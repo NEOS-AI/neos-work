@@ -1,0 +1,24 @@
+{
+  "title": "Settings",
+  "apiKeys": {
+    "title": "API Keys",
+    "anthropic": "Anthropic API Key",
+    "google": "Google AI API Key",
+    "placeholder": "Enter your API key",
+    "verified": "Verified",
+    "invalid": "Invalid key"
+  },
+  "appearance": {
+    "title": "Appearance",
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System",
+    "language": "Language"
+  },
+  "defaults": {
+    "title": "Defaults",
+    "provider": "Default Provider",
+    "model": "Default Model"
+  }
+}

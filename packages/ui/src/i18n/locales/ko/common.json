@@ -1,0 +1,39 @@
+{
+  "app": {
+    "name": "NEOS Work",
+    "tagline": "Prompt to Done"
+  },
+  "nav": {
+    "dashboard": "대시보드",
+    "sessions": "세션",
+    "templates": "템플릿",
+    "skills": "스킬",
+    "settings": "설정"
+  },
+  "mode": {
+    "title": "NEOS Work를 어떻게 실행하시겠습니까?",
+    "host": {
+      "title": "호스트 모드",
+      "description": "이 컴퓨터에서 엔진을 로컬로 실행합니다."
+    },
+    "client": {
+      "title": "클라이언트 모드",
+      "description": "기존 NEOS Work 인스턴스에 연결합니다."
+    }
+  },
+  "connection": {
+    "connected": "연결됨",
+    "disconnected": "연결 끊김",
+    "connecting": "연결 중...",
+    "stop": "중지 및 연결 해제"
+  },
+  "action": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "refresh": "새로고침",
+    "install": "설치",
+    "import": "가져오기",
+    "verify": "검증"
+  }
+}

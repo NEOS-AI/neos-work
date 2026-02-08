@@ -1,0 +1,39 @@
+{
+  "app": {
+    "name": "NEOS Work",
+    "tagline": "Prompt to Done"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "sessions": "Sessions",
+    "templates": "Templates",
+    "skills": "Skills",
+    "settings": "Settings"
+  },
+  "mode": {
+    "title": "How would you like to run NEOS Work today?",
+    "host": {
+      "title": "Host Mode",
+      "description": "Run the engine locally on this machine."
+    },
+    "client": {
+      "title": "Client Mode",
+      "description": "Connect to an existing NEOS Work instance."
+    }
+  },
+  "connection": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "stop": "Stop & Disconnect"
+  },
+  "action": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "refresh": "Refresh",
+    "install": "Install",
+    "import": "Import",
+    "verify": "Verify"
+  }
+}

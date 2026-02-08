@@ -1,0 +1,9 @@
+{
+  "title": "스킬",
+  "installFromPackage": "OpenPackage에서 설치",
+  "installPlaceholder": "github:owner/repo",
+  "importLocal": "로컬 스킬 가져오기",
+  "installed": "설치된 스킬",
+  "noSkillsFound": ".neos-work/skills에서 스킬을 찾을 수 없습니다",
+  "noSkillsInstalled": "`.neos-work/skills`에서 감지된 스킬이 없습니다."
+}

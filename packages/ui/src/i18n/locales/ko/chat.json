@@ -1,0 +1,18 @@
+{
+  "placeholder": "NEOS Work에게 질문하기...",
+  "send": "전송",
+  "thinking": "생각 중",
+  "responding": "응답 중",
+  "showSteps": "단계 보기",
+  "hideSteps": "단계 숨기기",
+  "newSession": "새 세션",
+  "addWorkspace": "워크스페이스 추가",
+  "noTasks": "아직 작업이 없습니다.",
+  "thinkingMode": {
+    "label": "사고 모드",
+    "none": "없음",
+    "low": "낮음",
+    "medium": "보통",
+    "high": "높음"
+  }
+}

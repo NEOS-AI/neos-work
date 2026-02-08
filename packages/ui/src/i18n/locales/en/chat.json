@@ -1,0 +1,18 @@
+{
+  "placeholder": "Ask NEOS Work...",
+  "send": "Send",
+  "thinking": "Thinking",
+  "responding": "Responding",
+  "showSteps": "Show steps",
+  "hideSteps": "Hide steps",
+  "newSession": "New session",
+  "addWorkspace": "Add a workspace",
+  "noTasks": "No tasks yet.",
+  "thinkingMode": {
+    "label": "Thinking",
+    "none": "None",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "title": "Skills",
+  "installFromPackage": "Install from OpenPackage",
+  "installPlaceholder": "github:owner/repo",
+  "importLocal": "Import local skill",
+  "installed": "Installed skills",
+  "noSkillsFound": "No skills found in .neos-work/skills",
+  "noSkillsInstalled": "No skills detected in `.neos-work/skills`."
+}

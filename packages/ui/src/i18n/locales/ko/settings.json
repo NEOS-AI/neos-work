@@ -1,0 +1,24 @@
+{
+  "title": "설정",
+  "apiKeys": {
+    "title": "API 키",
+    "anthropic": "Anthropic API 키",
+    "google": "Google AI API 키",
+    "placeholder": "API 키를 입력하세요",
+    "verified": "검증 완료",
+    "invalid": "유효하지 않은 키"
+  },
+  "appearance": {
+    "title": "외관",
+    "theme": "테마",
+    "dark": "다크",
+    "light": "라이트",
+    "system": "시스템",
+    "language": "언어"
+  },
+  "defaults": {
+    "title": "기본값",
+    "provider": "기본 프로바이더",
+    "model": "기본 모델"
+  }
+}
