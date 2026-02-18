@@ -33,6 +33,7 @@ export interface ChatParams {
 export interface ChatChunk {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'error' | 'done';
   content?: string;
+  toolUseId?: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   toolResult?: unknown;

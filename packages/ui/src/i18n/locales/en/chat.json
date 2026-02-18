@@ -7,8 +7,15 @@
   "hideSteps": "Hide steps",
   "newSession": "New session",
   "addWorkspace": "Add a workspace",
+  "tasks": "Tasks",
   "noTasks": "No tasks yet.",
-  "thinkingMode": {
+  "emptyState": "Select or create a session to get started",
+  "startConversation": "Start a conversation...",
+  "model": "Model",
+  "cancel": "Cancel",
+  "create": "Create",
+  "thinkingMode": "Thinking Mode",
+  "thinkingModes": {
     "label": "Thinking",
     "none": "None",
     "low": "Low",

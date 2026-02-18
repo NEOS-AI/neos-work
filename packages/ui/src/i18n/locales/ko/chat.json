@@ -7,8 +7,15 @@
   "hideSteps": "단계 숨기기",
   "newSession": "새 세션",
   "addWorkspace": "워크스페이스 추가",
+  "tasks": "작업",
   "noTasks": "아직 작업이 없습니다.",
-  "thinkingMode": {
+  "emptyState": "세션을 선택하거나 새로 만들어 시작하세요",
+  "startConversation": "대화를 시작하세요...",
+  "model": "모델",
+  "cancel": "취소",
+  "create": "생성",
+  "thinkingMode": "사고 모드",
+  "thinkingModes": {
     "label": "사고 모드",
     "none": "없음",
     "low": "낮음",

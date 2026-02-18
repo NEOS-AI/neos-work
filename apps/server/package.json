@@ -16,9 +16,12 @@
     "@hono/node-server": "^1.14.4",
     "@neos-work/core": "workspace:*",
     "@neos-work/shared": "workspace:*",
-    "hono": "^4.7.0"
+    "better-sqlite3": "^12.6.2",
+    "hono": "^4.7.0",
+    "nanoid": "^5.1.6"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.2"

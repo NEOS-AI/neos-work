@@ -1,1 +1,150 @@
 @import "tailwindcss";
+@import "highlight.js/styles/github-dark.css" layer(hljs-dark);
+@import "highlight.js/styles/github.css" layer(hljs-light);
+
+/* Theme variables */
+:root,
+[data-theme="dark"] {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #171717;
+  --bg-tertiary: #262626;
+  --bg-elevated: #1a1a1a;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #737373;
+  --text-inverted: #171717;
+  --border-primary: #262626;
+  --border-secondary: #404040;
+  --input-bg: #262626;
+  --overlay-bg: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-tertiary: #f5f5f5;
+  --bg-elevated: #ffffff;
+  --text-primary: #171717;
+  --text-secondary: #737373;
+  --text-muted: #a3a3a3;
+  --text-inverted: #f5f5f5;
+  --border-primary: #e5e5e5;
+  --border-secondary: #d4d4d4;
+  --input-bg: #f5f5f5;
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  color-scheme: light;
+}
+
+/* Highlight.js theme switching */
+[data-theme="dark"] .hljs,
+:root .hljs {
+  /* github-dark already applied by default */
+}
+
+@layer hljs-light {
+  [data-theme="light"] .hljs {
+    /* github.css styles apply in light mode */
+  }
+}
+
+/* Markdown content styles */
+.markdown-content {
+  line-height: 1.7;
+}
+
+.markdown-content p {
+  margin-bottom: 0.75em;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-content h1 { font-size: 1.25em; }
+.markdown-content h2 { font-size: 1.125em; }
+.markdown-content h3 { font-size: 1em; }
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.markdown-content ul { list-style-type: disc; }
+.markdown-content ol { list-style-type: decimal; }
+
+.markdown-content li {
+  margin-bottom: 0.25em;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin-top: 0.25em;
+  margin-bottom: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--border-secondary);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-bottom: 0.75em;
+  color: var(--text-secondary);
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75em;
+  font-size: 0.875em;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border-secondary);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.markdown-content th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-secondary);
+  margin: 1em 0;
+}
+
+.markdown-content code:not(pre code) {
+  background-color: var(--bg-tertiary);
+  padding: 0.15em 0.4em;
+  border-radius: 0.25em;
+  font-size: 0.875em;
+}
+
+.markdown-content pre {
+  margin-bottom: 0.75em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+}
+
+.markdown-content a {
+  color: var(--color-blue-400, #60a5fa);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-content a:hover {
+  color: var(--color-blue-300, #93c5fd);
+}

@@ -4,7 +4,8 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 import { health } from './routes/health.js';
-import { session } from './routes/session.js';
+import { session, workspace, models } from './routes/session.js';
+import { settings } from './routes/settings.js';
 
 const app = new Hono();
 
@@ -15,13 +16,16 @@ app.use(
   cors({
     origin: ['http://localhost:1420', 'http://localhost:5173', 'tauri://localhost'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-anthropic-key', 'x-google-key'],
   }),
 );
 
 // Routes
 app.route('/api/health', health);
+app.route('/api/workspace', workspace);
+app.route('/api/models', models);
 app.route('/api/session', session);
+app.route('/api/settings', settings);
 
 // Root
 app.get('/', (c) => {

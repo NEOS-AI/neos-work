@@ -20,6 +20,8 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "@google/genai": "^1.40.0",
     "@neos-work/shared": "workspace:*"
   },
   "devDependencies": {
