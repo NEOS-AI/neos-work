@@ -3,46 +3,10 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { ChatChunk, ChatParams, Model, ThinkingMode } from '@neos-work/shared';
+import type { ChatChunk, ChatParams, Model } from '@neos-work/shared';
+import { ANTHROPIC_MODELS, THINKING_BUDGET } from '@neos-work/shared';
 
 import type { LLMProviderAdapter } from './provider.js';
-
-const THINKING_BUDGET: Record<ThinkingMode, number> = {
-  none: 0,
-  low: 1024,
-  medium: 4096,
-  high: 16384,
-};
-
-const MODELS: Model[] = [
-  {
-    id: 'claude-opus-4-6',
-    name: 'Claude Opus 4.6',
-    providerId: 'anthropic',
-    contextWindow: 200000,
-    supportsThinking: true,
-    supportsTools: true,
-    supportsVision: true,
-  },
-  {
-    id: 'claude-sonnet-4-5-20250929',
-    name: 'Claude Sonnet 4.5',
-    providerId: 'anthropic',
-    contextWindow: 200000,
-    supportsThinking: true,
-    supportsTools: true,
-    supportsVision: true,
-  },
-  {
-    id: 'claude-haiku-4-5-20251001',
-    name: 'Claude Haiku 4.5',
-    providerId: 'anthropic',
-    contextWindow: 200000,
-    supportsThinking: true,
-    supportsTools: true,
-    supportsVision: true,
-  },
-];
 
 export class AnthropicAdapter implements LLMProviderAdapter {
   readonly id = 'anthropic' as const;
@@ -54,7 +18,7 @@ export class AnthropicAdapter implements LLMProviderAdapter {
   }
 
   getModels(): Model[] {
-    return MODELS;
+    return ANTHROPIC_MODELS;
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
@@ -133,7 +97,9 @@ export class AnthropicAdapter implements LLMProviderAdapter {
             try {
               parsedInput = toolInputJson ? JSON.parse(toolInputJson) : {};
             } catch {
-              // If JSON parsing fails, pass raw string
+              // If JSON parsing fails, wrap raw string as fallback
+              parsedInput = { _raw: toolInputJson };
+              console.error(`Failed to parse tool input JSON for ${currentToolName}`);
             }
             yield {
               type: 'tool_use',

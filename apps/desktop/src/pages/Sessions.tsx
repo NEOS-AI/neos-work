@@ -5,6 +5,8 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 
+import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/shared';
+
 import { useEngine } from '../hooks/useEngine.js';
 import type { MessageData, SessionData } from '../lib/engine.js';
 
@@ -24,29 +26,19 @@ interface DisplayMessage {
   steps?: ToolStep[];
 }
 
-// --- Model definitions (static, mirrors server-side adapters) ---
+// --- Model definitions (from shared single source of truth) ---
 
-interface ModelOption {
-  id: string;
-  name: string;
-  providerId: string;
-  providerName: string;
-}
+const PROVIDER_NAMES: Record<string, string> = { anthropic: 'Anthropic', google: 'Google' };
 
-const AVAILABLE_MODELS: ModelOption[] = [
-  { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', providerId: 'anthropic', providerName: 'Anthropic' },
-  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', providerId: 'anthropic', providerName: 'Anthropic' },
-  { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', providerId: 'anthropic', providerName: 'Anthropic' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', providerId: 'google', providerName: 'Google' },
-  { id: 'gemini-2.0-pro', name: 'Gemini 2.0 Pro', providerId: 'google', providerName: 'Google' },
-];
+const AVAILABLE_MODELS = ALL_MODELS.map((m) => ({
+  ...m,
+  providerName: PROVIDER_NAMES[m.providerId] ?? m.providerId,
+}));
 
-const THINKING_MODES = [
-  { value: 'none', label: 'Off' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-] as const;
+const THINKING_MODES = THINKING_MODE_VALUES.map((v) => ({
+  value: v,
+  label: v === 'none' ? 'Off' : v.charAt(0).toUpperCase() + v.slice(1),
+}));
 
 export function Sessions() {
   const { t } = useTranslation('chat');

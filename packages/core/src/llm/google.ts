@@ -4,29 +4,9 @@
 
 import { GoogleGenAI } from '@google/genai';
 import type { ChatChunk, ChatParams, Model } from '@neos-work/shared';
+import { GOOGLE_MODELS, THINKING_BUDGET } from '@neos-work/shared';
 
 import type { LLMProviderAdapter } from './provider.js';
-
-const MODELS: Model[] = [
-  {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
-    providerId: 'google',
-    contextWindow: 1000000,
-    supportsThinking: true,
-    supportsTools: true,
-    supportsVision: true,
-  },
-  {
-    id: 'gemini-2.0-pro',
-    name: 'Gemini 2.0 Pro',
-    providerId: 'google',
-    contextWindow: 1000000,
-    supportsThinking: true,
-    supportsTools: true,
-    supportsVision: true,
-  },
-];
 
 export class GoogleAdapter implements LLMProviderAdapter {
   readonly id = 'google' as const;
@@ -38,7 +18,7 @@ export class GoogleAdapter implements LLMProviderAdapter {
   }
 
   getModels(): Model[] {
-    return MODELS;
+    return GOOGLE_MODELS;
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
@@ -58,8 +38,7 @@ export class GoogleAdapter implements LLMProviderAdapter {
     }));
 
     const useThinking = thinkingMode !== 'none';
-    const thinkingBudget =
-      thinkingMode === 'low' ? 1024 : thinkingMode === 'medium' ? 4096 : 16384;
+    const thinkingBudget = THINKING_BUDGET[thinkingMode] || THINKING_BUDGET.high;
 
     try {
       const stream = await this.client.models.generateContentStream({

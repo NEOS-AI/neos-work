@@ -25,10 +25,22 @@ settings.get('/:key', (c) => {
 // PUT /api/settings/:key — create or update setting
 settings.put('/:key', async (c) => {
   const key = c.req.param('key');
+
+  // Validate key format (alphanumeric, dots, hyphens, underscores; max 100 chars)
+  if (!key || key.length > 100 || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+    return c.json({ ok: false, error: 'Invalid setting key' }, 400);
+  }
+
   const body = await c.req.json<{ value: string }>();
   if (body.value === undefined) {
     return c.json({ ok: false, error: 'Missing "value" in body' }, 400);
   }
+
+  // Limit value size to prevent memory abuse (1 MB)
+  if (typeof body.value !== 'string' || body.value.length > 1_000_000) {
+    return c.json({ ok: false, error: 'Setting value too large or invalid type' }, 400);
+  }
+
   settingsDb.setSetting(key, body.value);
   return c.json({ ok: true });
 });
@@ -58,11 +70,7 @@ settings.post('/verify-key', async (c) => {
       return c.json({ ok: false, error: `Unknown provider: ${body.provider}` }, 400);
     }
 
-    const adapter = registry.get(body.provider as 'anthropic' | 'google');
-    if (!adapter) {
-      return c.json({ ok: false, error: 'Adapter not found' }, 500);
-    }
-
+    const adapter = registry.get(body.provider as 'anthropic' | 'google')!;
     const valid = await adapter.validateApiKey(body.key);
     return c.json({ ok: true, data: { valid } });
   } catch (error) {

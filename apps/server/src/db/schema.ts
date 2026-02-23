@@ -61,6 +61,12 @@ function initSchema(db: Database.Database): void {
       updated_at  TEXT DEFAULT (datetime('now'))
     );
 
+    -- Indexes for common queries
+    CREATE INDEX IF NOT EXISTS idx_session_workspace_id ON session(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_session_updated_at ON session(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_message_session_id ON message(session_id);
+    CREATE INDEX IF NOT EXISTS idx_message_created_at ON message(created_at);
+
     -- Seed a default workspace if none exists
     INSERT OR IGNORE INTO workspace (id, name, path, type)
     VALUES ('default', 'Starter', NULL, 'local');

@@ -10,9 +10,11 @@ import type { Tool, ToolResult } from './base.js';
 
 /** Resolve a user-provided path within the workspace, preventing traversal. */
 function safePath(workspaceRoot: string, userPath: string): string {
-  const resolved = resolve(workspaceRoot, userPath);
-  const rel = relative(workspaceRoot, resolved);
-  if (rel.startsWith('..') || resolve(resolved) !== resolved && rel.startsWith('..')) {
+  const absoluteRoot = resolve(workspaceRoot);
+  const resolved = resolve(absoluteRoot, userPath);
+  const rel = relative(absoluteRoot, resolved);
+
+  if (rel.startsWith('..') || !resolved.startsWith(absoluteRoot + '/') && resolved !== absoluteRoot) {
     throw new Error(`Path "${userPath}" is outside the workspace`);
   }
   return resolved;

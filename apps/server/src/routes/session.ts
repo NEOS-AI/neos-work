@@ -1,3 +1,6 @@
+import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
@@ -6,6 +9,13 @@ import type { ChatParams, Message, MessageContent, ThinkingMode } from '@neos-wo
 
 import * as db from '../db/sessions.js';
 import * as settingsDb from '../db/settings.js';
+
+/** Validate that a workspace path is within the user's home directory. */
+function validateWorkspacePath(path: string): boolean {
+  const resolved = resolve(path);
+  const home = homedir();
+  return resolved.startsWith(home + '/') || resolved === home;
+}
 
 const session = new Hono();
 
@@ -100,8 +110,9 @@ session.post('/:id/chat', async (c) => {
   db.addMessage({ sessionId, role: 'user', content: body.content });
 
   // Auto-set title from first message
+  const MAX_TITLE_LENGTH = 60;
   if (!s.title) {
-    const title = body.content.slice(0, 60) + (body.content.length > 60 ? '...' : '');
+    const title = body.content.slice(0, MAX_TITLE_LENGTH) + (body.content.length > MAX_TITLE_LENGTH ? '...' : '');
     db.updateSessionTitle(sessionId, title);
   }
 
@@ -116,25 +127,55 @@ session.post('/:id/chat', async (c) => {
 
   // Build message history for LLM (supports structured content for tool messages)
   const messageRows = db.listMessages(sessionId);
-  const messages: Message[] = messageRows.map((m) => ({
-    role: m.role as Message['role'],
-    content: m.metadata && m.metadata !== 'null' ? JSON.parse(m.content) : m.content,
-  }));
+  const messages: Message[] = messageRows.map((m) => {
+    let content: string | MessageContent[];
+    if (m.metadata && m.metadata !== 'null') {
+      try {
+        content = JSON.parse(m.content);
+      } catch {
+        console.error(`Failed to parse structured message ${m.id}, falling back to text`);
+        content = m.content;
+      }
+    } else {
+      content = m.content;
+    }
+    return { role: m.role as Message['role'], content };
+  });
 
   const MAX_TOOL_ITERATIONS = 10;
+  const TOOL_EXEC_TIMEOUT_MS = 30_000;
 
   // Stream response via SSE with tool execution loop
   return streamSSE(c, async (stream) => {
+    let clientDisconnected = false;
+
+    // Detect client disconnection via abort signal
+    const abortSignal = c.req.raw.signal;
+    abortSignal?.addEventListener('abort', () => {
+      clientDisconnected = true;
+    });
+
+    /** Safely write to SSE stream; returns false if client disconnected. */
+    async function safeSend(event: string, data: string): Promise<boolean> {
+      if (clientDisconnected) return false;
+      try {
+        await stream.writeSSE({ event, data });
+        return true;
+      } catch {
+        clientDisconnected = true;
+        return false;
+      }
+    }
+
     try {
       let iteration = 0;
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
+        if (clientDisconnected) break;
+
         if (iteration++ >= MAX_TOOL_ITERATIONS) {
-          await stream.writeSSE({
-            event: 'error',
-            data: JSON.stringify({ type: 'error', content: 'Max tool iterations reached' }),
-          });
+          await safeSend('error', JSON.stringify({ type: 'error', content: 'Max tool iterations reached' }));
           break;
         }
 
@@ -150,6 +191,8 @@ session.post('/:id/chat', async (c) => {
         const toolCalls: { toolUseId: string; toolName: string; toolInput: Record<string, unknown> }[] = [];
 
         for await (const chunk of found.provider.chat(chatParams)) {
+          if (clientDisconnected) break;
+
           if (chunk.type === 'text') {
             fullText += chunk.content ?? '';
           } else if (chunk.type === 'tool_use') {
@@ -161,18 +204,14 @@ session.post('/:id/chat', async (c) => {
               toolInput: chunk.toolInput ?? {},
             });
             // Forward chunk with guaranteed ID to client
-            await stream.writeSSE({
-              event: chunk.type,
-              data: JSON.stringify({ ...chunk, toolUseId }),
-            });
+            await safeSend(chunk.type, JSON.stringify({ ...chunk, toolUseId }));
             continue;
           }
 
-          await stream.writeSSE({
-            event: chunk.type,
-            data: JSON.stringify(chunk),
-          });
+          await safeSend(chunk.type, JSON.stringify(chunk));
         }
+
+        if (clientDisconnected) break;
 
         if (toolCalls.length > 0) {
           // Build assistant message content (text + tool_use blocks)
@@ -198,10 +237,23 @@ session.post('/:id/chat', async (c) => {
           });
           messages.push({ role: 'assistant', content: assistantContent });
 
-          // Execute tools and build tool_result message
+          // Execute tools with timeout and build tool_result message
           const toolResults: MessageContent[] = [];
           for (const call of toolCalls) {
-            const result = await toolRegistry.execute(call.toolName, call.toolInput);
+            if (clientDisconnected) break;
+
+            let result;
+            try {
+              result = await Promise.race([
+                toolRegistry.execute(call.toolName, call.toolInput),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('Tool execution timeout')), TOOL_EXEC_TIMEOUT_MS),
+                ),
+              ]);
+            } catch (err) {
+              result = { success: false, output: null, error: (err as Error).message };
+            }
+
             const resultContent = result.success
               ? (typeof result.output === 'string' ? result.output : JSON.stringify(result.output))
               : `Error: ${result.error}`;
@@ -213,15 +265,12 @@ session.post('/:id/chat', async (c) => {
             });
 
             // Send tool_result to client for UI display
-            await stream.writeSSE({
-              event: 'tool_result',
-              data: JSON.stringify({
-                type: 'tool_result',
-                toolUseId: call.toolUseId,
-                toolName: call.toolName,
-                toolResult: result.output,
-              }),
-            });
+            await safeSend('tool_result', JSON.stringify({
+              type: 'tool_result',
+              toolUseId: call.toolUseId,
+              toolName: call.toolName,
+              toolResult: result.output,
+            }));
           }
 
           // Save tool results as a user message (Anthropic convention)
@@ -240,18 +289,15 @@ session.post('/:id/chat', async (c) => {
         // No tool calls — save final text response and exit loop
         if (fullText) {
           db.addMessage({ sessionId, role: 'assistant', content: fullText });
-          db.touchSession(sessionId);
         }
+        db.touchSession(sessionId);
         break;
       }
     } catch (error) {
-      await stream.writeSSE({
-        event: 'error',
-        data: JSON.stringify({
-          type: 'error',
-          content: error instanceof Error ? error.message : 'Stream error',
-        }),
-      });
+      await safeSend('error', JSON.stringify({
+        type: 'error',
+        content: error instanceof Error ? error.message : 'Stream error',
+      }));
     }
   });
 });
@@ -269,8 +315,11 @@ workspace.get('/', (c) => {
 
 workspace.post('/', async (c) => {
   const body = await c.req.json<{ name: string; path?: string; type?: string }>();
-  if (!body.name) {
-    return c.json({ ok: false, error: 'Missing "name"' }, 400);
+  if (!body.name || typeof body.name !== 'string' || body.name.length > 200) {
+    return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
+  }
+  if (body.path && !validateWorkspacePath(body.path)) {
+    return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
   }
   const created = db.createWorkspace({
     name: body.name,
@@ -283,6 +332,12 @@ workspace.post('/', async (c) => {
 workspace.put('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json<{ name?: string; path?: string }>();
+  if (body.name !== undefined && (typeof body.name !== 'string' || body.name.length > 200)) {
+    return c.json({ ok: false, error: 'Invalid "name"' }, 400);
+  }
+  if (body.path && !validateWorkspacePath(body.path)) {
+    return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
+  }
   const updated = db.updateWorkspace(id, body);
   if (!updated) return c.json({ ok: false, error: 'Workspace not found' }, 404);
   return c.json({ ok: true, data: updated });

@@ -38,29 +38,48 @@ export function EngineProvider({ children }: { children: ReactNode }) {
     error: null,
     client: null,
   });
-  const healthIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const healthIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const healthFailCountRef = useRef(0);
 
   const stopHealthCheck = useCallback(() => {
     if (healthIntervalRef.current) {
-      clearInterval(healthIntervalRef.current);
+      clearTimeout(healthIntervalRef.current);
       healthIntervalRef.current = null;
     }
+    healthFailCountRef.current = 0;
   }, []);
 
   const startHealthCheck = useCallback(
     (client: EngineClient) => {
       stopHealthCheck();
-      healthIntervalRef.current = setInterval(async () => {
-        const ok = await client.checkConnection();
-        if (!ok) {
-          setState((prev) => ({
-            ...prev,
-            status: 'error',
-            error: 'Lost connection to engine',
-          }));
-          stopHealthCheck();
-        }
-      }, HEALTH_CHECK_INTERVAL);
+
+      const scheduleNext = () => {
+        // Exponential backoff on failure: 5s, 10s, 20s, 40s, max 60s
+        const delay =
+          healthFailCountRef.current === 0
+            ? HEALTH_CHECK_INTERVAL
+            : Math.min(HEALTH_CHECK_INTERVAL * 2 ** healthFailCountRef.current, 60_000);
+
+        healthIntervalRef.current = setTimeout(async () => {
+          const ok = await client.checkConnection();
+          if (ok) {
+            healthFailCountRef.current = 0;
+            setState((prev) =>
+              prev.status === 'error' ? { ...prev, status: 'connected', error: null } : prev,
+            );
+          } else {
+            healthFailCountRef.current++;
+            setState((prev) => ({
+              ...prev,
+              status: 'error',
+              error: 'Lost connection to engine',
+            }));
+          }
+          scheduleNext();
+        }, delay);
+      };
+
+      scheduleNext();
     },
     [stopHealthCheck],
   );
