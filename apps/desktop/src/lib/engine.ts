@@ -26,7 +26,7 @@ export interface MessageData {
 
 export class EngineClient {
   private baseUrl: string;
-  private apiKeys: { anthropic?: string; google?: string } = {};
+  private authToken: string | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -36,14 +36,15 @@ export class EngineClient {
     return this.baseUrl;
   }
 
-  setApiKeys(keys: { anthropic?: string; google?: string }): void {
-    this.apiKeys = keys;
+  setAuthToken(token: string): void {
+    this.authToken = token;
   }
 
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.apiKeys.anthropic) headers['x-anthropic-key'] = this.apiKeys.anthropic;
-    if (this.apiKeys.google) headers['x-google-key'] = this.apiKeys.google;
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
     return headers;
   }
 
@@ -67,7 +68,9 @@ export class EngineClient {
 
   async listSessions(workspaceId?: string): Promise<ApiResponse<SessionData[]>> {
     const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';
-    const res = await fetch(`${this.baseUrl}/api/session${qs}`);
+    const res = await fetch(`${this.baseUrl}/api/session${qs}`, {
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
@@ -87,14 +90,19 @@ export class EngineClient {
   }
 
   async deleteSession(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/session/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${this.baseUrl}/api/session/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
   // --- Messages ---
 
   async listMessages(sessionId: string): Promise<ApiResponse<MessageData[]>> {
-    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/messages`);
+    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/messages`, {
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
@@ -143,10 +151,30 @@ export class EngineClient {
     }
   }
 
+  // --- Tool Confirmation (VULN-003) ---
+
+  async confirmTool(
+    sessionId: string,
+    toolUseId: string,
+    approved: boolean,
+  ): Promise<ApiResponse<void>> {
+    const res = await fetch(
+      `${this.baseUrl}/api/session/${sessionId}/tool-confirm/${toolUseId}`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ approved }),
+      },
+    );
+    return res.json();
+  }
+
   // --- Workspaces ---
 
   async listWorkspaces(): Promise<ApiResponse<{ id: string; name: string; path?: string; type: string }[]>> {
-    const res = await fetch(`${this.baseUrl}/api/workspace`);
+    const res = await fetch(`${this.baseUrl}/api/workspace`, {
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
@@ -157,7 +185,7 @@ export class EngineClient {
   }): Promise<ApiResponse<{ id: string; name: string; type: string }>> {
     const res = await fetch(`${this.baseUrl}/api/workspace`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
     return res.json();
@@ -169,33 +197,40 @@ export class EngineClient {
   ): Promise<ApiResponse<{ id: string; name: string; type: string }>> {
     const res = await fetch(`${this.baseUrl}/api/workspace/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
     return res.json();
   }
 
   async deleteWorkspace(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/workspace/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${this.baseUrl}/api/workspace/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
   // --- Settings ---
 
   async getSettings(): Promise<ApiResponse<Record<string, string>>> {
-    const res = await fetch(`${this.baseUrl}/api/settings`);
+    const res = await fetch(`${this.baseUrl}/api/settings`, {
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
   async getSetting(key: string): Promise<ApiResponse<{ key: string; value: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/settings/${encodeURIComponent(key)}`);
+    const res = await fetch(`${this.baseUrl}/api/settings/${encodeURIComponent(key)}`, {
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 
   async saveSetting(key: string, value: string): Promise<ApiResponse<void>> {
     const res = await fetch(`${this.baseUrl}/api/settings/${encodeURIComponent(key)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify({ value }),
     });
     return res.json();
@@ -204,25 +239,10 @@ export class EngineClient {
   async verifyApiKey(provider: string, key: string): Promise<ApiResponse<{ valid: boolean }>> {
     const res = await fetch(`${this.baseUrl}/api/settings/verify-key`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify({ provider, key }),
     });
     return res.json();
-  }
-
-  /** Load API keys from server settings and set them on this client. */
-  async loadApiKeys(): Promise<void> {
-    try {
-      const res = await this.getSettings();
-      if (res.ok && res.data) {
-        this.setApiKeys({
-          anthropic: res.data['apiKey.anthropic'] || undefined,
-          google: res.data['apiKey.google'] || undefined,
-        });
-      }
-    } catch {
-      // Settings might not be available yet
-    }
   }
 
   // --- Models ---

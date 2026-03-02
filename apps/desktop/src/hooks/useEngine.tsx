@@ -7,7 +7,7 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import type { ReactNode } from 'react';
 
 import { EngineClient } from '../lib/engine.js';
-import { startEngine, stopEngine } from '../lib/tauri.js';
+import { startEngine, stopEngine, getAuthToken, getEnginePort } from '../lib/tauri.js';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 export type AppMode = 'host' | 'client';
@@ -86,22 +86,32 @@ export function EngineProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(
     async (mode: AppMode, url?: string) => {
-      const serverUrl = mode === 'host' ? DEFAULT_HOST_URL : url ?? '';
-      const client = new EngineClient(serverUrl);
+      let serverUrl = mode === 'host' ? DEFAULT_HOST_URL : url ?? '';
 
       setState({
         status: 'connecting',
         mode,
         serverUrl,
         error: null,
-        client,
+        client: null,
       });
 
       // For host mode, try starting the engine via Tauri sidecar.
       // If sidecar is unavailable (dev mode), the server must be running manually.
       if (mode === 'host') {
         await startEngine();
+
+        // Wait briefly for sidecar to output port/token metadata
+        await new Promise((r) => setTimeout(r, 1000));
+
+        // Try to get the dynamic port from the sidecar
+        const port = await getEnginePort();
+        if (port) {
+          serverUrl = `http://127.0.0.1:${port}`;
+        }
       }
+
+      const client = new EngineClient(serverUrl);
 
       const maxRetries = mode === 'host' ? 20 : 3;
       const retryDelay = mode === 'host' ? 500 : 1000;
@@ -109,8 +119,12 @@ export function EngineProvider({ children }: { children: ReactNode }) {
       for (let i = 0; i < maxRetries; i++) {
         const ok = await client.checkConnection();
         if (ok) {
-          // Load saved API keys before marking as connected
-          await client.loadApiKeys();
+          // Set auth token from Tauri sidecar (production) or skip (dev mode)
+          const token = await getAuthToken();
+          if (token) {
+            client.setAuthToken(token);
+          }
+
           setState({
             status: 'connected',
             mode,

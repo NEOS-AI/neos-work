@@ -5,10 +5,12 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
 import { ProviderRegistry, AnthropicAdapter, GoogleAdapter, ToolRegistry, createFilesystemTools } from '@neos-work/core';
+import { ALL_MODELS, THINKING_MODES } from '@neos-work/shared';
 import type { ChatParams, Message, MessageContent, ThinkingMode } from '@neos-work/shared';
 
 import * as db from '../db/sessions.js';
 import * as settingsDb from '../db/settings.js';
+import { safeError } from '../lib/errors.js';
 
 /** Validate that a workspace path is within the user's home directory. */
 function validateWorkspacePath(path: string): boolean {
@@ -19,18 +21,40 @@ function validateWorkspacePath(path: string): boolean {
 
 const session = new Hono();
 
-// --- LLM Registry (initialized per-request with provided API keys) ---
+// --- Tool confirmation for destructive operations (VULN-003) ---
 
-function getRegistry(headers: Headers): ProviderRegistry {
+const DESTRUCTIVE_TOOLS = new Set(['write_file']);
+const TOOL_CONFIRM_TIMEOUT_MS = 60_000;
+
+const pendingConfirmations = new Map<
+  string,
+  { resolve: (approved: boolean) => void; timer: ReturnType<typeof setTimeout> }
+>();
+
+session.post('/:id/tool-confirm/:toolUseId', async (c) => {
+  const { toolUseId } = c.req.param();
+  const body = await c.req.json<{ approved: boolean }>();
+  const pending = pendingConfirmations.get(toolUseId);
+  if (!pending) {
+    return c.json({ ok: false, error: 'No pending confirmation' }, 404);
+  }
+  clearTimeout(pending.timer);
+  pending.resolve(body.approved);
+  pendingConfirmations.delete(toolUseId);
+  return c.json({ ok: true });
+});
+
+// --- LLM Registry ---
+
+function getRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
 
-  // Header keys take priority; fall back to DB-stored keys
-  const anthropicKey = headers.get('x-anthropic-key') ?? settingsDb.getSetting('apiKey.anthropic');
+  const anthropicKey = settingsDb.getSetting('apiKey.anthropic');
   if (anthropicKey) {
     registry.register(new AnthropicAdapter(anthropicKey));
   }
 
-  const googleKey = headers.get('x-google-key') ?? settingsDb.getSetting('apiKey.google');
+  const googleKey = settingsDb.getSetting('apiKey.google');
   if (googleKey) {
     registry.register(new GoogleAdapter(googleKey));
   }
@@ -54,6 +78,24 @@ session.post('/', async (c) => {
     model?: string;
     thinkingMode?: string;
   }>();
+
+  // Input validation
+  if (!body.workspaceId || typeof body.workspaceId !== 'string' || body.workspaceId.length > 100) {
+    return c.json({ ok: false, error: 'Invalid or missing workspaceId' }, 400);
+  }
+  if (body.provider && !['anthropic', 'google'].includes(body.provider)) {
+    return c.json({ ok: false, error: 'Invalid provider' }, 400);
+  }
+  if (body.model && !ALL_MODELS.some((m) => m.id === body.model)) {
+    return c.json({ ok: false, error: 'Invalid model' }, 400);
+  }
+  if (body.thinkingMode && !THINKING_MODES.includes(body.thinkingMode as ThinkingMode)) {
+    return c.json({ ok: false, error: 'Invalid thinkingMode' }, 400);
+  }
+  if (body.title && (typeof body.title !== 'string' || body.title.length > 200)) {
+    return c.json({ ok: false, error: 'Invalid title' }, 400);
+  }
+
   const created = db.createSession({
     workspaceId: body.workspaceId,
     title: body.title,
@@ -93,12 +135,21 @@ session.post('/:id/chat', async (c) => {
   const s = db.getSession(sessionId);
   if (!s) return c.json({ ok: false, error: 'Session not found' }, 404);
 
-  const registry = getRegistry(c.req.raw.headers);
+  const registry = getRegistry();
   if (registry.getAll().length === 0) {
-    return c.json({ ok: false, error: 'No API key provided. Set x-anthropic-key or x-google-key header.' }, 400);
+    return c.json({ ok: false, error: 'No API key configured. Please set API keys in Settings.' }, 400);
   }
 
   const body = await c.req.json<{ content: string }>();
+
+  // Input validation
+  const MAX_CONTENT_LENGTH = 100_000; // 100KB
+  if (!body.content || typeof body.content !== 'string') {
+    return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
+  }
+  if (body.content.length > MAX_CONTENT_LENGTH) {
+    return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);
+  }
 
   // Find the adapter for this session's model
   const found = registry.findModel(s.model);
@@ -242,6 +293,41 @@ session.post('/:id/chat', async (c) => {
           for (const call of toolCalls) {
             if (clientDisconnected) break;
 
+            // Request user confirmation for destructive tools (VULN-003)
+            if (DESTRUCTIVE_TOOLS.has(call.toolName)) {
+              await safeSend('tool_pending', JSON.stringify({
+                type: 'tool_pending',
+                toolUseId: call.toolUseId,
+                toolName: call.toolName,
+                toolInput: call.toolInput,
+              }));
+
+              const approved = await new Promise<boolean>((resolve) => {
+                const timer = setTimeout(() => {
+                  pendingConfirmations.delete(call.toolUseId);
+                  resolve(false);
+                }, TOOL_CONFIRM_TIMEOUT_MS);
+                pendingConfirmations.set(call.toolUseId, { resolve, timer });
+              });
+
+              if (!approved) {
+                const resultContent = 'Error: Tool execution rejected by user';
+                toolResults.push({
+                  type: 'tool_result',
+                  toolUseId: call.toolUseId,
+                  content: resultContent,
+                });
+                await safeSend('tool_result', JSON.stringify({
+                  type: 'tool_result',
+                  toolUseId: call.toolUseId,
+                  toolName: call.toolName,
+                  toolResult: null,
+                  rejected: true,
+                }));
+                continue;
+              }
+            }
+
             let result;
             try {
               result = await Promise.race([
@@ -294,9 +380,10 @@ session.post('/:id/chat', async (c) => {
         break;
       }
     } catch (error) {
+      const message = safeError(error, 'chat-stream');
       await safeSend('error', JSON.stringify({
         type: 'error',
-        content: error instanceof Error ? error.message : 'Stream error',
+        content: message,
       }));
     }
   });
@@ -356,7 +443,7 @@ workspace.delete('/:id', (c) => {
 const models = new Hono();
 
 models.get('/', (c) => {
-  const registry = getRegistry(c.req.raw.headers);
+  const registry = getRegistry();
   const allModels = registry.getAllModels();
   return c.json({ ok: true, data: allModels });
 });

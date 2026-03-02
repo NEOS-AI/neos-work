@@ -211,8 +211,6 @@ function ApiKeyInput({
     setSaveStatus('saving');
     try {
       await client.saveSetting(settingKey, value);
-      // Reload API keys on the client so future requests use them
-      await client.loadApiKeys();
       setSaveStatus('saved');
       setHasSavedKey(true);
       setValue('');

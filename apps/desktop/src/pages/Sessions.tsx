@@ -2,7 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
+
+// Allow highlight.js class names through sanitization
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code ?? []), 'className'],
+    span: [...(defaultSchema.attributes?.span ?? []), 'className'],
+  },
+};
 import { useTranslation } from 'react-i18next';
 
 import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/shared';
@@ -12,9 +23,10 @@ import type { MessageData, SessionData } from '../lib/engine.js';
 
 interface ToolStep {
   toolName: string;
+  toolUseId?: string;
   input: Record<string, unknown>;
   output?: unknown;
-  status: 'running' | 'completed' | 'error';
+  status: 'pending' | 'running' | 'completed' | 'error';
 }
 
 interface DisplayMessage {
@@ -343,10 +355,27 @@ function ChatArea({
                       ...(m.steps ?? []),
                       {
                         toolName: chunk.toolName ?? 'unknown',
+                        toolUseId: chunk.toolUseId,
                         input: chunk.toolInput ?? {},
                         status: 'running' as const,
                       },
                     ],
+                  }
+                : m,
+            ),
+          );
+        } else if (chunk.type === 'tool_pending') {
+          // Mark the tool step as pending user confirmation
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    steps: m.steps?.map((s) =>
+                      s.toolUseId === chunk.toolUseId
+                        ? { ...s, status: 'pending' as const }
+                        : s,
+                    ),
                   }
                 : m,
             ),
@@ -430,7 +459,7 @@ function ChatArea({
 
               {/* Tool steps */}
               {msg.steps?.map((step, i) => (
-                <ToolStepCard key={i} step={step} />
+                <ToolStepCard key={i} step={step} sessionId={session.id} />
               ))}
 
               {/* Message bubble */}
@@ -506,16 +535,17 @@ function ChatArea({
 
 function MarkdownContent({ content }: { content: string }) {
   return (
-    <ReactMarkdown
-      className="markdown-content"
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
-      components={{
-        code: CodeBlock,
-      }}
-    >
-      {content}
-    </ReactMarkdown>
+    <div className="markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight, [rehypeSanitize, sanitizeSchema] as never]}
+        components={{
+          code: CodeBlock,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }
 
@@ -610,11 +640,23 @@ function ThinkingBlock({
 
 // --- Tool Step Card ---
 
-function ToolStepCard({ step }: { step: ToolStep }) {
-  const [isOpen, setIsOpen] = useState(false);
+function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }) {
+  const { client } = useEngine();
+  const [isOpen, setIsOpen] = useState(step.status === 'pending');
+
+  const handleConfirm = async (approved: boolean) => {
+    if (!client || !step.toolUseId) return;
+    await client.confirmTool(sessionId, step.toolUseId, approved);
+  };
 
   const statusIcon =
-    step.status === 'running' ? (
+    step.status === 'pending' ? (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    ) : step.status === 'running' ? (
       <span className="h-2 w-2 animate-spin rounded-full border border-blue-400 border-t-transparent" />
     ) : step.status === 'completed' ? (
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400">
@@ -627,7 +669,13 @@ function ToolStepCard({ step }: { step: ToolStep }) {
     );
 
   return (
-    <div className="mb-2 max-w-[85%] rounded-lg border" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 50%, transparent)' }}>
+    <div
+      className="mb-2 max-w-[85%] rounded-lg border"
+      style={{
+        borderColor: step.status === 'pending' ? 'var(--border-warning, #d97706)' : 'var(--border-primary)',
+        backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 50%, transparent)',
+      }}
+    >
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center gap-2 px-3 py-2 text-xs"
@@ -635,6 +683,9 @@ function ToolStepCard({ step }: { step: ToolStep }) {
       >
         {statusIcon}
         <span className="font-mono">{step.toolName}</span>
+        {step.status === 'pending' && (
+          <span className="ml-1 text-amber-400">Awaiting approval</span>
+        )}
         <svg
           width="10"
           height="10"
@@ -655,6 +706,27 @@ function ToolStepCard({ step }: { step: ToolStep }) {
           <pre className="mb-2 overflow-x-auto rounded p-2" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
             {JSON.stringify(step.input, null, 2)}
           </pre>
+
+          {/* Confirmation buttons for pending destructive tools */}
+          {step.status === 'pending' && (
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => handleConfirm(true)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
+                style={{ backgroundColor: '#059669' }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => handleConfirm(false)}
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors"
+                style={{ backgroundColor: '#dc2626' }}
+              >
+                Reject
+              </button>
+            </div>
+          )}
+
           {step.output !== undefined && (
             <>
               <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>Output:</div>
