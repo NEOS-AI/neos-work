@@ -151,6 +151,16 @@ export class EngineClient {
     }
   }
 
+  // --- Cancel active chat ---
+
+  async cancelSession(sessionId: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/cancel`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
   // --- Tool Confirmation (VULN-003) ---
 
   async confirmTool(

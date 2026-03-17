@@ -21,6 +21,18 @@ function validateWorkspacePath(path: string): boolean {
 
 const session = new Hono();
 
+// --- Server-side active chat tracking for cancel support ---
+
+const activeChats = new Map<string, AbortController>();
+
+session.post('/:id/cancel', (c) => {
+  const sessionId = c.req.param('id');
+  const controller = activeChats.get(sessionId);
+  if (!controller) return c.json({ ok: false, error: 'No active chat for session' }, 404);
+  controller.abort();
+  return c.json({ ok: true });
+});
+
 // --- Tool confirmation for destructive operations (VULN-003) ---
 
 const DESTRUCTIVE_TOOLS = new Set(['write_file']);
@@ -200,9 +212,15 @@ session.post('/:id/chat', async (c) => {
   return streamSSE(c, async (stream) => {
     let clientDisconnected = false;
 
-    // Detect client disconnection via abort signal
-    const abortSignal = c.req.raw.signal;
-    abortSignal?.addEventListener('abort', () => {
+    // Combine client-disconnect signal with server-side cancel controller
+    const serverAbort = new AbortController();
+    activeChats.set(sessionId, serverAbort);
+
+    const signals: AbortSignal[] = [serverAbort.signal];
+    if (c.req.raw.signal) signals.push(c.req.raw.signal);
+    const abortSignal = AbortSignal.any(signals);
+
+    abortSignal.addEventListener('abort', () => {
       clientDisconnected = true;
     });
 
@@ -385,6 +403,8 @@ session.post('/:id/chat', async (c) => {
         type: 'error',
         content: message,
       }));
+    } finally {
+      activeChats.delete(sessionId);
     }
   });
 });

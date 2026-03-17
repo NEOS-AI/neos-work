@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
+import { Virtuoso } from 'react-virtuoso';
 
 // Allow highlight.js class names through sanitization
 const sanitizeSchema = {
@@ -286,7 +287,6 @@ function ChatArea({
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages
@@ -304,11 +304,6 @@ function ChatArea({
       }
     });
   }, [client, session.id]);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim() || !client || isStreaming) return;
@@ -443,15 +438,19 @@ function ChatArea({
   return (
     <>
       {/* Messages */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-2xl">
-          {messages.length === 0 && (
-            <p className="py-20 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-              {t('startConversation')}
-            </p>
-          )}
-          {messages.map((msg) => (
-            <div key={msg.id} className={`mb-4 ${msg.role === 'user' ? 'text-right' : ''}`}>
+      {messages.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            {t('startConversation')}
+          </p>
+        </div>
+      ) : (
+        <Virtuoso
+          style={{ flex: 1 }}
+          data={messages}
+          followOutput="smooth"
+          itemContent={(_, msg) => (
+            <div className={`px-6 mb-4 ${msg.role === 'user' ? 'text-right' : ''}`}>
               {/* Thinking block (before message bubble) */}
               {msg.thinking && (
                 <ThinkingBlock content={msg.thinking} isStreaming={msg.isStreaming} />
@@ -468,21 +467,20 @@ function ChatArea({
                   className="inline-block max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed"
                   style={{
                     backgroundColor: msg.role === 'user' ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
-                    color: msg.role === 'user' ? 'var(--text-primary)' : 'var(--text-primary)',
+                    color: 'var(--text-primary)',
                   }}
                 >
                   {msg.role === 'assistant' ? (
-                    <MarkdownContent content={msg.content || '...'} />
+                    <MarkdownContent content={msg.content || '...'} isStreaming={msg.isStreaming} />
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content || '...'}</p>
                   )}
                 </div>
               )}
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
+          )}
+        />
+      )}
 
       {/* Input */}
       <div className="border-t p-4" style={{ borderColor: 'var(--border-primary)' }}>
@@ -533,7 +531,16 @@ function ChatArea({
 
 // --- Markdown Rendering ---
 
-function MarkdownContent({ content }: { content: string }) {
+const MarkdownContent = memo(function MarkdownContent({
+  content,
+  isStreaming,
+}: {
+  content: string;
+  isStreaming?: boolean;
+}) {
+  if (isStreaming) {
+    return <pre className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: 'inherit' }}>{content}</pre>;
+  }
   return (
     <div className="markdown-content">
       <ReactMarkdown
@@ -547,7 +554,7 @@ function MarkdownContent({ content }: { content: string }) {
       </ReactMarkdown>
     </div>
   );
-}
+});
 
 function CodeBlock({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) {
   const isBlock = className?.startsWith('hljs') || className?.startsWith('language-');

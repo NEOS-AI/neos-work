@@ -61,11 +61,25 @@ function initSchema(db: Database.Database): void {
       updated_at  TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS agent_step (
+      id          TEXT PRIMARY KEY,
+      session_id  TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+      step_index  INTEGER NOT NULL,
+      type        TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      data        TEXT,
+      error       TEXT,
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT DEFAULT (datetime('now'))
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_session_workspace_id ON session(workspace_id);
     CREATE INDEX IF NOT EXISTS idx_session_updated_at ON session(updated_at);
     CREATE INDEX IF NOT EXISTS idx_message_session_id ON message(session_id);
     CREATE INDEX IF NOT EXISTS idx_message_created_at ON message(created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_step_session_id ON agent_step(session_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_step_status ON agent_step(status);
 
     -- Seed a default workspace if none exists
     INSERT OR IGNORE INTO workspace (id, name, path, type)
