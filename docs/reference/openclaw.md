@@ -1,4 +1,4 @@
-OpenClaw 분석 요약
+OpenClaw 분석 요약 (2026-03-18 기준)
 
 - OpenClaw는 단순 챗앱이 아니라, self-hosted 개인 AI 비서를 위한 gateway/orchestration 플랫폼이다.
 - 핵심 개념은 하나의 Gateway 프로세스가 여러 채널(메신저/디바이스/UI)을 연결하고, agent 세션/툴/메모리/노드 디바이스를 통합 관리하는 구조다.
