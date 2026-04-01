@@ -8,6 +8,8 @@ import { logger } from 'hono/logger';
 import { health } from './routes/health.js';
 import { session, workspace, models } from './routes/session.js';
 import { settings } from './routes/settings.js';
+import { skills } from './routes/skills.js';
+import { mcp } from './routes/mcp.js';
 import { migrateEncryption } from './db/settings.js';
 
 // Generate per-session auth token (VULN-002)
@@ -56,6 +58,8 @@ app.route('/api/workspace', workspace);
 app.route('/api/models', models);
 app.route('/api/session', session);
 app.route('/api/settings', settings);
+app.route('/api/skills', skills);
+app.route('/api/mcp-servers', mcp);
 
 // Root
 app.get('/', (c) => {

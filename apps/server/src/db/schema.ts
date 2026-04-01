@@ -73,6 +73,39 @@ function initSchema(db: Database.Database): void {
       updated_at  TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS memory (
+      id           TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
+      key          TEXT NOT NULL,
+      content      TEXT NOT NULL,
+      tags         TEXT,
+      created_at   TEXT DEFAULT (datetime('now')),
+      updated_at   TEXT DEFAULT (datetime('now')),
+      UNIQUE(workspace_id, key)
+    );
+
+    CREATE TABLE IF NOT EXISTS skill (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL UNIQUE,
+      description  TEXT,
+      source       TEXT NOT NULL,
+      path         TEXT NOT NULL,
+      version      TEXT,
+      enabled      INTEGER NOT NULL DEFAULT 1,
+      installed_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_server (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      transport  TEXT NOT NULL,
+      command    TEXT,
+      args       TEXT,
+      url        TEXT,
+      enabled    INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_session_workspace_id ON session(workspace_id);
     CREATE INDEX IF NOT EXISTS idx_session_updated_at ON session(updated_at);
@@ -80,6 +113,7 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_message_created_at ON message(created_at);
     CREATE INDEX IF NOT EXISTS idx_agent_step_session_id ON agent_step(session_id);
     CREATE INDEX IF NOT EXISTS idx_agent_step_status ON agent_step(status);
+    CREATE INDEX IF NOT EXISTS idx_memory_workspace_id ON memory(workspace_id);
 
     -- Seed a default workspace if none exists
     INSERT OR IGNORE INTO workspace (id, name, path, type)

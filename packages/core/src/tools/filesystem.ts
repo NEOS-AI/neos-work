@@ -3,9 +3,10 @@
  * All paths are sandboxed to the workspace root for security.
  */
 
-import { readFile, writeFile, readdir, stat } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
+import { readFile, writeFile, readdir, stat, rename, glob } from 'node:fs/promises';
+import { realpathSync, createReadStream } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
+import { createInterface } from 'node:readline';
 
 import type { Tool, ToolResult } from './base.js';
 
@@ -155,11 +156,145 @@ export function createListDirectoryTool(workspaceRoot: string): Tool {
   };
 }
 
+export function createSearchFilesTool(workspaceRoot: string): Tool {
+  return {
+    name: 'search_files',
+    description:
+      'Search for files in the workspace. Use type="glob" to find files by name pattern, ' +
+      'or type="content" to search file contents with a regex pattern.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Glob pattern (e.g. "**/*.ts") or regex string for content search' },
+        directory: { type: 'string', description: 'Subdirectory to search in (default: workspace root)' },
+        type: { type: 'string', enum: ['glob', 'content'], description: 'Search type: "glob" (default) or "content"' },
+      },
+      required: ['pattern'],
+    },
+    async execute(input): Promise<ToolResult> {
+      try {
+        const pattern = input.pattern as string;
+        const searchType = (input.type as string) ?? 'glob';
+
+        const absoluteRoot = realpathSync(resolve(workspaceRoot));
+        let searchRoot = absoluteRoot;
+
+        if (input.directory) {
+          const resolved = resolve(absoluteRoot, input.directory as string);
+          let realDir: string;
+          try {
+            realDir = realpathSync(resolved);
+          } catch {
+            return { success: false, output: null, error: `Directory does not exist: ${input.directory}` };
+          }
+          if (!realDir.startsWith(absoluteRoot + '/') && realDir !== absoluteRoot) {
+            return { success: false, output: null, error: `Directory is outside the workspace: ${input.directory}` };
+          }
+          searchRoot = realDir;
+        }
+
+        if (searchType === 'glob') {
+          const matches: string[] = [];
+          for await (const entry of glob(pattern, { cwd: searchRoot })) {
+            matches.push(entry);
+            if (matches.length >= 200) break; // cap results
+          }
+          return { success: true, output: { matches } };
+        } else {
+          // Content search — grep-style
+          let regex: RegExp;
+          try {
+            regex = new RegExp(pattern);
+          } catch {
+            return { success: false, output: null, error: `Invalid regex pattern: ${pattern}` };
+          }
+
+          const matchingLines: { file: string; line: number; content: string }[] = [];
+
+          // Walk all non-hidden files
+          async function searchDir(dirPath: string): Promise<void> {
+            const entries = await readdir(dirPath, { withFileTypes: true });
+            for (const entry of entries) {
+              if (entry.name.startsWith('.')) continue;
+              const fullPath = join(dirPath, entry.name);
+              if (entry.isDirectory()) {
+                await searchDir(fullPath);
+              } else if (entry.isFile()) {
+                const rl = createInterface({
+                  input: createReadStream(fullPath),
+                  crlfDelay: Infinity,
+                });
+                let lineNum = 0;
+                for await (const line of rl) {
+                  lineNum++;
+                  if (regex.test(line)) {
+                    const relPath = relative(absoluteRoot, fullPath);
+                    matchingLines.push({ file: relPath, line: lineNum, content: line.trim() });
+                    if (matchingLines.length >= 500) return;
+                  }
+                }
+              }
+            }
+          }
+
+          await searchDir(searchRoot);
+          return { success: true, output: { matches: matchingLines } };
+        }
+      } catch (err) {
+        return { success: false, output: null, error: (err as Error).message };
+      }
+    },
+  };
+}
+
+export function createMoveFileTool(workspaceRoot: string): Tool {
+  return {
+    name: 'move_file',
+    description: 'Move or rename a file or directory within the workspace.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', description: 'Relative path to the source file or directory' },
+        destination: { type: 'string', description: 'Relative path to the destination' },
+      },
+      required: ['source', 'destination'],
+    },
+    async execute(input): Promise<ToolResult> {
+      try {
+        const absoluteRoot = realpathSync(resolve(workspaceRoot));
+
+        const srcPath = safePath(workspaceRoot, input.source as string);
+        const srcRel = relative(absoluteRoot, srcPath);
+        if (isProtectedPath(srcRel)) {
+          return { success: false, output: null, error: `Cannot move protected path: ${input.source}` };
+        }
+
+        // Destination may not exist yet — validate parent
+        const destResolved = resolve(absoluteRoot, input.destination as string);
+        const destRel = relative(absoluteRoot, destResolved);
+        if (destRel.startsWith('..')) {
+          return { success: false, output: null, error: `Destination is outside the workspace: ${input.destination}` };
+        }
+        if (isProtectedPath(destRel)) {
+          return { success: false, output: null, error: `Cannot move to protected path: ${input.destination}` };
+        }
+
+        await rename(srcPath, destResolved);
+        return { success: true, output: { moved: `${input.source} → ${input.destination}` } };
+      } catch (err) {
+        return { success: false, output: null, error: (err as Error).message };
+      }
+    },
+  };
+}
+
 /** Create a ToolRegistry-compatible set of all filesystem tools for a workspace. */
 export function createFilesystemTools(workspaceRoot: string): Tool[] {
   return [
     createReadFileTool(workspaceRoot),
     createWriteFileTool(workspaceRoot),
     createListDirectoryTool(workspaceRoot),
+    createSearchFilesTool(workspaceRoot),
+    createMoveFileTool(workspaceRoot),
   ];
 }

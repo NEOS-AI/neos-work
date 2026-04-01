@@ -4,13 +4,29 @@ import { homedir } from 'node:os';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
-import { ProviderRegistry, AnthropicAdapter, GoogleAdapter, ToolRegistry, createFilesystemTools } from '@neos-work/core';
+import {
+  ProviderRegistry,
+  AnthropicAdapter,
+  GoogleAdapter,
+  ToolRegistry,
+  createFilesystemTools,
+  createWebSearchTool,
+  createShellTool,
+  createMemoryTools,
+  AgentOrchestrator,
+} from '@neos-work/core';
 import { ALL_MODELS, THINKING_MODES } from '@neos-work/shared';
 import type { ChatParams, Message, MessageContent, ThinkingMode } from '@neos-work/shared';
 
+import { McpClient, buildMcpTools } from '@neos-work/mcp-client';
+import type { McpServerConfig } from '@neos-work/mcp-client';
+
 import * as db from '../db/sessions.js';
+import * as agentStepsDb from '../db/agent-steps.js';
+import * as memoryDb from '../db/memory.js';
 import * as settingsDb from '../db/settings.js';
 import { safeError } from '../lib/errors.js';
+import { getDb } from '../db/schema.js';
 
 /** Validate that a workspace path is within the user's home directory. */
 function validateWorkspacePath(path: string): boolean {
@@ -35,7 +51,7 @@ session.post('/:id/cancel', (c) => {
 
 // --- Tool confirmation for destructive operations (VULN-003) ---
 
-const DESTRUCTIVE_TOOLS = new Set(['write_file']);
+const DESTRUCTIVE_TOOLS = new Set(['write_file', 'run_command']);
 const TOOL_CONFIRM_TIMEOUT_MS = 60_000;
 
 const pendingConfirmations = new Map<
@@ -72,6 +88,39 @@ function getRegistry(): ProviderRegistry {
   }
 
   return registry;
+}
+
+// --- MCP tool loader ---
+
+const mcpClients: McpClient[] = [];
+
+async function loadMcpTools(toolRegistry: ToolRegistry): Promise<void> {
+  const rows = getDb()
+    .prepare('SELECT * FROM mcp_server WHERE enabled = 1')
+    .all() as Array<{ id: string; name: string; transport: string; command: string | null; args: string | null; url: string | null }>;
+
+  for (const row of rows) {
+    const config: McpServerConfig = {
+      id: row.id,
+      name: row.name,
+      transport: row.transport as 'stdio' | 'http',
+      command: row.command ?? undefined,
+      args: row.args ? (JSON.parse(row.args) as string[]) : undefined,
+      url: row.url ?? undefined,
+      enabled: true,
+    };
+    const client = new McpClient();
+    try {
+      await client.connect(config);
+      const tools = await buildMcpTools(client);
+      for (const tool of tools) {
+        toolRegistry.register(tool);
+      }
+      mcpClients.push(client);
+    } catch (err) {
+      console.error(`Failed to connect to MCP server "${config.name}":`, err);
+    }
+  }
 }
 
 // --- Session CRUD ---
@@ -179,13 +228,16 @@ session.post('/:id/chat', async (c) => {
     db.updateSessionTitle(sessionId, title);
   }
 
-  // Initialize tool registry with workspace-scoped filesystem tools
+  // Initialize tool registry with workspace-scoped tools
   const ws = db.getWorkspace(s.workspace_id);
   const workspacePath = ws?.path || process.cwd();
   const toolRegistry = new ToolRegistry();
   for (const tool of createFilesystemTools(workspacePath)) {
     toolRegistry.register(tool);
   }
+  toolRegistry.register(createWebSearchTool());
+  toolRegistry.register(createShellTool(workspacePath));
+  await loadMcpTools(toolRegistry);
   const toolDefs = toolRegistry.toDefinitions();
 
   // Build message history for LLM (supports structured content for tool messages)
@@ -403,6 +455,175 @@ session.post('/:id/chat', async (c) => {
         type: 'error',
         content: message,
       }));
+    } finally {
+      activeChats.delete(sessionId);
+    }
+  });
+});
+
+// --- Agent execution (SSE streaming) ---
+
+session.post('/:id/agent', async (c) => {
+  const sessionId = c.req.param('id');
+  const s = db.getSession(sessionId);
+  if (!s) return c.json({ ok: false, error: 'Session not found' }, 404);
+
+  const registry = getRegistry();
+  if (registry.getAll().length === 0) {
+    return c.json({ ok: false, error: 'No API key configured. Please set API keys in Settings.' }, 400);
+  }
+
+  const body = await c.req.json<{ content: string }>();
+
+  const MAX_CONTENT_LENGTH = 100_000;
+  if (!body.content || typeof body.content !== 'string') {
+    return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
+  }
+  if (body.content.length > MAX_CONTENT_LENGTH) {
+    return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);
+  }
+
+  const found = registry.findModel(s.model);
+  if (!found) {
+    return c.json({ ok: false, error: `No adapter registered for model: ${s.model}` }, 400);
+  }
+
+  // Save user message and set session title
+  db.addMessage({ sessionId, role: 'user', content: body.content });
+  const MAX_TITLE_LENGTH = 60;
+  if (!s.title) {
+    const title = body.content.slice(0, MAX_TITLE_LENGTH) + (body.content.length > MAX_TITLE_LENGTH ? '...' : '');
+    db.updateSessionTitle(sessionId, title);
+  }
+
+  const ws = db.getWorkspace(s.workspace_id);
+  const workspacePath = ws?.path || process.cwd();
+
+  return streamSSE(c, async (stream) => {
+    let clientDisconnected = false;
+
+    const serverAbort = new AbortController();
+    activeChats.set(sessionId, serverAbort);
+
+    const signals: AbortSignal[] = [serverAbort.signal];
+    if (c.req.raw.signal) signals.push(c.req.raw.signal);
+    const abortSignal = AbortSignal.any(signals);
+
+    abortSignal.addEventListener('abort', () => {
+      clientDisconnected = true;
+    });
+
+    async function safeSend(event: string, data: string): Promise<boolean> {
+      if (clientDisconnected) return false;
+      try {
+        await stream.writeSSE({ event, data });
+        return true;
+      } catch {
+        clientDisconnected = true;
+        return false;
+      }
+    }
+
+    try {
+      const toolRegistry = new ToolRegistry();
+      for (const tool of createFilesystemTools(workspacePath)) {
+        toolRegistry.register(tool);
+      }
+      toolRegistry.register(createWebSearchTool());
+      toolRegistry.register(createShellTool(workspacePath));
+      await loadMcpTools(toolRegistry);
+
+      // Memory tools with workspace-scoped callbacks
+      const workspaceId = s.workspace_id;
+      const memoryCallbacks = {
+        async save(key: string, content: string, tags?: string[]) {
+          memoryDb.createMemory({ workspaceId, key, content, tags });
+        },
+        async search(query: string, tags?: string[], limit?: number) {
+          return memoryDb.searchMemory(workspaceId, query, tags, limit).map((r) => ({
+            key: r.key,
+            content: r.content,
+            tags: r.tags ? (JSON.parse(r.tags) as string[]) : undefined,
+          }));
+        },
+        async remove(key: string) {
+          memoryDb.deleteMemory(workspaceId, key);
+        },
+      };
+      for (const tool of createMemoryTools(memoryCallbacks)) {
+        toolRegistry.register(tool);
+      }
+
+      // Clear previous agent steps for this session
+      agentStepsDb.deleteAgentSteps(sessionId);
+
+      // Map internal step IDs → DB row IDs for status updates
+      const stepDbIds = new Map<string, string>();
+
+      const orchestrator = new AgentOrchestrator(found.provider, toolRegistry, {
+        maxIterations: 10,
+        model: s.model,
+      });
+
+      let accumulatedText = '';
+
+      for await (const event of orchestrator.run(body.content, abortSignal)) {
+        if (clientDisconnected) break;
+
+        switch (event.type) {
+          case 'plan': {
+            for (const step of event.steps) {
+              const row = agentStepsDb.createAgentStep({
+                sessionId,
+                stepIndex: step.index,
+                type: step.type,
+                data: step,
+              });
+              stepDbIds.set(step.id, row.id);
+            }
+            await safeSend('plan', JSON.stringify({ steps: event.steps }));
+            break;
+          }
+          case 'step_start': {
+            const rowId = stepDbIds.get(event.step.id);
+            if (rowId) agentStepsDb.updateAgentStep(rowId, { status: 'running', data: event.step });
+            await safeSend('step_start', JSON.stringify({ step: event.step }));
+            break;
+          }
+          case 'step_complete': {
+            const rowId = stepDbIds.get(event.step.id);
+            if (rowId) agentStepsDb.updateAgentStep(rowId, { status: 'completed', data: event.step });
+            await safeSend('step_complete', JSON.stringify({ step: event.step }));
+            break;
+          }
+          case 'step_error': {
+            const rowId = stepDbIds.get(event.step.id);
+            if (rowId) agentStepsDb.updateAgentStep(rowId, { status: 'error', data: event.step, error: event.error });
+            await safeSend('step_error', JSON.stringify({ step: event.step, error: event.error }));
+            break;
+          }
+          case 'text': {
+            accumulatedText += event.content;
+            await safeSend('text', JSON.stringify({ content: event.content }));
+            break;
+          }
+          case 'done': {
+            // Save final assistant message
+            const finalContent = accumulatedText || 'Agent task completed.';
+            db.addMessage({ sessionId, role: 'assistant', content: finalContent });
+            db.touchSession(sessionId);
+            await safeSend('done', JSON.stringify({ task: event.task }));
+            break;
+          }
+          case 'error': {
+            await safeSend('error', JSON.stringify({ error: event.error }));
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      const message = safeError(error, 'agent-stream');
+      await safeSend('error', JSON.stringify({ error: message }));
     } finally {
       activeChats.delete(sessionId);
     }

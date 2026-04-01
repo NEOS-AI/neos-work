@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useEngine } from '../hooks/useEngine.js';
 import { useTheme } from '../hooks/useTheme.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
+import type { McpServerData } from '../lib/engine.js';
 
 export function Settings() {
   const { t, i18n } = useTranslation(['settings', 'common']);
@@ -102,6 +103,9 @@ export function Settings() {
           </div>
         </div>
       </section>
+
+      {/* MCP Servers */}
+      <McpServersSection />
 
       {/* Default Model */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -318,5 +322,212 @@ function EyeOffIcon() {
       <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
       <line x1="2" y1="2" x2="22" y2="22" />
     </svg>
+  );
+}
+
+// --- MCP Servers Section ---
+
+function McpServersSection() {
+  const { client } = useEngine();
+  const [servers, setServers] = useState<McpServerData[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [transport, setTransport] = useState<'stdio' | 'http'>('stdio');
+  const [formName, setFormName] = useState('');
+  const [formCommand, setFormCommand] = useState('');
+  const [formArgs, setFormArgs] = useState('');
+  const [formUrl, setFormUrl] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const loadServers = useCallback(async () => {
+    if (!client) return;
+    const res = await client.listMcpServers();
+    if (res.ok && res.data) setServers(res.data);
+  }, [client]);
+
+  useEffect(() => {
+    loadServers();
+  }, [loadServers]);
+
+  const handleAdd = async () => {
+    if (!client || !formName) return;
+    setAdding(true);
+    try {
+      const args = formArgs.trim() ? formArgs.split(/\s+/) : undefined;
+      const res = await client.createMcpServer({
+        name: formName,
+        transport,
+        command: transport === 'stdio' ? formCommand : undefined,
+        args: transport === 'stdio' ? args : undefined,
+        url: transport === 'http' ? formUrl : undefined,
+      });
+      if (res.ok) {
+        setFormName('');
+        setFormCommand('');
+        setFormArgs('');
+        setFormUrl('');
+        setShowAddForm(false);
+        await loadServers();
+      }
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleToggle = async (id: string, enabled: boolean) => {
+    if (!client) return;
+    await client.toggleMcpServer(id, enabled);
+    setServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!client) return;
+    await client.deleteMcpServer(id);
+    setServers((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  return (
+    <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>MCP Servers</h2>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+          style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+        >
+          + Add
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div className="mb-4 rounded-lg border p-4" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
+          <div className="flex flex-col gap-3">
+            <input
+              placeholder="Server name"
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              className="rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+            />
+            <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)' }}>
+              {(['stdio', 'http'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTransport(t)}
+                  className="flex-1 rounded-md px-3 py-1 text-xs transition-colors"
+                  style={{
+                    backgroundColor: transport === t ? 'var(--border-secondary)' : undefined,
+                    color: transport === t ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            {transport === 'stdio' ? (
+              <>
+                <input
+                  placeholder="Command (e.g. npx)"
+                  value={formCommand}
+                  onChange={(e) => setFormCommand(e.target.value)}
+                  className="rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                />
+                <input
+                  placeholder="Args (space-separated, e.g. -y @server/pkg /path)"
+                  value={formArgs}
+                  onChange={(e) => setFormArgs(e.target.value)}
+                  className="rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                />
+              </>
+            ) : (
+              <input
+                placeholder="Server URL (e.g. http://localhost:3000/sse)"
+                value={formUrl}
+                onChange={(e) => setFormUrl(e.target.value)}
+                className="rounded-lg border px-3 py-2 text-sm outline-none"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              />
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="rounded-lg px-3 py-1.5 text-xs"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdd}
+                disabled={!formName || adding || (transport === 'stdio' && !formCommand) || (transport === 'http' && !formUrl)}
+                className="rounded-lg px-3 py-1.5 text-xs transition-colors disabled:opacity-40"
+                style={{ backgroundColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+              >
+                {adding ? 'Adding...' : 'Add Server'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {servers.length === 0 ? (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          No MCP servers configured. Add a server to extend the agent with external tools.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {servers.map((server) => (
+            <div
+              key={server.id}
+              className="flex items-center justify-between rounded-lg border px-3 py-2"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {server.name}
+                  </span>
+                  <span
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                  >
+                    {server.transport}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                  {server.transport === 'stdio'
+                    ? `${server.command} ${(server.args ?? []).join(' ')}`
+                    : server.url}
+                </p>
+              </div>
+              <div className="ml-2 flex items-center gap-2">
+                <button
+                  onClick={() => handleToggle(server.id, !server.enabled)}
+                  className="relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full transition-colors"
+                  style={{ backgroundColor: server.enabled ? '#059669' : 'var(--bg-tertiary)' }}
+                >
+                  <span
+                    className="inline-block h-4 w-4 transform rounded-full shadow transition-transform"
+                    style={{
+                      backgroundColor: 'white',
+                      transform: server.enabled ? 'translateX(16px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
+                <button
+                  onClick={() => handleDelete(server.id)}
+                  className="rounded p-1"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

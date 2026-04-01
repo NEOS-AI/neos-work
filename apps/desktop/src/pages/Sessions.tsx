@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/shared';
 
 import { useEngine } from '../hooks/useEngine.js';
-import type { MessageData, SessionData } from '../lib/engine.js';
+import type { AgentStep, MessageData, SessionData } from '../lib/engine.js';
 
 interface ToolStep {
   toolName: string;
@@ -37,6 +37,7 @@ interface DisplayMessage {
   thinking?: string;
   isStreaming?: boolean;
   steps?: ToolStep[];
+  agentPlan?: AgentStep[];
 }
 
 // --- Model definitions (from shared single source of truth) ---
@@ -287,6 +288,7 @@ function ChatArea({
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isAgentMode, setIsAgentMode] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages
@@ -307,6 +309,10 @@ function ChatArea({
 
   const handleSend = async () => {
     if (!input.trim() || !client || isStreaming) return;
+    if (isAgentMode) {
+      await handleSendAgent();
+      return;
+    }
 
     const userMessage: DisplayMessage = {
       id: `temp-${Date.now()}`,
@@ -422,6 +428,77 @@ function ChatArea({
     }
   };
 
+  const handleSendAgent = async () => {
+    if (!input.trim() || !client) return;
+
+    const userInput = input.trim();
+    setInput('');
+    setMessages((prev) => [...prev, { id: `temp-${Date.now()}`, role: 'user', content: userInput }]);
+    setIsStreaming(true);
+
+    const assistantId = `temp-agent-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '', isStreaming: true }]);
+
+    try {
+      abortRef.current = new AbortController();
+
+      for await (const chunk of client.runAgent(session.id, userInput, abortRef.current.signal)) {
+        if (chunk.type === 'plan') {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, agentPlan: chunk.steps } : m)),
+          );
+        } else if (chunk.type === 'step_start' || chunk.type === 'step_complete') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId && m.agentPlan
+                ? { ...m, agentPlan: m.agentPlan.map((s) => (s.id === chunk.step.id ? chunk.step : s)) }
+                : m,
+            ),
+          );
+        } else if (chunk.type === 'step_error') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId && m.agentPlan
+                ? {
+                    ...m,
+                    agentPlan: m.agentPlan.map((s) =>
+                      s.id === chunk.step.id ? { ...chunk.step, status: 'error' as const } : s,
+                    ),
+                  }
+                : m,
+            ),
+          );
+        } else if (chunk.type === 'text' && chunk.content) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk.content } : m)),
+          );
+        } else if (chunk.type === 'error') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content || `Error: ${chunk.error}` } : m,
+            ),
+          );
+        }
+      }
+
+      setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, isStreaming: false } : m)));
+      onSessionUpdate();
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: m.content || `Error: ${(error as Error).message}`, isStreaming: false }
+              : m,
+          ),
+        );
+      }
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -454,6 +531,11 @@ function ChatArea({
               {/* Thinking block (before message bubble) */}
               {msg.thinking && (
                 <ThinkingBlock content={msg.thinking} isStreaming={msg.isStreaming} />
+              )}
+
+              {/* Agent plan */}
+              {msg.agentPlan && msg.agentPlan.length > 0 && (
+                <AgentPlanCard plan={msg.agentPlan} isStreaming={msg.isStreaming} />
               )}
 
               {/* Tool steps */}
@@ -504,6 +586,23 @@ function ChatArea({
                     Thinking: {session.thinking_mode}
                   </span>
                 )}
+                {/* Agent mode toggle */}
+                <button
+                  onClick={() => setIsAgentMode((prev) => !prev)}
+                  disabled={isStreaming}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors disabled:opacity-30"
+                  style={{
+                    backgroundColor: isAgentMode ? 'var(--border-secondary)' : 'var(--bg-tertiary)',
+                    color: isAgentMode ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    border: isAgentMode ? '1px solid var(--border-secondary)' : '1px solid transparent',
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
+                  </svg>
+                  Agent
+                </button>
               </div>
               <button
                 onClick={isStreaming ? () => abortRef.current?.abort() : handleSend}
@@ -744,6 +843,83 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
               </pre>
             </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Agent Plan Card ---
+
+function AgentPlanCard({ plan, isStreaming }: { plan: AgentStep[]; isStreaming?: boolean }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const completedCount = plan.filter((s) => s.status === 'completed').length;
+
+  return (
+    <div
+      className="mb-2 max-w-[85%] rounded-lg border"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 50%, transparent)' }}
+    >
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-xs"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
+        </svg>
+        <span className="font-medium">Agent Plan</span>
+        <span style={{ color: 'var(--text-muted)' }}>
+          {completedCount}/{plan.length} steps
+        </span>
+        {isStreaming && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />}
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round"
+          className={`ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div className="border-t px-3 py-2" style={{ borderColor: 'var(--border-primary)' }}>
+          {plan.map((step, i) => (
+            <div key={step.id} className="flex items-start gap-2 py-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <span className="mt-0.5 shrink-0">
+                {step.status === 'pending' && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)' }}>
+                    <circle cx="12" cy="12" r="9" />
+                  </svg>
+                )}
+                {step.status === 'running' && (
+                  <span className="block h-3 w-3 animate-spin rounded-full border border-blue-400 border-t-transparent" />
+                )}
+                {step.status === 'completed' && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+                {step.status === 'error' && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-red-400">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                )}
+              </span>
+              <span className="flex-1">
+                <span style={{ color: 'var(--text-muted)' }}>{i + 1}.</span>{' '}
+                {step.description}
+                {step.toolName && (
+                  <span className="ml-1 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    [{step.toolName}]
+                  </span>
+                )}
+                {step.error && (
+                  <span className="ml-1 text-red-400">{step.error}</span>
+                )}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

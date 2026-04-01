@@ -15,6 +15,7 @@
   "dependencies": {
     "@hono/node-server": "^1.14.4",
     "@neos-work/core": "workspace:*",
+    "@neos-work/mcp-client": "workspace:*",
     "@neos-work/shared": "workspace:*",
     "better-sqlite3": "^12.6.2",
     "hono": "^4.7.0",
