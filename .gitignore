@@ -1,6 +1,7 @@
 node_modules
 dist
 .turbo
+.worktrees
 
 # MacOS
 .DS_Store
