@@ -14,6 +14,7 @@ import {
   createShellTool,
   createMemoryTools,
   AgentOrchestrator,
+  ContextManager,
 } from '@neos-work/core';
 import { ALL_MODELS, THINKING_MODES } from '@neos-work/shared';
 import type { ChatParams, Message, MessageContent, ThinkingMode } from '@neos-work/shared';
@@ -242,7 +243,7 @@ session.post('/:id/chat', async (c) => {
 
   // Build message history for LLM (supports structured content for tool messages)
   const messageRows = db.listMessages(sessionId);
-  const messages: Message[] = messageRows.map((m) => {
+  let messages: Message[] = messageRows.map((m) => {
     let content: string | MessageContent[];
     if (m.metadata && m.metadata !== 'null') {
       try {
@@ -259,6 +260,7 @@ session.post('/:id/chat', async (c) => {
 
   const MAX_TOOL_ITERATIONS = 10;
   const TOOL_EXEC_TIMEOUT_MS = 30_000;
+  const contextManager = new ContextManager();
 
   // Stream response via SSE with tool execution loop
   return streamSSE(c, async (stream) => {
@@ -298,6 +300,12 @@ session.post('/:id/chat', async (c) => {
         if (iteration++ >= MAX_TOOL_ITERATIONS) {
           await safeSend('error', JSON.stringify({ type: 'error', content: 'Max tool iterations reached' }));
           break;
+        }
+
+        // 컨텍스트 압축 (토큰 임계값 초과 시)
+        if (contextManager.needsCompression(messages)) {
+          messages = await contextManager.compress(messages, found.provider, abortSignal);
+          await safeSend('context_compressed', JSON.stringify({ type: 'context_compressed' }));
         }
 
         const chatParams: ChatParams = {
