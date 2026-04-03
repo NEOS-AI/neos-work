@@ -11,11 +11,15 @@ import type { LLMProviderAdapter } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { Planner } from './planner.js';
 import type { AgentEvent, AgentStep, AgentTask, OrchestratorOptions } from './types.js';
+import { RetryStrategy, ReflectionStrategy } from './healing.js';
+import type { HealingStrategy } from './healing.js';
 
 export class AgentOrchestrator {
   private planner: Planner;
   private maxIterations: number;
   private model: string;
+  private retryStrategy: HealingStrategy;
+  private reflectionStrategy: HealingStrategy;
 
   constructor(
     private adapter: LLMProviderAdapter,
@@ -25,6 +29,8 @@ export class AgentOrchestrator {
     this.planner = new Planner(adapter);
     this.maxIterations = options.maxIterations ?? 10;
     this.model = options.model ?? (adapter.getModels()[0]?.id ?? '');
+    this.retryStrategy = new RetryStrategy();
+    this.reflectionStrategy = new ReflectionStrategy(adapter);
   }
 
   async *run(goal: string, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
@@ -93,11 +99,66 @@ export class AgentOrchestrator {
           yield { type: 'step_complete', step: { ...step } };
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
-          step.status = 'error';
-          step.error = error;
-          yield { type: 'step_error', step: { ...step }, error };
+          let healed = false;
 
-          // Non-fatal: continue to next step
+          // Healing attempt 1: retry
+          if (!signal?.aborted) {
+            step.status = 'running';
+            yield { type: 'step_healing', step: { ...step }, strategy: 'retry' };
+            try {
+              const result = await this.executeStep(step, conversationHistory, signal);
+              step.output = result;
+              step.status = 'completed';
+              conversationHistory.push({
+                role: 'assistant',
+                content: `Step ${step.index + 1} (${step.description}): ${JSON.stringify(result)}`,
+              });
+              yield { type: 'step_complete', step: { ...step } };
+              healed = true;
+            } catch {
+              // retry도 실패 → reflection으로 진행
+            }
+          }
+
+          // Healing attempt 2: reflection
+          if (!healed && !signal?.aborted) {
+            yield { type: 'step_healing', step: { ...step }, strategy: 'reflect' };
+            const reflectResult = await this.reflectionStrategy.heal(
+              step, error, task.steps, signal,
+            );
+
+            if (reflectResult.action === 'abort') {
+              task.status = 'failed';
+              yield { type: 'error', error: `Agent aborted: step ${step.index + 1} failed after reflection` };
+              return;
+            }
+
+            if (reflectResult.action === 'retry' && reflectResult.revisedStep) {
+              Object.assign(step, reflectResult.revisedStep);
+              step.status = 'running';
+              try {
+                const result = await this.executeStep(step, conversationHistory, signal);
+                step.output = result;
+                step.status = 'completed';
+                conversationHistory.push({
+                  role: 'assistant',
+                  content: `Step ${step.index + 1} (${step.description}): ${JSON.stringify(result)}`,
+                });
+                yield { type: 'step_complete', step: { ...step } };
+                healed = true;
+              } catch {
+                // revised step도 실패 → skip으로 처리
+              }
+            }
+          }
+
+          if (!healed) {
+            const finalError = err instanceof Error ? err.message : String(err);
+            step.status = 'error';
+            step.error = finalError;
+            yield { type: 'step_error', step: { ...step }, error: finalError };
+            // Non-fatal: 다음 step 계속
+          }
         }
       }
 

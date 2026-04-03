@@ -34,6 +34,7 @@ export type AgentEvent =
   | { type: 'step_start'; step: AgentStep }
   | { type: 'step_complete'; step: AgentStep }
   | { type: 'step_error'; step: AgentStep; error: string }
+  | { type: 'step_healing'; step: AgentStep; strategy: 'retry' | 'reflect' }
   | { type: 'text'; content: string }
   | { type: 'done'; task: AgentTask }
   | { type: 'error'; error: string };

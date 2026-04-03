@@ -38,6 +38,7 @@ interface DisplayMessage {
   isStreaming?: boolean;
   steps?: ToolStep[];
   agentPlan?: AgentStep[];
+  isCompressSummary?: boolean;
 }
 
 // --- Model definitions (from shared single source of truth) ---
@@ -404,6 +405,16 @@ function ChatArea({
                 : m,
             ),
           );
+        } else if (chunk.type === 'context_compressed') {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: 'system' as const,
+              content: '이전 대화 요약됨',
+              isCompressSummary: true,
+            },
+          ]);
         }
       }
 
@@ -447,13 +458,55 @@ function ChatArea({
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantId ? { ...m, agentPlan: chunk.steps } : m)),
           );
-        } else if (chunk.type === 'step_start' || chunk.type === 'step_complete') {
+        } else if (chunk.type === 'step_start') {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId && m.agentPlan
                 ? { ...m, agentPlan: m.agentPlan.map((s) => (s.id === chunk.step.id ? chunk.step : s)) }
                 : m,
             ),
+          );
+        } else if (chunk.type === 'step_complete') {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (!m.agentPlan || m.id !== assistantId) return m;
+              return {
+                ...m,
+                agentPlan: m.agentPlan.map((s) => {
+                  if (s.id !== chunk.step.id) return s;
+                  // browser_screenshot output에서 base64 추출
+                  const output = chunk.step.output as Record<string, unknown> | undefined;
+                  const screenshot =
+                    output && typeof output === 'object' && 'screenshot' in output
+                      ? (output.screenshot as string)
+                      : undefined;
+                  return {
+                    ...chunk.step,
+                    status: 'completed' as const,
+                    screenshot,
+                    healingStatus: undefined,
+                  };
+                }),
+              };
+            }),
+          );
+        } else if (chunk.type === 'step_healing') {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (!m.agentPlan || m.id !== assistantId) return m;
+              return {
+                ...m,
+                agentPlan: m.agentPlan.map((s) =>
+                  s.id === chunk.step.id
+                    ? {
+                        ...s,
+                        healingStatus:
+                          chunk.strategy === 'retry' ? '재시도 중...' : '대안 탐색 중...',
+                      }
+                    : s,
+                ),
+              };
+            }),
           );
         } else if (chunk.type === 'step_error') {
           setMessages((prev) =>
@@ -528,6 +581,17 @@ function ChatArea({
           followOutput="smooth"
           itemContent={(_, msg) => (
             <div className={`px-6 mb-4 ${msg.role === 'user' ? 'text-right' : ''}`}>
+              {/* Context compression divider */}
+              {msg.isCompressSummary && (
+                <div className="my-2 flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <div className="h-px flex-1" style={{ backgroundColor: 'var(--border-primary)' }} />
+                  <span className="rounded px-2 py-0.5" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                    이전 대화 요약됨
+                  </span>
+                  <div className="h-px flex-1" style={{ backgroundColor: 'var(--border-primary)' }} />
+                </div>
+              )}
+
               {/* Thinking block (before message bubble) */}
               {msg.thinking && (
                 <ThinkingBlock content={msg.thinking} isStreaming={msg.isStreaming} />
@@ -849,6 +913,33 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
   );
 }
 
+// --- Screenshot Toggle ---
+
+function ScreenshotToggle({ screenshot }: { screenshot: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="ml-1 inline-block">
+      <button
+        onClick={() => setOpen(!open)}
+        className="text-[10px] underline"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        {open ? '스크린샷 닫기 ▲' : '스크린샷 보기 ▼'}
+      </button>
+      {open && (
+        <div className="mt-1">
+          <img
+            src={`data:image/png;base64,${screenshot}`}
+            alt="browser screenshot"
+            className="max-w-xs rounded border"
+            style={{ borderColor: 'var(--border-primary)' }}
+          />
+        </div>
+      )}
+    </span>
+  );
+}
+
 // --- Agent Plan Card ---
 
 function AgentPlanCard({ plan, isStreaming }: { plan: AgentStep[]; isStreaming?: boolean }) {
@@ -914,9 +1005,15 @@ function AgentPlanCard({ plan, isStreaming }: { plan: AgentStep[]; isStreaming?:
                     [{step.toolName}]
                   </span>
                 )}
+                {step.healingStatus && (
+                  <span className="ml-1 italic" style={{ color: 'var(--text-muted)' }}>
+                    {step.healingStatus}
+                  </span>
+                )}
                 {step.error && (
                   <span className="ml-1 text-red-400">{step.error}</span>
                 )}
+                {step.screenshot && <ScreenshotToggle screenshot={step.screenshot} />}
               </span>
             </div>
           ))}

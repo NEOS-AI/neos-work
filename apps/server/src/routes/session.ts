@@ -14,12 +14,14 @@ import {
   createShellTool,
   createMemoryTools,
   AgentOrchestrator,
+  ContextManager,
 } from '@neos-work/core';
 import { ALL_MODELS, THINKING_MODES } from '@neos-work/shared';
 import type { ChatParams, Message, MessageContent, ThinkingMode } from '@neos-work/shared';
 
 import { McpClient, buildMcpTools } from '@neos-work/mcp-client';
 import type { McpServerConfig } from '@neos-work/mcp-client';
+import { BrowserManager, createBrowserTools } from '@neos-work/browser-tool';
 
 import * as db from '../db/sessions.js';
 import * as agentStepsDb from '../db/agent-steps.js';
@@ -120,6 +122,20 @@ async function loadMcpTools(toolRegistry: ToolRegistry): Promise<void> {
     } catch (err) {
       console.error(`Failed to connect to MCP server "${config.name}":`, err);
     }
+  }
+}
+
+async function loadBrowserTools(
+  toolRegistry: ToolRegistry,
+  manager: BrowserManager,
+): Promise<void> {
+  try {
+    await manager.connect();
+    for (const tool of createBrowserTools(manager)) {
+      toolRegistry.register(tool);
+    }
+  } catch (err) {
+    console.error('Failed to initialize browser tools:', err);
   }
 }
 
@@ -242,7 +258,7 @@ session.post('/:id/chat', async (c) => {
 
   // Build message history for LLM (supports structured content for tool messages)
   const messageRows = db.listMessages(sessionId);
-  const messages: Message[] = messageRows.map((m) => {
+  let messages: Message[] = messageRows.map((m) => {
     let content: string | MessageContent[];
     if (m.metadata && m.metadata !== 'null') {
       try {
@@ -259,6 +275,7 @@ session.post('/:id/chat', async (c) => {
 
   const MAX_TOOL_ITERATIONS = 10;
   const TOOL_EXEC_TIMEOUT_MS = 30_000;
+  const contextManager = new ContextManager();
 
   // Stream response via SSE with tool execution loop
   return streamSSE(c, async (stream) => {
@@ -298,6 +315,12 @@ session.post('/:id/chat', async (c) => {
         if (iteration++ >= MAX_TOOL_ITERATIONS) {
           await safeSend('error', JSON.stringify({ type: 'error', content: 'Max tool iterations reached' }));
           break;
+        }
+
+        // 컨텍스트 압축 (토큰 임계값 초과 시)
+        if (contextManager.needsCompression(messages)) {
+          messages = await contextManager.compress(messages, found.provider, abortSignal);
+          await safeSend('context_compressed', JSON.stringify({ type: 'context_compressed' }));
         }
 
         const chatParams: ChatParams = {
@@ -524,6 +547,8 @@ session.post('/:id/agent', async (c) => {
       }
     }
 
+    const browserManager = new BrowserManager();
+
     try {
       const toolRegistry = new ToolRegistry();
       for (const tool of createFilesystemTools(workspacePath)) {
@@ -553,6 +578,9 @@ session.post('/:id/agent', async (c) => {
       for (const tool of createMemoryTools(memoryCallbacks)) {
         toolRegistry.register(tool);
       }
+
+      // Browser tools (session-scoped Chromium instance)
+      await loadBrowserTools(toolRegistry, browserManager);
 
       // Clear previous agent steps for this session
       agentStepsDb.deleteAgentSteps(sessionId);
@@ -602,6 +630,17 @@ session.post('/:id/agent', async (c) => {
             await safeSend('step_error', JSON.stringify({ step: event.step, error: event.error }));
             break;
           }
+          case 'step_healing': {
+            const rowId = stepDbIds.get(event.step.id);
+            if (rowId) {
+              agentStepsDb.updateAgentStep(rowId, { status: 'running', data: event.step });
+            }
+            await safeSend('step_healing', JSON.stringify({
+              step: event.step,
+              strategy: event.strategy,
+            }));
+            break;
+          }
           case 'text': {
             accumulatedText += event.content;
             await safeSend('text', JSON.stringify({ content: event.content }));
@@ -626,6 +665,7 @@ session.post('/:id/agent', async (c) => {
       await safeSend('error', JSON.stringify({ error: message }));
     } finally {
       activeChats.delete(sessionId);
+      await browserManager.disconnect();
     }
   });
 });
