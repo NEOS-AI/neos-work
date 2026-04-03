@@ -34,6 +34,8 @@ export interface AgentStep {
   input?: Record<string, unknown>;
   output?: unknown;
   error?: string;
+  screenshot?: string;    // base64 PNG (browser_screenshot 결과)
+  healingStatus?: string; // healing 진행 중 텍스트
 }
 
 export interface AgentTask {
@@ -72,6 +74,7 @@ export type AgentChunk =
   | { type: 'step_start'; step: AgentStep }
   | { type: 'step_complete'; step: AgentStep }
   | { type: 'step_error'; step: AgentStep; error: string }
+  | { type: 'step_healing'; step: AgentStep; strategy: 'retry' | 'reflect' }
   | { type: 'text'; content: string }
   | { type: 'done'; task: AgentTask }
   | { type: 'error'; error: string };
