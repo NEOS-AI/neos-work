@@ -21,6 +21,7 @@ import type { ChatParams, Message, MessageContent, ThinkingMode } from '@neos-wo
 
 import { McpClient, buildMcpTools } from '@neos-work/mcp-client';
 import type { McpServerConfig } from '@neos-work/mcp-client';
+import { BrowserManager, createBrowserTools } from '@neos-work/browser-tool';
 
 import * as db from '../db/sessions.js';
 import * as agentStepsDb from '../db/agent-steps.js';
@@ -121,6 +122,20 @@ async function loadMcpTools(toolRegistry: ToolRegistry): Promise<void> {
     } catch (err) {
       console.error(`Failed to connect to MCP server "${config.name}":`, err);
     }
+  }
+}
+
+async function loadBrowserTools(
+  toolRegistry: ToolRegistry,
+  manager: BrowserManager,
+): Promise<void> {
+  try {
+    await manager.connect();
+    for (const tool of createBrowserTools(manager)) {
+      toolRegistry.register(tool);
+    }
+  } catch (err) {
+    console.error('Failed to initialize browser tools:', err);
   }
 }
 
@@ -532,6 +547,8 @@ session.post('/:id/agent', async (c) => {
       }
     }
 
+    const browserManager = new BrowserManager();
+
     try {
       const toolRegistry = new ToolRegistry();
       for (const tool of createFilesystemTools(workspacePath)) {
@@ -561,6 +578,9 @@ session.post('/:id/agent', async (c) => {
       for (const tool of createMemoryTools(memoryCallbacks)) {
         toolRegistry.register(tool);
       }
+
+      // Browser tools (session-scoped Chromium instance)
+      await loadBrowserTools(toolRegistry, browserManager);
 
       // Clear previous agent steps for this session
       agentStepsDb.deleteAgentSteps(sessionId);
@@ -610,6 +630,17 @@ session.post('/:id/agent', async (c) => {
             await safeSend('step_error', JSON.stringify({ step: event.step, error: event.error }));
             break;
           }
+          case 'step_healing': {
+            const rowId = stepDbIds.get(event.step.id);
+            if (rowId) {
+              agentStepsDb.updateAgentStep(rowId, { status: 'running', data: event.step });
+            }
+            await safeSend('step_healing', JSON.stringify({
+              step: event.step,
+              strategy: event.strategy,
+            }));
+            break;
+          }
           case 'text': {
             accumulatedText += event.content;
             await safeSend('text', JSON.stringify({ content: event.content }));
@@ -634,6 +665,7 @@ session.post('/:id/agent', async (c) => {
       await safeSend('error', JSON.stringify({ error: message }));
     } finally {
       activeChats.delete(sessionId);
+      await browserManager.disconnect();
     }
   });
 });
