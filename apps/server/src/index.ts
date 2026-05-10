@@ -84,8 +84,8 @@ migrateEncryption();
 // Register built-in domain blocks
 registerFinanceBlocks();
 
-// Start server — use port 0 for OS-assigned random port when PORT is not set (VULN-011)
-const requestedPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
+// Start server — use NEOS_PORT or PORT env var, defaulting to 3000
+const requestedPort = parseInt(process.env.NEOS_PORT ?? process.env.PORT ?? '3000', 10);
 
 const server = serve({
   fetch: app.fetch,
@@ -95,7 +95,7 @@ const server = serve({
 
 // Read actual port and populate allowed hosts
 const addr = server.address();
-const actualPort = typeof addr === 'object' && addr ? addr.port : requestedPort;
+const actualPort = typeof addr === 'object' && addr && addr.port ? addr.port : requestedPort;
 
 ALLOWED_HOSTS.add('127.0.0.1');
 ALLOWED_HOSTS.add('localhost');
