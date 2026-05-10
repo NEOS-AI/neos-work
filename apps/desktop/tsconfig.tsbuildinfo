@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/sidebar.tsx","./src/hooks/useengine.tsx","./src/hooks/usetheme.tsx","./src/lib/engine.ts","./src/lib/tauri.ts","./src/pages/dashboard.tsx","./src/pages/modeselection.tsx","./src/pages/sessions.tsx","./src/pages/settings.tsx","./src/pages/skills.tsx","./src/pages/templates.tsx"],"version":"5.9.3"}

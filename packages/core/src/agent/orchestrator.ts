@@ -11,14 +11,13 @@ import type { LLMProviderAdapter } from '../llm/provider.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { Planner } from './planner.js';
 import type { AgentEvent, AgentStep, AgentTask, OrchestratorOptions } from './types.js';
-import { RetryStrategy, ReflectionStrategy } from './healing.js';
+import { ReflectionStrategy } from './healing.js';
 import type { HealingStrategy } from './healing.js';
 
 export class AgentOrchestrator {
   private planner: Planner;
   private maxIterations: number;
   private model: string;
-  private retryStrategy: HealingStrategy;
   private reflectionStrategy: HealingStrategy;
 
   constructor(
@@ -29,7 +28,6 @@ export class AgentOrchestrator {
     this.planner = new Planner(adapter);
     this.maxIterations = options.maxIterations ?? 10;
     this.model = options.model ?? (adapter.getModels()[0]?.id ?? '');
-    this.retryStrategy = new RetryStrategy();
     this.reflectionStrategy = new ReflectionStrategy(adapter);
   }
 

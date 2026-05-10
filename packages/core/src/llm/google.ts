@@ -22,7 +22,7 @@ export class GoogleAdapter implements LLMProviderAdapter {
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
-    const { model, messages, tools, maxTokens = 4096, thinkingMode = 'none' } = params;
+    const { model, messages, tools, maxTokens = 4096, thinkingMode = 'none', signal } = params;
 
     // Convert messages to Gemini format
     const systemMessages = messages.filter((m) => m.role === 'system');
@@ -48,6 +48,7 @@ export class GoogleAdapter implements LLMProviderAdapter {
           maxOutputTokens: maxTokens,
           systemInstruction: systemInstruction || undefined,
           thinkingConfig: useThinking ? { thinkingBudget } : undefined,
+          abortSignal: signal ?? undefined,
           ...(tools?.length
             ? {
                 tools: [

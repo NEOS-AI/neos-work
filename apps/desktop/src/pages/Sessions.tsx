@@ -501,7 +501,7 @@ function ChatArea({
                     ? {
                         ...s,
                         healingStatus:
-                          chunk.strategy === 'retry' ? '재시도 중...' : '대안 탐색 중...',
+                          chunk.strategy === 'retry' ? '재시도 중...' : '반성 중...',
                       }
                     : s,
                 ),
