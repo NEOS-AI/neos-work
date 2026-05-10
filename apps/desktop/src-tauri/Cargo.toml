@@ -1,6 +1,6 @@
 [package]
 name = "neos-work"
-version = "0.1.0"
+version = "0.2.0"
 description = "An open-source alternative to Claude Cowork"
 authors = ["NEOS AI"]
 edition = "2021"
