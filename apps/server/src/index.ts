@@ -74,7 +74,7 @@ app.route('/api/templates', templates);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.1.0',
+    version: '0.2.0',
   });
 });
 
