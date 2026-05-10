@@ -59,6 +59,26 @@ export function migrateEncryption(): void {
   }
 }
 
+const WORKFLOW_SECRET_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'GOOGLE_API_KEY',
+  'TAVILY_API_KEY',
+  'SLACK_BOT_TOKEN',
+  'DISCORD_WEBHOOK_URL',
+  'KIS_APP_KEY',
+  'KIS_APP_SECRET',
+];
+
+/** Returns all workflow-related API secrets as a plain-text map (for server-side use only). */
+export function getWorkflowSecrets(): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of WORKFLOW_SECRET_KEYS) {
+    const value = getSetting(key);
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
+}
+
 export function deleteSetting(key: string): boolean {
   const db = getDb();
   const result = db.prepare('DELETE FROM setting WHERE key = ?').run(key);

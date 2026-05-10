@@ -18,6 +18,8 @@
     "@neos-work/core": "workspace:*",
     "@neos-work/mcp-client": "workspace:*",
     "@neos-work/shared": "workspace:*",
+    "@neos-work/workflow-engine": "workspace:*",
+    "@slack/web-api": "^7.0.0",
     "better-sqlite3": "^12.6.2",
     "hono": "^4.7.0",
     "nanoid": "^5.1.6"

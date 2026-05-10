@@ -10,7 +10,12 @@ import { session, workspace, models } from './routes/session.js';
 import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
 import { mcp } from './routes/mcp.js';
+import workflow from './routes/workflow.js';
+import harness from './routes/harness.js';
+import blocks from './routes/blocks.js';
+import templates from './routes/templates.js';
 import { migrateEncryption } from './db/settings.js';
+import { registerFinanceBlocks } from '@neos-work/workflow-engine';
 
 // Generate per-session auth token (VULN-002)
 const AUTH_TOKEN = randomBytes(32).toString('hex');
@@ -60,6 +65,10 @@ app.route('/api/session', session);
 app.route('/api/settings', settings);
 app.route('/api/skills', skills);
 app.route('/api/mcp-servers', mcp);
+app.route('/api/workflow', workflow);
+app.route('/api/harness', harness);
+app.route('/api/blocks', blocks);
+app.route('/api/templates', templates);
 
 // Root
 app.get('/', (c) => {
@@ -71,6 +80,9 @@ app.get('/', (c) => {
 
 // Migrate plaintext API keys to encrypted format
 migrateEncryption();
+
+// Register built-in domain blocks
+registerFinanceBlocks();
 
 // Start server — use port 0 for OS-assigned random port when PORT is not set (VULN-011)
 const requestedPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;

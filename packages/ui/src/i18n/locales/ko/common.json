@@ -6,9 +6,35 @@
   "nav": {
     "dashboard": "대시보드",
     "sessions": "세션",
+    "workflows": "워크플로우",
+    "harnesses": "하네스",
+    "blocks": "블록",
     "templates": "템플릿",
     "skills": "스킬",
     "settings": "설정"
+  },
+  "common": {
+    "loading": "로딩 중...",
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "create": "생성",
+    "edit": "편집",
+    "view": "보기"
+  },
+  "workflow": {
+    "new": "새 워크플로우",
+    "name": "이름",
+    "namePlaceholder": "내 워크플로우",
+    "domain": "도메인",
+    "empty": "워크플로우가 없습니다. 새로 만들어 보세요.",
+    "confirmDelete": "이 워크플로우를 삭제할까요?",
+    "run": "실행",
+    "stop": "중지",
+    "nodes": "노드",
+    "runLog": "실행 로그",
+    "done": "완료",
+    "noRuns": "아직 실행 이력이 없습니다."
   },
   "mode": {
     "title": "NEOS Work를 어떻게 실행하시겠습니까?",
@@ -35,5 +61,37 @@
     "install": "설치",
     "import": "가져오기",
     "verify": "검증"
+  },
+  "harness": {
+    "title": "하네스",
+    "new": "새 하네스",
+    "empty": "하네스가 없습니다.",
+    "confirmDelete": "하네스 \"{{name}}\"를 삭제할까요?",
+    "name": "이름",
+    "domain": "도메인",
+    "description": "설명",
+    "systemPrompt": "시스템 프롬프트",
+    "allowedTools": "허용 도구",
+    "allowedToolsHint": "쉼표로 구분된 도구 이름 목록",
+    "createTitle": "하네스 생성",
+    "editTitle": "하네스 편집",
+    "viewTitle": "하네스 보기",
+    "validationError": "ID, 이름, 시스템 프롬프트는 필수입니다."
+  },
+  "block": {
+    "title": "블록",
+    "new": "새 블록",
+    "empty": "커스텀 블록이 없습니다.",
+    "confirmDelete": "블록 \"{{name}}\"를 삭제할까요?",
+    "name": "이름",
+    "domain": "도메인",
+    "category": "카테고리",
+    "description": "설명",
+    "implType": "구현 유형",
+    "promptTemplate": "프롬프트 템플릿",
+    "createTitle": "블록 생성",
+    "editTitle": "블록 편집",
+    "viewTitle": "블록 보기",
+    "validationError": "ID와 이름은 필수입니다."
   }
 }

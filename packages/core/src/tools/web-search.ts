@@ -1,25 +1,11 @@
 /**
- * Web search tool — searches the web using DuckDuckGo Instant Answer API.
- * No API key required. SSRF-protected.
+ * Web search tool — searches the web using Tavily Search API.
+ * Requires TAVILY_API_KEY environment variable.
  */
 
 import type { Tool, ToolResult } from './base.js';
 
-const PRIVATE_IP_RANGES = [
-  /^localhost$/i,
-  /^127\./,
-  /^0\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^::1$/,
-  /^fc00:/i,
-  /^fe80:/i,
-];
-
-function isPrivateHost(hostname: string): boolean {
-  return PRIVATE_IP_RANGES.some((pattern) => pattern.test(hostname));
-}
+const TAVILY_ENDPOINT = 'https://api.tavily.com/search';
 
 export function createWebSearchTool(): Tool {
   return {
@@ -38,65 +24,36 @@ export function createWebSearchTool(): Tool {
       required: ['query'],
     },
     async execute(input): Promise<ToolResult> {
+      const apiKey = process.env['TAVILY_API_KEY'];
+      if (!apiKey) {
+        return { success: false, output: null, error: 'TAVILY_API_KEY is not set' };
+      }
+
       try {
         const query = input.query as string;
         const maxResults = Math.min((input.maxResults as number) ?? 5, 10);
 
-        const url = new URL('https://api.duckduckgo.com/');
-        url.searchParams.set('q', query);
-        url.searchParams.set('format', 'json');
-        url.searchParams.set('no_html', '1');
-        url.searchParams.set('skip_disambig', '1');
-
-        // SSRF protection
-        if (isPrivateHost(url.hostname)) {
-          return { success: false, output: null, error: 'Requests to private/internal hosts are blocked' };
-        }
-
-        const response = await fetch(url.toString(), {
-          signal: AbortSignal.timeout(10_000),
-          headers: { 'User-Agent': 'neos-work/0.1.2' },
+        const response = await fetch(TAVILY_ENDPOINT, {
+          method: 'POST',
+          signal: AbortSignal.timeout(15_000),
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'neos-work/0.2.0',
+          },
+          body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
 
         if (!response.ok) {
-          return { success: false, output: null, error: `Search API returned ${response.status}` };
+          const text = await response.text().catch(() => '');
+          return { success: false, output: null, error: `Tavily API returned ${response.status}: ${text}` };
         }
 
-        const data = await response.json() as Record<string, unknown>;
-        const results: { title: string; url: string; snippet: string }[] = [];
-
-        // Abstract (top result)
-        if (data.Abstract && data.AbstractURL) {
-          results.push({
-            title: (data.Heading as string) || query,
-            url: data.AbstractURL as string,
-            snippet: data.Abstract as string,
-          });
-        }
-
-        // Related topics
-        const topics = (data.RelatedTopics as Array<Record<string, unknown>>) ?? [];
-        for (const topic of topics) {
-          if (results.length >= maxResults) break;
-          if (topic.Text && topic.FirstURL) {
-            results.push({
-              title: (topic.Text as string).split(' - ')[0] ?? (topic.Text as string),
-              url: topic.FirstURL as string,
-              snippet: topic.Text as string,
-            });
-          }
-        }
-
-        // Fallback if DDG returned nothing
-        if (results.length === 0) {
-          return {
-            success: true,
-            output: {
-              results: [],
-              note: 'No results found. The query may be too specific or DuckDuckGo has no instant answer.',
-            },
-          };
-        }
+        const data = await response.json() as { results?: Array<{ title: string; url: string; content: string }> };
+        const results = (data.results ?? []).map((r) => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.content,
+        }));
 
         return { success: true, output: { results } };
       } catch (err) {

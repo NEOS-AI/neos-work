@@ -3,6 +3,7 @@
  */
 
 import type { ChatMessage, Session, Workspace } from './session.js';
+import type { NodeType, WorkflowNode, WorkflowEdge, Workflow, WorkflowRun, AgentHarness, WorkflowBlock } from './workflow.js';
 
 // --- REST API Types ---
 
@@ -69,3 +70,43 @@ export interface HealthResponse {
 
 // Re-export for convenience
 export type { ChatMessage, Session, Workspace };
+
+// ── 워크플로우 API 타입 ────────────────────────────────────
+
+export interface CreateWorkflowRequest {
+  name: string;
+  description?: string;
+  domain: 'finance' | 'coding' | 'general';
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export interface UpdateWorkflowRequest {
+  name?: string;
+  description?: string;
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
+}
+
+export type WorkflowSSEEvent =
+  | { type: 'run.started'; runId: string }
+  | { type: 'node.started'; nodeId: string; nodeType: NodeType }
+  | { type: 'node.completed'; nodeId: string; output: unknown }
+  | { type: 'node.failed'; nodeId: string; error: string }
+  | { type: 'run.completed'; runId: string; duration: number }
+  | { type: 'run.failed'; runId: string; error: string };
+
+// ── 하네스 API 타입 ────────────────────────────────────────
+
+export interface CreateHarnessRequest {
+  id: string;
+  name: string;
+  domain: 'finance' | 'coding' | 'general';
+  description: string;
+  systemPrompt: string;
+  allowedTools: string[];
+  constraints?: AgentHarness['constraints'];
+}
+
+// Re-export workflow types for convenience
+export type { NodeType, Workflow, WorkflowNode, WorkflowEdge, WorkflowRun, AgentHarness, WorkflowBlock };

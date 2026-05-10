@@ -119,4 +119,59 @@ function initSchema(db: Database.Database): void {
     INSERT OR IGNORE INTO workspace (id, name, path, type)
     VALUES ('default', 'Starter', NULL, 'local');
   `);
+
+  // Workflow tables (v0.2.0)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT,
+      domain      TEXT NOT NULL DEFAULT 'general',
+      nodes_json  TEXT NOT NULL DEFAULT '[]',
+      edges_json  TEXT NOT NULL DEFAULT '[]',
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_run (
+      id                TEXT PRIMARY KEY,
+      workflow_id       TEXT NOT NULL REFERENCES workflow(id) ON DELETE CASCADE,
+      status            TEXT NOT NULL DEFAULT 'running',
+      node_results_json TEXT NOT NULL DEFAULT '{}',
+      started_at        TEXT DEFAULT (datetime('now')),
+      completed_at      TEXT,
+      error             TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS custom_harness (
+      id                  TEXT PRIMARY KEY,
+      name                TEXT NOT NULL,
+      domain              TEXT NOT NULL DEFAULT 'general',
+      description         TEXT NOT NULL DEFAULT '',
+      system_prompt       TEXT NOT NULL DEFAULT '',
+      allowed_tools_json  TEXT NOT NULL DEFAULT '[]',
+      constraints_json    TEXT NOT NULL DEFAULT '{}',
+      created_at          TEXT DEFAULT (datetime('now')),
+      updated_at          TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS custom_block (
+      id                  TEXT PRIMARY KEY,
+      name                TEXT NOT NULL,
+      domain              TEXT NOT NULL DEFAULT 'general',
+      category            TEXT NOT NULL DEFAULT 'custom',
+      description         TEXT NOT NULL DEFAULT '',
+      implementation_type TEXT NOT NULL,
+      param_defs_json     TEXT NOT NULL DEFAULT '[]',
+      input_description   TEXT NOT NULL DEFAULT '',
+      output_description  TEXT NOT NULL DEFAULT '',
+      prompt_template     TEXT,
+      skill_id            TEXT,
+      created_at          TEXT DEFAULT (datetime('now')),
+      updated_at          TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_workflow_run_workflow_id ON workflow_run(workflow_id);
+    CREATE INDEX IF NOT EXISTS idx_workflow_updated_at ON workflow(updated_at);
+  `);
 }

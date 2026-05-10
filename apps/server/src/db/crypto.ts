@@ -13,7 +13,16 @@ const KEY = createHash('sha256')
   .update(`${hostname()}:${homedir()}:neos-work-v1`)
   .digest();
 
-const SENSITIVE_PREFIXES = ['apiKey.'];
+const SENSITIVE_PREFIXES = [
+  'apiKey.',
+  'ANTHROPIC_API_KEY',
+  'GOOGLE_API_KEY',
+  'TAVILY_API_KEY',
+  'SLACK_BOT_TOKEN',
+  'DISCORD_WEBHOOK_URL',
+  'KIS_APP_KEY',
+  'KIS_APP_SECRET',
+];
 
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_PREFIXES.some((prefix) => key.startsWith(prefix));

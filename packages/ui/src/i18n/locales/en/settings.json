@@ -8,6 +8,10 @@
     "verified": "Verified",
     "invalid": "Invalid key"
   },
+  "workflowKeys": {
+    "title": "Workflow API Keys",
+    "description": "API keys used by workflow nodes (stored encrypted)"
+  },
   "appearance": {
     "title": "Appearance",
     "theme": "Theme",

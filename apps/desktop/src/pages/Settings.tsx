@@ -56,6 +56,23 @@ export function Settings() {
         </div>
       </section>
 
+      {/* Workflow API Keys */}
+      <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+        <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {t('settings:workflowKeys.title')}
+        </h2>
+        <p className="mb-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+          {t('settings:workflowKeys.description')}
+        </p>
+        <div className="flex flex-col gap-4">
+          <SimpleKeyInput label="Tavily API Key" placeholder="tvly-..." settingKey="TAVILY_API_KEY" />
+          <SimpleKeyInput label="Slack Bot Token" placeholder="xoxb-..." settingKey="SLACK_BOT_TOKEN" />
+          <SimpleKeyInput label="Discord Webhook URL" placeholder="https://discord.com/api/webhooks/..." settingKey="DISCORD_WEBHOOK_URL" />
+          <SimpleKeyInput label="KIS App Key" placeholder="PSxxxxxx..." settingKey="KIS_APP_KEY" />
+          <SimpleKeyInput label="KIS App Secret" placeholder="..." settingKey="KIS_APP_SECRET" />
+        </div>
+      </section>
+
       {/* Appearance */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
         <h2 className="mb-4 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -322,6 +339,78 @@ function EyeOffIcon() {
       <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
       <line x1="2" y1="2" x2="22" y2="22" />
     </svg>
+  );
+}
+
+// --- Simple Key Input (no verify button, for non-LLM API keys) ---
+
+function SimpleKeyInput({
+  label,
+  placeholder,
+  settingKey,
+}: {
+  label: string;
+  placeholder: string;
+  settingKey: string;
+}) {
+  const { client } = useEngine();
+  const [value, setValue] = useState('');
+  const [hasSaved, setHasSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [masked, setMasked] = useState(true);
+
+  useEffect(() => {
+    if (!client) return;
+    client.getSetting(settingKey).then((res) => {
+      if (res.ok && res.data?.value) setHasSaved(true);
+    }).catch(() => {});
+  }, [client, settingKey]);
+
+  const handleSave = async () => {
+    if (!client || !value) return;
+    setSaving(true);
+    await client.saveSetting(settingKey, value);
+    setSaving(false);
+    setHasSaved(true);
+    setValue('');
+  };
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm" style={{ color: 'var(--text-secondary)' }}>
+        {label}
+        {hasSaved && <span className="ml-2 text-xs text-emerald-500">(saved)</span>}
+      </label>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input
+            type={masked ? 'password' : 'text'}
+            placeholder={hasSaved ? '••••••••••••••' : placeholder}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2 pr-8 text-sm outline-none"
+            style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+          />
+          <button
+            type="button"
+            onClick={() => setMasked(!masked)}
+            className="absolute right-2 top-1/2 -translate-y-1/2"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {masked ? <EyeIcon /> : <EyeOffIcon />}
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!value || saving}
+          className="rounded-lg px-3 py-2 text-xs disabled:opacity-40"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+        >
+          {saving ? '...' : 'Save'}
+        </button>
+      </div>
+    </div>
   );
 }
 

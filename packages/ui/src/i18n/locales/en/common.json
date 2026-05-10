@@ -6,9 +6,35 @@
   "nav": {
     "dashboard": "Dashboard",
     "sessions": "Sessions",
+    "workflows": "Workflows",
     "templates": "Templates",
     "skills": "Skills",
-    "settings": "Settings"
+    "settings": "Settings",
+    "harnesses": "Harnesses",
+    "blocks": "Blocks"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "create": "Create",
+    "edit": "Edit",
+    "view": "View"
+  },
+  "workflow": {
+    "new": "New Workflow",
+    "name": "Name",
+    "namePlaceholder": "My Workflow",
+    "domain": "Domain",
+    "empty": "No workflows yet. Create one to get started.",
+    "confirmDelete": "Delete this workflow?",
+    "run": "Run",
+    "stop": "Stop",
+    "nodes": "Nodes",
+    "runLog": "Run Log",
+    "done": "Done",
+    "noRuns": "No runs yet."
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",
@@ -35,5 +61,37 @@
     "install": "Install",
     "import": "Import",
     "verify": "Verify"
+  },
+  "harness": {
+    "title": "Harnesses",
+    "new": "New Harness",
+    "empty": "No harnesses yet.",
+    "confirmDelete": "Delete harness \"{{name}}\"?",
+    "name": "Name",
+    "domain": "Domain",
+    "description": "Description",
+    "systemPrompt": "System Prompt",
+    "allowedTools": "Allowed Tools",
+    "allowedToolsHint": "Comma-separated list of tool names",
+    "createTitle": "Create Harness",
+    "editTitle": "Edit Harness",
+    "viewTitle": "View Harness",
+    "validationError": "ID, Name, and System Prompt are required."
+  },
+  "block": {
+    "title": "Blocks",
+    "new": "New Block",
+    "empty": "No custom blocks yet.",
+    "confirmDelete": "Delete block \"{{name}}\"?",
+    "name": "Name",
+    "domain": "Domain",
+    "category": "Category",
+    "description": "Description",
+    "implType": "Implementation Type",
+    "promptTemplate": "Prompt Template",
+    "createTitle": "Create Block",
+    "editTitle": "Edit Block",
+    "viewTitle": "View Block",
+    "validationError": "ID and Name are required."
   }
 }

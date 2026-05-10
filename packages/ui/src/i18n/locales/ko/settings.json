@@ -8,6 +8,10 @@
     "verified": "검증 완료",
     "invalid": "유효하지 않은 키"
   },
+  "workflowKeys": {
+    "title": "워크플로우 API 키",
+    "description": "워크플로우 노드에서 사용하는 API 키 (암호화 저장)"
+  },
   "appearance": {
     "title": "외관",
     "theme": "테마",

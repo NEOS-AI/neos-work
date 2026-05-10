@@ -443,4 +443,247 @@ export class EngineClient {
     });
     return res.json();
   }
+
+  // --- Workflows ---
+
+  async listWorkflows(): Promise<ApiResponse<Workflow[]>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async getWorkflow(id: string): Promise<ApiResponse<Workflow>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async createWorkflow(input: {
+    name: string;
+    description?: string;
+    domain?: string;
+    nodes?: unknown[];
+    edges?: unknown[];
+  }): Promise<ApiResponse<Workflow>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async updateWorkflow(
+    id: string,
+    input: { name?: string; description?: string; nodes?: unknown[]; edges?: unknown[] },
+  ): Promise<ApiResponse<Workflow>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async deleteWorkflow(id: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void): () => void {
+    const controller = new AbortController();
+    (async () => {
+      const res = await fetch(`${this.baseUrl}/api/workflow/${id}/run`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        signal: controller.signal,
+      });
+      if (!res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              onEvent(JSON.parse(line.slice(6)) as WorkflowSSEEvent);
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      }
+    })().catch(() => {});
+    return () => controller.abort();
+  }
+
+  async listWorkflowRuns(workflowId: string): Promise<ApiResponse<WorkflowRun[]>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Harnesses ---
+
+  async listHarnesses(): Promise<ApiResponse<AgentHarness[]>> {
+    const res = await fetch(`${this.baseUrl}/api/harness`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async createHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Promise<ApiResponse<AgentHarness>> {
+    const res = await fetch(`${this.baseUrl}/api/harness`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async updateHarness(id: string, input: Partial<AgentHarness>): Promise<ApiResponse<AgentHarness>> {
+    const res = await fetch(`${this.baseUrl}/api/harness/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async deleteHarness(id: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/harness/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Blocks ---
+
+  async listBlocks(domain?: string): Promise<ApiResponse<WorkflowBlock[]>> {
+    const url = domain
+      ? `${this.baseUrl}/api/blocks?domain=${encodeURIComponent(domain)}`
+      : `${this.baseUrl}/api/blocks`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async createBlock(input: Omit<WorkflowBlock, 'isBuiltIn'>): Promise<ApiResponse<WorkflowBlock>> {
+    const res = await fetch(`${this.baseUrl}/api/blocks`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async updateBlock(id: string, input: Partial<WorkflowBlock>): Promise<ApiResponse<WorkflowBlock>> {
+    const res = await fetch(`${this.baseUrl}/api/blocks/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async deleteBlock(id: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/blocks/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Templates ---
+
+  async getTemplates(domain?: string): Promise<ApiResponse<unknown[]>> {
+    const url = domain
+      ? `${this.baseUrl}/api/templates?domain=${encodeURIComponent(domain)}`
+      : `${this.baseUrl}/api/templates`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    return res.json();
+  }
+}
+
+// Local type mirrors to avoid adding @neos-work/shared to desktop package
+interface WorkflowNode {
+  id: string;
+  type: string;
+  label: string;
+  position: { x: number; y: number };
+  config: Record<string, unknown>;
+}
+
+interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description?: string;
+  domain: 'finance' | 'coding' | 'general';
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  nodeResults: Record<string, unknown>;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface AgentHarness {
+  id: string;
+  name: string;
+  domain: 'finance' | 'coding' | 'general';
+  description: string;
+  systemPrompt: string;
+  allowedTools: string[];
+  isBuiltIn?: boolean;
+  constraints?: { maxSteps?: number; maxTokens?: number; timeoutMs?: number };
+}
+
+export type WorkflowSSEEvent =
+  | { type: 'run.started'; runId: string }
+  | { type: 'node.started'; nodeId: string; nodeType: string }
+  | { type: 'node.completed'; nodeId: string; output: unknown }
+  | { type: 'node.failed'; nodeId: string; error: string }
+  | { type: 'run.completed'; runId: string; duration: number }
+  | { type: 'run.failed'; runId: string; error: string };
+
+export interface WorkflowBlock {
+  id: string;
+  name: string;
+  domain: 'finance' | 'coding' | 'general';
+  category: string;
+  description: string;
+  isBuiltIn: boolean;
+  implementationType: 'native' | 'prompt' | 'skill';
+  paramDefs: Array<{ key: string; label: string; type: string; description?: string; default?: unknown; options?: string[]; min?: number; max?: number }>;
+  inputDescription: string;
+  outputDescription: string;
+  requiredSettings?: string[];
+  promptTemplate?: string;
+  skillId?: string;
 }
