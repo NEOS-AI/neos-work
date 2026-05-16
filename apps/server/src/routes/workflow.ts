@@ -120,6 +120,7 @@ workflow.post('/:id/run', async (c) => {
 
     try {
       await executeWorkflow({
+        runId,
         workflow: wf,
         settings,
         onEvent: (event) => {
@@ -136,10 +137,12 @@ workflow.post('/:id/run', async (c) => {
         signal: controller.signal,
       });
 
+      const finalStatus = controller.signal.aborted ? 'cancelled' : 'completed';
+
       db.saveRun({
         id: runId,
         workflowId: wf.id,
-        status: 'completed',
+        status: finalStatus,
         nodeResults: nodeResults as never,
         startedAt: now,
         completedAt: new Date().toISOString(),

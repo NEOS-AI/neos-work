@@ -32,7 +32,11 @@
     "run": "실행",
     "stop": "중지",
     "nodes": "노드",
+    "config": "설정",
     "runLog": "실행 로그",
+    "history": "이력",
+    "validation": "검증",
+    "noNodeSelected": "설정을 편집할 노드를 선택하세요.",
     "done": "완료",
     "noRuns": "아직 실행 이력이 없습니다."
   },

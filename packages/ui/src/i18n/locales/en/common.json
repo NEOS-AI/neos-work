@@ -32,7 +32,11 @@
     "run": "Run",
     "stop": "Stop",
     "nodes": "Nodes",
+    "config": "Config",
     "runLog": "Run Log",
+    "history": "History",
+    "validation": "Validation",
+    "noNodeSelected": "Select a node to edit its settings.",
     "done": "Done",
     "noRuns": "No runs yet."
   },

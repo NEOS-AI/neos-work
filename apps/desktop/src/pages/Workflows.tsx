@@ -38,7 +38,17 @@ export function Workflows() {
     e.preventDefault();
     if (!client || !newName.trim()) return;
     setCreating(true);
-    const res = await client.createWorkflow({ name: newName.trim(), domain: newDomain });
+    const triggerId = crypto.randomUUID();
+    const outputId = crypto.randomUUID();
+    const res = await client.createWorkflow({
+      name: newName.trim(),
+      domain: newDomain,
+      nodes: [
+        { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+        { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
+      ],
+      edges: [{ id: crypto.randomUUID(), source: triggerId, target: outputId }],
+    });
     setCreating(false);
     if (res.ok && res.data) {
       setShowModal(false);
@@ -84,6 +94,13 @@ export function Workflows() {
               style={{ backgroundColor: '#10b981' }}
             >
               {t('workflow.new')}
+            </button>
+            <button
+              onClick={() => navigate('/templates')}
+              className="rounded-lg px-4 py-2 text-sm font-medium"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+            >
+              Start from Template
             </button>
           </div>
         ) : (

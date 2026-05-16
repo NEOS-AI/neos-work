@@ -20,11 +20,12 @@ export interface ExecutorOptions {
   settings: Record<string, string>;
   onEvent: (event: WorkflowSSEEvent) => void;
   signal?: AbortSignal;
+  runId?: string;
 }
 
 export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   const { workflow, settings, onEvent, signal } = options;
-  const runId = crypto.randomUUID();
+  const runId = options.runId ?? crypto.randomUUID();
   const runStartMs = Date.now();
 
   onEvent({ type: 'run.started', runId });

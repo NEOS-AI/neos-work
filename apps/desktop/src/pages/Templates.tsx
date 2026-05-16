@@ -13,6 +13,20 @@ const DOMAIN_COLORS: Record<string, string> = {
   general: '#8b5cf6',
 };
 
+function inferRequiredSettings(template: TemplateWorkflow): string[] {
+  const keys = new Set<string>();
+  for (const node of template.nodes) {
+    if (node.type === 'web_search') keys.add('TAVILY_API_KEY');
+    if (node.type === 'slack_message') keys.add('SLACK_BOT_TOKEN');
+    if (node.type === 'discord_message') keys.add('DISCORD_WEBHOOK_URL');
+    if (node.type === 'block') {
+      keys.add('KIS_APP_KEY');
+      keys.add('KIS_APP_SECRET');
+    }
+  }
+  return [...keys];
+}
+
 export function Templates() {
   const { t } = useTranslation('common');
   const { client } = useEngine();
@@ -87,6 +101,7 @@ export function Templates() {
           {filtered.map((tpl) => {
             const domainColor = DOMAIN_COLORS[tpl.domain] ?? '#8b5cf6';
             const isCreating = creating === tpl.name;
+            const requiredSettings = inferRequiredSettings(tpl);
             return (
               <div
                 key={tpl.name}
@@ -105,6 +120,19 @@ export function Templates() {
                 <p className="flex-1 text-xs line-clamp-3" style={{ color: 'var(--text-muted)' }}>
                   {tpl.description}
                 </p>
+                {requiredSettings.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {requiredSettings.map((key) => (
+                      <span
+                        key={key}
+                        className="rounded px-1.5 py-0.5 text-[10px]"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                      >
+                        {key}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     {tpl.nodes.length} nodes

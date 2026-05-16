@@ -617,9 +617,21 @@ export class EngineClient {
 }
 
 // Local type mirrors to avoid adding @neos-work/shared to desktop package
+export type WorkflowNodeType =
+  | 'trigger'
+  | 'agent_finance'
+  | 'agent_coding'
+  | 'block'
+  | 'gate_and'
+  | 'gate_or'
+  | 'web_search'
+  | 'slack_message'
+  | 'discord_message'
+  | 'output';
+
 interface WorkflowNode {
   id: string;
-  type: string;
+  type: WorkflowNodeType;
   label: string;
   position: { x: number; y: number };
   config: Record<string, unknown>;
