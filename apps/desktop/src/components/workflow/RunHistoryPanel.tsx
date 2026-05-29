@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
+import { RunDetailPanel } from './RunDetailPanel.js';
 
 export function RunHistoryPanel(props: { workflowId: string; refreshKey: number }) {
   const { client } = useEngine();
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,7 +31,8 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number 
   }
 
   return (
-    <div className="space-y-2 overflow-y-auto p-3">
+    <div className="flex flex-col overflow-hidden">
+      <div className="space-y-2 overflow-y-auto p-3">
       {runs.map((run) => {
         const nodeResults = run.nodeResults ?? {};
         const failedCount = Object.values(nodeResults).filter((value) => {
@@ -41,8 +44,18 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number 
           return result.error;
         }).find(Boolean);
 
+        const isSelected = selectedRunId === run.id;
+
         return (
-          <div key={run.id} className="rounded-md border p-2 text-xs" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+          <div
+            key={run.id}
+            className="cursor-pointer rounded-md border p-2 text-xs transition-colors"
+            style={{
+              borderColor: isSelected ? 'var(--border-accent, #3b82f6)' : 'var(--border-primary)',
+              backgroundColor: isSelected ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+            }}
+            onClick={() => setSelectedRunId(isSelected ? null : run.id)}
+          >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
                 {run.status}
@@ -58,6 +71,15 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number 
           </div>
         );
       })}
+      </div>
+
+      {selectedRunId && (
+        <RunDetailPanel
+          workflowId={props.workflowId}
+          runId={selectedRunId}
+          onClose={() => setSelectedRunId(null)}
+        />
+      )}
     </div>
   );
 }

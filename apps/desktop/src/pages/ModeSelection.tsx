@@ -8,9 +8,11 @@ export function ModeSelection() {
   const { t } = useTranslation('common');
   const { status, error, connect } = useEngine();
   const [remoteUrl, setRemoteUrl] = useState('');
+  const [devToken, setDevToken] = useState('');
 
   const handleSelect = (mode: AppMode) => {
     if (mode === 'client' && !remoteUrl) return;
+    if (devToken) sessionStorage.setItem('devAuthToken', devToken);
     connect(mode, mode === 'client' ? remoteUrl : undefined);
   };
 
@@ -82,6 +84,14 @@ export function ModeSelection() {
             value={remoteUrl}
             onChange={(e) => setRemoteUrl(e.target.value)}
             className="mt-1 rounded-lg border px-3 py-1.5 text-xs outline-none"
+            style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+          />
+          <input
+            type="password"
+            placeholder="Bearer token (optional)"
+            value={devToken}
+            onChange={(e) => setDevToken(e.target.value)}
+            className="rounded-lg border px-3 py-1.5 text-xs outline-none"
             style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
           />
           <button

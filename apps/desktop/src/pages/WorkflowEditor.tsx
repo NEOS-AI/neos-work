@@ -20,6 +20,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow, WorkflowBlock, WorkflowSSEEvent } from '../lib/engine.js';
 import { NodeConfigPanel } from '../components/workflow/NodeConfigPanel.js';
 import { RunHistoryPanel } from '../components/workflow/RunHistoryPanel.js';
+import { RunInputsDialog } from '../components/workflow/RunInputsDialog.js';
 import { validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
 
 // ── Node color palette ─────────────────────────────────────
@@ -126,6 +127,7 @@ export function WorkflowEditor() {
   const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [runEvents, setRunEvents] = useState<WorkflowSSEEvent[]>([]);
+  const [runInputsOpen, setRunInputsOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('config');
   const [allBlocks, setAllBlocks] = useState<WorkflowBlock[]>([]);
@@ -221,7 +223,7 @@ export function WorkflowEditor() {
     if (validationIssues.length > 0) setRightPanelTab('config');
   };
 
-  const handleRun = async () => {
+  const handleRun = async (inputs?: Record<string, unknown>) => {
     if (!client || !workflow) return;
     if (hasValidationErrors) {
       setRightPanelTab('config');
@@ -248,7 +250,7 @@ export function WorkflowEditor() {
         setIsRunning(false);
         setHistoryRefreshKey((key) => key + 1);
       }
-    });
+    }, inputs);
     stopRef.current = stop;
   };
 
@@ -314,7 +316,7 @@ export function WorkflowEditor() {
           </button>
         ) : (
           <button
-            onClick={handleRun}
+            onClick={() => setRunInputsOpen(true)}
             className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
             style={{ backgroundColor: '#10b981' }}
           >
@@ -426,6 +428,16 @@ export function WorkflowEditor() {
           )}
         </aside>
       </div>
+
+      {runInputsOpen && (
+        <RunInputsDialog
+          defaultInputs={
+            (draft.nodes.find((n) => n.type === 'trigger')?.config?.initialInputs as Record<string, unknown> | undefined)
+          }
+          onConfirm={(inputs) => { setRunInputsOpen(false); void handleRun(inputs); }}
+          onCancel={() => setRunInputsOpen(false)}
+        />
+      )}
     </div>
   );
 }

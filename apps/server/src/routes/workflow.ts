@@ -91,10 +91,32 @@ workflow.get('/:id/runs', (c) => {
   return c.json({ ok: true, data: runs });
 });
 
+workflow.get('/:id/runs/:runId', (c) => {
+  const run = db.getRun(c.req.param('runId'));
+  if (!run) return c.json({ ok: false, error: 'Not found' }, 404);
+  // Ensure the run belongs to the requested workflow
+  if (run.workflowId !== c.req.param('id')) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: run });
+});
+
 /** SSE stream: POST /api/workflow/:id/run */
 workflow.post('/:id/run', async (c) => {
   const wf = db.getWorkflow(c.req.param('id'));
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  // Parse optional trigger inputs from request body
+  let triggerInputs: Record<string, unknown> = {};
+  const contentType = c.req.header('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    try {
+      const body = await c.req.json<{ inputs?: Record<string, unknown> }>();
+      if (body.inputs && typeof body.inputs === 'object') {
+        triggerInputs = body.inputs;
+      }
+    } catch {
+      // No body or invalid JSON — proceed with empty inputs
+    }
+  }
 
   const settings = getWorkflowSecrets();
   const controller = new AbortController();
@@ -121,6 +143,7 @@ workflow.post('/:id/run', async (c) => {
     try {
       await executeWorkflow({
         runId,
+        triggerInputs,
         workflow: wf,
         settings,
         onEvent: (event) => {

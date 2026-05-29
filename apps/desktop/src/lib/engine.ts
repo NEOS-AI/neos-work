@@ -495,12 +495,17 @@ export class EngineClient {
     return res.json();
   }
 
-  runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void): () => void {
+  runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void, inputs?: Record<string, unknown>): () => void {
     const controller = new AbortController();
     (async () => {
+      const body = inputs ? JSON.stringify({ inputs }) : undefined;
       const res = await fetch(`${this.baseUrl}/api/workflow/${id}/run`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: {
+          ...this.getHeaders(),
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body,
         signal: controller.signal,
       });
       if (!res.body) return;
@@ -529,6 +534,13 @@ export class EngineClient {
 
   async listWorkflowRuns(workflowId: string): Promise<ApiResponse<WorkflowRun[]>> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async getWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<WorkflowRun>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
       headers: this.getHeaders(),
     });
     return res.json();

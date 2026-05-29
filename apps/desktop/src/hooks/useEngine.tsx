@@ -119,8 +119,10 @@ export function EngineProvider({ children }: { children: ReactNode }) {
       for (let i = 0; i < maxRetries; i++) {
         const ok = await client.checkConnection();
         if (ok) {
-          // Set auth token from Tauri sidecar (production) or skip (dev mode)
-          const token = await getAuthToken();
+          // Set auth token: sessionStorage override takes priority over Tauri sidecar token
+          const overrideToken = sessionStorage.getItem('devAuthToken');
+          const tauriToken = await getAuthToken();
+          const token = overrideToken ?? tauriToken;
           if (token) {
             client.setAuthToken(token);
           }

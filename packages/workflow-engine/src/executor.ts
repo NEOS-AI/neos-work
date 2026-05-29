@@ -21,11 +21,14 @@ export interface ExecutorOptions {
   onEvent: (event: WorkflowSSEEvent) => void;
   signal?: AbortSignal;
   runId?: string;
+  /** Inputs to inject as the Trigger node's output (runtime parameterisation) */
+  triggerInputs?: Record<string, unknown>;
 }
 
 export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   const { workflow, settings, onEvent, signal } = options;
   const runId = options.runId ?? crypto.randomUUID();
+  const triggerInputs = options.triggerInputs ?? {};
   const runStartMs = Date.now();
 
   onEvent({ type: 'run.started', runId });
@@ -101,11 +104,13 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     onEvent({ type: 'node.started', nodeId: node.id, nodeType: node.type });
 
     const nodeImpl = resolveNode(node.type, node.config as Record<string, unknown> | undefined);
+    // For trigger nodes, inject triggerInputs as the effective inputs
+    const effectiveInputs = node.type === 'trigger' ? triggerInputs : inputs;
     const ctx: NodeContext = {
       workflowId: workflow.id,
       runId,
       nodeId: node.id,
-      inputs,
+      inputs: effectiveInputs,
       settings,
       config: node.config as Record<string, unknown> | undefined,
       signal,

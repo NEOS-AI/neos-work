@@ -58,4 +58,29 @@ describe('executeWorkflow', () => {
       error: 'blockId is required for block nodes',
     });
   });
+
+  it('passes triggerInputs as trigger node output', async () => {
+    const events: WorkflowSSEEvent[] = [];
+
+    await executeWorkflow({
+      runId: 'run-trigger-inputs',
+      triggerInputs: { query: 'hello world', count: 5 },
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'output', type: 'output', label: 'Output', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'output' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const triggerCompleted = events.find(
+      (e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'trigger',
+    ) as { type: string; nodeId: string; output: unknown } | undefined;
+
+    expect(triggerCompleted).toBeDefined();
+    expect(triggerCompleted?.output).toEqual({ query: 'hello world', count: 5 });
+  });
 });

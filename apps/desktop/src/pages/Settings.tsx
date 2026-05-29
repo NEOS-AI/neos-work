@@ -167,6 +167,9 @@ export function Settings() {
           </div>
         </div>
       </section>
+
+      {/* Dev Tools */}
+      <DevToolsSection />
     </div>
   );
 }
@@ -617,6 +620,59 @@ function McpServersSection() {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+// --- Dev Tools Section ---
+
+function DevToolsSection() {
+  const { client } = useEngine();
+  const [token, setToken] = useState(() => sessionStorage.getItem('devAuthToken') ?? '');
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    if (token) {
+      sessionStorage.setItem('devAuthToken', token);
+    } else {
+      sessionStorage.removeItem('devAuthToken');
+    }
+    client?.setAuthToken(token || '');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+      <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Dev Tools</h2>
+      <p className="mb-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+        Override the auth token used to connect to the engine (stored in sessionStorage).
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="password"
+          placeholder="Override Bearer token"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+          style={{
+            borderColor: 'var(--border-secondary)',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+          }}
+        />
+        <button
+          onClick={handleSave}
+          className="rounded-lg px-3 py-2 text-xs transition-colors"
+          style={
+            saved
+              ? { backgroundColor: '#065f46', color: '#6ee7b7' }
+              : { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }
+          }
+        >
+          {saved ? 'Saved!' : 'Apply'}
+        </button>
+      </div>
     </section>
   );
 }
