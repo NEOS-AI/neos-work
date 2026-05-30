@@ -84,6 +84,66 @@ workflow.delete('/:id', (c) => {
   return c.json({ ok: true });
 });
 
+// ── Import/Export/Duplicate ────────────────────────────────
+
+workflow.post('/import', async (c) => {
+  const body = await c.req.json<{
+    version?: string;
+    workflow?: {
+      name?: string;
+      description?: string;
+      domain?: string;
+      nodes?: unknown[];
+      edges?: unknown[];
+    };
+  }>().catch(() => null);
+
+  if (!body || body.version !== '1' || !body.workflow) {
+    return c.json({ ok: false, error: 'Invalid import format or unsupported version' }, 400);
+  }
+
+  const wf = body.workflow;
+  const rawName = typeof wf.name === 'string' && wf.name.length > 0 ? wf.name.slice(0, 200) : 'Imported Workflow';
+  const existing = db.listWorkflows().find((w) => w.name === rawName);
+  const finalName = existing ? `${rawName} (imported)` : rawName;
+
+  const created = db.createWorkflow({
+    name: finalName,
+    description: typeof wf.description === 'string' ? wf.description : undefined,
+    domain: (['finance', 'coding', 'general'] as const).includes(wf.domain as never)
+      ? (wf.domain as 'finance' | 'coding' | 'general')
+      : 'general',
+    nodes: (wf.nodes as never) ?? [],
+    edges: (wf.edges as never) ?? [],
+  });
+
+  return c.json({ ok: true, data: created }, 201);
+});
+
+workflow.post('/:id/duplicate', (c) => {
+  const copy = db.duplicateWorkflow(c.req.param('id'));
+  if (!copy) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: copy }, 201);
+});
+
+workflow.get('/:id/export', (c) => {
+  const wf = db.getWorkflow(c.req.param('id'));
+  if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
+  const safeName = wf.name.replace(/[^a-z0-9_-]/gi, '_');
+  c.header('Content-Disposition', `attachment; filename="${safeName}.neos.json"`);
+  return c.json({
+    version: '1',
+    exportedAt: new Date().toISOString(),
+    workflow: {
+      name: wf.name,
+      description: wf.description,
+      domain: wf.domain,
+      nodes: wf.nodes,
+      edges: wf.edges,
+    },
+  });
+});
+
 // ── Runs ──────────────────────────────────────────────────
 
 workflow.get('/:id/runs', (c) => {
@@ -151,7 +211,7 @@ workflow.post('/:id/run', async (c) => {
 
           // Track node results in memory for final save
           if (event.type === 'node.completed') {
-            nodeResults[event.nodeId] = { status: 'completed', output: event.output };
+            nodeResults[event.nodeId] = { status: 'completed', output: event.output, durationMs: event.durationMs };
           }
           if (event.type === 'node.failed') {
             nodeResults[event.nodeId] = { status: 'failed', error: event.error };

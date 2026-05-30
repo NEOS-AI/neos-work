@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -64,6 +64,31 @@ export function Workflows() {
     setWorkflows((prev) => prev.filter((w) => w.id !== id));
   };
 
+  const handleDuplicate = async (id: string) => {
+    if (!client) return;
+    const res = await client.duplicateWorkflow(id);
+    if (res.ok) await loadWorkflows();
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as unknown;
+      const res = await client.importWorkflow(data as Parameters<typeof client.importWorkflow>[0]);
+      if (res.ok && res.data) {
+        navigate(`/workflows/${res.data.id}`);
+      }
+    } catch {
+      // 파싱 또는 import 오류
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       {/* Header */}
@@ -71,14 +96,24 @@ export function Workflows() {
         <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('nav.workflows')}
         </h1>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors"
-          style={{ backgroundColor: '#10b981' }}
-        >
-          <span className="text-base leading-none">+</span>
-          {t('workflow.new')}
-        </button>
+        <div className="flex items-center gap-2">
+          <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+          >
+            {t('workflow.import')}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors"
+            style={{ backgroundColor: '#10b981' }}
+          >
+            <span className="text-base leading-none">+</span>
+            {t('workflow.new')}
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -131,15 +166,25 @@ export function Workflows() {
                   {new Date(wf.updatedAt).toLocaleDateString()}
                 </p>
 
-                {/* Delete button */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDelete(wf.id); }}
-                  className="absolute right-3 top-3 hidden rounded p-1 text-xs group-hover:flex"
-                  style={{ color: 'var(--text-muted)' }}
-                  title={t('common.delete')}
-                >
-                  ✕
-                </button>
+                {/* Action buttons */}
+                <div className="absolute right-2 top-2 hidden items-center gap-1 group-hover:flex">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); void handleDuplicate(wf.id); }}
+                    className="rounded p-1 text-xs"
+                    style={{ color: 'var(--text-muted)' }}
+                    title={t('workflow.duplicate')}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); void handleDelete(wf.id); }}
+                    className="rounded p-1 text-xs"
+                    style={{ color: 'var(--text-muted)' }}
+                    title={t('common.delete')}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))}
           </div>

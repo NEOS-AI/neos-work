@@ -495,6 +495,48 @@ export class EngineClient {
     return res.json();
   }
 
+  async duplicateWorkflow(id: string): Promise<ApiResponse<Workflow>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${id}/duplicate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async exportWorkflow(id: string, workflowName: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${id}/export`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const safeName = workflowName.replace(/[^a-z0-9_-]/gi, '_');
+    const filename = `${safeName}.neos.json`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async importWorkflow(data: {
+    version: string;
+    workflow: {
+      name: string;
+      description?: string;
+      domain: string;
+      nodes: unknown[];
+      edges: unknown[];
+    };
+  }): Promise<ApiResponse<Workflow>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/import`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  }
+
   runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void, inputs?: Record<string, unknown>): () => void {
     const controller = new AbortController();
     (async () => {
@@ -691,7 +733,7 @@ export interface AgentHarness {
 export type WorkflowSSEEvent =
   | { type: 'run.started'; runId: string }
   | { type: 'node.started'; nodeId: string; nodeType: string }
-  | { type: 'node.completed'; nodeId: string; output: unknown }
+  | { type: 'node.completed'; nodeId: string; output: unknown; durationMs?: number }
   | { type: 'node.failed'; nodeId: string; error: string }
   | { type: 'run.completed'; runId: string; duration: number }
   | { type: 'run.failed'; runId: string; error: string };

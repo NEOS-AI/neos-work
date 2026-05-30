@@ -126,6 +126,18 @@ export function deleteWorkflow(id: string): boolean {
   return result.changes > 0;
 }
 
+export function duplicateWorkflow(id: string): Workflow | undefined {
+  const src = getWorkflow(id);
+  if (!src) return undefined;
+  return createWorkflow({
+    name: `${src.name} (copy)`,
+    description: src.description,
+    domain: src.domain,
+    nodes: src.nodes,
+    edges: src.edges,
+  });
+}
+
 // ── Workflow Runs ──────────────────────────────────────────
 
 export function saveRun(run: WorkflowRun): void {

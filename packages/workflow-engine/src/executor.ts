@@ -128,7 +128,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     nodeOutputs.set(node.id, output);
 
     if (result.ok) {
-      onEvent({ type: 'node.completed', nodeId: node.id, output });
+      onEvent({ type: 'node.completed', nodeId: node.id, output, durationMs: result.durationMs });
     } else {
       failedNodes.add(node.id);
       onEvent({ type: 'node.failed', nodeId: node.id, error: result.error ?? 'Unknown error' });

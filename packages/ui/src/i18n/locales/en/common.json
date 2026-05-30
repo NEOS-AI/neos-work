@@ -38,7 +38,10 @@
     "validation": "Validation",
     "noNodeSelected": "Select a node to edit its settings.",
     "done": "Done",
-    "noRuns": "No runs yet."
+    "noRuns": "No runs yet.",
+    "duplicate": "Duplicate",
+    "export": "Export",
+    "import": "Import"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

@@ -124,9 +124,11 @@ export function WorkflowEditor() {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [savedDraft, setSavedDraft] = useState<ReturnType<typeof buildWorkflowDraft> | null>(null);
   const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [runEvents, setRunEvents] = useState<WorkflowSSEEvent[]>([]);
+  const [expandedRunLogIdx, setExpandedRunLogIdx] = useState<number | null>(null);
   const [runInputsOpen, setRunInputsOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('config');
@@ -141,8 +143,11 @@ export function WorkflowEditor() {
     const res = await client.getWorkflow(id);
     if (res.ok && res.data) {
       setWorkflow(res.data);
-      setNodes(toReactFlowNodes(res.data, {}));
-      setEdges(toReactFlowEdges(res.data));
+      const rfNodes = toReactFlowNodes(res.data, {});
+      const rfEdges = toReactFlowEdges(res.data);
+      setNodes(rfNodes);
+      setEdges(rfEdges);
+      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges));
     }
   }, [client, id, setNodes, setEdges]);
 
@@ -198,6 +203,30 @@ export function WorkflowEditor() {
   );
   const hasValidationErrors = validationIssues.some((issue) => issue.severity === 'error');
 
+  const isDirty = useMemo(() => {
+    if (!savedDraft) return false;
+    return JSON.stringify(draft) !== JSON.stringify(savedDraft);
+  }, [draft, savedDraft]);
+
+  const nodeLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const n of nodes) {
+      map[n.id] = String(n.data.label ?? n.id);
+    }
+    return map;
+  }, [nodes]);
+
+  // beforeunload 경고: dirty 상태에서 이탈 시
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
   const patchNodeData = useCallback((nodeId: string, patch: { label?: string; config?: Record<string, unknown> }) => {
     setNodes((current) =>
       current.map((node) => {
@@ -218,7 +247,10 @@ export function WorkflowEditor() {
     if (!client || !workflow) return;
     setSaving(true);
     const res = await client.updateWorkflow(workflow.id, draft);
-    if (res.ok && res.data) setWorkflow(res.data);
+    if (res.ok && res.data) {
+      setWorkflow(res.data);
+      setSavedDraft(draft);
+    }
     setSaving(false);
     if (validationIssues.length > 0) setRightPanelTab('config');
   };
@@ -230,11 +262,15 @@ export function WorkflowEditor() {
       return;
     }
     const saveRes = await client.updateWorkflow(workflow.id, draft);
-    if (saveRes.ok && saveRes.data) setWorkflow(saveRes.data);
+    if (saveRes.ok && saveRes.data) {
+      setWorkflow(saveRes.data);
+      setSavedDraft(draft);
+    }
     setIsRunning(true);
     setRightPanelTab('run');
     setRunEvents([]);
     setRunStatuses({});
+    setExpandedRunLogIdx(null);
     const stop = client.runWorkflow(workflow.id, (event) => {
       setRunEvents((prev) => [...prev, event]);
       if (event.type === 'node.started') {
@@ -296,8 +332,19 @@ export function WorkflowEditor() {
         </button>
         <span className="mx-1 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
           {workflow.name}
+          {isDirty && (
+            <span className="ml-1 select-none text-yellow-400" title="Unsaved changes">•</span>
+          )}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => client?.exportWorkflow(workflow.id, workflow.name)}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title={t('workflow.export')}
+        >
+          {t('workflow.export')}
+        </button>
         <button
           onClick={handleSave}
           disabled={saving}
@@ -401,16 +448,36 @@ export function WorkflowEditor() {
 
           {rightPanelTab === 'run' && (
             <div className="flex-1 overflow-y-auto p-3 text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
-              {runEvents.map((ev, i) => (
-                <div key={i} className="rounded px-2 py-1" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                  {ev.type === 'node.started' && `▶ ${ev.nodeId} (${ev.nodeType})`}
-                  {ev.type === 'node.completed' && `✓ ${ev.nodeId}`}
-                  {ev.type === 'node.failed' && `✗ ${ev.nodeId}: ${ev.error}`}
-                  {ev.type === 'run.started' && `Run ${ev.runId.slice(0, 8)}`}
-                  {ev.type === 'run.completed' && `${t('workflow.done')} (${ev.duration}ms)`}
-                  {ev.type === 'run.failed' && ev.error}
-                </div>
-              ))}
+              {runEvents.map((ev, i) => {
+                const nodeLabel = 'nodeId' in ev
+                  ? (nodeLabelMap[(ev as { nodeId: string }).nodeId] ?? (ev as { nodeId: string }).nodeId)
+                  : null;
+                const isExpanded = expandedRunLogIdx === i;
+                const hasOutput = ev.type === 'node.completed' && (ev as { output?: unknown }).output !== undefined;
+                return (
+                  <div
+                    key={i}
+                    className={`rounded px-2 py-1${hasOutput ? ' cursor-pointer' : ''}`}
+                    style={{ backgroundColor: 'var(--bg-secondary)' }}
+                    onClick={() => hasOutput && setExpandedRunLogIdx(isExpanded ? null : i)}
+                  >
+                    {ev.type === 'node.started' && `▶ ${nodeLabel} (${(ev as { nodeType: string }).nodeType})`}
+                    {ev.type === 'node.completed' && `✓ ${nodeLabel}${hasOutput ? ' ▸' : ''}`}
+                    {ev.type === 'node.failed' && `✗ ${nodeLabel}: ${(ev as { error: string }).error}`}
+                    {ev.type === 'run.started' && `Run ${(ev as { runId: string }).runId.slice(0, 8)}`}
+                    {ev.type === 'run.completed' && `${t('workflow.done')} (${(ev as { duration: number }).duration}ms)`}
+                    {ev.type === 'run.failed' && (ev as { error: string }).error}
+                    {isExpanded && hasOutput && (
+                      <pre
+                        className="mt-1 overflow-x-auto rounded p-1 text-[10px]"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                      >
+                        {JSON.stringify((ev as { output: unknown }).output, null, 2).slice(0, 400)}
+                      </pre>
+                    )}
+                  </div>
+                );
+              })}
               {runEvents.length === 0 && (
                 <p style={{ color: 'var(--text-muted)' }}>{t('workflow.noRuns')}</p>
               )}

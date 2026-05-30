@@ -83,4 +83,28 @@ describe('executeWorkflow', () => {
     expect(triggerCompleted).toBeDefined();
     expect(triggerCompleted?.output).toEqual({ query: 'hello world', count: 5 });
   });
+
+  it('node.completed 이벤트에 durationMs를 포함한다', async () => {
+    const events: WorkflowSSEEvent[] = [];
+
+    await executeWorkflow({
+      runId: 'run-duration',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'output', type: 'output', label: 'Output', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'output' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const completed = events.filter((e) => e.type === 'node.completed') as Array<{ type: 'node.completed'; nodeId: string; output: unknown; durationMs: number }>;
+    expect(completed.length).toBeGreaterThan(0);
+    for (const ev of completed) {
+      expect(typeof ev.durationMs).toBe('number');
+      expect(ev.durationMs).toBeGreaterThanOrEqual(0);
+    }
+  });
 });
