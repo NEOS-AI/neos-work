@@ -92,6 +92,7 @@ function initSchema(db: Database.Database): void {
       path         TEXT NOT NULL,
       version      TEXT,
       enabled      INTEGER NOT NULL DEFAULT 1,
+      manifest_json TEXT,
       installed_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -174,4 +175,10 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_workflow_run_workflow_id ON workflow_run(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_updated_at ON workflow(updated_at);
   `);
+
+  // Migrations for older schemas
+  const skillCols = (db.prepare("PRAGMA table_info(skill)").all() as Array<{ name: string }>).map((c) => c.name);
+  if (!skillCols.includes('manifest_json')) {
+    db.exec("ALTER TABLE skill ADD COLUMN manifest_json TEXT");
+  }
 }

@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { id: 'blocks', path: '/blocks', icon: BlocksIcon },
   { id: 'templates', path: '/templates', icon: TemplatesIcon },
   { id: 'skills', path: '/skills', icon: SkillsIcon },
+  { id: 'memory', path: '/memory', icon: MemoryIcon },
   { id: 'settings', path: '/settings', icon: SettingsIcon },
 ] as const;
 
@@ -183,6 +184,16 @@ function BlocksIcon() {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function MemoryIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
+      <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6" />
     </svg>
   );
 }

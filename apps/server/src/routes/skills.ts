@@ -19,6 +19,7 @@ interface SkillRow {
   path: string;
   version: string | null;
   enabled: number;
+  manifest_json: string | null;
   installed_at: string;
 }
 
@@ -34,18 +35,20 @@ function upsertSkill(params: {
   source: string;
   path: string;
   version?: string;
+  manifestJson?: string;
 }): SkillRow {
   const dbInst = getDb();
   const id = crypto.randomUUID();
   dbInst.prepare(
-    `INSERT INTO skill (id, name, description, source, path, version)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO skill (id, name, description, source, path, version, manifest_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(name) DO UPDATE SET
        description = excluded.description,
        source = excluded.source,
        path = excluded.path,
-       version = excluded.version`,
-  ).run(id, params.name, params.description ?? null, params.source, params.path, params.version ?? null);
+       version = excluded.version,
+       manifest_json = excluded.manifest_json`,
+  ).run(id, params.name, params.description ?? null, params.source, params.path, params.version ?? null, params.manifestJson ?? null);
   return dbInst.prepare('SELECT * FROM skill WHERE name = ?').get(params.name) as SkillRow;
 }
 
@@ -64,16 +67,27 @@ function deleteSkillById(id: string): boolean {
 // GET /api/skills — list installed skills
 skills.get('/', (c) => {
   const rows = listSkillRows();
-  const data = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description,
-    source: r.source,
-    path: r.path,
-    version: r.version,
-    enabled: r.enabled === 1,
-    installedAt: r.installed_at,
-  }));
+  const data = rows.map((r) => {
+    let manifest: Record<string, unknown> | null = null;
+    if (r.manifest_json) {
+      try { manifest = JSON.parse(r.manifest_json) as Record<string, unknown>; } catch { /* ignore */ }
+    }
+    return {
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      source: r.source,
+      path: r.path,
+      version: r.version,
+      enabled: r.enabled === 1,
+      installedAt: r.installed_at,
+      mode: manifest?.['mode'] as string | undefined,
+      category: manifest?.['category'] as string | undefined,
+      featured: manifest?.['featured'] === true,
+      triggers: manifest?.['triggers'] as string[] | undefined,
+      examplePrompt: manifest?.['examplePrompt'] as string | undefined,
+    };
+  });
   return c.json({ ok: true, data });
 });
 
@@ -92,7 +106,8 @@ skills.post('/scan', async (c) => {
         description: skill.manifest.description,
         source: skill.source,
         path: skill.path,
-        version: skill.manifest.metadata?.version,
+        version: skill.manifest.version ?? skill.manifest.metadata?.version,
+        manifestJson: JSON.stringify(skill.manifest),
       });
     }
 

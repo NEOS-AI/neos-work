@@ -67,6 +67,11 @@ export interface SkillData {
   version: string | null;
   enabled: boolean;
   installedAt: string;
+  mode?: string;
+  category?: string;
+  featured?: boolean;
+  triggers?: string[];
+  examplePrompt?: string;
 }
 
 export type AgentChunk =
@@ -574,8 +579,8 @@ export class EngineClient {
     return () => controller.abort();
   }
 
-  async listWorkflowRuns(workflowId: string): Promise<ApiResponse<WorkflowRun[]>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs`, {
+  async listWorkflowRuns(workflowId: string, limit = 20, offset = 0): Promise<ApiResponse<WorkflowRun[]>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs?limit=${limit}&offset=${offset}`, {
       headers: this.getHeaders(),
     });
     return res.json();
@@ -583,6 +588,14 @@ export class EngineClient {
 
   async getWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<WorkflowRun>> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async deleteWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
+      method: 'DELETE',
       headers: this.getHeaders(),
     });
     return res.json();
@@ -666,6 +679,47 @@ export class EngineClient {
       ? `${this.baseUrl}/api/templates?domain=${encodeURIComponent(domain)}`
       : `${this.baseUrl}/api/templates`;
     const res = await fetch(url, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  // --- Memory ---
+
+  async listMemories(): Promise<ApiResponse<MemoryItem[]>> {
+    const res = await fetch(`${this.baseUrl}/api/memory`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async createMemory(input: CreateMemoryInput): Promise<ApiResponse<MemoryItem>> {
+    const res = await fetch(`${this.baseUrl}/api/memory`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async updateMemory(id: string, input: UpdateMemoryInput): Promise<ApiResponse<MemoryItem>> {
+    const res = await fetch(`${this.baseUrl}/api/memory/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async deleteMemory(id: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/memory/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async toggleMemory(id: string): Promise<ApiResponse<MemoryItem>> {
+    const res = await fetch(`${this.baseUrl}/api/memory/${encodeURIComponent(id)}/toggle`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+    });
     return res.json();
   }
 }
@@ -752,4 +806,31 @@ export interface WorkflowBlock {
   requiredSettings?: string[];
   promptTemplate?: string;
   skillId?: string;
+}
+
+export type MemoryType = 'user' | 'session' | 'skill' | 'reference';
+
+export interface MemoryItem {
+  id: string;
+  name: string;
+  type: MemoryType;
+  enabled: boolean;
+  content: string;
+  filePath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMemoryInput {
+  name: string;
+  type: MemoryType;
+  content: string;
+  enabled?: boolean;
+}
+
+export interface UpdateMemoryInput {
+  name?: string;
+  type?: MemoryType;
+  content?: string;
+  enabled?: boolean;
 }

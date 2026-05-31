@@ -53,6 +53,22 @@ export function Settings() {
             provider="google"
             settingKey="apiKey.google"
           />
+          <ApiKeyInput
+            label="OpenAI API Key"
+            placeholder="sk-..."
+            provider="openai"
+            settingKey="OPENAI_API_KEY"
+          />
+          <SimpleKeyInput
+            label="OpenAI Base URL"
+            placeholder="https://api.openai.com/v1"
+            settingKey="OPENAI_BASE_URL"
+          />
+          <SimpleKeyInput
+            label="Ollama Base URL"
+            placeholder="http://localhost:11434"
+            settingKey="OLLAMA_BASE_URL"
+          />
         </div>
       </section>
 

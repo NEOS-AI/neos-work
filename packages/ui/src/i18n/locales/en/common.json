@@ -11,7 +11,8 @@
     "skills": "Skills",
     "settings": "Settings",
     "harnesses": "Harnesses",
-    "blocks": "Blocks"
+    "blocks": "Blocks",
+    "memory": "Memory"
   },
   "common": {
     "loading": "Loading...",
@@ -20,7 +21,9 @@
     "delete": "Delete",
     "create": "Create",
     "edit": "Edit",
-    "view": "View"
+    "view": "View",
+    "stay": "Stay",
+    "loadMore": "Load more"
   },
   "workflow": {
     "new": "New Workflow",
@@ -41,7 +44,19 @@
     "noRuns": "No runs yet.",
     "duplicate": "Duplicate",
     "export": "Export",
-    "import": "Import"
+    "import": "Import",
+    "rename": "Click to rename",
+    "description": "Description",
+    "descriptionPlaceholder": "What does this workflow do?",
+    "unsavedChanges": "Unsaved Changes",
+    "leaveConfirm": "You have unsaved changes. Are you sure you want to leave?",
+    "leave": "Leave",
+    "deleteRun": "Delete run",
+    "loadMore": "Load more",
+    "filterAll": "All",
+    "filterCompleted": "Completed",
+    "filterFailed": "Failed",
+    "filterCancelled": "Cancelled"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",
@@ -100,5 +115,32 @@
     "editTitle": "Edit Block",
     "viewTitle": "View Block",
     "validationError": "ID and Name are required."
+  },
+  "run": {
+    "status": "Status",
+    "duration": "Duration",
+    "startedAt": "Started At",
+    "node": "Node",
+    "output": "Output"
+  },
+  "memory": {
+    "title": "Memory",
+    "new": "New Memory",
+    "empty": "No memories yet.",
+    "confirmDelete": "Delete this memory?",
+    "content": "Content",
+    "tags": "Tags",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "toggle": "Toggle",
+    "export": "Export"
+  },
+  "skill": {
+    "mode": "Mode",
+    "platform": "Platform",
+    "category": "Category",
+    "featured": "Featured",
+    "tryPrompt": "Try",
+    "triggers": "Triggers"
   }
 }

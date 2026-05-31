@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { Node } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 
 import type { WorkflowBlock } from '../../lib/engine.js';
+import { ANTHROPIC_MODELS, GOOGLE_MODELS, OLLAMA_PRESET_MODELS, OPENAI_MODELS } from '@neos-work/shared';
 import { BlockParamForm } from './BlockParamForm.js';
 import { BlockSelector, defaultsForBlock } from './BlockSelector.js';
 import { CheckboxField, NumberField, TextAreaField, TextField } from './fields.js';
@@ -12,6 +14,8 @@ interface NodeConfigPanelProps {
   selectedNode: Node | null;
   validationIssues: WorkflowValidationIssue[];
   onPatchNodeData: (nodeId: string, patch: { label?: string; config?: Record<string, unknown> }) => void;
+  workflowDescription?: string;
+  onUpdateDescription?: (desc: string) => void;
 }
 
 function getConfig(node: Node): Record<string, unknown> {
@@ -27,9 +31,10 @@ function stringifyJson(value: unknown): string {
   }
 }
 
-export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeData }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeData, workflowDescription, onUpdateDescription }: NodeConfigPanelProps) {
   const [blocks, setBlocks] = useState<WorkflowBlock[]>([]);
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
+  const { t } = useTranslation('common');
 
   const selectedIssues = useMemo(() => {
     if (!selectedNode) return validationIssues;
@@ -43,6 +48,19 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           Select a node to edit its settings.
         </p>
         <ValidationList issues={selectedIssues} />
+        {onUpdateDescription !== undefined && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              {t('workflow.description')}
+            </p>
+            <TextAreaField
+              label=""
+              value={workflowDescription ?? ''}
+              rows={3}
+              onChange={onUpdateDescription}
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -68,6 +86,48 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
 
       {(nodeType === 'agent_finance' || nodeType === 'agent_coding') && (
         <div className="space-y-3">
+          {/* Provider selector */}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              Provider
+            </label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              value={typeof config.llmProvider === 'string' ? config.llmProvider : 'anthropic'}
+              onChange={(e) => patchConfig({ llmProvider: e.target.value, llmModel: '' })}
+            >
+              <option value="anthropic">Anthropic</option>
+              <option value="google">Google</option>
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama</option>
+            </select>
+          </div>
+          {/* Model selector */}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              Model
+            </label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              value={typeof config.llmModel === 'string' ? config.llmModel : ''}
+              onChange={(e) => patchConfig({ llmModel: e.target.value })}
+            >
+              {(() => {
+                const provider = typeof config.llmProvider === 'string' ? config.llmProvider : 'anthropic';
+                const modelsMap: Record<string, { id: string; name: string }[]> = {
+                  anthropic: ANTHROPIC_MODELS,
+                  google: GOOGLE_MODELS,
+                  openai: OPENAI_MODELS,
+                  ollama: OLLAMA_PRESET_MODELS,
+                };
+                return (modelsMap[provider] ?? ANTHROPIC_MODELS).map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ));
+              })()}
+            </select>
+          </div>
           <HarnessSelector
             nodeType={nodeType}
             value={typeof config.harnessId === 'string' ? config.harnessId : ''}

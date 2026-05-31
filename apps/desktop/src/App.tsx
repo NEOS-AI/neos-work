@@ -13,6 +13,7 @@ import { Skills } from './pages/Skills.js';
 import { Templates } from './pages/Templates.js';
 import { Workflows } from './pages/Workflows.js';
 import { WorkflowEditor } from './pages/WorkflowEditor.js';
+import Memory from './pages/Memory.js';
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ function AppRouter() {
           <Route path="blocks" element={<Blocks />} />
           <Route path="templates" element={<Templates />} />
           <Route path="skills" element={<Skills />} />
+          <Route path="memory" element={<Memory />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

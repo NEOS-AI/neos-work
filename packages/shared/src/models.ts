@@ -60,9 +60,25 @@ export const GOOGLE_MODELS: Model[] = [
   },
 ];
 
+// --- OpenAI Models ---
+
+export const OPENAI_MODELS: Model[] = [
+  { id: 'gpt-4o',      name: 'GPT-4o',      providerId: 'openai', contextWindow: 128_000, supportsThinking: false, supportsTools: true,  supportsVision: true },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', providerId: 'openai', contextWindow: 128_000, supportsThinking: false, supportsTools: true,  supportsVision: true },
+  { id: 'o3-mini',     name: 'o3-mini',     providerId: 'openai', contextWindow: 200_000, supportsThinking: true,  supportsTools: true,  supportsVision: false },
+];
+
+// --- Ollama Models ---
+
+export const OLLAMA_PRESET_MODELS: Model[] = [
+  { id: 'llama3.3',      name: 'Llama 3.3',      providerId: 'ollama', contextWindow: 128_000, supportsThinking: false, supportsTools: true,  supportsVision: false },
+  { id: 'qwen2.5-coder', name: 'Qwen 2.5 Coder', providerId: 'ollama', contextWindow: 128_000, supportsThinking: false, supportsTools: true,  supportsVision: false },
+  { id: 'deepseek-r1',   name: 'DeepSeek R1',    providerId: 'ollama', contextWindow: 128_000, supportsThinking: true,  supportsTools: true,  supportsVision: false },
+];
+
 // --- All Models ---
 
-export const ALL_MODELS: Model[] = [...ANTHROPIC_MODELS, ...GOOGLE_MODELS];
+export const ALL_MODELS: Model[] = [...ANTHROPIC_MODELS, ...GOOGLE_MODELS, ...OPENAI_MODELS, ...OLLAMA_PRESET_MODELS];
 
 // --- Thinking Budget ---
 

@@ -36,8 +36,19 @@ export function parseSkillFile(
   const manifest: SkillManifest = {
     name: raw.name,
     description: raw.description ?? '',
+    version: raw.version,
     license: raw.license,
     compatibility: raw.compatibility,
+    mode: raw.mode,
+    platform: raw.platform,
+    category: raw.category,
+    featured: raw.featured === 'true',
+    examplePrompt: raw.examplePrompt ?? raw['example-prompt'],
+    triggers: raw.triggers
+      ? raw.triggers.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined,
+    designSystemRequired: raw.designSystemRequired === 'true' || raw['design-system-required'] === 'true',
+    fidelity: raw.fidelity,
   };
 
   return {

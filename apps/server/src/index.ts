@@ -14,6 +14,7 @@ import workflow from './routes/workflow.js';
 import harness from './routes/harness.js';
 import blocks from './routes/blocks.js';
 import templates from './routes/templates.js';
+import memory from './routes/memory.js';
 import { migrateEncryption } from './db/settings.js';
 import { registerFinanceBlocks } from '@neos-work/workflow-engine';
 
@@ -69,6 +70,7 @@ app.route('/api/workflow', workflow);
 app.route('/api/harness', harness);
 app.route('/api/blocks', blocks);
 app.route('/api/templates', templates);
+app.route('/api/memory', memory);
 
 // Root
 app.get('/', (c) => {

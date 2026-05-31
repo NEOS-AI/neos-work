@@ -8,6 +8,7 @@ interface NodeRunResult {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   output?: unknown;
   error?: string;
+  durationMs?: number;
   startedAt?: string;
   completedAt?: string;
 }
@@ -23,10 +24,11 @@ const STATUS_COLORS: Record<string, string> = {
 interface RunDetailPanelProps {
   workflowId: string;
   runId: string;
+  nodeLabelMap?: Record<string, string>;
   onClose: () => void;
 }
 
-export function RunDetailPanel({ workflowId, runId, onClose }: RunDetailPanelProps) {
+export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: RunDetailPanelProps) {
   const { client } = useEngine();
   const [run, setRun] = useState<WorkflowRun | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,8 +93,13 @@ export function RunDetailPanel({ workflowId, runId, onClose }: RunDetailPanelPro
               {nr.status}
             </span>
             <span className="font-mono" style={{ color: 'var(--text-primary)' }}>
-              {nr.nodeId}
+              {nodeLabelMap?.[nr.nodeId] ?? nr.nodeId}
             </span>
+            {nr.status === 'completed' && nr.durationMs !== undefined && (
+              <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {nr.durationMs < 1000 ? `${nr.durationMs}ms` : `${(nr.durationMs / 1000).toFixed(2)}s`}
+              </span>
+            )}
           </div>
 
           {nr.error && (

@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { SkillData } from '../lib/engine.js';
 
 export function Skills() {
   const { client } = useEngine();
+  const { t } = useTranslation('common');
   const [skills, setSkills] = useState<SkillData[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [tryPrompt, setTryPrompt] = useState<string | null>(null);
 
   const loadSkills = useCallback(async () => {
     if (!client) return;
@@ -48,6 +52,17 @@ export function Skills() {
     await client.deleteSkill(id);
     setSkills((prev) => prev.filter((s) => s.id !== id));
   };
+
+  // Sort: featured first, then alphabetical
+  const sorted = [...skills].sort((a, b) => {
+    if (a.featured && !b.featured) return -1;
+    if (!a.featured && b.featured) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  // Categories
+  const categories = ['all', ...Array.from(new Set(skills.map((s) => s.category).filter(Boolean)))];
+  const filtered = categoryFilter === 'all' ? sorted : sorted.filter((s) => s.category === categoryFilter);
 
   const enabledCount = skills.filter((s) => s.enabled).length;
 
@@ -100,23 +115,84 @@ export function Skills() {
           </span>
         </div>
 
-        {skills.length === 0 ? (
+        {/* Category filter */}
+        {categories.length > 1 && (
+          <div className="mb-3 flex flex-wrap gap-1">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat ?? 'all')}
+                className="rounded-full px-2.5 py-0.5 text-xs transition-colors"
+                style={{
+                  backgroundColor: categoryFilter === (cat ?? 'all') ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                  color: categoryFilter === (cat ?? 'all') ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                {cat ?? 'all'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {filtered.length === 0 ? (
           <div className="rounded-lg border px-4 py-6 text-center" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No skills installed. Click Scan to discover skills.</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {skills.map((skill) => (
+            {filtered.map((skill) => (
               <SkillCard
                 key={skill.id}
                 skill={skill}
                 onToggle={(enabled) => handleToggle(skill.id, enabled)}
                 onDelete={() => handleDelete(skill.id)}
+                onTry={skill.examplePrompt ? () => setTryPrompt(skill.examplePrompt!) : undefined}
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* Try prompt modal */}
+      {tryPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setTryPrompt(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-xl border p-6"
+            style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {t('skill.tryPrompt')}
+            </h3>
+            <pre
+              className="rounded-lg p-3 text-xs whitespace-pre-wrap break-words"
+              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)' }}
+            >
+              {tryPrompt}
+            </pre>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { void navigator.clipboard.writeText(tryPrompt); }}
+                className="rounded-lg border px-3 py-1.5 text-xs"
+                style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => setTryPrompt(null)}
+                className="rounded-lg px-3 py-1.5 text-xs"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -125,11 +201,14 @@ function SkillCard({
   skill,
   onToggle,
   onDelete,
+  onTry,
 }: {
   skill: SkillData;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
+  onTry?: () => void;
 }) {
+  const { t } = useTranslation('common');
   return (
     <div
       className="flex items-start justify-between rounded-lg border px-4 py-3"
@@ -140,7 +219,10 @@ function SkillCard({
       }}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {skill.featured && (
+            <span className="shrink-0 text-[10px]" style={{ color: '#f59e0b' }}>★</span>
+          )}
           <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
             {skill.name}
           </span>
@@ -155,15 +237,55 @@ function SkillCard({
               v{skill.version}
             </span>
           )}
+          {skill.mode && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+              style={{ backgroundColor: '#3b82f620', color: '#3b82f6' }}
+            >
+              {skill.mode}
+            </span>
+          )}
+          {skill.category && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+              style={{ backgroundColor: '#8b5cf620', color: '#8b5cf6' }}
+            >
+              {skill.category}
+            </span>
+          )}
         </div>
         {skill.description && (
           <p className="mt-0.5 line-clamp-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
             {skill.description}
           </p>
         )}
+        {skill.triggers && skill.triggers.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {skill.triggers.map((trigger) => (
+              <span
+                key={trigger}
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+              >
+                {trigger}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="ml-3 flex shrink-0 items-center gap-2">
+        {/* Try button */}
+        {onTry && (
+          <button
+            onClick={onTry}
+            className="rounded-lg border px-2 py-0.5 text-[10px] transition-colors"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+          >
+            {t('skill.tryPrompt')}
+          </button>
+        )}
+
         {/* Enable/disable toggle */}
         <button
           onClick={() => onToggle(!skill.enabled)}

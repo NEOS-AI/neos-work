@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useBlocker } from 'react-router-dom';
 import {
   ReactFlow,
   Background,
@@ -21,6 +21,7 @@ import type { Workflow, WorkflowBlock, WorkflowSSEEvent } from '../lib/engine.js
 import { NodeConfigPanel } from '../components/workflow/NodeConfigPanel.js';
 import { RunHistoryPanel } from '../components/workflow/RunHistoryPanel.js';
 import { RunInputsDialog } from '../components/workflow/RunInputsDialog.js';
+import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
 
 // ── Node color palette ─────────────────────────────────────
@@ -75,8 +76,9 @@ const customNodeTypes: NodeTypes = {
 
 type RightPanelTab = 'config' | 'run' | 'history';
 
-function buildWorkflowDraft(nodes: Node[], edges: Edge[]) {
+function buildWorkflowDraft(nodes: Node[], edges: Edge[], description?: string) {
   return {
+    description,
     nodes: nodes.map((n) => ({
       id: n.id,
       type: n.data.nodeType as string,
@@ -125,6 +127,9 @@ export function WorkflowEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [savedDraft, setSavedDraft] = useState<ReturnType<typeof buildWorkflowDraft> | null>(null);
+  const [workflowDescription, setWorkflowDescription] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
   const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [runEvents, setRunEvents] = useState<WorkflowSSEEvent[]>([]);
@@ -143,11 +148,12 @@ export function WorkflowEditor() {
     const res = await client.getWorkflow(id);
     if (res.ok && res.data) {
       setWorkflow(res.data);
+      setWorkflowDescription(res.data.description ?? '');
       const rfNodes = toReactFlowNodes(res.data, {});
       const rfEdges = toReactFlowEdges(res.data);
       setNodes(rfNodes);
       setEdges(rfEdges);
-      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges));
+      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, res.data.description ?? ''));
     }
   }, [client, id, setNodes, setEdges]);
 
@@ -196,7 +202,7 @@ export function WorkflowEditor() {
     [nodes, selectedNodeId],
   );
 
-  const draft = useMemo(() => buildWorkflowDraft(nodes, edges), [nodes, edges]);
+  const draft = useMemo(() => buildWorkflowDraft(nodes, edges, workflowDescription), [nodes, edges, workflowDescription]);
   const validationIssues = useMemo(
     () => validateWorkflowDraft({ nodes: draft.nodes, edges: draft.edges, blocks: allBlocks }),
     [draft, allBlocks],
@@ -207,6 +213,8 @@ export function WorkflowEditor() {
     if (!savedDraft) return false;
     return JSON.stringify(draft) !== JSON.stringify(savedDraft);
   }, [draft, savedDraft]);
+
+  const blocker = useBlocker(isDirty);
 
   const nodeLabelMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -242,6 +250,14 @@ export function WorkflowEditor() {
       }),
     );
   }, [setNodes]);
+
+  const handleNameCommit = async () => {
+    const trimmed = nameInput.trim().slice(0, 200);
+    setEditingName(false);
+    if (!trimmed || !client || !workflow || trimmed === workflow.name) return;
+    const res = await client.updateWorkflow(workflow.id, { ...draft, name: trimmed });
+    if (res.ok && res.data) setWorkflow(res.data);
+  };
 
   const handleSave = async () => {
     if (!client || !workflow) return;
@@ -331,7 +347,34 @@ export function WorkflowEditor() {
           ← {t('nav.workflows')}
         </button>
         <span className="mx-1 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-          {workflow.name}
+          {editingName ? (
+            <input
+              autoFocus
+              className="rounded border px-1 text-sm font-semibold"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                width: '160px',
+              }}
+              value={nameInput}
+              maxLength={200}
+              onChange={(e) => setNameInput(e.target.value)}
+              onBlur={() => void handleNameCommit()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleNameCommit();
+                if (e.key === 'Escape') setEditingName(false);
+              }}
+            />
+          ) : (
+            <span
+              className="cursor-text hover:opacity-80"
+              onClick={() => { setNameInput(workflow.name); setEditingName(true); }}
+              title={t('workflow.rename')}
+            >
+              {workflow.name}
+            </span>
+          )}
           {isDirty && (
             <span className="ml-1 select-none text-yellow-400" title="Unsaved changes">•</span>
           )}
@@ -442,6 +485,8 @@ export function WorkflowEditor() {
                 selectedNode={selectedNode}
                 validationIssues={validationIssues}
                 onPatchNodeData={patchNodeData}
+                workflowDescription={workflowDescription}
+                onUpdateDescription={setWorkflowDescription}
               />
             </div>
           )}
@@ -485,7 +530,7 @@ export function WorkflowEditor() {
           )}
 
           {rightPanelTab === 'history' && (
-            <RunHistoryPanel workflowId={workflow.id} refreshKey={historyRefreshKey} />
+            <RunHistoryPanel workflowId={workflow.id} refreshKey={historyRefreshKey} nodeLabelMap={nodeLabelMap} />
           )}
 
           {rightPanelTab !== 'config' && hasValidationErrors && (
@@ -503,6 +548,13 @@ export function WorkflowEditor() {
           }
           onConfirm={(inputs) => { setRunInputsOpen(false); void handleRun(inputs); }}
           onCancel={() => setRunInputsOpen(false)}
+        />
+      )}
+
+      {blocker.state === 'blocked' && (
+        <ConfirmLeaveModal
+          onConfirm={() => blocker.proceed?.()}
+          onCancel={() => blocker.reset?.()}
         />
       )}
     </div>

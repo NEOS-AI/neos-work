@@ -174,10 +174,16 @@ export function getRun(runId: string): WorkflowRun | undefined {
   return row ? rowToRun(row) : undefined;
 }
 
-export function listRuns(workflowId: string): WorkflowRun[] {
+export function listRuns(workflowId: string, limit = 20, offset = 0): WorkflowRun[] {
   const db = getDb();
   const rows = db
-    .prepare('SELECT * FROM workflow_run WHERE workflow_id = ? ORDER BY started_at DESC')
-    .all(workflowId) as WorkflowRunRow[];
+    .prepare('SELECT * FROM workflow_run WHERE workflow_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?')
+    .all(workflowId, limit, offset) as WorkflowRunRow[];
   return rows.map(rowToRun);
+}
+
+export function deleteRun(runId: string): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM workflow_run WHERE id = ?').run(runId);
+  return result.changes > 0;
 }

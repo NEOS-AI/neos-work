@@ -3,7 +3,7 @@
  * Supports Anthropic (Claude) and Google (Gemini).
  */
 
-export type ProviderId = 'anthropic' | 'google';
+export type ProviderId = 'anthropic' | 'google' | 'openai' | 'ollama';
 
 export interface LLMProvider {
   id: ProviderId;

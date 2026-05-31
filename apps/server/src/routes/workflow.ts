@@ -147,8 +147,18 @@ workflow.get('/:id/export', (c) => {
 // ── Runs ──────────────────────────────────────────────────
 
 workflow.get('/:id/runs', (c) => {
-  const runs = db.listRuns(c.req.param('id'));
+  const limit = Math.min(Number(c.req.query('limit') ?? '20'), 100);
+  const offset = Number(c.req.query('offset') ?? '0');
+  const runs = db.listRuns(c.req.param('id'), limit, offset);
   return c.json({ ok: true, data: runs });
+});
+
+workflow.delete('/:id/runs/:runId', (c) => {
+  const run = db.getRun(c.req.param('runId'));
+  if (!run) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (run.workflowId !== c.req.param('id')) return c.json({ ok: false, error: 'Not found' }, 404);
+  db.deleteRun(run.id);
+  return c.json({ ok: true });
 });
 
 workflow.get('/:id/runs/:runId', (c) => {

@@ -3,20 +3,52 @@
  * Supports optional harness injection for domain-specific agent configuration.
  */
 
-import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
+import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveHarness } from '../harness/index.js';
 
 function buildAdapter(settings: Record<string, string>) {
   const provider = settings['llmProvider'] ?? 'anthropic';
+
+  if (provider === 'openai') {
+    const apiKey = settings['OPENAI_API_KEY'];
+    const baseUrl = settings['OPENAI_BASE_URL'];
+    return new OpenAIAdapter({ provider: 'openai', apiKey, baseUrl });
+  }
+
+  if (provider === 'ollama') {
+    const baseUrl = settings['OLLAMA_BASE_URL'];
+    return new OpenAIAdapter({ provider: 'ollama', baseUrl });
+  }
+
   if (provider === 'google' && settings['GOOGLE_API_KEY']) {
     return new GoogleAdapter(settings['GOOGLE_API_KEY']);
   }
+
   const apiKey = settings['ANTHROPIC_API_KEY'];
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured');
   }
   return new AnthropicAdapter(apiKey);
+}
+
+async function buildSystemPromptWithMemory(
+  basePrompt: string,
+  serverUrl: string,
+  authToken: string,
+): Promise<string> {
+  try {
+    const res = await fetch(`${serverUrl}/api/memory/export`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return basePrompt;
+    const memoryContext = await res.text();
+    if (!memoryContext.trim()) return basePrompt;
+    return `${basePrompt}\n\n---\n## Agent Memory\n${memoryContext}`;
+  } catch {
+    return basePrompt;
+  }
 }
 
 function buildToolRegistry(
@@ -51,9 +83,13 @@ export class AgentNode implements ExecutableNode {
     const harnessId = this.nodeConfig?.['harnessId'] as string | undefined;
     const harness = harnessId ? resolveHarness(harnessId) : undefined;
 
-    const systemPrompt = harness
+    const baseSystemPrompt = harness
       ? [harness.systemPrompt, this.nodeConfig?.['systemPrompt']].filter(Boolean).join('\n\n---\n')
       : String(this.nodeConfig?.['systemPrompt'] ?? '');
+
+    const serverUrl = ctx.settings['SERVER_URL'] ?? 'http://localhost:3579';
+    const authToken = ctx.settings['AUTH_TOKEN'] ?? '';
+    const systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
     const maxIterations = harness?.constraints?.maxSteps ?? Number(this.nodeConfig?.['maxSteps'] ?? 20);
     const toolFilter = harness?.allowedTools;

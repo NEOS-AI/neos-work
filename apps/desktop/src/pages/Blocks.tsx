@@ -38,12 +38,40 @@ function BlockModal({ block, onSave, onClose }: ModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  type ParamDraft = { key: string; label: string; type: string; description: string; default: string; options: string };
+  const blankDraft = (): ParamDraft => ({ key: '', label: '', type: 'string', description: '', default: '', options: '' });
+  const toParamDraft = (p: WorkflowBlock['paramDefs'][number]): ParamDraft => ({
+    key: p.key,
+    label: p.label,
+    type: p.type,
+    description: p.description ?? '',
+    default: p.default !== undefined ? String(p.default) : '',
+    options: p.options?.join(', ') ?? '',
+  });
+  const [paramDrafts, setParamDrafts] = useState<ParamDraft[]>(
+    (block?.paramDefs ?? []).map(toParamDraft),
+  );
+
+  const patchDraft = (i: number, field: keyof ParamDraft, value: string) => {
+    setParamDrafts((prev) => prev.map((d, idx) => idx === i ? { ...d, [field]: value } : d));
+  };
+
   const handleSave = async () => {
     if (!name) { setError('Name is required'); return; }
     if (!isEdit && !id) { setError('ID is required'); return; }
     if (implType === 'prompt' && !promptTemplate) { setError('Prompt template is required'); return; }
     setSaving(true);
     try {
+      const paramDefs = paramDrafts
+        .filter((d) => d.key.trim())
+        .map((d) => ({
+          key: d.key.trim(),
+          label: d.label.trim() || d.key.trim(),
+          type: d.type,
+          description: d.description.trim() || undefined,
+          default: d.default.trim() ? d.default.trim() : undefined,
+          options: d.options.trim() ? d.options.split(',').map((o) => o.trim()).filter(Boolean) : undefined,
+        }));
       await onSave({
         id,
         name,
@@ -52,7 +80,7 @@ function BlockModal({ block, onSave, onClose }: ModalProps) {
         description,
         implementationType: implType,
         promptTemplate: implType === 'prompt' ? promptTemplate : undefined,
-        paramDefs: block?.paramDefs ?? [],
+        paramDefs,
         inputDescription: inputDesc,
         outputDescription: outputDesc,
       });
@@ -166,6 +194,87 @@ function BlockModal({ block, onSave, onClose }: ModalProps) {
             <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Output Description</span>
             <input style={inputStyle} value={outputDesc} onChange={(e) => setOutputDesc(e.target.value)} placeholder="What this block returns as output" />
           </label>
+
+          {/* ── ParamDefs editor ─────────────────────────────────── */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Parameters</span>
+              <button
+                type="button"
+                onClick={() => setParamDrafts((prev) => [...prev, blankDraft()])}
+                className="rounded px-2 py-0.5 text-xs"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+              >
+                + Add
+              </button>
+            </div>
+            {paramDrafts.map((d, i) => (
+              <div
+                key={i}
+                className="flex flex-col gap-1.5 rounded-lg border p-3"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)' }}
+              >
+                <div className="flex gap-2">
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={d.key}
+                    onChange={(e) => patchDraft(i, 'key', e.target.value.replace(/\s/g, '_'))}
+                    placeholder="key"
+                  />
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={d.label}
+                    onChange={(e) => patchDraft(i, 'label', e.target.value)}
+                    placeholder="Label"
+                  />
+                  <select
+                    style={{ ...inputStyle, width: '7rem', flex: 'none' }}
+                    value={d.type}
+                    onChange={(e) => patchDraft(i, 'type', e.target.value)}
+                  >
+                    <option value="string">string</option>
+                    <option value="number">number</option>
+                    <option value="boolean">boolean</option>
+                    <option value="select">select</option>
+                    <option value="textarea">textarea</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setParamDrafts((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="px-1 text-xs"
+                    style={{ color: '#ef4444' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <input
+                  style={inputStyle}
+                  value={d.description}
+                  onChange={(e) => patchDraft(i, 'description', e.target.value)}
+                  placeholder="Description (optional)"
+                />
+                <div className="flex gap-2">
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={d.default}
+                    onChange={(e) => patchDraft(i, 'default', e.target.value)}
+                    placeholder="Default value"
+                  />
+                  {d.type === 'select' && (
+                    <input
+                      style={{ ...inputStyle, flex: 2 }}
+                      value={d.options}
+                      onChange={(e) => patchDraft(i, 'options', e.target.value)}
+                      placeholder="opt1, opt2, opt3"
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+            {paramDrafts.length === 0 && (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No parameters defined yet.</p>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: 'var(--border-primary)' }}>
