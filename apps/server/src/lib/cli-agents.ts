@@ -4,6 +4,9 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -89,16 +92,43 @@ function buildCliArgs(cliId: SpawnCliAgentOptions['cliId'], prompt: string): { b
   }
 }
 
+/** Load all stored MCP OAuth tokens and return them as env var entries. */
+function loadMcpTokenEnvVars(): Record<string, string> {
+  const tokenDir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
+  const envVars: Record<string, string> = {};
+  try {
+    const files = fs.readdirSync(tokenDir);
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const raw = fs.readFileSync(path.join(tokenDir, file), 'utf-8');
+        const token = JSON.parse(raw) as { serverId: string; accessToken: string; expiresAt?: string };
+        if (!token.serverId || !token.accessToken) continue;
+        // Skip expired tokens
+        if (token.expiresAt && new Date(token.expiresAt) <= new Date()) continue;
+        const key = `NEOS_MCP_TOKEN_${token.serverId.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
+        envVars[key] = token.accessToken;
+      } catch {
+        // Ignore malformed files
+      }
+    }
+  } catch {
+    // Token dir doesn't exist — no tokens to inject
+  }
+  return envVars;
+}
+
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
   const { cliId, prompt, cwd, signal, onChunk } = opts;
   const { bin, args } = buildCliArgs(cliId, prompt);
+  const mcpTokenEnv = loadMcpTokenEnvVars();
 
   return new Promise<SpawnCliAgentResult>((resolve, reject) => {
     const child = spawn(bin, args, {
       cwd: cwd ?? process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, ...mcpTokenEnv },
     });
 
     let accumulated = '';

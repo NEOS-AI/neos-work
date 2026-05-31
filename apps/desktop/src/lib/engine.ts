@@ -495,6 +495,48 @@ export class EngineClient {
     return res.json();
   }
 
+  // --- MCP OAuth ---
+
+  async startMcpOAuth(params: {
+    serverId: string;
+    authorizationEndpoint: string;
+    tokenEndpoint: string;
+    clientId: string;
+    redirectUri: string;
+    scope?: string;
+  }): Promise<ApiResponse<{ authUrl: string; state: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/start`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(params),
+    });
+    return res.json();
+  }
+
+  async getMcpOAuthStatus(serverId: string): Promise<ApiResponse<{ connected: boolean; expiresAt?: string; scope?: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}/status`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async revokeMcpOAuth(serverId: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async refreshMcpOAuth(serverId: string, params: { tokenEndpoint: string; clientId: string }): Promise<ApiResponse<{ connected: boolean; expiresAt?: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}/refresh`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(params),
+    });
+    return res.json();
+  }
+
   // --- CLI Agents ---
 
   async listCliAgents(): Promise<ApiResponse<{ id: string; name: string; path: string; version?: string }[]>> {

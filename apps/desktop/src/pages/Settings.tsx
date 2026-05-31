@@ -438,6 +438,21 @@ function SimpleKeyInput({
 
 // --- MCP Servers Section ---
 
+interface OAuthStatus {
+  connected: boolean;
+  expiresAt?: string;
+  scope?: string;
+}
+
+interface OAuthModalState {
+  serverId: string;
+  serverName: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  clientId: string;
+  scope: string;
+}
+
 function McpServersSection() {
   const { client } = useEngine();
   const [servers, setServers] = useState<McpServerData[]>([]);
@@ -448,11 +463,25 @@ function McpServersSection() {
   const [formArgs, setFormArgs] = useState('');
   const [formUrl, setFormUrl] = useState('');
   const [adding, setAdding] = useState(false);
+  const [oauthStatuses, setOauthStatuses] = useState<Record<string, OAuthStatus>>({});
+  const [oauthModal, setOauthModal] = useState<OAuthModalState | null>(null);
+  const [oauthConnecting, setOauthConnecting] = useState(false);
 
   const loadServers = useCallback(async () => {
     if (!client) return;
     const res = await client.listMcpServers();
-    if (res.ok && res.data) setServers(res.data);
+    if (res.ok && res.data) {
+      setServers(res.data);
+      // Load OAuth status for each server
+      const statusMap: Record<string, OAuthStatus> = {};
+      await Promise.all(
+        res.data.map(async (s) => {
+          const st = await client.getMcpOAuthStatus(s.id);
+          if (st.ok && st.data) statusMap[s.id] = st.data;
+        }),
+      );
+      setOauthStatuses(statusMap);
+    }
   }, [client]);
 
   useEffect(() => {
@@ -496,6 +525,43 @@ function McpServersSection() {
     setServers((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const handleOAuthConnect = async () => {
+    if (!client || !oauthModal) return;
+    setOauthConnecting(true);
+    try {
+      const redirectUri = `http://localhost:3000/api/mcp/oauth/callback`;
+      const res = await client.startMcpOAuth({
+        serverId: oauthModal.serverId,
+        authorizationEndpoint: oauthModal.authorizationEndpoint,
+        tokenEndpoint: oauthModal.tokenEndpoint,
+        clientId: oauthModal.clientId,
+        redirectUri,
+        scope: oauthModal.scope || undefined,
+      });
+      if (res.ok && res.data?.authUrl) {
+        // Open in system browser via Tauri
+        const { open } = await import('@tauri-apps/plugin-shell');
+        await open(res.data.authUrl);
+        setOauthModal(null);
+        // Poll for token after 3s
+        setTimeout(async () => {
+          const st = await client.getMcpOAuthStatus(oauthModal.serverId);
+          if (st.ok && st.data) {
+            setOauthStatuses((prev) => ({ ...prev, [oauthModal.serverId]: st.data! }));
+          }
+        }, 3000);
+      }
+    } finally {
+      setOauthConnecting(false);
+    }
+  };
+
+  const handleOAuthRevoke = async (serverId: string) => {
+    if (!client) return;
+    await client.revokeMcpOAuth(serverId);
+    setOauthStatuses((prev) => ({ ...prev, [serverId]: { connected: false } }));
+  };
+
   return (
     <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
       <div className="mb-4 flex items-center justify-between">
@@ -508,6 +574,67 @@ function McpServersSection() {
           + Add
         </button>
       </div>
+
+      {/* OAuth Connect Modal */}
+      {oauthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-80 rounded-xl border p-5 shadow-xl" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+            <h3 className="mb-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+              Connect: {oauthModal.serverName}
+            </h3>
+            <div className="flex flex-col gap-2">
+              <input
+                placeholder="Authorization Endpoint"
+                value={oauthModal.authorizationEndpoint}
+                onChange={(e) => setOauthModal((m) => m ? { ...m, authorizationEndpoint: e.target.value } : m)}
+                className="rounded-lg border px-3 py-2 text-xs outline-none"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              />
+              <input
+                placeholder="Token Endpoint"
+                value={oauthModal.tokenEndpoint}
+                onChange={(e) => setOauthModal((m) => m ? { ...m, tokenEndpoint: e.target.value } : m)}
+                className="rounded-lg border px-3 py-2 text-xs outline-none"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              />
+              <input
+                placeholder="Client ID"
+                value={oauthModal.clientId}
+                onChange={(e) => setOauthModal((m) => m ? { ...m, clientId: e.target.value } : m)}
+                className="rounded-lg border px-3 py-2 text-xs outline-none"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              />
+              <input
+                placeholder="Scope (optional)"
+                value={oauthModal.scope}
+                onChange={(e) => setOauthModal((m) => m ? { ...m, scope: e.target.value } : m)}
+                className="rounded-lg border px-3 py-2 text-xs outline-none"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              />
+            </div>
+            <p className="mt-2 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              A browser window will open to complete authorization.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setOauthModal(null)}
+                className="rounded-lg px-3 py-1.5 text-xs"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleOAuthConnect}
+                disabled={oauthConnecting || !oauthModal.authorizationEndpoint || !oauthModal.tokenEndpoint || !oauthModal.clientId}
+                className="rounded-lg px-3 py-1.5 text-xs transition-colors disabled:opacity-40"
+                style={{ backgroundColor: '#059669', color: 'white' }}
+              >
+                {oauthConnecting ? 'Opening...' : 'Open Browser'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddForm && (
         <div className="mb-4 rounded-lg border p-4" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
@@ -587,56 +714,91 @@ function McpServersSection() {
         </p>
       ) : (
         <div className="space-y-2">
-          {servers.map((server) => (
-            <div
-              key={server.id}
-              className="flex items-center justify-between rounded-lg border px-3 py-2"
-              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {server.name}
-                  </span>
-                  <span
-                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono"
-                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-                  >
-                    {server.transport}
-                  </span>
+          {servers.map((server) => {
+            const oauthSt = oauthStatuses[server.id];
+            return (
+              <div
+                key={server.id}
+                className="rounded-lg border px-3 py-2"
+                style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {server.name}
+                      </span>
+                      <span
+                        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                      >
+                        {server.transport}
+                      </span>
+                      {/* OAuth status badge */}
+                      {oauthSt && (
+                        <span
+                          className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+                          style={{
+                            backgroundColor: oauthSt.connected ? '#065f4620' : 'var(--bg-tertiary)',
+                            color: oauthSt.connected ? '#059669' : 'var(--text-muted)',
+                          }}
+                        >
+                          {oauthSt.connected ? '● OAuth' : '○ OAuth'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 truncate text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                      {server.transport === 'stdio'
+                        ? `${server.command} ${(server.args ?? []).join(' ')}`
+                        : server.url}
+                    </p>
+                  </div>
+                  <div className="ml-2 flex items-center gap-2">
+                    {/* OAuth connect/disconnect */}
+                    {oauthSt?.connected ? (
+                      <button
+                        onClick={() => handleOAuthRevoke(server.id)}
+                        className="rounded px-2 py-1 text-[10px] transition-colors"
+                        style={{ color: '#ef4444', backgroundColor: '#ef444410' }}
+                      >
+                        Disconnect
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setOauthModal({ serverId: server.id, serverName: server.name, authorizationEndpoint: '', tokenEndpoint: '', clientId: '', scope: '' })}
+                        className="rounded px-2 py-1 text-[10px] transition-colors"
+                        style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)' }}
+                      >
+                        OAuth
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleToggle(server.id, !server.enabled)}
+                      className="relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full transition-colors"
+                      style={{ backgroundColor: server.enabled ? '#059669' : 'var(--bg-tertiary)' }}
+                    >
+                      <span
+                        className="inline-block h-4 w-4 transform rounded-full shadow transition-transform"
+                        style={{
+                          backgroundColor: 'white',
+                          transform: server.enabled ? 'translateX(16px)' : 'translateX(0)',
+                        }}
+                      />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(server.id)}
+                      className="rounded p-1"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <p className="mt-0.5 truncate text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {server.transport === 'stdio'
-                    ? `${server.command} ${(server.args ?? []).join(' ')}`
-                    : server.url}
-                </p>
               </div>
-              <div className="ml-2 flex items-center gap-2">
-                <button
-                  onClick={() => handleToggle(server.id, !server.enabled)}
-                  className="relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-full transition-colors"
-                  style={{ backgroundColor: server.enabled ? '#059669' : 'var(--bg-tertiary)' }}
-                >
-                  <span
-                    className="inline-block h-4 w-4 transform rounded-full shadow transition-transform"
-                    style={{
-                      backgroundColor: 'white',
-                      transform: server.enabled ? 'translateX(16px)' : 'translateX(0)',
-                    }}
-                  />
-                </button>
-                <button
-                  onClick={() => handleDelete(server.id)}
-                  className="rounded p-1"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
