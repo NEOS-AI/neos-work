@@ -1,7 +1,275 @@
 /**
- * Coding domain blocks — placeholder for v0.3.0 implementation.
+ * Coding domain blocks — code_eval, file_read, file_write, git_diff, test_runner.
+ *
+ * Security notes:
+ * - code_eval: vm.runInNewContext with 5s timeout, no module access
+ * - file_read/file_write: path traversal prevention, write restricted to workspaces dir
+ * - git_diff: read-only, uses spawn not exec
+ * - test_runner: allowed command prefix allowlist
  */
 
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { registerNativeBlock } from '../registry.js';
+import type { BlockExecutionContext, BlockResult } from '../types.js';
+
+const WORKSPACES_DIR = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
+const ALLOWED_TEST_PREFIXES = ['npm', 'pnpm', 'yarn', 'pytest', 'go', 'cargo'];
+const CODE_EVAL_TIMEOUT_MS = 5000;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function safePath(inputPath: string, baseDir?: string): string | null {
+  // Reject absolute paths or traversal attempts
+  if (path.isAbsolute(inputPath)) return null;
+  const base = baseDir ?? WORKSPACES_DIR;
+  const resolved = path.resolve(base, inputPath);
+  if (!resolved.startsWith(path.resolve(base) + path.sep) && resolved !== path.resolve(base)) {
+    return null;
+  }
+  return resolved;
+}
+
+function runSpawn(
+  bin: string,
+  args: string[],
+  opts: { cwd?: string; signal?: AbortSignal; timeoutMs?: number },
+): Promise<{ output: string; exitCode: number | null }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, {
+      cwd: opts.cwd ?? process.cwd(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+
+    let output = '';
+    child.stdout?.on('data', (d: Buffer) => { output += d.toString('utf8'); });
+    child.stderr?.on('data', (d: Buffer) => { output += d.toString('utf8'); });
+
+    const timeout = opts.timeoutMs
+      ? setTimeout(() => { try { child.kill('SIGTERM'); } catch { /* ignore */ } }, opts.timeoutMs)
+      : null;
+
+    const abortHandler = () => { try { child.kill('SIGTERM'); } catch { /* ignore */ } };
+    opts.signal?.addEventListener('abort', abortHandler, { once: true });
+
+    child.on('error', (err) => {
+      if (timeout) clearTimeout(timeout);
+      opts.signal?.removeEventListener('abort', abortHandler);
+      reject(err);
+    });
+
+    child.on('exit', (code) => {
+      if (timeout) clearTimeout(timeout);
+      opts.signal?.removeEventListener('abort', abortHandler);
+      resolve({ output, exitCode: code });
+    });
+  });
+}
+
+// ── code_eval ─────────────────────────────────────────────────────────────────
+
+async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult> {
+  const start = Date.now();
+  const code = String(ctx.params['code'] ?? '');
+  const language = String(ctx.params['language'] ?? 'js');
+
+  if (!code.trim()) {
+    return { ok: false, output: null, error: 'No code provided', durationMs: Date.now() - start };
+  }
+
+  if (language === 'python') {
+    // Python: spawn python3 -c "<code>"
+    const result = await runSpawn('python3', ['-c', code], {
+      signal: ctx.signal,
+      timeoutMs: CODE_EVAL_TIMEOUT_MS,
+    }).catch((err) => ({ output: String(err), exitCode: -1 }));
+
+    return {
+      ok: result.exitCode === 0,
+      output: result.output,
+      error: result.exitCode !== 0 ? `Python exited with code ${result.exitCode}` : undefined,
+      durationMs: Date.now() - start,
+    };
+  }
+
+  // JavaScript / TypeScript: vm.runInNewContext
+  try {
+    // Dynamic import to avoid bundling in browser contexts
+    const vm = createRequire(import.meta.url)('vm') as typeof import('vm');
+    const sandbox = Object.create(null) as Record<string, unknown>;
+    sandbox['console'] = {
+      log: (...args: unknown[]) => { sandbox['__output'] = (sandbox['__output'] as string ?? '') + args.join(' ') + '\n'; },
+    };
+    sandbox['__output'] = '';
+
+    const script = new vm.Script(
+      language === 'ts' ? `// TypeScript run as JS (no transpile)\n${code}` : code,
+      { timeout: CODE_EVAL_TIMEOUT_MS },
+    );
+    const result = script.runInNewContext(sandbox, { timeout: CODE_EVAL_TIMEOUT_MS });
+    const output = sandbox['__output'] as string || (result !== undefined ? String(result) : '(no output)');
+
+    return { ok: true, output, durationMs: Date.now() - start };
+  } catch (err) {
+    return {
+      ok: false,
+      output: null,
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - start,
+    };
+  }
+}
+
+// ── file_read ─────────────────────────────────────────────────────────────────
+
+async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult> {
+  const start = Date.now();
+  const inputPath = String(ctx.params['path'] ?? '');
+
+  if (!inputPath) {
+    return { ok: false, output: null, error: 'No path provided', durationMs: Date.now() - start };
+  }
+
+  const resolved = safePath(inputPath);
+  if (!resolved) {
+    return { ok: false, output: null, error: 'Invalid or unsafe path', durationMs: Date.now() - start };
+  }
+
+  try {
+    const content = await fs.readFile(resolved, 'utf8');
+    return { ok: true, output: content, durationMs: Date.now() - start };
+  } catch (err) {
+    return {
+      ok: false,
+      output: null,
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - start,
+    };
+  }
+}
+
+// ── file_write ────────────────────────────────────────────────────────────────
+
+async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult> {
+  const start = Date.now();
+  const inputPath = String(ctx.params['path'] ?? '');
+  const content = String(ctx.params['content'] ?? '');
+
+  if (!inputPath) {
+    return { ok: false, output: false, error: 'No path provided', durationMs: Date.now() - start };
+  }
+
+  // Write restricted to WORKSPACES_DIR only
+  const resolved = safePath(inputPath, WORKSPACES_DIR);
+  if (!resolved) {
+    return { ok: false, output: false, error: 'Write path must be relative and within workspaces directory', durationMs: Date.now() - start };
+  }
+
+  try {
+    await fs.mkdir(path.dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, content, 'utf8');
+    return { ok: true, output: true, durationMs: Date.now() - start };
+  } catch (err) {
+    return {
+      ok: false,
+      output: false,
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - start,
+    };
+  }
+}
+
+// ── git_diff ──────────────────────────────────────────────────────────────────
+
+async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> {
+  const start = Date.now();
+  const repoPath = ctx.params['repoPath'] ? String(ctx.params['repoPath']) : process.cwd();
+
+  // Validate repo path is not going outside reasonable bounds
+  if (path.isAbsolute(repoPath) && !repoPath.startsWith(os.homedir())) {
+    return { ok: false, output: null, error: 'Repo path must be within home directory', durationMs: Date.now() - start };
+  }
+
+  const { output, exitCode } = await runSpawn('git', ['diff', 'HEAD'], {
+    cwd: repoPath,
+    signal: ctx.signal,
+    timeoutMs: 10_000,
+  }).catch((err) => ({ output: String(err), exitCode: -1 }));
+
+  return {
+    ok: exitCode === 0,
+    output: output || '(no diff)',
+    error: exitCode !== 0 ? `git diff failed with code ${exitCode}` : undefined,
+    durationMs: Date.now() - start,
+  };
+}
+
+// ── test_runner ───────────────────────────────────────────────────────────────
+
+async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResult> {
+  const start = Date.now();
+  const command = String(ctx.params['command'] ?? '');
+  const cwd = ctx.params['cwd'] ? String(ctx.params['cwd']) : process.cwd();
+
+  if (!command.trim()) {
+    return { ok: false, output: null, error: 'No command provided', durationMs: Date.now() - start };
+  }
+
+  const [bin, ...args] = command.trim().split(/\s+/);
+  const allowed = ALLOWED_TEST_PREFIXES.some((prefix) => bin === prefix || bin.endsWith(`/${prefix}`));
+  if (!allowed) {
+    return {
+      ok: false,
+      output: null,
+      error: `Command '${bin}' not in allowed list: ${ALLOWED_TEST_PREFIXES.join(', ')}`,
+      durationMs: Date.now() - start,
+    };
+  }
+
+  const { output, exitCode } = await runSpawn(bin, args, {
+    cwd,
+    signal: ctx.signal,
+    timeoutMs: 120_000, // 2 minutes max
+  }).catch((err) => ({ output: String(err), exitCode: -1 }));
+
+  return {
+    ok: exitCode === 0,
+    output,
+    meta: { exitCode: exitCode ?? -1 },
+    error: exitCode !== 0 ? `Test runner exited with code ${exitCode}` : undefined,
+    durationMs: Date.now() - start,
+  };
+}
+
+// ── Registration ──────────────────────────────────────────────────────────────
+
 export function registerCodingBlocks(): void {
-  // No coding blocks in v0.2.0 — reserved for v0.3.0
+  registerNativeBlock({
+    blockId: 'code_eval',
+    execute: executeCodeEval,
+  });
+
+  registerNativeBlock({
+    blockId: 'file_read',
+    execute: executeFileRead,
+  });
+
+  registerNativeBlock({
+    blockId: 'file_write',
+    execute: executeFileWrite,
+  });
+
+  registerNativeBlock({
+    blockId: 'git_diff',
+    execute: executeGitDiff,
+  });
+
+  registerNativeBlock({
+    blockId: 'test_runner',
+    execute: executeTestRunner,
+  });
 }

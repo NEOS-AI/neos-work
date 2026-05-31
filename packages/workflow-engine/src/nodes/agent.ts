@@ -1,6 +1,7 @@
 /**
  * AgentNode — wraps AgentOrchestrator for use in a workflow.
  * Supports optional harness injection for domain-specific agent configuration.
+ * Supports CLI providers: 'cli-claude', 'cli-gemini', 'cli-codex'.
  */
 
 import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
@@ -89,10 +90,38 @@ export class AgentNode implements ExecutableNode {
 
     const serverUrl = ctx.settings['SERVER_URL'] ?? 'http://localhost:3579';
     const authToken = ctx.settings['AUTH_TOKEN'] ?? '';
-    const systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
+    let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
+
+    // Prepend Design System context if injected
+    if (ctx.designSystemContent) {
+      systemPrompt = `<!-- DESIGN CONTEXT -->\n${ctx.designSystemContent}\n<!-- /DESIGN CONTEXT -->\n\n${systemPrompt}`;
+    }
 
     const maxIterations = harness?.constraints?.maxSteps ?? Number(this.nodeConfig?.['maxSteps'] ?? 20);
     const toolFilter = harness?.allowedTools;
+
+    // CLI provider branch
+    const provider = this.nodeConfig?.['provider'] as string | undefined;
+    if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
+      if (!ctx.cliSpawn) {
+        return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };
+      }
+      const prompt = systemPrompt
+        ? `${systemPrompt}\n\n---\n${JSON.stringify(ctx.inputs)}`
+        : JSON.stringify(ctx.inputs);
+      const result = await ctx.cliSpawn(
+        provider,
+        prompt,
+        (chunk, accumulated) => ctx.onProgress?.(chunk, accumulated),
+        ctx.signal,
+      );
+      return {
+        ok: result.exitCode === 0,
+        output: result.output,
+        error: result.exitCode !== 0 ? `CLI exited with code ${result.exitCode}` : undefined,
+        durationMs: Date.now() - start,
+      };
+    }
 
     try {
       const adapter = buildAdapter(ctx.settings);
@@ -107,6 +136,7 @@ export class AgentNode implements ExecutableNode {
       for await (const event of orchestrator.run(goal, ctx.signal)) {
         if (event.type === 'text') {
           lastText += event.content;
+          ctx.onProgress?.(event.content, lastText);
         }
         if (event.type === 'done') {
           const result = lastText || JSON.stringify(event.task.steps.at(-1)?.output ?? null);
@@ -128,3 +158,4 @@ export class AgentNode implements ExecutableNode {
     }
   }
 }
+

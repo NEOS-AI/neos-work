@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
 import type { WorkflowBlock } from '../../lib/engine.js';
+import { useEngine } from '../../hooks/useEngine.js';
+import type { DesignSystem } from '../../lib/engine.js';
 import { ANTHROPIC_MODELS, GOOGLE_MODELS, OLLAMA_PRESET_MODELS, OPENAI_MODELS } from '@neos-work/shared';
 import { BlockParamForm } from './BlockParamForm.js';
 import { BlockSelector, defaultsForBlock } from './BlockSelector.js';
@@ -16,6 +18,8 @@ interface NodeConfigPanelProps {
   onPatchNodeData: (nodeId: string, patch: { label?: string; config?: Record<string, unknown> }) => void;
   workflowDescription?: string;
   onUpdateDescription?: (desc: string) => void;
+  designSystemId?: string;
+  onUpdateDesignSystemId?: (id: string) => void;
 }
 
 function getConfig(node: Node): Record<string, unknown> {
@@ -31,10 +35,19 @@ function stringifyJson(value: unknown): string {
   }
 }
 
-export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeData, workflowDescription, onUpdateDescription }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeData, workflowDescription, onUpdateDescription, designSystemId, onUpdateDesignSystemId }: NodeConfigPanelProps) {
   const [blocks, setBlocks] = useState<WorkflowBlock[]>([]);
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
+  const [designSystems, setDesignSystems] = useState<DesignSystem[]>([]);
+  const { client } = useEngine();
   const { t } = useTranslation('common');
+
+  useEffect(() => {
+    if (!client) return;
+    client.listDesignSystems().then((res) => {
+      if (res.ok && res.data) setDesignSystems(res.data);
+    });
+  }, [client]);
 
   const selectedIssues = useMemo(() => {
     if (!selectedNode) return validationIssues;
@@ -59,6 +72,26 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               rows={3}
               onChange={onUpdateDescription}
             />
+          </div>
+        )}
+        {onUpdateDesignSystemId !== undefined && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Design System</p>
+            <select
+              value={designSystemId ?? ''}
+              onChange={(e) => onUpdateDesignSystemId(e.target.value)}
+              className="w-full rounded bg-black/20 border border-white/10 px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">None</option>
+              {designSystems.map((ds) => (
+                <option key={ds.id} value={ds.id}>{ds.name}</option>
+              ))}
+            </select>
+            {designSystemId && (
+              <p className="text-[10px] text-white/30">
+                Selected DESIGN.md will be prepended to agent system prompts.
+              </p>
+            )}
           </div>
         )}
       </div>

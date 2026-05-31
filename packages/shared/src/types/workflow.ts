@@ -11,6 +11,11 @@ export type NodeType =
   | 'block'
   | 'gate_and'
   | 'gate_or'
+  | 'parallel_start'
+  | 'parallel_end'
+  | 'or_gate'
+  | 'media'
+  | 'deploy'
   | 'web_search'
   | 'slack_message'
   | 'discord_message'
@@ -40,6 +45,8 @@ export interface Workflow {
   domain: 'finance' | 'coding' | 'general';
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  webhookSecret?: string;
+  designSystemId?: string;
   createdAt: string;
   updatedAt: string;
 }

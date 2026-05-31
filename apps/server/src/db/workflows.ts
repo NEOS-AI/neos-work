@@ -2,6 +2,7 @@
  * Workflow CRUD operations (SQLite).
  */
 
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getDb } from './schema.js';
 import type {
   Workflow,
@@ -18,6 +19,8 @@ interface WorkflowRow {
   domain: string;
   nodes_json: string;
   edges_json: string;
+  webhook_secret: string | null;
+  design_system_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +43,8 @@ function rowToWorkflow(row: WorkflowRow): Workflow {
     domain: row.domain as Workflow['domain'],
     nodes: JSON.parse(row.nodes_json) as WorkflowNode[],
     edges: JSON.parse(row.edges_json) as WorkflowEdge[],
+    webhookSecret: row.webhook_secret ?? undefined,
+    designSystemId: row.design_system_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -99,6 +104,7 @@ export function updateWorkflow(
   input: {
     name?: string;
     description?: string;
+    designSystemId?: string;
     nodes?: WorkflowNode[];
     edges?: WorkflowEdge[];
   },
@@ -109,13 +115,16 @@ export function updateWorkflow(
 
   const name = input.name ?? existing.name;
   const description = input.description !== undefined ? input.description : existing.description;
+  const designSystemId = input.designSystemId !== undefined
+    ? (input.designSystemId || null)
+    : existing.design_system_id;
   const nodes = input.nodes !== undefined ? JSON.stringify(input.nodes) : existing.nodes_json;
   const edges = input.edges !== undefined ? JSON.stringify(input.edges) : existing.edges_json;
 
   db.prepare(
-    `UPDATE workflow SET name = ?, description = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
+    `UPDATE workflow SET name = ?, description = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
      WHERE id = ?`,
-  ).run(name, description, nodes, edges, id);
+  ).run(name, description, designSystemId, nodes, edges, id);
 
   return getWorkflow(id);
 }
@@ -186,4 +195,41 @@ export function deleteRun(runId: string): boolean {
   const db = getDb();
   const result = db.prepare('DELETE FROM workflow_run WHERE id = ?').run(runId);
   return result.changes > 0;
+}
+
+// ── Webhook ────────────────────────────────────────────────
+
+export function getOrCreateWebhookSecret(workflowId: string): string {
+  const db = getDb();
+  const row = db.prepare('SELECT webhook_secret FROM workflow WHERE id = ?').get(workflowId) as { webhook_secret: string | null } | undefined;
+  if (!row) throw new Error('Workflow not found');
+
+  if (row.webhook_secret) return row.webhook_secret;
+
+  const secret = randomBytes(32).toString('hex');
+  db.prepare("UPDATE workflow SET webhook_secret = ?, updated_at = datetime('now') WHERE id = ?").run(secret, workflowId);
+  return secret;
+}
+
+export function regenerateWebhookSecret(workflowId: string): string {
+  const db = getDb();
+  const secret = randomBytes(32).toString('hex');
+  const result = db.prepare("UPDATE workflow SET webhook_secret = ?, updated_at = datetime('now') WHERE id = ?").run(secret, workflowId);
+  if (result.changes === 0) throw new Error('Workflow not found');
+  return secret;
+}
+
+/** Constant-time HMAC-SHA256 signature verification. */
+export function verifyWebhookSignature(secret: string, body: string, signatureHeader: string): boolean {
+  try {
+    const [algo, sig] = signatureHeader.split('=');
+    if (algo !== 'sha256' || !sig) return false;
+    const expected = createHmac('sha256', secret).update(body).digest('hex');
+    const a = Buffer.from(sig, 'hex');
+    const b = Buffer.from(expected, 'hex');
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }

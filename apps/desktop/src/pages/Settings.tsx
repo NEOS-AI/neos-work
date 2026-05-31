@@ -140,6 +140,9 @@ export function Settings() {
       {/* MCP Servers */}
       <McpServersSection />
 
+      {/* CLI Agents */}
+      <CliAgentsSection />
+
       {/* Default Model */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
         <h2 className="mb-4 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -632,6 +635,104 @@ function McpServersSection() {
                   </svg>
                 </button>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// --- CLI Agents Section ---
+
+interface CliAgentInfo {
+  id: string;
+  name: string;
+  path: string;
+  version?: string;
+}
+
+function CliAgentsSection() {
+  const { client } = useEngine();
+  const [agents, setAgents] = useState<CliAgentInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadAgents = useCallback(async () => {
+    if (!client) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await client.listCliAgents();
+      if (res.ok && res.data) {
+        setAgents(res.data);
+      } else {
+        setError('Failed to load CLI agents');
+      }
+    } catch {
+      setError('Failed to connect to server');
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    loadAgents();
+  }, [loadAgents]);
+
+  return (
+    <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>CLI Agents</h2>
+          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Detected CLI-based AI agents on this machine (Claude Code, Gemini CLI, Codex CLI).
+          </p>
+        </div>
+        <button
+          onClick={loadAgents}
+          className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+          style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+        >
+          ↺ Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Detecting CLI agents...</p>
+      ) : error ? (
+        <p className="text-xs text-red-400">{error}</p>
+      ) : agents.length === 0 ? (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          No CLI agents detected. Install{' '}
+          <code className="rounded bg-black/20 px-1">claude</code>,{' '}
+          <code className="rounded bg-black/20 px-1">gemini</code>, or{' '}
+          <code className="rounded bg-black/20 px-1">codex</code> to use them as workflow providers.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className="flex items-center justify-between rounded-lg border px-3 py-2"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {agent.name}
+                  </span>
+                  <span className="rounded bg-emerald-900/50 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                    detected
+                  </span>
+                </div>
+                <p className="mt-0.5 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {agent.path}{agent.version ? ` · ${agent.version}` : ''}
+                </p>
+              </div>
+              <span className="rounded px-2 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
+                {agent.id}
+              </span>
             </div>
           ))}
         </div>

@@ -8,6 +8,7 @@ import {
   addEdge,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   type Connection,
   type Node,
   type Edge,
@@ -23,6 +24,9 @@ import { RunHistoryPanel } from '../components/workflow/RunHistoryPanel.js';
 import { RunInputsDialog } from '../components/workflow/RunInputsDialog.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
+import { autoLayout } from '../lib/layout.js';
+import { RevisionPanel } from '../components/workflow/RevisionPanel.js';
+import { ArtifactPreview } from '../components/workflow/ArtifactPreview.js';
 
 // ── Node color palette ─────────────────────────────────────
 
@@ -74,11 +78,12 @@ const customNodeTypes: NodeTypes = {
   workflowNode: WorkflowNodeComponent,
 };
 
-type RightPanelTab = 'config' | 'run' | 'history';
+type RightPanelTab = 'config' | 'run' | 'history' | 'preview';
 
-function buildWorkflowDraft(nodes: Node[], edges: Edge[], description?: string) {
+function buildWorkflowDraft(nodes: Node[], edges: Edge[], description?: string, designSystemId?: string) {
   return {
     description,
+    designSystemId: designSystemId || undefined,
     nodes: nodes.map((n) => ({
       id: n.id,
       type: n.data.nodeType as string,
@@ -122,12 +127,14 @@ export function WorkflowEditor() {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const { client } = useEngine();
+  const { fitView } = useReactFlow();
 
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [savedDraft, setSavedDraft] = useState<ReturnType<typeof buildWorkflowDraft> | null>(null);
   const [workflowDescription, setWorkflowDescription] = useState('');
+  const [designSystemId, setDesignSystemId] = useState<string>('');
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
@@ -140,6 +147,8 @@ export function WorkflowEditor() {
   const [allBlocks, setAllBlocks] = useState<WorkflowBlock[]>([]);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [revisionPanelOpen, setRevisionPanelOpen] = useState(false);
+  const [latestArtifactId, setLatestArtifactId] = useState<string | undefined>(undefined);
 
   const stopRef = useRef<(() => void) | null>(null);
 
@@ -149,11 +158,12 @@ export function WorkflowEditor() {
     if (res.ok && res.data) {
       setWorkflow(res.data);
       setWorkflowDescription(res.data.description ?? '');
+      setDesignSystemId(res.data.designSystemId ?? '');
       const rfNodes = toReactFlowNodes(res.data, {});
       const rfEdges = toReactFlowEdges(res.data);
       setNodes(rfNodes);
       setEdges(rfEdges);
-      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, res.data.description ?? ''));
+      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, res.data.description ?? '', res.data.designSystemId ?? ''));
     }
   }, [client, id, setNodes, setEdges]);
 
@@ -202,7 +212,7 @@ export function WorkflowEditor() {
     [nodes, selectedNodeId],
   );
 
-  const draft = useMemo(() => buildWorkflowDraft(nodes, edges, workflowDescription), [nodes, edges, workflowDescription]);
+  const draft = useMemo(() => buildWorkflowDraft(nodes, edges, workflowDescription, designSystemId), [nodes, edges, workflowDescription, designSystemId]);
   const validationIssues = useMemo(
     () => validateWorkflowDraft({ nodes: draft.nodes, edges: draft.edges, blocks: allBlocks }),
     [draft, allBlocks],
@@ -298,7 +308,15 @@ export function WorkflowEditor() {
       if (event.type === 'node.failed') {
         setRunStatuses((prev) => ({ ...prev, [event.nodeId]: 'failed' }));
       }
-      if (event.type === 'run.completed' || event.type === 'run.failed') {
+      if (event.type === 'run.completed') {
+        setIsRunning(false);
+        setHistoryRefreshKey((key) => key + 1);
+        if ((event as { artifactId?: string }).artifactId) {
+          setLatestArtifactId((event as { artifactId?: string }).artifactId);
+          setRightPanelTab('preview');
+        }
+      }
+      if (event.type === 'run.failed') {
         setIsRunning(false);
         setHistoryRefreshKey((key) => key + 1);
       }
@@ -310,6 +328,15 @@ export function WorkflowEditor() {
     stopRef.current?.();
     setIsRunning(false);
   };
+
+  const handleAutoLayout = useCallback(() => {
+    setNodes((current) => {
+      const laid = autoLayout(current, edges);
+      // fitView needs a tick to see new positions
+      setTimeout(() => fitView({ padding: 0.1, duration: 300 }), 50);
+      return laid;
+    });
+  }, [edges, fitView, setNodes]);
 
   // Sync run statuses to node styles — preserve existing data (including config)
   useEffect(() => {
@@ -381,12 +408,36 @@ export function WorkflowEditor() {
         </span>
         <div className="flex-1" />
         <button
+          onClick={handleAutoLayout}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Auto Layout (TB)"
+        >
+          ⬡ Layout
+        </button>
+        <button
+          onClick={() => setRevisionPanelOpen(true)}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Version History"
+        >
+          🕐 History
+        </button>
+        <button
           onClick={() => client?.exportWorkflow(workflow.id, workflow.name)}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
           title={t('workflow.export')}
         >
-          {t('workflow.export')}
+          {t('workflow.export')} (JSON)
+        </button>
+        <button
+          onClick={() => client?.exportWorkflowZip(workflow.id, workflow.name)}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Export as ZIP"
+        >
+          Export (ZIP)
         </button>
         <button
           onClick={handleSave}
@@ -462,7 +513,7 @@ export function WorkflowEditor() {
         {/* Config / Run / History panel */}
         <aside className="flex w-72 flex-col border-l" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
           <div className="flex border-b" style={{ borderColor: 'var(--border-primary)' }}>
-            {(['config', 'run', 'history'] as RightPanelTab[]).map((tab) => (
+            {(['config', 'run', 'history', 'preview'] as RightPanelTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRightPanelTab(tab)}
@@ -475,6 +526,7 @@ export function WorkflowEditor() {
                 {tab === 'config' && t('workflow.config')}
                 {tab === 'run' && t('workflow.runLog')}
                 {tab === 'history' && t('workflow.history')}
+                {tab === 'preview' && '🖼 Preview'}
               </button>
             ))}
           </div>
@@ -487,6 +539,8 @@ export function WorkflowEditor() {
                 onPatchNodeData={patchNodeData}
                 workflowDescription={workflowDescription}
                 onUpdateDescription={setWorkflowDescription}
+                designSystemId={designSystemId}
+                onUpdateDesignSystemId={setDesignSystemId}
               />
             </div>
           )}
@@ -533,6 +587,15 @@ export function WorkflowEditor() {
             <RunHistoryPanel workflowId={workflow.id} refreshKey={historyRefreshKey} nodeLabelMap={nodeLabelMap} />
           )}
 
+          {rightPanelTab === 'preview' && (
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ArtifactPreview
+                workflowId={workflow.id}
+                latestArtifactId={latestArtifactId}
+              />
+            </div>
+          )}
+
           {rightPanelTab !== 'config' && hasValidationErrors && (
             <div className="border-t p-2 text-[11px] text-red-300" style={{ borderColor: 'var(--border-primary)', backgroundColor: '#450a0a33' }}>
               {validationIssues.filter((issue) => issue.severity === 'error').length} validation errors block execution.
@@ -555,6 +618,33 @@ export function WorkflowEditor() {
         <ConfirmLeaveModal
           onConfirm={() => blocker.proceed?.()}
           onCancel={() => blocker.reset?.()}
+        />
+      )}
+
+      {revisionPanelOpen && client && (
+        <RevisionPanel
+          workflowId={workflow.id}
+          client={client}
+          onClose={() => setRevisionPanelOpen(false)}
+          onRestore={(snap) => {
+            if (Array.isArray(snap.nodes) && Array.isArray(snap.edges)) {
+              const rfNodes = snap.nodes.map((n: unknown) => {
+                const node = n as { id: string; type: string; label: string; position: { x: number; y: number }; config?: Record<string, unknown> };
+                return {
+                  id: node.id,
+                  type: 'workflowNode',
+                  position: node.position,
+                  data: { label: node.label, nodeType: node.type, config: node.config ?? {} },
+                };
+              });
+              const rfEdges = snap.edges.map((e: unknown) => {
+                const edge = e as { id: string; source: string; target: string; label?: string };
+                return { id: edge.id, source: edge.source, target: edge.target, label: edge.label };
+              });
+              setNodes(rfNodes);
+              setEdges(rfEdges);
+            }
+          }}
         />
       )}
     </div>

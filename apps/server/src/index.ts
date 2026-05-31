@@ -15,8 +15,18 @@ import harness from './routes/harness.js';
 import blocks from './routes/blocks.js';
 import templates from './routes/templates.js';
 import memory from './routes/memory.js';
+import webhooks from './routes/webhooks.js';
+import designSystems from './routes/design-systems.js';
+import artifacts from './routes/artifacts.js';
+import workflowRevisions from './routes/workflow-revisions.js';
+import cliAgents from './routes/cli-agents.js';
+import routines from './routes/routines.js';
+import media from './routes/media.js';
+import deploy from './routes/deploy.js';
+import pluginsRoute from './routes/plugins.js';
 import { migrateEncryption } from './db/settings.js';
 import { registerFinanceBlocks } from '@neos-work/workflow-engine';
+import { initScheduler } from './lib/routine-scheduler.js';
 
 // Generate per-session auth token (VULN-002)
 const AUTH_TOKEN = randomBytes(32).toString('hex');
@@ -51,6 +61,9 @@ app.use('*', async (c, next) => {
   // Skip auth for health check (used for connection probing before token is known)
   if (c.req.path === '/api/health') return next();
 
+  // Webhook endpoint uses HMAC-SHA256 signature auth — skip Bearer token check
+  if (c.req.path.startsWith('/api/webhook/')) return next();
+
   const authHeader = c.req.header('Authorization');
   if (authHeader !== `Bearer ${AUTH_TOKEN}`) {
     return c.json({ ok: false, error: 'Unauthorized' }, 401);
@@ -71,6 +84,15 @@ app.route('/api/harness', harness);
 app.route('/api/blocks', blocks);
 app.route('/api/templates', templates);
 app.route('/api/memory', memory);
+app.route('/api/webhook', webhooks);
+app.route('/api/design-systems', designSystems);
+app.route('/api/artifacts', artifacts);
+app.route('/api/workflow-revisions', workflowRevisions);
+app.route('/api/cli-agents', cliAgents);
+app.route('/api/routines', routines);
+app.route('/api/media', media);
+app.route('/api/deploy', deploy);
+app.route('/api/plugins', pluginsRoute);
 
 // Root
 app.get('/', (c) => {
@@ -85,6 +107,9 @@ migrateEncryption();
 
 // Register built-in domain blocks
 registerFinanceBlocks();
+
+// Initialize automation routine scheduler
+initScheduler();
 
 // Start server — use NEOS_PORT or PORT env var, defaulting to 3000
 const requestedPort = parseInt(process.env.NEOS_PORT ?? process.env.PORT ?? '3000', 10);

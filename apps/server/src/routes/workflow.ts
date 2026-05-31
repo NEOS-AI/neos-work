@@ -11,10 +11,17 @@
 
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
+import archiver from 'archiver';
+import unzipper from 'unzipper';
+import { Readable } from 'node:stream';
 import type { WorkflowSSEEvent } from '@neos-work/shared';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
+import * as artifactDb from '../db/artifacts.js';
+import * as revisionDb from '../db/workflow-revisions.js';
 import { getWorkflowSecrets } from '../db/settings.js';
+import { spawnCliAgent } from '../lib/cli-agents.js';
+import { getDesignSystemContent } from '../lib/design-system-store.js';
 
 const workflow = new Hono();
 
@@ -59,6 +66,7 @@ workflow.put('/:id', async (c) => {
   const body = await c.req.json<{
     name?: string;
     description?: string;
+    designSystemId?: string;
     nodes?: unknown[];
     edges?: unknown[];
   }>();
@@ -67,9 +75,22 @@ workflow.put('/:id', async (c) => {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
 
+  // Auto-snapshot before update (Task 16: version history)
+  const current = db.getWorkflow(id);
+  if (current) {
+    const snapshot = JSON.stringify({
+      name: current.name,
+      description: current.description,
+      nodes: current.nodes,
+      edges: current.edges,
+    });
+    revisionDb.createRevision(id, snapshot);
+  }
+
   const updated = db.updateWorkflow(id, {
     name: body.name,
     description: body.description,
+    designSystemId: body.designSystemId,
     nodes: body.nodes as never,
     edges: body.edges as never,
   });
@@ -144,6 +165,91 @@ workflow.get('/:id/export', (c) => {
   });
 });
 
+workflow.get('/:id/export.zip', async (c) => {
+  const wf = db.getWorkflow(c.req.param('id'));
+  if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
+  const safeName = wf.name.replace(/[^a-z0-9_-]/gi, '_');
+
+  const manifest = JSON.stringify({
+    version: '1',
+    exportedAt: new Date().toISOString(),
+    workflow: {
+      name: wf.name,
+      description: wf.description,
+      domain: wf.domain,
+      nodes: wf.nodes,
+      edges: wf.edges,
+    },
+  }, null, 2);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.append(manifest, { name: 'workflow.json' });
+  archive.append(`# ${wf.name}\n\n${wf.description ?? ''}\n`, { name: 'README.md' });
+  archive.finalize();
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of archive) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const buf = Buffer.concat(chunks);
+
+  c.header('Content-Type', 'application/zip');
+  c.header('Content-Disposition', `attachment; filename="${safeName}.neos.zip"`);
+  return c.body(buf);
+});
+
+workflow.post('/import.zip', async (c) => {
+  const contentType = c.req.header('content-type') ?? '';
+  if (!contentType.includes('multipart/form-data') && !contentType.includes('application/octet-stream') && !contentType.includes('application/zip')) {
+    return c.json({ ok: false, error: 'Expected multipart/form-data or application/zip' }, 400);
+  }
+
+  let zipBuffer: Buffer;
+  if (contentType.includes('multipart/form-data')) {
+    const form = await c.req.formData();
+    const file = form.get('file');
+    if (!file || typeof file === 'string') return c.json({ ok: false, error: 'Missing file field' }, 400);
+    const ab = await file.arrayBuffer();
+    zipBuffer = Buffer.from(ab);
+  } else {
+    const ab = await c.req.arrayBuffer();
+    zipBuffer = Buffer.from(ab);
+  }
+
+  // Parse ZIP in-memory
+  const dir = await unzipper.Open.buffer(zipBuffer);
+  const manifestFile = dir.files.find((f) => f.path === 'workflow.json');
+  if (!manifestFile) return c.json({ ok: false, error: 'workflow.json not found in ZIP' }, 400);
+
+  const rawJson = (await manifestFile.buffer()).toString('utf-8');
+  let manifest: { version?: string; workflow?: Record<string, unknown> };
+  try {
+    manifest = JSON.parse(rawJson);
+  } catch {
+    return c.json({ ok: false, error: 'Invalid workflow.json' }, 400);
+  }
+  if (manifest.version !== '1' || !manifest.workflow) {
+    return c.json({ ok: false, error: 'Unsupported version' }, 400);
+  }
+
+  const wf = manifest.workflow;
+  const rawName = typeof wf.name === 'string' && wf.name.length > 0 ? wf.name.slice(0, 200) : 'Imported Workflow';
+  const existing = db.listWorkflows().find((w) => w.name === rawName);
+  const finalName = existing ? `${rawName} (imported)` : rawName;
+
+  const created = db.createWorkflow({
+    name: finalName,
+    description: typeof wf.description === 'string' ? wf.description : undefined,
+    domain: (['finance', 'coding', 'general'] as const).includes(wf.domain as never)
+      ? (wf.domain as 'finance' | 'coding' | 'general')
+      : 'general',
+    nodes: (wf.nodes as never) ?? [],
+    edges: (wf.edges as never) ?? [],
+  });
+
+  return c.json({ ok: true, data: created }, 201);
+});
+
 // ── Runs ──────────────────────────────────────────────────
 
 workflow.get('/:id/runs', (c) => {
@@ -191,6 +297,11 @@ workflow.post('/:id/run', async (c) => {
   const settings = getWorkflowSecrets();
   const controller = new AbortController();
 
+  // Load Design System content if the workflow has one configured
+  const designSystemContent = wf.designSystemId
+    ? (await getDesignSystemContent(wf.designSystemId)) ?? undefined
+    : undefined;
+
   // Create an initial run record
   const runId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -228,7 +339,36 @@ workflow.post('/:id/run', async (c) => {
           }
         },
         signal: controller.signal,
+        cliSpawn: (cliId, prompt, onChunk, signal) =>
+          spawnCliAgent({ cliId, prompt, onChunk, signal }),
+        designSystemContent,
       });
+
+      // Auto-detect HTML artifacts from completed node outputs
+      let artifactId: string | undefined;
+      for (const [nodeId, result] of Object.entries(nodeResults)) {
+        const r = result as { output?: unknown; status?: string };
+        if (r.status === 'completed' && typeof r.output === 'string' && r.output.trim().startsWith('<')) {
+          const htmlContent = r.output.trim();
+          if (htmlContent.includes('<html') || htmlContent.includes('<div') || htmlContent.includes('<svg')) {
+            const artifact = artifactDb.createArtifact({
+              workflowId: wf.id,
+              runId,
+              name: `Output (${nodeId})`,
+              contentType: 'text/html',
+              content: htmlContent,
+              nodeId,
+            });
+            artifactId = artifact.id;
+            break; // Only save first HTML artifact per run
+          }
+        }
+      }
+
+      // Send supplementary artifact event if one was created
+      if (artifactId) {
+        await sendEvent({ type: 'run.completed', runId, duration: 0, artifactId });
+      }
 
       const finalStatus = controller.signal.aborted ? 'cancelled' : 'completed';
 

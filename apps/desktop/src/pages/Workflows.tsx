@@ -71,6 +71,7 @@ export function Workflows() {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,6 +90,21 @@ export function Workflows() {
     }
   };
 
+  const handleImportZip = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+    try {
+      const res = await client.importWorkflowZip(file);
+      if (res.ok && res.data) {
+        navigate(`/workflows/${res.data.id}`);
+      }
+    } catch {
+      // import 오류
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       {/* Header */}
@@ -98,12 +114,20 @@ export function Workflows() {
         </h1>
         <div className="flex items-center gap-2">
           <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+          <input ref={zipInputRef} type="file" accept=".zip" className="hidden" onChange={handleImportZip} />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
             style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
           >
-            {t('workflow.import')}
+            {t('workflow.import')} (JSON)
+          </button>
+          <button
+            onClick={() => zipInputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+          >
+            {t('workflow.import')} (ZIP)
           </button>
           <button
             onClick={() => setShowModal(true)}

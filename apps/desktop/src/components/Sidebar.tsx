@@ -12,6 +12,9 @@ const NAV_ITEMS = [
   { id: 'templates', path: '/templates', icon: TemplatesIcon },
   { id: 'skills', path: '/skills', icon: SkillsIcon },
   { id: 'memory', path: '/memory', icon: MemoryIcon },
+  { id: 'design-systems', path: '/design-systems', icon: DesignSystemsIcon },
+  { id: 'routines', path: '/routines', icon: RoutinesIcon },
+  { id: 'plugins', path: '/plugins', icon: PluginsIcon },
   { id: 'settings', path: '/settings', icon: SettingsIcon },
 ] as const;
 
@@ -142,6 +145,41 @@ function SkillsIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
       <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+    </svg>
+  );
+}
+
+function DesignSystemsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="7" height="7" rx="1" />
+      <rect x="15" y="3" width="7" height="7" rx="1" />
+      <rect x="2" y="14" width="7" height="7" rx="1" />
+      <rect x="15" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function RoutinesIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v4" />
+      <path d="M12 18v4" />
+      <path d="M4.93 4.93l2.83 2.83" />
+      <path d="M16.24 16.24l2.83 2.83" />
+      <path d="M2 12h4" />
+      <path d="M18 12h4" />
+      <path d="M4.93 19.07l2.83-2.83" />
+      <path d="M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
+function PluginsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.94 11A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06Z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }

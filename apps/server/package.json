@@ -20,13 +20,19 @@
     "@neos-work/shared": "workspace:*",
     "@neos-work/workflow-engine": "workspace:*",
     "@slack/web-api": "^7.0.0",
+    "archiver": "^8.0.0",
     "better-sqlite3": "^12.6.2",
     "hono": "^4.7.0",
-    "nanoid": "^5.1.6"
+    "nanoid": "^5.1.6",
+    "node-cron": "^4.2.1",
+    "unzipper": "^0.12.3"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/unzipper": "^0.10.11",
     "tsx": "^4.19.0",
     "typescript": "^5.8.2"
   }

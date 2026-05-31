@@ -14,6 +14,10 @@ import { Templates } from './pages/Templates.js';
 import { Workflows } from './pages/Workflows.js';
 import { WorkflowEditor } from './pages/WorkflowEditor.js';
 import Memory from './pages/Memory.js';
+import { DesignSystems } from './pages/DesignSystems.js';
+import { DesignSystemEditor } from './pages/DesignSystemEditor.js';
+import { Routines } from './pages/Routines.js';
+import { Plugins } from './pages/Plugins.js';
 
 export default function App() {
   return (
@@ -47,6 +51,10 @@ function AppRouter() {
           <Route path="skills" element={<Skills />} />
           <Route path="memory" element={<Memory />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="design-systems" element={<DesignSystems />} />
+          <Route path="design-systems/:id" element={<DesignSystemEditor />} />
+          <Route path="routines" element={<Routines />} />
+          <Route path="plugins" element={<Plugins />} />
         </Route>
       </Routes>
     </BrowserRouter>

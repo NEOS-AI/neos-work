@@ -174,11 +174,72 @@ function initSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_workflow_run_workflow_id ON workflow_run(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_workflow_updated_at ON workflow(updated_at);
+
+    -- v0.3.0 tables
+    CREATE TABLE IF NOT EXISTS artifacts (
+      id           TEXT PRIMARY KEY,
+      workflow_id  TEXT NOT NULL REFERENCES workflow(id) ON DELETE CASCADE,
+      run_id       TEXT,
+      name         TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      content      TEXT,
+      file_path    TEXT,
+      node_id      TEXT,
+      created_at   TEXT DEFAULT (datetime('now')),
+      updated_at   TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_revisions (
+      id          TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL REFERENCES workflow(id) ON DELETE CASCADE,
+      snapshot    TEXT NOT NULL,
+      label       TEXT,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_artifact_workflow_id ON artifacts(workflow_id);
+    CREATE INDEX IF NOT EXISTS idx_revision_workflow_id ON workflow_revisions(workflow_id);
+    CREATE INDEX IF NOT EXISTS idx_revision_created_at ON workflow_revisions(created_at);
+
+    -- Automation Routine tables (v0.3.0)
+    CREATE TABLE IF NOT EXISTS routine (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      workflow_id  TEXT NOT NULL REFERENCES workflow(id) ON DELETE CASCADE,
+      schedule     TEXT NOT NULL,
+      enabled      INTEGER NOT NULL DEFAULT 1,
+      inputs_json  TEXT NOT NULL DEFAULT '{}',
+      last_run_at  TEXT,
+      created_at   TEXT DEFAULT (datetime('now')),
+      updated_at   TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS routine_run (
+      id          TEXT PRIMARY KEY,
+      routine_id  TEXT NOT NULL REFERENCES routine(id) ON DELETE CASCADE,
+      run_id      TEXT,
+      status      TEXT NOT NULL DEFAULT 'running',
+      started_at  TEXT DEFAULT (datetime('now')),
+      completed_at TEXT,
+      error       TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_routine_workflow_id ON routine(workflow_id);
+    CREATE INDEX IF NOT EXISTS idx_routine_run_routine_id ON routine_run(routine_id);
   `);
 
   // Migrations for older schemas
   const skillCols = (db.prepare("PRAGMA table_info(skill)").all() as Array<{ name: string }>).map((c) => c.name);
   if (!skillCols.includes('manifest_json')) {
     db.exec("ALTER TABLE skill ADD COLUMN manifest_json TEXT");
+  }
+
+  // v0.3.0 migrations
+  const workflowCols = (db.prepare("PRAGMA table_info(workflow)").all() as Array<{ name: string }>).map((c) => c.name);
+  if (!workflowCols.includes('webhook_secret')) {
+    db.exec("ALTER TABLE workflow ADD COLUMN webhook_secret TEXT");
+  }
+  if (!workflowCols.includes('design_system_id')) {
+    db.exec("ALTER TABLE workflow ADD COLUMN design_system_id TEXT");
   }
 }

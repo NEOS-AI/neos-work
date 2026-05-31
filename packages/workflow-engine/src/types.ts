@@ -15,6 +15,25 @@ export interface NodeContext {
   settings: Record<string, string>;
   config?: Record<string, unknown>;
   signal?: AbortSignal;
+  /** Called per streaming text chunk from agent nodes. */
+  onProgress?: (chunk: string, accumulated: string) => void;
+  /**
+   * Optional CLI spawn function injected by the server.
+   * Allows agent nodes to run external CLI agents (claude, gemini, codex)
+   * without coupling the workflow-engine package to Node.js child_process.
+   */
+  cliSpawn?: (
+    cliId: 'cli-claude' | 'cli-gemini' | 'cli-codex',
+    prompt: string,
+    onChunk?: (chunk: string, accumulated: string) => void,
+    signal?: AbortSignal,
+  ) => Promise<{ output: string; exitCode: number | null }>;
+  /**
+   * Optional Design System content (DESIGN.md) injected by the server.
+   * When present, AgentNode prepends this as a design context block
+   * before the system prompt.
+   */
+  designSystemContent?: string;
 }
 
 export interface NodeResult {

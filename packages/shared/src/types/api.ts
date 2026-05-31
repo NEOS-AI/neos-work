@@ -91,9 +91,10 @@ export interface UpdateWorkflowRequest {
 export type WorkflowSSEEvent =
   | { type: 'run.started'; runId: string }
   | { type: 'node.started'; nodeId: string; nodeType: NodeType }
+  | { type: 'node.progress'; nodeId: string; chunk: string; accumulated: string }
   | { type: 'node.completed'; nodeId: string; output: unknown; durationMs: number }
   | { type: 'node.failed'; nodeId: string; error: string }
-  | { type: 'run.completed'; runId: string; duration: number }
+  | { type: 'run.completed'; runId: string; duration: number; artifactId?: string }
   | { type: 'run.failed'; runId: string; error: string };
 
 // ── 하네스 API 타입 ────────────────────────────────────────

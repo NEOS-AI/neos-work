@@ -58,6 +58,52 @@ export interface McpServerData {
   createdAt: string;
 }
 
+export interface DesignSystem {
+  id: string;
+  name: string;
+  description?: string;
+  path: string;
+  hasManifest: boolean;
+  hasTokens: boolean;
+  hasComponents: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Artifact {
+  id: string;
+  workflowId: string;
+  runId?: string;
+  name: string;
+  contentType: string;
+  content?: string;
+  nodeId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Routine {
+  id: string;
+  name: string;
+  workflowId: string;
+  schedule: string;
+  enabled: boolean;
+  inputs: Record<string, unknown>;
+  lastRunAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoutineRun {
+  id: string;
+  routineId: string;
+  runId?: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
 export interface SkillData {
   id: string;
   name: string;
@@ -449,6 +495,189 @@ export class EngineClient {
     return res.json();
   }
 
+  // --- CLI Agents ---
+
+  async listCliAgents(): Promise<ApiResponse<{ id: string; name: string; path: string; version?: string }[]>> {
+    const res = await fetch(`${this.baseUrl}/api/cli-agents`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Design Systems ---
+
+  async listDesignSystems(): Promise<ApiResponse<DesignSystem[]>> {
+    const res = await fetch(`${this.baseUrl}/api/design-systems`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async createDesignSystem(name: string, description?: string): Promise<ApiResponse<DesignSystem>> {
+    const res = await fetch(`${this.baseUrl}/api/design-systems`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description }),
+    });
+    return res.json();
+  }
+
+  async deleteDesignSystem(id: string): Promise<ApiResponse<null>> {
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async getDesignSystemContent(id: string): Promise<ApiResponse<{ content: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${id}/content`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async saveDesignSystemContent(id: string, content: string): Promise<ApiResponse<null>> {
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${id}/content`, {
+      method: 'PUT',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    return res.json();
+  }
+
+  // --- Artifacts ---
+
+  async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {
+    const q = params.runId ? `runId=${params.runId}` : `workflowId=${params.workflowId}`;
+    const res = await fetch(`${this.baseUrl}/api/artifacts?${q}`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async getArtifact(id: string): Promise<ApiResponse<Artifact>> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  // --- Routines ---
+
+  async listRoutines(): Promise<ApiResponse<Routine[]>> {
+    const res = await fetch(`${this.baseUrl}/api/routines`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async getRoutine(id: string): Promise<ApiResponse<Routine>> {
+    const res = await fetch(`${this.baseUrl}/api/routines/${id}`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async createRoutine(input: {
+    name: string;
+    workflowId: string;
+    schedule: string;
+    enabled?: boolean;
+    inputs?: Record<string, unknown>;
+  }): Promise<ApiResponse<Routine>> {
+    const res = await fetch(`${this.baseUrl}/api/routines`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async updateRoutine(id: string, input: Partial<{ name: string; schedule: string; enabled: boolean; inputs: Record<string, unknown> }>): Promise<ApiResponse<Routine>> {
+    const res = await fetch(`${this.baseUrl}/api/routines/${id}`, {
+      method: 'PUT',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async deleteRoutine(id: string): Promise<ApiResponse<null>> {
+    const res = await fetch(`${this.baseUrl}/api/routines/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async runRoutineNow(id: string): Promise<ApiResponse<{ runId: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/routines/${id}/run`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async listRoutineRuns(id: string): Promise<ApiResponse<RoutineRun[]>> {
+    const res = await fetch(`${this.baseUrl}/api/routines/${id}/runs`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  // --- Plugins ---
+
+  async listPlugins(): Promise<ApiResponse<unknown[]>> {
+    const res = await fetch(`${this.baseUrl}/api/plugins`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  async getPlugin(id: string): Promise<ApiResponse<unknown>> {
+    const res = await fetch(`${this.baseUrl}/api/plugins/${id}`, { headers: this.getHeaders() });
+    return res.json();
+  }
+
+  runPlugin(
+    id: string,
+    inputs: Record<string, unknown>,
+    onEvent: (event: unknown) => void,
+  ): { stop: () => void; runIdPromise: Promise<string | null> } {
+    const controller = new AbortController();
+    const runIdPromise = (async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/plugins/${id}/run`, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ inputs }),
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) return null;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let runId: string | null = null;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+          for (const part of parts) {
+            const line = part.startsWith('data: ') ? part.slice(6) : part;
+            try {
+              const event = JSON.parse(line);
+              if (event.type === 'pipeline.started') runId = event.runId;
+              onEvent(event);
+            } catch { /* ignore */ }
+          }
+        }
+        return runId;
+      } catch { return null; }
+    })();
+    return { stop: () => controller.abort(), runIdPromise };
+  }
+
+  async resumePlugin(
+    id: string,
+    runId: string,
+    stageId: string,
+    response: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    const res = await fetch(`${this.baseUrl}/api/plugins/${id}/run/${runId}/resume`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ stageId, response }),
+    });
+    return res.json();
+  }
+
   // --- Workflows ---
 
   async listWorkflows(): Promise<ApiResponse<Workflow[]>> {
@@ -482,7 +711,7 @@ export class EngineClient {
 
   async updateWorkflow(
     id: string,
-    input: { name?: string; description?: string; nodes?: unknown[]; edges?: unknown[] },
+    input: { name?: string; description?: string; designSystemId?: string; nodes?: unknown[]; edges?: unknown[] },
   ): Promise<ApiResponse<Workflow>> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
       method: 'PUT',
@@ -542,6 +771,34 @@ export class EngineClient {
     return res.json();
   }
 
+  async importWorkflowZip(file: File): Promise<ApiResponse<Workflow>> {
+    const form = new FormData();
+    form.append('file', file);
+    const headers = this.getHeaders();
+    // FormData sets its own Content-Type boundary — remove it
+    delete (headers as Record<string, string>)['Content-Type'];
+    const res = await fetch(`${this.baseUrl}/api/workflow/import.zip`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    return res.json();
+  }
+
+  async exportWorkflowZip(id: string, filename: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${id}/export.zip`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.endsWith('.zip') ? filename : `${filename}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void, inputs?: Record<string, unknown>): () => void {
     const controller = new AbortController();
     (async () => {
@@ -595,6 +852,56 @@ export class EngineClient {
 
   async deleteWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<void>> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Webhook ---
+
+  async getWebhookSecret(workflowId: string): Promise<ApiResponse<{ secret: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/secret`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async regenerateWebhookSecret(workflowId: string): Promise<ApiResponse<{ secret: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/regenerate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Workflow Revisions ---
+
+  async listRevisions(workflowId: string): Promise<ApiResponse<WorkflowRevision[]>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async getRevision(workflowId: string, revisionId: string): Promise<ApiResponse<WorkflowRevision>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async updateRevisionLabel(workflowId: string, revisionId: string, label: string): Promise<ApiResponse<WorkflowRevision>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
+      method: 'PATCH',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ label }),
+    });
+    return res.json();
+  }
+
+  async deleteRevision(workflowId: string, revisionId: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -759,8 +1066,17 @@ export interface Workflow {
   domain: 'finance' | 'coding' | 'general';
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  webhookSecret?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkflowRevision {
+  id: string;
+  workflowId: string;
+  snapshot?: string;
+  label?: string;
+  createdAt: string;
 }
 
 export interface WorkflowRun {
@@ -787,9 +1103,10 @@ export interface AgentHarness {
 export type WorkflowSSEEvent =
   | { type: 'run.started'; runId: string }
   | { type: 'node.started'; nodeId: string; nodeType: string }
+  | { type: 'node.progress'; nodeId: string; chunk: string; accumulated: string }
   | { type: 'node.completed'; nodeId: string; output: unknown; durationMs?: number }
   | { type: 'node.failed'; nodeId: string; error: string }
-  | { type: 'run.completed'; runId: string; duration: number }
+  | { type: 'run.completed'; runId: string; duration: number; artifactId?: string }
   | { type: 'run.failed'; runId: string; error: string };
 
 export interface WorkflowBlock {
