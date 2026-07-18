@@ -126,6 +126,18 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'output_no_upstream' && i.nodeId === 'o')).toBe(true);
   });
 
+  it('warns when trigger has no downstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'trigger_no_downstream' && i.nodeId === 't')).toBe(true);
+  });
+
   it('passes with valid trigger-output graph', () => {
     const issues = validateWorkflowDraft({
       nodes: [

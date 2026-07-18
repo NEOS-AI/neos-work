@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterByEnabled,
+  filterByFieldValue,
   filterByKind,
   filterBySearchText,
   filterByStatus,
@@ -117,6 +118,19 @@ describe('filterByTextMatch', () => {
       filterByTextMatch(items, 'docs', (d) => `${d.projectName} ${d.provider} ${d.url}`),
     ).toHaveLength(1);
     expect(filterByTextMatch(items, '', (d) => d.projectName)).toHaveLength(2);
+  });
+});
+
+describe('filterByFieldValue', () => {
+  it('filters by provider chip', () => {
+    const items = [
+      { provider: 'vercel', name: 'a' },
+      { provider: 'cloudflare', name: 'b' },
+      { provider: 'vercel', name: 'c' },
+    ];
+    expect(filterByFieldValue(items, 'provider', 'vercel')).toHaveLength(2);
+    expect(filterByFieldValue(items, 'provider', 'cloudflare')).toHaveLength(1);
+    expect(filterByFieldValue(items, 'provider', 'all')).toHaveLength(3);
   });
 });
 
