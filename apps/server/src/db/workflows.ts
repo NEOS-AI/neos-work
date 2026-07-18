@@ -202,6 +202,22 @@ export function deleteRun(runId: string): boolean {
   return result.changes > 0;
 }
 
+/**
+ * Delete runs for a workflow. Optional status filter (completed|failed|cancelled|running).
+ * Returns number of deleted rows.
+ */
+export function deleteRuns(workflowId: string, status?: string): number {
+  const db = getDb();
+  if (status) {
+    const result = db
+      .prepare('DELETE FROM workflow_run WHERE workflow_id = ? AND status = ?')
+      .run(workflowId, status);
+    return result.changes;
+  }
+  const result = db.prepare('DELETE FROM workflow_run WHERE workflow_id = ?').run(workflowId);
+  return result.changes;
+}
+
 // ── Webhook ────────────────────────────────────────────────
 
 export function getOrCreateWebhookSecret(workflowId: string): string {

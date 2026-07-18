@@ -461,6 +461,28 @@ export function WorkflowEditor() {
           ⬡ Layout
         </button>
         <button
+          onClick={async () => {
+            if (!client || !workflow) return;
+            const res = await client.preflightWorkflow(workflow.id);
+            if (!res.ok || !res.data) {
+              window.alert((res as { error?: string }).error ?? 'Preflight failed');
+              return;
+            }
+            const { ok, issues } = res.data;
+            if (issues.length === 0) {
+              window.alert('Preflight OK — ready to run.');
+              return;
+            }
+            const lines = issues.map((i) => `[${i.severity}] ${i.message}${i.nodeId ? ` (${i.nodeId})` : ''}`);
+            window.alert(`${ok ? 'Preflight warnings' : 'Preflight blocked'}:\n\n${lines.join('\n')}`);
+          }}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Check graph structure and required settings"
+        >
+          ✓ Preflight
+        </button>
+        <button
           onClick={() => setRevisionPanelOpen(true)}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}

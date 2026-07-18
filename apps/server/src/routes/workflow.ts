@@ -28,6 +28,7 @@ import {
   updateDesignSystemContent,
 } from '../lib/design-system-store.js';
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
+import { assessWorkflowPreflight } from '../lib/workflow-preflight.js';
 
 const workflow = new Hono();
 
@@ -484,6 +485,19 @@ workflow.get('/:id/runs', (c) => {
   return c.json({ ok: true, data: runs });
 });
 
+/** Clear runs for a workflow. Optional ?status=completed|failed|cancelled|running */
+workflow.delete('/:id/runs', (c) => {
+  const wf = db.getWorkflow(c.req.param('id'));
+  if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
+  const status = c.req.query('status') || undefined;
+  const allowed = new Set(['completed', 'failed', 'cancelled', 'running']);
+  if (status && !allowed.has(status)) {
+    return c.json({ ok: false, error: 'Invalid status filter' }, 400);
+  }
+  const deleted = db.deleteRuns(wf.id, status);
+  return c.json({ ok: true, data: { deleted } });
+});
+
 workflow.delete('/:id/runs/:runId', (c) => {
   const run = db.getRun(c.req.param('runId'));
   if (!run) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -498,6 +512,27 @@ workflow.get('/:id/runs/:runId', (c) => {
   // Ensure the run belongs to the requested workflow
   if (run.workflowId !== c.req.param('id')) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: run });
+});
+
+/**
+ * Preflight checks — structural graph + settings readiness (plan polish).
+ * Does not start a run.
+ */
+workflow.post('/:id/preflight', async (c) => {
+  const wf = db.getWorkflow(c.req.param('id'));
+  if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
+  const secrets = getExecutionSettings({
+    serverUrl: getRuntimeServerUrl(),
+    authToken: getRuntimeAuthToken(),
+  });
+  const result = assessWorkflowPreflight(
+    { nodes: wf.nodes, edges: wf.edges },
+    secrets,
+  );
+  return c.json({
+    ok: true,
+    data: result,
+  });
 });
 
 /** SSE stream: POST /api/workflow/:id/run */

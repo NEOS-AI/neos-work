@@ -126,7 +126,14 @@ export class AgentNode implements ExecutableNode {
     try {
       const adapter = buildAdapter(ctx.settings);
       const toolRegistry = buildToolRegistry(toolFilter, ctx.settings);
-      const orchestrator = new AgentOrchestrator(adapter, toolRegistry, { maxIterations });
+      // Prefer node config model, then settings.model (defaults.model), else adapter default
+      const model =
+        (typeof this.nodeConfig?.['model'] === 'string' && this.nodeConfig['model'])
+        || (ctx.settings['model'] || undefined);
+      const orchestrator = new AgentOrchestrator(adapter, toolRegistry, {
+        maxIterations,
+        model: model || undefined,
+      });
 
       const goal = systemPrompt
         ? `${systemPrompt}\n\n---\n${JSON.stringify(ctx.inputs)}`

@@ -1043,6 +1043,30 @@ export class EngineClient {
     return res.json();
   }
 
+  /** Clear runs for a workflow. Optional status filter. */
+  async clearWorkflowRuns(
+    workflowId: string,
+    status?: 'completed' | 'failed' | 'cancelled' | 'running',
+  ): Promise<ApiResponse<{ deleted: number }>> {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs${qs}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async preflightWorkflow(workflowId: string): Promise<ApiResponse<{
+    ok: boolean;
+    issues: Array<{ code: string; severity: 'error' | 'warning'; message: string; nodeId?: string }>;
+  }>> {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/preflight`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
   // --- Webhook ---
 
   async getWebhookSecret(workflowId: string): Promise<ApiResponse<{

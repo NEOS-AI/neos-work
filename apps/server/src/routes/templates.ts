@@ -8,7 +8,8 @@ import type { Workflow } from '@neos-work/shared';
 
 const templates = new Hono();
 
-const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
+/** Exported for unit tests */
+export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
   // ── Finance templates ─────────────────────────────────
   {
     name: 'Stock Price Monitor',
@@ -116,6 +117,27 @@ const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
       { id: 'e1', source: 'trigger', target: 'search' },
       { id: 'e2', source: 'search', target: 'slack' },
       { id: 'e3', source: 'slack', target: 'output' },
+    ],
+  },
+  {
+    name: 'Parallel Research Branches',
+    description: '병렬 브랜치로 두 검색을 동시에 실행한 뒤 AND join (plan Task 11)',
+    domain: 'general',
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 60, y: 220 }, config: {} },
+      { id: 'ps', type: 'parallel_start', label: 'Fan-out', position: { x: 260, y: 220 }, config: {} },
+      { id: 's1', type: 'web_search', label: 'Search A', position: { x: 480, y: 120 }, config: { query: 'topic A' } },
+      { id: 's2', type: 'web_search', label: 'Search B', position: { x: 480, y: 320 }, config: { query: 'topic B' } },
+      { id: 'pe', type: 'parallel_end', label: 'Join', position: { x: 700, y: 220 }, config: {} },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 920, y: 220 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'ps' },
+      { id: 'e2', source: 'ps', target: 's1' },
+      { id: 'e3', source: 'ps', target: 's2' },
+      { id: 'e4', source: 's1', target: 'pe' },
+      { id: 'e5', source: 's2', target: 'pe' },
+      { id: 'e6', source: 'pe', target: 'output' },
     ],
   },
 ];

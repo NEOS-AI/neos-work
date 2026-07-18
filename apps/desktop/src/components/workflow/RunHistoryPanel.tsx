@@ -69,8 +69,8 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
 
   return (
     <div className="flex flex-col overflow-hidden">
-      {/* Filter buttons */}
-      <div className="flex gap-1 border-b p-2" style={{ borderColor: 'var(--border-primary)' }}>
+      {/* Filter buttons + clear */}
+      <div className="flex flex-wrap items-center gap-1 border-b p-2" style={{ borderColor: 'var(--border-primary)' }}>
         {FILTERS.map(({ key, label }) => (
           <button
             key={key}
@@ -84,6 +84,23 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
             {label}
           </button>
         ))}
+        <button
+          type="button"
+          className="ml-auto rounded px-2 py-0.5 text-[10px] font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Clear completed runs"
+          onClick={async () => {
+            if (!client) return;
+            if (!window.confirm('Delete all completed runs for this workflow?')) return;
+            const res = await client.clearWorkflowRuns(props.workflowId, 'completed');
+            if (res.ok) {
+              setRuns((prev) => prev.filter((r) => r.status !== 'completed'));
+              setSelectedRunId(null);
+            }
+          }}
+        >
+          Clear completed
+        </button>
       </div>
 
       <div className="space-y-2 overflow-y-auto p-3">
@@ -116,6 +133,28 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                 </span>
                 <div className="flex items-center gap-1">
                   <span style={{ color: 'var(--text-muted)' }}>{run.id.slice(0, 8)}</span>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!client) return;
+                      const res = await client.getWorkflowRun(props.workflowId, run.id);
+                      if (!res.ok || !res.data) return;
+                      const blob = new Blob([JSON.stringify(res.data, null, 2)], {
+                        type: 'application/json',
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `run-${run.id.slice(0, 8)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="rounded px-1 py-0.5 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
+                    style={{ color: 'var(--text-muted)' }}
+                    title="Export run JSON"
+                  >
+                    ⬇
+                  </button>
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();

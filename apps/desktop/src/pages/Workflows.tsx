@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
+import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
   finance: '#10b981',
@@ -21,6 +22,13 @@ export function Workflows() {
   const [newName, setNewName] = useState('');
   const [newDomain, setNewDomain] = useState<'finance' | 'coding' | 'general'>('general');
   const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
+  const [domainFilter, setDomainFilter] = useState<'all' | 'finance' | 'coding' | 'general'>('all');
+
+  const filteredWorkflows = filterWorkflowList(workflows, {
+    search,
+    domain: domainFilter,
+  });
 
   const loadWorkflows = useCallback(async () => {
     if (!client) return;
@@ -172,6 +180,40 @@ export function Workflows() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
+        {workflows.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search workflows…"
+              className="rounded-lg border px-3 py-1.5 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                minWidth: 200,
+              }}
+            />
+            {(['all', 'finance', 'coding', 'general'] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDomainFilter(d)}
+                className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
+                style={{
+                  backgroundColor: domainFilter === d ? '#10b981' : 'var(--bg-tertiary)',
+                  color: domainFilter === d ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                {d}
+              </button>
+            ))}
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {filteredWorkflows.length}/{workflows.length}
+            </span>
+          </div>
+        )}
         {loading ? (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</p>
         ) : workflows.length === 0 ? (
@@ -192,9 +234,11 @@ export function Workflows() {
               Start from Template
             </button>
           </div>
+        ) : filteredWorkflows.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No workflows match your search.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {workflows.map((wf) => (
+            {filteredWorkflows.map((wf) => (
               <div
                 key={wf.id}
                 className="group relative cursor-pointer rounded-xl border p-5 transition-shadow hover:shadow-md"
