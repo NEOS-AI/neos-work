@@ -120,4 +120,23 @@ media.get('/file/:filename', (c) => {
   return c.body(buf);
 });
 
+/** Delete a generated media file */
+media.delete('/file/:filename', (c) => {
+  const filename = c.req.param('filename');
+  if (!/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
+    return c.json({ ok: false, error: 'Invalid filename' }, 400);
+  }
+  const filePath = path.join(MEDIA_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
+  try {
+    fs.unlinkSync(filePath);
+    return c.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Delete failed';
+    return c.json({ ok: false, error: msg }, 500);
+  }
+});
+
 export default media;

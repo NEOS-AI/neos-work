@@ -165,6 +165,14 @@ export function WorkflowEditor() {
   const [scheduleBusy, setScheduleBusy] = useState(false);
 
   const stopRef = useRef<(() => void) | null>(null);
+  const runLogScrollRef = useRef<HTMLDivElement | null>(null);
+  const runLogEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll run log when new events arrive (streaming progress)
+  useEffect(() => {
+    if (rightPanelTab !== 'run') return;
+    runLogEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }, [runEvents, rightPanelTab]);
 
   const loadWorkflow = useCallback(async () => {
     if (!client || !id) return;
@@ -581,7 +589,11 @@ export function WorkflowEditor() {
           )}
 
           {rightPanelTab === 'run' && (
-            <div className="flex-1 overflow-y-auto p-3 text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
+            <div
+              ref={runLogScrollRef}
+              className="flex-1 overflow-y-auto p-3 text-xs space-y-1"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {runEvents.map((ev, i) => {
                 const nodeLabel = 'nodeId' in ev
                   ? (nodeLabelMap[(ev as { nodeId: string }).nodeId] ?? (ev as { nodeId: string }).nodeId)
@@ -589,9 +601,11 @@ export function WorkflowEditor() {
                 const isExpanded = expandedRunLogIdx === i;
                 const hasOutput = ev.type === 'node.completed' && (ev as { output?: unknown }).output !== undefined;
                 const isProgress = ev.type === 'node.progress';
+                const isLast = i === runEvents.length - 1;
                 return (
                   <div
                     key={i}
+                    ref={isLast ? runLogEndRef : undefined}
                     className={`rounded px-2 py-1${hasOutput || isProgress ? ' cursor-pointer' : ''}`}
                     style={{ backgroundColor: 'var(--bg-secondary)' }}
                     onClick={() => {
@@ -645,6 +659,11 @@ export function WorkflowEditor() {
               <ArtifactPreview
                 workflowId={workflow.id}
                 latestArtifactId={latestArtifactId}
+                isRunning={isRunning}
+                onRerunWorkflow={() => {
+                  setRightPanelTab('run');
+                  void handleRun();
+                }}
               />
             </div>
           )}

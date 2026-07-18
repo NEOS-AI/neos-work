@@ -631,10 +631,22 @@ export class EngineClient {
     return res.json();
   }
 
-  async refreshArtifact(id: string): Promise<ApiResponse<Artifact>> {
+  async refreshArtifact(
+    id: string,
+    mode: 'reload' | 'rerun' = 'reload',
+  ): Promise<ApiResponse<Artifact> & { meta?: { mode?: string; workflowId?: string; nodeId?: string; message?: string } }> {
     const res = await fetch(`${this.baseUrl}/api/artifacts/${id}/refresh`, {
       method: 'POST',
-      headers: this.getHeaders(),
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    return res.json();
+  }
+
+  async deleteMediaFile(filename: string): Promise<ApiResponse<void>> {
+    const res = await fetch(this.mediaFileUrl(filename), {
+      method: 'DELETE',
+      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
     });
     return res.json();
   }

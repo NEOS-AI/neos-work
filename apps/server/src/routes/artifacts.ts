@@ -75,13 +75,31 @@ artifacts.delete('/:id', (c) => {
 
 /**
  * Refresh artifact content for preview.
- * If the artifact has an on-disk file_path, re-read it; otherwise return the stored row.
- * Full node re-execution is out of scope (requires workflow re-run).
+ * Body: { mode?: 'reload' | 'rerun' }
+ * - reload (default): re-read file_path or return stored content
+ * - rerun: instruct client/server to re-run the parent workflow (returns workflowId)
  */
 artifacts.post('/:id/refresh', async (c) => {
   const id = c.req.param('id');
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  const body = await c.req.json<{ mode?: 'reload' | 'rerun' }>().catch(() => ({} as { mode?: string }));
+  const mode = body.mode === 'rerun' ? 'rerun' : 'reload';
+
+  if (mode === 'rerun') {
+    // Client should call POST /api/workflow/:workflowId/run and listen for new artifacts
+    return c.json({
+      ok: true,
+      data: artifact,
+      meta: {
+        mode: 'rerun',
+        workflowId: artifact.workflowId,
+        nodeId: artifact.nodeId,
+        message: 'Re-run the workflow to regenerate this artifact',
+      },
+    });
+  }
 
   if (artifact.filePath) {
     try {
@@ -95,7 +113,7 @@ artifacts.post('/:id/refresh', async (c) => {
       }
       const content = await fs.readFile(resolved, 'utf8');
       const updated = db.updateArtifactContent(id, content);
-      return c.json({ ok: true, data: updated });
+      return c.json({ ok: true, data: updated, meta: { mode: 'reload' } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to refresh file';
       return c.json({ ok: false, error: msg }, 500);
@@ -103,7 +121,7 @@ artifacts.post('/:id/refresh', async (c) => {
   }
 
   // No file — return current in-DB content (client reloads preview)
-  return c.json({ ok: true, data: artifact });
+  return c.json({ ok: true, data: artifact, meta: { mode: 'reload' } });
 });
 
 export default artifacts;

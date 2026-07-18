@@ -53,8 +53,27 @@ export function getRevision(revisionId: string): WorkflowRevision | undefined {
   return row ? rowToRevision(row) : undefined;
 }
 
-export function createRevision(workflowId: string, snapshot: string, label?: string): WorkflowRevision {
+/**
+ * Create a revision snapshot.
+ * Returns null when the latest snapshot is identical (dedup — plan Task 16).
+ */
+export function createRevision(
+  workflowId: string,
+  snapshot: string,
+  label?: string,
+): WorkflowRevision | null {
   const db = getDb();
+
+  // Skip identical consecutive snapshots
+  const latest = db
+    .prepare(
+      'SELECT id, workflow_id, snapshot, label, created_at FROM workflow_revisions WHERE workflow_id = ? ORDER BY created_at DESC LIMIT 1',
+    )
+    .get(workflowId) as RevisionRow | undefined;
+  if (latest && latest.snapshot === snapshot) {
+    return null;
+  }
+
   const id = crypto.randomUUID();
 
   db.prepare(

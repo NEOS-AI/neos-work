@@ -29,6 +29,21 @@ export function Media() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const handleDelete = async (filename: string) => {
+    if (!client) return;
+    if (!window.confirm(`Delete ${filename}?`)) return;
+    const res = await client.deleteMediaFile(filename);
+    if (res.ok) {
+      setFiles((prev) => prev.filter((f) => f.filename !== filename));
+      if (selected?.filename === filename) {
+        setSelected(null);
+        setBlobUrl(null);
+      }
+    } else {
+      setError((res as { error?: string }).error ?? 'Delete failed');
+    }
+  };
+
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
@@ -89,22 +104,35 @@ export function Media() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="md:col-span-1 space-y-2 max-h-[70vh] overflow-y-auto">
             {files.map((f) => (
-              <button
+              <div
                 key={f.filename}
-                type="button"
-                onClick={() => { setError(null); setSelected(f); }}
-                className="w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors"
-                style={{
-                  borderColor: selected?.filename === f.filename ? '#3b82f6' : 'var(--border-primary)',
-                  backgroundColor: selected?.filename === f.filename ? 'var(--bg-secondary)' : 'transparent',
-                  color: 'var(--text-primary)',
-                }}
+                className="flex items-stretch gap-1"
               >
-                <div className="font-medium truncate">{f.filename}</div>
-                <div style={{ color: 'var(--text-muted)' }}>
-                  {f.kind} · {formatBytes(f.size)} · {new Date(f.createdAt).toLocaleString()}
-                </div>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => { setError(null); setSelected(f); }}
+                  className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-left text-xs transition-colors"
+                  style={{
+                    borderColor: selected?.filename === f.filename ? '#3b82f6' : 'var(--border-primary)',
+                    backgroundColor: selected?.filename === f.filename ? 'var(--bg-secondary)' : 'transparent',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <div className="font-medium truncate">{f.filename}</div>
+                  <div style={{ color: 'var(--text-muted)' }}>
+                    {f.kind} · {formatBytes(f.size)} · {new Date(f.createdAt).toLocaleString()}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(f.filename)}
+                  className="shrink-0 rounded-lg border px-2 text-xs text-red-400"
+                  style={{ borderColor: 'var(--border-primary)' }}
+                  title="Delete file"
+                >
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
           <div
