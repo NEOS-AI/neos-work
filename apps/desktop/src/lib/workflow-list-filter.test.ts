@@ -4,6 +4,7 @@ import {
   filterByKind,
   filterBySearchText,
   filterByStatus,
+  filterByTextMatch,
   filterWorkflowList,
 } from './workflow-list-filter.js';
 
@@ -100,6 +101,22 @@ describe('filterByEnabled', () => {
     expect(filterByEnabled(items, 'disabled')).toHaveLength(1);
     expect(filterByEnabled(items, 'all')).toHaveLength(3);
     expect(filterByEnabled(items, undefined)).toHaveLength(3);
+  });
+});
+
+describe('filterByTextMatch', () => {
+  it('matches against custom haystack fields', () => {
+    const items = [
+      { projectName: 'landing', provider: 'vercel', url: 'https://a.vercel.app' },
+      { projectName: 'docs', provider: 'cloudflare', url: 'https://docs.pages.dev' },
+    ];
+    expect(
+      filterByTextMatch(items, 'vercel', (d) => `${d.projectName} ${d.provider} ${d.url}`),
+    ).toHaveLength(1);
+    expect(
+      filterByTextMatch(items, 'docs', (d) => `${d.projectName} ${d.provider} ${d.url}`),
+    ).toHaveLength(1);
+    expect(filterByTextMatch(items, '', (d) => d.projectName)).toHaveLength(2);
   });
 });
 
