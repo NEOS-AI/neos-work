@@ -93,6 +93,23 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'self_loop')).toBe(true);
   });
 
+  it('detects duplicate_edge when two edges share source and target', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 'a', type: 'trigger', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 'a', target: 'b' },
+        { id: 'e2', source: 'a', target: 'b' },
+      ],
+      blocks: emptyBlocks,
+    });
+    const dups = issues.filter((i) => i.code === 'duplicate_edge');
+    expect(dups.length).toBe(2);
+    expect(dups.every((i) => i.severity === 'warning')).toBe(true);
+  });
+
   it('detects cycle in graph', () => {
     const issues = validateWorkflowDraft({
       nodes: [

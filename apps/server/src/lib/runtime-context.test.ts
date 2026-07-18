@@ -14,3 +14,13 @@ describe('runtime-context', () => {
     expect(getRuntimeServerUrl()).toBe('http://127.0.0.1:57286');
   });
 });
+
+describe('runtime-context updates', () => {
+  it('overwrites previous context values', () => {
+    setRuntimeContext({ authToken: 'a', port: 1 });
+    setRuntimeContext({ authToken: 'b', port: 9999 });
+    expect(getRuntimeAuthToken()).toBe('b');
+    expect(getRuntimePort()).toBe(9999);
+    expect(getRuntimeServerUrl()).toBe('http://127.0.0.1:9999');
+  });
+});

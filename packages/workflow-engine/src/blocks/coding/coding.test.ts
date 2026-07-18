@@ -61,6 +61,17 @@ describe('coding blocks', () => {
       expect(result.ok).toBe(true);
       expect(String(result.output)).toContain('10');
     });
+
+    it('runs python language via python3 -c when available', async () => {
+      const result = await exec().execute(ctx({ code: 'print(1+1)', language: 'python' }));
+      // python3 may be missing in some CI images — only assert structured result
+      expect(typeof result.durationMs).toBe('number');
+      if (result.ok) {
+        expect(String(result.output)).toMatch(/2/);
+      } else {
+        expect(result.error).toBeTruthy();
+      }
+    });
   });
 
   describe('file_read / file_write path safety', () => {
@@ -72,6 +83,18 @@ describe('coding blocks', () => {
 
     afterEach(async () => {
       await fs.rm(path.join(workspaces, testRel), { recursive: true, force: true }).catch(() => {});
+    });
+
+    it('rejects empty path for file_read', async () => {
+      const result = await read().execute(ctx({ path: '' }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/No path/);
+    });
+
+    it('returns error when relative file does not exist', async () => {
+      const result = await read().execute(ctx({ path: `${testRel}/missing-file.txt` }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toBeTruthy();
     });
 
     it('rejects absolute path for file_read', async () => {
@@ -131,6 +154,24 @@ describe('coding blocks', () => {
       expect(typeof result.meta?.exitCode).toBe('number');
       // If pnpm exists, ok true; if not, ok false with exit -1 or nonzero — either is valid coverage
       expect(result.output !== undefined || result.error !== undefined).toBe(true);
+    });
+
+    it('allows path-qualified allowlisted binary names', async () => {
+      const result = await runner().execute(ctx({ command: '/usr/bin/npm --version' }));
+      // binary ends with /npm → allowlisted; may fail if path missing, but must not be allowlist error
+      if (result.error) {
+        expect(result.error).not.toMatch(/not in allowed list/);
+      }
+      expect(result.meta === undefined || typeof result.meta?.exitCode === 'number').toBe(true);
+    });
+
+    it('allows go and cargo prefixes for structured failures', async () => {
+      for (const command of ['go version', 'cargo --version']) {
+        const result = await runner().execute(ctx({ command }));
+        if (result.error) {
+          expect(result.error).not.toMatch(/not in allowed list/);
+        }
+      }
     });
   });
 

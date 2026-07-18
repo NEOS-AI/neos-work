@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { pickRecentByDate, pickRecentRoutines, pickRecentWorkflows } from './recent-workflows.js';
+import {
+  pickRecentByDate,
+  pickRecentDeployments,
+  pickRecentRoutines,
+  pickRecentWorkflows,
+} from './recent-workflows.js';
 
 describe('pickRecentWorkflows', () => {
   const items = [
@@ -28,5 +33,39 @@ describe('pickRecentByDate / pickRecentRoutines', () => {
   it('orders by updatedAt desc', () => {
     expect(pickRecentByDate(routines, 2).map((r) => r.id)).toEqual(['r2', 'r3']);
     expect(pickRecentRoutines(routines, 1).map((r) => r.id)).toEqual(['r2']);
+  });
+});
+
+describe('pickRecentDeployments', () => {
+  const deployments = [
+    {
+      id: 'd1',
+      createdAt: '2021-01-01T00:00:00.000Z',
+      status: 'success',
+      provider: 'vercel',
+      projectName: 'old',
+    },
+    {
+      id: 'd2',
+      createdAt: '2025-06-01T00:00:00.000Z',
+      status: 'failed',
+      provider: 'cloudflare',
+      projectName: 'new',
+    },
+    {
+      id: 'd3',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      status: 'deploying',
+      provider: 'vercel',
+    },
+  ];
+
+  it('orders by createdAt desc up to limit', () => {
+    expect(pickRecentDeployments(deployments, 2).map((d) => d.id)).toEqual(['d2', 'd3']);
+  });
+
+  it('returns empty for zero limit or empty list', () => {
+    expect(pickRecentDeployments(deployments, 0)).toEqual([]);
+    expect(pickRecentDeployments([], 5)).toEqual([]);
   });
 });

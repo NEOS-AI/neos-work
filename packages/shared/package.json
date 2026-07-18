@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/shared",
-  "version": "0.3.27",
+  "version": "0.3.28",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -17,9 +17,11 @@
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
   }
 }
