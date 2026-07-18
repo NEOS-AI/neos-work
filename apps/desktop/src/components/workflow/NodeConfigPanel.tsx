@@ -428,7 +428,13 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
 }
 
 function ValidationList({ issues }: { issues: WorkflowValidationIssue[] }) {
-  if (issues.length === 0) return null;
+  if (issues.length === 0) {
+    return (
+      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+        No validation issues.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-1">

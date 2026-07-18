@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterByFieldValue, filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
@@ -200,7 +201,7 @@ export function Deployments() {
           </button>
         ))}
         <span className="self-center text-xs" style={{ color: 'var(--text-muted)' }}>
-          {visibleDeployments.length}/{deployments.length}
+          {formatListCount(visibleDeployments.length, deployments.length)}
         </span>
       </div>
 

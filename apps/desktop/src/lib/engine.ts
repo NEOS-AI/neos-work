@@ -717,6 +717,22 @@ export class EngineClient {
     return res.json();
   }
 
+  /** Media generation readiness (no secrets returned). */
+  async getMediaConfig(): Promise<
+    ApiResponse<{
+      openaiConfigured: boolean;
+      openaiBaseUrl: string | null;
+      surfaces: string[];
+      imageModels: string[];
+      audioModels: string[];
+    }>
+  > {
+    const res = await fetch(`${this.baseUrl}/api/media/config`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
   mediaFileUrl(filename: string): string {
     return `${this.baseUrl}/api/media/file/${encodeURIComponent(filename)}`;
   }

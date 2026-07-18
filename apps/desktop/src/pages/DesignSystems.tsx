@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function DesignSystems() {
@@ -72,7 +73,7 @@ export function DesignSystems() {
                 className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30"
               />
               <span className="text-xs text-white/40">
-                {filteredSystems.length}/{systems.length}
+                {formatListCount(filteredSystems.length, systems.length)}
               </span>
             </>
           )}

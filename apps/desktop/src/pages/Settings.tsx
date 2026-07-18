@@ -107,6 +107,8 @@ export function Settings() {
         </div>
       </section>
 
+      <MediaStatusSection />
+
       {/* Appearance */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
         <h2 className="mb-4 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -208,6 +210,77 @@ export function Settings() {
       {/* Dev Tools */}
       <DevToolsSection />
     </div>
+  );
+}
+
+// --- Media generation status (from /api/media/config) ---
+
+function MediaStatusSection() {
+  const { client, status } = useEngine();
+  const [configured, setConfigured] = useState<boolean | null>(null);
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const [surfaces, setSurfaces] = useState<string[]>([]);
+  const [imageModels, setImageModels] = useState<string[]>([]);
+  const [audioModels, setAudioModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!client || status !== 'connected') {
+      setConfigured(null);
+      setBaseUrl(null);
+      setSurfaces([]);
+      setImageModels([]);
+      setAudioModels([]);
+      return;
+    }
+    let cancelled = false;
+    void client
+      .getMediaConfig()
+      .then((res) => {
+        if (cancelled || !res.ok || !res.data) return;
+        setConfigured(res.data.openaiConfigured);
+        setBaseUrl(res.data.openaiBaseUrl);
+        setSurfaces(res.data.surfaces ?? []);
+        setImageModels(res.data.imageModels ?? []);
+        setAudioModels(res.data.audioModels ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setConfigured(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, status]);
+
+  return (
+    <section
+      className="rounded-xl border p-5"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+    >
+      <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+        Media generation
+      </h2>
+      <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+        Status for Media nodes (DALL·E / TTS). Keys are configured under API Keys above.
+      </p>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <dt style={{ color: 'var(--text-muted)' }}>OpenAI key</dt>
+        <dd style={{ color: configured ? '#34d399' : 'var(--text-primary)' }}>
+          {configured == null ? '—' : configured ? 'Configured' : 'Not set'}
+        </dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Base URL</dt>
+        <dd className="truncate" style={{ color: 'var(--text-primary)' }} title={baseUrl ?? undefined}>
+          {baseUrl || 'default'}
+        </dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Surfaces</dt>
+        <dd style={{ color: 'var(--text-primary)' }}>
+          {surfaces.length > 0 ? surfaces.join(', ') : '—'}
+        </dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Models</dt>
+        <dd style={{ color: 'var(--text-primary)' }}>
+          {[...imageModels, ...audioModels].join(', ') || '—'}
+        </dd>
+      </dl>
+    </section>
   );
 }
 

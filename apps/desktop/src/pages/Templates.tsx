@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 
 type TemplateWorkflow = Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>;
@@ -106,7 +107,7 @@ export function Templates() {
           ))}
         </div>
           <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {filtered.length}/{templateList.length}
+            {formatListCount(filtered.length, templateList.length)}
           </span>
         </div>
       </div>

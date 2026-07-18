@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
@@ -249,7 +250,7 @@ export function Workflows() {
               <option value="name">Sort: Name</option>
             </select>
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {filteredWorkflows.length}/{workflows.length}
+              {formatListCount(filteredWorkflows.length, workflows.length)}
             </span>
           </div>
         )}
