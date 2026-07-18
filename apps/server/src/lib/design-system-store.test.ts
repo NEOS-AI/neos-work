@@ -66,3 +66,34 @@ describe('design-system-store', () => {
     expect(await deleteDesignSystem('nope')).toBe(false);
   });
 });
+
+describe('design-system-store scan edge cases', () => {
+  const EXTRA = `_cov_ds_extra_${process.pid}`;
+
+  afterEach(async () => {
+    await fs.rm(path.join(DESIGN_SYSTEMS_DIR, EXTRA), { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('skips directories without DESIGN.md', async () => {
+    await fs.mkdir(path.join(DESIGN_SYSTEMS_DIR, EXTRA), { recursive: true });
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, EXTRA, 'readme.txt'), 'nope', 'utf8');
+    const list = await listDesignSystems();
+    expect(list.some((d) => d.name === EXTRA)).toBe(false);
+  });
+
+  it('flags tokens and components when present', async () => {
+    const created = await createDesignSystem(EXTRA, 'extra');
+    expect(created).not.toBeNull();
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, EXTRA, 'tokens.css'), ':root{}', 'utf8');
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, EXTRA, 'components.html'), '<div></div>', 'utf8');
+    const got = await getDesignSystem(created!.id);
+    expect(got?.hasTokens).toBe(true);
+    expect(got?.hasComponents).toBe(true);
+    expect(got?.hasManifest).toBe(true);
+  });
+
+  it('returns null when create name already exists', async () => {
+    await createDesignSystem(EXTRA, 'once');
+    expect(await createDesignSystem(EXTRA, 'twice')).toBeNull();
+  });
+});

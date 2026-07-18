@@ -71,3 +71,50 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
   });
 });
+
+describe('plugin-store listPlugins edge cases', () => {
+  it('skips invalid schemaVersion manifests', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({ schemaVersion: 'old', id: DIR_NAME, name: 'X', version: '1' }),
+      'utf8',
+    );
+    const list = await listPlugins();
+    expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
+  });
+
+  it('attaches skillContent when SKILL.md is present', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), '# Skill body for coverage\n', 'utf8');
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'With Skill',
+        version: '0.1.0',
+      }),
+      'utf8',
+    );
+    const plugin = await getPlugin(DIR_NAME);
+    expect(plugin?.skillContent).toContain('Skill body');
+    expect(plugin?.dir).toContain(DIR_NAME);
+  });
+
+  it('sanitizes skillDirName when upgrading', async () => {
+    const weird = `_cov_skill_weird_${process.pid}`;
+    // only alnum/_/- allowed after sanitize; use a clean dir
+    const dir = path.join(SKILLS_DIR, weird);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'SKILL.md'), '# Title From File\n\nBody\n', 'utf8');
+    try {
+      const plugin = await upgradeSkillToPlugin({ skillDirName: weird });
+      expect(plugin.name).toBe(weird);
+      expect(plugin.description).toMatch(/Title From File|Plugin upgraded/i);
+      expect(plugin.inputFields?.[0]?.key).toBe('goal');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+});

@@ -40,3 +40,34 @@ describe('harness registry', () => {
     expect(listHarnesses('general').some((h) => h.id === 'test-custom-harness')).toBe(true);
   });
 });
+
+describe('built-in coding and finance harness catalogs', () => {
+  it('includes expected coding harness ids with tools and constraints', () => {
+    const coding = listHarnesses('coding');
+    const ids = coding.map((h) => h.id);
+    expect(ids).toEqual(expect.arrayContaining(['coding_reviewer', 'coding_test_writer', 'coding_refactor']));
+    for (const h of coding) {
+      expect(h.isBuiltIn).toBe(true);
+      expect(h.systemPrompt.length).toBeGreaterThan(20);
+      expect(h.allowedTools.length).toBeGreaterThan(0);
+      expect(h.constraints?.maxSteps).toBeGreaterThan(0);
+    }
+  });
+
+  it('includes expected finance harness ids with output schemas', () => {
+    const finance = listHarnesses('finance');
+    const ids = finance.map((h) => h.id);
+    expect(ids).toEqual(expect.arrayContaining(['finance_analyst', 'finance_risk']));
+    for (const h of finance) {
+      expect(h.domain).toBe('finance');
+      expect(h.outputSchema?.type).toBe('object');
+      expect(Array.isArray(h.outputSchema?.required)).toBe(true);
+    }
+  });
+
+  it('has unique harness ids across all domains', () => {
+    const all = listHarnesses();
+    const ids = all.map((h) => h.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

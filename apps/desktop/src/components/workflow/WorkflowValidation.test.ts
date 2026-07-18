@@ -110,6 +110,22 @@ describe('validateWorkflowDraft', () => {
     expect(dups.every((i) => i.severity === 'warning')).toBe(true);
   });
 
+  it('detects duplicate_edge_id when two edges share an id', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 'a', type: 'trigger', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+        { id: 'c', type: 'block', label: 'C', config: { blockId: 'x' } },
+      ],
+      edges: [
+        { id: 'same', source: 'a', target: 'b' },
+        { id: 'same', source: 'a', target: 'c' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'duplicate_edge_id' && i.edgeId === 'same')).toBe(true);
+  });
+
   it('detects cycle in graph', () => {
     const issues = validateWorkflowDraft({
       nodes: [

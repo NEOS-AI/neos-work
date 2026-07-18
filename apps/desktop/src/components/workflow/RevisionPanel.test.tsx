@@ -221,4 +221,35 @@ describe('RevisionPanel', () => {
     confirmSpy.mockRestore();
   });
 
+  it('closes on Escape when not editing a label', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
+  });
+
 });
