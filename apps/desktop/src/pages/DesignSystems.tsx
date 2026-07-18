@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
@@ -173,8 +174,8 @@ export function DesignSystems() {
                 {ds.description && (
                   <p className="text-xs text-white/40 mt-0.5 truncate">{ds.description}</p>
                 )}
-                <p className="text-xs text-white/30 mt-0.5">
-                  Updated {new Date(ds.updatedAt).toLocaleDateString()}
+                <p className="text-xs text-white/30 mt-0.5" title={formatAbsoluteTime(ds.updatedAt)}>
+                  Updated {formatRelativeTime(ds.updatedAt)}
                 </p>
               </div>
               <div className="flex items-center gap-2 ml-4 shrink-0">

@@ -21,7 +21,9 @@ import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/s
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentStep, MessageData, SessionData } from '../lib/engine.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByDateDesc } from '../lib/list-sort.js';
 
 interface ToolStep {
   toolName: string;
@@ -114,9 +116,7 @@ export function Sessions() {
           return title.includes(q) || model.includes(q) || provider.includes(q);
         })
       : sessions;
-    return [...filtered].sort(
-      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-    );
+    return sortByDateDesc(filtered, (s) => s.updated_at);
   })();
 
   return (
@@ -176,7 +176,13 @@ export function Sessions() {
                     color: activeSessionId === session.id ? 'var(--text-primary)' : 'var(--text-secondary)',
                   }}
                 >
-                  {session.title || 'New session'}
+                  <span className="block truncate">{session.title || 'New session'}</span>
+                  <span
+                    className="block truncate text-[10px] opacity-70"
+                    title={formatAbsoluteTime(session.updated_at)}
+                  >
+                    {formatRelativeTime(session.updated_at)}
+                  </span>
                 </button>
                 <button
                   type="button"

@@ -190,6 +190,26 @@ export function WorkflowEditor() {
     loadWorkflow();
   }, [loadWorkflow]);
 
+  // Escape closes Schedule modal (plan Task 2 shortcut UX)
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setScheduleOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [scheduleOpen]);
+
+  // Escape closes shortcuts help
+  useEffect(() => {
+    if (!shortcutsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShortcutsOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [shortcutsOpen]);
+
   useEffect(() => {
     let cancelled = false;
     if (!client) return;
@@ -884,6 +904,12 @@ export function WorkflowEditor() {
               </li>
               <li className="flex justify-between gap-4">
                 <span>Close History panel</span>
+                <kbd className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  Esc
+                </kbd>
+              </li>
+              <li className="flex justify-between gap-4">
+                <span>Close Schedule / Shortcuts</span>
                 <kbd className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                   Esc
                 </kbd>

@@ -297,7 +297,14 @@ export function validateWorkflowDraft(input: {
   if (input.edges.length > 0) {
     const seenEdgeIds = new Set<string>();
     for (const edge of input.edges) {
-      if (seenEdgeIds.has(edge.id)) {
+      if (!edge.id || !String(edge.id).trim()) {
+        issues.push({
+          code: 'missing_edge_id',
+          severity: 'error',
+          edgeId: edge.id,
+          message: 'Edge is missing an id.',
+        });
+      } else if (seenEdgeIds.has(edge.id)) {
         issues.push({
           code: 'duplicate_edge_id',
           severity: 'error',
@@ -305,7 +312,7 @@ export function validateWorkflowDraft(input: {
           message: `Duplicate edge id "${edge.id}".`,
         });
       }
-      seenEdgeIds.add(edge.id);
+      if (edge.id) seenEdgeIds.add(edge.id);
     }
   }
 

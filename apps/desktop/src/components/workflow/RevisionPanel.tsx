@@ -3,7 +3,7 @@
  * Allows users to view, label, and restore past snapshots.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowRevision } from '../../lib/engine.js';
 import type { EngineClient } from '../../lib/engine.js';
@@ -31,6 +31,14 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [labelInput, setLabelInput] = useState('');
   const [restoring, setRestoring] = useState<string | null>(null);
+  /** When true, blur must not persist the in-progress label (Escape cancel). */
+  const skipBlurSaveRef = useRef(false);
+
+  const cancelLabelEdit = useCallback(() => {
+    skipBlurSaveRef.current = true;
+    setEditingId(null);
+    setLabelInput('');
+  }, []);
 
   const loadRevisions = async () => {
     setLoading(true);
@@ -48,16 +56,17 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      // Let inline label editors consume Escape first
+      // Cancel label edit first; do not close the panel or save via blur
       if (editingId) {
-        setEditingId(null);
+        e.preventDefault();
+        cancelLabelEdit();
         return;
       }
       onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editingId, onClose]);
+  }, [editingId, onClose, cancelLabelEdit]);
 
   const handleRestore = async (rev: WorkflowRevision) => {
     if (isDirty) {
@@ -94,8 +103,13 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   };
 
   const handleSaveLabel = async (revId: string) => {
-    if (!labelInput.trim()) return;
-    await client.updateRevisionLabel(workflowId, revId, labelInput.trim());
+    const next = labelInput.trim();
+    if (!next) {
+      // Empty blur / Enter exits edit without writing
+      setEditingId(null);
+      return;
+    }
+    await client.updateRevisionLabel(workflowId, revId, next);
     setEditingId(null);
     void loadRevisions();
   };
@@ -158,10 +172,23 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
                   maxLength={200}
                   onChange={(e) => setLabelInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleSaveLabel(rev.id);
-                    if (e.key === 'Escape') setEditingId(null);
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleSaveLabel(rev.id);
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      cancelLabelEdit();
+                    }
                   }}
-                  onBlur={() => void handleSaveLabel(rev.id)}
+                  onBlur={() => {
+                    if (skipBlurSaveRef.current) {
+                      skipBlurSaveRef.current = false;
+                      return;
+                    }
+                    void handleSaveLabel(rev.id);
+                  }}
                 />
               ) : (
                 <span

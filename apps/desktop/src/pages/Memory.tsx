@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MemoryItem, MemoryType, CreateMemoryInput } from '../lib/engine.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByDateDesc } from '../lib/list-sort.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const TYPE_COLORS: Record<MemoryType, string> = {
@@ -143,7 +145,8 @@ export default function Memory() {
   const filteredItems = useMemo(() => {
     const byType = typeFilter === 'all' ? items : items.filter((i) => i.type === typeFilter);
     const byEnabled = filterByEnabled(byType, enabledFilter);
-    return filterBySearchText(byEnabled, search);
+    const matched = filterBySearchText(byEnabled, search);
+    return sortByDateDesc(matched, (i) => i.updatedAt);
   }, [items, search, typeFilter, enabledFilter]);
 
   const load = useCallback(async () => {
@@ -332,8 +335,12 @@ export default function Memory() {
                   {item.content.slice(0, 300)}{item.content.length > 300 ? '…' : ''}
                 </pre>
 
-                <p className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  {new Date(item.updatedAt).toLocaleString()}
+                <p
+                  className="mt-1 text-[10px]"
+                  style={{ color: 'var(--text-muted)' }}
+                  title={formatAbsoluteTime(item.updatedAt)}
+                >
+                  {formatRelativeTime(item.updatedAt)}
                 </p>
               </div>
             ))}
