@@ -61,6 +61,7 @@ export function Sessions() {
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [sessionSearch, setSessionSearch] = useState('');
 
   // Load sessions from server
   const loadSessions = useCallback(async () => {
@@ -94,6 +95,16 @@ export function Sessions() {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
+  const q = sessionSearch.trim().toLowerCase();
+  const visibleSessions = q
+    ? sessions.filter((s) => {
+        const title = (s.title || 'New session').toLowerCase();
+        const model = (s.model || '').toLowerCase();
+        const provider = (s.provider || '').toLowerCase();
+        return title.includes(q) || model.includes(q) || provider.includes(q);
+      })
+    : sessions;
+
   return (
     <div className="-m-6 flex h-[calc(100%+3rem)]">
       {/* Session sidebar */}
@@ -111,11 +122,30 @@ export function Sessions() {
           </button>
         </div>
 
+        {sessions.length > 0 && (
+          <div className="px-2 pb-2">
+            <input
+              type="search"
+              value={sessionSearch}
+              onChange={(e) => setSessionSearch(e.target.value)}
+              placeholder="Search…"
+              className="w-full rounded-md border px-2 py-1 text-xs"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+              }}
+            />
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto px-2">
           {sessions.length === 0 ? (
             <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>{t('noTasks')}</p>
+          ) : visibleSessions.length === 0 ? (
+            <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>No matches</p>
           ) : (
-            sessions.map((session) => (
+            visibleSessions.map((session) => (
               <button
                 key={session.id}
                 onClick={() => setActiveSessionId(session.id)}

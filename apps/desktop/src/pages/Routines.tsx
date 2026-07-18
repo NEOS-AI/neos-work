@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Routine, RoutineRun, Workflow } from '../lib/engine.js';
+import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Routines() {
   const { client } = useEngine();
@@ -12,6 +13,8 @@ export function Routines() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RoutineRun[]>([]);
+  const [search, setSearch] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -124,6 +127,11 @@ export function Routines() {
 
   const selectedRoutine = routines.find((r) => r.id === selectedId);
 
+  const visibleRoutines = useMemo(() => {
+    const byEnabled = filterByEnabled(routines, enabledFilter);
+    return filterBySearchText(byEnabled, search);
+  }, [routines, enabledFilter, search]);
+
   return (
     <div className="flex h-full">
       {/* List */}
@@ -140,13 +148,51 @@ export function Routines() {
             + New
           </button>
         </div>
+        <div className="flex flex-col gap-2 border-b p-3" style={{ borderColor: 'var(--border-primary)' }}>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search routines…"
+            className="w-full rounded-lg border px-2 py-1.5 text-xs"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-primary)',
+            }}
+          />
+          <div className="flex gap-1">
+            {([
+              { id: 'all', label: 'All' },
+              { id: 'enabled', label: 'ON' },
+              { id: 'disabled', label: 'OFF' },
+            ] as const).map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => setEnabledFilter(chip.id)}
+                className="rounded-md px-2 py-0.5 text-[10px] font-medium uppercase"
+                style={{
+                  backgroundColor: enabledFilter === chip.id ? 'var(--border-secondary)' : 'var(--bg-tertiary)',
+                  color: enabledFilter === chip.id ? 'var(--text-primary)' : 'var(--text-muted)',
+                }}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto">
           {routines.length === 0 ? (
             <div className="p-4 text-sm" style={{ color: 'var(--text-muted)' }}>
               No routines. Create one to automate workflows.
             </div>
+          ) : visibleRoutines.length === 0 ? (
+            <div className="p-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+              No routines match filters.
+            </div>
           ) : (
-            routines.map((r) => (
+            visibleRoutines.map((r) => (
               <div
                 key={r.id}
                 onClick={() => setSelectedId(r.id)}

@@ -55,3 +55,17 @@ export function filterByKind<T extends { kind: string }>(
   if (!kind || kind === 'all') return items;
   return items.filter((item) => item.kind === kind);
 }
+
+/**
+ * Filter by enabled flag (routines, skills, etc.).
+ * `enabledFilter`: 'all' | 'enabled' | 'disabled'
+ */
+export function filterByEnabled<T extends { enabled: boolean }>(
+  items: T[],
+  enabledFilter?: string,
+): T[] {
+  if (!enabledFilter || enabledFilter === 'all') return items;
+  if (enabledFilter === 'enabled') return items.filter((item) => item.enabled);
+  if (enabledFilter === 'disabled') return items.filter((item) => !item.enabled);
+  return items;
+}

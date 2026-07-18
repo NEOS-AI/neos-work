@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { WorkflowBlock } from '../lib/engine.js';
+import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
   finance: '#10b981',
@@ -373,6 +374,7 @@ export function Blocks() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; block?: WorkflowBlock } | null>(null);
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     if (!client) return;
@@ -401,17 +403,33 @@ export function Blocks() {
   };
 
   const domains = ['all', 'finance', 'coding', 'general'];
-  const filtered = filter === 'all' ? blockList : blockList.filter((b) => b.domain === filter);
+  const filtered = useMemo(() => {
+    const byDomain = filter === 'all' ? blockList : blockList.filter((b) => b.domain === filter);
+    return filterBySearchText(byDomain, search);
+  }, [blockList, filter, search]);
   const builtIn = filtered.filter((b) => b.isBuiltIn);
   const custom = filtered.filter((b) => !b.isBuiltIn);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('nav.blocks', 'Blocks')}
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search blocks…"
+            className="rounded-lg border px-3 py-1.5 text-sm"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-primary)',
+              minWidth: 160,
+            }}
+          />
           <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
             {domains.map((d) => (
               <button

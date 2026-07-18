@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
+import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 
 type TemplateWorkflow = Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>;
 
@@ -35,6 +36,7 @@ export function Templates() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!client) return;
@@ -63,14 +65,31 @@ export function Templates() {
   };
 
   const domains = ['all', 'finance', 'coding', 'general'];
-  const filtered = filter === 'all' ? templateList : templateList.filter((t) => t.domain === filter);
+  const filtered = useMemo(
+    () => filterWorkflowList(templateList, { search, domain: filter }),
+    [templateList, search, filter],
+  );
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('nav.templates')}
         </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search templates…"
+            className="rounded-lg border px-3 py-1.5 text-sm"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-primary)',
+              minWidth: 160,
+            }}
+          />
         <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
           {domains.map((d) => (
             <button
@@ -85,6 +104,7 @@ export function Templates() {
               {d}
             </button>
           ))}
+        </div>
         </div>
       </div>
 

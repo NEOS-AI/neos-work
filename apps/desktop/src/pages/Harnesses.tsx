@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentHarness } from '../lib/engine.js';
+import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
   finance: '#10b981',
@@ -17,6 +18,8 @@ export function Harnesses() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<AgentHarness | null>(null);
+  const [domainFilter, setDomainFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   const load = async () => {
     if (!client) return;
@@ -40,6 +43,13 @@ export function Harnesses() {
   const closeModal = () => setShowModal(false);
   const onSaved = () => { closeModal(); load(); };
 
+  const domains = ['all', 'finance', 'coding', 'general'];
+  const visible = useMemo(() => {
+    const byDomain =
+      domainFilter === 'all' ? harnesses : harnesses.filter((h) => h.domain === domainFilter);
+    return filterBySearchText(byDomain, search);
+  }, [harnesses, domainFilter, search]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -51,17 +61,47 @@ export function Harnesses() {
   return (
     <div className="flex h-full flex-col gap-4 p-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('harness.title')}
         </h1>
-        <button
-          onClick={openCreate}
-          className="rounded-lg px-4 py-2 text-sm font-medium"
-          style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
-        >
-          {t('harness.new')}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search harnesses…"
+            className="rounded-lg border px-3 py-1.5 text-sm"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-primary)',
+              minWidth: 160,
+            }}
+          />
+          <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
+            {domains.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDomainFilter(d)}
+                className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
+                style={{
+                  backgroundColor: domainFilter === d ? 'var(--border-secondary)' : undefined,
+                  color: domainFilter === d ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={openCreate}
+            className="rounded-lg px-4 py-2 text-sm font-medium"
+            style={{ backgroundColor: 'var(--accent)', color: '#fff' }}
+          >
+            {t('harness.new')}
+          </button>
+        </div>
       </div>
 
       {/* Harness grid */}
@@ -69,9 +109,13 @@ export function Harnesses() {
         <div className="flex flex-1 items-center justify-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('harness.empty')}</span>
         </div>
+      ) : visible.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center">
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No harnesses match filters</span>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {harnesses.map((h) => (
+          {visible.map((h) => (
             <HarnessCard
               key={h.id}
               harness={h}
