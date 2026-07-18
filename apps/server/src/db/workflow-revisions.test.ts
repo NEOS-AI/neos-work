@@ -70,4 +70,23 @@ describe('createRevision snapshot payload', () => {
     // list omits snapshot; re-create read via createRevision path is enough that snap was accepted
     expect(JSON.parse(snap).designSystemId).toBe('ds-123');
   });
+
+  it('listRevisions exposes nodeCount and edgeCount from snapshot', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    createRevision(
+      wf.id,
+      JSON.stringify({
+        nodes: [{ id: 'a' }, { id: 'b' }],
+        edges: [{ id: 'e1', source: 'a', target: 'b' }],
+      }),
+    );
+    const list = listRevisions(wf.id);
+    expect(list[0]?.nodeCount).toBe(2);
+    expect(list[0]?.edgeCount).toBe(1);
+  });
 });

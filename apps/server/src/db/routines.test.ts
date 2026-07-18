@@ -1,0 +1,113 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { getDb } from './schema.js';
+import * as workflows from './workflows.js';
+import {
+  completeRoutineRun,
+  createRoutine,
+  createRoutineRun,
+  deleteRoutine,
+  getRoutine,
+  getRoutineRun,
+  listRoutineRuns,
+  listRoutines,
+  setLastRunAt,
+  updateRoutine,
+} from './routines.js';
+
+const WF_NAME = `_cov_rtn_${process.pid}`;
+
+function cleanup() {
+  const db = getDb();
+  const wfs = db.prepare('SELECT id FROM workflow WHERE name = ?').all(WF_NAME) as Array<{ id: string }>;
+  for (const w of wfs) {
+    const routines = db.prepare('SELECT id FROM routine WHERE workflow_id = ?').all(w.id) as Array<{ id: string }>;
+    for (const r of routines) {
+      db.prepare('DELETE FROM routine_run WHERE routine_id = ?').run(r.id);
+      db.prepare('DELETE FROM routine WHERE id = ?').run(r.id);
+    }
+    db.prepare('DELETE FROM workflow WHERE id = ?').run(w.id);
+  }
+}
+
+afterEach(cleanup);
+
+describe('routines CRUD', () => {
+  it('creates, lists, updates, toggles, and deletes', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'Daily',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'Asia/Seoul',
+      inputs: { foo: 1 },
+    });
+    expect(r.timezone).toBe('Asia/Seoul');
+    expect(r.enabled).toBe(true);
+    expect(r.inputs).toEqual({ foo: 1 });
+    expect(listRoutines().some((x) => x.id === r.id)).toBe(true);
+    expect(getRoutine(r.id)?.name).toBe('Daily');
+
+    const updated = updateRoutine(r.id, { enabled: false, schedule: '0 10 * * *' });
+    expect(updated?.enabled).toBe(false);
+    expect(updated?.schedule).toBe('0 10 * * *');
+
+    setLastRunAt(r.id);
+    expect(getRoutine(r.id)?.lastRunAt).toBeTruthy();
+
+    expect(deleteRoutine(r.id)).toBe(true);
+    expect(getRoutine(r.id)).toBeNull();
+  });
+
+  it('defaults timezone to UTC when omitted', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'Hourly',
+      workflowId: wf.id,
+      schedule: '0 * * * *',
+    });
+    expect(r.timezone).toBe('UTC');
+  });
+});
+
+describe('routine runs', () => {
+  it('creates runs, completes them, lists, and looks up by pk or workflow run id', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'R',
+      workflowId: wf.id,
+      schedule: '*/5 * * * *',
+    });
+    const workflowRunId = crypto.randomUUID();
+    const run = createRoutineRun({ routineId: r.id, runId: workflowRunId });
+    expect(run.status).toBe('running');
+    expect(run.runId).toBe(workflowRunId);
+
+    completeRoutineRun(run.id, 'completed');
+    const listed = listRoutineRuns(r.id);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.status).toBe('completed');
+    expect(listed[0]?.completedAt).toBeTruthy();
+
+    expect(getRoutineRun(r.id, run.id)?.id).toBe(run.id);
+    expect(getRoutineRun(r.id, workflowRunId)?.id).toBe(run.id);
+
+    const failed = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(failed.id, 'failed', 'boom');
+    expect(getRoutineRun(r.id, failed.id)?.error).toBe('boom');
+  });
+});

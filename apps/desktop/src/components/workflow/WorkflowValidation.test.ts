@@ -156,4 +156,97 @@ describe('validateWorkflowDraft media/deploy nodes', () => {
     const errors = issues.filter((i) => i.severity === 'error');
     expect(errors).toEqual([]);
   });
+
+  it('errors when deploy provider is missing', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'd', type: 'deploy', label: 'Deploy', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'd' },
+        { id: 'e2', source: 'd', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_deploy_provider')).toBe(true);
+  });
+
+  it('warns when media has no prompt or upstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'm', type: 'media', label: 'Media', config: { mediaType: 'image' } },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        // media disconnected from trigger
+        { id: 'e2', source: 'm', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_media_prompt')).toBe(true);
+  });
+});
+
+describe('validateWorkflowDraft parallel / OR gates', () => {
+  it('warns when parallel_start lacks a join and underconnected', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'ps', type: 'parallel_start', label: 'Fan-out', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'ps' },
+        { id: 'e2', source: 'ps', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'parallel_missing_join')).toBe(true);
+    expect(issues.some((i) => i.code === 'parallel_start_underconnected')).toBe(true);
+  });
+
+  it('warns when or_gate has fewer than two predecessors', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'or', type: 'or_gate', label: 'Race', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'or' },
+        { id: 'e2', source: 'or', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'or_gate_underconnected')).toBe(true);
+  });
+
+  it('accepts parallel_start with two branches and parallel_end', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'ps', type: 'parallel_start', label: 'Fan-out', config: {} },
+        { id: 'a', type: 'agent_coding', label: 'A', config: { harnessId: 'h1' } },
+        { id: 'b', type: 'agent_coding', label: 'B', config: { harnessId: 'h1' } },
+        { id: 'pe', type: 'parallel_end', label: 'Join', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'ps' },
+        { id: 'e2', source: 'ps', target: 'a' },
+        { id: 'e3', source: 'ps', target: 'b' },
+        { id: 'e4', source: 'a', target: 'pe' },
+        { id: 'e5', source: 'b', target: 'pe' },
+        { id: 'e6', source: 'pe', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'parallel_missing_join')).toBe(false);
+    expect(issues.some((i) => i.code === 'parallel_start_underconnected')).toBe(false);
+    expect(issues.some((i) => i.code === 'parallel_end_underconnected')).toBe(false);
+    expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
+  });
 });
