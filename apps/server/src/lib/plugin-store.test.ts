@@ -59,4 +59,15 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(second.name).toBe(first.name);
     expect(second.id).toBe(first.id);
   });
+
+  it('getPlugin returns null for unknown id', async () => {
+    expect(await getPlugin('no-plugin-xyz')).toBeNull();
+  });
+
+  it('listPlugins skips skill dirs without open-design.json', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), '# Skill only\n', 'utf8');
+    const list = await listPlugins();
+    expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
+  });
 });

@@ -74,4 +74,20 @@ describe('AgentNode CLI provider', () => {
     expect(prompt).toContain('Use blue');
     expect(prompt).toContain('Be helpful');
   });
+
+  it('forwards AbortSignal to cliSpawn', async () => {
+    const ac = new AbortController();
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'x', exitCode: 0 });
+    const node = new AgentNode('agent_coding', { provider: 'cli-claude' });
+    await node.execute(ctx({ cliSpawn, signal: ac.signal }));
+    expect(cliSpawn.mock.calls[0][3]).toBe(ac.signal);
+  });
+
+  it('includes inputs JSON in CLI prompt', async () => {
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'ok', exitCode: 0 });
+    const node = new AgentNode('agent_coding', { provider: 'cli-claude' });
+    await node.execute(ctx({ cliSpawn, inputs: { task: 'ship v0.3.11' } }));
+    const prompt = cliSpawn.mock.calls[0][1] as string;
+    expect(prompt).toContain('ship v0.3.11');
+  });
 });

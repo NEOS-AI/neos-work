@@ -100,3 +100,57 @@ describe('plugin-runner empty pipeline', () => {
   });
 });
 
+describe('plugin-runner multi-stage human-in-loop', () => {
+  it('waits twice for form then confirmation', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'two-wait',
+      name: 'Two Wait',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'form',
+          name: 'Form',
+          kind: 'form',
+          humanInLoop: true,
+          outputKey: 'formOut',
+          schema: { fields: [] },
+        },
+        {
+          id: 'confirm',
+          name: 'Confirm',
+          kind: 'form',
+          humanInLoop: true,
+          surface: 'confirmation',
+          outputKey: 'confirmOut',
+        },
+      ],
+    };
+    const events: Array<{ type: string; stageId?: string }> = [];
+    let runId: string | null = null;
+    let waitCount = 0;
+
+    const done = runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => {
+        events.push(e as { type: string; stageId?: string });
+        if (e.type === 'pipeline.started') runId = e.runId;
+        if (e.type === 'stage.waiting' && runId) {
+          waitCount += 1;
+          const response = waitCount === 1 ? { name: 'Ada' } : { confirmed: true };
+          setTimeout(() => {
+            expect(resumeRun(runId!, e.stageId, response)).toBe(true);
+          }, 0);
+        }
+      },
+    });
+
+    await done;
+    expect(waitCount).toBe(2);
+    expect(events.filter((e) => e.type === 'stage.waiting')).toHaveLength(2);
+    expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
+  });
+});
+

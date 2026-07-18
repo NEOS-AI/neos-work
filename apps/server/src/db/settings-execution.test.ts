@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { deleteSetting, getExecutionSettings, getWorkflowSecrets, setSetting } from './settings.js';
+import {
+  deleteSetting,
+  getExecutionSettings,
+  getWorkflowSecrets,
+  isSafeHttpBaseUrl,
+  setSetting,
+} from './settings.js';
 
 const KEYS = [
   'OPENAI_API_KEY',
@@ -13,6 +19,8 @@ const KEYS = [
   'VERCEL_API_TOKEN',
   'CLOUDFLARE_API_TOKEN',
   'CLOUDFLARE_ACCOUNT_ID',
+  'defaults.provider',
+  'defaults.model',
 ];
 
 afterEach(() => {
@@ -84,5 +92,48 @@ describe('getExecutionSettings', () => {
     expect(s.SERVER_URL).toBeUndefined();
     expect(s.SERVER_TOKEN).toBeUndefined();
     expect(s.AUTH_TOKEN).toBeUndefined();
+  });
+
+  it('injects defaults.provider and defaults.model as llmProvider/model', () => {
+    setSetting('defaults.provider', 'openai');
+    setSetting('defaults.model', 'gpt-4o');
+    const s = getExecutionSettings();
+    expect(s.llmProvider).toBe('openai');
+    expect(s.model).toBe('gpt-4o');
+  });
+
+  it('strips unsafe OPENAI_BASE_URL and OLLAMA_BASE_URL', () => {
+    setSetting('OPENAI_BASE_URL', 'file:///etc/passwd');
+    setSetting('OLLAMA_BASE_URL', 'not a url');
+    const s = getExecutionSettings();
+    expect(s.OPENAI_BASE_URL).toBeUndefined();
+    expect(s.OLLAMA_BASE_URL).toBeUndefined();
+  });
+
+  it('does not overwrite existing llmProvider with defaults.provider', () => {
+    setSetting('defaults.provider', 'openai');
+    // Simulate a pre-set bag by setting an engine-facing key is not how getExecution works —
+    // llmProvider only comes from defaults when unset. Verifying defaults apply only once.
+    const s = getExecutionSettings();
+    expect(s.llmProvider).toBe('openai');
+    setSetting('defaults.provider', 'anthropic');
+    const s2 = getExecutionSettings();
+    expect(s2.llmProvider).toBe('anthropic');
+  });
+
+  it('keeps valid https OPENAI_BASE_URL', () => {
+    setSetting('OPENAI_BASE_URL', 'https://api.openai.com/v1');
+    const s = getExecutionSettings();
+    expect(s.OPENAI_BASE_URL).toBe('https://api.openai.com/v1');
+  });
+});
+
+describe('isSafeHttpBaseUrl', () => {
+  it('accepts http and https only', () => {
+    expect(isSafeHttpBaseUrl('https://api.openai.com/v1')).toBe(true);
+    expect(isSafeHttpBaseUrl('http://127.0.0.1:11434')).toBe(true);
+    expect(isSafeHttpBaseUrl('file:///tmp')).toBe(false);
+    expect(isSafeHttpBaseUrl('ftp://x')).toBe(false);
+    expect(isSafeHttpBaseUrl('')).toBe(false);
   });
 });

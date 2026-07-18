@@ -250,3 +250,101 @@ describe('validateWorkflowDraft parallel / OR gates', () => {
     expect(issues.filter((i) => i.severity === 'error')).toEqual([]);
   });
 });
+
+describe('validateWorkflowDraft agent CLI and deploy content', () => {
+  it('does not warn missing harness for cli providers', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'CLI',
+          config: { provider: 'cli-claude' },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(issues.some((i) => i.code === 'missing_harness_id')).toBe(false);
+  });
+
+  it('also recognizes llmProvider for CLI harness skip', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'CLI',
+          config: { llmProvider: 'cli-codex' },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(issues.some((i) => i.code === 'missing_harness_id')).toBe(false);
+  });
+
+  it('still warns harness for non-CLI agents', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'a', type: 'agent_finance', label: 'Agent', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(issues.some((i) => i.code === 'missing_harness_id')).toBe(true);
+  });
+
+  it('warns when deploy has no content or upstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'd', type: 'deploy', label: 'Deploy', config: { provider: 'vercel' } },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        // deploy disconnected from trigger
+        { id: 'e2', source: 'd', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(issues.some((i) => i.code === 'missing_deploy_content')).toBe(true);
+  });
+
+  it('does not warn deploy content when config.content is set', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'Deploy',
+          config: { provider: 'vercel', content: '<html></html>' },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'd' },
+        { id: 'e2', source: 'd', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(issues.some((i) => i.code === 'missing_deploy_content')).toBe(false);
+  });
+});
+

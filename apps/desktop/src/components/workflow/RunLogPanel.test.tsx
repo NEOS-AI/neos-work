@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunLogPanel, linkifyText } from './RunLogPanel.js';
@@ -95,6 +95,24 @@ describe('RunLogPanel duration and artifact', () => {
     const link = screen.getByRole('link', { name: 'https://proj.vercel.app' });
     expect(link).toHaveAttribute('href', 'https://proj.vercel.app');
     expect(link).toHaveAttribute('target', '_blank');
+  });
+});
+
+describe('RunLogPanel copy', () => {
+  it('shows Copy button when output is expanded', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const events: WorkflowSSEEvent[] = [
+      { type: 'node.completed', nodeId: 'n1', output: 'hello-out', durationMs: 10 },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{ n1: 'Node' }} />);
+    await user.click(screen.getByText(/✓ Node/));
+    await user.click(screen.getByRole('button', { name: /copy/i }));
+    expect(writeText).toHaveBeenCalledWith('hello-out');
   });
 });
 

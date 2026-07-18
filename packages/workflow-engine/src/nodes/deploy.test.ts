@@ -55,4 +55,24 @@ describe('DeployNode', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe('token missing');
   });
+
+  it('uses config.content and inputs.projectName', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://cf.pages.dev' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await DeployNode.execute(
+      ctx({
+        config: { provider: 'cloudflare', content: '<p>cfg</p>' },
+        inputs: { projectName: 'from-input' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.provider).toBe('cloudflare');
+    expect(body.content).toBe('<p>cfg</p>');
+    expect(body.projectName).toBe('from-input');
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer t');
+  });
 });
