@@ -302,6 +302,25 @@ export function WorkflowEditor() {
       setRightPanelTab('config');
       return;
     }
+    // Soft preflight: block hard errors unless user confirms (plan polish)
+    try {
+      const pf = await client.preflightWorkflow(workflow.id);
+      if (pf.ok && pf.data && !pf.data.ok) {
+        const errs = pf.data.issues.filter((i) => i.severity === 'error');
+        if (errs.length > 0) {
+          const msg = errs.map((i) => `• ${i.message}`).join('\n');
+          const proceed = window.confirm(
+            `Preflight found ${errs.length} issue(s):\n\n${msg}\n\nRun anyway?`,
+          );
+          if (!proceed) {
+            setRightPanelTab('config');
+            return;
+          }
+        }
+      }
+    } catch {
+      // non-blocking if preflight endpoint unavailable
+    }
     const saveRes = await client.updateWorkflow(workflow.id, draft);
     if (saveRes.ok && saveRes.data) {
       setWorkflow(saveRes.data);

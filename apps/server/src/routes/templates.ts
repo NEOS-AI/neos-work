@@ -140,6 +140,38 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
       { id: 'e6', source: 'pe', target: 'output' },
     ],
   },
+  {
+    name: 'Generate Image & Deploy',
+    description: 'DALL·E image generation then static deploy (plan Tasks 7–8)',
+    domain: 'general',
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+      {
+        id: 'media',
+        type: 'media',
+        label: 'Generate Image',
+        position: { x: 320, y: 200 },
+        config: { mediaType: 'image', prompt: 'A clean product hero image', size: '1024x1024' },
+      },
+      {
+        id: 'deploy',
+        type: 'deploy',
+        label: 'Deploy',
+        position: { x: 560, y: 200 },
+        config: {
+          provider: 'vercel',
+          projectName: 'neos-media-preview',
+          content: '<!DOCTYPE html><html><body><h1>Media deploy stub</h1><p>Replace with generated asset HTML.</p></body></html>',
+        },
+      },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 800, y: 200 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'media' },
+      { id: 'e2', source: 'media', target: 'deploy' },
+      { id: 'e3', source: 'deploy', target: 'output' },
+    ],
+  },
 ];
 
 // GET /api/templates

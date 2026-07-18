@@ -101,6 +101,23 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
         >
           Clear completed
         </button>
+        <button
+          type="button"
+          className="rounded px-2 py-0.5 text-[10px] font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Clear failed runs"
+          onClick={async () => {
+            if (!client) return;
+            if (!window.confirm('Delete all failed runs for this workflow?')) return;
+            const res = await client.clearWorkflowRuns(props.workflowId, 'failed');
+            if (res.ok) {
+              setRuns((prev) => prev.filter((r) => r.status !== 'failed'));
+              setSelectedRunId(null);
+            }
+          }}
+        >
+          Clear failed
+        </button>
       </div>
 
       <div className="space-y-2 overflow-y-auto p-3">
