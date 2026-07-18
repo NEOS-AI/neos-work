@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,6 +12,8 @@ const DOMAIN_COLORS: Record<string, string> = {
   general: '#8b5cf6',
 };
 
+type SortMode = 'updated' | 'name';
+
 export function Workflows() {
   const { t } = useTranslation('common');
   const { client } = useEngine();
@@ -24,11 +26,34 @@ export function Workflows() {
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<'all' | 'finance' | 'coding' | 'general'>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('updated');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const filteredWorkflows = filterWorkflowList(workflows, {
-    search,
-    domain: domainFilter,
-  });
+  const filteredWorkflows = useMemo(() => {
+    const filtered = filterWorkflowList(workflows, {
+      search,
+      domain: domainFilter,
+    });
+    const sorted = [...filtered];
+    if (sortMode === 'name') {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      sorted.sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+    }
+    return sorted;
+  }, [workflows, search, domainFilter, sortMode]);
+
+  const handleCopyId = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
+    } catch {
+      // clipboard may be unavailable
+    }
+  };
 
   const loadWorkflows = useCallback(async () => {
     if (!client) return;
@@ -209,6 +234,20 @@ export function Workflows() {
                 {d}
               </button>
             ))}
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="rounded-lg border px-2 py-1 text-xs"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-secondary)',
+              }}
+              title="Sort order"
+            >
+              <option value="updated">Sort: Updated</option>
+              <option value="name">Sort: Name</option>
+            </select>
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {filteredWorkflows.length}/{workflows.length}
             </span>
@@ -266,6 +305,14 @@ export function Workflows() {
 
                 {/* Action buttons */}
                 <div className="absolute right-2 top-2 hidden items-center gap-1 group-hover:flex">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); void handleCopyId(wf.id); }}
+                    className="rounded p-1 text-xs"
+                    style={{ color: 'var(--text-muted)' }}
+                    title={copiedId === wf.id ? 'Copied!' : 'Copy workflow ID'}
+                  >
+                    {copiedId === wf.id ? '✓' : 'ID'}
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); void handleDuplicate(wf.id); }}
                     className="rounded p-1 text-xs"

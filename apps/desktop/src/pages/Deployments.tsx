@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
-import { filterByStatus } from '../lib/workflow-list-filter.js';
+import { filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   success: { bg: '#065f4620', color: '#059669' },
@@ -21,12 +21,28 @@ export function Deployments() {
   const [loading, setLoading] = useState(true);
   const [filterWorkflowId, setFilterWorkflowId] = useState('');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
+  const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const visibleDeployments = useMemo(
-    () => filterByStatus(deployments, statusFilter),
-    [deployments, statusFilter],
-  );
+  const visibleDeployments = useMemo(() => {
+    const byStatus = filterByStatus(deployments, statusFilter);
+    return filterByTextMatch(
+      byStatus,
+      search,
+      (d) =>
+        [
+          d.projectName,
+          d.provider,
+          d.url,
+          d.status,
+          d.statusMessage,
+          d.workflowId ? workflows[d.workflowId]?.name : undefined,
+          d.workflowId,
+        ]
+          .filter(Boolean)
+          .join(' '),
+    );
+  }, [deployments, statusFilter, search, workflows]);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -105,7 +121,20 @@ export function Deployments() {
             History of Vercel and Cloudflare Pages deploys from Deploy nodes.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search project, URL, provider…"
+            className="rounded-lg border px-3 py-1.5 text-sm outline-none"
+            style={{
+              borderColor: 'var(--border-secondary)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              minWidth: 180,
+            }}
+          />
           <select
             value={filterWorkflowId}
             onChange={(e) => setFilterWorkflowId(e.target.value)}
@@ -174,7 +203,7 @@ export function Deployments() {
         </div>
       ) : visibleDeployments.length === 0 ? (
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          No deployments match this status filter.
+          No deployments match the current filters.
         </p>
       ) : (
         <div

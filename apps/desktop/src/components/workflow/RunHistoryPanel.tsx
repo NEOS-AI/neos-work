@@ -3,17 +3,10 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
+import { formatDuration } from '../../lib/format-duration.js';
 import { RunDetailPanel } from './RunDetailPanel.js';
 
-type RunFilter = 'all' | 'completed' | 'failed' | 'cancelled';
-
-function formatDuration(startedAt: string, completedAt?: string): string {
-  if (!completedAt) return '—';
-  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
-}
+type RunFilter = 'all' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 const PAGE_SIZE = 20;
 
@@ -53,10 +46,11 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
   const filteredRuns = runs.filter((r) => filter === 'all' || r.status === filter);
 
   const FILTERS: { key: RunFilter; label: string }[] = [
-    { key: 'all', label: t('run.filterAll') },
-    { key: 'completed', label: t('run.filterCompleted') },
-    { key: 'failed', label: t('run.filterFailed') },
-    { key: 'cancelled', label: t('run.filterCancelled') },
+    { key: 'all', label: t('run.filterAll', 'All') },
+    { key: 'running', label: t('run.filterRunning', 'Running') },
+    { key: 'completed', label: t('run.filterCompleted', 'Completed') },
+    { key: 'failed', label: t('run.filterFailed', 'Failed') },
+    { key: 'cancelled', label: t('run.filterCancelled', 'Cancelled') },
   ];
 
   if (runs.length === 0 && offset === 0) {

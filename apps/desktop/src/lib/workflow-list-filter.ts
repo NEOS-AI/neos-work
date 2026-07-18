@@ -69,3 +69,14 @@ export function filterByEnabled<T extends { enabled: boolean }>(
   if (enabledFilter === 'disabled') return items.filter((item) => !item.enabled);
   return items;
 }
+
+/** Free-text match against a derived haystack (deployments, multi-field search). */
+export function filterByTextMatch<T>(
+  items: T[],
+  search: string | undefined,
+  getHaystack: (item: T) => string,
+): T[] {
+  const q = search?.trim().toLowerCase() ?? '';
+  if (!q) return items;
+  return items.filter((item) => getHaystack(item).toLowerCase().includes(q));
+}
