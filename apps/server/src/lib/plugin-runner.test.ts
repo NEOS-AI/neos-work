@@ -78,3 +78,25 @@ describe('plugin-runner', () => {
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
 });
+
+describe('plugin-runner empty pipeline', () => {
+  it('completes immediately when pipeline is empty', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'empty',
+      name: 'Empty',
+      version: '0.0.1',
+      pipeline: [],
+    };
+    const events: Array<{ type: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => events.push(e),
+    });
+    expect(events.some((e) => e.type === 'pipeline.started')).toBe(true);
+    expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
+  });
+});
+

@@ -65,6 +65,21 @@ describe('buildCliArgs', () => {
       args: ['exec', 'hi'],
     });
   });
+
+  it('accepts bin overrides for manual paths', () => {
+    expect(buildCliArgs('cli-claude', 'x', '/opt/claude')).toEqual({
+      bin: '/opt/claude',
+      args: ['--print', 'x'],
+    });
+    expect(buildCliArgs('cli-gemini', 'x', '/opt/gemini')).toEqual({
+      bin: '/opt/gemini',
+      args: ['-p', 'x'],
+    });
+    expect(buildCliArgs('cli-codex', 'x', '/opt/codex')).toEqual({
+      bin: '/opt/codex',
+      args: ['exec', 'x'],
+    });
+  });
 });
 
 describe('detectCLIs', () => {
@@ -104,6 +119,49 @@ describe('detectCLIs', () => {
       path: '/usr/local/bin/claude',
       version: 'claude 1.2.3',
     });
+  });
+
+  it('prefers executable path overrides over PATH', async () => {
+    const override = path.join(os.tmpdir(), `neos-cli-override-${process.pid}`);
+    fs.writeFileSync(override, '#!/bin/sh\necho ok\n', { mode: 0o755 });
+    execFileMock.mockImplementation((cmd: string, args: string[], ...rest: unknown[]) => {
+      const cb = rest.find((a) => typeof a === 'function') as
+        | ((err: Error | null, stdout?: string, stderr?: string) => void)
+        | undefined;
+      // which should not be needed for claude when override works
+      if (cmd === override && args[0] === '--version') {
+        cb?.(null, 'claude override 9.9\n', '');
+        return;
+      }
+      cb?.(new Error('not found'));
+    });
+    try {
+      const found = await detectCLIs({ 'cli-claude': override });
+      expect(found.some((a) => a.id === 'cli-claude' && a.path === override)).toBe(true);
+      const claude = found.find((a) => a.id === 'cli-claude');
+      expect(claude?.version).toMatch(/override/);
+    } finally {
+      try { fs.unlinkSync(override); } catch { /* ignore */ }
+    }
+  });
+
+  it('falls back to PATH when override is not executable', async () => {
+    execFileMock.mockImplementation((cmd: string, args: string[], ...rest: unknown[]) => {
+      const cb = rest.find((a) => typeof a === 'function') as
+        | ((err: Error | null, stdout?: string, stderr?: string) => void)
+        | undefined;
+      if (cmd === 'which' && args[0] === 'gemini') {
+        cb?.(null, '/bin/gemini\n', '');
+        return;
+      }
+      if (cmd === '/bin/gemini' && args[0] === '--version') {
+        cb?.(null, 'gemini 0.1\n', '');
+        return;
+      }
+      cb?.(new Error('not found'));
+    });
+    const found = await detectCLIs({ 'cli-gemini': '/no/such/binary-xyz' });
+    expect(found.find((a) => a.id === 'cli-gemini')?.path).toBe('/bin/gemini');
   });
 });
 
@@ -149,6 +207,15 @@ describe('spawnCliAgent', () => {
     spawnMock.mockReset();
   });
 
+  /** spawnCliAgent awaits settings import before calling spawn */
+  async function waitForSpawn() {
+    for (let i = 0; i < 50; i++) {
+      if (spawnMock.mock.calls.length > 0) return;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    throw new Error('spawn was not called');
+  }
+
   it('streams stdout and stderr via onChunk and resolves exit code', async () => {
     const child = makeChild();
     spawnMock.mockReturnValue(child);
@@ -160,7 +227,7 @@ describe('spawnCliAgent', () => {
       onChunk: (chunk) => chunks.push(chunk),
     });
 
-    await Promise.resolve();
+    await waitForSpawn();
     child.stdout.emit('data', Buffer.from('out-'));
     child.stderr.emit('data', Buffer.from('err'));
     child.emit('exit', 0);
@@ -187,7 +254,7 @@ describe('spawnCliAgent', () => {
       signal: ac.signal,
     });
 
-    await Promise.resolve();
+    await waitForSpawn();
     ac.abort();
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     child.emit('exit', null);
@@ -200,7 +267,7 @@ describe('spawnCliAgent', () => {
     const child = makeChild();
     spawnMock.mockReturnValue(child);
     const promise = spawnCliAgent({ cliId: 'cli-codex', prompt: 'x' });
-    await Promise.resolve();
+    await waitForSpawn();
     child.emit('error', new Error('ENOENT'));
     await expect(promise).rejects.toThrow('ENOENT');
   });

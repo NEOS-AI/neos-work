@@ -52,3 +52,17 @@ describe('FixedWindowRateLimiter', () => {
     expect(limiter.status('z', now).remaining).toBe(3);
   });
 });
+
+describe('FixedWindowRateLimiter status after partial use', () => {
+  it('status after partial consumption', () => {
+    const limiter = new FixedWindowRateLimiter(5, 10_000);
+    const now = 1000;
+    expect(limiter.check('k', now)).toBe(true);
+    expect(limiter.check('k', now)).toBe(true);
+    const st = limiter.status('k', now);
+    expect(st.remaining).toBe(3);
+    expect(st.limit).toBe(5);
+    expect(st.windowMs).toBe(10_000);
+  });
+});
+

@@ -7,6 +7,7 @@ const listArtifacts = vi.fn();
 const getArtifact = vi.fn();
 const refreshArtifact = vi.fn();
 const deleteArtifact = vi.fn();
+const updateArtifact = vi.fn();
 
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
@@ -15,6 +16,7 @@ vi.mock('../../hooks/useEngine.js', () => ({
       getArtifact,
       refreshArtifact,
       deleteArtifact,
+      updateArtifact,
     },
   }),
 }));
@@ -41,6 +43,7 @@ describe('ArtifactPreview', () => {
     getArtifact.mockReset();
     refreshArtifact.mockReset();
     deleteArtifact.mockReset();
+    updateArtifact.mockReset();
   });
 
   it('shows empty state when no artifacts', async () => {
@@ -130,5 +133,55 @@ describe('ArtifactPreview', () => {
       expect(deleteArtifact).toHaveBeenCalledWith('a3');
     });
     confirmSpy.mockRestore();
+  });
+
+  it('renames selected artifact via prompt', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a4',
+      workflowId: 'wf-1',
+      name: 'old-name.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    updateArtifact.mockImplementation(async (_id: string, input: { name?: string }) => {
+      const renamed = { ...art, name: input.name ?? art.name };
+      listArtifacts.mockResolvedValue({ ok: true, data: [renamed] });
+      return { ok: true, data: renamed };
+    });
+
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('new-name.html');
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('old-name.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    await waitFor(() => {
+      expect(updateArtifact).toHaveBeenCalledWith('a4', { name: 'new-name.html' });
+    });
+    promptSpy.mockRestore();
+  });
+
+  it('skips rename when prompt is cancelled', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a5',
+      workflowId: 'wf-1',
+      name: 'keep.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(null);
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('keep.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(updateArtifact).not.toHaveBeenCalled();
+    promptSpy.mockRestore();
   });
 });

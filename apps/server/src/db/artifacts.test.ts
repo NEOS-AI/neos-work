@@ -8,6 +8,7 @@ import {
   listArtifacts,
   listArtifactsByRun,
   updateArtifactContent,
+  updateArtifact,
 } from './artifacts.js';
 
 const WF_NAME = `_cov_art_${process.pid}`;
@@ -61,3 +62,64 @@ describe('artifacts CRUD', () => {
     expect(listArtifacts('no-such-workflow')).toEqual([]);
   });
 });
+
+describe('updateArtifact PATCH semantics', () => {
+  it('renames without changing content', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'old.html',
+      contentType: 'text/html',
+      content: '<html>x</html>',
+    });
+    const updated = updateArtifact(art.id, { name: 'new.html' });
+    expect(updated?.name).toBe('new.html');
+    expect(updated?.content).toBe('<html>x</html>');
+  });
+
+  it('updates content without changing name', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html>old</html>',
+    });
+    const updated = updateArtifact(art.id, { content: '<html>new</html>' });
+    expect(updated?.name).toBe('page.html');
+    expect(updated?.content).toBe('<html>new</html>');
+  });
+
+  it('updates name and content together', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'a.html',
+      contentType: 'text/html',
+      content: 'a',
+    });
+    const updated = updateArtifact(art.id, { name: 'b.html', content: 'b' });
+    expect(updated?.name).toBe('b.html');
+    expect(updated?.content).toBe('b');
+  });
+
+  it('returns undefined for missing id', () => {
+    expect(updateArtifact('missing-id', { name: 'x' })).toBeUndefined();
+  });
+});
+
