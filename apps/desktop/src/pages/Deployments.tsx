@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
+import { formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
 import { filterByFieldValue, filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
@@ -297,8 +298,12 @@ export function Deployments() {
                         <span style={{ color: 'var(--text-muted)' }}>—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-                      {formatWhen(d.createdAt)}
+                    <td
+                      className="px-4 py-3 whitespace-nowrap"
+                      style={{ color: 'var(--text-muted)' }}
+                      title={formatWhen(d.createdAt)}
+                    >
+                      {formatRelativeTime(d.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       {d.deploymentId && (

@@ -256,6 +256,7 @@ export function validateWorkflowDraft(input: {
     }
   }
 
+  const pairCounts = new Map<string, string[]>();
   for (const edge of input.edges) {
     if (edge.source === edge.target) {
       issues.push({
@@ -271,6 +272,23 @@ export function validateWorkflowDraft(input: {
         severity: 'error',
         edgeId: edge.id,
         message: 'Edge points to a missing node.',
+      });
+    }
+    const pairKey = `${edge.source}\0${edge.target}`;
+    const list = pairCounts.get(pairKey) ?? [];
+    list.push(edge.id);
+    pairCounts.set(pairKey, list);
+  }
+
+  // Duplicate parallel edges (same source→target) confuse fan-out semantics
+  for (const edgeIds of pairCounts.values()) {
+    if (edgeIds.length < 2) continue;
+    for (const edgeId of edgeIds) {
+      issues.push({
+        code: 'duplicate_edge',
+        severity: 'warning',
+        edgeId,
+        message: 'Multiple edges connect the same source and target.',
       });
     }
   }

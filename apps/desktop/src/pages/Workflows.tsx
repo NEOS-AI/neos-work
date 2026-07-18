@@ -5,7 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
+import { formatRelativeTime } from '../lib/format-relative-time.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
+import {
+  loadWorkflowListSort,
+  saveWorkflowListSort,
+  type WorkflowListSortMode,
+} from '../lib/workflow-list-prefs.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
   finance: '#10b981',
@@ -13,7 +19,7 @@ const DOMAIN_COLORS: Record<string, string> = {
   general: '#8b5cf6',
 };
 
-type SortMode = 'updated' | 'name';
+type SortMode = WorkflowListSortMode;
 
 export function Workflows() {
   const { t } = useTranslation('common');
@@ -27,8 +33,13 @@ export function Workflows() {
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<'all' | 'finance' | 'coding' | 'general'>('all');
-  const [sortMode, setSortMode] = useState<SortMode>('updated');
+  const [sortMode, setSortMode] = useState<SortMode>(() => loadWorkflowListSort());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleSortModeChange = (mode: SortMode) => {
+    setSortMode(mode);
+    saveWorkflowListSort(mode);
+  };
 
   const filteredWorkflows = useMemo(() => {
     const filtered = filterWorkflowList(workflows, {
@@ -237,7 +248,7 @@ export function Workflows() {
             ))}
             <select
               value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              onChange={(e) => handleSortModeChange(e.target.value as SortMode)}
               className="rounded-lg border px-2 py-1 text-xs"
               style={{
                 backgroundColor: 'var(--bg-primary)',
@@ -300,8 +311,12 @@ export function Workflows() {
                     {wf.description}
                   </p>
                 )}
-                <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {new Date(wf.updatedAt).toLocaleDateString()}
+                <p
+                  className="mt-3 text-xs"
+                  style={{ color: 'var(--text-muted)' }}
+                  title={new Date(wf.updatedAt).toLocaleString()}
+                >
+                  {formatRelativeTime(wf.updatedAt)}
                   {' · '}
                   {(wf.nodes?.length ?? 0)} nodes
                   {' · '}

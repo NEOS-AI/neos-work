@@ -3,10 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
-import type { Routine, Workflow } from '../lib/engine.js';
+import type { Deployment, Routine, Workflow } from '../lib/engine.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
 import { formatRelativeTime } from '../lib/format-relative-time.js';
-import { pickRecentRoutines, pickRecentWorkflows } from '../lib/recent-workflows.js';
+import {
+  pickRecentDeployments,
+  pickRecentRoutines,
+  pickRecentWorkflows,
+} from '../lib/recent-workflows.js';
 
 interface DashboardStats {
   sessions: number | null;
@@ -38,6 +42,7 @@ export function Dashboard() {
   });
   const [recentWorkflows, setRecentWorkflows] = useState<Workflow[]>([]);
   const [recentRoutines, setRecentRoutines] = useState<Routine[]>([]);
+  const [recentDeployments, setRecentDeployments] = useState<Deployment[]>([]);
 
   useEffect(() => {
     if (!client) return;
@@ -58,6 +63,7 @@ export function Dashboard() {
         ]);
       if (cancelled) return;
       const wfList = workflows?.ok && workflows.data ? workflows.data : [];
+      const deployList = deployments?.ok && deployments.data ? deployments.data : [];
       setStats({
         sessions: sessions?.ok && sessions.data ? sessions.data.length : null,
         workflows: workflows?.ok && workflows.data ? workflows.data.length : null,
@@ -73,6 +79,7 @@ export function Dashboard() {
       setRecentWorkflows(pickRecentWorkflows(wfList, 5));
       const routineList = routines?.ok && routines.data ? routines.data : [];
       setRecentRoutines(pickRecentRoutines(routineList, 5));
+      setRecentDeployments(pickRecentDeployments(deployList, 5));
     })();
 
     return () => {
@@ -222,6 +229,48 @@ export function Dashboard() {
                   {r.nextRunAt
                     ? `next ${formatRelativeTime(r.nextRunAt)}`
                     : formatRelativeTime(r.updatedAt)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent deployments */}
+      {recentDeployments.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Recent deployments
+            </h2>
+            <Link to="/deployments" className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              View all
+            </Link>
+          </div>
+          <div className="flex flex-col gap-2">
+            {recentDeployments.map((d) => (
+              <Link
+                key={d.id}
+                to={d.workflowId ? `/workflows/${d.workflowId}` : '/deployments'}
+                className="flex items-center justify-between rounded-xl border px-4 py-3 transition-opacity hover:opacity-90"
+                style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {d.projectName || d.provider}
+                  </p>
+                  <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
+                    {d.provider}
+                    {' · '}
+                    {d.status}
+                  </p>
+                </div>
+                <span
+                  className="shrink-0 text-[10px]"
+                  style={{ color: 'var(--text-muted)' }}
+                  title={new Date(d.createdAt).toLocaleString()}
+                >
+                  {formatRelativeTime(d.createdAt)}
                 </span>
               </Link>
             ))}

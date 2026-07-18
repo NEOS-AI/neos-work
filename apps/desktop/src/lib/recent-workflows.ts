@@ -40,3 +40,28 @@ export function pickRecentRoutines<T extends RecentByDateLike & { name: string; 
 ): T[] {
   return pickRecentByDate(routines, limit);
 }
+
+export interface RecentDeploymentLike {
+  id: string;
+  createdAt: string;
+  status: string;
+  provider: string;
+  projectName?: string;
+  url?: string;
+  workflowId?: string;
+}
+
+/**
+ * Recent deployments for dashboard (PLAN Task 8 polish).
+ * Sorts by `createdAt` (deploy time) rather than updatedAt.
+ */
+export function pickRecentDeployments<T extends RecentDeploymentLike>(
+  deployments: T[],
+  limit = 5,
+): T[] {
+  const n = Math.max(0, Math.floor(limit));
+  if (n === 0 || deployments.length === 0) return [];
+  return [...deployments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, n);
+}

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowRevision } from '../../lib/engine.js';
 import type { EngineClient } from '../../lib/engine.js';
+import { formatRelativeTime } from '../../lib/format-relative-time.js';
 
 interface RevisionPanelProps {
   workflowId: string;
@@ -160,8 +161,8 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
             </div>
 
             {/* Timestamp + graph size (plan Task 16) */}
-            <p className="mt-1" style={{ color: 'var(--text-muted)' }}>
-              {new Date(rev.createdAt).toLocaleString()}
+            <p className="mt-1" style={{ color: 'var(--text-muted)' }} title={new Date(rev.createdAt).toLocaleString()}>
+              {formatRelativeTime(rev.createdAt)}
               {typeof rev.nodeCount === 'number' && (
                 <span>
                   {' · '}
