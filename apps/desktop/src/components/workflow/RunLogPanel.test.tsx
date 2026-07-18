@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RunLogPanel, linkifyText } from './RunLogPanel.js';
+import { RunLogPanel, filterRunLogEvents, linkifyText } from './RunLogPanel.js';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
 
 describe('RunLogPanel', () => {
@@ -33,6 +33,30 @@ describe('RunLogPanel', () => {
     expect(screen.getByText(/boom/)).toBeInTheDocument();
     await user.click(screen.getByText(/✓ A/));
     expect(screen.getByText(/"ok": true/)).toBeInTheDocument();
+  });
+});
+
+describe('filterRunLogEvents', () => {
+  const events: WorkflowSSEEvent[] = [
+    { type: 'run.started', runId: 'r1' },
+    { type: 'node.started', nodeId: 'n1', nodeType: 'agent_coding' },
+    { type: 'node.progress', nodeId: 'n1', chunk: 'x', accumulated: 'x' },
+    { type: 'node.completed', nodeId: 'n1', output: 'ok', durationMs: 10 },
+    { type: 'node.failed', nodeId: 'n2', error: 'boom' },
+    { type: 'run.failed', runId: 'r1', error: 'fail' },
+  ];
+
+  it('filters by chip category', () => {
+    expect(filterRunLogEvents(events, 'all')).toHaveLength(6);
+    expect(filterRunLogEvents(events, 'progress')).toHaveLength(1);
+    expect(filterRunLogEvents(events, 'completed')).toHaveLength(1);
+    expect(filterRunLogEvents(events, 'failed')).toHaveLength(2);
+    expect(filterRunLogEvents(events, 'lifecycle').map((e) => e.type)).toEqual([
+      'run.started',
+      'node.started',
+      'node.failed',
+      'run.failed',
+    ]);
   });
 });
 
