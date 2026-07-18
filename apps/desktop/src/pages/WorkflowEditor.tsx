@@ -164,6 +164,7 @@ export function WorkflowEditor() {
   const [scheduleName, setScheduleName] = useState('');
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('TB');
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const stopRef = useRef<(() => void) | null>(null);
 
@@ -468,6 +469,14 @@ export function WorkflowEditor() {
           )}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => setShortcutsOpen((v) => !v)}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Keyboard shortcuts"
+        >
+          ⌨
+        </button>
         <button
           onClick={() => {
             setScheduleName(workflow ? `${workflow.name} schedule` : 'Scheduled run');
@@ -809,6 +818,54 @@ export function WorkflowEditor() {
                 {scheduleBusy ? '…' : 'Create routine'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {shortcutsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShortcutsOpen(false); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border p-5 space-y-3"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Keyboard shortcuts
+              </h3>
+              <button
+                type="button"
+                className="text-xs"
+                style={{ color: 'var(--text-muted)' }}
+                onClick={() => setShortcutsOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="space-y-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <li className="flex justify-between gap-4">
+                <span>Save workflow</span>
+                <kbd className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  ⌘/Ctrl+S
+                </kbd>
+              </li>
+              <li className="flex justify-between gap-4">
+                <span>Run workflow</span>
+                <kbd className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  ⌘/Ctrl+Enter
+                </kbd>
+              </li>
+              <li className="flex justify-between gap-4">
+                <span>Confirm leave dialog</span>
+                <span style={{ color: 'var(--text-muted)' }}>when dirty</span>
+              </li>
+            </ul>
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              Toolbar: Schedule, Layout, Preflight, History, Export, and Preview tabs.
+            </p>
           </div>
         </div>
       )}

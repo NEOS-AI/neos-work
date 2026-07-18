@@ -25,6 +25,12 @@ export function Routines() {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Edit schedule for selected routine
+  const [editSchedule, setEditSchedule] = useState('');
+  const [editTimezone, setEditTimezone] = useState('UTC');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
   const load = async () => {
     if (!client) return;
     const [rRes, wRes] = await Promise.all([client.listRoutines(), client.listWorkflows()]);
@@ -40,6 +46,14 @@ export function Routines() {
       if (res.ok && res.data) setRuns(res.data);
     });
   }, [client, selectedId]);
+
+  useEffect(() => {
+    const r = routines.find((x) => x.id === selectedId);
+    if (!r) return;
+    setEditSchedule(r.schedule);
+    setEditTimezone(r.timezone || 'UTC');
+    setEditError('');
+  }, [selectedId, routines]);
 
   const handleCreate = async () => {
     if (!client) return;
@@ -105,6 +119,26 @@ export function Routines() {
     } else {
       alert((res as { error?: string }).error ?? 'Crystallize failed');
     }
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!client || !selectedId) return;
+    if (!editSchedule.trim()) {
+      setEditError('Schedule is required');
+      return;
+    }
+    setEditSaving(true);
+    setEditError('');
+    const res = await client.updateRoutine(selectedId, {
+      schedule: editSchedule.trim(),
+      timezone: editTimezone.trim() || 'UTC',
+    });
+    setEditSaving(false);
+    if (!res.ok) {
+      setEditError((res as { error?: string }).error ?? 'Update failed');
+      return;
+    }
+    await load();
   };
 
   const schedulePresets = [
@@ -311,6 +345,67 @@ export function Routines() {
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Edit schedule / timezone */}
+            <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+              <h4 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                Schedule
+              </h4>
+              <div className="flex flex-wrap gap-1">
+                {schedulePresets.map((p) => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => setEditSchedule(p.value)}
+                    className="rounded px-2 py-0.5 text-[10px]"
+                    style={{
+                      backgroundColor: editSchedule === p.value ? '#3b82f6' : 'var(--bg-tertiary)',
+                      color: editSchedule === p.value ? '#fff' : 'var(--text-muted)',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={editSchedule}
+                onChange={(e) => setEditSchedule(e.target.value)}
+                className="w-full rounded border px-2 py-1.5 font-mono text-xs"
+                style={{
+                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: 'var(--border-primary)',
+                  color: 'var(--text-primary)',
+                }}
+                placeholder="0 9 * * *"
+              />
+              <div className="flex flex-wrap gap-1">
+                {timezonePresets.map((tz) => (
+                  <button
+                    key={tz}
+                    type="button"
+                    onClick={() => setEditTimezone(tz)}
+                    className="rounded px-2 py-0.5 text-[10px]"
+                    style={{
+                      backgroundColor: editTimezone === tz ? '#3b82f6' : 'var(--bg-tertiary)',
+                      color: editTimezone === tz ? '#fff' : 'var(--text-muted)',
+                    }}
+                  >
+                    {tz}
+                  </button>
+                ))}
+              </div>
+              {editError && <p className="text-xs text-red-400">{editError}</p>}
+              <button
+                type="button"
+                disabled={editSaving}
+                onClick={() => void handleSaveSchedule()}
+                className="rounded px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: '#10b981' }}
+              >
+                {editSaving ? 'Saving…' : 'Save schedule'}
+              </button>
             </div>
 
             {/* Run history */}

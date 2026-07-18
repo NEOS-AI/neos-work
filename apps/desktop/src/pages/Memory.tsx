@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MemoryItem, MemoryType, CreateMemoryInput } from '../lib/engine.js';
-import { filterBySearchText } from '../lib/workflow-list-filter.js';
+import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const TYPE_COLORS: Record<MemoryType, string> = {
   user:      '#3b82f6',
@@ -137,11 +137,13 @@ export default function Memory() {
   const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: MemoryItem } | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | MemoryType>('all');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
 
   const filteredItems = useMemo(() => {
     const byType = typeFilter === 'all' ? items : items.filter((i) => i.type === typeFilter);
-    return filterBySearchText(byType, search);
-  }, [items, search, typeFilter]);
+    const byEnabled = filterByEnabled(byType, enabledFilter);
+    return filterBySearchText(byEnabled, search);
+  }, [items, search, typeFilter, enabledFilter]);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -203,6 +205,24 @@ export default function Memory() {
                   minWidth: 160,
                 }}
               />
+              {([
+                { id: 'all', label: 'All' },
+                { id: 'enabled', label: 'ON' },
+                { id: 'disabled', label: 'OFF' },
+              ] as const).map((chip) => (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setEnabledFilter(chip.id)}
+                  className="rounded-lg px-2 py-1 text-[10px] font-medium"
+                  style={{
+                    backgroundColor: enabledFilter === chip.id ? '#10b981' : 'var(--bg-tertiary)',
+                    color: enabledFilter === chip.id ? '#fff' : 'var(--text-muted)',
+                  }}
+                >
+                  {chip.label}
+                </button>
+              ))}
               {(['all', 'user', 'session', 'skill', 'reference'] as const).map((ty) => (
                 <button
                   key={ty}

@@ -254,5 +254,34 @@ export function validateWorkflowDraft(input: {
     });
   }
 
+  // Isolated nodes (not connected to any edge) — skip single-node graphs
+  if (input.nodes.length > 1) {
+    for (const node of input.nodes) {
+      const connected = input.edges.some((e) => e.source === node.id || e.target === node.id);
+      if (!connected) {
+        issues.push({
+          code: 'isolated_node',
+          severity: 'warning',
+          nodeId: node.id,
+          message: `Node "${node.label || node.id}" is not connected to the graph.`,
+        });
+      }
+    }
+  }
+
+  // Output with no upstream when other nodes exist
+  for (const node of input.nodes) {
+    if (node.type !== 'output') continue;
+    const incoming = input.edges.some((e) => e.target === node.id);
+    if (!incoming && input.nodes.length > 1) {
+      issues.push({
+        code: 'output_no_upstream',
+        severity: 'warning',
+        nodeId: node.id,
+        message: 'Output node has no upstream connection.',
+      });
+    }
+  }
+
   return issues;
 }
