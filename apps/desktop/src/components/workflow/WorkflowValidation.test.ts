@@ -101,6 +101,31 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'missing_discord_content')).toBe(false);
   });
 
+  it('warns about isolated nodes when graph has multiple nodes', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+        { id: 'x', type: 'agent_coding', label: 'Lonely', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'isolated_node' && i.nodeId === 'x')).toBe(true);
+  });
+
+  it('warns when output has no upstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'output_no_upstream' && i.nodeId === 'o')).toBe(true);
+  });
+
   it('passes with valid trigger-output graph', () => {
     const issues = validateWorkflowDraft({
       nodes: [
