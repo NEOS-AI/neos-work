@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterBySearchText, filterByStatus, filterWorkflowList } from './workflow-list-filter.js';
+import { filterByKind, filterBySearchText, filterByStatus, filterWorkflowList } from './workflow-list-filter.js';
 
 const items = [
   { name: 'Stock Bot', description: 'prices', domain: 'finance' },
@@ -65,6 +65,21 @@ describe('filterBySearchText case-insensitivity', () => {
     const items = [{ name: 'DesignKit', description: 'OD Atoms' }];
     expect(filterBySearchText(items, 'design')).toHaveLength(1);
     expect(filterBySearchText(items, 'OD ATOMS')).toHaveLength(1);
+  });
+});
+
+describe('filterByKind', () => {
+  it('filters media-like items by kind chip', () => {
+    const media = [
+      { filename: 'a.png', kind: 'image' },
+      { filename: 'b.mp3', kind: 'audio' },
+      { filename: 'c.bin', kind: 'other' },
+    ];
+    expect(filterByKind(media, 'image')).toEqual([media[0]]);
+    expect(filterByKind(media, 'audio')).toHaveLength(1);
+    expect(filterByKind(media, 'all')).toHaveLength(3);
+    expect(filterByKind(media, undefined)).toHaveLength(3);
+    expect(filterByKind(media, 'video')).toEqual([]);
   });
 });
 
