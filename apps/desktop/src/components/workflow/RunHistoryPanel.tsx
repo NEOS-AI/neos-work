@@ -4,9 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
 import { formatDuration } from '../../lib/format-duration.js';
+import { formatListCount } from '../../lib/list-count.js';
+import { filterRunsByStatus, type RunStatusFilter } from '../../lib/run-history-filter.js';
 import { RunDetailPanel } from './RunDetailPanel.js';
 
-type RunFilter = 'all' | 'running' | 'completed' | 'failed' | 'cancelled';
+type RunFilter = RunStatusFilter;
 
 const PAGE_SIZE = 20;
 
@@ -43,7 +45,7 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
     };
   }, [client, props.workflowId, props.refreshKey, offset]);
 
-  const filteredRuns = runs.filter((r) => filter === 'all' || r.status === filter);
+  const filteredRuns = filterRunsByStatus(runs, filter);
 
   const FILTERS: { key: RunFilter; label: string }[] = [
     { key: 'all', label: t('run.filterAll', 'All') },
@@ -131,7 +133,16 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
         </button>
       </div>
 
+      <div className="border-b px-2 pb-1 text-[10px]" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}>
+        {formatListCount(filteredRuns.length, runs.length)} shown
+      </div>
+
       <div className="space-y-2 overflow-y-auto p-3">
+        {filteredRuns.length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            No runs match the current filter.
+          </p>
+        ) : null}
         {filteredRuns.map((run) => {
           const nodeResults = run.nodeResults ?? {};
           const failedCount = Object.values(nodeResults).filter((value) => {

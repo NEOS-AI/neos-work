@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
-import type { Workflow } from '../lib/engine.js';
+import type { Routine, Workflow } from '../lib/engine.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
-import { pickRecentWorkflows } from '../lib/recent-workflows.js';
+import { pickRecentRoutines, pickRecentWorkflows } from '../lib/recent-workflows.js';
 
 interface DashboardStats {
   sessions: number | null;
@@ -36,6 +36,7 @@ export function Dashboard() {
     engineUptimeSec: null,
   });
   const [recentWorkflows, setRecentWorkflows] = useState<Workflow[]>([]);
+  const [recentRoutines, setRecentRoutines] = useState<Routine[]>([]);
 
   useEffect(() => {
     if (!client) return;
@@ -69,6 +70,8 @@ export function Dashboard() {
         engineUptimeSec: health?.status === 'ok' ? (health.uptime ?? null) : null,
       });
       setRecentWorkflows(pickRecentWorkflows(wfList, 5));
+      const routineList = routines?.ok && routines.data ? routines.data : [];
+      setRecentRoutines(pickRecentRoutines(routineList, 5));
     })();
 
     return () => {
@@ -174,6 +177,46 @@ export function Dashboard() {
                 </div>
                 <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
                   {new Date(wf.updatedAt).toLocaleDateString()}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent routines */}
+      {recentRoutines.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Recent routines
+            </h2>
+            <Link to="/routines" className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              View all
+            </Link>
+          </div>
+          <div className="flex flex-col gap-2">
+            {recentRoutines.map((r) => (
+              <Link
+                key={r.id}
+                to="/routines"
+                className="flex items-center justify-between rounded-xl border px-4 py-3 transition-opacity hover:opacity-90"
+                style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {r.name}
+                  </p>
+                  <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                    {r.schedule}
+                    {' · '}
+                    {r.enabled ? 'enabled' : 'disabled'}
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {r.nextRunAt
+                    ? `next ${new Date(r.nextRunAt).toLocaleString()}`
+                    : new Date(r.updatedAt).toLocaleDateString()}
                 </span>
               </Link>
             ))}

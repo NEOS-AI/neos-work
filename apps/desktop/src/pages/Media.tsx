@@ -4,6 +4,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import type { MediaFileInfo } from '../lib/engine.js';
 import { filterByKind, filterByTextMatch } from '../lib/workflow-list-filter.js';
 import { formatBytes } from '../lib/format-bytes.js';
+import { formatListCount } from '../lib/list-count.js';
 
 export function Media() {
   const { client } = useEngine();
@@ -128,7 +129,7 @@ export function Media() {
             </button>
           ))}
           <span className="self-center text-xs" style={{ color: 'var(--text-muted)' }}>
-            {visibleFiles.length}/{files.length}
+            {formatListCount(visibleFiles.length, files.length)}
           </span>
         </div>
       )}

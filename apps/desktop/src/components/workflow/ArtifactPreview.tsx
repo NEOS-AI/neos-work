@@ -37,6 +37,18 @@ export function isMarkdownContent(contentType: string | undefined, name?: string
   return !!name && /\.(md|markdown)$/i.test(name);
 }
 
+/** Trigger a browser download of text content (exported for unit tests). */
+export function downloadTextFile(filename: string, content: string, mimeType = 'text/plain'): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'artifact.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+
 export function ArtifactPreview({
   workflowId,
   runId,
@@ -64,6 +76,15 @@ export function ArtifactPreview({
       setStatusMsg('Copy failed');
       setTimeout(() => setStatusMsg(null), 2000);
     }
+  };
+
+  const handleDownloadContent = () => {
+    if (!selectedContent || !selectedId) return;
+    const art = artifacts.find((a) => a.id === selectedId);
+    const mime = art?.contentType || 'text/plain';
+    downloadTextFile(art?.name || 'artifact.txt', selectedContent, mime);
+    setStatusMsg('Downloaded');
+    setTimeout(() => setStatusMsg(null), 1500);
   };
 
   const loadList = () => {
@@ -240,6 +261,15 @@ export function ArtifactPreview({
           title="Copy artifact content"
         >
           {copied ? 'Copied' : 'Copy'}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDownloadContent()}
+          disabled={!selectedContent}
+          className="shrink-0 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 disabled:opacity-40"
+          title="Download artifact"
+        >
+          ⬇
         </button>
         <button
           type="button"

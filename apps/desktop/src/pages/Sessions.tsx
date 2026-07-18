@@ -21,6 +21,7 @@ import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/s
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentStep, MessageData, SessionData } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 
 interface ToolStep {
   toolName: string;
@@ -104,14 +105,19 @@ export function Sessions() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   const q = sessionSearch.trim().toLowerCase();
-  const visibleSessions = q
-    ? sessions.filter((s) => {
-        const title = (s.title || 'New session').toLowerCase();
-        const model = (s.model || '').toLowerCase();
-        const provider = (s.provider || '').toLowerCase();
-        return title.includes(q) || model.includes(q) || provider.includes(q);
-      })
-    : sessions;
+  const visibleSessions = (() => {
+    const filtered = q
+      ? sessions.filter((s) => {
+          const title = (s.title || 'New session').toLowerCase();
+          const model = (s.model || '').toLowerCase();
+          const provider = (s.provider || '').toLowerCase();
+          return title.includes(q) || model.includes(q) || provider.includes(q);
+        })
+      : sessions;
+    return [...filtered].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    );
+  })();
 
   return (
     <div className="-m-6 flex h-[calc(100%+3rem)]">
@@ -131,7 +137,7 @@ export function Sessions() {
         </div>
 
         {sessions.length > 0 && (
-          <div className="px-2 pb-2">
+          <div className="space-y-1 px-2 pb-2">
             <input
               type="search"
               value={sessionSearch}
@@ -144,6 +150,9 @@ export function Sessions() {
                 color: 'var(--text-primary)',
               }}
             />
+            <p className="px-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              {formatListCount(visibleSessions.length, sessions.length)}
+            </p>
           </div>
         )}
 
