@@ -277,5 +277,31 @@ describe('runRoutine', () => {
     const runId = await runRoutine('r1');
     expect(runId).toBeNull();
     expect(mocks.completeRoutineRun).toHaveBeenCalledWith('rr-1', 'failed', 'engine down');
+    // Workflow run must not stay stuck as "running"
+    const failedSave = mocks.saveRun.mock.calls
+      .map((c) => c[0] as { status: string; error?: string; startedAt: string })
+      .find((r) => r.status === 'failed');
+    expect(failedSave).toBeTruthy();
+    expect(failedSave!.error).toBe('engine down');
+    expect(failedSave!.startedAt).toBeTruthy();
+  });
+
+  it('preserves startedAt between running and completed saves', async () => {
+    mocks.getRoutine.mockReturnValue({
+      id: 'r1',
+      enabled: true,
+      workflowId: 'wf1',
+      inputs: {},
+    });
+    mocks.getWorkflow.mockReturnValue({ id: 'wf1', nodes: [], edges: [] });
+
+    await runRoutine('r1');
+    const saves = mocks.saveRun.mock.calls.map(
+      (c) => c[0] as { status: string; startedAt: string },
+    );
+    const running = saves.find((s) => s.status === 'running');
+    const completed = saves.find((s) => s.status === 'completed');
+    expect(running?.startedAt).toBeTruthy();
+    expect(completed?.startedAt).toBe(running!.startedAt);
   });
 });

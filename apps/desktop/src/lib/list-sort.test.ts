@@ -19,4 +19,12 @@ describe('sortByDateDesc', () => {
     ];
     expect(sortByDateDesc(items, (i) => i.createdAt).map((i) => i.id)).toEqual(['2', '3', '1']);
   });
+
+  it('sorts SQLite UTC timestamps correctly', () => {
+    const items = [
+      { id: 'old', createdAt: '2020-01-01 00:00:00' },
+      { id: 'new', createdAt: '2024-06-01 12:00:00' },
+    ];
+    expect(sortByDateDesc(items, (i) => i.createdAt).map((i) => i.id)).toEqual(['new', 'old']);
+  });
 });
