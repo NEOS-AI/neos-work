@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { SkillData } from '../lib/engine.js';
-import { filterBySearchText } from '../lib/workflow-list-filter.js';
+import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Skills() {
   const { client } = useEngine();
@@ -12,6 +12,7 @@ export function Skills() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [search, setSearch] = useState('');
   const [tryPrompt, setTryPrompt] = useState<string | null>(null);
 
@@ -73,12 +74,13 @@ export function Skills() {
     return a.name.localeCompare(b.name);
   });
 
-  // Categories + search
+  // Categories + enabled + search
   const categories = ['all', ...Array.from(new Set(skills.map((s) => s.category).filter(Boolean)))];
   const filtered = useMemo(() => {
     const byCat = categoryFilter === 'all' ? sorted : sorted.filter((s) => s.category === categoryFilter);
-    return filterBySearchText(byCat, search);
-  }, [sorted, categoryFilter, search]);
+    const byEnabled = filterByEnabled(byCat, enabledFilter);
+    return filterBySearchText(byEnabled, search);
+  }, [sorted, categoryFilter, enabledFilter, search]);
 
   const enabledCount = skills.filter((s) => s.enabled).length;
 
@@ -148,7 +150,29 @@ export function Skills() {
           </span>
         </div>
 
-        {/* Category filter */}
+        {/* Enabled + category filters */}
+        {skills.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1">
+            {([
+              { id: 'all', label: 'All' },
+              { id: 'enabled', label: 'ON' },
+              { id: 'disabled', label: 'OFF' },
+            ] as const).map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => setEnabledFilter(chip.id)}
+                className="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: enabledFilter === chip.id ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                  color: enabledFilter === chip.id ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
         {categories.length > 1 && (
           <div className="mb-3 flex flex-wrap gap-1">
             {categories.map((cat) => (
@@ -169,7 +193,11 @@ export function Skills() {
 
         {filtered.length === 0 ? (
           <div className="rounded-lg border px-4 py-6 text-center" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No skills installed. Click Scan to discover skills.</p>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              {skills.length === 0
+                ? 'No skills installed. Click Scan to discover skills.'
+                : 'No skills match the current filters.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">

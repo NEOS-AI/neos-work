@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
+import { formatDurationMs, serializeNodeOutput } from '../../lib/format-duration.js';
 
 interface NodeRunResult {
   nodeId: string;
@@ -33,6 +34,7 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
   const [run, setRun] = useState<WorkflowRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client) return;
@@ -53,6 +55,16 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
   const nodeResults: NodeRunResult[] = run
     ? Object.values(run.nodeResults as Record<string, NodeRunResult>)
     : [];
+
+  const handleCopyOutput = async (nodeId: string, output: unknown) => {
+    try {
+      await navigator.clipboard.writeText(serializeNodeOutput(output));
+      setCopiedNodeId(nodeId);
+      setTimeout(() => setCopiedNodeId((cur) => (cur === nodeId ? null : cur)), 1500);
+    } catch {
+      // clipboard may be unavailable
+    }
+  };
 
   return (
     <div
@@ -95,10 +107,25 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
             <span className="font-mono" style={{ color: 'var(--text-primary)' }}>
               {nodeLabelMap?.[nr.nodeId] ?? nr.nodeId}
             </span>
-            {nr.status === 'completed' && nr.durationMs !== undefined && (
+            {nr.durationMs !== undefined && (
               <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                {nr.durationMs < 1000 ? `${nr.durationMs}ms` : `${(nr.durationMs / 1000).toFixed(2)}s`}
+                {formatDurationMs(nr.durationMs)}
               </span>
+            )}
+            {nr.output !== undefined && (
+              <button
+                type="button"
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-muted)',
+                  marginLeft: nr.durationMs === undefined ? 'auto' : undefined,
+                }}
+                title="Copy node output"
+                onClick={() => void handleCopyOutput(nr.nodeId, nr.output)}
+              >
+                {copiedNodeId === nr.nodeId ? 'Copied' : 'Copy'}
+              </button>
             )}
           </div>
 
@@ -118,9 +145,7 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
                 wordBreak: 'break-all',
               }}
             >
-              {typeof nr.output === 'string'
-                ? nr.output
-                : JSON.stringify(nr.output, null, 2)}
+              {serializeNodeOutput(nr.output)}
             </pre>
           )}
         </div>

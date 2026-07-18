@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MediaFileInfo } from '../lib/engine.js';
-import { filterByKind } from '../lib/workflow-list-filter.js';
+import { filterByKind, filterByTextMatch } from '../lib/workflow-list-filter.js';
 import { formatBytes } from '../lib/format-bytes.js';
 
 export function Media() {
@@ -13,11 +13,12 @@ export function Media() {
   const [selected, setSelected] = useState<MediaFileInfo | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<'all' | 'image' | 'audio' | 'other'>('all');
+  const [search, setSearch] = useState('');
 
-  const visibleFiles = useMemo(
-    () => filterByKind(files, kindFilter),
-    [files, kindFilter],
-  );
+  const visibleFiles = useMemo(() => {
+    const byKind = filterByKind(files, kindFilter);
+    return filterByTextMatch(byKind, search, (f) => `${f.filename} ${f.kind}`);
+  }, [files, kindFilter, search]);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -81,14 +82,31 @@ export function Media() {
             FileViewer for Media node outputs stored under ~/.neos-work/media
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-lg border px-3 py-1.5 text-sm"
-          style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
-        >
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {files.length > 0 && (
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search files…"
+              className="rounded-lg border px-3 py-1.5 text-sm"
+              style={{
+                borderColor: 'var(--border-secondary)',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                minWidth: 160,
+              }}
+            />
+          )}
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-lg border px-3 py-1.5 text-sm"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
@@ -125,7 +143,7 @@ export function Media() {
           No media files yet. Run a workflow with a Media node (image/audio).
         </div>
       ) : visibleFiles.length === 0 ? (
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No files match this kind filter.</p>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No files match the current filters.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="md:col-span-1 space-y-2 max-h-[70vh] overflow-y-auto">

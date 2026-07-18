@@ -133,6 +133,21 @@ export function validateWorkflowDraft(input: {
       });
     }
 
+    if (node.type === 'discord_message') {
+      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasStatic =
+        (typeof config.content === 'string' && config.content.trim().length > 0)
+        || (typeof config.text === 'string' && config.text.trim().length > 0);
+      if (!hasIncoming && !hasStatic) {
+        issues.push({
+          code: 'missing_discord_content',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Discord node has no content/text or upstream input.',
+        });
+      }
+    }
+
     if (node.type === 'media') {
       const hasPrompt = typeof config.prompt === 'string' && config.prompt.trim().length > 0;
       const hasIncoming = input.edges.some((edge) => edge.target === node.id);

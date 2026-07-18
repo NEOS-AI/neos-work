@@ -1,11 +1,26 @@
+/** Format a millisecond duration (node run results). */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(2)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
 /** Format a time range as a short human duration (run history, etc.). */
 export function formatDuration(startedAt: string, completedAt?: string): string {
   if (!completedAt) return '—';
   const start = new Date(startedAt).getTime();
   const end = new Date(completedAt).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '—';
-  const ms = end - start;
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+  return formatDurationMs(end - start);
+}
+
+/** Serialize node output for clipboard / export. */
+export function serializeNodeOutput(output: unknown): string {
+  if (typeof output === 'string') return output;
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return String(output);
+  }
 }

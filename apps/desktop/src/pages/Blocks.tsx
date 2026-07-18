@@ -374,6 +374,7 @@ export function Blocks() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; block?: WorkflowBlock } | null>(null);
   const [filter, setFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'builtin' | 'custom'>('all');
   const [search, setSearch] = useState('');
 
   const load = async () => {
@@ -405,8 +406,14 @@ export function Blocks() {
   const domains = ['all', 'finance', 'coding', 'general'];
   const filtered = useMemo(() => {
     const byDomain = filter === 'all' ? blockList : blockList.filter((b) => b.domain === filter);
-    return filterBySearchText(byDomain, search);
-  }, [blockList, filter, search]);
+    const bySource =
+      sourceFilter === 'all'
+        ? byDomain
+        : sourceFilter === 'builtin'
+          ? byDomain.filter((b) => b.isBuiltIn)
+          : byDomain.filter((b) => !b.isBuiltIn);
+    return filterBySearchText(bySource, search);
+  }, [blockList, filter, sourceFilter, search]);
   const builtIn = filtered.filter((b) => b.isBuiltIn);
   const custom = filtered.filter((b) => !b.isBuiltIn);
 
@@ -442,6 +449,26 @@ export function Blocks() {
                 }}
               >
                 {d}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
+            {([
+              { id: 'all', label: 'All' },
+              { id: 'builtin', label: 'Built-in' },
+              { id: 'custom', label: 'Custom' },
+            ] as const).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSourceFilter(s.id)}
+                className="rounded-md px-3 py-1 text-xs transition-colors"
+                style={{
+                  backgroundColor: sourceFilter === s.id ? 'var(--border-secondary)' : undefined,
+                  color: sourceFilter === s.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}
+              >
+                {s.label}
               </button>
             ))}
           </div>
