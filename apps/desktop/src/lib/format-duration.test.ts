@@ -29,6 +29,10 @@ describe('formatDuration', () => {
     expect(formatDuration(start, '2020-01-01T00:00:02.500Z')).toBe('2.50s');
     expect(formatDuration(start, '2020-01-01T00:01:05.000Z')).toBe('1m 5s');
   });
+
+  it('parses SQLite UTC datetime strings', () => {
+    expect(formatDuration('2020-01-01 00:00:00', '2020-01-01 00:00:30')).toBe('30.00s');
+  });
 });
 
 describe('serializeNodeOutput', () => {

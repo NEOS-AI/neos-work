@@ -27,4 +27,11 @@ describe('tauri helpers outside Tauri', () => {
     expect(await getAuthToken()).toBeNull();
     expect(await getEnginePort()).toBeNull();
   });
+
+  it('startEngine returns false when Tauri flag set but invoke unavailable', async () => {
+    // @ts-expect-error stub
+    window.__TAURI_INTERNALS__ = {};
+    // Dynamic import of @tauri-apps/api/core will fail / throw → false
+    expect(await startEngine()).toBe(false);
+  });
 });

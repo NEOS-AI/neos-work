@@ -192,9 +192,17 @@ describe('EngineClient', () => {
       }
       return document.createElement(tag);
     });
+    // jsdom may lack blob URL helpers — install test doubles
     const createObjectURL = vi.fn(() => 'blob:mock');
     const revokeObjectURL = vi.fn();
-    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    const urlProto = URL as unknown as {
+      createObjectURL?: typeof createObjectURL;
+      revokeObjectURL?: typeof revokeObjectURL;
+    };
+    const prevCreate = urlProto.createObjectURL;
+    const prevRevoke = urlProto.revokeObjectURL;
+    urlProto.createObjectURL = createObjectURL;
+    urlProto.revokeObjectURL = revokeObjectURL;
 
     await client.exportWorkflow('w1', 'My Workflow!');
     expect(click).toHaveBeenCalled();
@@ -202,15 +210,20 @@ describe('EngineClient', () => {
     expect(revokeObjectURL).toHaveBeenCalled();
 
     createElement.mockRestore();
+    urlProto.createObjectURL = prevCreate;
+    urlProto.revokeObjectURL = prevRevoke;
   });
 
   it('exportWorkflow no-ops when response not ok', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
     const createObjectURL = vi.fn();
-    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+    const urlProto = URL as unknown as { createObjectURL?: typeof createObjectURL };
+    const prevCreate = urlProto.createObjectURL;
+    urlProto.createObjectURL = createObjectURL;
     await client.exportWorkflow('w1', 'x');
     expect(createObjectURL).not.toHaveBeenCalled();
+    urlProto.createObjectURL = prevCreate;
   });
 
   it('importWorkflowZip strips Content-Type for FormData', async () => {
@@ -393,20 +406,27 @@ describe('EngineClient', () => {
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
   });
 
-  it('webhook secret and test fire with HMAC', async () => {
+  it('webhook secret, rate limit, and regenerate endpoints', async () => {
     const client = new EngineClient('http://engine.test');
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { secret: 'abc' } }))
-      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { secret: 'abc' } }))
-      .mockResolvedValueOnce(
-        new Response(null, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
-      );
+    fetchMock.mockImplementation(async () =>
+      jsonResponse({ ok: true, data: { secret: 'abc', limit: 60, remaining: 59, resetAt: 0, windowMs: 60_000 } }),
+    );
 
     await client.getWebhookSecret('w1');
-    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/webhook\/w1\/secret/);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
+      'http://engine.test/api/webhook/w1/secret',
+    );
 
     await client.getWebhookRateLimit('w1');
-    // second call might be regenerate or rate-limit depending on mock order - reset
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
+      'http://engine.test/api/webhook/w1/rate-limit',
+    );
+
+    await client.regenerateWebhookSecret('w1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
+      'http://engine.test/api/webhook/w1/regenerate',
+    );
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
   });
 
   it('testWebhookFire signs body and posts without bearer', async () => {

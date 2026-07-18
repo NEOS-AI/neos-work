@@ -1,0 +1,136 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { PipelineRunner } from './PipelineRunner.js';
+import type { Plugin } from '../../lib/engine.js';
+
+const runPlugin = vi.fn();
+const resumePlugin = vi.fn();
+const stop = vi.fn();
+
+vi.mock('../../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client: {
+      runPlugin,
+      resumePlugin,
+    },
+  }),
+}));
+
+const plugin: Plugin = {
+  id: 'plug-1',
+  name: 'Demo Plugin',
+  version: '1.0.0',
+  description: 'A test plugin',
+  pipeline: [
+    { id: 'discovery', name: 'Discovery', kind: 'discovery' },
+    { id: 'plan', name: 'Plan', kind: 'plan' },
+  ],
+  inputFields: [
+    { key: 'goal', label: 'Goal', type: 'text', placeholder: 'what to do' },
+  ],
+};
+
+describe('PipelineRunner', () => {
+  beforeEach(() => {
+    runPlugin.mockReset();
+    resumePlugin.mockReset();
+    stop.mockReset();
+    runPlugin.mockReturnValue({
+      stop,
+      runIdPromise: Promise.resolve('run-xyz'),
+    });
+    resumePlugin.mockResolvedValue({ ok: true });
+  });
+
+  it('renders plugin name and input fields before run', () => {
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    expect(screen.getByText('Demo Plugin')).toBeInTheDocument();
+    expect(screen.getByText('Goal')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('what to do')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /run pipeline/i })).toBeInTheDocument();
+  });
+
+  it('Escape calls onClose', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<PipelineRunner plugin={plugin} onClose={onClose} />);
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('starts pipeline and shows stages from events', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-1') };
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.type(screen.getByPlaceholderText('what to do'), 'ship it');
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+
+    expect(runPlugin).toHaveBeenCalledWith(
+      'plug-1',
+      expect.objectContaining({ goal: 'ship it' }),
+      expect.any(Function),
+    );
+
+    // stages appear after events
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-1' });
+      onEvent?.({ type: 'stage.started', stageId: 'discovery', stageName: 'Discovery' });
+      onEvent?.({ type: 'stage.completed', stageId: 'discovery', output: 'found things' });
+      onEvent?.({ type: 'pipeline.completed' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Pipeline completed successfully.')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Discovery')).toBeInTheDocument();
+    expect(screen.getByText(/found things/)).toBeInTheDocument();
+  });
+
+  it('shows failure message on pipeline.failed', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-2') };
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'pipeline.failed', error: 'boom' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Error: boom/)).toBeInTheDocument();
+    });
+  });
+
+  it('Stop button calls stop and clears run UI', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-3') };
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'stage.started', stageId: 'discovery', stageName: 'Discovery' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /stop/i }));
+    expect(stop).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /run pipeline/i })).toBeInTheDocument();
+  });
+});
+

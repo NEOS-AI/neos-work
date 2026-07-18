@@ -126,8 +126,8 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'duplicate_edge_id' && i.edgeId === 'same')).toBe(true);
   });
 
-  it('detects missing_edge_id when edge id is empty', () => {
-    const issues = validateWorkflowDraft({
+  it('detects missing_edge_id when edge id is empty or whitespace', () => {
+    const empty = validateWorkflowDraft({
       nodes: [
         { id: 'a', type: 'trigger', label: 'A', config: {} },
         { id: 'b', type: 'output', label: 'B', config: {} },
@@ -135,8 +135,19 @@ describe('validateWorkflowDraft', () => {
       edges: [{ id: '', source: 'a', target: 'b' }],
       blocks: emptyBlocks,
     });
-    expect(issues.some((i) => i.code === 'missing_edge_id')).toBe(true);
+    expect(empty.some((i) => i.code === 'missing_edge_id')).toBe(true);
+
+    const blank = validateWorkflowDraft({
+      nodes: [
+        { id: 'a', type: 'trigger', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [{ id: '   ', source: 'a', target: 'b' }],
+      blocks: emptyBlocks,
+    });
+    expect(blank.some((i) => i.code === 'missing_edge_id')).toBe(true);
   });
+
 
   it('detects cycle in graph', () => {
     const issues = validateWorkflowDraft({
