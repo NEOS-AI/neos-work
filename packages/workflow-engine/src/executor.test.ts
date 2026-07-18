@@ -173,3 +173,39 @@ describe('executeWorkflow', () => {
     expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-or-gate' });
   });
 });
+
+describe('executeWorkflow media/deploy nodes', () => {
+  it('fails deploy node without content', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-deploy-empty',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'deploy', type: 'deploy', label: 'Deploy', position: { x: 1, y: 0 }, config: { provider: 'vercel' } },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'deploy' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    expect(events.some((e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'deploy')).toBe(true);
+  });
+
+  it('fails media image node without prompt', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-media-empty',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'media', type: 'media', label: 'Media', position: { x: 1, y: 0 }, config: { mediaType: 'image' } },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'media' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    expect(events.some((e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'media')).toBe(true);
+  });
+});

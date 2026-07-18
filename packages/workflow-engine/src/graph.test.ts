@@ -26,4 +26,38 @@ describe('topologicalSort', () => {
 
     expect(() => topologicalSort(nodes, edges)).toThrow('Workflow contains a cycle');
   });
+
+  it('handles diamond DAG (fan-out / fan-in)', () => {
+    const diamondNodes: WorkflowNode[] = [
+      { id: 'a', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: 'b', type: 'output', label: 'B', position: { x: 1, y: 0 }, config: {} },
+      { id: 'c', type: 'output', label: 'C', position: { x: 1, y: 1 }, config: {} },
+      { id: 'd', type: 'output', label: 'D', position: { x: 2, y: 0 }, config: {} },
+    ];
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'a', target: 'c' },
+      { id: 'e3', source: 'b', target: 'd' },
+      { id: 'e4', source: 'c', target: 'd' },
+    ];
+    const order = topologicalSort(diamondNodes, edges).map((n) => n.id);
+    expect(order.indexOf('a')).toBeLessThan(order.indexOf('b'));
+    expect(order.indexOf('a')).toBeLessThan(order.indexOf('c'));
+    expect(order.indexOf('b')).toBeLessThan(order.indexOf('d'));
+    expect(order.indexOf('c')).toBeLessThan(order.indexOf('d'));
+    expect(order).toHaveLength(4);
+  });
+
+  it('returns empty array for empty graph', () => {
+    expect(topologicalSort([], [])).toEqual([]);
+  });
+
+  it('keeps isolated nodes (no edges)', () => {
+    const isolated: WorkflowNode[] = [
+      { id: 'x', type: 'trigger', label: 'X', position: { x: 0, y: 0 }, config: {} },
+      { id: 'y', type: 'output', label: 'Y', position: { x: 1, y: 0 }, config: {} },
+    ];
+    const order = topologicalSort(isolated, []).map((n) => n.id);
+    expect(order.sort()).toEqual(['x', 'y']);
+  });
 });

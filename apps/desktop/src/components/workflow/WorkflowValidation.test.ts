@@ -98,3 +98,40 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'no_output')).toBe(false);
   });
 });
+
+describe('validateWorkflowDraft happy paths', () => {
+  it('accepts a minimal valid trigger → output graph', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: emptyBlocks,
+    });
+    const errors = issues.filter((i) => i.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+
+  it('accepts block with required params filled', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'b',
+          type: 'block',
+          label: 'Lookup',
+          config: { blockId: 'blk1', params: { url: 'https://example.com' } },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'b' },
+        { id: 'e2', source: 'b', target: 'o' },
+      ],
+      blocks: [{ id: 'blk1', paramDefs: [{ key: 'url', type: 'string', label: 'URL' }] }],
+    });
+    expect(issues.some((i) => i.code === 'missing_required_block_param')).toBe(false);
+    expect(issues.some((i) => i.code === 'missing_block_id')).toBe(false);
+  });
+});
