@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { SkillData } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Skills() {
@@ -143,11 +144,18 @@ export function Skills() {
 
       {/* Installed skills */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Installed Skills</h2>
-          <span className="rounded-full px-2 py-0.5 text-xs" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
-            {enabledCount}/{skills.length}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-full px-2 py-0.5 text-xs" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }} title="Enabled / total">
+              {enabledCount}/{skills.length} on
+            </span>
+            {skills.length > 0 && (
+              <span className="rounded-full px-2 py-0.5 text-xs" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }} title="Visible / total">
+                {formatListCount(filtered.length, skills.length)}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Enabled + category filters */}

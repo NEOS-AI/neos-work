@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentHarness } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
@@ -47,7 +48,8 @@ export function Harnesses() {
   const visible = useMemo(() => {
     const byDomain =
       domainFilter === 'all' ? harnesses : harnesses.filter((h) => h.domain === domainFilter);
-    return filterBySearchText(byDomain, search);
+    const searched = filterBySearchText(byDomain, search);
+    return [...searched].sort((a, b) => a.name.localeCompare(b.name));
   }, [harnesses, domainFilter, search]);
 
   if (loading) {
@@ -79,6 +81,11 @@ export function Harnesses() {
               minWidth: 160,
             }}
           />
+          {harnesses.length > 0 && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {formatListCount(visible.length, harnesses.length)}
+            </span>
+          )}
           <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
             {domains.map((d) => (
               <button

@@ -1,6 +1,3 @@
-import { resolve } from 'node:path';
-import { homedir } from 'node:os';
-
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 
@@ -28,14 +25,8 @@ import * as agentStepsDb from '../db/agent-steps.js';
 import * as memoryDb from '../db/memory.js';
 import * as settingsDb from '../db/settings.js';
 import { safeError } from '../lib/errors.js';
+import { validateWorkspacePath } from '../lib/path-safety.js';
 import { getDb } from '../db/schema.js';
-
-/** Validate that a workspace path is within the user's home directory. */
-function validateWorkspacePath(path: string): boolean {
-  const resolved = resolve(path);
-  const home = homedir();
-  return resolved.startsWith(home + '/') || resolved === home;
-}
 
 const session = new Hono();
 

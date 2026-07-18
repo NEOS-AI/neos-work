@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Plugin } from '../lib/engine.js';
 import { PipelineRunner } from '../components/workflow/PipelineRunner.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Plugins() {
@@ -29,19 +30,24 @@ export function Plugins() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>Plugins</h1>
         {plugins.length > 0 && (
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search plugins…"
-            className="rounded-lg border px-3 py-1.5 text-sm"
-            style={{
-              backgroundColor: 'var(--bg-secondary)',
-              borderColor: 'var(--border-primary)',
-              color: 'var(--text-primary)',
-              minWidth: 200,
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search plugins…"
+              className="rounded-lg border px-3 py-1.5 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                minWidth: 200,
+              }}
+            />
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {formatListCount(filtered.length, plugins.length)}
+            </span>
+          </div>
         )}
       </div>
 

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Routine, RoutineRun, Workflow } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Routines() {
@@ -174,13 +175,20 @@ export function Routines() {
           <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
             Routines
           </h2>
-          <button
-            onClick={() => setCreateOpen(true)}
-            className="rounded px-2 py-1 text-xs text-white"
-            style={{ backgroundColor: '#10b981' }}
-          >
-            + New
-          </button>
+          <div className="flex items-center gap-2">
+            {routines.length > 0 && (
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {formatListCount(visibleRoutines.length, routines.length)}
+              </span>
+            )}
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="rounded px-2 py-1 text-xs text-white"
+              style={{ backgroundColor: '#10b981' }}
+            >
+              + New
+            </button>
+          </div>
         </div>
         <div className="flex flex-col gap-2 border-b p-3" style={{ borderColor: 'var(--border-primary)' }}>
           <input

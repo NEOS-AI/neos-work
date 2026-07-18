@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MemoryItem, MemoryType, CreateMemoryInput } from '../lib/engine.js';
+import { formatListCount } from '../lib/list-count.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const TYPE_COLORS: Record<MemoryType, string> = {
@@ -205,6 +206,9 @@ export default function Memory() {
                   minWidth: 160,
                 }}
               />
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {formatListCount(filteredItems.length, items.length)}
+              </span>
               {([
                 { id: 'all', label: 'All' },
                 { id: 'enabled', label: 'ON' },
