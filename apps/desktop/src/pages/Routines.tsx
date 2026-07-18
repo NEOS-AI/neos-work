@@ -17,6 +17,7 @@ export function Routines() {
   const [formName, setFormName] = useState('');
   const [formWorkflowId, setFormWorkflowId] = useState('');
   const [formSchedule, setFormSchedule] = useState('0 9 * * *');
+  const [formTimezone, setFormTimezone] = useState('UTC');
   const [formEnabled, setFormEnabled] = useState(true);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -48,6 +49,7 @@ export function Routines() {
       name: formName.trim(),
       workflowId: formWorkflowId,
       schedule: formSchedule.trim(),
+      timezone: formTimezone.trim() || 'UTC',
       enabled: formEnabled,
     });
     setSubmitting(false);
@@ -56,6 +58,7 @@ export function Routines() {
     setFormName('');
     setFormWorkflowId('');
     setFormSchedule('0 9 * * *');
+    setFormTimezone('UTC');
     setFormEnabled(true);
     await load();
   };
@@ -103,9 +106,20 @@ export function Routines() {
 
   const schedulePresets = [
     { label: 'Every hour', value: '0 * * * *' },
-    { label: 'Daily at 9 AM (UTC)', value: '0 9 * * *' },
+    { label: 'Daily at 9 AM', value: '0 9 * * *' },
     { label: 'Every Monday 9 AM', value: '0 9 * * 1' },
     { label: 'Every 15 minutes', value: '*/15 * * * *' },
+  ];
+
+  const timezonePresets = [
+    'UTC',
+    'America/New_York',
+    'America/Los_Angeles',
+    'Europe/London',
+    'Europe/Paris',
+    'Asia/Seoul',
+    'Asia/Tokyo',
+    'Australia/Sydney',
   ];
 
   const selectedRoutine = routines.find((r) => r.id === selectedId);
@@ -153,7 +167,7 @@ export function Routines() {
                   </span>
                 </div>
                 <div className="text-xs mt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {r.schedule}
+                  {r.schedule} · {r.timezone || 'UTC'}
                 </div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
                   {workflows.find((w) => w.id === r.workflowId)?.name ?? r.workflowId}
@@ -183,7 +197,7 @@ export function Routines() {
                   {selectedRoutine.name}
                 </h3>
                 <p className="text-sm mt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {selectedRoutine.schedule}
+                  {selectedRoutine.schedule} ({selectedRoutine.timezone || 'UTC'})
                 </p>
               </div>
               <div className="flex gap-2">
@@ -363,8 +377,39 @@ export function Routines() {
                   placeholder="0 9 * * *"
                 />
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  UTC timezone · minute hour day month weekday
+                  Cron fields: minute hour day month weekday · timezone selected below (DST-aware)
                 </p>
+              </div>
+
+              <div>
+                <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>
+                  Timezone (IANA, DST-aware)
+                </label>
+                <select
+                  className="w-full rounded px-3 py-1.5 text-sm border"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderColor: 'var(--border-primary)',
+                    color: 'var(--text-primary)',
+                  }}
+                  value={formTimezone}
+                  onChange={(e) => setFormTimezone(e.target.value)}
+                >
+                  {timezonePresets.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+                <input
+                  className="w-full rounded px-3 py-1.5 text-sm border font-mono mt-1"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderColor: 'var(--border-primary)',
+                    color: 'var(--text-primary)',
+                  }}
+                  value={formTimezone}
+                  onChange={(e) => setFormTimezone(e.target.value)}
+                  placeholder="Asia/Seoul"
+                />
               </div>
 
               <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>

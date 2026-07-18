@@ -8,6 +8,7 @@ export interface RoutineRow {
   name: string;
   workflow_id: string;
   schedule: string;
+  timezone: string | null;
   enabled: number;
   inputs_json: string;
   last_run_at: string | null;
@@ -20,6 +21,8 @@ export interface Routine {
   name: string;
   workflowId: string;
   schedule: string;
+  /** IANA timezone for cron evaluation (DST-aware via node-cron) */
+  timezone: string;
   enabled: boolean;
   inputs: Record<string, unknown>;
   lastRunAt?: string;
@@ -53,6 +56,7 @@ function rowToRoutine(row: RoutineRow): Routine {
     name: row.name,
     workflowId: row.workflow_id,
     schedule: row.schedule,
+    timezone: row.timezone || 'UTC',
     enabled: row.enabled === 1,
     inputs: JSON.parse(row.inputs_json || '{}') as Record<string, unknown>,
     lastRunAt: row.last_run_at ?? undefined,
@@ -89,20 +93,23 @@ export function createRoutine(input: {
   name: string;
   workflowId: string;
   schedule: string;
+  timezone?: string;
   enabled?: boolean;
   inputs?: Record<string, unknown>;
 }): Routine {
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const timezone = input.timezone?.trim() || 'UTC';
   db.prepare(`
-    INSERT INTO routine (id, name, workflow_id, schedule, enabled, inputs_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO routine (id, name, workflow_id, schedule, timezone, enabled, inputs_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.name,
     input.workflowId,
     input.schedule,
+    timezone,
     input.enabled !== false ? 1 : 0,
     JSON.stringify(input.inputs ?? {}),
     now,
@@ -113,7 +120,7 @@ export function createRoutine(input: {
 
 export function updateRoutine(
   id: string,
-  input: Partial<{ name: string; schedule: string; enabled: boolean; inputs: Record<string, unknown> }>,
+  input: Partial<{ name: string; schedule: string; timezone: string; enabled: boolean; inputs: Record<string, unknown> }>,
 ): Routine | null {
   const db = getDb();
   const existing = getRoutine(id);
@@ -122,11 +129,12 @@ export function updateRoutine(
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE routine
-    SET name = ?, schedule = ?, enabled = ?, inputs_json = ?, updated_at = ?
+    SET name = ?, schedule = ?, timezone = ?, enabled = ?, inputs_json = ?, updated_at = ?
     WHERE id = ?
   `).run(
     input.name ?? existing.name,
     input.schedule ?? existing.schedule,
+    input.timezone ?? existing.timezone,
     input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
     JSON.stringify(input.inputs ?? existing.inputs),
     now,

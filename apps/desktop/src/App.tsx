@@ -19,6 +19,7 @@ import { DesignSystemEditor } from './pages/DesignSystemEditor.js';
 import { Routines } from './pages/Routines.js';
 import { Plugins } from './pages/Plugins.js';
 import { Deployments } from './pages/Deployments.js';
+import { Media } from './pages/Media.js';
 
 export default function App() {
   return (
@@ -57,6 +58,7 @@ function AppRouter() {
           <Route path="routines" element={<Routines />} />
           <Route path="plugins" element={<Plugins />} />
           <Route path="deployments" element={<Deployments />} />
+          <Route path="media" element={<Media />} />
         </Route>
       </Routes>
     </BrowserRouter>

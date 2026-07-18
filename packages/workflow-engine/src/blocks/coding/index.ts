@@ -247,29 +247,62 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
+function codingMeta(
+  id: string,
+  name: string,
+  description: string,
+  paramDefs: import('@neos-work/shared').WorkflowBlock['paramDefs'],
+): import('@neos-work/shared').WorkflowBlock {
+  return {
+    id,
+    name,
+    domain: 'coding',
+    category: 'coding',
+    description,
+    isBuiltIn: true,
+    implementationType: 'native',
+    paramDefs,
+    inputDescription: 'Block params and upstream inputs',
+    outputDescription: 'Execution result',
+  };
+}
+
 export function registerCodingBlocks(): void {
-  registerNativeBlock({
-    blockId: 'code_eval',
-    execute: executeCodeEval,
-  });
+  registerNativeBlock(
+    { blockId: 'code_eval', execute: executeCodeEval },
+    codingMeta('code_eval', 'Code Eval', 'Run JavaScript in a sandboxed vm (5s timeout)', [
+      { key: 'code', label: 'Code', type: 'string', description: 'JS source to evaluate' },
+      { key: 'language', label: 'Language', type: 'string', default: 'js', options: ['js', 'ts', 'python'] },
+    ]),
+  );
 
-  registerNativeBlock({
-    blockId: 'file_read',
-    execute: executeFileRead,
-  });
+  registerNativeBlock(
+    { blockId: 'file_read', execute: executeFileRead },
+    codingMeta('file_read', 'File Read', 'Read a relative file under workspaces', [
+      { key: 'path', label: 'Path', type: 'string', description: 'Relative path' },
+    ]),
+  );
 
-  registerNativeBlock({
-    blockId: 'file_write',
-    execute: executeFileWrite,
-  });
+  registerNativeBlock(
+    { blockId: 'file_write', execute: executeFileWrite },
+    codingMeta('file_write', 'File Write', 'Write a file under workspaces only', [
+      { key: 'path', label: 'Path', type: 'string' },
+      { key: 'content', label: 'Content', type: 'string' },
+    ]),
+  );
 
-  registerNativeBlock({
-    blockId: 'git_diff',
-    execute: executeGitDiff,
-  });
+  registerNativeBlock(
+    { blockId: 'git_diff', execute: executeGitDiff },
+    codingMeta('git_diff', 'Git Diff', 'Run git diff HEAD in a repository', [
+      { key: 'repoPath', label: 'Repo path', type: 'string', description: 'Optional path within home' },
+    ]),
+  );
 
-  registerNativeBlock({
-    blockId: 'test_runner',
-    execute: executeTestRunner,
-  });
+  registerNativeBlock(
+    { blockId: 'test_runner', execute: executeTestRunner },
+    codingMeta('test_runner', 'Test Runner', 'Run allowlisted test commands (npm/pnpm/yarn/pytest/go/cargo)', [
+      { key: 'command', label: 'Command', type: 'string', description: 'e.g. pnpm test' },
+      { key: 'cwd', label: 'Working directory', type: 'string' },
+    ]),
+  );
 }

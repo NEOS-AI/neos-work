@@ -16,7 +16,8 @@
     "design-systems": "Design Systems",
     "routines": "Routines",
     "plugins": "Plugins",
-    "deployments": "Deployments"
+    "deployments": "Deployments",
+    "media": "Media"
   },
   "common": {
     "loading": "Loading...",

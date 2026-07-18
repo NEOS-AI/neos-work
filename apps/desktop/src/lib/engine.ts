@@ -102,11 +102,21 @@ export interface Routine {
   name: string;
   workflowId: string;
   schedule: string;
+  timezone: string;
   enabled: boolean;
   inputs: Record<string, unknown>;
   lastRunAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MediaFileInfo {
+  filename: string;
+  size: number;
+  kind: 'image' | 'audio' | 'other';
+  mimeType: string;
+  createdAt: string;
+  urlPath: string;
 }
 
 export interface RoutineRun {
@@ -645,6 +655,7 @@ export class EngineClient {
     name: string;
     workflowId: string;
     schedule: string;
+    timezone?: string;
     enabled?: boolean;
     inputs?: Record<string, unknown>;
   }): Promise<ApiResponse<Routine>> {
@@ -656,11 +667,39 @@ export class EngineClient {
     return res.json();
   }
 
-  async updateRoutine(id: string, input: Partial<{ name: string; schedule: string; enabled: boolean; inputs: Record<string, unknown> }>): Promise<ApiResponse<Routine>> {
+  async updateRoutine(id: string, input: Partial<{ name: string; schedule: string; timezone: string; enabled: boolean; inputs: Record<string, unknown> }>): Promise<ApiResponse<Routine>> {
     const res = await fetch(`${this.baseUrl}/api/routines/${id}`, {
       method: 'PUT',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
+  async listMediaFiles(limit = 100): Promise<ApiResponse<MediaFileInfo[]>> {
+    const res = await fetch(`${this.baseUrl}/api/media/files?limit=${limit}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  mediaFileUrl(filename: string): string {
+    return `${this.baseUrl}/api/media/file/${encodeURIComponent(filename)}`;
+  }
+
+  /** Authenticated fetch of a media file as Blob (for FileViewer). */
+  async fetchMediaBlob(filename: string): Promise<Blob> {
+    const res = await fetch(this.mediaFileUrl(filename), {
+      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+    });
+    if (!res.ok) throw new Error(`Failed to load media (${res.status})`);
+    return res.blob();
+  }
+
+  async refreshDeployment(id: string): Promise<ApiResponse<Deployment>> {
+    const res = await fetch(`${this.baseUrl}/api/deploy/${id}/refresh`, {
+      method: 'POST',
+      headers: this.getHeaders(),
     });
     return res.json();
   }

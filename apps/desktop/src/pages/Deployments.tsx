@@ -48,6 +48,41 @@ export function Deployments() {
     if (res.ok) setDeployments((prev) => prev.filter((d) => d.id !== id));
   };
 
+  const handleRefreshStatus = async (id: string) => {
+    if (!client) return;
+    const res = await client.refreshDeployment(id);
+    if (res.ok && res.data) {
+      setDeployments((prev) => prev.map((d) => (d.id === id ? res.data! : d)));
+    } else {
+      setError((res as { error?: string }).error ?? 'Status refresh failed');
+    }
+  };
+
+  // Auto-poll deploying/pending rows every 15s (stable interval; reads latest via functional updates)
+  useEffect(() => {
+    if (!client) return;
+    const t = setInterval(() => {
+      void (async () => {
+        setDeployments((current) => {
+          const active = current.filter(
+            (d) => (d.status === 'deploying' || d.status === 'pending') && d.deploymentId,
+          );
+          if (active.length === 0) return current;
+          // fire-and-forget refresh; apply results asynchronously
+          for (const d of active) {
+            void client.refreshDeployment(d.id).then((res) => {
+              if (res.ok && res.data) {
+                setDeployments((prev) => prev.map((x) => (x.id === d.id ? res.data! : x)));
+              }
+            });
+          }
+          return current;
+        });
+      })();
+    }, 15_000);
+    return () => clearInterval(t);
+  }, [client]);
+
   const workflowOptions = Object.values(workflows).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
@@ -182,7 +217,17 @@ export function Deployments() {
                     <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
                       {formatWhen(d.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right space-x-2">
+                      {d.deploymentId && (
+                        <button
+                          type="button"
+                          onClick={() => void handleRefreshStatus(d.id)}
+                          className="text-xs text-blue-400 hover:underline"
+                          title="Poll provider for latest status"
+                        >
+                          Refresh
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleDelete(d.id)}

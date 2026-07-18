@@ -10,10 +10,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getSetting } from '../db/settings.js';
-import { generateImage, generateAudio } from '../lib/media-generator.js';
+import { generateImage, generateAudio, listMediaFiles, MEDIA_DIR as MEDIA_DIR_EXPORT } from '../lib/media-generator.js';
 
 const media = new Hono();
-const MEDIA_DIR = path.join(os.homedir(), '.neos-work', 'media');
+const MEDIA_DIR = MEDIA_DIR_EXPORT;
+
+/** List generated media files for FileViewer */
+media.get('/files', async (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '100'), 1), 500);
+  const files = await listMediaFiles(limit);
+  return c.json({ ok: true, data: files });
+});
 
 media.post('/image', async (c) => {
   const body = await c.req.json<{

@@ -260,4 +260,10 @@ function initSchema(db: Database.Database): void {
   if (!workflowCols.includes('design_system_id')) {
     db.exec("ALTER TABLE workflow ADD COLUMN design_system_id TEXT");
   }
+
+  // v0.3.4 — routine timezone (DST via IANA zone for node-cron)
+  const routineCols = (db.prepare("PRAGMA table_info(routine)").all() as Array<{ name: string }>).map((c) => c.name);
+  if (!routineCols.includes('timezone')) {
+    db.exec("ALTER TABLE routine ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'");
+  }
 }

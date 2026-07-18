@@ -12,10 +12,68 @@ function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
 }
 
-const MEDIA_DIR = path.join(os.homedir(), '.neos-work', 'media');
+export const MEDIA_DIR = path.join(os.homedir(), '.neos-work', 'media');
 
 async function ensureMediaDir() {
   await fs.mkdir(MEDIA_DIR, { recursive: true });
+}
+
+export interface MediaFileInfo {
+  filename: string;
+  size: number;
+  kind: 'image' | 'audio' | 'other';
+  mimeType: string;
+  createdAt: string;
+  urlPath: string;
+}
+
+/** List generated media files under ~/.neos-work/media (newest first). */
+export async function listMediaFiles(limit = 100): Promise<MediaFileInfo[]> {
+  await ensureMediaDir();
+  let names: string[];
+  try {
+    names = await fs.readdir(MEDIA_DIR);
+  } catch {
+    return [];
+  }
+
+  const items: MediaFileInfo[] = [];
+  for (const filename of names) {
+    if (filename.startsWith('.')) continue;
+    if (!/^[a-zA-Z0-9_\-.]+$/.test(filename)) continue;
+    const filePath = path.join(MEDIA_DIR, filename);
+    try {
+      const st = await fs.stat(filePath);
+      if (!st.isFile()) continue;
+      const ext = path.extname(filename).toLowerCase();
+      const kind: MediaFileInfo['kind'] =
+        ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext) ? 'image'
+          : ['.mp3', '.wav', '.opus', '.aac', '.flac'].includes(ext) ? 'audio'
+            : 'other';
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+      };
+      items.push({
+        filename,
+        size: st.size,
+        kind,
+        mimeType: mimeTypes[ext] ?? 'application/octet-stream',
+        createdAt: st.mtime.toISOString(),
+        urlPath: `/api/media/file/${encodeURIComponent(filename)}`,
+      });
+    } catch {
+      // skip unreadable
+    }
+  }
+
+  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return items.slice(0, Math.min(Math.max(limit, 1), 500));
 }
 
 export interface GenerateImageResult {

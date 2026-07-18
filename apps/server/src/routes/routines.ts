@@ -37,6 +37,7 @@ routines.post('/', async (c) => {
     name?: string;
     workflowId?: string;
     schedule?: string;
+    timezone?: string;
     enabled?: boolean;
     inputs?: Record<string, unknown>;
   }>();
@@ -59,12 +60,13 @@ routines.post('/', async (c) => {
     name: body.name,
     workflowId: body.workflowId,
     schedule: body.schedule,
+    timezone: body.timezone,
     enabled: body.enabled !== false,
     inputs: body.inputs,
   });
 
   if (routine.enabled) {
-    addOrUpdateSchedule(routine.id, routine.schedule, true);
+    addOrUpdateSchedule(routine.id, routine.schedule, true, routine.timezone);
   }
 
   return c.json({ ok: true, data: routine }, 201);
@@ -75,6 +77,7 @@ routines.put('/:id', async (c) => {
   const body = await c.req.json<{
     name?: string;
     schedule?: string;
+    timezone?: string;
     enabled?: boolean;
     inputs?: Record<string, unknown>;
   }>();
@@ -82,13 +85,14 @@ routines.put('/:id', async (c) => {
   const updated = db.updateRoutine(id, {
     name: body.name,
     schedule: body.schedule,
+    timezone: body.timezone,
     enabled: body.enabled,
     inputs: body.inputs,
   });
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
 
-  // Sync scheduler
-  addOrUpdateSchedule(updated.id, updated.schedule, updated.enabled);
+  // Sync scheduler (DST-aware via IANA timezone)
+  addOrUpdateSchedule(updated.id, updated.schedule, updated.enabled, updated.timezone);
 
   return c.json({ ok: true, data: updated });
 });

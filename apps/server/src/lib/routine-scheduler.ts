@@ -18,22 +18,24 @@ import { getDesignSystemContent } from './design-system-store.js';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
 
-function scheduleRoutine(routineId: string, schedule: string): void {
+function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'): void {
   // Validate cron expression
   if (!cron.validate(schedule)) {
     console.warn(`[Scheduler] Invalid cron expression for routine ${routineId}: ${schedule}`);
     return;
   }
 
+  // IANA timezone → node-cron applies local wall-clock rules including DST
+  const tz = timezone.trim() || 'UTC';
   const task = cron.schedule(schedule, async () => {
     await runRoutine(routineId);
   }, {
-    timezone: 'UTC',
+    timezone: tz,
   });
 
   scheduledTasks.set(routineId, task);
   task.start();
-  console.log(`[Scheduler] Scheduled routine ${routineId} with cron: ${schedule}`);
+  console.log(`[Scheduler] Scheduled routine ${routineId} with cron: ${schedule} (${tz})`);
 }
 
 export async function runRoutine(routineId: string): Promise<string | null> {
@@ -109,13 +111,18 @@ export function initScheduler(): void {
   const routines = listRoutines();
   for (const routine of routines) {
     if (routine.enabled) {
-      scheduleRoutine(routine.id, routine.schedule);
+      scheduleRoutine(routine.id, routine.schedule, routine.timezone);
     }
   }
   console.log(`[Scheduler] Initialized ${routines.filter((r) => r.enabled).length} routines`);
 }
 
-export function addOrUpdateSchedule(routineId: string, schedule: string, enabled: boolean): void {
+export function addOrUpdateSchedule(
+  routineId: string,
+  schedule: string,
+  enabled: boolean,
+  timezone = 'UTC',
+): void {
   // Remove existing task
   const existing = scheduledTasks.get(routineId);
   if (existing) {
@@ -124,7 +131,7 @@ export function addOrUpdateSchedule(routineId: string, schedule: string, enabled
   }
 
   if (enabled) {
-    scheduleRoutine(routineId, schedule);
+    scheduleRoutine(routineId, schedule, timezone);
   }
 }
 

@@ -8,7 +8,12 @@
 
 import { Hono } from 'hono';
 import { getSetting } from '../db/settings.js';
-import { deployToVercel, deployToCloudflare } from '../lib/deploy.js';
+import {
+  deployToVercel,
+  deployToCloudflare,
+  getVercelDeploymentStatus,
+  getCloudflareDeploymentStatus,
+} from '../lib/deploy.js';
 import {
   createDeployment,
   deleteDeployment,
@@ -84,6 +89,57 @@ deploy.get('/:id', (c) => {
   const row = getDeployment(c.req.param('id'));
   if (!row) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: row });
+});
+
+/**
+ * Poll remote provider for deployment status and update local history row.
+ */
+deploy.post('/:id/refresh', async (c) => {
+  const row = getDeployment(c.req.param('id'));
+  if (!row) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!row.deploymentId) {
+    return c.json({ ok: false, error: 'No remote deployment id to poll' }, 400);
+  }
+
+  try {
+    if (row.provider === 'vercel') {
+      const apiToken = getSetting('VERCEL_API_TOKEN');
+      if (!apiToken) return c.json({ ok: false, error: 'Vercel API token not configured' }, 400);
+      const remote = await getVercelDeploymentStatus(row.deploymentId, apiToken);
+      const updated = updateDeployment(row.id, {
+        status: remote.status,
+        url: remote.url ?? row.url,
+        statusMessage: remote.statusMessage,
+      });
+      return c.json({ ok: true, data: updated });
+    }
+
+    if (row.provider === 'cloudflare') {
+      const apiToken = getSetting('CLOUDFLARE_API_TOKEN');
+      const accountId = getSetting('CLOUDFLARE_ACCOUNT_ID');
+      if (!apiToken || !accountId) {
+        return c.json({ ok: false, error: 'Cloudflare credentials not configured' }, 400);
+      }
+      const projectName = row.projectName ?? 'neos-deploy';
+      const remote = await getCloudflareDeploymentStatus({
+        accountId,
+        projectName,
+        deploymentId: row.deploymentId,
+        apiToken,
+      });
+      const updated = updateDeployment(row.id, {
+        status: remote.status,
+        url: remote.url ?? row.url,
+        statusMessage: remote.statusMessage,
+      });
+      return c.json({ ok: true, data: updated });
+    }
+
+    return c.json({ ok: false, error: `Unsupported provider: ${row.provider}` }, 400);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Status refresh failed';
+    return c.json({ ok: false, error: msg }, 500);
+  }
 });
 
 deploy.delete('/:id', (c) => {
