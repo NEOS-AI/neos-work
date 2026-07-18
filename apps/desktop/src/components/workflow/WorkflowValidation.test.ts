@@ -135,3 +135,25 @@ describe('validateWorkflowDraft happy paths', () => {
     expect(issues.some((i) => i.code === 'missing_block_id')).toBe(false);
   });
 });
+
+describe('validateWorkflowDraft media/deploy nodes', () => {
+  it('does not require blockId for media or deploy nodes', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'm', type: 'media', label: 'Media', config: { mediaType: 'image' } },
+        { id: 'd', type: 'deploy', label: 'Deploy', config: { provider: 'vercel' } },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'm' },
+        { id: 'e2', source: 'm', target: 'd' },
+        { id: 'e3', source: 'd', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_block_id')).toBe(false);
+    const errors = issues.filter((i) => i.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+});
