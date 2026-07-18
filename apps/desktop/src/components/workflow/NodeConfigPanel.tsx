@@ -454,13 +454,23 @@ function WorkflowWebhookSection() {
   const { client, serverUrl } = useEngine();
   const { id: workflowId } = useParamsSafe();
   const [secret, setSecret] = useState<string | null>(null);
+  const [rateLimit, setRateLimit] = useState<{ limit: number; remaining: number; resetAt: number } | null>(null);
   const [showSecret, setShowSecret] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!client || !workflowId) return;
     client.getWebhookSecret(workflowId).then((res) => {
-      if (res.ok && res.data) setSecret(res.data.secret);
+      if (res.ok && res.data) {
+        setSecret(res.data.secret);
+        if (res.data.rateLimit) {
+          setRateLimit({
+            limit: res.data.rateLimit.limit,
+            remaining: res.data.rateLimit.remaining,
+            resetAt: res.data.rateLimit.resetAt,
+          });
+        }
+      }
     });
   }, [client, workflowId]);
 
@@ -478,6 +488,13 @@ function WorkflowWebhookSection() {
       <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
         Header: <code>X-Neos-Signature: sha256=&lt;hmac&gt;</code>
       </p>
+      {rateLimit && (
+        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          Rate limit: {rateLimit.remaining}/{rateLimit.limit} remaining
+          {' · '}
+          resets {new Date(rateLimit.resetAt).toLocaleTimeString()}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-mono truncate flex-1" style={{ color: 'var(--text-secondary)' }}>
           {secret

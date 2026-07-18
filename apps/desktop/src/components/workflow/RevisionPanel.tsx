@@ -12,7 +12,13 @@ interface RevisionPanelProps {
   workflowId: string;
   client: EngineClient;
   onClose: () => void;
-  onRestore: (snapshot: { nodes: unknown[]; edges: unknown[]; name?: string; description?: string }) => void;
+  onRestore: (snapshot: {
+    nodes: unknown[];
+    edges: unknown[];
+    name?: string;
+    description?: string;
+    designSystemId?: string;
+  }) => void;
 }
 
 export function RevisionPanel({ workflowId, client, onClose, onRestore }: RevisionPanelProps) {
@@ -46,6 +52,7 @@ export function RevisionPanel({ workflowId, client, onClose, onRestore }: Revisi
         edges: unknown[];
         name?: string;
         description?: string;
+        designSystemId?: string;
       };
       onRestore(snap);
       onClose();

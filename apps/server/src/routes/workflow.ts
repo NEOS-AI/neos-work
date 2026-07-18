@@ -81,6 +81,7 @@ workflow.put('/:id', async (c) => {
     const snapshot = JSON.stringify({
       name: current.name,
       description: current.description,
+      designSystemId: current.designSystemId,
       nodes: current.nodes,
       edges: current.edges,
     });

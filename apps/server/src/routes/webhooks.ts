@@ -13,22 +13,16 @@ import * as db from '../db/workflows.js';
 import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
 import { getDesignSystemContent } from '../lib/design-system-store.js';
+import { webhookRateLimiter } from '../lib/rate-limit.js';
 
 const webhooks = new Hono();
 
-// Rate limit: max 60 requests per 60s per workflowId
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-
 function checkRateLimit(workflowId: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(workflowId);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(workflowId, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 60) return false;
-  entry.count += 1;
-  return true;
+  return webhookRateLimiter.check(workflowId);
+}
+
+function getRateLimitStatus(workflowId: string) {
+  return webhookRateLimiter.status(workflowId);
 }
 
 // GET webhook secret
@@ -38,7 +32,21 @@ webhooks.get('/:workflowId/secret', (c) => {
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
 
   const secret = db.getOrCreateWebhookSecret(workflowId);
-  return c.json({ ok: true, data: { secret } });
+  return c.json({
+    ok: true,
+    data: {
+      secret,
+      rateLimit: getRateLimitStatus(workflowId),
+    },
+  });
+});
+
+// GET rate-limit status (no secret)
+webhooks.get('/:workflowId/rate-limit', (c) => {
+  const workflowId = c.req.param('workflowId');
+  const wf = db.getWorkflow(workflowId);
+  if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: getRateLimitStatus(workflowId) });
 });
 
 // POST regenerate secret

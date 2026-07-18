@@ -27,6 +27,7 @@ import { validateWorkflowDraft } from '../components/workflow/WorkflowValidation
 import { autoLayout } from '../lib/layout.js';
 import { RevisionPanel } from '../components/workflow/RevisionPanel.js';
 import { ArtifactPreview } from '../components/workflow/ArtifactPreview.js';
+import { RunLogPanel } from '../components/workflow/RunLogPanel.js';
 
 // ── Node color palette ─────────────────────────────────────
 
@@ -150,7 +151,6 @@ export function WorkflowEditor() {
   const [runStatuses, setRunStatuses] = useState<Record<string, string>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [runEvents, setRunEvents] = useState<WorkflowSSEEvent[]>([]);
-  const [expandedRunLogIdx, setExpandedRunLogIdx] = useState<number | null>(null);
   const [runInputsOpen, setRunInputsOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('config');
@@ -163,16 +163,9 @@ export function WorkflowEditor() {
   const [scheduleCron, setScheduleCron] = useState('0 9 * * *');
   const [scheduleName, setScheduleName] = useState('');
   const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('TB');
 
   const stopRef = useRef<(() => void) | null>(null);
-  const runLogScrollRef = useRef<HTMLDivElement | null>(null);
-  const runLogEndRef = useRef<HTMLDivElement | null>(null);
-
-  // Auto-scroll run log when new events arrive (streaming progress)
-  useEffect(() => {
-    if (rightPanelTab !== 'run') return;
-    runLogEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [runEvents, rightPanelTab]);
 
   const loadWorkflow = useCallback(async () => {
     if (!client || !id) return;
@@ -318,7 +311,6 @@ export function WorkflowEditor() {
     setRightPanelTab('run');
     setRunEvents([]);
     setRunStatuses({});
-    setExpandedRunLogIdx(null);
     const stop = client.runWorkflow(workflow.id, (event) => {
       // Collapse consecutive node.progress for the same node into one log row
       setRunEvents((prev) => {
@@ -360,14 +352,16 @@ export function WorkflowEditor() {
     setIsRunning(false);
   };
 
-  const handleAutoLayout = useCallback(() => {
+  const handleAutoLayout = useCallback((direction?: 'TB' | 'LR') => {
+    const dir = direction ?? layoutDirection;
+    setLayoutDirection(dir);
     setNodes((current) => {
-      const laid = autoLayout(current, edges);
+      const laid = autoLayout(current, edges, dir);
       // fitView needs a tick to see new positions
       setTimeout(() => fitView({ padding: 0.1, duration: 300 }), 50);
       return laid;
     });
-  }, [edges, fitView, setNodes]);
+  }, [edges, fitView, setNodes, layoutDirection]);
 
   // Sync run statuses to node styles — preserve existing data (including config)
   useEffect(() => {
@@ -451,10 +445,18 @@ export function WorkflowEditor() {
           ⏱ Schedule
         </button>
         <button
-          onClick={handleAutoLayout}
+          onClick={() => handleAutoLayout(layoutDirection === 'TB' ? 'LR' : 'TB')}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-          title="Auto Layout (TB)"
+          title={`Switch layout direction (current: ${layoutDirection})`}
+        >
+          {layoutDirection === 'TB' ? '↓' : '→'} Dir
+        </button>
+        <button
+          onClick={() => handleAutoLayout()}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title={`Auto Layout (${layoutDirection})`}
         >
           ⬡ Layout
         </button>
@@ -589,65 +591,7 @@ export function WorkflowEditor() {
           )}
 
           {rightPanelTab === 'run' && (
-            <div
-              ref={runLogScrollRef}
-              className="flex-1 overflow-y-auto p-3 text-xs space-y-1"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              {runEvents.map((ev, i) => {
-                const nodeLabel = 'nodeId' in ev
-                  ? (nodeLabelMap[(ev as { nodeId: string }).nodeId] ?? (ev as { nodeId: string }).nodeId)
-                  : null;
-                const isExpanded = expandedRunLogIdx === i;
-                const hasOutput = ev.type === 'node.completed' && (ev as { output?: unknown }).output !== undefined;
-                const isProgress = ev.type === 'node.progress';
-                const isLast = i === runEvents.length - 1;
-                return (
-                  <div
-                    key={i}
-                    ref={isLast ? runLogEndRef : undefined}
-                    className={`rounded px-2 py-1${hasOutput || isProgress ? ' cursor-pointer' : ''}`}
-                    style={{ backgroundColor: 'var(--bg-secondary)' }}
-                    onClick={() => {
-                      if (hasOutput || isProgress) setExpandedRunLogIdx(isExpanded ? null : i);
-                    }}
-                  >
-                    {ev.type === 'node.started' && `▶ ${nodeLabel} (${(ev as { nodeType: string }).nodeType})`}
-                    {ev.type === 'node.progress' && (
-                      <span className="text-sky-400">
-                        … {nodeLabel} streaming{(ev as { accumulated?: string }).accumulated ? ' ▸' : ''}
-                      </span>
-                    )}
-                    {ev.type === 'node.completed' && `✓ ${nodeLabel}${hasOutput ? ' ▸' : ''}`}
-                    {ev.type === 'node.failed' && `✗ ${nodeLabel}: ${(ev as { error: string }).error}`}
-                    {ev.type === 'run.started' && `Run ${(ev as { runId: string }).runId.slice(0, 8)}`}
-                    {ev.type === 'run.completed' && `${t('workflow.done')} (${(ev as { duration: number }).duration}ms)`}
-                    {ev.type === 'run.failed' && (ev as { error: string }).error}
-                    {isExpanded && isProgress && (
-                      <pre
-                        className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
-                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-                      >
-                        {((ev as { accumulated?: string; chunk?: string }).accumulated
-                          ?? (ev as { chunk?: string }).chunk
-                          ?? '').slice(-2000)}
-                      </pre>
-                    )}
-                    {isExpanded && hasOutput && (
-                      <pre
-                        className="mt-1 overflow-x-auto rounded p-1 text-[10px]"
-                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-                      >
-                        {JSON.stringify((ev as { output: unknown }).output, null, 2).slice(0, 400)}
-                      </pre>
-                    )}
-                  </div>
-                );
-              })}
-              {runEvents.length === 0 && (
-                <p style={{ color: 'var(--text-muted)' }}>{t('workflow.noRuns')}</p>
-              )}
-            </div>
+            <RunLogPanel events={runEvents} nodeLabelMap={nodeLabelMap} />
           )}
 
           {rightPanelTab === 'history' && (
@@ -715,6 +659,9 @@ export function WorkflowEditor() {
               });
               setNodes(rfNodes);
               setEdges(rfEdges);
+              if (typeof snap.description === 'string') setWorkflowDescription(snap.description);
+              if (typeof snap.designSystemId === 'string') setDesignSystemId(snap.designSystemId);
+              else if (snap.designSystemId === undefined || snap.designSystemId === null) setDesignSystemId('');
             }
           }}
         />

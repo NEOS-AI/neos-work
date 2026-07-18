@@ -1023,8 +1023,23 @@ export class EngineClient {
 
   // --- Webhook ---
 
-  async getWebhookSecret(workflowId: string): Promise<ApiResponse<{ secret: string }>> {
+  async getWebhookSecret(workflowId: string): Promise<ApiResponse<{
+    secret: string;
+    rateLimit?: { limit: number; remaining: number; resetAt: number; windowMs: number };
+  }>> {
     const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/secret`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async getWebhookRateLimit(workflowId: string): Promise<ApiResponse<{
+    limit: number;
+    remaining: number;
+    resetAt: number;
+    windowMs: number;
+  }>> {
+    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/rate-limit`, {
       headers: this.getHeaders(),
     });
     return res.json();
