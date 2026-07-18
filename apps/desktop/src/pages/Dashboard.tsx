@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Routine, Workflow } from '../lib/engine.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
-import { formatRelativeTime } from '../lib/format-relative-time.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import {
   pickRecentDeployments,
   pickRecentRoutines,
@@ -183,7 +183,7 @@ export function Dashboard() {
                     {(wf.nodes?.length ?? 0)} nodes
                   </p>
                 </div>
-                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }} title={new Date(wf.updatedAt).toLocaleString()}>
+                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }} title={formatAbsoluteTime(wf.updatedAt)}>
                   {formatRelativeTime(wf.updatedAt)}
                 </span>
               </Link>
@@ -224,7 +224,7 @@ export function Dashboard() {
                 <span
                   className="shrink-0 text-[10px]"
                   style={{ color: 'var(--text-muted)' }}
-                  title={r.nextRunAt ? new Date(r.nextRunAt).toLocaleString() : new Date(r.updatedAt).toLocaleString()}
+                  title={formatAbsoluteTime(r.nextRunAt ?? r.updatedAt)}
                 >
                   {r.nextRunAt
                     ? `next ${formatRelativeTime(r.nextRunAt)}`
@@ -268,7 +268,7 @@ export function Dashboard() {
                 <span
                   className="shrink-0 text-[10px]"
                   style={{ color: 'var(--text-muted)' }}
-                  title={new Date(d.createdAt).toLocaleString()}
+                  title={formatAbsoluteTime(d.createdAt)}
                 >
                   {formatRelativeTime(d.createdAt)}
                 </span>

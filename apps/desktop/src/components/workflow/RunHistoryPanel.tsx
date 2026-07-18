@@ -5,7 +5,7 @@ import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
 import { formatDuration } from '../../lib/format-duration.js';
 import { formatListCount } from '../../lib/list-count.js';
-import { formatRelativeTime } from '../../lib/format-relative-time.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../../lib/format-relative-time.js';
 import { filterRunsByStatus, type RunStatusFilter } from '../../lib/run-history-filter.js';
 import { RunDetailPanel } from './RunDetailPanel.js';
 
@@ -211,7 +211,7 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                   </button>
                 </div>
               </div>
-              <p style={{ color: 'var(--text-muted)' }} title={new Date(run.startedAt).toLocaleString()}>
+              <p style={{ color: 'var(--text-muted)' }} title={formatAbsoluteTime(run.startedAt)}>
                 {formatRelativeTime(run.startedAt)}
               </p>
               {run.completedAt && (

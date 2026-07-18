@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
-import { formatRelativeTime } from '../lib/format-relative-time.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
+import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 import {
   loadWorkflowListSort,
@@ -46,15 +47,8 @@ export function Workflows() {
       search,
       domain: domainFilter,
     });
-    const sorted = [...filtered];
-    if (sortMode === 'name') {
-      sorted.sort((a, b) => a.name.localeCompare(b.name));
-    } else {
-      sorted.sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      );
-    }
-    return sorted;
+    if (sortMode === 'name') return sortByName(filtered);
+    return sortByDateDesc(filtered, (w) => w.updatedAt);
   }, [workflows, search, domainFilter, sortMode]);
 
   const handleCopyId = async (id: string) => {
@@ -314,7 +308,7 @@ export function Workflows() {
                 <p
                   className="mt-3 text-xs"
                   style={{ color: 'var(--text-muted)' }}
-                  title={new Date(wf.updatedAt).toLocaleString()}
+                  title={formatAbsoluteTime(wf.updatedAt)}
                 >
                   {formatRelativeTime(wf.updatedAt)}
                   {' · '}

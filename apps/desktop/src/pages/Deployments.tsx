@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
-import { formatRelativeTime } from '../lib/format-relative-time.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
 import { filterByFieldValue, filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
@@ -301,7 +301,7 @@ export function Deployments() {
                     <td
                       className="px-4 py-3 whitespace-nowrap"
                       style={{ color: 'var(--text-muted)' }}
-                      title={formatWhen(d.createdAt)}
+                      title={formatAbsoluteTime(d.createdAt)}
                     >
                       {formatRelativeTime(d.createdAt)}
                     </td>
@@ -335,12 +335,4 @@ export function Deployments() {
   );
 }
 
-function formatWhen(iso: string): string {
-  try {
-    const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString();
-  } catch {
-    return iso;
-  }
-}
+

@@ -1,5 +1,7 @@
 /** Pick the N most recently updated workflows for dashboard shortcuts. */
 
+import { parseTimestampMs } from './format-relative-time.js';
+
 export interface RecentWorkflowLike {
   id: string;
   name: string;
@@ -14,6 +16,11 @@ export interface RecentByDateLike {
   updatedAt: string;
 }
 
+function timeMs(value: string | undefined): number {
+  const t = parseTimestampMs(value);
+  return Number.isFinite(t) ? t : 0;
+}
+
 /** Generic newest-first picker by ISO `updatedAt` (or any date string). */
 export function pickRecentByDate<T extends RecentByDateLike>(
   items: T[],
@@ -22,7 +29,7 @@ export function pickRecentByDate<T extends RecentByDateLike>(
   const n = Math.max(0, Math.floor(limit));
   if (n === 0 || items.length === 0) return [];
   return [...items]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .sort((a, b) => timeMs(b.updatedAt) - timeMs(a.updatedAt))
     .slice(0, n);
 }
 
@@ -62,6 +69,6 @@ export function pickRecentDeployments<T extends RecentDeploymentLike>(
   const n = Math.max(0, Math.floor(limit));
   if (n === 0 || deployments.length === 0) return [];
   return [...deployments]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a, b) => timeMs(b.createdAt) - timeMs(a.createdAt))
     .slice(0, n);
 }

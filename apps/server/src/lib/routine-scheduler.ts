@@ -54,6 +54,10 @@ export async function runRoutine(routineId: string): Promise<string | null> {
   const runRecord = createRoutineRun({ routineId });
   setLastRunAt(routineId);
 
+  const runId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
+  const nodeResults: Record<string, unknown> = {};
+
   try {
     const settings = getExecutionSettings({
       serverUrl: getRuntimeServerUrl(),
@@ -63,17 +67,13 @@ export async function runRoutine(routineId: string): Promise<string | null> {
       ? (await getDesignSystemContent(wf.designSystemId)) ?? undefined
       : undefined;
 
-    const runId = crypto.randomUUID();
-
     workflowDb.saveRun({
       id: runId,
       workflowId: wf.id,
       status: 'running',
       nodeResults: {},
-      startedAt: new Date().toISOString(),
+      startedAt,
     });
-
-    const nodeResults: Record<string, unknown> = {};
 
     await executeWorkflow({
       runId,
@@ -115,7 +115,7 @@ export async function runRoutine(routineId: string): Promise<string | null> {
       workflowId: wf.id,
       status: 'completed',
       nodeResults: nodeResults as never,
-      startedAt: new Date().toISOString(),
+      startedAt,
       completedAt: new Date().toISOString(),
     });
 
@@ -124,6 +124,16 @@ export async function runRoutine(routineId: string): Promise<string | null> {
     return runId;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Execution error';
+    // Persist failed workflow run so history does not leave rows stuck as "running"
+    workflowDb.saveRun({
+      id: runId,
+      workflowId: wf.id,
+      status: 'failed',
+      nodeResults: nodeResults as never,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      error: errorMsg,
+    });
     completeRoutineRun(runRecord.id, 'failed', errorMsg);
     console.error(`[Scheduler] Routine ${routineId} failed: ${errorMsg}`);
     return null;
