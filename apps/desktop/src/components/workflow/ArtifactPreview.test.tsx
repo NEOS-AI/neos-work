@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ArtifactPreview, isHtmlContent, isMarkdownContent } from './ArtifactPreview.js';
+import { ArtifactPreview, downloadTextFile, isHtmlContent, isMarkdownContent } from './ArtifactPreview.js';
 
 const listArtifacts = vi.fn();
 const getArtifact = vi.fn();
@@ -20,6 +20,29 @@ vi.mock('../../hooks/useEngine.js', () => ({
     },
   }),
 }));
+
+describe('downloadTextFile', () => {
+  it('creates an object URL and clicks a download anchor', () => {
+    const click = vi.fn();
+    const createObjectURL = vi.fn(() => 'blob:test');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    const origCreate = document.createElement.bind(document);
+    const createEl = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag);
+      if (tag === 'a') {
+        Object.defineProperty(el, 'click', { value: click });
+      }
+      return el;
+    });
+    downloadTextFile('out.html', '<html></html>', 'text/html');
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:test');
+    createEl.mockRestore();
+  });
+});
 
 describe('isHtmlContent / isMarkdownContent', () => {
   it('detects html by content-type and content sniffing', () => {
