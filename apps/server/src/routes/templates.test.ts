@@ -41,3 +41,12 @@ describe('workflow TEMPLATES', () => {
     }
   });
 });
+
+  it('includes Generate Image & Deploy template', () => {
+    const t = TEMPLATES.find((x) => x.name === 'Generate Image & Deploy');
+    expect(t).toBeTruthy();
+    const types = t!.nodes.map((n) => n.type);
+    expect(types).toContain('media');
+    expect(types).toContain('deploy');
+  });
+
