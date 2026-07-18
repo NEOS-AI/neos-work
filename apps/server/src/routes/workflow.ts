@@ -22,7 +22,12 @@ import * as revisionDb from '../db/workflow-revisions.js';
 import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
-import { getDesignSystemContent } from '../lib/design-system-store.js';
+import {
+  createDesignSystem,
+  getDesignSystemContent,
+  updateDesignSystemContent,
+} from '../lib/design-system-store.js';
+import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 
 const workflow = new Hono();
 
@@ -406,7 +411,50 @@ workflow.post('/import.zip', async (c) => {
     });
   }
 
-  return c.json({ ok: true, data: created, meta: { importKind: 'neos-workflow' } }, 201);
+  // Optional: restore design systems from design-systems/<name>/DESIGN.md (plan Tasks 1 / 10)
+  let importedDesignSystemId: string | undefined =
+    typeof wf.designSystemId === 'string' ? wf.designSystemId : undefined;
+  const dsFiles = dir.files.filter((f) => {
+    const p = f.path.replace(/\\/g, '/');
+    return /^design-systems\/[^/]+\/DESIGN\.md$/i.test(p);
+  });
+  for (const f of dsFiles) {
+    const p = f.path.replace(/\\/g, '/');
+    const parts = p.split('/');
+    const rawName = parts[1] ?? 'imported';
+    // Directory names must match createDesignSystem allowlist
+    const safeName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) || 'imported';
+    const content = (await f.buffer()).toString('utf-8');
+    let ds = await createDesignSystem(safeName, `Imported with ${finalName}`);
+    if (!ds) {
+      // already exists — overwrite content and re-bind id
+      const { listDesignSystems } = await import('../lib/design-system-store.js');
+      const existingDs = (await listDesignSystems()).find((d) => d.name === safeName);
+      if (existingDs) {
+        await updateDesignSystemContent(existingDs.id, content);
+        ds = existingDs;
+      }
+    } else {
+      await updateDesignSystemContent(ds.id, content);
+    }
+    if (ds) {
+      importedDesignSystemId = ds.id;
+    }
+  }
+
+  if (importedDesignSystemId) {
+    db.updateWorkflow(created.id, { designSystemId: importedDesignSystemId });
+  }
+
+  const finalWf = db.getWorkflow(created.id) ?? created;
+  return c.json({
+    ok: true,
+    data: finalWf,
+    meta: {
+      importKind: 'neos-workflow',
+      designSystemId: importedDesignSystemId,
+    },
+  }, 201);
 });
 
 /** Dedicated Claude Design ZIP import (OD §18.1) */
@@ -530,34 +578,13 @@ workflow.post('/:id/run', async (c) => {
         designSystemContent,
       });
 
-      // Auto-detect HTML artifacts from completed node outputs (plan Task 4:
-      // DOCTYPE html / <html, plus common fragment tags used by agents)
-      let artifactId: string | undefined;
-      for (const [nodeId, result] of Object.entries(nodeResults)) {
-        const r = result as { output?: unknown; status?: string };
-        if (r.status === 'completed' && typeof r.output === 'string') {
-          const htmlContent = r.output.trim();
-          const head = htmlContent.slice(0, 200).toLowerCase();
-          const isHtml =
-            head.startsWith('<!doctype html')
-            || head.startsWith('<html')
-            || htmlContent.includes('<html')
-            || htmlContent.includes('<div')
-            || htmlContent.includes('<svg');
-          if (isHtml && htmlContent.startsWith('<')) {
-            const artifact = artifactDb.createArtifact({
-              workflowId: wf.id,
-              runId,
-              name: `Output (${nodeId})`,
-              contentType: 'text/html',
-              content: htmlContent,
-              nodeId,
-            });
-            artifactId = artifact.id;
-            break; // Only save first HTML artifact per run
-          }
-        }
-      }
+      // Auto-detect HTML artifacts from completed node outputs (plan Task 4)
+      const artifactId = createFirstHtmlArtifact({
+        workflowId: wf.id,
+        runId,
+        nodeResults,
+        create: (input) => artifactDb.createArtifact(input),
+      });
 
       // Send supplementary artifact event if one was created
       if (artifactId) {

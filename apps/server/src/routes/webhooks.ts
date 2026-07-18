@@ -13,6 +13,8 @@ import * as db from '../db/workflows.js';
 import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
+import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
+import * as artifactDb from '../db/artifacts.js';
 import { getDesignSystemContent } from '../lib/design-system-store.js';
 import { webhookRateLimiter } from '../lib/rate-limit.js';
 
@@ -148,6 +150,17 @@ webhooks.post('/:workflowId', async (c) => {
           }),
         designSystemContent,
       });
+
+      // Auto-detect HTML artifacts (same as workflow run path)
+      const artifactId = createFirstHtmlArtifact({
+        workflowId: wf.id,
+        runId,
+        nodeResults,
+        create: (input) => artifactDb.createArtifact(input),
+      });
+      if (artifactId) {
+        await sendEvent({ type: 'run.completed', runId, duration: 0, artifactId });
+      }
 
       const finalStatus = controller.signal.aborted ? 'cancelled' : 'completed';
       db.saveRun({

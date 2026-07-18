@@ -864,6 +864,7 @@ function CliAgentsSection() {
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>CLI Agents</h2>
           <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
             Detected CLI-based AI agents on this machine (Claude Code, Gemini CLI, Codex CLI).
+            Optional absolute paths override PATH lookup (plan Task 3).
           </p>
         </div>
         <button
@@ -884,7 +885,7 @@ function CliAgentsSection() {
           No CLI agents detected. Install{' '}
           <code className="rounded bg-black/20 px-1">claude</code>,{' '}
           <code className="rounded bg-black/20 px-1">gemini</code>, or{' '}
-          <code className="rounded bg-black/20 px-1">codex</code> to use them as workflow providers.
+          <code className="rounded bg-black/20 px-1">codex</code>, or set a manual path below.
         </p>
       ) : (
         <div className="space-y-2">
@@ -914,6 +915,21 @@ function CliAgentsSection() {
           ))}
         </div>
       )}
+
+      <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: 'var(--border-primary)' }}>
+        <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Manual binary paths</p>
+        <SimpleKeyInput label="Claude Code path" placeholder="/usr/local/bin/claude" settingKey="CLI_PATH_CLAUDE" />
+        <SimpleKeyInput label="Gemini CLI path" placeholder="/usr/local/bin/gemini" settingKey="CLI_PATH_GEMINI" />
+        <SimpleKeyInput label="Codex CLI path" placeholder="/usr/local/bin/codex" settingKey="CLI_PATH_CODEX" />
+        <button
+          type="button"
+          onClick={loadAgents}
+          className="rounded-lg border px-3 py-1.5 text-xs"
+          style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+        >
+          Re-detect with overrides
+        </button>
+      </div>
     </section>
   );
 }

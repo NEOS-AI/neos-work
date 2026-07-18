@@ -94,3 +94,19 @@ export function updateArtifactContent(id: string, content: string): Artifact | u
   db.prepare(`UPDATE artifacts SET content = ?, updated_at = datetime('now') WHERE id = ?`).run(content, id);
   return getArtifact(id);
 }
+
+/** Plan Task 4 — PATCH name and/or content. */
+export function updateArtifact(
+  id: string,
+  input: { name?: string; content?: string },
+): Artifact | undefined {
+  const existing = getArtifact(id);
+  if (!existing) return undefined;
+  const db = getDb();
+  const name = input.name !== undefined ? input.name : existing.name;
+  const content = input.content !== undefined ? input.content : (existing.content ?? null);
+  db.prepare(
+    `UPDATE artifacts SET name = ?, content = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).run(name, content, id);
+  return getArtifact(id);
+}

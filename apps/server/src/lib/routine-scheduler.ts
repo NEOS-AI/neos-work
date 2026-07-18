@@ -16,6 +16,8 @@ import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from './cli-agents.js';
 import { getDesignSystemContent } from './design-system-store.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from './runtime-context.js';
+import { createFirstHtmlArtifact } from './html-artifact.js';
+import * as artifactDb from '../db/artifacts.js';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
 
@@ -95,6 +97,14 @@ export async function runRoutine(routineId: string): Promise<string | null> {
           authToken: getRuntimeAuthToken(),
         }),
       designSystemContent,
+    });
+
+    // Auto-detect HTML artifacts for scheduled runs
+    createFirstHtmlArtifact({
+      workflowId: wf.id,
+      runId,
+      nodeResults,
+      create: (input) => artifactDb.createArtifact(input),
     });
 
     workflowDb.saveRun({

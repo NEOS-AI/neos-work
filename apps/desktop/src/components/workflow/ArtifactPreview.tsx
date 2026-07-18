@@ -147,6 +147,28 @@ export function ArtifactPreview({
     }
   };
 
+  const handleRename = async () => {
+    if (!client || !selectedId || !selected) return;
+    const next = window.prompt('Rename artifact', selected.name);
+    if (next === null) return;
+    const name = next.trim();
+    if (!name || name === selected.name) return;
+    setRefreshing(true);
+    setStatusMsg(null);
+    try {
+      const res = await client.updateArtifact(selectedId, { name });
+      if (res.ok) {
+        setStatusMsg('Renamed');
+        loadList();
+      } else {
+        setStatusMsg((res as { error?: string }).error ?? 'Rename failed');
+      }
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setStatusMsg(null), 2500);
+    }
+  };
+
   const selected = useMemo(
     () => artifacts.find((a) => a.id === selectedId) ?? null,
     [artifacts, selectedId],
@@ -217,6 +239,15 @@ export function ArtifactPreview({
             ▶ Re-run
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => void handleRename()}
+          disabled={!selectedId || refreshing}
+          className="shrink-0 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 disabled:opacity-40"
+          title="Rename artifact"
+        >
+          Rename
+        </button>
         <button
           type="button"
           onClick={() => void handleDelete()}

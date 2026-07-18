@@ -36,23 +36,52 @@ async function getVersion(binPath: string, versionFlag = '--version'): Promise<s
   }
 }
 
-/** Detect available CLI agents on the host system. */
-export async function detectCLIs(): Promise<CliAgentInfo[]> {
+/** Settings keys for optional manual binary paths (plan Task 3). */
+export const CLI_PATH_SETTING_KEYS = {
+  'cli-claude': 'CLI_PATH_CLAUDE',
+  'cli-gemini': 'CLI_PATH_GEMINI',
+  'cli-codex': 'CLI_PATH_CODEX',
+} as const;
+
+export type CliPathOverrides = Partial<Record<'cli-claude' | 'cli-gemini' | 'cli-codex', string>>;
+
+/**
+ * Resolve a binary path: override if it exists on disk, else PATH lookup.
+ */
+async function resolveCliPath(
+  id: 'cli-claude' | 'cli-gemini' | 'cli-codex',
+  defaultBinary: string,
+  overrides?: CliPathOverrides,
+): Promise<string | null> {
+  const override = overrides?.[id]?.trim();
+  if (override) {
+    try {
+      fs.accessSync(override, fs.constants.X_OK);
+      return override;
+    } catch {
+      // fall through to PATH
+    }
+  }
+  return which(defaultBinary);
+}
+
+/** Detect available CLI agents on the host system (optional manual path overrides). */
+export async function detectCLIs(overrides?: CliPathOverrides): Promise<CliAgentInfo[]> {
   const results: CliAgentInfo[] = [];
 
-  const claudePath = await which('claude');
+  const claudePath = await resolveCliPath('cli-claude', 'claude', overrides);
   if (claudePath) {
     const version = await getVersion(claudePath);
     results.push({ id: 'cli-claude', name: 'Claude Code', path: claudePath, version });
   }
 
-  const geminiPath = await which('gemini');
+  const geminiPath = await resolveCliPath('cli-gemini', 'gemini', overrides);
   if (geminiPath) {
     const version = await getVersion(geminiPath);
     results.push({ id: 'cli-gemini', name: 'Gemini CLI', path: geminiPath, version });
   }
 
-  const codexPath = await which('codex');
+  const codexPath = await resolveCliPath('cli-codex', 'codex', overrides);
   if (codexPath) {
     const version = await getVersion(codexPath);
     results.push({ id: 'cli-codex', name: 'Codex CLI', path: codexPath, version });
@@ -83,17 +112,21 @@ export interface SpawnCliAgentResult {
  * Build CLI arguments for the given agent.
  * Each CLI has a different interface for non-interactive prompt submission.
  */
-export function buildCliArgs(cliId: SpawnCliAgentOptions['cliId'], prompt: string): { bin: string; args: string[] } {
+export function buildCliArgs(
+  cliId: SpawnCliAgentOptions['cliId'],
+  prompt: string,
+  binOverride?: string,
+): { bin: string; args: string[] } {
   switch (cliId) {
     case 'cli-claude':
       // claude --print "<prompt>" (non-interactive mode)
-      return { bin: 'claude', args: ['--print', prompt] };
+      return { bin: binOverride ?? 'claude', args: ['--print', prompt] };
     case 'cli-gemini':
       // gemini -p "<prompt>"
-      return { bin: 'gemini', args: ['-p', prompt] };
+      return { bin: binOverride ?? 'gemini', args: ['-p', prompt] };
     case 'cli-codex':
       // codex exec "<prompt>"
-      return { bin: 'codex', args: ['exec', prompt] };
+      return { bin: binOverride ?? 'codex', args: ['exec', prompt] };
   }
 }
 
@@ -154,7 +187,26 @@ export function ensureCliWorkspace(runId: string): string {
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
   const { cliId, prompt, signal, onChunk, workflowId, runId, serverUrl, authToken } = opts;
-  const { bin, args } = buildCliArgs(cliId, prompt);
+
+  // Resolve optional path override from settings (lazy import avoids circular deps in tests)
+  let binOverride: string | undefined;
+  try {
+    const { getSetting } = await import('../db/settings.js');
+    const key = CLI_PATH_SETTING_KEYS[cliId];
+    const override = getSetting(key)?.trim();
+    if (override) {
+      try {
+        fs.accessSync(override, fs.constants.X_OK);
+        binOverride = override;
+      } catch {
+        // ignore invalid override
+      }
+    }
+  } catch {
+    // settings unavailable
+  }
+
+  const { bin, args } = buildCliArgs(cliId, prompt, binOverride);
   const mcpTokenEnv = loadMcpTokenEnvVars();
   const neosEnv = buildNeosCliEnv({ workflowId, runId, serverUrl, authToken });
 

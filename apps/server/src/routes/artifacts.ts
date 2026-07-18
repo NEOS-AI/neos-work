@@ -3,8 +3,10 @@
  * GET  /api/artifacts?workflowId=...   — list by workflow
  * GET  /api/artifacts?runId=...        — list by run
  * GET  /api/artifacts/:id              — get single (returns full content)
+ * GET  /api/artifacts/:id/preview      — raw HTML/text preview
  * POST /api/artifacts                  — create
  * PUT  /api/artifacts/:id              — update content
+ * PATCH /api/artifacts/:id            — update name and/or content (plan Task 4)
  * DELETE /api/artifacts/:id            — delete
  */
 
@@ -79,6 +81,28 @@ artifacts.put('/:id', async (c) => {
     return c.json({ ok: false, error: 'content string required' }, 400);
   }
   const updated = db.updateArtifactContent(c.req.param('id'), body.content);
+  if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: updated });
+});
+
+/** Plan Task 4 — PATCH name and/or content */
+artifacts.patch('/:id', async (c) => {
+  const body = await c.req.json<{ name?: string; content?: string }>().catch(() => null);
+  if (!body || (body.name === undefined && body.content === undefined)) {
+    return c.json({ ok: false, error: 'name and/or content required' }, 400);
+  }
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || body.name.trim().length === 0 || body.name.length > 200) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+  }
+  if (body.content !== undefined && typeof body.content !== 'string') {
+    return c.json({ ok: false, error: 'content must be a string' }, 400);
+  }
+  const updated = db.updateArtifact(c.req.param('id'), {
+    name: body.name?.trim(),
+    content: body.content,
+  });
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: updated });
 });

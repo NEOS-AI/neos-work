@@ -651,6 +651,18 @@ export class EngineClient {
     return res.json();
   }
 
+  async updateArtifact(
+    id: string,
+    input: { name?: string; content?: string },
+  ): Promise<ApiResponse<Artifact>> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, {
+      method: 'PATCH',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return res.json();
+  }
+
   async deleteMediaFile(filename: string): Promise<ApiResponse<void>> {
     const res = await fetch(this.mediaFileUrl(filename), {
       method: 'DELETE',

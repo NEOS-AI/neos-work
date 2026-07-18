@@ -120,6 +120,81 @@ media.get('/file/:filename', (c) => {
   return c.body(buf);
 });
 
+/**
+ * Unified media generate endpoint (plan Task 7).
+ * Body: { surface: 'image' | 'audio', prompt|text, size?, quality?, voice?, model? }
+ */
+media.post('/generate', async (c) => {
+  const body = await c.req.json<{
+    surface?: 'image' | 'audio';
+    prompt?: string;
+    text?: string;
+    size?: '1024x1024' | '1792x1024' | '1024x1792';
+    quality?: 'standard' | 'hd';
+    voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+    model?: 'tts-1' | 'tts-1-hd';
+  }>().catch(() => null);
+
+  if (!body?.surface || (body.surface !== 'image' && body.surface !== 'audio')) {
+    return c.json({ ok: false, error: 'surface must be image or audio' }, 400);
+  }
+
+  const apiKey = getSetting('OPENAI_API_KEY');
+  if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
+
+  try {
+    if (body.surface === 'image') {
+      const prompt = body.prompt ?? body.text;
+      if (!prompt || typeof prompt !== 'string') {
+        return c.json({ ok: false, error: 'prompt is required for image' }, 400);
+      }
+      if (prompt.length > 4000) {
+        return c.json({ ok: false, error: 'prompt too long' }, 400);
+      }
+      const result = await generateImage({
+        prompt,
+        size: body.size,
+        quality: body.quality,
+        apiKey,
+      });
+      return c.json({
+        ok: true,
+        data: {
+          surface: 'image',
+          filePath: result.filePath,
+          filename: path.basename(result.filePath),
+          revisedPrompt: result.revisedPrompt,
+        },
+      });
+    }
+
+    const text = body.text ?? body.prompt;
+    if (!text || typeof text !== 'string') {
+      return c.json({ ok: false, error: 'text is required for audio' }, 400);
+    }
+    if (text.length > 4096) {
+      return c.json({ ok: false, error: 'text too long (max 4096 chars)' }, 400);
+    }
+    const result = await generateAudio({
+      text,
+      voice: body.voice,
+      model: body.model,
+      apiKey,
+    });
+    return c.json({
+      ok: true,
+      data: {
+        surface: 'audio',
+        filePath: result.filePath,
+        filename: path.basename(result.filePath),
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to generate media';
+    return c.json({ ok: false, error: msg }, 500);
+  }
+});
+
 /** Delete a generated media file */
 media.delete('/file/:filename', (c) => {
   const filename = c.req.param('filename');
