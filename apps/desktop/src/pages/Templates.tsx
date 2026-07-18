@@ -105,6 +105,9 @@ export function Templates() {
             </button>
           ))}
         </div>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {filtered.length}/{templateList.length}
+          </span>
         </div>
       </div>
 

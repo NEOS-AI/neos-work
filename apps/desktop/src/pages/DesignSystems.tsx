@@ -16,10 +16,10 @@ export function DesignSystems() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const filteredSystems = useMemo(
-    () => filterBySearchText(systems, search),
-    [systems, search],
-  );
+  const filteredSystems = useMemo(() => {
+    const list = filterBySearchText(systems, search);
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [systems, search]);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -63,13 +63,18 @@ export function DesignSystems() {
         </div>
         <div className="flex items-center gap-2">
           {systems.length > 0 && (
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search design systems…"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30"
-            />
+            <>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search design systems…"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30"
+              />
+              <span className="text-xs text-white/40">
+                {filteredSystems.length}/{systems.length}
+              </span>
+            </>
           )}
           <button
             onClick={() => { setIsCreating(true); setCreateError(null); }}

@@ -52,6 +52,19 @@ export function ArtifactPreview({
   const [refreshing, setRefreshing] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [viewport, setViewport] = useState<ViewportMode>('full');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyContent = async () => {
+    if (!selectedContent) return;
+    try {
+      await navigator.clipboard.writeText(selectedContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setStatusMsg('Copy failed');
+      setTimeout(() => setStatusMsg(null), 2000);
+    }
+  };
 
   const loadList = () => {
     if (!client) return;
@@ -219,6 +232,15 @@ export function ArtifactPreview({
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => void handleCopyContent()}
+          disabled={!selectedContent}
+          className="shrink-0 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 disabled:opacity-40"
+          title="Copy artifact content"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
         <button
           type="button"
           onClick={() => void handleReload()}

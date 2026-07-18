@@ -59,6 +59,21 @@ export function validateWorkflowDraft(input: {
   const nodeIds = new Set(input.nodes.map((node) => node.id));
   const blockMap = new Map(input.blocks.map((block) => [block.id, block]));
 
+  if (nodeIds.size !== input.nodes.length) {
+    const seen = new Set<string>();
+    for (const node of input.nodes) {
+      if (seen.has(node.id)) {
+        issues.push({
+          code: 'duplicate_node_id',
+          severity: 'error',
+          nodeId: node.id,
+          message: `Duplicate node id "${node.id}".`,
+        });
+      }
+      seen.add(node.id);
+    }
+  }
+
   for (const node of input.nodes) {
     const config = node.config ?? {};
 

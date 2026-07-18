@@ -3,16 +3,18 @@ import { useTranslation } from 'react-i18next';
 
 import type { AppMode } from '../hooks/useEngine.js';
 import { useEngine } from '../hooks/useEngine.js';
+import { loadRemoteUrl, saveRemoteUrl } from '../lib/mode-prefs.js';
 
 export function ModeSelection() {
   const { t } = useTranslation('common');
   const { status, error, connect } = useEngine();
-  const [remoteUrl, setRemoteUrl] = useState('');
+  const [remoteUrl, setRemoteUrl] = useState(() => loadRemoteUrl());
   const [devToken, setDevToken] = useState('');
 
   const handleSelect = (mode: AppMode) => {
     if (mode === 'client' && !remoteUrl) return;
     if (devToken) sessionStorage.setItem('devAuthToken', devToken);
+    if (mode === 'client') saveRemoteUrl(remoteUrl);
     connect(mode, mode === 'client' ? remoteUrl : undefined);
   };
 
@@ -82,7 +84,10 @@ export function ModeSelection() {
             type="text"
             placeholder="http://192.168.1.100:57286"
             value={remoteUrl}
-            onChange={(e) => setRemoteUrl(e.target.value)}
+            onChange={(e) => {
+              setRemoteUrl(e.target.value);
+              saveRemoteUrl(e.target.value);
+            }}
             className="mt-1 rounded-lg border px-3 py-1.5 text-xs outline-none"
             style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
           />
