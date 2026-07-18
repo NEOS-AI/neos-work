@@ -10,7 +10,7 @@ import { stream } from 'hono/streaming';
 import type { WorkflowSSEEvent } from '@neos-work/shared';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
-import { getWorkflowSecrets } from '../db/settings.js';
+import { getExecutionSettings } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
@@ -95,7 +95,10 @@ webhooks.post('/:workflowId', async (c) => {
     // non-JSON body — use empty inputs
   }
 
-  const settings = getWorkflowSecrets();
+  const settings = getExecutionSettings({
+    serverUrl: getRuntimeServerUrl(),
+    authToken: getRuntimeAuthToken(),
+  });
   const controller = new AbortController();
   const runId = crypto.randomUUID();
   const now = new Date().toISOString();

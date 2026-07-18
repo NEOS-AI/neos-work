@@ -106,6 +106,8 @@ export interface Routine {
   enabled: boolean;
   inputs: Record<string, unknown>;
   lastRunAt?: string;
+  /** Estimated next schedule fire (ISO), when enabled */
+  nextRunAt?: string;
   createdAt: string;
   updatedAt: string;
 }

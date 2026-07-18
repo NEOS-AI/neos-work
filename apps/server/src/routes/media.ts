@@ -22,6 +22,24 @@ media.get('/files', async (c) => {
   return c.json({ ok: true, data: files });
 });
 
+/**
+ * Media config status (plan Task 7) — does not return the secret value.
+ */
+media.get('/config', (c) => {
+  const hasOpenAi = !!getSetting('OPENAI_API_KEY');
+  const baseUrl = getSetting('OPENAI_BASE_URL');
+  return c.json({
+    ok: true,
+    data: {
+      openaiConfigured: hasOpenAi,
+      openaiBaseUrl: baseUrl ?? null,
+      surfaces: ['image', 'audio'] as const,
+      imageModels: ['dall-e-3'],
+      audioModels: ['tts-1', 'tts-1-hd'],
+    },
+  });
+});
+
 media.post('/image', async (c) => {
   const body = await c.req.json<{
     prompt: string;

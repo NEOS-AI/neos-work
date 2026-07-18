@@ -19,17 +19,29 @@ import * as db from '../db/routines.js';
 import * as workflowDb from '../db/workflows.js';
 import { getDb } from '../db/schema.js';
 import { addOrUpdateSchedule, removeSchedule, runRoutine } from '../lib/routine-scheduler.js';
+import { estimateNextCronRun } from '../lib/cron-next.js';
 
 const routines = new Hono();
 
+function withNextRun<T extends { schedule: string; timezone: string; enabled: boolean }>(
+  routine: T,
+): T & { nextRunAt?: string } {
+  if (!routine.enabled) return { ...routine };
+  const next = estimateNextCronRun(routine.schedule, { timezone: routine.timezone || 'UTC' });
+  return {
+    ...routine,
+    nextRunAt: next?.toISOString(),
+  };
+}
+
 routines.get('/', (c) => {
-  return c.json({ ok: true, data: db.listRoutines() });
+  return c.json({ ok: true, data: db.listRoutines().map(withNextRun) });
 });
 
 routines.get('/:id', (c) => {
   const routine = db.getRoutine(c.req.param('id'));
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: routine });
+  return c.json({ ok: true, data: withNextRun(routine) });
 });
 
 routines.post('/', async (c) => {

@@ -177,6 +177,11 @@ export function Routines() {
                     Last: {new Date(r.lastRunAt).toLocaleString()}
                   </div>
                 )}
+                {r.nextRunAt && r.enabled && (
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    Next: {new Date(r.nextRunAt).toLocaleString()}
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -244,6 +249,14 @@ export function Routines() {
                   {new Date(selectedRoutine.createdAt).toLocaleString()}
                 </span>
               </div>
+              {selectedRoutine.nextRunAt && selectedRoutine.enabled && (
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-muted)' }}>Next Run</span>
+                  <span style={{ color: 'var(--text-primary)' }}>
+                    {new Date(selectedRoutine.nextRunAt).toLocaleString()}
+                  </span>
+                </div>
+              )}
               {selectedRoutine.lastRunAt && (
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-muted)' }}>Last Run</span>

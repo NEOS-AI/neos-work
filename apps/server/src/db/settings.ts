@@ -62,11 +62,26 @@ export function migrateEncryption(): void {
 const WORKFLOW_SECRET_KEYS = [
   'ANTHROPIC_API_KEY',
   'GOOGLE_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'OLLAMA_BASE_URL',
   'TAVILY_API_KEY',
   'SLACK_BOT_TOKEN',
   'DISCORD_WEBHOOK_URL',
   'KIS_APP_KEY',
   'KIS_APP_SECRET',
+  'VERCEL_API_TOKEN',
+  'CLOUDFLARE_API_TOKEN',
+  'CLOUDFLARE_ACCOUNT_ID',
+];
+
+/**
+ * Map UI setting keys → engine secret names used by workflow-engine adapters/nodes.
+ * Settings page stores Anthropic/Google as apiKey.anthropic / apiKey.google.
+ */
+const UI_KEY_ALIASES: Array<[string, string]> = [
+  ['apiKey.anthropic', 'ANTHROPIC_API_KEY'],
+  ['apiKey.google', 'GOOGLE_API_KEY'],
 ];
 
 /** Returns all workflow-related API secrets as a plain-text map (for server-side use only). */
@@ -75,6 +90,32 @@ export function getWorkflowSecrets(): Record<string, string> {
   for (const key of WORKFLOW_SECRET_KEYS) {
     const value = getSetting(key);
     if (value !== undefined) result[key] = value;
+  }
+  // Prefer explicit ANTHROPIC/GOOGLE keys; fall back to UI apiKey.* aliases
+  for (const [uiKey, engineKey] of UI_KEY_ALIASES) {
+    if (!result[engineKey]) {
+      const value = getSetting(uiKey);
+      if (value !== undefined) result[engineKey] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Settings bag for executeWorkflow — secrets plus runtime server URL/token
+ * so Media/Deploy/Agent memory can call back into this process (plan Tasks 7–8, 1).
+ */
+export function getExecutionSettings(runtime?: {
+  serverUrl?: string;
+  authToken?: string;
+}): Record<string, string> {
+  const result = getWorkflowSecrets();
+  if (runtime?.serverUrl) {
+    result.SERVER_URL = runtime.serverUrl;
+  }
+  if (runtime?.authToken) {
+    result.SERVER_TOKEN = runtime.authToken;
+    result.AUTH_TOKEN = runtime.authToken;
   }
   return result;
 }

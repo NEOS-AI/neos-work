@@ -12,7 +12,7 @@ import {
 } from '../db/routines.js';
 import * as workflowDb from '../db/workflows.js';
 import { executeWorkflow } from '@neos-work/workflow-engine';
-import { getWorkflowSecrets } from '../db/settings.js';
+import { getExecutionSettings } from '../db/settings.js';
 import { spawnCliAgent } from './cli-agents.js';
 import { getDesignSystemContent } from './design-system-store.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from './runtime-context.js';
@@ -55,7 +55,10 @@ export async function runRoutine(routineId: string): Promise<string | null> {
   setLastRunAt(routineId);
 
   try {
-    const settings = getWorkflowSecrets();
+    const settings = getExecutionSettings({
+      serverUrl: getRuntimeServerUrl(),
+      authToken: getRuntimeAuthToken(),
+    });
     const designSystemContent = wf.designSystemId
       ? (await getDesignSystemContent(wf.designSystemId)) ?? undefined
       : undefined;

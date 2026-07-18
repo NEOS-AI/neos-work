@@ -19,7 +19,7 @@ import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
 import * as artifactDb from '../db/artifacts.js';
 import * as revisionDb from '../db/workflow-revisions.js';
-import { getWorkflowSecrets } from '../db/settings.js';
+import { getExecutionSettings } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import {
@@ -519,7 +519,10 @@ workflow.post('/:id/run', async (c) => {
     }
   }
 
-  const settings = getWorkflowSecrets();
+  const settings = getExecutionSettings({
+    serverUrl: getRuntimeServerUrl(),
+    authToken: getRuntimeAuthToken(),
+  });
   const controller = new AbortController();
 
   // Load Design System content if the workflow has one configured
