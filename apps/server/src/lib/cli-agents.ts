@@ -78,7 +78,7 @@ export interface SpawnCliAgentResult {
  * Build CLI arguments for the given agent.
  * Each CLI has a different interface for non-interactive prompt submission.
  */
-function buildCliArgs(cliId: SpawnCliAgentOptions['cliId'], prompt: string): { bin: string; args: string[] } {
+export function buildCliArgs(cliId: SpawnCliAgentOptions['cliId'], prompt: string): { bin: string; args: string[] } {
   switch (cliId) {
     case 'cli-claude':
       // claude --print "<prompt>" (non-interactive mode)
@@ -93,7 +93,7 @@ function buildCliArgs(cliId: SpawnCliAgentOptions['cliId'], prompt: string): { b
 }
 
 /** Load all stored MCP OAuth tokens and return them as env var entries. */
-function loadMcpTokenEnvVars(): Record<string, string> {
+export function loadMcpTokenEnvVars(): Record<string, string> {
   const tokenDir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
   const envVars: Record<string, string> = {};
   try {
@@ -153,9 +153,10 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
     });
 
     child.stderr?.on('data', (data: Buffer) => {
-      // Treat stderr as informational — do not fail the run
+      // Stream stderr as progress too (CLI tools often write status to stderr)
       const chunk = data.toString('utf8');
       accumulated += chunk;
+      onChunk?.(chunk, accumulated);
     });
 
     child.on('error', (err) => {

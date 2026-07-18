@@ -11,6 +11,8 @@ import type { EngineClient } from '../../lib/engine.js';
 interface RevisionPanelProps {
   workflowId: string;
   client: EngineClient;
+  /** When true, restore requires an explicit confirm (plan Task 16 dirty warning). */
+  isDirty?: boolean;
   onClose: () => void;
   onRestore: (snapshot: {
     nodes: unknown[];
@@ -21,7 +23,7 @@ interface RevisionPanelProps {
   }) => void;
 }
 
-export function RevisionPanel({ workflowId, client, onClose, onRestore }: RevisionPanelProps) {
+export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore }: RevisionPanelProps) {
   const { t } = useTranslation('common');
   const [revisions, setRevisions] = useState<WorkflowRevision[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +44,20 @@ export function RevisionPanel({ workflowId, client, onClose, onRestore }: Revisi
   }, [workflowId]);
 
   const handleRestore = async (rev: WorkflowRevision) => {
+    if (isDirty) {
+      const ok = window.confirm(
+        t(
+          'workflow.restoreDirtyConfirm',
+          'You have unsaved changes. Restoring this version will discard them. Continue?',
+        ),
+      );
+      if (!ok) return;
+    } else {
+      const ok = window.confirm(
+        t('workflow.restoreConfirm', 'Restore this version into the editor? Unsaved canvas state will be replaced.'),
+      );
+      if (!ok) return;
+    }
     setRestoring(rev.id);
     const full = await client.getRevision(workflowId, rev.id);
     setRestoring(null);
@@ -134,9 +150,16 @@ export function RevisionPanel({ workflowId, client, onClose, onRestore }: Revisi
               )}
             </div>
 
-            {/* Timestamp */}
+            {/* Timestamp + graph size (plan Task 16) */}
             <p className="mt-1" style={{ color: 'var(--text-muted)' }}>
               {new Date(rev.createdAt).toLocaleString()}
+              {typeof rev.nodeCount === 'number' && (
+                <span>
+                  {' · '}
+                  {rev.nodeCount} node{rev.nodeCount === 1 ? '' : 's'}
+                  {typeof rev.edgeCount === 'number' ? ` · ${rev.edgeCount} edge${rev.edgeCount === 1 ? '' : 's'}` : ''}
+                </span>
+              )}
             </p>
 
             {/* Actions */}

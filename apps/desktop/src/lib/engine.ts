@@ -643,6 +643,14 @@ export class EngineClient {
     return res.json();
   }
 
+  async deleteArtifact(id: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
   async deleteMediaFile(filename: string): Promise<ApiResponse<void>> {
     const res = await fetch(this.mediaFileUrl(filename), {
       method: 'DELETE',
@@ -1284,6 +1292,8 @@ export interface WorkflowRevision {
   snapshot?: string;
   label?: string;
   createdAt: string;
+  nodeCount?: number;
+  edgeCount?: number;
 }
 
 export interface Deployment {

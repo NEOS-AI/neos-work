@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { Artifact } from '../../lib/engine.js';
+
+type ViewportMode = 'full' | 'tablet' | 'mobile';
+
+const VIEWPORT_WIDTH: Record<ViewportMode, string> = {
+  full: '100%',
+  tablet: '768px',
+  mobile: '390px',
+};
 
 interface ArtifactPreviewProps {
   workflowId: string;
@@ -13,6 +21,20 @@ interface ArtifactPreviewProps {
   onRerunWorkflow?: () => void;
   /** Whether a workflow run is already in progress */
   isRunning?: boolean;
+}
+
+/** Exported for unit tests — HTML vs plain/markdown content routing. */
+export function isHtmlContent(contentType: string | undefined, content: string | null): boolean {
+  if (contentType?.includes('html')) return true;
+  if (!content) return false;
+  const head = content.trimStart().slice(0, 200).toLowerCase();
+  return head.startsWith('<!doctype html') || head.startsWith('<html') || head.includes('<body');
+}
+
+/** Exported for unit tests. */
+export function isMarkdownContent(contentType: string | undefined, name?: string): boolean {
+  if (contentType?.includes('markdown') || contentType === 'text/md') return true;
+  return !!name && /\.(md|markdown)$/i.test(name);
 }
 
 export function ArtifactPreview({
@@ -29,6 +51,7 @@ export function ArtifactPreview({
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [viewport, setViewport] = useState<ViewportMode>('full');
 
   const loadList = () => {
     if (!client) return;
@@ -103,6 +126,35 @@ export function ArtifactPreview({
     }
   };
 
+  const handleDelete = async () => {
+    if (!client || !selectedId) return;
+    if (!window.confirm('Delete this artifact?')) return;
+    setRefreshing(true);
+    setStatusMsg(null);
+    try {
+      const res = await client.deleteArtifact(selectedId);
+      if (res.ok) {
+        setSelectedId(null);
+        setSelectedContent(null);
+        setStatusMsg('Artifact deleted');
+        loadList();
+      } else {
+        setStatusMsg((res as { error?: string }).error ?? 'Delete failed');
+      }
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setStatusMsg(null), 2500);
+    }
+  };
+
+  const selected = useMemo(
+    () => artifacts.find((a) => a.id === selectedId) ?? null,
+    [artifacts, selectedId],
+  );
+
+  const showAsHtml = isHtmlContent(selected?.contentType, selectedContent);
+  const showAsMarkdown = !showAsHtml && isMarkdownContent(selected?.contentType, selected?.name);
+
   if (artifacts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-white/30 text-sm gap-2 p-4">
@@ -165,26 +217,66 @@ export function ArtifactPreview({
             ▶ Re-run
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => void handleDelete()}
+          disabled={!selectedId || refreshing}
+          className="shrink-0 rounded px-2 py-1 text-xs text-red-300/80 hover:bg-white/10 disabled:opacity-40"
+          title="Delete artifact"
+        >
+          Delete
+        </button>
       </div>
+      {/* Viewport chrome for HTML previews (Live Artifact polish) */}
+      {showAsHtml && (
+        <div className="flex items-center gap-1 px-2 py-1 border-b border-white/10 shrink-0">
+          {(['full', 'tablet', 'mobile'] as ViewportMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewport(mode)}
+              className={`rounded px-2 py-0.5 text-[10px] capitalize ${
+                viewport === mode ? 'bg-white/15 text-white' : 'text-white/40 hover:bg-white/5'
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      )}
       {statusMsg && (
         <p className="px-2 py-1 text-[10px] text-white/40 border-b border-white/5">{statusMsg}</p>
       )}
 
-      {/* Preview iframe */}
-      <div className="flex-1 min-h-0 relative">
+      {/* Preview: HTML iframe, Markdown/text renderer (plan Task 4 content-type) */}
+      <div className="flex-1 min-h-0 relative overflow-auto flex justify-center bg-black/20">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white/40 text-sm z-10">
             Loading…
           </div>
         )}
-        {selectedContent ? (
+        {selectedContent && showAsHtml ? (
           <iframe
-            key={`${selectedId}-${selectedContent.length}`}
+            key={`${selectedId}-${selectedContent.length}-${viewport}`}
             title="Artifact preview"
             sandbox="allow-scripts"
             srcDoc={selectedContent}
-            className="w-full h-full border-0 bg-white rounded"
+            className="h-full border-0 bg-white rounded shadow-sm"
+            style={{ width: VIEWPORT_WIDTH[viewport], maxWidth: '100%' }}
           />
+        ) : selectedContent && showAsMarkdown ? (
+          <pre
+            className="w-full h-full overflow-auto p-4 text-xs text-left whitespace-pre-wrap font-mono"
+            style={{ color: 'var(--text-primary)', backgroundColor: 'var(--bg-secondary)' }}
+          >
+            {selectedContent}
+          </pre>
+        ) : selectedContent ? (
+          <pre
+            className="w-full h-full overflow-auto p-4 text-xs text-left whitespace-pre-wrap font-mono text-white/70"
+          >
+            {selectedContent}
+          </pre>
         ) : (
           <div className="flex items-center justify-center h-full text-white/30 text-sm">
             Select an artifact to preview

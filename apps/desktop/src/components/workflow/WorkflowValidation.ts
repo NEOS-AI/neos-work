@@ -126,6 +126,68 @@ export function validateWorkflowDraft(input: {
         message: 'Slack node requires a channel.',
       });
     }
+
+    if (node.type === 'media') {
+      const hasPrompt = typeof config.prompt === 'string' && config.prompt.trim().length > 0;
+      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      if (!hasPrompt && !hasIncoming) {
+        issues.push({
+          code: 'missing_media_prompt',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Media node has no prompt or upstream input.',
+        });
+      }
+    }
+
+    if (node.type === 'deploy') {
+      const provider = config.provider;
+      if (provider !== 'vercel' && provider !== 'cloudflare') {
+        issues.push({
+          code: 'missing_deploy_provider',
+          severity: 'error',
+          nodeId: node.id,
+          message: 'Deploy node requires provider (vercel or cloudflare).',
+        });
+      }
+    }
+
+    // Parallel / OR structural checks (plan Task 11)
+    if (node.type === 'or_gate') {
+      const incoming = input.edges.filter((edge) => edge.target === node.id).length;
+      if (incoming < 2) {
+        issues.push({
+          code: 'or_gate_underconnected',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'OR gate should have at least two upstream branches to race.',
+        });
+      }
+    }
+
+    if (node.type === 'parallel_start') {
+      const outgoing = input.edges.filter((edge) => edge.source === node.id).length;
+      if (outgoing < 2) {
+        issues.push({
+          code: 'parallel_start_underconnected',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Parallel Start should fan out to at least two branches.',
+        });
+      }
+    }
+
+    if (node.type === 'parallel_end') {
+      const incoming = input.edges.filter((edge) => edge.target === node.id).length;
+      if (incoming < 2) {
+        issues.push({
+          code: 'parallel_end_underconnected',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Parallel End should join at least two upstream branches.',
+        });
+      }
+    }
   }
 
   for (const edge of input.edges) {
@@ -147,6 +209,17 @@ export function validateWorkflowDraft(input: {
   }
   if (!input.nodes.some((node) => node.type === 'output')) {
     issues.push({ code: 'no_output', severity: 'warning', message: 'Workflow has no output node.' });
+  }
+
+  // parallel_start without a join (parallel_end or or_gate) is a structural warning
+  const hasParallelStart = input.nodes.some((n) => n.type === 'parallel_start');
+  const hasJoin = input.nodes.some((n) => n.type === 'parallel_end' || n.type === 'or_gate');
+  if (hasParallelStart && !hasJoin) {
+    issues.push({
+      code: 'parallel_missing_join',
+      severity: 'warning',
+      message: 'Parallel Start is present but no Parallel End / OR Gate join node was found.',
+    });
   }
 
   return issues;

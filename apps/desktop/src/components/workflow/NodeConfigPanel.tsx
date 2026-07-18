@@ -457,6 +457,7 @@ function WorkflowWebhookSection() {
   const [rateLimit, setRateLimit] = useState<{ limit: number; remaining: number; resetAt: number } | null>(null);
   const [showSecret, setShowSecret] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client || !workflowId) return;
@@ -479,12 +480,48 @@ function WorkflowWebhookSection() {
   const base = serverUrl?.replace(/\/$/, '') || 'http://localhost:3000';
   const webhookUrl = `${base}/api/webhook/${workflowId}`;
 
+  const flashCopy = (label: string) => {
+    setCopyMsg(label);
+    setTimeout(() => setCopyMsg(null), 1500);
+  };
+
+  const copyText = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      flashCopy(label);
+    } catch {
+      flashCopy('Copy failed');
+    }
+  };
+
+  const curlExample = secret
+    ? `BODY='{}'\nSIG=$(printf %s "$BODY" | openssl dgst -sha256 -hmac '${secret}' | awk '{print $2}')\ncurl -sS -X POST '${webhookUrl}' \\\n  -H 'Content-Type: application/json' \\\n  -H "X-Neos-Signature: sha256=$SIG" \\\n  -d "$BODY"`
+    : `curl -sS -X POST '${webhookUrl}' -H 'Content-Type: application/json' -H 'X-Neos-Signature: sha256=<hmac>' -d '{}'`;
+
   return (
     <div className="mt-4 space-y-2 rounded-md border p-2" style={{ borderColor: 'var(--border-primary)' }}>
       <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Webhook</p>
       <p className="text-[10px] break-all font-mono" style={{ color: 'var(--text-secondary)' }}>
         POST {webhookUrl}
       </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="text-[10px] underline"
+          style={{ color: 'var(--text-muted)' }}
+          onClick={() => void copyText(webhookUrl, 'URL copied')}
+        >
+          Copy URL
+        </button>
+        <button
+          type="button"
+          className="text-[10px] underline"
+          style={{ color: 'var(--text-muted)' }}
+          onClick={() => void copyText(curlExample, 'curl copied')}
+        >
+          Copy curl
+        </button>
+      </div>
       <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
         Header: <code>X-Neos-Signature: sha256=&lt;hmac&gt;</code>
       </p>
@@ -511,6 +548,15 @@ function WorkflowWebhookSection() {
         </button>
         <button
           type="button"
+          disabled={!secret}
+          className="text-[10px] underline disabled:opacity-40"
+          style={{ color: 'var(--text-muted)' }}
+          onClick={() => secret && void copyText(secret, 'Secret copied')}
+        >
+          Copy
+        </button>
+        <button
+          type="button"
           disabled={busy || !client}
           className="text-[10px] underline disabled:opacity-40"
           style={{ color: 'var(--text-muted)' }}
@@ -525,6 +571,9 @@ function WorkflowWebhookSection() {
           Regenerate
         </button>
       </div>
+      {copyMsg && (
+        <p className="text-[10px]" style={{ color: '#10b981' }}>{copyMsg}</p>
+      )}
     </div>
   );
 }

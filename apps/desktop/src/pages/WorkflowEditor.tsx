@@ -641,6 +641,7 @@ export function WorkflowEditor() {
         <RevisionPanel
           workflowId={workflow.id}
           client={client}
+          isDirty={isDirty}
           onClose={() => setRevisionPanelOpen(false)}
           onRestore={(snap) => {
             if (Array.isArray(snap.nodes) && Array.isArray(snap.edges)) {

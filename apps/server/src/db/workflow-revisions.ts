@@ -12,6 +12,9 @@ export interface WorkflowRevision {
   snapshot: string;  // JSON string of { nodes, edges, name, description }
   label?: string;
   createdAt: string;
+  /** Populated on list responses (plan Task 16 — date, label, node count). */
+  nodeCount?: number;
+  edgeCount?: number;
 }
 
 interface RevisionRow {
@@ -20,6 +23,18 @@ interface RevisionRow {
   snapshot: string;
   label: string | null;
   created_at: string;
+}
+
+function parseSnapshotCounts(snapshot: string): { nodeCount?: number; edgeCount?: number } {
+  try {
+    const parsed = JSON.parse(snapshot) as { nodes?: unknown; edges?: unknown };
+    return {
+      nodeCount: Array.isArray(parsed.nodes) ? parsed.nodes.length : undefined,
+      edgeCount: Array.isArray(parsed.edges) ? parsed.edges.length : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function rowToRevision(row: RevisionRow): WorkflowRevision {
@@ -36,15 +51,23 @@ const MAX_REVISIONS = 50;
 
 export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snapshot'>[] {
   const db = getDb();
+  // Include snapshot only to derive node/edge counts for History panel (not returned to client as raw blob).
   const rows = db
-    .prepare('SELECT id, workflow_id, label, created_at FROM workflow_revisions WHERE workflow_id = ? ORDER BY created_at DESC')
-    .all(workflowId) as Omit<RevisionRow, 'snapshot'>[];
-  return rows.map((row) => ({
-    id: row.id,
-    workflowId: row.workflow_id,
-    label: row.label ?? undefined,
-    createdAt: row.created_at,
-  }));
+    .prepare(
+      'SELECT id, workflow_id, snapshot, label, created_at FROM workflow_revisions WHERE workflow_id = ? ORDER BY created_at DESC',
+    )
+    .all(workflowId) as RevisionRow[];
+  return rows.map((row) => {
+    const counts = parseSnapshotCounts(row.snapshot);
+    return {
+      id: row.id,
+      workflowId: row.workflow_id,
+      label: row.label ?? undefined,
+      createdAt: row.created_at,
+      nodeCount: counts.nodeCount,
+      edgeCount: counts.edgeCount,
+    };
+  });
 }
 
 export function getRevision(revisionId: string): WorkflowRevision | undefined {
