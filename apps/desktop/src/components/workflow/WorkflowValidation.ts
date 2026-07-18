@@ -293,26 +293,29 @@ export function validateWorkflowDraft(input: {
     }
   }
 
-  // Duplicate edge ids (graph corruption / bad import)
+  // Duplicate / missing edge ids (graph corruption / bad import)
   if (input.edges.length > 0) {
     const seenEdgeIds = new Set<string>();
     for (const edge of input.edges) {
-      if (!edge.id || !String(edge.id).trim()) {
+      const edgeId = typeof edge.id === 'string' ? edge.id.trim() : '';
+      if (!edgeId) {
         issues.push({
           code: 'missing_edge_id',
           severity: 'error',
           edgeId: edge.id,
           message: 'Edge is missing an id.',
         });
-      } else if (seenEdgeIds.has(edge.id)) {
+        continue;
+      }
+      if (seenEdgeIds.has(edgeId)) {
         issues.push({
           code: 'duplicate_edge_id',
           severity: 'error',
           edgeId: edge.id,
-          message: `Duplicate edge id "${edge.id}".`,
+          message: `Duplicate edge id "${edgeId}".`,
         });
       }
-      if (edge.id) seenEdgeIds.add(edge.id);
+      seenEdgeIds.add(edgeId);
     }
   }
 

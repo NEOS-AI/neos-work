@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { Plugin } from '../../lib/engine.js';
@@ -33,6 +33,17 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
   );
   const [run, setRun] = useState<RunState | null>(null);
   const [stopFn, setStopFn] = useState<(() => void) | null>(null);
+
+  // Escape closes modal; stop in-flight pipeline stream when closing
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      stopFn?.();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, stopFn]);
 
   const handleStart = useCallback(() => {
     if (!client || run) return;

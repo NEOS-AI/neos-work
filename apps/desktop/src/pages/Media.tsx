@@ -6,6 +6,11 @@ import { formatBytes } from '../lib/format-bytes.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
+import {
+  loadMediaKindFilter,
+  saveMediaKindFilter,
+  type MediaKindFilter,
+} from '../lib/media-prefs.js';
 import { filterByKind, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
 export function Media() {
@@ -15,8 +20,13 @@ export function Media() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MediaFileInfo | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [kindFilter, setKindFilter] = useState<'all' | 'image' | 'audio' | 'other'>('all');
+  const [kindFilter, setKindFilter] = useState<MediaKindFilter>(() => loadMediaKindFilter());
   const [search, setSearch] = useState('');
+
+  const handleKindFilter = (kind: MediaKindFilter) => {
+    setKindFilter(kind);
+    saveMediaKindFilter(kind);
+  };
 
   const visibleFiles = useMemo(() => {
     const byKind = filterByKind(files, kindFilter);
@@ -121,7 +131,7 @@ export function Media() {
             <button
               key={k}
               type="button"
-              onClick={() => setKindFilter(k)}
+              onClick={() => handleKindFilter(k)}
               className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
               style={{
                 backgroundColor: kindFilter === k ? '#3b82f6' : 'var(--bg-tertiary)',

@@ -190,25 +190,17 @@ export function WorkflowEditor() {
     loadWorkflow();
   }, [loadWorkflow]);
 
-  // Escape closes Schedule modal (plan Task 2 shortcut UX)
+  // Escape closes Schedule modal and/or shortcuts help (plan Task 2 / UX)
   useEffect(() => {
-    if (!scheduleOpen) return;
+    if (!scheduleOpen && !shortcutsOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setScheduleOpen(false);
+      if (e.key !== 'Escape') return;
+      if (scheduleOpen) setScheduleOpen(false);
+      if (shortcutsOpen) setShortcutsOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [scheduleOpen]);
-
-  // Escape closes shortcuts help
-  useEffect(() => {
-    if (!shortcutsOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShortcutsOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [shortcutsOpen]);
+  }, [scheduleOpen, shortcutsOpen]);
 
   useEffect(() => {
     let cancelled = false;

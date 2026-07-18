@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { SkillData } from '../lib/engine.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
@@ -26,6 +27,16 @@ export function Skills() {
   useEffect(() => {
     loadSkills();
   }, [loadSkills]);
+
+  // Escape closes try-prompt modal
+  useEffect(() => {
+    if (!tryPrompt) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTryPrompt(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tryPrompt]);
 
   const handleScan = async () => {
     if (!client || isScanning) return;
@@ -329,6 +340,15 @@ function SkillCard({
         {skill.description && (
           <p className="mt-0.5 line-clamp-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
             {skill.description}
+          </p>
+        )}
+        {skill.installedAt && (
+          <p
+            className="mt-0.5 text-[10px]"
+            style={{ color: 'var(--text-muted)' }}
+            title={formatAbsoluteTime(skill.installedAt)}
+          >
+            Installed {formatRelativeTime(skill.installedAt)}
           </p>
         )}
         {skill.triggers && skill.triggers.length > 0 && (

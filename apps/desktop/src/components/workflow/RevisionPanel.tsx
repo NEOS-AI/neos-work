@@ -194,7 +194,12 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
                 <span
                   className="flex-1 cursor-text font-medium"
                   style={{ color: 'var(--text-primary)' }}
-                  onClick={() => { setEditingId(rev.id); setLabelInput(rev.label ?? ''); }}
+                  onClick={() => {
+                    // Clear any leftover Escape-cancel flag so the next blur can save
+                    skipBlurSaveRef.current = false;
+                    setEditingId(rev.id);
+                    setLabelInput(rev.label ?? '');
+                  }}
                   title="Click to add label"
                 >
                   {rev.label || <span style={{ color: 'var(--text-muted)' }}>Auto-save</span>}

@@ -1,3 +1,5 @@
+import { parseTimestampMs } from './format-relative-time.js';
+
 /** Format a millisecond duration (node run results). */
 export function formatDurationMs(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms < 0) return '—';
@@ -9,8 +11,8 @@ export function formatDurationMs(ms: number | null | undefined): string {
 /** Format a time range as a short human duration (run history, etc.). */
 export function formatDuration(startedAt: string, completedAt?: string): string {
   if (!completedAt) return '—';
-  const start = new Date(startedAt).getTime();
-  const end = new Date(completedAt).getTime();
+  const start = parseTimestampMs(startedAt);
+  const end = parseTimestampMs(completedAt);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '—';
   return formatDurationMs(end - start);
 }
