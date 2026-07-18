@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { SkillData } from '../lib/engine.js';
+import {
+  loadEnabledFilter,
+  saveEnabledFilter,
+  type EnabledFilterPref,
+} from '../lib/enabled-filter-prefs.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
@@ -14,9 +19,14 @@ export function Skills() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('skills'));
   const [search, setSearch] = useState('');
   const [tryPrompt, setTryPrompt] = useState<string | null>(null);
+
+  const handleEnabledFilter = (value: EnabledFilterPref) => {
+    setEnabledFilter(value);
+    saveEnabledFilter('skills', value);
+  };
 
   const loadSkills = useCallback(async () => {
     if (!client) return;
@@ -180,7 +190,7 @@ export function Skills() {
               <button
                 key={chip.id}
                 type="button"
-                onClick={() => setEnabledFilter(chip.id)}
+                onClick={() => handleEnabledFilter(chip.id)}
                 className="rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors"
                 style={{
                   backgroundColor: enabledFilter === chip.id ? 'var(--accent-primary)' : 'var(--bg-tertiary)',

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { AgentHarness } from '../../lib/engine.js';
+import { filterAndSortHarnesses } from '../../lib/harness-filter.js';
 import { SelectField } from './fields.js';
 
 export function HarnessSelector(props: {
@@ -25,14 +26,10 @@ export function HarnessSelector(props: {
     };
   }, [client]);
 
-  const allowedDomains = useMemo(() => {
-    if (props.nodeType === 'agent_finance') return new Set(['finance', 'general']);
-    return new Set(['coding', 'general']);
-  }, [props.nodeType]);
-
-  const filtered = harnesses
-    .filter((harness) => allowedDomains.has(harness.domain))
-    .sort((a, b) => `${a.domain}:${a.name}`.localeCompare(`${b.domain}:${b.name}`));
+  const filtered = useMemo(
+    () => filterAndSortHarnesses(harnesses, props.nodeType),
+    [harnesses, props.nodeType],
+  );
   const selected = filtered.find((harness) => harness.id === props.value);
 
   return (

@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MemoryItem, MemoryType, CreateMemoryInput } from '../lib/engine.js';
+import {
+  loadEnabledFilter,
+  saveEnabledFilter,
+  type EnabledFilterPref,
+} from '../lib/enabled-filter-prefs.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -32,6 +37,14 @@ function MemoryModal({ item, onSave, onClose }: MemoryModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const handleSave = async () => {
     if (!name.trim() || !content.trim()) {
       setError('Name and content are required');
@@ -47,7 +60,7 @@ function MemoryModal({ item, onSave, onClose }: MemoryModalProps) {
     }
   };
 
-  const inputStyle: React.CSSProperties = {
+  const inputStyle: CSSProperties = {
     backgroundColor: 'var(--bg-primary)',
     border: '1px solid var(--border-secondary)',
     borderRadius: '0.5rem',
@@ -140,7 +153,12 @@ export default function Memory() {
   const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: MemoryItem } | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | MemoryType>('all');
-  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('memory'));
+
+  const handleEnabledFilter = (value: EnabledFilterPref) => {
+    setEnabledFilter(value);
+    saveEnabledFilter('memory', value);
+  };
 
   const filteredItems = useMemo(() => {
     const byType = typeFilter === 'all' ? items : items.filter((i) => i.type === typeFilter);
@@ -220,7 +238,7 @@ export default function Memory() {
                 <button
                   key={chip.id}
                   type="button"
-                  onClick={() => setEnabledFilter(chip.id)}
+                  onClick={() => handleEnabledFilter(chip.id)}
                   className="rounded-lg px-2 py-1 text-[10px] font-medium"
                   style={{
                     backgroundColor: enabledFilter === chip.id ? '#10b981' : 'var(--bg-tertiary)',

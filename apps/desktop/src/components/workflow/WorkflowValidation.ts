@@ -143,6 +143,16 @@ export function validateWorkflowDraft(input: {
           message: 'Agent node has no harness selected.',
         });
       }
+      // Agents typically need upstream context when the graph has more than one node
+      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      if (!hasIncoming && input.nodes.length > 1) {
+        issues.push({
+          code: 'agent_no_upstream',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Agent node has no upstream connection.',
+        });
+      }
     }
 
     if (node.type === 'web_search') {

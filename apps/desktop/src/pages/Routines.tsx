@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Routine, RoutineRun, Workflow } from '../lib/engine.js';
+import {
+  loadEnabledFilter,
+  saveEnabledFilter,
+  type EnabledFilterPref,
+} from '../lib/enabled-filter-prefs.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -17,7 +22,12 @@ export function Routines() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RoutineRun[]>([]);
   const [search, setSearch] = useState('');
-  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('routines'));
+
+  const handleEnabledFilter = (value: EnabledFilterPref) => {
+    setEnabledFilter(value);
+    saveEnabledFilter('routines', value);
+  };
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -42,6 +52,19 @@ export function Routines() {
   };
 
   useEffect(() => { load(); }, [client]);
+
+  // Escape closes create-routine modal
+  useEffect(() => {
+    if (!createOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setCreateOpen(false);
+        setFormError('');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [createOpen]);
 
   useEffect(() => {
     if (!client || !selectedId) return;
@@ -215,7 +238,7 @@ export function Routines() {
               <button
                 key={chip.id}
                 type="button"
-                onClick={() => setEnabledFilter(chip.id)}
+                onClick={() => handleEnabledFilter(chip.id)}
                 className="rounded-md px-2 py-0.5 text-[10px] font-medium uppercase"
                 style={{
                   backgroundColor: enabledFilter === chip.id ? 'var(--border-secondary)' : 'var(--bg-tertiary)',
