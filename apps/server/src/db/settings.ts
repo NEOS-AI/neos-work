@@ -102,14 +102,46 @@ export function getWorkflowSecrets(): Record<string, string> {
 }
 
 /**
+ * Reject non-http(s) base URLs (plan Task 7/3 polish — light guard, not full SSRF).
+ * Exported for unit tests.
+ */
+export function isSafeHttpBaseUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Settings bag for executeWorkflow — secrets plus runtime server URL/token
  * so Media/Deploy/Agent memory can call back into this process (plan Tasks 7–8, 1).
+ * Also injects defaults.provider → llmProvider and defaults.model → model.
  */
 export function getExecutionSettings(runtime?: {
   serverUrl?: string;
   authToken?: string;
 }): Record<string, string> {
   const result = getWorkflowSecrets();
+
+  // Drop unsafe custom base URLs rather than sending them to adapters
+  for (const key of ['OPENAI_BASE_URL', 'OLLAMA_BASE_URL'] as const) {
+    if (result[key] && !isSafeHttpBaseUrl(result[key]!)) {
+      delete result[key];
+    }
+  }
+
+  // Settings UI defaults → agent adapter selection (plan multi-LLM)
+  const defaultProvider = getSetting('defaults.provider');
+  if (defaultProvider && !result.llmProvider) {
+    result.llmProvider = defaultProvider;
+  }
+  const defaultModel = getSetting('defaults.model');
+  if (defaultModel && !result.model) {
+    result.model = defaultModel;
+  }
+
   if (runtime?.serverUrl) {
     result.SERVER_URL = runtime.serverUrl;
   }

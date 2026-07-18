@@ -138,13 +138,18 @@ export function deleteWorkflow(id: string): boolean {
 export function duplicateWorkflow(id: string): Workflow | undefined {
   const src = getWorkflow(id);
   if (!src) return undefined;
-  return createWorkflow({
+  const copy = createWorkflow({
     name: `${src.name} (copy)`,
     description: src.description,
     domain: src.domain,
     nodes: src.nodes,
     edges: src.edges,
   });
+  // Preserve design context binding (plan Task 1)
+  if (src.designSystemId) {
+    return updateWorkflow(copy.id, { designSystemId: src.designSystemId }) ?? copy;
+  }
+  return copy;
 }
 
 // ── Workflow Runs ──────────────────────────────────────────

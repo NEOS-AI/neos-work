@@ -96,13 +96,19 @@ export function validateWorkflowDraft(input: {
       }
     }
 
-    if ((node.type === 'agent_finance' || node.type === 'agent_coding') && typeof config.harnessId !== 'string') {
-      issues.push({
-        code: 'missing_harness_id',
-        severity: 'warning',
-        nodeId: node.id,
-        message: 'Agent node has no harness selected.',
-      });
+    if (node.type === 'agent_finance' || node.type === 'agent_coding') {
+      const provider = (config.provider ?? config.llmProvider) as string | undefined;
+      const isCli =
+        provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
+      // CLI agents do not require a harness (plan Task 3)
+      if (!isCli && typeof config.harnessId !== 'string') {
+        issues.push({
+          code: 'missing_harness_id',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Agent node has no harness selected.',
+        });
+      }
     }
 
     if (node.type === 'web_search') {
@@ -148,6 +154,17 @@ export function validateWorkflowDraft(input: {
           severity: 'error',
           nodeId: node.id,
           message: 'Deploy node requires provider (vercel or cloudflare).',
+        });
+      }
+      const hasContent =
+        (typeof config.content === 'string' && config.content.trim().length > 0)
+        || input.edges.some((edge) => edge.target === node.id);
+      if (!hasContent) {
+        issues.push({
+          code: 'missing_deploy_content',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Deploy node has no content or upstream input.',
         });
       }
     }

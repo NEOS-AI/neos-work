@@ -125,22 +125,57 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
             )}
             {ev.type === 'run.failed' && (ev as { error: string }).error}
             {isExpanded && isProgress && (
-              <pre
-                className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-              >
-                {((ev as { accumulated?: string; chunk?: string }).accumulated
-                  ?? (ev as { chunk?: string }).chunk
-                  ?? '').slice(-2000)}
-              </pre>
+              <div className="mt-1">
+                <div className="mb-1 flex justify-end">
+                  <button
+                    type="button"
+                    className="text-[10px] underline"
+                    style={{ color: 'var(--text-muted)' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const text = ((ev as { accumulated?: string; chunk?: string }).accumulated
+                        ?? (ev as { chunk?: string }).chunk
+                        ?? '');
+                      void navigator.clipboard?.writeText(text);
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre
+                  className="max-h-40 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                >
+                  {((ev as { accumulated?: string; chunk?: string }).accumulated
+                    ?? (ev as { chunk?: string }).chunk
+                    ?? '').slice(-2000)}
+                </pre>
+              </div>
             )}
             {isExpanded && hasOutput && (
-              <pre
-                className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-              >
-                {linkifyText(formatOutput((ev as { output: unknown }).output).slice(0, 2000))}
-              </pre>
+              <div className="mt-1">
+                <div className="mb-1 flex justify-end">
+                  <button
+                    type="button"
+                    className="text-[10px] underline"
+                    style={{ color: 'var(--text-muted)' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void navigator.clipboard?.writeText(
+                        formatOutput((ev as { output: unknown }).output),
+                      );
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre
+                  className="max-h-48 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                >
+                  {linkifyText(formatOutput((ev as { output: unknown }).output).slice(0, 2000))}
+                </pre>
+              </div>
             )}
           </div>
         );

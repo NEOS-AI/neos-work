@@ -11,8 +11,9 @@ import { stream } from 'hono/streaming';
 import { listPlugins, getPlugin, upgradeSkillToPlugin } from '../lib/plugin-store.js';
 import { runPlugin, resumeRun } from '../lib/plugin-runner.js';
 import type { PluginSSEEvent } from '../lib/plugin-runner.js';
-import { getWorkflowSecrets } from '../db/settings.js';
+import { getExecutionSettings } from '../db/settings.js';
 import { getDb } from '../db/schema.js';
+import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 
 const plugins = new Hono();
 
@@ -83,7 +84,10 @@ plugins.post('/:id/run', async (c) => {
     // No body
   }
 
-  const settings = getWorkflowSecrets();
+  const settings = getExecutionSettings({
+    serverUrl: getRuntimeServerUrl(),
+    authToken: getRuntimeAuthToken(),
+  });
   const controller = new AbortController();
 
   return stream(c, async (writableStream) => {
