@@ -18,7 +18,7 @@ describe('routine cron / timezone assumptions', () => {
     const task = cron.schedule(
       '0 9 * * *',
       () => {},
-      { timezone: 'Asia/Seoul', scheduled: false },
+      { timezone: 'Asia/Seoul' },
     );
     expect(task).toBeDefined();
     task.stop();
@@ -28,7 +28,7 @@ describe('routine cron / timezone assumptions', () => {
     const task = cron.schedule(
       '0 9 * * *',
       () => {},
-      { timezone: 'America/New_York', scheduled: false },
+      { timezone: 'America/New_York' },
     );
     expect(task).toBeDefined();
     task.stop();

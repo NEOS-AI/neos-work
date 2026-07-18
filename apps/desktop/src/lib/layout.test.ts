@@ -44,3 +44,26 @@ describe('autoLayout', () => {
     expect(autoLayout([], [])).toEqual([]);
   });
 });
+
+describe('autoLayout fan-out', () => {
+  it('places parallel branches with different y for TB', () => {
+    const nodes = [
+      { id: 'a', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+      { id: 'b', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+      { id: 'c', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+      { id: 'd', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+    ];
+    const edges = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'a', target: 'c' },
+      { id: 'e3', source: 'b', target: 'd' },
+      { id: 'e4', source: 'c', target: 'd' },
+    ];
+    const laid = autoLayout(nodes, edges, 'TB');
+    const byId = Object.fromEntries(laid.map((n) => [n.id, n]));
+    expect(byId.a!.position.y).toBeLessThan(byId.b!.position.y);
+    expect(byId.a!.position.y).toBeLessThan(byId.c!.position.y);
+    // branches should not share exact same coordinates
+    expect(byId.b!.position.x !== byId.c!.position.x || byId.b!.position.y !== byId.c!.position.y).toBe(true);
+  });
+});
