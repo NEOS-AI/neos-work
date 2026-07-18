@@ -4,16 +4,42 @@
  * Linkifies http(s) URLs in outputs (deploy links, media paths).
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
+import { formatDurationMs } from '../../lib/format-duration.js';
 
 interface RunLogPanelProps {
   events: WorkflowSSEEvent[];
   nodeLabelMap: Record<string, string>;
 }
 
+type RunLogFilter = 'all' | 'progress' | 'completed' | 'failed' | 'lifecycle';
+
 const URL_RE = /(https?:\/\/[^\s"'<>]+)/g;
+
+/** Exported for unit tests — filter run log events by category chip. */
+export function filterRunLogEvents(
+  events: WorkflowSSEEvent[],
+  filter: RunLogFilter,
+): WorkflowSSEEvent[] {
+  if (filter === 'all') return events;
+  return events.filter((ev) => {
+    if (filter === 'progress') return ev.type === 'node.progress';
+    if (filter === 'completed') return ev.type === 'node.completed';
+    if (filter === 'failed') return ev.type === 'node.failed' || ev.type === 'run.failed';
+    if (filter === 'lifecycle') {
+      return (
+        ev.type === 'run.started'
+        || ev.type === 'run.completed'
+        || ev.type === 'run.failed'
+        || ev.type === 'node.started'
+        || ev.type === 'node.failed'
+      );
+    }
+    return true;
+  });
+}
 
 /** Exported for unit tests — turn plain text into linkified React nodes. */
 export function linkifyText(text: string): ReactNode[] {
@@ -50,23 +76,23 @@ function formatOutput(output: unknown): string {
   }
 }
 
-function formatDuration(ms: number | undefined): string {
-  if (ms === undefined || !Number.isFinite(ms)) return '';
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
 export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [logFilter, setLogFilter] = useState<RunLogFilter>('all');
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  const visibleEvents = useMemo(
+    () => filterRunLogEvents(events, logFilter),
+    [events, logFilter],
+  );
 
   useEffect(() => {
     const el = endRef.current;
     if (el && typeof el.scrollIntoView === 'function') {
       el.scrollIntoView({ block: 'end', behavior: 'smooth' });
     }
-  }, [events]);
+  }, [visibleEvents]);
 
   if (events.length === 0) {
     return (
@@ -76,16 +102,47 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
     );
   }
 
+  const FILTERS: { id: RunLogFilter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'lifecycle', label: 'Lifecycle' },
+    { id: 'progress', label: 'Progress' },
+    { id: 'completed', label: 'Completed' },
+    { id: 'failed', label: 'Failed' },
+  ];
+
   return (
+    <div className="flex flex-1 flex-col min-h-0">
+      <div className="flex flex-wrap gap-1 border-b px-2 py-1.5" style={{ borderColor: 'var(--border-primary)' }}>
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setLogFilter(f.id)}
+            className="rounded px-2 py-0.5 text-[10px] font-medium"
+            style={{
+              backgroundColor: logFilter === f.id ? 'var(--bg-accent, #3b82f6)' : 'var(--bg-tertiary)',
+              color: logFilter === f.id ? '#fff' : 'var(--text-muted)',
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span className="self-center text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          {visibleEvents.length}/{events.length}
+        </span>
+      </div>
     <div className="flex-1 overflow-y-auto p-3 text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
-      {events.map((ev, i) => {
+      {visibleEvents.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)' }}>No events match this filter.</p>
+      ) : null}
+      {visibleEvents.map((ev, i) => {
         const nodeLabel = 'nodeId' in ev
           ? (nodeLabelMap[(ev as { nodeId: string }).nodeId] ?? (ev as { nodeId: string }).nodeId)
           : null;
         const isExpanded = expandedIdx === i;
         const hasOutput = ev.type === 'node.completed' && (ev as { output?: unknown }).output !== undefined;
         const isProgress = ev.type === 'node.progress';
-        const isLast = i === events.length - 1;
+        const isLast = i === visibleEvents.length - 1;
         const durationMs = ev.type === 'node.completed'
           ? (ev as { durationMs?: number }).durationMs
           : undefined;
@@ -111,7 +168,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
             {ev.type === 'node.completed' && (
               <span>
                 ✓ {nodeLabel}
-                {durationMs !== undefined ? ` · ${formatDuration(durationMs)}` : ''}
+                {durationMs !== undefined ? ` · ${formatDurationMs(durationMs)}` : ''}
                 {hasOutput ? ' ▸' : ''}
               </span>
             )}
@@ -180,6 +237,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

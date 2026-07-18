@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentHarness } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const DOMAIN_COLORS: Record<string, string> = {
@@ -48,8 +49,7 @@ export function Harnesses() {
   const visible = useMemo(() => {
     const byDomain =
       domainFilter === 'all' ? harnesses : harnesses.filter((h) => h.domain === domainFilter);
-    const searched = filterBySearchText(byDomain, search);
-    return [...searched].sort((a, b) => a.name.localeCompare(b.name));
+    return sortByName(filterBySearchText(byDomain, search));
   }, [harnesses, domainFilter, search]);
 
   if (loading) {

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function DesignSystems() {
@@ -18,8 +19,7 @@ export function DesignSystems() {
   const [search, setSearch] = useState('');
 
   const filteredSystems = useMemo(() => {
-    const list = filterBySearchText(systems, search);
-    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    return sortByName(filterBySearchText(systems, search));
   }, [systems, search]);
 
   const load = useCallback(async () => {

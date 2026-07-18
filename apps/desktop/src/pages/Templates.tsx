@@ -159,7 +159,7 @@ export function Templates() {
                 )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {tpl.nodes.length} nodes
+                    {tpl.nodes.length} nodes · {tpl.edges.length} edges
                   </span>
                   <button
                     onClick={() => handleUse(tpl)}

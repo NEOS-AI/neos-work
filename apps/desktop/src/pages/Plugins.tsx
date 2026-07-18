@@ -3,6 +3,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import type { Plugin } from '../lib/engine.js';
 import { PipelineRunner } from '../components/workflow/PipelineRunner.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Plugins() {
@@ -21,8 +22,7 @@ export function Plugins() {
   }, [client]);
 
   const filtered = useMemo(() => {
-    const list = filterBySearchText(plugins, search);
-    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    return sortByName(filterBySearchText(plugins, search));
   }, [plugins, search]);
 
   return (

@@ -180,8 +180,10 @@ export function WorkflowEditor() {
       setNodes(rfNodes);
       setEdges(rfEdges);
       setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, res.data.description ?? '', res.data.designSystemId ?? ''));
+      // Fit graph after positions apply
+      setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 50);
     }
-  }, [client, id, setNodes, setEdges]);
+  }, [client, id, setNodes, setEdges, fitView]);
 
   useEffect(() => {
     loadWorkflow();

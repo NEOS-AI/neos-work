@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
 import { filterByFieldValue, filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
@@ -30,7 +31,7 @@ export function Deployments() {
   const visibleDeployments = useMemo(() => {
     const byStatus = filterByStatus(deployments, statusFilter);
     const byProvider = filterByFieldValue(byStatus, 'provider', providerFilter);
-    return filterByTextMatch(
+    const matched = filterByTextMatch(
       byProvider,
       search,
       (d) =>
@@ -46,6 +47,7 @@ export function Deployments() {
           .filter(Boolean)
           .join(' '),
     );
+    return sortByDateDesc(matched, (d) => d.createdAt);
   }, [deployments, statusFilter, providerFilter, search, workflows]);
 
   const load = useCallback(async () => {
@@ -112,7 +114,7 @@ export function Deployments() {
     return () => clearInterval(t);
   }, [client]);
 
-  const workflowOptions = Object.values(workflows).sort((a, b) => a.name.localeCompare(b.name));
+  const workflowOptions = sortByName(Object.values(workflows));
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
