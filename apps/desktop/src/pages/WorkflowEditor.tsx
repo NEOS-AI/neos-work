@@ -23,7 +23,7 @@ import { NodeConfigPanel } from '../components/workflow/NodeConfigPanel.js';
 import { RunHistoryPanel } from '../components/workflow/RunHistoryPanel.js';
 import { RunInputsDialog } from '../components/workflow/RunInputsDialog.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
-import { validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
+import { summarizeValidationIssues, validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
 import { autoLayout } from '../lib/layout.js';
 import { RevisionPanel } from '../components/workflow/RevisionPanel.js';
 import { ArtifactPreview } from '../components/workflow/ArtifactPreview.js';
@@ -234,6 +234,10 @@ export function WorkflowEditor() {
     [draft, allBlocks],
   );
   const hasValidationErrors = validationIssues.some((issue) => issue.severity === 'error');
+  const validationSummary = useMemo(
+    () => summarizeValidationIssues(validationIssues),
+    [validationIssues],
+  );
 
   const isDirty = useMemo(() => {
     if (!savedDraft) return false;
@@ -469,6 +473,22 @@ export function WorkflowEditor() {
           )}
         </span>
         <div className="flex-1" />
+        {validationSummary.total > 0 && (
+          <button
+            type="button"
+            onClick={() => setRightPanelTab('config')}
+            className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium"
+            style={{
+              backgroundColor: validationSummary.errors > 0 ? '#7f1d1d40' : 'var(--bg-tertiary)',
+              color: validationSummary.errors > 0 ? '#fca5a5' : 'var(--text-muted)',
+            }}
+            title="Open Config panel for validation issues"
+          >
+            {validationSummary.errors > 0
+              ? `${validationSummary.errors} error${validationSummary.errors === 1 ? '' : 's'}`
+              : `${validationSummary.warnings} warning${validationSummary.warnings === 1 ? '' : 's'}`}
+          </button>
+        )}
         <button
           onClick={() => setShortcutsOpen((v) => !v)}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"

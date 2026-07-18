@@ -10,6 +10,25 @@ export interface WorkflowValidationIssue {
   message: string;
 }
 
+export interface WorkflowValidationSummary {
+  total: number;
+  errors: number;
+  warnings: number;
+}
+
+/** Count errors vs warnings for toolbar badges. */
+export function summarizeValidationIssues(
+  issues: WorkflowValidationIssue[],
+): WorkflowValidationSummary {
+  let errors = 0;
+  let warnings = 0;
+  for (const issue of issues) {
+    if (issue.severity === 'error') errors += 1;
+    else warnings += 1;
+  }
+  return { total: issues.length, errors, warnings };
+}
+
 interface DraftNode {
   id: string;
   type: string;

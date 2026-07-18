@@ -437,6 +437,11 @@ export function Blocks() {
               minWidth: 160,
             }}
           />
+          {blockList.length > 0 && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {filtered.length}/{blockList.length}
+            </span>
+          )}
           <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
             {domains.map((d) => (
               <button
@@ -520,7 +525,11 @@ export function Blocks() {
           ) : (
             custom.length === 0 && builtIn.length === 0 && (
               <div className="flex h-32 items-center justify-center rounded-xl border" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
-                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No blocks found. Create your first custom block!</span>
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {blockList.length === 0
+                    ? 'No blocks found. Create your first custom block!'
+                    : 'No blocks match the current filters.'}
+                </span>
               </div>
             )
           )}

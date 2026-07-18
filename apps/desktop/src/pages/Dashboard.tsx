@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
+import type { Workflow } from '../lib/engine.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
+import { pickRecentWorkflows } from '../lib/recent-workflows.js';
 
 interface DashboardStats {
   sessions: number | null;
@@ -33,6 +35,7 @@ export function Dashboard() {
     engineVersion: null,
     engineUptimeSec: null,
   });
+  const [recentWorkflows, setRecentWorkflows] = useState<Workflow[]>([]);
 
   useEffect(() => {
     if (!client) return;
@@ -52,6 +55,7 @@ export function Dashboard() {
           client.health().catch(() => null),
         ]);
       if (cancelled) return;
+      const wfList = workflows?.ok && workflows.data ? workflows.data : [];
       setStats({
         sessions: sessions?.ok && sessions.data ? sessions.data.length : null,
         workflows: workflows?.ok && workflows.data ? workflows.data.length : null,
@@ -64,6 +68,7 @@ export function Dashboard() {
         engineVersion: health?.status === 'ok' ? (health.version ?? null) : null,
         engineUptimeSec: health?.status === 'ok' ? (health.uptime ?? null) : null,
       });
+      setRecentWorkflows(pickRecentWorkflows(wfList, 5));
     })();
 
     return () => {
@@ -137,6 +142,44 @@ export function Dashboard() {
           to="/media"
         />
       </div>
+
+      {/* Recent workflows */}
+      {recentWorkflows.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Recent workflows
+            </h2>
+            <Link to="/workflows" className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              View all
+            </Link>
+          </div>
+          <div className="flex flex-col gap-2">
+            {recentWorkflows.map((wf) => (
+              <Link
+                key={wf.id}
+                to={`/workflows/${wf.id}`}
+                className="flex items-center justify-between rounded-xl border px-4 py-3 transition-opacity hover:opacity-90"
+                style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {wf.name}
+                  </p>
+                  <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
+                    {wf.domain}
+                    {' · '}
+                    {(wf.nodes?.length ?? 0)} nodes
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {new Date(wf.updatedAt).toLocaleDateString()}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div>
