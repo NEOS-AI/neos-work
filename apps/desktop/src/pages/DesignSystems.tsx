@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
+import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function DesignSystems() {
   const { client } = useEngine();
@@ -13,6 +14,12 @@ export function DesignSystems() {
   const [newDescription, setNewDescription] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  const filteredSystems = useMemo(
+    () => filterBySearchText(systems, search),
+    [systems, search],
+  );
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -47,19 +54,30 @@ export function DesignSystems() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Design Systems</h1>
           <p className="text-sm text-white/50 mt-1">
             Manage design context files (DESIGN.md) injected into agent system prompts.
           </p>
         </div>
-        <button
-          onClick={() => { setIsCreating(true); setCreateError(null); }}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
-        >
-          + New Design System
-        </button>
+        <div className="flex items-center gap-2">
+          {systems.length > 0 && (
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search design systems…"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30"
+            />
+          )}
+          <button
+            onClick={() => { setIsCreating(true); setCreateError(null); }}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+          >
+            + New Design System
+          </button>
+        </div>
       </div>
 
       {/* Create form */}
@@ -120,9 +138,11 @@ export function DesignSystems() {
             Create one to inject brand guidelines and component styles into agent prompts.
           </p>
         </div>
+      ) : filteredSystems.length === 0 ? (
+        <p className="text-white/40 text-sm">No design systems match your search.</p>
       ) : (
         <div className="grid gap-3">
-          {systems.map((ds) => (
+          {filteredSystems.map((ds) => (
             <div
               key={ds.id}
               className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/[0.07] transition-colors"

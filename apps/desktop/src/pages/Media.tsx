@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MediaFileInfo } from '../lib/engine.js';
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
+import { filterByKind } from '../lib/workflow-list-filter.js';
+import { formatBytes } from '../lib/format-bytes.js';
 
 export function Media() {
   const { client } = useEngine();
@@ -16,6 +12,12 @@ export function Media() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MediaFileInfo | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [kindFilter, setKindFilter] = useState<'all' | 'image' | 'audio' | 'other'>('all');
+
+  const visibleFiles = useMemo(
+    () => filterByKind(files, kindFilter),
+    [files, kindFilter],
+  );
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -91,6 +93,28 @@ export function Media() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {(['all', 'image', 'audio', 'other'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKindFilter(k)}
+              className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
+              style={{
+                backgroundColor: kindFilter === k ? '#3b82f6' : 'var(--bg-tertiary)',
+                color: kindFilter === k ? '#fff' : 'var(--text-secondary)',
+              }}
+            >
+              {k}
+            </button>
+          ))}
+          <span className="self-center text-xs" style={{ color: 'var(--text-muted)' }}>
+            {visibleFiles.length}/{files.length}
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>
       ) : files.length === 0 ? (
@@ -100,10 +124,12 @@ export function Media() {
         >
           No media files yet. Run a workflow with a Media node (image/audio).
         </div>
+      ) : visibleFiles.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No files match this kind filter.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="md:col-span-1 space-y-2 max-h-[70vh] overflow-y-auto">
-            {files.map((f) => (
+            {visibleFiles.map((f) => (
               <div
                 key={f.filename}
                 className="flex items-stretch gap-1"

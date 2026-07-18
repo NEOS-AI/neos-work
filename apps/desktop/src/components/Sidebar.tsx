@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 
@@ -22,7 +23,20 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const { t } = useTranslation('common');
-  const { status, mode, serverUrl, disconnect } = useEngine();
+  const { status, mode, serverUrl, disconnect, client } = useEngine();
+  const [engineVersion, setEngineVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!client || status !== 'connected') {
+      setEngineVersion(null);
+      return;
+    }
+    let cancelled = false;
+    void client.health().then((h) => {
+      if (!cancelled && h.status === 'ok') setEngineVersion(h.version);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [client, status]);
 
   return (
     <aside className="flex w-52 flex-col border-r" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
@@ -97,6 +111,11 @@ export function Sidebar() {
         </div>
         {serverUrl && (
           <p className="mt-1 truncate text-xs" style={{ color: 'var(--text-muted)' }}>{serverUrl}</p>
+        )}
+        {engineVersion && (
+          <p className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            Engine v{engineVersion}{mode ? ` · ${mode}` : ''}
+          </p>
         )}
         {status === 'connected' && (
           <button

@@ -46,3 +46,12 @@ export function filterByStatus<T extends { status: string }>(
   if (!status || status === 'all') return items;
   return items.filter((item) => item.status === status);
 }
+
+/** Filter media files (or similar) by kind chip. */
+export function filterByKind<T extends { kind: string }>(
+  items: T[],
+  kind?: string,
+): T[] {
+  if (!kind || kind === 'all') return items;
+  return items.filter((item) => item.kind === kind);
+}

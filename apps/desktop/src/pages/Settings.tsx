@@ -5,6 +5,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import { useTheme } from '../hooks/useTheme.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
 import type { McpServerData } from '../lib/engine.js';
+import { formatEngineUptime } from '../lib/format-uptime.js';
 
 export function Settings() {
   const { t, i18n } = useTranslation(['settings', 'common']);
@@ -34,6 +35,8 @@ export function Settings() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{t('settings:title')}</h1>
+
+      <EngineStatusSection />
 
       {/* API Keys */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -205,6 +208,74 @@ export function Settings() {
       {/* Dev Tools */}
       <DevToolsSection />
     </div>
+  );
+}
+
+// --- Engine status (version / uptime from /api/health) ---
+
+function EngineStatusSection() {
+  const { client, status, mode, serverUrl } = useEngine();
+  const [version, setVersion] = useState<string | null>(null);
+  const [uptimeSec, setUptimeSec] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!client || status !== 'connected') {
+      setVersion(null);
+      setUptimeSec(null);
+      return;
+    }
+    let cancelled = false;
+    void client
+      .health()
+      .then((h) => {
+        if (cancelled || h.status !== 'ok') return;
+        setVersion(h.version ?? null);
+        setUptimeSec(typeof h.uptime === 'number' ? h.uptime : null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVersion(null);
+          setUptimeSec(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, status]);
+
+  const uptimeLabel = formatEngineUptime(uptimeSec);
+  const statusLabel =
+    status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting…' : 'Disconnected';
+
+  return (
+    <section
+      className="rounded-xl border p-5"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+    >
+      <h2 className="mb-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+        Engine
+      </h2>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <dt style={{ color: 'var(--text-muted)' }}>Status</dt>
+        <dd style={{ color: 'var(--text-primary)' }}>{statusLabel}</dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Mode</dt>
+        <dd style={{ color: 'var(--text-primary)' }}>
+          {mode === 'host' ? 'Local' : mode === 'client' ? 'Remote' : '—'}
+        </dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Version</dt>
+        <dd style={{ color: 'var(--text-primary)' }}>{version ? `v${version}` : '—'}</dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Uptime</dt>
+        <dd style={{ color: 'var(--text-primary)' }}>{uptimeLabel || '—'}</dd>
+        {serverUrl && (
+          <>
+            <dt style={{ color: 'var(--text-muted)' }}>URL</dt>
+            <dd className="truncate" style={{ color: 'var(--text-primary)' }} title={serverUrl}>
+              {serverUrl}
+            </dd>
+          </>
+        )}
+      </dl>
+    </section>
   );
 }
 

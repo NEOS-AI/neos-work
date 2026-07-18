@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { SkillData } from '../lib/engine.js';
+import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Skills() {
   const { client } = useEngine();
@@ -11,6 +12,7 @@ export function Skills() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const [tryPrompt, setTryPrompt] = useState<string | null>(null);
 
   const loadSkills = useCallback(async () => {
@@ -71,29 +73,49 @@ export function Skills() {
     return a.name.localeCompare(b.name);
   });
 
-  // Categories
+  // Categories + search
   const categories = ['all', ...Array.from(new Set(skills.map((s) => s.category).filter(Boolean)))];
-  const filtered = categoryFilter === 'all' ? sorted : sorted.filter((s) => s.category === categoryFilter);
+  const filtered = useMemo(() => {
+    const byCat = categoryFilter === 'all' ? sorted : sorted.filter((s) => s.category === categoryFilter);
+    return filterBySearchText(byCat, search);
+  }, [sorted, categoryFilter, search]);
 
   const enabledCount = skills.filter((s) => s.enabled).length;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>Skills</h1>
-        <button
-          onClick={handleScan}
-          disabled={isScanning || !client}
-          className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors disabled:opacity-40"
-          style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
-        >
-          {isScanning ? (
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
-          ) : (
-            <ScanIcon />
+        <div className="flex items-center gap-2">
+          {skills.length > 0 && (
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search skills…"
+              className="rounded-lg border px-3 py-1.5 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                minWidth: 180,
+              }}
+            />
           )}
-          Scan
-        </button>
+          <button
+            onClick={handleScan}
+            disabled={isScanning || !client}
+            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors disabled:opacity-40"
+            style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+          >
+            {isScanning ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent" />
+            ) : (
+              <ScanIcon />
+            )}
+            Scan
+          </button>
+        </div>
       </div>
 
       {scanResult && (

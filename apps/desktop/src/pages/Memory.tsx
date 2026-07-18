@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MemoryItem, MemoryType, CreateMemoryInput } from '../lib/engine.js';
+import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const TYPE_COLORS: Record<MemoryType, string> = {
   user:      '#3b82f6',
@@ -134,6 +135,13 @@ export default function Memory() {
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: MemoryItem } | null>(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | MemoryType>('all');
+
+  const filteredItems = useMemo(() => {
+    const byType = typeFilter === 'all' ? items : items.filter((i) => i.type === typeFilter);
+    return filterBySearchText(byType, search);
+  }, [items, search, typeFilter]);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -173,19 +181,52 @@ export default function Memory() {
     <div className="flex h-full flex-col overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {/* Header */}
       <div
-        className="flex flex-shrink-0 items-center justify-between border-b px-6 py-4"
+        className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b px-6 py-4"
         style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
       >
         <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('memory.title')}
         </h1>
-        <button
-          onClick={() => setModal({ mode: 'create' })}
-          className="rounded-xl px-3 py-1.5 text-xs font-medium text-white"
-          style={{ backgroundColor: 'var(--accent)' }}
-        >
-          + {t('memory.new')}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {items.length > 0 && (
+            <>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search memory…"
+                className="rounded-lg border px-3 py-1.5 text-xs"
+                style={{
+                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: 'var(--border-primary)',
+                  color: 'var(--text-primary)',
+                  minWidth: 160,
+                }}
+              />
+              {(['all', 'user', 'session', 'skill', 'reference'] as const).map((ty) => (
+                <button
+                  key={ty}
+                  type="button"
+                  onClick={() => setTypeFilter(ty)}
+                  className="rounded-lg px-2 py-1 text-[10px] font-medium capitalize"
+                  style={{
+                    backgroundColor: typeFilter === ty ? '#3b82f6' : 'var(--bg-tertiary)',
+                    color: typeFilter === ty ? '#fff' : 'var(--text-muted)',
+                  }}
+                >
+                  {ty}
+                </button>
+              ))}
+            </>
+          )}
+          <button
+            onClick={() => setModal({ mode: 'create' })}
+            className="rounded-xl px-3 py-1.5 text-xs font-medium text-white"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            + {t('memory.new')}
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -194,9 +235,11 @@ export default function Memory() {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</p>
         ) : items.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('memory.empty')}</p>
+        ) : filteredItems.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No memory items match your filters.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <div
                 key={item.id}
                 className="rounded-xl border p-4"
