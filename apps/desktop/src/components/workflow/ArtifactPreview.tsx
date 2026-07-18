@@ -17,8 +17,9 @@ export function ArtifactPreview({ workflowId, runId, latestArtifactId }: Artifac
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadList = () => {
     if (!client) return;
     const params = runId ? { runId } : { workflowId };
     client.listArtifacts(params).then((res) => {
@@ -29,6 +30,10 @@ export function ArtifactPreview({ workflowId, runId, latestArtifactId }: Artifac
         }
       }
     });
+  };
+
+  useEffect(() => {
+    loadList();
   }, [client, workflowId, runId, latestArtifactId]);
 
   useEffect(() => {
@@ -42,6 +47,24 @@ export function ArtifactPreview({ workflowId, runId, latestArtifactId }: Artifac
       .finally(() => setLoading(false));
   }, [client, selectedId]);
 
+  const handleRefresh = async () => {
+    if (!client || !selectedId) return;
+    setRefreshing(true);
+    try {
+      const res = await client.refreshArtifact(selectedId);
+      if (res.ok && res.data?.content) {
+        setSelectedContent(res.data.content);
+      } else {
+        // Fall back to re-fetch
+        const again = await client.getArtifact(selectedId);
+        if (again.ok && again.data?.content) setSelectedContent(again.data.content);
+      }
+      loadList();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (artifacts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-white/30 text-sm gap-2">
@@ -54,9 +77,9 @@ export function ArtifactPreview({ workflowId, runId, latestArtifactId }: Artifac
 
   return (
     <div className="flex flex-col h-full">
-      {/* Artifact selector */}
-      {artifacts.length > 1 && (
-        <div className="flex gap-1 p-2 border-b border-white/10 overflow-x-auto shrink-0">
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 p-2 border-b border-white/10 shrink-0">
+        <div className="flex gap-1 flex-1 overflow-x-auto">
           {artifacts.map((a) => (
             <button
               key={a.id}
@@ -71,7 +94,16 @@ export function ArtifactPreview({ workflowId, runId, latestArtifactId }: Artifac
             </button>
           ))}
         </div>
-      )}
+        <button
+          type="button"
+          onClick={() => void handleRefresh()}
+          disabled={!selectedId || refreshing}
+          className="shrink-0 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 disabled:opacity-40"
+          title="Refresh preview"
+        >
+          {refreshing ? '…' : '↻ Refresh'}
+        </button>
+      </div>
 
       {/* Preview iframe */}
       <div className="flex-1 min-h-0 relative">
@@ -82,9 +114,9 @@ export function ArtifactPreview({ workflowId, runId, latestArtifactId }: Artifac
         )}
         {selectedContent ? (
           <iframe
-            key={selectedId}
+            key={`${selectedId}-${selectedContent.length}`}
             title="Artifact preview"
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts"
             srcDoc={selectedContent}
             className="w-full h-full border-0 bg-white rounded"
           />

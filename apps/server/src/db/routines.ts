@@ -175,3 +175,14 @@ export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {
   ).all(routineId, limit) as RoutineRunRow[];
   return rows.map(rowToRun);
 }
+
+export function getRoutineRun(routineId: string, runId: string): RoutineRun | null {
+  const db = getDb();
+  // `runId` may be the routine_run primary key or the linked workflow_run id
+  const row = db.prepare(
+    `SELECT * FROM routine_run
+     WHERE routine_id = ? AND (id = ? OR run_id = ?)
+     LIMIT 1`,
+  ).get(routineId, runId, runId) as RoutineRunRow | undefined;
+  return row ? rowToRun(row) : null;
+}

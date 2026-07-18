@@ -94,6 +94,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             )}
           </div>
         )}
+        <WorkflowWebhookSection />
       </div>
     );
   }
@@ -128,15 +129,23 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               className="w-full rounded border px-2 py-1.5 text-xs"
               style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
               value={typeof config.llmProvider === 'string' ? config.llmProvider : 'anthropic'}
-              onChange={(e) => patchConfig({ llmProvider: e.target.value, llmModel: '' })}
+              onChange={(e) => {
+                const llmProvider = e.target.value;
+                // Keep `provider` in sync for CLI spawn path in AgentNode
+                patchConfig({ llmProvider, provider: llmProvider, llmModel: '' });
+              }}
             >
               <option value="anthropic">Anthropic</option>
               <option value="google">Google</option>
               <option value="openai">OpenAI</option>
               <option value="ollama">Ollama</option>
+              <option value="cli-claude">CLI · Claude Code</option>
+              <option value="cli-gemini">CLI · Gemini</option>
+              <option value="cli-codex">CLI · Codex</option>
             </select>
           </div>
-          {/* Model selector */}
+          {/* Model selector (hidden for external CLI providers) */}
+          {!(typeof config.llmProvider === 'string' && config.llmProvider.startsWith('cli-')) && (
           <div className="space-y-1">
             <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
               Model
@@ -161,6 +170,12 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               })()}
             </select>
           </div>
+          )}
+          {typeof config.llmProvider === 'string' && config.llmProvider.startsWith('cli-') && (
+            <p className="rounded-md border p-2 text-[11px]" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}>
+              External CLI agent will be spawned on the server (PATH detection in Settings → CLI Agents).
+            </p>
+          )}
           <HarnessSelector
             nodeType={nodeType}
             value={typeof config.harnessId === 'string' ? config.harnessId : ''}
@@ -271,10 +286,132 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
         />
       )}
 
-      {(nodeType === 'gate_and' || nodeType === 'gate_or' || nodeType === 'output') && (
+      {(nodeType === 'gate_and' || nodeType === 'gate_or' || nodeType === 'output'
+        || nodeType === 'parallel_start' || nodeType === 'parallel_end' || nodeType === 'or_gate') && (
         <p className="rounded-md border p-2 text-xs" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}>
-          This node uses upstream inputs and has no required settings.
+          {nodeType === 'parallel_start' && 'Fan-out: successors run as parallel branches.'}
+          {nodeType === 'parallel_end' && 'Fan-in: waits for all upstream branches (AND join).'}
+          {nodeType === 'or_gate' && 'Takes the first completed upstream branch result.'}
+          {(nodeType === 'gate_and' || nodeType === 'gate_or' || nodeType === 'output')
+            && 'This node uses upstream inputs and has no required settings.'}
         </p>
+      )}
+
+      {nodeType === 'media' && (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Media type</label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              value={typeof config.mediaType === 'string' ? config.mediaType : 'image'}
+              onChange={(e) => patchConfig({ mediaType: e.target.value })}
+            >
+              <option value="image">Image (DALL·E 3)</option>
+              <option value="audio">Audio (TTS)</option>
+            </select>
+          </div>
+          {(config.mediaType !== 'audio') && (
+            <>
+              <TextAreaField
+                label="Prompt"
+                value={typeof config.prompt === 'string' ? config.prompt : ''}
+                rows={3}
+                onChange={(prompt) => patchConfig({ prompt })}
+              />
+              <div className="space-y-1">
+                <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Size</label>
+                <select
+                  className="w-full rounded border px-2 py-1.5 text-xs"
+                  style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  value={typeof config.size === 'string' ? config.size : '1024x1024'}
+                  onChange={(e) => patchConfig({ size: e.target.value })}
+                >
+                  <option value="1024x1024">1024×1024</option>
+                  <option value="1792x1024">1792×1024</option>
+                  <option value="1024x1792">1024×1792</option>
+                </select>
+              </div>
+            </>
+          )}
+          {config.mediaType === 'audio' && (
+            <>
+              <TextAreaField
+                label="Text"
+                value={typeof config.text === 'string' ? config.text : ''}
+                rows={3}
+                onChange={(text) => patchConfig({ text })}
+              />
+              <div className="space-y-1">
+                <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Voice</label>
+                <select
+                  className="w-full rounded border px-2 py-1.5 text-xs"
+                  style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  value={typeof config.voice === 'string' ? config.voice : 'alloy'}
+                  onChange={(e) => patchConfig({ voice: e.target.value })}
+                >
+                  {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+          <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+            Requires OPENAI_API_KEY in Settings.
+          </p>
+        </div>
+      )}
+
+      {nodeType === 'deploy' && (
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Provider</label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              value={typeof config.provider === 'string' ? config.provider : 'vercel'}
+              onChange={(e) => patchConfig({ provider: e.target.value })}
+            >
+              <option value="vercel">Vercel</option>
+              <option value="cloudflare">Cloudflare Pages</option>
+            </select>
+          </div>
+          <TextField
+            label="Project name"
+            value={typeof config.projectName === 'string' ? config.projectName : ''}
+            placeholder="neos-deploy"
+            onChange={(projectName) => patchConfig({ projectName })}
+          />
+          <TextAreaField
+            label="Content (HTML)"
+            value={typeof config.content === 'string' ? config.content : ''}
+            rows={4}
+            description="Optional static content; otherwise uses upstream `content` input."
+            onChange={(content) => patchConfig({ content })}
+          />
+          <button
+            type="button"
+            className="w-full rounded border px-2 py-1.5 text-xs"
+            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+            onClick={async () => {
+              if (!client) return;
+              const provider = (typeof config.provider === 'string' ? config.provider : 'vercel') as 'vercel' | 'cloudflare';
+              const res = await client.deployPreflight(
+                provider,
+                typeof config.projectName === 'string' ? config.projectName : undefined,
+              );
+              if (res.ok && res.data) {
+                const lines = res.data.checks.map((ch) => `${ch.ok ? '✓' : '✗'} ${ch.message}`).join('\n');
+                alert(`${res.data.ready ? 'Ready' : 'Not ready'} for ${res.data.provider}\n\n${lines}`);
+              } else {
+                alert((res as { error?: string }).error ?? 'Preflight failed');
+              }
+            }}
+          >
+            Run deploy preflight
+          </button>
+        </div>
       )}
 
       {nodeType === 'trigger' && (
@@ -310,4 +447,77 @@ function ValidationList({ issues }: { issues: WorkflowValidationIssue[] }) {
       ))}
     </div>
   );
+}
+
+/** Webhook URL + secret for the open workflow (shown when no node is selected). */
+function WorkflowWebhookSection() {
+  const { client, serverUrl } = useEngine();
+  const { id: workflowId } = useParamsSafe();
+  const [secret, setSecret] = useState<string | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!client || !workflowId) return;
+    client.getWebhookSecret(workflowId).then((res) => {
+      if (res.ok && res.data) setSecret(res.data.secret);
+    });
+  }, [client, workflowId]);
+
+  if (!workflowId) return null;
+
+  const base = serverUrl?.replace(/\/$/, '') || 'http://localhost:3000';
+  const webhookUrl = `${base}/api/webhook/${workflowId}`;
+
+  return (
+    <div className="mt-4 space-y-2 rounded-md border p-2" style={{ borderColor: 'var(--border-primary)' }}>
+      <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Webhook</p>
+      <p className="text-[10px] break-all font-mono" style={{ color: 'var(--text-secondary)' }}>
+        POST {webhookUrl}
+      </p>
+      <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+        Header: <code>X-Neos-Signature: sha256=&lt;hmac&gt;</code>
+      </p>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-mono truncate flex-1" style={{ color: 'var(--text-secondary)' }}>
+          {secret
+            ? (showSecret ? secret : `${secret.slice(0, 8)}…${secret.slice(-4)}`)
+            : 'Loading secret…'}
+        </span>
+        <button
+          type="button"
+          className="text-[10px] underline"
+          style={{ color: 'var(--text-muted)' }}
+          onClick={() => setShowSecret((v) => !v)}
+        >
+          {showSecret ? 'Hide' : 'Show'}
+        </button>
+        <button
+          type="button"
+          disabled={busy || !client}
+          className="text-[10px] underline disabled:opacity-40"
+          style={{ color: 'var(--text-muted)' }}
+          onClick={async () => {
+            if (!client) return;
+            setBusy(true);
+            const res = await client.regenerateWebhookSecret(workflowId);
+            setBusy(false);
+            if (res.ok && res.data) setSecret(res.data.secret);
+          }}
+        >
+          Regenerate
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function useParamsSafe(): { id?: string } {
+  // Local import-free helper using window location (NodeConfigPanel is under /workflows/:id)
+  try {
+    const m = window.location.pathname.match(/\/workflows\/([^/]+)/);
+    return { id: m?.[1] };
+  } catch {
+    return {};
+  }
 }

@@ -79,6 +79,25 @@ export function Routines() {
     if (res.ok) {
       alert(`Triggered! runId: ${res.data?.runId?.slice(0, 8)}`);
       await load();
+      if (selectedId === id) {
+        const runsRes = await client.listRoutineRuns(id);
+        if (runsRes.ok && runsRes.data) setRuns(runsRes.data);
+      }
+    }
+  };
+
+  const handleCrystallize = async (run: RoutineRun) => {
+    if (!client || !selectedId) return;
+    if (run.status !== 'completed') {
+      alert('Only completed runs can be crystallized into a skill.');
+      return;
+    }
+    if (!confirm('Save this successful run as a skill candidate?')) return;
+    const res = await client.crystallizeRoutineRun(selectedId, run.id);
+    if (res.ok && res.data) {
+      alert(`Crystallized skill: ${res.data.name}\n${res.data.path}`);
+    } else {
+      alert((res as { error?: string }).error ?? 'Crystallize failed');
     }
   };
 
@@ -233,7 +252,7 @@ export function Routines() {
                   {runs.map((run) => (
                     <div
                       key={run.id}
-                      className="flex items-center justify-between rounded px-3 py-2 text-xs"
+                      className="flex items-center justify-between gap-2 rounded px-3 py-2 text-xs"
                       style={{ backgroundColor: 'var(--bg-secondary)' }}
                     >
                       <span style={{ color: 'var(--text-primary)' }}>
@@ -245,6 +264,17 @@ export function Routines() {
                       }>
                         {run.status}
                       </span>
+                      {run.status === 'completed' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleCrystallize(run)}
+                          className="rounded px-2 py-0.5 text-[10px] font-medium text-white"
+                          style={{ backgroundColor: '#7c3aed' }}
+                          title="Save as skill candidate"
+                        >
+                          Crystallize
+                        </button>
+                      )}
                       {run.error && (
                         <span className="text-red-400 truncate max-w-[160px]" title={run.error}>
                           {run.error}

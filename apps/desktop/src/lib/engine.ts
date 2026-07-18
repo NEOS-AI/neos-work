@@ -70,6 +70,21 @@ export interface DesignSystem {
   updatedAt: string;
 }
 
+export interface Plugin {
+  id: string;
+  name: string;
+  description?: string;
+  version: string;
+  pipeline?: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    humanInLoop?: boolean;
+    schema?: unknown;
+  }>;
+  inputFields?: Array<{ key: string; label: string; type: string; placeholder?: string }>;
+}
+
 export interface Artifact {
   id: string;
   workflowId: string;
@@ -454,6 +469,15 @@ export class EngineClient {
     return res.json();
   }
 
+  async upgradeSkillToPlugin(skillId: string): Promise<ApiResponse<Plugin>> {
+    const res = await fetch(`${this.baseUrl}/api/plugins/upgrade-from-skill`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skillId }),
+    });
+    return res.json();
+  }
+
   // --- MCP Servers ---
 
   async listMcpServers(): Promise<ApiResponse<McpServerData[]>> {
@@ -597,6 +621,14 @@ export class EngineClient {
     return res.json();
   }
 
+  async refreshArtifact(id: string): Promise<ApiResponse<Artifact>> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}/refresh`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
   // --- Routines ---
 
   async listRoutines(): Promise<ApiResponse<Routine[]>> {
@@ -654,14 +686,38 @@ export class EngineClient {
     return res.json();
   }
 
+  async crystallizeRoutineRun(
+    routineId: string,
+    runId: string,
+    input?: { name?: string; description?: string },
+  ): Promise<ApiResponse<{ skillId: string; name: string; path: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/routines/${routineId}/runs/${runId}/crystallize`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(input ?? {}),
+    });
+    return res.json();
+  }
+
+  async deployPreflight(provider: 'vercel' | 'cloudflare', projectName?: string): Promise<
+    ApiResponse<{ provider: string; ready: boolean; checks: Array<{ key: string; ok: boolean; message: string }> }>
+  > {
+    const res = await fetch(`${this.baseUrl}/api/deploy/preflight`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, projectName }),
+    });
+    return res.json();
+  }
+
   // --- Plugins ---
 
-  async listPlugins(): Promise<ApiResponse<unknown[]>> {
+  async listPlugins(): Promise<ApiResponse<Plugin[]>> {
     const res = await fetch(`${this.baseUrl}/api/plugins`, { headers: this.getHeaders() });
     return res.json();
   }
 
-  async getPlugin(id: string): Promise<ApiResponse<unknown>> {
+  async getPlugin(id: string): Promise<ApiResponse<Plugin>> {
     const res = await fetch(`${this.baseUrl}/api/plugins/${id}`, { headers: this.getHeaders() });
     return res.json();
   }
@@ -813,13 +869,27 @@ export class EngineClient {
     return res.json();
   }
 
-  async importWorkflowZip(file: File): Promise<ApiResponse<Workflow>> {
+  async importWorkflowZip(file: File): Promise<ApiResponse<Workflow> & { meta?: { importKind?: string; artifactId?: string } }> {
     const form = new FormData();
     form.append('file', file);
     const headers = this.getHeaders();
     // FormData sets its own Content-Type boundary — remove it
     delete (headers as Record<string, string>)['Content-Type'];
     const res = await fetch(`${this.baseUrl}/api/workflow/import.zip`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    return res.json();
+  }
+
+  /** Import Claude Design / HTML-only ZIP as a workflow + artifact */
+  async importClaudeDesignZip(file: File): Promise<ApiResponse<Workflow> & { meta?: { importKind?: string; artifactId?: string } }> {
+    const form = new FormData();
+    form.append('file', file);
+    const headers = this.getHeaders();
+    delete (headers as Record<string, string>)['Content-Type'];
+    const res = await fetch(`${this.baseUrl}/api/workflow/import/claude-design`, {
       method: 'POST',
       headers,
       body: form,
@@ -944,6 +1014,34 @@ export class EngineClient {
 
   async deleteRevision(workflowId: string, revisionId: string): Promise<ApiResponse<void>> {
     const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  // --- Deployments ---
+
+  async listDeployments(workflowId?: string, limit = 100): Promise<ApiResponse<Deployment[]>> {
+    const params = new URLSearchParams();
+    if (workflowId) params.set('workflowId', workflowId);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString();
+    const res = await fetch(`${this.baseUrl}/api/deploy${qs ? `?${qs}` : ''}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async getDeployment(id: string): Promise<ApiResponse<Deployment>> {
+    const res = await fetch(`${this.baseUrl}/api/deploy/${id}`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  async deleteDeployment(id: string): Promise<ApiResponse<void>> {
+    const res = await fetch(`${this.baseUrl}/api/deploy/${id}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1109,6 +1207,7 @@ export interface Workflow {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   webhookSecret?: string;
+  designSystemId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1119,6 +1218,20 @@ export interface WorkflowRevision {
   snapshot?: string;
   label?: string;
   createdAt: string;
+}
+
+export interface Deployment {
+  id: string;
+  workflowId?: string;
+  runId?: string;
+  provider: string;
+  projectName?: string;
+  url?: string;
+  deploymentId?: string;
+  status: 'pending' | 'deploying' | 'success' | 'failed';
+  statusMessage?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface WorkflowRun {

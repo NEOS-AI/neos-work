@@ -37,9 +37,14 @@ const NODE_COLORS: Record<string, string> = {
   block:           '#f59e0b',
   gate_and:        '#f59e0b',
   gate_or:         '#f97316',
+  parallel_start:  '#0ea5e9',
+  parallel_end:    '#0ea5e9',
+  or_gate:         '#f97316',
   web_search:      '#8b5cf6',
   slack_message:   '#4CAF50',
   discord_message: '#5865F2',
+  media:           '#ec4899',
+  deploy:          '#14b8a6',
   output:          '#6b7280',
 };
 
@@ -50,8 +55,13 @@ const NODE_TYPES_LIST = [
   { type: 'web_search',      label: 'Web Search',      group: 'tool' },
   { type: 'slack_message',   label: 'Slack Message',   group: 'tool' },
   { type: 'discord_message', label: 'Discord Message', group: 'tool' },
+  { type: 'media',           label: 'Media',           group: 'tool' },
+  { type: 'deploy',          label: 'Deploy',          group: 'tool' },
   { type: 'gate_and',        label: 'AND Gate',        group: 'gate' },
   { type: 'gate_or',         label: 'OR Gate',         group: 'gate' },
+  { type: 'parallel_start',  label: 'Parallel Start',  group: 'gate' },
+  { type: 'parallel_end',    label: 'Parallel End',    group: 'gate' },
+  { type: 'or_gate',         label: 'OR Gate (race)',  group: 'gate' },
   { type: 'block',           label: 'Block',           group: 'block' },
   { type: 'output',          label: 'Output',          group: 'flow' },
 ] as const;
@@ -149,6 +159,10 @@ export function WorkflowEditor() {
   const [saving, setSaving] = useState(false);
   const [revisionPanelOpen, setRevisionPanelOpen] = useState(false);
   const [latestArtifactId, setLatestArtifactId] = useState<string | undefined>(undefined);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleCron, setScheduleCron] = useState('0 9 * * *');
+  const [scheduleName, setScheduleName] = useState('');
+  const [scheduleBusy, setScheduleBusy] = useState(false);
 
   const stopRef = useRef<(() => void) | null>(null);
 
@@ -298,7 +312,16 @@ export function WorkflowEditor() {
     setRunStatuses({});
     setExpandedRunLogIdx(null);
     const stop = client.runWorkflow(workflow.id, (event) => {
-      setRunEvents((prev) => [...prev, event]);
+      // Collapse consecutive node.progress for the same node into one log row
+      setRunEvents((prev) => {
+        if (event.type === 'node.progress') {
+          const last = prev[prev.length - 1];
+          if (last && last.type === 'node.progress' && last.nodeId === event.nodeId) {
+            return [...prev.slice(0, -1), event];
+          }
+        }
+        return [...prev, event];
+      });
       if (event.type === 'node.started') {
         setRunStatuses((prev) => ({ ...prev, [event.nodeId]: 'running' }));
       }
@@ -407,6 +430,18 @@ export function WorkflowEditor() {
           )}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => {
+            setScheduleName(workflow ? `${workflow.name} schedule` : 'Scheduled run');
+            setScheduleCron('0 9 * * *');
+            setScheduleOpen(true);
+          }}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+          title="Create automation routine for this workflow"
+        >
+          ⏱ Schedule
+        </button>
         <button
           onClick={handleAutoLayout}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
@@ -553,19 +588,37 @@ export function WorkflowEditor() {
                   : null;
                 const isExpanded = expandedRunLogIdx === i;
                 const hasOutput = ev.type === 'node.completed' && (ev as { output?: unknown }).output !== undefined;
+                const isProgress = ev.type === 'node.progress';
                 return (
                   <div
                     key={i}
-                    className={`rounded px-2 py-1${hasOutput ? ' cursor-pointer' : ''}`}
+                    className={`rounded px-2 py-1${hasOutput || isProgress ? ' cursor-pointer' : ''}`}
                     style={{ backgroundColor: 'var(--bg-secondary)' }}
-                    onClick={() => hasOutput && setExpandedRunLogIdx(isExpanded ? null : i)}
+                    onClick={() => {
+                      if (hasOutput || isProgress) setExpandedRunLogIdx(isExpanded ? null : i);
+                    }}
                   >
                     {ev.type === 'node.started' && `▶ ${nodeLabel} (${(ev as { nodeType: string }).nodeType})`}
+                    {ev.type === 'node.progress' && (
+                      <span className="text-sky-400">
+                        … {nodeLabel} streaming{(ev as { accumulated?: string }).accumulated ? ' ▸' : ''}
+                      </span>
+                    )}
                     {ev.type === 'node.completed' && `✓ ${nodeLabel}${hasOutput ? ' ▸' : ''}`}
                     {ev.type === 'node.failed' && `✗ ${nodeLabel}: ${(ev as { error: string }).error}`}
                     {ev.type === 'run.started' && `Run ${(ev as { runId: string }).runId.slice(0, 8)}`}
                     {ev.type === 'run.completed' && `${t('workflow.done')} (${(ev as { duration: number }).duration}ms)`}
                     {ev.type === 'run.failed' && (ev as { error: string }).error}
+                    {isExpanded && isProgress && (
+                      <pre
+                        className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                      >
+                        {((ev as { accumulated?: string; chunk?: string }).accumulated
+                          ?? (ev as { chunk?: string }).chunk
+                          ?? '').slice(-2000)}
+                      </pre>
+                    )}
                     {isExpanded && hasOutput && (
                       <pre
                         className="mt-1 overflow-x-auto rounded p-1 text-[10px]"
@@ -646,6 +699,93 @@ export function WorkflowEditor() {
             }
           }}
         />
+      )}
+
+      {scheduleOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setScheduleOpen(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border p-5 space-y-4"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Schedule this workflow
+            </h3>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Creates an automation routine linked to this workflow. Manage it under Routines.
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Name</label>
+              <input
+                className="w-full rounded border px-3 py-1.5 text-sm"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                value={scheduleName}
+                onChange={(e) => setScheduleName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Cron (UTC)</label>
+              <select
+                className="w-full rounded border px-3 py-1.5 text-sm mb-1"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                value={scheduleCron}
+                onChange={(e) => setScheduleCron(e.target.value)}
+              >
+                <option value="0 * * * *">Every hour</option>
+                <option value="0 9 * * *">Daily 09:00 UTC</option>
+                <option value="0 9 * * 1">Weekly Monday 09:00 UTC</option>
+                <option value="*/15 * * * *">Every 15 minutes</option>
+              </select>
+              <input
+                className="w-full rounded border px-3 py-1.5 text-sm font-mono"
+                style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                value={scheduleCron}
+                onChange={(e) => setScheduleCron(e.target.value)}
+                placeholder="0 9 * * *"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded px-3 py-1.5 text-xs"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                onClick={() => setScheduleOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={scheduleBusy || !scheduleName.trim() || !scheduleCron.trim()}
+                className="rounded px-3 py-1.5 text-xs text-white disabled:opacity-40"
+                style={{ backgroundColor: '#10b981' }}
+                onClick={async () => {
+                  if (!client || !workflow) return;
+                  setScheduleBusy(true);
+                  const res = await client.createRoutine({
+                    name: scheduleName.trim(),
+                    workflowId: workflow.id,
+                    schedule: scheduleCron.trim(),
+                    enabled: true,
+                  });
+                  setScheduleBusy(false);
+                  if (res.ok) {
+                    setScheduleOpen(false);
+                    if (confirm('Routine created. Open Routines page?')) {
+                      navigate('/routines');
+                    }
+                  } else {
+                    alert((res as { error?: string }).error ?? 'Failed to create routine');
+                  }
+                }}
+              >
+                {scheduleBusy ? '…' : 'Create routine'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

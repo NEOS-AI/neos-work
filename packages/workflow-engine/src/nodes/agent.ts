@@ -100,8 +100,8 @@ export class AgentNode implements ExecutableNode {
     const maxIterations = harness?.constraints?.maxSteps ?? Number(this.nodeConfig?.['maxSteps'] ?? 20);
     const toolFilter = harness?.allowedTools;
 
-    // CLI provider branch
-    const provider = this.nodeConfig?.['provider'] as string | undefined;
+    // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig)
+    const provider = (this.nodeConfig?.['provider'] ?? this.nodeConfig?.['llmProvider']) as string | undefined;
     if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
       if (!ctx.cliSpawn) {
         return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };

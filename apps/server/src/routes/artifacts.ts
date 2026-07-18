@@ -73,4 +73,37 @@ artifacts.delete('/:id', (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Refresh artifact content for preview.
+ * If the artifact has an on-disk file_path, re-read it; otherwise return the stored row.
+ * Full node re-execution is out of scope (requires workflow re-run).
+ */
+artifacts.post('/:id/refresh', async (c) => {
+  const id = c.req.param('id');
+  const artifact = db.getArtifact(id);
+  if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  if (artifact.filePath) {
+    try {
+      const fs = await import('node:fs/promises');
+      const pathMod = await import('node:path');
+      // Only allow reading under home config / media dirs (path traversal defense)
+      const resolved = pathMod.resolve(artifact.filePath);
+      const home = (await import('node:os')).homedir();
+      if (!resolved.startsWith(pathMod.resolve(home))) {
+        return c.json({ ok: false, error: 'Invalid file path' }, 400);
+      }
+      const content = await fs.readFile(resolved, 'utf8');
+      const updated = db.updateArtifactContent(id, content);
+      return c.json({ ok: true, data: updated });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to refresh file';
+      return c.json({ ok: false, error: msg }, 500);
+    }
+  }
+
+  // No file — return current in-DB content (client reloads preview)
+  return c.json({ ok: true, data: artifact });
+});
+
 export default artifacts;
