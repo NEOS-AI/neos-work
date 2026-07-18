@@ -31,7 +31,9 @@ vi.mock('node:child_process', () => ({
 
 import {
   buildCliArgs,
+  buildNeosCliEnv,
   detectCLIs,
+  ensureCliWorkspace,
   loadMcpTokenEnvVars,
   spawnCliAgent,
 } from './cli-agents.js';
@@ -201,5 +203,35 @@ describe('spawnCliAgent', () => {
     await Promise.resolve();
     child.emit('error', new Error('ENOENT'));
     await expect(promise).rejects.toThrow('ENOENT');
+  });
+});
+
+
+describe('buildNeosCliEnv / ensureCliWorkspace', () => {
+  it('maps NEOS_* env vars', () => {
+    expect(buildNeosCliEnv({
+      serverUrl: 'http://127.0.0.1:3000',
+      authToken: 'tok',
+      workflowId: 'wf-1',
+      runId: 'run-1',
+    })).toEqual({
+      NEOS_SERVER_URL: 'http://127.0.0.1:3000',
+      NEOS_AUTH_TOKEN: 'tok',
+      NEOS_WORKFLOW_ID: 'wf-1',
+      NEOS_RUN_ID: 'run-1',
+    });
+  });
+
+  it('omits empty fields', () => {
+    expect(buildNeosCliEnv({})).toEqual({});
+  });
+
+  it('creates workspace under ~/.config/neos-work/workspaces', () => {
+    const runId = `_cov_ws_${process.pid}`;
+    const dir = ensureCliWorkspace(runId);
+    expect(dir).toContain(path.join('.config', 'neos-work', 'workspaces', runId));
+    expect(fs.existsSync(dir)).toBe(true);
+    // cleanup
+    try { fs.rmSync(dir, { recursive: true }); } catch { /* ignore */ }
   });
 });

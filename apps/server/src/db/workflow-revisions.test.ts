@@ -90,3 +90,39 @@ describe('createRevision snapshot payload', () => {
     expect(list[0]?.edgeCount).toBe(1);
   });
 });
+
+describe('revision restore payload', () => {
+  it('snapshot can be applied via updateWorkflow (restore semantics)', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [{ id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} }] as never,
+      edges: [],
+    });
+    const snap = JSON.stringify({
+      name: WF_NAME,
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+        { id: 'o', type: 'output', label: 'O', position: { x: 100, y: 0 }, config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      designSystemId: 'ds-restored',
+    });
+    const rev = createRevision(wf.id, snap, 'checkpoint');
+    expect(rev).not.toBeNull();
+    const parsed = JSON.parse(rev!.snapshot) as {
+      nodes: unknown[];
+      edges: unknown[];
+      designSystemId?: string;
+    };
+    const updated = workflows.updateWorkflow(wf.id, {
+      nodes: parsed.nodes as never,
+      edges: parsed.edges as never,
+      designSystemId: parsed.designSystemId,
+    });
+    expect(updated?.nodes).toHaveLength(2);
+    expect(updated?.edges).toHaveLength(1);
+    expect(updated?.designSystemId).toBe('ds-restored');
+  });
+});
+
