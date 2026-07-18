@@ -55,4 +55,41 @@ describe('memory-store', () => {
     expect(deleteMemory('missing-id')).toBe(false);
     expect(toggleMemory('missing-id')).toBeNull();
   });
+
+  it('creates memories of each type and lists them', () => {
+    const types = ['user', 'session', 'skill', 'reference'] as const;
+    const ids: string[] = [];
+    for (const type of types) {
+      const m = createMemory({
+        name: `${NAME}_${type}`,
+        type,
+        content: `content-${type}`,
+        enabled: true,
+      });
+      ids.push(m.id);
+      expect(m.type).toBe(type);
+    }
+    const listed = listMemories();
+    for (const id of ids) {
+      expect(listed.some((m) => m.id === id)).toBe(true);
+    }
+    const exported = exportMemories();
+    for (const type of types) {
+      expect(exported).toContain(`content-${type}`);
+    }
+  });
+
+  it('updateMemory can rename and change type', () => {
+    const m = createMemory({
+      name: `${NAME}_rename`,
+      type: 'user',
+      content: 'c',
+      enabled: true,
+    });
+    const updated = updateMemory(m.id, { name: `${NAME}_renamed`, type: 'reference', content: 'c2' });
+    expect(updated?.name).toBe(`${NAME}_renamed`);
+    expect(updated?.type).toBe('reference');
+    expect(updated?.content).toBe('c2');
+    expect(getMemory(m.id)?.name).toBe(`${NAME}_renamed`);
+  });
 });

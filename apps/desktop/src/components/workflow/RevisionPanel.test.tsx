@@ -252,4 +252,46 @@ describe('RevisionPanel', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('Escape while editing cancels without saving the label', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    updateRevisionLabel.mockResolvedValue({ ok: true });
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Snap A'));
+    const input = await screen.findByDisplayValue('Snap A');
+    await user.clear(input);
+    await user.type(input, 'Should not save');
+    await user.keyboard('{Escape}');
+
+    expect(updateRevisionLabel).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // back to display mode with original label
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+  });
+
 });

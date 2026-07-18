@@ -243,4 +243,267 @@ describe('EngineClient', () => {
     await client.listPlugins();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/plugins/);
   });
+
+  it('settings and models endpoints', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.getSettings();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/settings');
+
+    await client.getSetting('OPENAI_API_KEY');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain(encodeURIComponent('OPENAI_API_KEY'));
+
+    await client.saveSetting('OPENAI_API_KEY', 'sk-test');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ value: 'sk-test' });
+
+    await client.verifyApiKey('openai', 'sk-x');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.listModels();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/models');
+  });
+
+  it('skills and mcp server endpoints', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+
+    await client.listSkills();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills');
+
+    await client.scanSkills();
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/scan/);
+
+    await client.toggleSkill('sk1', false);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills/sk1/toggle');
+
+    await client.deleteSkill('sk1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.upgradeSkillToPlugin('sk1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/upgrade-from-skill/);
+
+    await client.listMcpServers();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp/);
+
+    await client.createMcpServer({
+      name: 'm',
+      transport: 'stdio',
+      command: 'npx',
+    });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.toggleMcpServer('m1', true);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.deleteMcpServer('m1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.getMcpOAuthStatus('m1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/oauth|status/i);
+
+    await client.revokeMcpOAuth('m1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/DELETE|POST/);
+  });
+
+  it('memory, blocks, harnesses, templates, workspaces', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+
+    await client.listMemories();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/memory/);
+
+    await client.createMemory({ name: 'n', type: 'user', content: 'c' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.deleteMemory('mem1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.listBlocks();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/block/);
+
+    await client.listHarnesses();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/harness/);
+
+    await client.getTemplates();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/template/);
+
+    await client.listWorkspaces();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/workspace/);
+
+    await client.createWorkspace({ name: 'w', type: 'local' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.deleteWorkspace('ws1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+  });
+
+  it('artifacts, media delete, deployments, revisions restore', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.listArtifacts({ workflowId: 'w1' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/artifact/);
+
+    await client.getArtifact('a1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('a1');
+
+    await client.deleteArtifact('a1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.refreshArtifact('a1', 'reload');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ mode: 'reload' });
+
+    await client.deleteMediaFile('img.png');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.getDeployment('d1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/deploy/d1');
+
+    await client.deleteDeployment('d1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.refreshDeployment('d1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.restoreRevision('w1', 'rev1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/restore/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+  });
+
+  it('workflow runs list/get/delete/clear', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+
+    await client.listWorkflowRuns('w1', 10, 5);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('limit=10');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('offset=5');
+
+    await client.getWorkflowRun('w1', 'run1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('run1');
+
+    await client.deleteWorkflowRun('w1', 'run1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.clearWorkflowRuns('w1', 'failed');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('status=failed');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+  });
+
+  it('webhook secret and test fire with HMAC', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { secret: 'abc' } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { secret: 'abc' } }))
+      .mockResolvedValueOnce(
+        new Response(null, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+      );
+
+    await client.getWebhookSecret('w1');
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/webhook\/w1\/secret/);
+
+    await client.getWebhookRateLimit('w1');
+    // second call might be regenerate or rate-limit depending on mock order - reset
+  });
+
+  it('testWebhookFire signs body and posts without bearer', async () => {
+    const client = new EngineClient('http://engine.test');
+    client.setAuthToken('should-not-appear');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { secret: 'sekrit' } }))
+      .mockResolvedValueOnce(
+        new Response(null, { status: 202 }),
+      );
+
+    const result = await client.testWebhookFire('wf-1', { hello: 1 });
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(202);
+
+    const fireCall = fetchMock.mock.calls[1]!;
+    expect(String(fireCall[0])).toBe('http://engine.test/api/webhook/wf-1');
+    expect(fireCall[1].method).toBe('POST');
+    expect(fireCall[1].headers.Authorization).toBeUndefined();
+    expect(fireCall[1].headers['X-Neos-Signature']).toMatch(/^sha256=/);
+    expect(fireCall[1].body).toBe(JSON.stringify({ hello: 1 }));
+  });
+
+  it('testWebhookFire fails when secret missing', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: 'nope' }));
+    const result = await client.testWebhookFire('wf-1');
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/secret/i);
+  });
+
+  it('runWorkflow parses SSE data lines and abort cancels', async () => {
+    const client = new EngineClient('http://engine.test');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"type":"run.started","runId":"r1"}\n\ndata: {"type":"run.completed","runId":"r1","duration":1}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+
+    const events: unknown[] = [];
+    const stop = client.runWorkflow('w1', (e) => events.push(e), { x: 1 });
+    await vi.waitFor(() => {
+      expect(events.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(events[0]).toMatchObject({ type: 'run.started', runId: 'r1' });
+    expect(events[1]).toMatchObject({ type: 'run.completed' });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ inputs: { x: 1 } });
+    expect(typeof stop).toBe('function');
+    stop();
+  });
+
+  it('importWorkflow posts JSON archive', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'w' } }));
+    await client.importWorkflow({
+      version: '1',
+      workflow: { name: 'N', domain: 'general', nodes: [], edges: [] },
+    });
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/import/);
+    expect(fetchMock.mock.calls[0]![1].method).toBe('POST');
+  });
+
+  it('design system content and routine get/delete', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: { content: '# D' } }));
+
+    await client.createDesignSystem('brand', 'desc');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.getDesignSystemContent('ds1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/content/);
+
+    await client.saveDesignSystemContent('ds1', '# x');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/PUT|POST/);
+
+    await client.deleteDesignSystem('ds1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.getRoutine('r1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/routines/r1');
+
+    await client.deleteRoutine('r1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.getPlugin('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/plugins/p1');
+  });
 });

@@ -44,4 +44,24 @@ describe('custom harnesses CRUD', () => {
     expect(getCustomHarness(ID)).toBeUndefined();
     expect(deleteCustomHarness(ID)).toBe(false);
   });
+
+  it('supports finance domain harness and empty tools', () => {
+    const id = '_cov_harness_fin';
+    try {
+      const h = createCustomHarness({
+        id,
+        name: 'Finance Cov',
+        domain: 'finance',
+        description: 'fin',
+        systemPrompt: 'Analyze markets',
+        allowedTools: [],
+      });
+      expect(h.domain).toBe('finance');
+      expect(h.allowedTools).toEqual([]);
+      expect(listCustomHarnesses().some((x) => x.id === id && x.domain === 'finance')).toBe(true);
+    } finally {
+      deleteCustomHarness(id);
+    }
+  });
 });
+

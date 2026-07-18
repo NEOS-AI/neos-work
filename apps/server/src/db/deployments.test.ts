@@ -61,4 +61,29 @@ describe('deployments CRUD', () => {
     expect(filtered.some((d) => d.id === a.id)).toBe(true);
     expect(listDeployments({ workflowId: 'missing-wf', limit: 10 })).toEqual([]);
   });
+
+  it('respects limit and supports failed status update', () => {
+    for (let i = 0; i < 5; i++) {
+      createDeployment({
+        provider: 'vercel',
+        projectName: `${MARKER}-lim-${i}`,
+        status: 'pending',
+      });
+    }
+    const limited = listDeployments({ limit: 2 });
+    expect(limited.length).toBeLessThanOrEqual(2);
+
+    const row = createDeployment({
+      provider: 'cloudflare',
+      projectName: `${MARKER}-fail`,
+      status: 'deploying',
+    });
+    const failed = updateDeployment(row.id, {
+      status: 'failed',
+      statusMessage: 'timeout',
+    });
+    expect(failed?.status).toBe('failed');
+    expect(failed?.statusMessage).toBe('timeout');
+    expect(deleteDeployment('no-such-id')).toBe(false);
+  });
 });
