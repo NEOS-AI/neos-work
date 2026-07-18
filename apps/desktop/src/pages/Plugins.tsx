@@ -19,10 +19,10 @@ export function Plugins() {
     });
   }, [client]);
 
-  const filtered = useMemo(
-    () => filterBySearchText(plugins, search),
-    [plugins, search],
-  );
+  const filtered = useMemo(() => {
+    const list = filterBySearchText(plugins, search);
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [plugins, search]);
 
   return (
     <div className="flex-1 overflow-y-auto p-6">

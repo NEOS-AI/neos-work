@@ -283,5 +283,19 @@ export function validateWorkflowDraft(input: {
     }
   }
 
+  // Trigger with no downstream when other nodes exist
+  for (const node of input.nodes) {
+    if (node.type !== 'trigger') continue;
+    const outgoing = input.edges.some((e) => e.source === node.id);
+    if (!outgoing && input.nodes.length > 1) {
+      issues.push({
+        code: 'trigger_no_downstream',
+        severity: 'warning',
+        nodeId: node.id,
+        message: 'Trigger node has no downstream connection.',
+      });
+    }
+  }
+
   return issues;
 }

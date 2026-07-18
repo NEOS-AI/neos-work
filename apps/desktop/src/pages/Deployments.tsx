@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
-import { filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
+import { filterByFieldValue, filterByStatus, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   success: { bg: '#065f4620', color: '#059669' },
@@ -13,6 +13,7 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_FILTERS = ['all', 'success', 'failed', 'deploying', 'pending'] as const;
+const PROVIDER_FILTERS = ['all', 'vercel', 'cloudflare'] as const;
 
 export function Deployments() {
   const { client } = useEngine();
@@ -21,13 +22,15 @@ export function Deployments() {
   const [loading, setLoading] = useState(true);
   const [filterWorkflowId, setFilterWorkflowId] = useState('');
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
+  const [providerFilter, setProviderFilter] = useState<(typeof PROVIDER_FILTERS)[number]>('all');
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const visibleDeployments = useMemo(() => {
     const byStatus = filterByStatus(deployments, statusFilter);
+    const byProvider = filterByFieldValue(byStatus, 'provider', providerFilter);
     return filterByTextMatch(
-      byStatus,
+      byProvider,
       search,
       (d) =>
         [
@@ -42,7 +45,7 @@ export function Deployments() {
           .filter(Boolean)
           .join(' '),
     );
-  }, [deployments, statusFilter, search, workflows]);
+  }, [deployments, statusFilter, providerFilter, search, workflows]);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -179,6 +182,21 @@ export function Deployments() {
             }}
           >
             {s}
+          </button>
+        ))}
+        <span className="self-center mx-1 text-xs" style={{ color: 'var(--text-muted)' }}>|</span>
+        {PROVIDER_FILTERS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setProviderFilter(p)}
+            className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
+            style={{
+              backgroundColor: providerFilter === p ? '#10b981' : 'var(--bg-tertiary)',
+              color: providerFilter === p ? '#fff' : 'var(--text-secondary)',
+            }}
+          >
+            {p}
           </button>
         ))}
         <span className="self-center text-xs" style={{ color: 'var(--text-muted)' }}>

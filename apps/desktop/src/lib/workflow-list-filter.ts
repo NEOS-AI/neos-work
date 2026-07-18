@@ -80,3 +80,13 @@ export function filterByTextMatch<T>(
   if (!q) return items;
   return items.filter((item) => getHaystack(item).toLowerCase().includes(q));
 }
+
+/** Filter by a string field chip (e.g. deployment provider). */
+export function filterByFieldValue<T>(
+  items: T[],
+  field: keyof T & string,
+  value?: string,
+): T[] {
+  if (!value || value === 'all') return items;
+  return items.filter((item) => String(item[field] ?? '') === value);
+}

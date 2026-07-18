@@ -93,6 +93,14 @@ export function Sessions() {
     setShowNewSessionModal(false);
   };
 
+  const handleDeleteSession = async (id: string) => {
+    if (!client) return;
+    if (!window.confirm('Delete this session and its messages?')) return;
+    await client.deleteSession(id);
+    if (activeSessionId === id) setActiveSessionId(null);
+    await loadSessions();
+  };
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   const q = sessionSearch.trim().toLowerCase();
@@ -146,17 +154,34 @@ export function Sessions() {
             <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>No matches</p>
           ) : (
             visibleSessions.map((session) => (
-              <button
+              <div
                 key={session.id}
-                onClick={() => setActiveSessionId(session.id)}
-                className="mb-0.5 w-full truncate rounded-lg px-2 py-1.5 text-left text-sm transition-colors"
-                style={{
-                  backgroundColor: activeSessionId === session.id ? 'var(--bg-tertiary)' : undefined,
-                  color: activeSessionId === session.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                }}
+                className="group mb-0.5 flex w-full items-center gap-0.5"
               >
-                {session.title || 'New session'}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSessionId(session.id)}
+                  className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left text-sm transition-colors"
+                  style={{
+                    backgroundColor: activeSessionId === session.id ? 'var(--bg-tertiary)' : undefined,
+                    color: activeSessionId === session.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {session.title || 'New session'}
+                </button>
+                <button
+                  type="button"
+                  title="Delete session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleDeleteSession(session.id);
+                  }}
+                  className="shrink-0 rounded px-1.5 py-1 text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  ✕
+                </button>
+              </div>
             ))
           )}
         </div>

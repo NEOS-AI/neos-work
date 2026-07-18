@@ -301,6 +301,10 @@ export function Workflows() {
                 )}
                 <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
                   {new Date(wf.updatedAt).toLocaleDateString()}
+                  {' · '}
+                  {(wf.nodes?.length ?? 0)} nodes
+                  {' · '}
+                  {(wf.edges?.length ?? 0)} edges
                 </p>
 
                 {/* Action buttons */}
