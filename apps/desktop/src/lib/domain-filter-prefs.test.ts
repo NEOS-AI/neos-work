@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  DOMAIN_FILTER_OPTIONS,
   loadBlocksSourceFilter,
   loadDomainFilter,
   saveBlocksSourceFilter,
@@ -9,6 +10,10 @@ import {
 describe('domain-filter-prefs', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it('exposes stable domain chip options', () => {
+    expect(DOMAIN_FILTER_OPTIONS).toEqual(['all', 'finance', 'coding', 'general']);
   });
 
   it('defaults domain filters to all', () => {
