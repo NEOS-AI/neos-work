@@ -1,7 +1,7 @@
 {
   "name": "neos-work",
   "private": true,
-  "version": "0.3.18",
+  "version": "0.3.19",
   "description": "An open-source alternative to Claude Cowork",
   "license": "MIT",
   "type": "module",
