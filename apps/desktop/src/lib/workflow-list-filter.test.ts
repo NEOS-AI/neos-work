@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { filterByKind, filterBySearchText, filterByStatus, filterWorkflowList } from './workflow-list-filter.js';
+import {
+  filterByEnabled,
+  filterByKind,
+  filterBySearchText,
+  filterByStatus,
+  filterWorkflowList,
+} from './workflow-list-filter.js';
 
 const items = [
   { name: 'Stock Bot', description: 'prices', domain: 'finance' },
@@ -80,6 +86,20 @@ describe('filterByKind', () => {
     expect(filterByKind(media, 'all')).toHaveLength(3);
     expect(filterByKind(media, undefined)).toHaveLength(3);
     expect(filterByKind(media, 'video')).toEqual([]);
+  });
+});
+
+describe('filterByEnabled', () => {
+  it('filters by enabled/disabled chips', () => {
+    const items = [
+      { name: 'a', enabled: true },
+      { name: 'b', enabled: false },
+      { name: 'c', enabled: true },
+    ];
+    expect(filterByEnabled(items, 'enabled')).toHaveLength(2);
+    expect(filterByEnabled(items, 'disabled')).toHaveLength(1);
+    expect(filterByEnabled(items, 'all')).toHaveLength(3);
+    expect(filterByEnabled(items, undefined)).toHaveLength(3);
   });
 });
 
