@@ -1099,6 +1099,38 @@ export class EngineClient {
     return res.json();
   }
 
+  /**
+   * Fire the public webhook endpoint with a valid HMAC (plan Task 13).
+   * Uses the stored secret from getWebhookSecret; does not send Bearer auth.
+   */
+  async testWebhookFire(
+    workflowId: string,
+    body: Record<string, unknown> = {},
+  ): Promise<{ ok: boolean; status: number; error?: string }> {
+    const secretRes = await this.getWebhookSecret(workflowId);
+    if (!secretRes.ok || !secretRes.data?.secret) {
+      return { ok: false, status: 0, error: 'Failed to load webhook secret' };
+    }
+    const { hmacSha256Hex } = await import('./hmac.js');
+    const raw = JSON.stringify(body);
+    const sig = await hmacSha256Hex(secretRes.data.secret, raw);
+    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Neos-Signature': `sha256=${sig}`,
+      },
+      body: raw,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({})) as { error?: string };
+      return { ok: false, status: res.status, error: errBody.error ?? res.statusText };
+    }
+    // SSE stream — we only need to confirm acceptance; cancel read
+    try { res.body?.cancel(); } catch { /* ignore */ }
+    return { ok: true, status: res.status };
+  }
+
   // --- Workflow Revisions ---
 
   async listRevisions(workflowId: string): Promise<ApiResponse<WorkflowRevision[]>> {

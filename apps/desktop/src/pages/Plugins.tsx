@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Plugin } from '../lib/engine.js';
 import { PipelineRunner } from '../components/workflow/PipelineRunner.js';
+import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Plugins() {
   const { client } = useEngine();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Plugin | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!client) return;
@@ -17,10 +19,30 @@ export function Plugins() {
     });
   }, [client]);
 
+  const filtered = useMemo(
+    () => filterBySearchText(plugins, search),
+    [plugins, search],
+  );
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>Plugins</h1>
+        {plugins.length > 0 && (
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search plugins…"
+            className="rounded-lg border px-3 py-1.5 text-sm"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-primary)',
+              minWidth: 200,
+            }}
+          />
+        )}
       </div>
 
       {loading ? (
@@ -34,9 +56,11 @@ export function Plugins() {
             ~/.config/neos-work/skills/&lt;plugin-name&gt;/open-design.json
           </p>
         </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No plugins match your search.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {plugins.map((p) => (
+          {filtered.map((p) => (
             <div
               key={p.id}
               className="rounded-xl border p-4 flex flex-col gap-2"

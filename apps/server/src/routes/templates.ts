@@ -172,6 +172,39 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
       { id: 'e3', source: 'deploy', target: 'output' },
     ],
   },
+  {
+    name: 'OR Race Two Agents',
+    description: '병렬 브랜치 후 OR 게이트로 먼저 끝난 결과 채택 (plan Task 11)',
+    domain: 'coding',
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 60, y: 220 }, config: {} },
+      { id: 'ps', type: 'parallel_start', label: 'Fan-out', position: { x: 260, y: 220 }, config: {} },
+      {
+        id: 'a1',
+        type: 'agent_coding',
+        label: 'Agent A',
+        position: { x: 480, y: 120 },
+        config: { harnessId: 'coding_reviewer', systemPrompt: 'Answer briefly as Agent A.' },
+      },
+      {
+        id: 'a2',
+        type: 'agent_coding',
+        label: 'Agent B',
+        position: { x: 480, y: 320 },
+        config: { harnessId: 'coding_test_writer', systemPrompt: 'Answer briefly as Agent B.' },
+      },
+      { id: 'or', type: 'or_gate', label: 'OR Gate', position: { x: 720, y: 220 }, config: {} },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 940, y: 220 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'ps' },
+      { id: 'e2', source: 'ps', target: 'a1' },
+      { id: 'e3', source: 'ps', target: 'a2' },
+      { id: 'e4', source: 'a1', target: 'or' },
+      { id: 'e5', source: 'a2', target: 'or' },
+      { id: 'e6', source: 'or', target: 'output' },
+    ],
+  },
 ];
 
 // GET /api/templates

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
+import { filterByStatus } from '../lib/workflow-list-filter.js';
 
 const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   success: { bg: '#065f4620', color: '#059669' },
@@ -11,13 +12,21 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   pending: { bg: 'var(--bg-tertiary)', color: 'var(--text-muted)' },
 };
 
+const STATUS_FILTERS = ['all', 'success', 'failed', 'deploying', 'pending'] as const;
+
 export function Deployments() {
   const { client } = useEngine();
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
   const [loading, setLoading] = useState(true);
   const [filterWorkflowId, setFilterWorkflowId] = useState('');
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
   const [error, setError] = useState<string | null>(null);
+
+  const visibleDeployments = useMemo(
+    () => filterByStatus(deployments, statusFilter),
+    [deployments, statusFilter],
+  );
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -128,6 +137,26 @@ export function Deployments() {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-1">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStatusFilter(s)}
+            className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
+            style={{
+              backgroundColor: statusFilter === s ? '#3b82f6' : 'var(--bg-tertiary)',
+              color: statusFilter === s ? '#fff' : 'var(--text-secondary)',
+            }}
+          >
+            {s}
+          </button>
+        ))}
+        <span className="self-center text-xs" style={{ color: 'var(--text-muted)' }}>
+          {visibleDeployments.length}/{deployments.length}
+        </span>
+      </div>
+
       {error && (
         <p className="text-sm text-red-400">{error}</p>
       )}
@@ -143,6 +172,10 @@ export function Deployments() {
         >
           No deployments yet. Add a Deploy node to a workflow and run it after configuring tokens in Settings.
         </div>
+      ) : visibleDeployments.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          No deployments match this status filter.
+        </p>
       ) : (
         <div
           className="overflow-hidden rounded-xl border"
@@ -161,7 +194,7 @@ export function Deployments() {
               </tr>
             </thead>
             <tbody>
-              {deployments.map((d) => {
+              {visibleDeployments.map((d) => {
                 const st = STATUS_STYLES[d.status] ?? STATUS_STYLES.pending;
                 const wfName = d.workflowId ? workflows[d.workflowId]?.name : undefined;
                 return (

@@ -371,6 +371,23 @@ export function WorkflowEditor() {
     setIsRunning(false);
   };
 
+  // Keyboard shortcuts: Cmd/Ctrl+S save, Cmd/Ctrl+Enter run
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (!meta) return;
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        void handleSave();
+      } else if (e.key === 'Enter' && !isRunning) {
+        e.preventDefault();
+        void handleRun();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isRunning, workflow, client, draft, hasValidationErrors, isDirty]);
+
   const handleAutoLayout = useCallback((direction?: 'TB' | 'LR') => {
     const dir = direction ?? layoutDirection;
     setLayoutDirection(dir);

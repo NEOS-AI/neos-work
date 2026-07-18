@@ -1,5 +1,5 @@
 /**
- * Client-side workflow list filter (search + domain).
+ * Client-side list filters (search + optional domain/status).
  */
 
 export interface WorkflowListItem {
@@ -22,4 +22,27 @@ export function filterWorkflowList<T extends WorkflowListItem>(
       || (wf.description ?? '').toLowerCase().includes(q)
     );
   });
+}
+
+/** Generic name/description search for plugins, skills, etc. */
+export function filterBySearchText<T extends { name: string; description?: string | null }>(
+  items: T[],
+  search?: string,
+): T[] {
+  const q = search?.trim().toLowerCase() ?? '';
+  if (!q) return items;
+  return items.filter(
+    (item) =>
+      item.name.toLowerCase().includes(q)
+      || (item.description ?? '').toLowerCase().includes(q),
+  );
+}
+
+/** Filter deployments by status chip. */
+export function filterByStatus<T extends { status: string }>(
+  items: T[],
+  status?: string,
+): T[] {
+  if (!status || status === 'all') return items;
+  return items.filter((item) => item.status === status);
 }

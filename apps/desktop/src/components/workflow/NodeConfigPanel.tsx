@@ -521,6 +521,33 @@ function WorkflowWebhookSection() {
         >
           Copy curl
         </button>
+        <button
+          type="button"
+          disabled={busy || !client || !secret}
+          className="text-[10px] underline disabled:opacity-40"
+          style={{ color: 'var(--text-muted)' }}
+          onClick={async () => {
+            if (!client) return;
+            setBusy(true);
+            try {
+              const res = await client.testWebhookFire(workflowId, { source: 'config-test-fire' });
+              flashCopy(res.ok ? `Webhook fired (${res.status})` : (res.error ?? 'Fire failed'));
+              // refresh rate limit remaining
+              const again = await client.getWebhookSecret(workflowId);
+              if (again.ok && again.data?.rateLimit) {
+                setRateLimit({
+                  limit: again.data.rateLimit.limit,
+                  remaining: again.data.rateLimit.remaining,
+                  resetAt: again.data.rateLimit.resetAt,
+                });
+              }
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Test fire
+        </button>
       </div>
       <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
         Header: <code>X-Neos-Signature: sha256=&lt;hmac&gt;</code>
