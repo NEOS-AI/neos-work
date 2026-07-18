@@ -293,6 +293,22 @@ export function validateWorkflowDraft(input: {
     }
   }
 
+  // Duplicate edge ids (graph corruption / bad import)
+  if (input.edges.length > 0) {
+    const seenEdgeIds = new Set<string>();
+    for (const edge of input.edges) {
+      if (seenEdgeIds.has(edge.id)) {
+        issues.push({
+          code: 'duplicate_edge_id',
+          severity: 'error',
+          edgeId: edge.id,
+          message: `Duplicate edge id "${edge.id}".`,
+        });
+      }
+      seenEdgeIds.add(edge.id);
+    }
+  }
+
   if (hasCycle(input.nodes, input.edges)) {
     issues.push({ code: 'cycle', severity: 'error', message: 'Workflow graph contains a cycle.' });
   }

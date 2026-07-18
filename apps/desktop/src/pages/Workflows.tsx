@@ -9,8 +9,11 @@ import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-t
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 import {
+  loadWorkflowListDomain,
   loadWorkflowListSort,
+  saveWorkflowListDomain,
   saveWorkflowListSort,
+  type WorkflowListDomainFilter,
   type WorkflowListSortMode,
 } from '../lib/workflow-list-prefs.js';
 
@@ -33,13 +36,18 @@ export function Workflows() {
   const [newDomain, setNewDomain] = useState<'finance' | 'coding' | 'general'>('general');
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
-  const [domainFilter, setDomainFilter] = useState<'all' | 'finance' | 'coding' | 'general'>('all');
+  const [domainFilter, setDomainFilter] = useState<WorkflowListDomainFilter>(() => loadWorkflowListDomain());
   const [sortMode, setSortMode] = useState<SortMode>(() => loadWorkflowListSort());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleSortModeChange = (mode: SortMode) => {
     setSortMode(mode);
     saveWorkflowListSort(mode);
+  };
+
+  const handleDomainFilterChange = (domain: WorkflowListDomainFilter) => {
+    setDomainFilter(domain);
+    saveWorkflowListDomain(domain);
   };
 
   const filteredWorkflows = useMemo(() => {
@@ -230,7 +238,7 @@ export function Workflows() {
               <button
                 key={d}
                 type="button"
-                onClick={() => setDomainFilter(d)}
+                onClick={() => handleDomainFilterChange(d)}
                 className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
                 style={{
                   backgroundColor: domainFilter === d ? '#10b981' : 'var(--bg-tertiary)',

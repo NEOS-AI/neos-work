@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { MediaFileInfo } from '../lib/engine.js';
-import { filterByKind, filterByTextMatch } from '../lib/workflow-list-filter.js';
 import { formatBytes } from '../lib/format-bytes.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByDateDesc } from '../lib/list-sort.js';
+import { filterByKind, filterByTextMatch } from '../lib/workflow-list-filter.js';
 
 export function Media() {
   const { client } = useEngine();
@@ -18,7 +20,8 @@ export function Media() {
 
   const visibleFiles = useMemo(() => {
     const byKind = filterByKind(files, kindFilter);
-    return filterByTextMatch(byKind, search, (f) => `${f.filename} ${f.kind}`);
+    const matched = filterByTextMatch(byKind, search, (f) => `${f.filename} ${f.kind}`);
+    return sortByDateDesc(matched, (f) => f.createdAt);
   }, [files, kindFilter, search]);
 
   const load = useCallback(async () => {
@@ -164,8 +167,8 @@ export function Media() {
                   }}
                 >
                   <div className="font-medium truncate">{f.filename}</div>
-                  <div style={{ color: 'var(--text-muted)' }}>
-                    {f.kind} · {formatBytes(f.size)} · {new Date(f.createdAt).toLocaleString()}
+                  <div style={{ color: 'var(--text-muted)' }} title={formatAbsoluteTime(f.createdAt)}>
+                    {f.kind} · {formatBytes(f.size)} · {formatRelativeTime(f.createdAt)}
                   </div>
                 </button>
                 <button

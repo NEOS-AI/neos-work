@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Routine, RoutineRun, Workflow } from '../lib/engine.js';
+import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
@@ -263,13 +264,21 @@ export function Routines() {
                   {workflows.find((w) => w.id === r.workflowId)?.name ?? r.workflowId}
                 </div>
                 {r.lastRunAt && (
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    Last: {new Date(r.lastRunAt).toLocaleString()}
+                  <div
+                    className="text-xs mt-0.5"
+                    style={{ color: 'var(--text-muted)' }}
+                    title={formatAbsoluteTime(r.lastRunAt)}
+                  >
+                    Last: {formatRelativeTime(r.lastRunAt)}
                   </div>
                 )}
                 {r.nextRunAt && r.enabled && (
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    Next: {new Date(r.nextRunAt).toLocaleString()}
+                  <div
+                    className="text-xs mt-0.5"
+                    style={{ color: 'var(--text-muted)' }}
+                    title={formatAbsoluteTime(r.nextRunAt)}
+                  >
+                    Next: {formatRelativeTime(r.nextRunAt)}
                   </div>
                 )}
               </div>
@@ -335,23 +344,23 @@ export function Routines() {
               </div>
               <div className="flex justify-between">
                 <span style={{ color: 'var(--text-muted)' }}>Created</span>
-                <span style={{ color: 'var(--text-primary)' }}>
-                  {new Date(selectedRoutine.createdAt).toLocaleString()}
+                <span style={{ color: 'var(--text-primary)' }} title={formatAbsoluteTime(selectedRoutine.createdAt)}>
+                  {formatRelativeTime(selectedRoutine.createdAt)}
                 </span>
               </div>
               {selectedRoutine.nextRunAt && selectedRoutine.enabled && (
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-muted)' }}>Next Run</span>
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    {new Date(selectedRoutine.nextRunAt).toLocaleString()}
+                  <span style={{ color: 'var(--text-primary)' }} title={formatAbsoluteTime(selectedRoutine.nextRunAt)}>
+                    {formatRelativeTime(selectedRoutine.nextRunAt)}
                   </span>
                 </div>
               )}
               {selectedRoutine.lastRunAt && (
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-muted)' }}>Last Run</span>
-                  <span style={{ color: 'var(--text-primary)' }}>
-                    {new Date(selectedRoutine.lastRunAt).toLocaleString()}
+                  <span style={{ color: 'var(--text-primary)' }} title={formatAbsoluteTime(selectedRoutine.lastRunAt)}>
+                    {formatRelativeTime(selectedRoutine.lastRunAt)}
                   </span>
                 </div>
               )}
@@ -433,8 +442,8 @@ export function Routines() {
                       className="flex items-center justify-between gap-2 rounded px-3 py-2 text-xs"
                       style={{ backgroundColor: 'var(--bg-secondary)' }}
                     >
-                      <span style={{ color: 'var(--text-primary)' }}>
-                        {new Date(run.startedAt).toLocaleString()}
+                      <span style={{ color: 'var(--text-primary)' }} title={formatAbsoluteTime(run.startedAt)}>
+                        {formatRelativeTime(run.startedAt)}
                       </span>
                       <span className={
                         run.status === 'completed' ? 'text-green-400' :

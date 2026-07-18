@@ -883,6 +883,12 @@ export function WorkflowEditor() {
                 </kbd>
               </li>
               <li className="flex justify-between gap-4">
+                <span>Close History panel</span>
+                <kbd className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  Esc
+                </kbd>
+              </li>
+              <li className="flex justify-between gap-4">
                 <span>Confirm leave dialog</span>
                 <span style={{ color: 'var(--text-muted)' }}>when dirty</span>
               </li>

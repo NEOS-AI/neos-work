@@ -44,6 +44,21 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId]);
 
+  // Escape closes the history panel (plan Task 16 UX)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Let inline label editors consume Escape first
+      if (editingId) {
+        setEditingId(null);
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editingId, onClose]);
+
   const handleRestore = async (rev: WorkflowRevision) => {
     if (isDirty) {
       const ok = window.confirm(
