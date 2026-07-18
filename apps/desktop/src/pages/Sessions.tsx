@@ -239,6 +239,14 @@ function NewSessionModal({
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929');
   const [thinkingMode, setThinkingMode] = useState('none');
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const selectedModelInfo = AVAILABLE_MODELS.find((m) => m.id === selectedModel);
 
   const handleCreate = () => {

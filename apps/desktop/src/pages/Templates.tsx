@@ -4,6 +4,11 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
+import {
+  loadDomainFilter,
+  saveDomainFilter,
+  type DomainFilterPref,
+} from '../lib/domain-filter-prefs.js';
 import { formatListCount } from '../lib/list-count.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
 
@@ -36,8 +41,13 @@ export function Templates() {
   const [templateList, setTemplateList] = useState<TemplateWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>('all');
+  const [filter, setFilter] = useState<DomainFilterPref>(() => loadDomainFilter('templates'));
   const [search, setSearch] = useState('');
+
+  const handleDomainFilter = (d: DomainFilterPref) => {
+    setFilter(d);
+    saveDomainFilter('templates', d);
+  };
 
   useEffect(() => {
     if (!client) return;
@@ -95,7 +105,7 @@ export function Templates() {
           {domains.map((d) => (
             <button
               key={d}
-              onClick={() => setFilter(d)}
+              onClick={() => handleDomainFilter(d as DomainFilterPref)}
               className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
               style={{
                 backgroundColor: filter === d ? 'var(--border-secondary)' : undefined,

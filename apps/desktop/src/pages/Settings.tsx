@@ -647,6 +647,16 @@ function McpServersSection() {
     loadServers();
   }, [loadServers]);
 
+  // Escape closes MCP OAuth connect modal
+  useEffect(() => {
+    if (!oauthModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !oauthConnecting) setOauthModal(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [oauthModal, oauthConnecting]);
+
   const handleAdd = async () => {
     if (!client || !formName) return;
     setAdding(true);

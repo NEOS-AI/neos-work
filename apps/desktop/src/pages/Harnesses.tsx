@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentHarness } from '../lib/engine.js';
+import {
+  loadDomainFilter,
+  saveDomainFilter,
+  type DomainFilterPref,
+} from '../lib/domain-filter-prefs.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
@@ -20,8 +25,13 @@ export function Harnesses() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<AgentHarness | null>(null);
-  const [domainFilter, setDomainFilter] = useState('all');
+  const [domainFilter, setDomainFilter] = useState<DomainFilterPref>(() => loadDomainFilter('harnesses'));
   const [search, setSearch] = useState('');
+
+  const handleDomainFilter = (d: DomainFilterPref) => {
+    setDomainFilter(d);
+    saveDomainFilter('harnesses', d);
+  };
 
   const load = async () => {
     if (!client) return;
@@ -32,6 +42,16 @@ export function Harnesses() {
   };
 
   useEffect(() => { load(); }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Escape closes harness create/edit modal
+  useEffect(() => {
+    if (!showModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showModal]);
 
   const handleDelete = async (h: AgentHarness) => {
     if (!client || h.isBuiltIn) return;
@@ -90,7 +110,7 @@ export function Harnesses() {
             {domains.map((d) => (
               <button
                 key={d}
-                onClick={() => setDomainFilter(d)}
+                onClick={() => handleDomainFilter(d as DomainFilterPref)}
                 className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
                 style={{
                   backgroundColor: domainFilter === d ? 'var(--border-secondary)' : undefined,

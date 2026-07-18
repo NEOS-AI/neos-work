@@ -3,6 +3,14 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { WorkflowBlock } from '../lib/engine.js';
+import {
+  loadBlocksSourceFilter,
+  loadDomainFilter,
+  saveBlocksSourceFilter,
+  saveDomainFilter,
+  type BlocksSourceFilter,
+  type DomainFilterPref,
+} from '../lib/domain-filter-prefs.js';
 import { formatListCount } from '../lib/list-count.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
@@ -374,9 +382,18 @@ export function Blocks() {
   const [blockList, setBlockList] = useState<WorkflowBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; block?: WorkflowBlock } | null>(null);
-  const [filter, setFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'builtin' | 'custom'>('all');
+  const [filter, setFilter] = useState<DomainFilterPref>(() => loadDomainFilter('blocks'));
+  const [sourceFilter, setSourceFilter] = useState<BlocksSourceFilter>(() => loadBlocksSourceFilter());
   const [search, setSearch] = useState('');
+
+  const handleDomainFilter = (d: DomainFilterPref) => {
+    setFilter(d);
+    saveDomainFilter('blocks', d);
+  };
+  const handleSourceFilter = (s: BlocksSourceFilter) => {
+    setSourceFilter(s);
+    saveBlocksSourceFilter(s);
+  };
 
   const load = async () => {
     if (!client) return;
@@ -386,6 +403,16 @@ export function Blocks() {
   };
 
   useEffect(() => { load(); }, [client]);
+
+  // Escape closes create/edit block modal
+  useEffect(() => {
+    if (!modal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModal(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [modal]);
 
   const handleSave = async (data: Omit<WorkflowBlock, 'isBuiltIn'>) => {
     if (!client) return;
@@ -447,7 +474,7 @@ export function Blocks() {
             {domains.map((d) => (
               <button
                 key={d}
-                onClick={() => setFilter(d)}
+                onClick={() => handleDomainFilter(d as DomainFilterPref)}
                 className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
                 style={{
                   backgroundColor: filter === d ? 'var(--border-secondary)' : undefined,
@@ -467,7 +494,7 @@ export function Blocks() {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => setSourceFilter(s.id)}
+                onClick={() => handleSourceFilter(s.id)}
                 className="rounded-md px-3 py-1 text-xs transition-colors"
                 style={{
                   backgroundColor: sourceFilter === s.id ? 'var(--border-secondary)' : undefined,
