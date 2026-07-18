@@ -226,6 +226,24 @@ function initSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_routine_workflow_id ON routine(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_routine_run_routine_id ON routine_run(routine_id);
+
+    -- Deploy history (v0.3.1 / plan Task 8)
+    CREATE TABLE IF NOT EXISTS deployments (
+      id              TEXT PRIMARY KEY,
+      workflow_id     TEXT,
+      run_id          TEXT,
+      provider        TEXT NOT NULL,
+      project_name    TEXT,
+      url             TEXT,
+      deployment_id   TEXT,
+      status          TEXT NOT NULL,
+      status_message  TEXT,
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_deployments_workflow_id ON deployments(workflow_id);
+    CREATE INDEX IF NOT EXISTS idx_deployments_created_at ON deployments(created_at);
   `);
 
   // Migrations for older schemas

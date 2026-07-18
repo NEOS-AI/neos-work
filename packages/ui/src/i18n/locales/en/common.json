@@ -12,7 +12,11 @@
     "settings": "Settings",
     "harnesses": "Harnesses",
     "blocks": "Blocks",
-    "memory": "Memory"
+    "memory": "Memory",
+    "design-systems": "Design Systems",
+    "routines": "Routines",
+    "plugins": "Plugins",
+    "deployments": "Deployments"
   },
   "common": {
     "loading": "Loading...",

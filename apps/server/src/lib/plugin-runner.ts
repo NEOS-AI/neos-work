@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import type { PluginManifest, PipelineStage } from './plugin-store.js';
 
-export interface PluginSSEEvent =
+export type PluginSSEEvent =
   | { type: 'pipeline.started'; runId: string; pluginId: string }
   | { type: 'stage.started'; stageId: string; stageName: string }
   | { type: 'stage.output'; stageId: string; output: string }

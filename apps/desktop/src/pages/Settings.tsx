@@ -89,6 +89,21 @@ export function Settings() {
         </div>
       </section>
 
+      {/* Deploy */}
+      <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
+        <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          Deploy
+        </h2>
+        <p className="mb-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Tokens used by Deploy nodes to publish static content to Vercel or Cloudflare Pages.
+        </p>
+        <div className="flex flex-col gap-4">
+          <SimpleKeyInput label="Vercel API Token" placeholder="vercel_..." settingKey="VERCEL_API_TOKEN" />
+          <SimpleKeyInput label="Cloudflare API Token" placeholder="..." settingKey="CLOUDFLARE_API_TOKEN" />
+          <SimpleKeyInput label="Cloudflare Account ID" placeholder="hex account id" settingKey="CLOUDFLARE_ACCOUNT_ID" />
+        </div>
+      </section>
+
       {/* Appearance */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
         <h2 className="mb-4 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>

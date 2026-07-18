@@ -106,9 +106,9 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
     };
     sandbox['__output'] = '';
 
+    // timeout belongs on runInNewContext only (not Script constructor options)
     const script = new vm.Script(
       language === 'ts' ? `// TypeScript run as JS (no transpile)\n${code}` : code,
-      { timeout: CODE_EVAL_TIMEOUT_MS },
     );
     const result = script.runInNewContext(sandbox, { timeout: CODE_EVAL_TIMEOUT_MS });
     const output = sandbox['__output'] as string || (result !== undefined ? String(result) : '(no output)');

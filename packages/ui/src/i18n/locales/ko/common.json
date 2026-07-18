@@ -12,6 +12,10 @@
     "templates": "템플릿",
     "skills": "스킬",
     "memory": "메모리",
+    "design-systems": "디자인 시스템",
+    "routines": "루틴",
+    "plugins": "플러그인",
+    "deployments": "배포",
     "settings": "설정"
   },
   "common": {

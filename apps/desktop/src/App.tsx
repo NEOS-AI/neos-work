@@ -18,6 +18,7 @@ import { DesignSystems } from './pages/DesignSystems.js';
 import { DesignSystemEditor } from './pages/DesignSystemEditor.js';
 import { Routines } from './pages/Routines.js';
 import { Plugins } from './pages/Plugins.js';
+import { Deployments } from './pages/Deployments.js';
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ function AppRouter() {
           <Route path="design-systems/:id" element={<DesignSystemEditor />} />
           <Route path="routines" element={<Routines />} />
           <Route path="plugins" element={<Plugins />} />
+          <Route path="deployments" element={<Deployments />} />
         </Route>
       </Routes>
     </BrowserRouter>

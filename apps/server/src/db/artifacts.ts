@@ -2,7 +2,7 @@
  * Artifact CRUD — read/write the `artifacts` table.
  */
 
-import { getDb } from './index.js';
+import { getDb } from './schema.js';
 
 export interface ArtifactRow {
   id: string;

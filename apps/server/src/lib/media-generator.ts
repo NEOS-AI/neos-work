@@ -42,7 +42,7 @@ export async function generateImage(options: {
     n: 1,
   });
 
-  const item = response.data[0];
+  const item = response.data?.[0];
   if (!item?.url) throw new Error('No image URL returned');
 
   // Download the image and save locally

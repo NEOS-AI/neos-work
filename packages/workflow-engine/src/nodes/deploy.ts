@@ -8,13 +8,16 @@ export const DeployNode: ExecutableNode = {
   type: 'deploy',
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
+    const start = Date.now();
     const { config, settings, inputs } = ctx;
     const provider = (config?.provider as string) ?? 'vercel';
     const serverUrl = settings['SERVER_URL'] ?? 'http://localhost:3001';
     const serverToken = settings['SERVER_TOKEN'] ?? '';
 
     const content = (inputs['content'] as string) ?? (config?.content as string) ?? '';
-    if (!content) return { ok: false, error: 'No content to deploy' };
+    if (!content) {
+      return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
+    }
 
     const projectName = (config?.projectName as string) ?? (inputs['projectName'] as string) ?? 'neos-deploy';
 
@@ -24,15 +27,29 @@ export const DeployNode: ExecutableNode = {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${serverToken}`,
       },
-      body: JSON.stringify({ provider, content, projectName }),
+      body: JSON.stringify({
+        provider,
+        content,
+        projectName,
+        workflowId: ctx.workflowId,
+        runId: ctx.runId,
+      }),
       signal: ctx.signal,
     });
 
     const data = await res.json() as { ok: boolean; data?: { url: string; deploymentId?: string }; error?: string };
-    if (!data.ok) return { ok: false, error: data.error ?? 'Deploy failed' };
+    if (!data.ok) {
+      return {
+        ok: false,
+        output: null,
+        error: data.error ?? 'Deploy failed',
+        durationMs: Date.now() - start,
+      };
+    }
     return {
       ok: true,
       output: `Deployed to ${provider}: ${data.data?.url ?? 'unknown URL'}`,
+      durationMs: Date.now() - start,
     };
   },
 };
