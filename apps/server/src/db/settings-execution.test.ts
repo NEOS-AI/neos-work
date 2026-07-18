@@ -136,4 +136,11 @@ describe('isSafeHttpBaseUrl', () => {
     expect(isSafeHttpBaseUrl('ftp://x')).toBe(false);
     expect(isSafeHttpBaseUrl('')).toBe(false);
   });
+
+  it('rejects javascript and data schemes and malformed strings', () => {
+    expect(isSafeHttpBaseUrl('javascript:alert(1)')).toBe(false);
+    expect(isSafeHttpBaseUrl('data:text/html,hi')).toBe(false);
+    expect(isSafeHttpBaseUrl('not a url')).toBe(false);
+    expect(isSafeHttpBaseUrl('https://')).toBe(false);
+  });
 });

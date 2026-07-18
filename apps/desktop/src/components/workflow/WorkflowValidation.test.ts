@@ -1,7 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { validateWorkflowDraft } from './WorkflowValidation.js';
+import { summarizeValidationIssues, validateWorkflowDraft } from './WorkflowValidation.js';
 
 const emptyBlocks: never[] = [];
+
+describe('summarizeValidationIssues', () => {
+  it('counts errors and warnings', () => {
+    expect(
+      summarizeValidationIssues([
+        { code: 'a', severity: 'error', message: 'e' },
+        { code: 'b', severity: 'warning', message: 'w' },
+        { code: 'c', severity: 'error', message: 'e2' },
+      ]),
+    ).toEqual({ total: 3, errors: 2, warnings: 1 });
+    expect(summarizeValidationIssues([])).toEqual({ total: 0, errors: 0, warnings: 0 });
+  });
+});
 
 describe('validateWorkflowDraft', () => {
   it('returns no_trigger warning when no trigger node', () => {
