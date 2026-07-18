@@ -126,3 +126,37 @@ describe('revision restore payload', () => {
   });
 });
 
+describe('createRevision GC', () => {
+  it('GC keeps at most 50 revisions per workflow', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    for (let i = 0; i < 55; i++) {
+      createRevision(wf.id, JSON.stringify({ n: i, nodes: [], edges: [] }));
+    }
+    expect(listRevisions(wf.id).length).toBe(50);
+  });
+
+  it('GC retains the newest revisions (not the oldest)', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    for (let i = 0; i < 52; i++) {
+      createRevision(wf.id, JSON.stringify({ n: i, nodes: [{ id: `n${i}` }], edges: [] }));
+    }
+    const list = listRevisions(wf.id);
+    expect(list).toHaveLength(50);
+    // list is newest-first; first entry should be n=51
+    expect(list[0]?.nodeCount).toBe(1);
+    // oldest remaining should be around n=2 (0 and 1 GC'd)
+    const oldest = list[list.length - 1];
+    expect(oldest?.nodeCount).toBe(1);
+  });
+});
+

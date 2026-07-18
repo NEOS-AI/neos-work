@@ -50,3 +50,17 @@ describe('workflow TEMPLATES', () => {
     expect(types).toContain('deploy');
   });
 
+  it('includes OR Race Two Agents template', () => {
+    const t = TEMPLATES.find((x) => x.name === 'OR Race Two Agents');
+    expect(t).toBeTruthy();
+    expect(t!.nodes.some((n) => n.type === 'or_gate')).toBe(true);
+    expect(t!.nodes.filter((n) => n.type === 'agent_coding').length).toBe(2);
+  });
+
+  it('OR template fans into or_gate from both agents', () => {
+    const t = TEMPLATES.find((x) => x.name === 'OR Race Two Agents')!;
+    const or = t.nodes.find((n) => n.type === 'or_gate')!;
+    const incoming = t.edges.filter((e) => e.target === or.id);
+    expect(incoming.length).toBe(2);
+  });
+

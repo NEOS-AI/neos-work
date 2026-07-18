@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterWorkflowList } from './workflow-list-filter.js';
+import { filterBySearchText, filterByStatus, filterWorkflowList } from './workflow-list-filter.js';
 
 const items = [
   { name: 'Stock Bot', description: 'prices', domain: 'finance' },
@@ -30,3 +30,41 @@ describe('filterWorkflowList', () => {
     expect(filterWorkflowList(items, { domain: 'all', search: 'bot' })).toHaveLength(1);
   });
 });
+
+describe('filterBySearchText', () => {
+  it('filters plugins by name or description', () => {
+    const items = [
+      { name: 'Design Kit', description: 'atoms' },
+      { name: 'Other', description: null },
+    ];
+    expect(filterBySearchText(items, 'atom')).toHaveLength(1);
+    expect(filterBySearchText(items, 'other')).toHaveLength(1);
+    expect(filterBySearchText(items, '')).toHaveLength(2);
+  });
+});
+
+describe('filterByStatus', () => {
+  it('filters deployments by status', () => {
+    const items = [
+      { status: 'success' },
+      { status: 'failed' },
+      { status: 'success' },
+    ];
+    expect(filterByStatus(items, 'success')).toHaveLength(2);
+    expect(filterByStatus(items, 'all')).toHaveLength(3);
+    expect(filterByStatus(items, undefined)).toHaveLength(3);
+  });
+
+  it('returns empty when no status matches', () => {
+    expect(filterByStatus([{ status: 'pending' }], 'failed')).toEqual([]);
+  });
+});
+
+describe('filterBySearchText case-insensitivity', () => {
+  it('matches mixed case names', () => {
+    const items = [{ name: 'DesignKit', description: 'OD Atoms' }];
+    expect(filterBySearchText(items, 'design')).toHaveLength(1);
+    expect(filterBySearchText(items, 'OD ATOMS')).toHaveLength(1);
+  });
+});
+
