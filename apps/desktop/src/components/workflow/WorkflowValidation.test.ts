@@ -23,6 +23,18 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'missing_node_label' && i.nodeId === '1')).toBe(true);
   });
 
+  it('returns duplicate_node_id when two nodes share an id', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 'dup', type: 'trigger', label: 'A', config: {} },
+        { id: 'dup', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'duplicate_node_id' && i.nodeId === 'dup')).toBe(true);
+  });
+
   it('returns missing_block_id error when block node has no blockId', () => {
     const issues = validateWorkflowDraft({
       nodes: [{ id: 'b1', type: 'block', label: 'My Block', config: {} }],

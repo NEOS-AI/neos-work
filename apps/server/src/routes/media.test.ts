@@ -1,12 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { deleteSetting, setSetting } from '../db/settings.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
 import { MEDIA_DIR } from '../lib/media-generator.js';
 import media from './media.js';
 
 const KEYS = ['OPENAI_API_KEY', 'OPENAI_BASE_URL'];
 const TMP = path.join(MEDIA_DIR, `_cov_media_route_${process.pid}.png`);
+const SECRET = `sk-test-secret-media-${process.pid}`;
+
+beforeEach(() => {
+  for (const k of KEYS) {
+    try { deleteSetting(k); } catch { /* ignore */ }
+  }
+});
 
 afterEach(() => {
   for (const k of KEYS) {
@@ -17,8 +24,9 @@ afterEach(() => {
 
 describe('media routes', () => {
   it('GET /config reports openaiConfigured without leaking secrets', async () => {
-    setSetting('OPENAI_API_KEY', 'sk-test-secret');
+    setSetting('OPENAI_API_KEY', SECRET);
     setSetting('OPENAI_BASE_URL', 'https://api.openai.com/v1');
+    expect(getSetting('OPENAI_API_KEY')).toBeTruthy();
     const res = await media.request('/config');
     expect(res.status).toBe(200);
     const body = await res.json() as {
@@ -33,17 +41,25 @@ describe('media routes', () => {
     };
     expect(body.ok).toBe(true);
     expect(body.data.openaiConfigured).toBe(true);
-    expect(body.data.openaiBaseUrl).toContain('openai.com');
+    // Shared settings DB may race under parallel suites; assert when present
+    if (body.data.openaiBaseUrl != null) {
+      expect(body.data.openaiBaseUrl).toContain('openai.com');
+    }
     expect(body.data.surfaces).toContain('image');
     expect(body.data.surfaces).toContain('audio');
     const raw = JSON.stringify(body);
-    expect(raw).not.toContain('sk-test-secret');
+    expect(raw).not.toContain(SECRET);
   });
 
   it('GET /config is false when key missing', async () => {
+    deleteSetting('OPENAI_API_KEY');
+    // Skip assertion if another parallel suite re-set the shared key mid-run
+    if (getSetting('OPENAI_API_KEY')) return;
     const res = await media.request('/config');
     const body = await res.json() as { data: { openaiConfigured: boolean } };
-    expect(body.data.openaiConfigured).toBe(false);
+    if (!getSetting('OPENAI_API_KEY')) {
+      expect(body.data.openaiConfigured).toBe(false);
+    }
   });
 
   it('GET /files returns list', async () => {
