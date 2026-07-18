@@ -78,4 +78,30 @@ describe('MediaNode', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe('quota exceeded');
   });
+
+  it('uses upstream inputs.prompt when config prompt missing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'from-input.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image' },
+        inputs: { prompt: 'from upstream' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.prompt).toBe('from upstream');
+  });
+
+  it('sends Authorization bearer from SERVER_TOKEN', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'a.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(ctx({ config: { mediaType: 'image', prompt: 'p' } }));
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer tok');
+  });
 });

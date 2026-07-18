@@ -41,4 +41,24 @@ describe('deployments CRUD', () => {
     expect(deleteDeployment(row.id)).toBe(true);
     expect(getDeployment(row.id)).toBeUndefined();
   });
+
+  it('filters list by workflowId and returns empty for unknown', () => {
+    const wfId = crypto.randomUUID();
+    const a = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-a`,
+      status: 'pending',
+      workflowId: wfId,
+    });
+    createDeployment({
+      provider: 'cloudflare',
+      projectName: `${MARKER}-b`,
+      status: 'pending',
+      workflowId: crypto.randomUUID(),
+    });
+    const filtered = listDeployments({ workflowId: wfId, limit: 50 });
+    expect(filtered.every((d) => d.workflowId === wfId)).toBe(true);
+    expect(filtered.some((d) => d.id === a.id)).toBe(true);
+    expect(listDeployments({ workflowId: 'missing-wf', limit: 10 })).toEqual([]);
+  });
 });
