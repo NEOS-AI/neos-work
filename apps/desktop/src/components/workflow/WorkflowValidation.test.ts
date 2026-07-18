@@ -83,6 +83,24 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'missing_slack_channel' && i.nodeId === 's1')).toBe(true);
   });
 
+  it('returns missing_discord_content when discord has no content or upstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [{ id: 'd1', type: 'discord_message', label: 'Discord', config: {} }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_discord_content' && i.nodeId === 'd1')).toBe(true);
+  });
+
+  it('does not warn discord when static content is set', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [{ id: 'd1', type: 'discord_message', label: 'Discord', config: { content: 'hi' } }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_discord_content')).toBe(false);
+  });
+
   it('passes with valid trigger-output graph', () => {
     const issues = validateWorkflowDraft({
       nodes: [
