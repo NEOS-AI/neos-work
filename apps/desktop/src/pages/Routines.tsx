@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Routine, RoutineRun, Workflow } from '../lib/engine.js';
 import { formatListCount } from '../lib/list-count.js';
+import { sortByDateDesc } from '../lib/list-sort.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Routines() {
@@ -164,7 +165,8 @@ export function Routines() {
 
   const visibleRoutines = useMemo(() => {
     const byEnabled = filterByEnabled(routines, enabledFilter);
-    return filterBySearchText(byEnabled, search);
+    const filtered = filterBySearchText(byEnabled, search);
+    return sortByDateDesc(filtered, (r) => r.updatedAt);
   }, [routines, enabledFilter, search]);
 
   return (

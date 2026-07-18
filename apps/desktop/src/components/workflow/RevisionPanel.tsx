@@ -85,6 +85,10 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   };
 
   const handleDelete = async (revId: string) => {
+    const ok = window.confirm(
+      t('workflow.deleteRevisionConfirm', 'Delete this revision permanently? This cannot be undone.'),
+    );
+    if (!ok) return;
     await client.deleteRevision(workflowId, revId);
     void loadRevisions();
   };
@@ -95,6 +99,11 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--border-primary)' }}>
         <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('workflow.history', 'Version History')}
+          {!loading && (
+            <span className="ml-2 font-normal" style={{ color: 'var(--text-muted)' }}>
+              ({revisions.length})
+            </span>
+          )}
         </span>
         <button
           onClick={onClose}

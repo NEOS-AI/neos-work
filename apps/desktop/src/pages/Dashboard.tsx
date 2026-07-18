@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Routine, Workflow } from '../lib/engine.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
+import { formatRelativeTime } from '../lib/format-relative-time.js';
 import { pickRecentRoutines, pickRecentWorkflows } from '../lib/recent-workflows.js';
 
 interface DashboardStats {
@@ -175,8 +176,8 @@ export function Dashboard() {
                     {(wf.nodes?.length ?? 0)} nodes
                   </p>
                 </div>
-                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  {new Date(wf.updatedAt).toLocaleDateString()}
+                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }} title={new Date(wf.updatedAt).toLocaleString()}>
+                  {formatRelativeTime(wf.updatedAt)}
                 </span>
               </Link>
             ))}
@@ -213,10 +214,14 @@ export function Dashboard() {
                     {r.enabled ? 'enabled' : 'disabled'}
                   </p>
                 </div>
-                <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                <span
+                  className="shrink-0 text-[10px]"
+                  style={{ color: 'var(--text-muted)' }}
+                  title={r.nextRunAt ? new Date(r.nextRunAt).toLocaleString() : new Date(r.updatedAt).toLocaleString()}
+                >
                   {r.nextRunAt
-                    ? `next ${new Date(r.nextRunAt).toLocaleString()}`
-                    : new Date(r.updatedAt).toLocaleDateString()}
+                    ? `next ${formatRelativeTime(r.nextRunAt)}`
+                    : formatRelativeTime(r.updatedAt)}
                 </span>
               </Link>
             ))}

@@ -257,6 +257,14 @@ export function validateWorkflowDraft(input: {
   }
 
   for (const edge of input.edges) {
+    if (edge.source === edge.target) {
+      issues.push({
+        code: 'self_loop',
+        severity: 'error',
+        edgeId: edge.id,
+        message: 'Edge cannot connect a node to itself.',
+      });
+    }
     if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
       issues.push({
         code: 'dangling_edge',

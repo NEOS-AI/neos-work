@@ -25,6 +25,7 @@ import { RunInputsDialog } from '../components/workflow/RunInputsDialog.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { summarizeValidationIssues, validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
 import { autoLayout } from '../lib/layout.js';
+import { loadLayoutDirection, saveLayoutDirection } from '../lib/layout-prefs.js';
 import { RevisionPanel } from '../components/workflow/RevisionPanel.js';
 import { ArtifactPreview } from '../components/workflow/ArtifactPreview.js';
 import { RunLogPanel } from '../components/workflow/RunLogPanel.js';
@@ -163,7 +164,7 @@ export function WorkflowEditor() {
   const [scheduleCron, setScheduleCron] = useState('0 9 * * *');
   const [scheduleName, setScheduleName] = useState('');
   const [scheduleBusy, setScheduleBusy] = useState(false);
-  const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('TB');
+  const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>(() => loadLayoutDirection());
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const stopRef = useRef<(() => void) | null>(null);
@@ -398,6 +399,7 @@ export function WorkflowEditor() {
   const handleAutoLayout = useCallback((direction?: 'TB' | 'LR') => {
     const dir = direction ?? layoutDirection;
     setLayoutDirection(dir);
+    saveLayoutDirection(dir);
     setNodes((current) => {
       const laid = autoLayout(current, edges, dir);
       // fitView needs a tick to see new positions
