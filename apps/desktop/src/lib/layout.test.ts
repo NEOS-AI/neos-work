@@ -67,3 +67,21 @@ describe('autoLayout fan-out', () => {
     expect(byId.b!.position.x !== byId.c!.position.x || byId.b!.position.y !== byId.c!.position.y).toBe(true);
   });
 });
+
+describe('autoLayout LR', () => {
+  it('places chain left-to-right for LR direction', () => {
+    const nodes = [
+      { id: 'a', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+      { id: 'b', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+      { id: 'c', position: { x: 0, y: 0 }, data: {}, type: 'default' as const },
+    ];
+    const edges = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: 'b', target: 'c' },
+    ];
+    const laid = autoLayout(nodes, edges, 'LR');
+    const byId = Object.fromEntries(laid.map((n) => [n.id, n]));
+    expect(byId.a!.position.x).toBeLessThan(byId.b!.position.x);
+    expect(byId.b!.position.x).toBeLessThan(byId.c!.position.x);
+  });
+});

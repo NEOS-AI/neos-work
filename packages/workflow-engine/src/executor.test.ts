@@ -209,3 +209,23 @@ describe('executeWorkflow media/deploy nodes', () => {
     expect(events.some((e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'media')).toBe(true);
   });
 });
+
+  it('fails web_search node when TAVILY_API_KEY missing', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-search-nokey',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'search', type: 'web_search', label: 'Search', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'search' }],
+      }),
+      settings: {},
+      triggerInputs: { query: 'neos' },
+      onEvent: (event) => events.push(event),
+    });
+    const failed = events.find((e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'search');
+    expect(failed).toBeDefined();
+    expect((failed as { error: string }).error).toMatch(/TAVILY_API_KEY/);
+  });
