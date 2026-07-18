@@ -1077,6 +1077,18 @@ export class EngineClient {
     return res.json();
   }
 
+  /** Persist a revision snapshot onto the workflow record (plan Task 16). */
+  async restoreRevision(
+    workflowId: string,
+    revisionId: string,
+  ): Promise<ApiResponse<Workflow> & { meta?: { restoredFrom?: string; label?: string } }> {
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}/restore`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
   async updateRevisionLabel(workflowId: string, revisionId: string, label: string): Promise<ApiResponse<WorkflowRevision>> {
     const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
       method: 'PATCH',

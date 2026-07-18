@@ -21,6 +21,7 @@ import * as artifactDb from '../db/artifacts.js';
 import * as revisionDb from '../db/workflow-revisions.js';
 import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
+import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { getDesignSystemContent } from '../lib/design-system-store.js';
 
 const workflow = new Hono();
@@ -229,6 +230,22 @@ workflow.get('/:id/export.zip', async (c) => {
       }, null, 2),
       { name: `artifacts/${safeArt}-${art.id.slice(0, 8)}.meta.json` },
     );
+  }
+
+  // Design system DESIGN.md when workflow is bound (plan Tasks 1 / 10)
+  if (wf.designSystemId) {
+    try {
+      const content = await getDesignSystemContent(wf.designSystemId);
+      if (content) {
+        archive.append(content, { name: `design-systems/${wf.designSystemId}/DESIGN.md` });
+        archive.append(
+          JSON.stringify({ id: wf.designSystemId, exportedAt: new Date().toISOString() }, null, 2),
+          { name: `design-systems/${wf.designSystemId}/meta.json` },
+        );
+      }
+    } catch {
+      // non-fatal — export without design system content
+    }
   }
 
   archive.finalize();
@@ -500,17 +517,34 @@ workflow.post('/:id/run', async (c) => {
         },
         signal: controller.signal,
         cliSpawn: (cliId, prompt, onChunk, signal) =>
-          spawnCliAgent({ cliId, prompt, onChunk, signal }),
+          spawnCliAgent({
+            cliId,
+            prompt,
+            onChunk,
+            signal,
+            workflowId: wf.id,
+            runId,
+            serverUrl: getRuntimeServerUrl(),
+            authToken: getRuntimeAuthToken(),
+          }),
         designSystemContent,
       });
 
-      // Auto-detect HTML artifacts from completed node outputs
+      // Auto-detect HTML artifacts from completed node outputs (plan Task 4:
+      // DOCTYPE html / <html, plus common fragment tags used by agents)
       let artifactId: string | undefined;
       for (const [nodeId, result] of Object.entries(nodeResults)) {
         const r = result as { output?: unknown; status?: string };
-        if (r.status === 'completed' && typeof r.output === 'string' && r.output.trim().startsWith('<')) {
+        if (r.status === 'completed' && typeof r.output === 'string') {
           const htmlContent = r.output.trim();
-          if (htmlContent.includes('<html') || htmlContent.includes('<div') || htmlContent.includes('<svg')) {
+          const head = htmlContent.slice(0, 200).toLowerCase();
+          const isHtml =
+            head.startsWith('<!doctype html')
+            || head.startsWith('<html')
+            || htmlContent.includes('<html')
+            || htmlContent.includes('<div')
+            || htmlContent.includes('<svg');
+          if (isHtml && htmlContent.startsWith('<')) {
             const artifact = artifactDb.createArtifact({
               workflowId: wf.id,
               runId,

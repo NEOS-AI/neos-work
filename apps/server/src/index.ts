@@ -27,9 +27,12 @@ import pluginsRoute from './routes/plugins.js';
 import { migrateEncryption } from './db/settings.js';
 import { registerCodingBlocks, registerFinanceBlocks } from '@neos-work/workflow-engine';
 import { initScheduler } from './lib/routine-scheduler.js';
+import { setRuntimeContext } from './lib/runtime-context.js';
 
 // Generate per-session auth token (VULN-002)
 const AUTH_TOKEN = randomBytes(32).toString('hex');
+// Seed early so CLI spawn during startup paths has a token; port updated after listen
+setRuntimeContext({ authToken: AUTH_TOKEN, port: parseInt(process.env.NEOS_PORT ?? process.env.PORT ?? '3000', 10) });
 
 const app = new Hono();
 
@@ -98,7 +101,7 @@ app.route('/api/plugins', pluginsRoute);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.3.6',
+    version: '0.3.8',
   });
 });
 
@@ -129,6 +132,7 @@ ALLOWED_HOSTS.add('127.0.0.1');
 ALLOWED_HOSTS.add('localhost');
 ALLOWED_HOSTS.add(`127.0.0.1:${actualPort}`);
 ALLOWED_HOSTS.add(`localhost:${actualPort}`);
+setRuntimeContext({ authToken: AUTH_TOKEN, port: actualPort });
 
 // Output structured metadata for Tauri sidecar to parse
 console.log(`NEOS_PORT=${actualPort}`);

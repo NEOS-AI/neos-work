@@ -4,6 +4,7 @@ import { useEngine } from '../../hooks/useEngine.js';
 import type { Plugin } from '../../lib/engine.js';
 import { GenUIForm } from './GenUIForm.js';
 import { GenUIChoice } from './GenUIChoice.js';
+import { GenUIConfirmation } from './GenUIConfirmation.js';
 
 interface StageLog {
   stageId: string;
@@ -174,22 +175,10 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
                 />
               )}
               {run.waiting.surface === 'confirmation' && (
-                <div className="flex gap-2">
-                  <button
-                    className="rounded px-4 py-1.5 text-sm text-white"
-                    style={{ backgroundColor: '#10b981' }}
-                    onClick={() => handleResume(run.waiting!.stageId, { confirmed: true })}
-                  >
-                    Continue
-                  </button>
-                  <button
-                    className="rounded px-4 py-1.5 text-sm"
-                    style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)' }}
-                    onClick={() => handleResume(run.waiting!.stageId, { confirmed: false })}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <GenUIConfirmation
+                  schema={run.waiting.schema as { prompt?: string; confirmLabel?: string; cancelLabel?: string } | undefined}
+                  onConfirm={(confirmed) => handleResume(run.waiting!.stageId, { confirmed })}
+                />
               )}
             </div>
           )}

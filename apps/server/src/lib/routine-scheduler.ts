@@ -15,6 +15,7 @@ import { executeWorkflow } from '@neos-work/workflow-engine';
 import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from './cli-agents.js';
 import { getDesignSystemContent } from './design-system-store.js';
+import { getRuntimeAuthToken, getRuntimeServerUrl } from './runtime-context.js';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
 
@@ -83,7 +84,16 @@ export async function runRoutine(routineId: string): Promise<string | null> {
         }
       },
       cliSpawn: (cliId, prompt, onChunk, signal) =>
-        spawnCliAgent({ cliId, prompt, onChunk, signal }),
+        spawnCliAgent({
+          cliId,
+          prompt,
+          onChunk,
+          signal,
+          workflowId: wf.id,
+          runId,
+          serverUrl: getRuntimeServerUrl(),
+          authToken: getRuntimeAuthToken(),
+        }),
       designSystemContent,
     });
 

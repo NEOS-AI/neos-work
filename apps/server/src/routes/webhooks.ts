@@ -12,6 +12,7 @@ import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
 import { getWorkflowSecrets } from '../db/settings.js';
 import { spawnCliAgent } from '../lib/cli-agents.js';
+import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { getDesignSystemContent } from '../lib/design-system-store.js';
 import { webhookRateLimiter } from '../lib/rate-limit.js';
 
@@ -135,7 +136,16 @@ webhooks.post('/:workflowId', async (c) => {
         },
         signal: controller.signal,
         cliSpawn: (cliId, prompt, onChunk, signal) =>
-          spawnCliAgent({ cliId, prompt, onChunk, signal }),
+          spawnCliAgent({
+            cliId,
+            prompt,
+            onChunk,
+            signal,
+            workflowId: wf.id,
+            runId,
+            serverUrl: getRuntimeServerUrl(),
+            authToken: getRuntimeAuthToken(),
+          }),
         designSystemContent,
       });
 

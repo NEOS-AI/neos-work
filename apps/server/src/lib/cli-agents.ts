@@ -67,6 +67,11 @@ export interface SpawnCliAgentOptions {
   cwd?: string;
   signal?: AbortSignal;
   onChunk?: (chunk: string, accumulated: string) => void;
+  /** Plan Task 3 — injected into child env as NEOS_* variables */
+  workflowId?: string;
+  runId?: string;
+  serverUrl?: string;
+  authToken?: string;
 }
 
 export interface SpawnCliAgentResult {
@@ -118,17 +123,57 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
   return envVars;
 }
 
+/**
+ * Build NEOS_* context env vars for CLI child processes (plan Task 3).
+ * Exported for unit tests.
+ */
+export function buildNeosCliEnv(opts: {
+  workflowId?: string;
+  runId?: string;
+  serverUrl?: string;
+  authToken?: string;
+}): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (opts.serverUrl) env.NEOS_SERVER_URL = opts.serverUrl;
+  if (opts.authToken) env.NEOS_AUTH_TOKEN = opts.authToken;
+  if (opts.workflowId) env.NEOS_WORKFLOW_ID = opts.workflowId;
+  if (opts.runId) env.NEOS_RUN_ID = opts.runId;
+  return env;
+}
+
+/**
+ * Ensure a per-run workspace directory exists under
+ * `~/.config/neos-work/workspaces/<runId>/` (plan Task 3).
+ */
+export function ensureCliWorkspace(runId: string): string {
+  const dir = path.join(os.homedir(), '.config', 'neos-work', 'workspaces', runId);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
-  const { cliId, prompt, cwd, signal, onChunk } = opts;
+  const { cliId, prompt, signal, onChunk, workflowId, runId, serverUrl, authToken } = opts;
   const { bin, args } = buildCliArgs(cliId, prompt);
   const mcpTokenEnv = loadMcpTokenEnvVars();
+  const neosEnv = buildNeosCliEnv({ workflowId, runId, serverUrl, authToken });
+
+  // Prefer explicit cwd; otherwise create a per-run workspace when runId is known
+  let cwd = opts.cwd;
+  if (!cwd && runId) {
+    try {
+      cwd = ensureCliWorkspace(runId);
+    } catch {
+      cwd = process.cwd();
+    }
+  }
+  cwd = cwd ?? process.cwd();
 
   return new Promise<SpawnCliAgentResult>((resolve, reject) => {
     const child = spawn(bin, args, {
-      cwd: cwd ?? process.cwd(),
+      cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...mcpTokenEnv },
+      env: { ...process.env, ...mcpTokenEnv, ...neosEnv },
     });
 
     let accumulated = '';

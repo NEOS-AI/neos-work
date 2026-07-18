@@ -32,6 +32,22 @@ artifacts.get('/:id', (c) => {
   return c.json({ ok: true, data: artifact });
 });
 
+/**
+ * Live Artifact preview endpoint (plan Task 4).
+ * Returns raw HTML (or text) for iframe / srcDoc consumers.
+ */
+artifacts.get('/:id/preview', (c) => {
+  const artifact = db.getArtifact(c.req.param('id'));
+  if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
+  const content = artifact.content ?? '';
+  const isHtml = (artifact.contentType ?? '').includes('html');
+  c.header('Content-Type', isHtml ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8');
+  c.header('X-Content-Type-Options', 'nosniff');
+  // Deny framing from other origins if ever loaded as a document
+  c.header('Content-Security-Policy', "frame-ancestors 'self'");
+  return c.body(content);
+});
+
 artifacts.post('/', async (c) => {
   const body = await c.req.json<{
     workflowId: string;
