@@ -84,6 +84,15 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
+  it('detects self_loop when edge source equals target', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [{ id: 'n1', type: 'trigger', label: 'T', config: {} }],
+      edges: [{ id: 'e1', source: 'n1', target: 'n1' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'self_loop')).toBe(true);
+  });
+
   it('detects cycle in graph', () => {
     const issues = validateWorkflowDraft({
       nodes: [

@@ -138,4 +138,87 @@ describe('RevisionPanel', () => {
     expect(onRestore).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
+
+  it('shows revision count in header and confirms before delete', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          nodeCount: 1,
+          edgeCount: 0,
+        },
+        {
+          id: 'rev-2',
+          workflowId: 'wf-1',
+          label: 'Snap B',
+          createdAt: '2026-01-02T00:00:00.000Z',
+          nodeCount: 2,
+          edgeCount: 1,
+        },
+      ],
+    });
+    deleteRevision.mockResolvedValue({ ok: true });
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+    expect(screen.getByText('(2)')).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: /delete/i })[0]!);
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(deleteRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+    });
+
+    confirmSpy.mockRestore();
+  });
+
+  it('does not delete when confirm is cancelled', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    expect(deleteRevision).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
 });
