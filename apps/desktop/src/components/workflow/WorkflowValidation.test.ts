@@ -491,5 +491,19 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
     });
     expect(issues.some((i) => i.code === 'missing_deploy_content')).toBe(false);
   });
+
+  it('warns agent_no_upstream when agent is disconnected in multi-node graph', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', config: {} },
+        { id: 'a', type: 'agent_coding', label: 'Agent', config: { harnessId: 'h1' } },
+        { id: 'o', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'agent_no_upstream' && i.nodeId === 'a')).toBe(true);
+  });
 });
+
 

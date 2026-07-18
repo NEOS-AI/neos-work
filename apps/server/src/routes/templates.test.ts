@@ -16,7 +16,6 @@ describe('workflow TEMPLATES', () => {
     expect(types).toContain('parallel_start');
     expect(types).toContain('parallel_end');
     expect(types.filter((t) => t === 'web_search').length).toBeGreaterThanOrEqual(2);
-    // edges: parallel_start fans out to both searches
     const ps = parallel!.nodes.find((n) => n.type === 'parallel_start')!;
     const out = parallel!.edges.filter((e) => e.source === ps.id);
     expect(out.length).toBeGreaterThanOrEqual(2);
@@ -40,7 +39,16 @@ describe('workflow TEMPLATES', () => {
       }
     }
   });
-});
+
+  it('node and edge ids are unique within each template', () => {
+    for (const t of TEMPLATES) {
+      const nodeIds = t.nodes.map((n) => n.id);
+      const edgeIds = t.edges.map((e) => e.id);
+      expect(new Set(nodeIds).size).toBe(nodeIds.length);
+      expect(new Set(edgeIds).size).toBe(edgeIds.length);
+      expect(edgeIds.every((id) => typeof id === 'string' && id.trim().length > 0)).toBe(true);
+    }
+  });
 
   it('includes Generate Image & Deploy template', () => {
     const t = TEMPLATES.find((x) => x.name === 'Generate Image & Deploy');
@@ -63,4 +71,4 @@ describe('workflow TEMPLATES', () => {
     const incoming = t.edges.filter((e) => e.target === or.id);
     expect(incoming.length).toBe(2);
   });
-
+});
