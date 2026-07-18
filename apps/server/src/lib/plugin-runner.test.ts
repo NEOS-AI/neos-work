@@ -121,7 +121,6 @@ describe('plugin-runner multi-stage human-in-loop', () => {
           name: 'Confirm',
           kind: 'form',
           humanInLoop: true,
-          surface: 'confirmation',
           outputKey: 'confirmOut',
         },
       ],

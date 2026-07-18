@@ -1,0 +1,206 @@
+import { describe, expect, it } from 'vitest';
+import { assessWorkflowPreflight } from './workflow-preflight.js';
+
+const base = {
+  nodes: [
+    { id: 't', type: 'trigger', config: {} },
+    { id: 'o', type: 'output', config: {} },
+  ],
+  edges: [{ id: 'e1', source: 't', target: 'o' }],
+};
+
+describe('assessWorkflowPreflight', () => {
+  it('passes a minimal trigger→output graph', () => {
+    const r = assessWorkflowPreflight(base, {});
+    expect(r.ok).toBe(true);
+    expect(r.issues.filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('errors when web_search lacks Tavily key', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          ...base.nodes,
+          { id: 's', type: 'web_search', config: { query: 'x' } },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 's' },
+          { id: 'e2', source: 's', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_tavily_key')).toBe(true);
+  });
+
+  it('errors for media without OpenAI key', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'm', type: 'media', config: { mediaType: 'image', prompt: 'a' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'm' },
+          { id: 'e2', source: 'm', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_openai_key')).toBe(true);
+  });
+
+  it('skips API key checks for CLI agent providers', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_coding', config: { provider: 'cli-claude' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.issues.some((i) => i.code === 'missing_anthropic_key')).toBe(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('requires Vercel token for vercel deploy', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: 'vercel' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_vercel_token')).toBe(true);
+  });
+
+  it('requires Cloudflare credentials for cloudflare deploy', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: 'cloudflare' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      { CLOUDFLARE_API_TOKEN: 'only-token' },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_cloudflare_creds')).toBe(true);
+  });
+
+  it('requires Slack and Discord secrets when those nodes exist', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'sl', type: 'slack_message', config: { channel: '#x' } },
+          { id: 'di', type: 'discord_message', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'sl' },
+          { id: 'e2', source: 'sl', target: 'di' },
+          { id: 'e3', source: 'di', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.issues.some((i) => i.code === 'missing_slack_token')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'missing_discord_webhook')).toBe(true);
+  });
+
+  it('requires Anthropic key for default agent and Google for google provider', () => {
+    const noKey = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_finance', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(noKey.issues.some((i) => i.code === 'missing_anthropic_key')).toBe(true);
+
+    const google = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_coding', config: { llmProvider: 'google' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(google.issues.some((i) => i.code === 'missing_google_key')).toBe(true);
+  });
+
+  it('passes when required secrets are present', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 's', type: 'web_search', config: {} },
+          { id: 'm', type: 'media', config: { mediaType: 'image' } },
+          { id: 'a', type: 'agent_coding', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 's' },
+          { id: 'e2', source: 's', target: 'm' },
+          { id: 'e3', source: 'm', target: 'a' },
+          { id: 'e4', source: 'a', target: 'o' },
+        ],
+      },
+      {
+        TAVILY_API_KEY: 'tv',
+        OPENAI_API_KEY: 'sk',
+        ANTHROPIC_API_KEY: 'ant',
+      },
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('flags missing trigger and dangling edges', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [{ id: 'o', type: 'output', config: {} }],
+        edges: [{ id: 'e1', source: 'missing', target: 'o' }],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'no_trigger')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+});

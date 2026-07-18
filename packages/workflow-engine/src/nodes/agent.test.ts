@@ -1,4 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+const orchestratorCtor = vi.fn();
+vi.mock('@neos-work/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@neos-work/core')>();
+  return {
+    ...actual,
+    AgentOrchestrator: class {
+      constructor(...args: unknown[]) {
+        orchestratorCtor(...args);
+      }
+      async *run() {
+        yield { type: 'done', task: { steps: [] } };
+      }
+    },
+  };
+});
+
 import { AgentNode } from './agent.js';
 import type { NodeContext } from '../types.js';
 
@@ -91,3 +108,39 @@ describe('AgentNode CLI provider', () => {
     expect(prompt).toContain('ship v0.3.11');
   });
 });
+
+describe('AgentNode LLM model selection', () => {
+  beforeEach(() => {
+    orchestratorCtor.mockClear();
+  });
+
+  it('passes model to AgentOrchestrator from settings.model', async () => {
+    const node = new AgentNode('agent_coding', {});
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          model: 'claude-sonnet-custom',
+        },
+      }),
+    );
+    expect(orchestratorCtor).toHaveBeenCalled();
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
+    expect(opts?.model).toBe('claude-sonnet-custom');
+  });
+
+  it('prefers nodeConfig.model over settings.model', async () => {
+    const node = new AgentNode('agent_coding', { model: 'node-model' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          model: 'settings-model',
+        },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
+    expect(opts?.model).toBe('node-model');
+  });
+});
+
