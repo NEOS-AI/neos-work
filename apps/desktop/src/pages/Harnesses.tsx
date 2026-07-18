@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentHarness } from '../lib/engine.js';
 import {
+  DOMAIN_FILTER_OPTIONS,
   loadDomainFilter,
   saveDomainFilter,
   type DomainFilterPref,
@@ -43,11 +44,18 @@ export function Harnesses() {
 
   useEffect(() => { load(); }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Escape closes harness create/edit modal
+  const openCreate = () => { setEditTarget(null); setShowModal(true); };
+  const openEdit = (h: AgentHarness) => { setEditTarget(h); setShowModal(true); };
+  const closeModal = () => {
+    setShowModal(false);
+    setEditTarget(null);
+  };
+
+  // Escape closes harness create/edit modal and clears edit target
   useEffect(() => {
     if (!showModal) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowModal(false);
+      if (e.key === 'Escape') closeModal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -59,13 +67,9 @@ export function Harnesses() {
     await client.deleteHarness(h.id);
     await load();
   };
-
-  const openCreate = () => { setEditTarget(null); setShowModal(true); };
-  const openEdit = (h: AgentHarness) => { setEditTarget(h); setShowModal(true); };
-  const closeModal = () => setShowModal(false);
   const onSaved = () => { closeModal(); load(); };
 
-  const domains = ['all', 'finance', 'coding', 'general'];
+  const domains = DOMAIN_FILTER_OPTIONS;
   const visible = useMemo(() => {
     const byDomain =
       domainFilter === 'all' ? harnesses : harnesses.filter((h) => h.domain === domainFilter);
@@ -110,7 +114,7 @@ export function Harnesses() {
             {domains.map((d) => (
               <button
                 key={d}
-                onClick={() => handleDomainFilter(d as DomainFilterPref)}
+                onClick={() => handleDomainFilter(d)}
                 className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
                 style={{
                   backgroundColor: domainFilter === d ? 'var(--border-secondary)' : undefined,

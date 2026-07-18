@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
 import {
+  DOMAIN_FILTER_OPTIONS,
   loadDomainFilter,
   saveDomainFilter,
   type DomainFilterPref,
@@ -75,7 +76,7 @@ export function Templates() {
     }
   };
 
-  const domains = ['all', 'finance', 'coding', 'general'];
+  const domains = DOMAIN_FILTER_OPTIONS;
   const filtered = useMemo(
     () => filterWorkflowList(templateList, { search, domain: filter }),
     [templateList, search, filter],
@@ -105,7 +106,7 @@ export function Templates() {
           {domains.map((d) => (
             <button
               key={d}
-              onClick={() => handleDomainFilter(d as DomainFilterPref)}
+              onClick={() => handleDomainFilter(d)}
               className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
               style={{
                 backgroundColor: filter === d ? 'var(--border-secondary)' : undefined,

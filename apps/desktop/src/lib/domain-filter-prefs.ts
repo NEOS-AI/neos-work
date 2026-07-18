@@ -2,6 +2,14 @@
 
 export type DomainFilterPref = 'all' | 'finance' | 'coding' | 'general';
 
+/** Shared chip order for Blocks / Templates / Harnesses toolbars. */
+export const DOMAIN_FILTER_OPTIONS: readonly DomainFilterPref[] = [
+  'all',
+  'finance',
+  'coding',
+  'general',
+] as const;
+
 const KEYS = {
   blocks: 'neos-blocks-domain',
   templates: 'neos-templates-domain',

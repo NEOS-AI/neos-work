@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useEngine } from '../hooks/useEngine.js';
 import type { WorkflowBlock } from '../lib/engine.js';
 import {
+  DOMAIN_FILTER_OPTIONS,
   loadBlocksSourceFilter,
   loadDomainFilter,
   saveBlocksSourceFilter,
@@ -431,7 +432,7 @@ export function Blocks() {
     await load();
   };
 
-  const domains = ['all', 'finance', 'coding', 'general'];
+  const domains = DOMAIN_FILTER_OPTIONS;
   const filtered = useMemo(() => {
     const byDomain = filter === 'all' ? blockList : blockList.filter((b) => b.domain === filter);
     const bySource =
@@ -474,7 +475,7 @@ export function Blocks() {
             {domains.map((d) => (
               <button
                 key={d}
-                onClick={() => handleDomainFilter(d as DomainFilterPref)}
+                onClick={() => handleDomainFilter(d)}
                 className="rounded-md px-3 py-1 text-xs capitalize transition-colors"
                 style={{
                   backgroundColor: filter === d ? 'var(--border-secondary)' : undefined,
