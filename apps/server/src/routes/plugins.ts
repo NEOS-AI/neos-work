@@ -8,10 +8,11 @@
 
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
-import { listPlugins, getPlugin } from '../lib/plugin-store.js';
+import { listPlugins, getPlugin, upgradeSkillToPlugin } from '../lib/plugin-store.js';
 import { runPlugin, resumeRun } from '../lib/plugin-runner.js';
 import type { PluginSSEEvent } from '../lib/plugin-runner.js';
 import { getWorkflowSecrets } from '../db/settings.js';
+import { getDb } from '../db/schema.js';
 
 const plugins = new Hono();
 
@@ -19,6 +20,48 @@ plugins.get('/', async (c) => {
   const list = await listPlugins();
   // Strip skillContent and dir for list view
   return c.json({ ok: true, data: list.map(({ skillContent: _, dir: __, ...p }) => p) });
+});
+
+/**
+ * Upgrade a skill to a plugin (writes open-design.json next to SKILL.md).
+ * Body: { skillId?: string, skillDirName?: string, name?: string, description?: string }
+ */
+plugins.post('/upgrade-from-skill', async (c) => {
+  type UpgradeBody = {
+    skillId?: string;
+    skillDirName?: string;
+    name?: string;
+    description?: string;
+  };
+  const body: UpgradeBody = await c.req.json<UpgradeBody>().catch(() => ({}));
+
+  let skillDirName = body.skillDirName;
+  if (!skillDirName && body.skillId) {
+    const row = getDb().prepare('SELECT path, name FROM skill WHERE id = ?').get(body.skillId) as
+      | { path: string; name: string }
+      | undefined;
+    if (!row) return c.json({ ok: false, error: 'Skill not found' }, 404);
+    // path is .../skills/<dir>/SKILL.md or the skill file path
+    const parts = row.path.replace(/\\/g, '/').split('/');
+    const skillsIdx = parts.lastIndexOf('skills');
+    skillDirName = skillsIdx >= 0 && parts[skillsIdx + 1] ? parts[skillsIdx + 1] : row.name;
+  }
+  if (!skillDirName) {
+    return c.json({ ok: false, error: 'skillId or skillDirName required' }, 400);
+  }
+
+  try {
+    const plugin = await upgradeSkillToPlugin({
+      skillDirName,
+      name: body.name,
+      description: body.description,
+    });
+    const { dir: _, skillContent: __, ...safe } = plugin;
+    return c.json({ ok: true, data: safe }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Upgrade failed';
+    return c.json({ ok: false, error: msg }, 400);
+  }
 });
 
 plugins.get('/:id', async (c) => {

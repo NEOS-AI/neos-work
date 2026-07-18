@@ -25,7 +25,7 @@ import media from './routes/media.js';
 import deploy from './routes/deploy.js';
 import pluginsRoute from './routes/plugins.js';
 import { migrateEncryption } from './db/settings.js';
-import { registerFinanceBlocks } from '@neos-work/workflow-engine';
+import { registerCodingBlocks, registerFinanceBlocks } from '@neos-work/workflow-engine';
 import { initScheduler } from './lib/routine-scheduler.js';
 
 // Generate per-session auth token (VULN-002)
@@ -98,7 +98,7 @@ app.route('/api/plugins', pluginsRoute);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.2.0',
+    version: '0.3.3',
   });
 });
 
@@ -107,6 +107,7 @@ migrateEncryption();
 
 // Register built-in domain blocks
 registerFinanceBlocks();
+registerCodingBlocks();
 
 // Initialize automation routine scheduler
 initScheduler();

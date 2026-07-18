@@ -53,6 +53,17 @@ export function Skills() {
     setSkills((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const handleUpgradeToPlugin = async (id: string) => {
+    if (!client) return;
+    if (!confirm('Create open-design.json plugin sidecar for this skill?')) return;
+    const res = await client.upgradeSkillToPlugin(id);
+    if (res.ok && res.data) {
+      alert(`Upgraded to plugin: ${res.data.name}\nOpen the Plugins page to run it.`);
+    } else {
+      alert((res as { error?: string }).error ?? 'Upgrade failed');
+    }
+  };
+
   // Sort: featured first, then alphabetical
   const sorted = [...skills].sort((a, b) => {
     if (a.featured && !b.featured) return -1;
@@ -146,6 +157,7 @@ export function Skills() {
                 skill={skill}
                 onToggle={(enabled) => handleToggle(skill.id, enabled)}
                 onDelete={() => handleDelete(skill.id)}
+                onUpgrade={() => void handleUpgradeToPlugin(skill.id)}
                 onTry={skill.examplePrompt ? () => setTryPrompt(skill.examplePrompt!) : undefined}
               />
             ))}
@@ -201,11 +213,13 @@ function SkillCard({
   skill,
   onToggle,
   onDelete,
+  onUpgrade,
   onTry,
 }: {
   skill: SkillData;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
+  onUpgrade?: () => void;
   onTry?: () => void;
 }) {
   const { t } = useTranslation('common');
@@ -275,6 +289,16 @@ function SkillCard({
       </div>
 
       <div className="ml-3 flex shrink-0 items-center gap-2">
+        {onUpgrade && (
+          <button
+            onClick={onUpgrade}
+            className="rounded-lg border px-2 py-0.5 text-[10px] transition-colors"
+            style={{ borderColor: 'var(--border-secondary)', color: '#a78bfa' }}
+            title="Write open-design.json and expose as Plugin"
+          >
+            → Plugin
+          </button>
+        )}
         {/* Try button */}
         {onTry && (
           <button

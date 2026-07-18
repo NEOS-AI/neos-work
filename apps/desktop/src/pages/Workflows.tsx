@@ -72,6 +72,7 @@ export function Workflows() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+  const claudeZipInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -94,12 +95,32 @@ export function Workflows() {
     const file = e.target.files?.[0];
     if (!file || !client) return;
     try {
+      // Handles both NEOS workflow.json ZIPs and Claude Design HTML-only ZIPs
       const res = await client.importWorkflowZip(file);
       if (res.ok && res.data) {
         navigate(`/workflows/${res.data.id}`);
+      } else {
+        alert((res as { error?: string }).error ?? 'ZIP import failed');
       }
     } catch {
-      // import 오류
+      alert('ZIP import failed');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleImportClaudeDesign = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+    try {
+      const res = await client.importClaudeDesignZip(file);
+      if (res.ok && res.data) {
+        navigate(`/workflows/${res.data.id}`);
+      } else {
+        alert((res as { error?: string }).error ?? 'Claude Design import failed');
+      }
+    } catch {
+      alert('Claude Design import failed');
     } finally {
       e.target.value = '';
     }
@@ -115,6 +136,7 @@ export function Workflows() {
         <div className="flex items-center gap-2">
           <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
           <input ref={zipInputRef} type="file" accept=".zip" className="hidden" onChange={handleImportZip} />
+          <input ref={claudeZipInputRef} type="file" accept=".zip" className="hidden" onChange={handleImportClaudeDesign} />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
@@ -128,6 +150,14 @@ export function Workflows() {
             style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
           >
             {t('workflow.import')} (ZIP)
+          </button>
+          <button
+            onClick={() => claudeZipInputRef.current?.click()}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+            title="Import Claude Design HTML ZIP as workflow + artifact"
+          >
+            Import (Claude Design)
           </button>
           <button
             onClick={() => setShowModal(true)}

@@ -170,6 +170,9 @@ workflow.get('/:id/export.zip', async (c) => {
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
   const safeName = wf.name.replace(/[^a-z0-9_-]/gi, '_');
 
+  const runs = db.listRuns(wf.id, 10, 0);
+  const artifacts = artifactDb.listArtifacts(wf.id);
+
   const manifest = JSON.stringify({
     version: '1',
     exportedAt: new Date().toISOString(),
@@ -177,14 +180,56 @@ workflow.get('/:id/export.zip', async (c) => {
       name: wf.name,
       description: wf.description,
       domain: wf.domain,
+      designSystemId: wf.designSystemId,
       nodes: wf.nodes,
       edges: wf.edges,
     },
+    runCount: runs.length,
+    artifactCount: artifacts.length,
   }, null, 2);
 
   const archive = archiver('zip', { zlib: { level: 6 } });
   archive.append(manifest, { name: 'workflow.json' });
-  archive.append(`# ${wf.name}\n\n${wf.description ?? ''}\n`, { name: 'README.md' });
+  archive.append(
+    `# ${wf.name}\n\n${wf.description ?? ''}\n\nExported from NEOS Work with ${runs.length} recent run(s) and ${artifacts.length} artifact(s).\n`,
+    { name: 'README.md' },
+  );
+
+  // Recent runs (skip dotfiles / internal noise)
+  for (const run of runs) {
+    const payload = JSON.stringify({
+      id: run.id,
+      status: run.status,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      error: run.error,
+      nodeResults: run.nodeResults,
+    }, null, 2);
+    archive.append(payload, { name: `runs/${run.id}.json` });
+  }
+
+  // Artifacts — inline HTML/markdown content only (no binary path dumps)
+  for (const art of artifacts) {
+    if (!art.content) continue;
+    const safeArt = art.name.replace(/[^a-z0-9._-]/gi, '_').slice(0, 80) || art.id.slice(0, 8);
+    const ext =
+      art.contentType.includes('html') ? 'html'
+        : art.contentType.includes('markdown') ? 'md'
+          : 'txt';
+    archive.append(art.content, { name: `artifacts/${safeArt}-${art.id.slice(0, 8)}.${ext}` });
+    archive.append(
+      JSON.stringify({
+        id: art.id,
+        name: art.name,
+        contentType: art.contentType,
+        nodeId: art.nodeId,
+        runId: art.runId,
+        createdAt: art.createdAt,
+      }, null, 2),
+      { name: `artifacts/${safeArt}-${art.id.slice(0, 8)}.meta.json` },
+    );
+  }
+
   archive.finalize();
 
   const chunks: Buffer[] = [];
@@ -198,28 +243,107 @@ workflow.get('/:id/export.zip', async (c) => {
   return c.body(buf);
 });
 
-workflow.post('/import.zip', async (c) => {
+type ZipBufferResult =
+  | { ok: true; buffer: Buffer }
+  | { ok: false; error: string; status: 400 };
+
+async function readZipBuffer(c: {
+  req: {
+    header: (n: string) => string | undefined;
+    formData: () => Promise<FormData>;
+    arrayBuffer: () => Promise<ArrayBuffer>;
+  };
+}): Promise<ZipBufferResult> {
   const contentType = c.req.header('content-type') ?? '';
   if (!contentType.includes('multipart/form-data') && !contentType.includes('application/octet-stream') && !contentType.includes('application/zip')) {
-    return c.json({ ok: false, error: 'Expected multipart/form-data or application/zip' }, 400);
+    return { ok: false, error: 'Expected multipart/form-data or application/zip', status: 400 };
   }
-
-  let zipBuffer: Buffer;
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.formData();
     const file = form.get('file');
-    if (!file || typeof file === 'string') return c.json({ ok: false, error: 'Missing file field' }, 400);
-    const ab = await file.arrayBuffer();
-    zipBuffer = Buffer.from(ab);
-  } else {
-    const ab = await c.req.arrayBuffer();
-    zipBuffer = Buffer.from(ab);
+    if (!file || typeof file === 'string') {
+      return { ok: false, error: 'Missing file field', status: 400 };
+    }
+    return { ok: true, buffer: Buffer.from(await file.arrayBuffer()) };
   }
+  return { ok: true, buffer: Buffer.from(await c.req.arrayBuffer()) };
+}
 
-  // Parse ZIP in-memory
+/**
+ * Claude Design / HTML-only ZIP: no workflow.json, but has index.html or other HTML entry.
+ * Creates a workflow with trigger→output and stores HTML as an artifact.
+ */
+async function importClaudeDesignZip(
+  dir: Awaited<ReturnType<typeof unzipper.Open.buffer>>,
+  preferredName?: string,
+) {
+  const htmlFiles = dir.files.filter((f) => {
+    const p = f.path.replace(/\\/g, '/');
+    if (p.startsWith('__MACOSX/') || p.includes('/.')) return false;
+    return /\.html?$/i.test(p) && f.type !== 'Directory';
+  });
+  if (htmlFiles.length === 0) return null;
+
+  // Prefer index.html / Index.html at root, else first HTML by path length
+  const entry =
+    htmlFiles.find((f) => /(^|\/)index\.html?$/i.test(f.path.replace(/\\/g, '/')))
+    ?? htmlFiles.sort((a, b) => a.path.length - b.path.length)[0]!;
+
+  const html = (await entry.buffer()).toString('utf-8');
+  const baseFromZip = preferredName
+    ?? entry.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.html?$/i, '')
+    ?? 'Claude Design Import';
+  const rawName = baseFromZip.slice(0, 200) || 'Claude Design Import';
+  const existing = db.listWorkflows().find((w) => w.name === rawName);
+  const finalName = existing ? `Copy of ${rawName}` : rawName;
+
+  const triggerId = crypto.randomUUID();
+  const outputId = crypto.randomUUID();
+  const created = db.createWorkflow({
+    name: finalName,
+    description: `Imported from Claude Design ZIP (entry: ${entry.path})`,
+    domain: 'general',
+    nodes: [
+      { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+      { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
+    ],
+    edges: [{ id: crypto.randomUUID(), source: triggerId, target: outputId }],
+  });
+
+  const artifact = artifactDb.createArtifact({
+    workflowId: created.id,
+    name: entry.path.replace(/\\/g, '/').split('/').pop() ?? 'index.html',
+    contentType: 'text/html',
+    content: html,
+  });
+
+  return { workflow: created, artifactId: artifact.id, importKind: 'claude-design' as const };
+}
+
+workflow.post('/import.zip', async (c) => {
+  const zipOrErr = await readZipBuffer(c);
+  if (!zipOrErr.ok) {
+    return c.json({ ok: false, error: zipOrErr.error }, zipOrErr.status);
+  }
+  const zipBuffer = zipOrErr.buffer;
+
   const dir = await unzipper.Open.buffer(zipBuffer);
-  const manifestFile = dir.files.find((f) => f.path === 'workflow.json');
-  if (!manifestFile) return c.json({ ok: false, error: 'workflow.json not found in ZIP' }, 400);
+  const manifestFile = dir.files.find((f) => {
+    const p = f.path.replace(/\\/g, '/');
+    return p === 'workflow.json' || p.endsWith('/workflow.json');
+  });
+
+  // Claude Design / HTML-only ZIP fallback (PLAN Task 10)
+  if (!manifestFile) {
+    const imported = await importClaudeDesignZip(dir);
+    if (!imported) {
+      return c.json({
+        ok: false,
+        error: 'workflow.json not found and no HTML entry (index.html) for Claude Design import',
+      }, 400);
+    }
+    return c.json({ ok: true, data: imported.workflow, meta: { importKind: imported.importKind, artifactId: imported.artifactId } }, 201);
+  }
 
   const rawJson = (await manifestFile.buffer()).toString('utf-8');
   let manifest: { version?: string; workflow?: Record<string, unknown> };
@@ -235,7 +359,7 @@ workflow.post('/import.zip', async (c) => {
   const wf = manifest.workflow;
   const rawName = typeof wf.name === 'string' && wf.name.length > 0 ? wf.name.slice(0, 200) : 'Imported Workflow';
   const existing = db.listWorkflows().find((w) => w.name === rawName);
-  const finalName = existing ? `${rawName} (imported)` : rawName;
+  const finalName = existing ? `Copy of ${rawName}` : rawName;
 
   const created = db.createWorkflow({
     name: finalName,
@@ -247,7 +371,42 @@ workflow.post('/import.zip', async (c) => {
     edges: (wf.edges as never) ?? [],
   });
 
-  return c.json({ ok: true, data: created }, 201);
+  // Optional: restore artifact HTML files if present
+  const artFiles = dir.files.filter((f) => {
+    const p = f.path.replace(/\\/g, '/');
+    return p.startsWith('artifacts/') && /\.(html?|md|txt)$/i.test(p) && !p.endsWith('.meta.json');
+  });
+  for (const f of artFiles) {
+    const content = (await f.buffer()).toString('utf-8');
+    const name = f.path.replace(/\\/g, '/').split('/').pop() ?? 'artifact';
+    const contentType = /\.html?$/i.test(name) ? 'text/html' : /\.md$/i.test(name) ? 'text/markdown' : 'text/plain';
+    artifactDb.createArtifact({
+      workflowId: created.id,
+      name,
+      contentType,
+      content,
+    });
+  }
+
+  return c.json({ ok: true, data: created, meta: { importKind: 'neos-workflow' } }, 201);
+});
+
+/** Dedicated Claude Design ZIP import (OD §18.1) */
+workflow.post('/import/claude-design', async (c) => {
+  const zipOrErr = await readZipBuffer(c);
+  if (!zipOrErr.ok) {
+    return c.json({ ok: false, error: zipOrErr.error }, zipOrErr.status);
+  }
+  const dir = await unzipper.Open.buffer(zipOrErr.buffer);
+  const imported = await importClaudeDesignZip(dir);
+  if (!imported) {
+    return c.json({ ok: false, error: 'No HTML entry file found in ZIP' }, 400);
+  }
+  return c.json({
+    ok: true,
+    data: imported.workflow,
+    meta: { importKind: imported.importKind, artifactId: imported.artifactId },
+  }, 201);
 });
 
 // ── Runs ──────────────────────────────────────────────────
