@@ -265,6 +265,24 @@ describe('AgentNode LLM model selection', () => {
     expect(result.error).toMatch(/ANTHROPIC_API_KEY/);
   });
 
+  it('treats whitespace-only anthropic key as missing', async () => {
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(ctx({ settings: { ANTHROPIC_API_KEY: '   ' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/ANTHROPIC_API_KEY/);
+  });
+
+  it('errors when google provider has no API key', async () => {
+    const node = new AgentNode('agent_coding', { llmProvider: 'google' });
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test', GOOGLE_API_KEY: '  ' },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/GOOGLE_API_KEY/);
+  });
+
   it('injects memory export into the orchestrator goal', async () => {
     vi.stubGlobal(
       'fetch',
@@ -308,6 +326,56 @@ describe('AgentNode LLM model selection', () => {
     expect(goal).not.toContain('## Agent Memory');
   });
 
+  it('keeps base prompt when memory export returns non-ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, text: async () => 'nope' }));
+    const node = new AgentNode('agent_coding', { systemPrompt: 'No mem' });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test', SERVER_URL: 'http://m.test' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('No mem');
+    expect(goal).not.toContain('## Agent Memory');
+  });
+
+  it('keeps base prompt when memory export body is blank', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, text: async () => '   \n  ' }),
+    );
+    const node = new AgentNode('agent_coding', { systemPrompt: 'Blank mem' });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('Blank mem');
+    expect(goal).not.toContain('## Agent Memory');
+  });
+
+  it('trims SERVER_URL and AUTH_TOKEN for memory export', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => 'note' });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new AgentNode('agent_coding', { systemPrompt: 'P' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: '  http://mem.local  ',
+          AUTH_TOKEN: '  secret  ',
+        },
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://mem.local/api/memory/export',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer secret' },
+      }),
+    );
+  });
+
   it('prepends design system content on the LLM path', async () => {
     const node = new AgentNode('agent_coding', { systemPrompt: 'Agent body' });
     await node.execute(
@@ -320,6 +388,36 @@ describe('AgentNode LLM model selection', () => {
     expect(goal).toContain('<!-- DESIGN CONTEXT -->');
     expect(goal).toContain('Use brand blue');
     expect(goal).toContain('Agent body');
+  });
+
+  it('merges harness systemPrompt with node systemPrompt', async () => {
+    const node = new AgentNode('agent_coding', {
+      harnessId: 'coding_reviewer',
+      systemPrompt: 'Extra focus on security',
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('시니어 소프트웨어 엔지니어');
+    expect(goal).toContain('Extra focus on security');
+    expect(goal).toContain('---');
+  });
+
+  it('falls through whitespace-only llmModel to settings model', async () => {
+    const node = new AgentNode('agent_coding', { llmModel: '   ' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          model: 'from-settings',
+        },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
+    expect(opts?.model).toBe('from-settings');
   });
 
   it('forwards text progress and returns done output', async () => {
@@ -340,6 +438,34 @@ describe('AgentNode LLM model selection', () => {
     expect(result.output).toBe('hello');
     expect(onProgress).toHaveBeenCalledWith('hel', 'hel');
     expect(onProgress).toHaveBeenCalledWith('lo', 'hello');
+  });
+
+  it('uses last step output when done arrives with no streamed text', async () => {
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'done', task: { steps: [{ output: { answer: 42 } }] } };
+    });
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe(JSON.stringify({ answer: 42 }));
+  });
+
+  it('returns accumulated text when stream ends without done/error', async () => {
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'text', content: 'partial' };
+    });
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('partial');
   });
 
   it('returns orchestrator error events as failures', async () => {

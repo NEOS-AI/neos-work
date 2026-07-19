@@ -79,4 +79,32 @@ describe('gate nodes', () => {
     expect(result.ok).toBe(true);
     expect(result.output).toEqual({ winner: true });
   });
+
+  it('OrGateNode and ORGateNode return undefined when no inputs', async () => {
+    const orLegacy = await new OrGateNode().execute(makeCtx({}));
+    expect(orLegacy.ok).toBe(true);
+    expect(orLegacy.output).toBeUndefined();
+
+    const orNew = await new ORGateNode().execute(makeCtx({}));
+    expect(orNew.ok).toBe(true);
+    expect(orNew.output).toBeUndefined();
+  });
+
+  it('ParallelEndNode wraps primitive branch outputs', async () => {
+    const node = new ParallelEndNode();
+    const result = await node.execute(makeCtx({ a: 'text', b: 3 }));
+    expect(result.ok).toBe(true);
+    // last merge wins for { value } keys
+    expect(result.output).toEqual({ value: 3 });
+  });
+
+  it('exposes stable type identifiers', () => {
+    expect(new TriggerNode().type).toBe('trigger');
+    expect(new OutputNode().type).toBe('output');
+    expect(new AndGateNode().type).toBe('gate_and');
+    expect(new OrGateNode().type).toBe('gate_or');
+    expect(new ParallelStartNode().type).toBe('parallel_start');
+    expect(new ParallelEndNode().type).toBe('parallel_end');
+    expect(new ORGateNode().type).toBe('or_gate');
+  });
 });

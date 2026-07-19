@@ -64,6 +64,44 @@ describe('DeployNode', () => {
     expect(result.error).toBe('token missing');
   });
 
+  it('catches network errors instead of throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/ECONNREFUSED/);
+  });
+
+  it('uses generic Deploy failed when API omits error string', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: async () => ({ ok: false }),
+    }));
+    const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Deploy failed');
+  });
+
+  it('stringifies non-Error network failures', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue('boom'));
+    const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Deploy failed');
+  });
+
+  it('trims SERVER_URL and SERVER_TOKEN before calling the API', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://x.app' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await DeployNode.execute(
+      ctx({
+        inputs: { content: '<p>x</p>' },
+        settings: { SERVER_URL: '  http://localhost:9  ', SERVER_TOKEN: '  tok  ' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:9/api/deploy');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
+  });
+
   it('uses config.content and inputs.projectName', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { url: 'https://cf.pages.dev' } }),

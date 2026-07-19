@@ -37,6 +37,35 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/Unknown media type/);
   });
 
+  it('trims SERVER_URL and SERVER_TOKEN before calling the API', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'img.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image', prompt: 'a cat' },
+        settings: { SERVER_URL: '  http://localhost:3001  ', SERVER_TOKEN: '  tok  ' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('falls back to default SERVER_URL when whitespace-only', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'img.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image', prompt: 'a cat' },
+        settings: { SERVER_URL: '   ', SERVER_TOKEN: '' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+  });
+
   it('posts image request and returns filename', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'img.png', revisedPrompt: 'better' } }),

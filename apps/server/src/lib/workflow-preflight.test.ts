@@ -345,4 +345,23 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'invalid_discord_webhook')).toBe(false);
     expect(r.issues.some((i) => i.code === 'missing_discord_webhook')).toBe(false);
   });
+
+  it('treats whitespace-only agent API keys as missing', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_coding', config: { llmProvider: 'google' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      { GOOGLE_API_KEY: '  \t  ' },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_google_key')).toBe(true);
+  });
 });
