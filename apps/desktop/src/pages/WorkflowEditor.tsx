@@ -25,7 +25,14 @@ import { RunInputsDialog } from '../components/workflow/RunInputsDialog.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { summarizeValidationIssues, validateWorkflowDraft } from '../components/workflow/WorkflowValidation.js';
 import { autoLayout } from '../lib/layout.js';
-import { loadLayoutDirection, saveLayoutDirection } from '../lib/layout-prefs.js';
+import {
+  EDITOR_RIGHT_PANEL_TABS,
+  loadEditorRightPanelTab,
+  loadLayoutDirection,
+  saveEditorRightPanelTab,
+  saveLayoutDirection,
+  type EditorRightPanelTab,
+} from '../lib/layout-prefs.js';
 import { RevisionPanel } from '../components/workflow/RevisionPanel.js';
 import { ArtifactPreview } from '../components/workflow/ArtifactPreview.js';
 import { RunLogPanel } from '../components/workflow/RunLogPanel.js';
@@ -90,7 +97,7 @@ const customNodeTypes: NodeTypes = {
   workflowNode: WorkflowNodeComponent,
 };
 
-type RightPanelTab = 'config' | 'run' | 'history' | 'preview';
+type RightPanelTab = EditorRightPanelTab;
 
 function buildWorkflowDraft(nodes: Node[], edges: Edge[], description?: string, designSystemId?: string) {
   return {
@@ -154,7 +161,7 @@ export function WorkflowEditor() {
   const [runEvents, setRunEvents] = useState<WorkflowSSEEvent[]>([]);
   const [runInputsOpen, setRunInputsOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('config');
+  const [rightPanelTab, setRightPanelTabState] = useState<RightPanelTab>(() => loadEditorRightPanelTab());
   const [allBlocks, setAllBlocks] = useState<WorkflowBlock[]>([]);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -166,6 +173,11 @@ export function WorkflowEditor() {
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>(() => loadLayoutDirection());
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const setRightPanelTab = useCallback((tab: RightPanelTab) => {
+    setRightPanelTabState(tab);
+    saveEditorRightPanelTab(tab);
+  }, []);
 
   const stopRef = useRef<(() => void) | null>(null);
 
@@ -661,7 +673,7 @@ export function WorkflowEditor() {
         {/* Config / Run / History panel */}
         <aside className="flex w-72 flex-col border-l" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
           <div className="flex border-b" style={{ borderColor: 'var(--border-primary)' }}>
-            {(['config', 'run', 'history', 'preview'] as RightPanelTab[]).map((tab) => (
+            {EDITOR_RIGHT_PANEL_TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRightPanelTab(tab)}

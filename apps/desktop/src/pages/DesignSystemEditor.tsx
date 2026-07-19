@@ -85,6 +85,18 @@ export function DesignSystemEditor() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [isDirty]);
 
+  // Escape returns to list (confirms when dirty via handleBack)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Don't fight Cmd/Ctrl+S handler; Escape alone navigates back
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      handleBack();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleBack]);
+
   if (!ds) {
     return (
       <div className="p-6 text-white/40 text-sm">Loading...</div>

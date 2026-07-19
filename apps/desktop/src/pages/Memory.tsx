@@ -11,6 +11,12 @@ import {
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
+import {
+  loadMemoryTypeFilter,
+  MEMORY_TYPE_FILTERS,
+  saveMemoryTypeFilter,
+  type MemoryTypeFilter,
+} from '../lib/memory-prefs.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 const TYPE_COLORS: Record<MemoryType, string> = {
@@ -152,12 +158,17 @@ export default function Memory() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: MemoryItem } | null>(null);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | MemoryType>('all');
+  const [typeFilter, setTypeFilter] = useState<MemoryTypeFilter>(() => loadMemoryTypeFilter());
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('memory'));
 
   const handleEnabledFilter = (value: EnabledFilterPref) => {
     setEnabledFilter(value);
     saveEnabledFilter('memory', value);
+  };
+
+  const handleTypeFilter = (value: MemoryTypeFilter) => {
+    setTypeFilter(value);
+    saveMemoryTypeFilter(value);
   };
 
   const filteredItems = useMemo(() => {
@@ -248,11 +259,11 @@ export default function Memory() {
                   {chip.label}
                 </button>
               ))}
-              {(['all', 'user', 'session', 'skill', 'reference'] as const).map((ty) => (
+              {MEMORY_TYPE_FILTERS.map((ty) => (
                 <button
                   key={ty}
                   type="button"
-                  onClick={() => setTypeFilter(ty)}
+                  onClick={() => handleTypeFilter(ty)}
                   className="rounded-lg px-2 py-1 text-[10px] font-medium capitalize"
                   style={{
                     backgroundColor: typeFilter === ty ? '#3b82f6' : 'var(--bg-tertiary)',
