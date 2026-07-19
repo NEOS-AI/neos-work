@@ -33,6 +33,11 @@ import {
   saveLayoutDirection,
   type EditorRightPanelTab,
 } from '../lib/layout-prefs.js';
+import {
+  buildWorkflowDraft,
+  toReactFlowEdges,
+  toReactFlowNodes,
+} from '../lib/workflow-draft.js';
 import { RevisionPanel } from '../components/workflow/RevisionPanel.js';
 import { ArtifactPreview } from '../components/workflow/ArtifactPreview.js';
 import { RunLogPanel } from '../components/workflow/RunLogPanel.js';
@@ -99,47 +104,7 @@ const customNodeTypes: NodeTypes = {
 
 type RightPanelTab = EditorRightPanelTab;
 
-function buildWorkflowDraft(nodes: Node[], edges: Edge[], description?: string, designSystemId?: string) {
-  return {
-    description,
-    designSystemId: designSystemId || undefined,
-    nodes: nodes.map((n) => ({
-      id: n.id,
-      type: n.data.nodeType as string,
-      label: n.data.label as string,
-      position: n.position,
-      config: (n.data.config as Record<string, unknown>) ?? {},
-    })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label as string | undefined,
-    })),
-  };
-}
-
 // ── WorkflowEditor ────────────────────────────────────────
-
-function toReactFlowNodes(wf: Workflow, runStatuses: Record<string, string>): Node[] {
-  return wf.nodes.map((n) => ({
-    id: n.id,
-    type: 'workflowNode',
-    position: n.position,
-    data: {
-      label: n.label,
-      nodeType: n.type,
-      config: n.config,
-      isRunning: runStatuses[n.id] === 'running',
-      isDone: runStatuses[n.id] === 'completed',
-      isFailed: runStatuses[n.id] === 'failed',
-    },
-  }));
-}
-
-function toReactFlowEdges(wf: Workflow): Edge[] {
-  return wf.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: e.label }));
-}
 
 export function WorkflowEditor() {
   const { id } = useParams<{ id: string }>();

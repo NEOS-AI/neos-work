@@ -8,15 +8,28 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
 import { formatDurationMs } from '../../lib/format-duration.js';
+import {
+  loadRunLogFilter,
+  saveRunLogFilter,
+  type RunLogFilterPref,
+} from '../../lib/run-log-prefs.js';
 
 interface RunLogPanelProps {
   events: WorkflowSSEEvent[];
   nodeLabelMap: Record<string, string>;
 }
 
-type RunLogFilter = 'all' | 'progress' | 'completed' | 'failed' | 'lifecycle';
+type RunLogFilter = RunLogFilterPref;
 
 const URL_RE = /(https?:\/\/[^\s"'<>]+)/g;
+
+const FILTER_LABELS: Record<RunLogFilter, string> = {
+  all: 'All',
+  lifecycle: 'Lifecycle',
+  progress: 'Progress',
+  completed: 'Completed',
+  failed: 'Failed',
+};
 
 /** Exported for unit tests — filter run log events by category chip. */
 export function filterRunLogEvents(
@@ -79,8 +92,13 @@ function formatOutput(output: unknown): string {
 export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  const [logFilter, setLogFilter] = useState<RunLogFilter>('all');
+  const [logFilter, setLogFilter] = useState<RunLogFilter>(() => loadRunLogFilter());
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  const handleLogFilter = (next: RunLogFilter) => {
+    setLogFilter(next);
+    saveRunLogFilter(next);
+  };
 
   const visibleEvents = useMemo(
     () => filterRunLogEvents(events, logFilter),
@@ -102,13 +120,11 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
     );
   }
 
-  const FILTERS: { id: RunLogFilter; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'lifecycle', label: 'Lifecycle' },
-    { id: 'progress', label: 'Progress' },
-    { id: 'completed', label: 'Completed' },
-    { id: 'failed', label: 'Failed' },
-  ];
+  // Chip order: lifecycle before progress for scanability during live runs
+  const FILTERS = (['all', 'lifecycle', 'progress', 'completed', 'failed'] as const).map((id) => ({
+    id,
+    label: FILTER_LABELS[id],
+  }));
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
@@ -117,7 +133,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
           <button
             key={f.id}
             type="button"
-            onClick={() => setLogFilter(f.id)}
+            onClick={() => handleLogFilter(f.id)}
             className="rounded px-2 py-0.5 text-[10px] font-medium"
             style={{
               backgroundColor: logFilter === f.id ? 'var(--bg-accent, #3b82f6)' : 'var(--bg-tertiary)',

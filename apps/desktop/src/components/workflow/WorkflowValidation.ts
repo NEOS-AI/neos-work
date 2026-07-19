@@ -269,6 +269,16 @@ export function validateWorkflowDraft(input: {
           message: 'Deploy node requires provider (vercel or cloudflare).',
         });
       }
+      const projectName =
+        typeof config.projectName === 'string' ? config.projectName.trim() : '';
+      if (!projectName) {
+        issues.push({
+          code: 'missing_deploy_project',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Deploy node has no project name.',
+        });
+      }
       const hasContent =
         (typeof config.content === 'string' && config.content.trim().length > 0)
         || input.edges.some((edge) => edge.target === node.id);
