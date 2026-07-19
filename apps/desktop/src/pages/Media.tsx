@@ -46,6 +46,16 @@ export function Media() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Escape clears media preview selection (blob URL revoked by the selected effect cleanup)
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelected(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected]);
+
   const handleDelete = async (filename: string) => {
     if (!client) return;
     if (!window.confirm(`Delete ${filename}?`)) return;

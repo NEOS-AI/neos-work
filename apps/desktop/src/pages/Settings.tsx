@@ -647,7 +647,16 @@ function McpServersSection() {
     loadServers();
   }, [loadServers]);
 
-  // Escape closes MCP OAuth connect modal or the add-server form
+  const closeAddForm = useCallback(() => {
+    setShowAddForm(false);
+    setFormName('');
+    setFormCommand('');
+    setFormArgs('');
+    setFormUrl('');
+    setTransport('stdio');
+  }, []);
+
+  // Escape closes MCP OAuth connect modal or the add-server form (and clears draft fields)
   useEffect(() => {
     if (!oauthModal && !showAddForm) return;
     const onKey = (e: KeyboardEvent) => {
@@ -656,11 +665,11 @@ function McpServersSection() {
         setOauthModal(null);
         return;
       }
-      if (showAddForm && !oauthModal) setShowAddForm(false);
+      if (showAddForm && !oauthModal) closeAddForm();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [oauthModal, oauthConnecting, showAddForm]);
+  }, [oauthModal, oauthConnecting, showAddForm, closeAddForm]);
 
   const handleAdd = async () => {
     if (!client || !formName) return;
@@ -675,11 +684,7 @@ function McpServersSection() {
         url: transport === 'http' ? formUrl : undefined,
       });
       if (res.ok) {
-        setFormName('');
-        setFormCommand('');
-        setFormArgs('');
-        setFormUrl('');
-        setShowAddForm(false);
+        closeAddForm();
         await loadServers();
       }
     } finally {
@@ -863,7 +868,7 @@ function McpServersSection() {
             )}
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setShowAddForm(false)}
+                onClick={closeAddForm}
                 className="rounded-lg px-3 py-1.5 text-xs"
                 style={{ color: 'var(--text-secondary)' }}
               >

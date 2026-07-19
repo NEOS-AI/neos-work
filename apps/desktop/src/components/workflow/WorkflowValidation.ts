@@ -199,13 +199,28 @@ export function validateWorkflowDraft(input: {
       }
     }
 
-    if (node.type === 'slack_message' && (typeof config.channel !== 'string' || config.channel.trim().length === 0)) {
-      issues.push({
-        code: 'missing_slack_channel',
-        severity: 'error',
-        nodeId: node.id,
-        message: 'Slack node requires a channel.',
-      });
+    if (node.type === 'slack_message') {
+      if (typeof config.channel !== 'string' || config.channel.trim().length === 0) {
+        issues.push({
+          code: 'missing_slack_channel',
+          severity: 'error',
+          nodeId: node.id,
+          message: 'Slack node requires a channel.',
+        });
+      }
+      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasTemplate =
+        (typeof config.textTemplate === 'string' && config.textTemplate.trim().length > 0)
+        || (typeof config.content === 'string' && config.content.trim().length > 0)
+        || (typeof config.text === 'string' && config.text.trim().length > 0);
+      if (!hasIncoming && !hasTemplate) {
+        issues.push({
+          code: 'missing_slack_content',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Slack node has no text template or upstream input.',
+        });
+      }
     }
 
     if (node.type === 'discord_message') {
@@ -376,8 +391,15 @@ export function validateWorkflowDraft(input: {
   if (hasCycle(input.nodes, input.edges)) {
     issues.push({ code: 'cycle', severity: 'error', message: 'Workflow graph contains a cycle.' });
   }
-  if (!input.nodes.some((node) => node.type === 'trigger')) {
+  const triggerCount = input.nodes.filter((node) => node.type === 'trigger').length;
+  if (triggerCount === 0) {
     issues.push({ code: 'no_trigger', severity: 'warning', message: 'Workflow has no trigger node.' });
+  } else if (triggerCount > 1) {
+    issues.push({
+      code: 'multiple_triggers',
+      severity: 'warning',
+      message: `Workflow has ${triggerCount} trigger nodes; only one start trigger is recommended.`,
+    });
   }
   if (!input.nodes.some((node) => node.type === 'output')) {
     issues.push({ code: 'no_output', severity: 'warning', message: 'Workflow has no output node.' });

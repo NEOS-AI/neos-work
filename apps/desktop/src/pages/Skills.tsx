@@ -10,6 +10,7 @@ import {
 } from '../lib/enabled-filter-prefs.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
+import { loadSkillsCategoryFilter, saveSkillsCategoryFilter } from '../lib/skills-prefs.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Skills() {
@@ -18,7 +19,7 @@ export function Skills() {
   const [skills, setSkills] = useState<SkillData[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>(() => loadSkillsCategoryFilter());
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('skills'));
   const [search, setSearch] = useState('');
   const [tryPrompt, setTryPrompt] = useState<string | null>(null);
@@ -26,6 +27,12 @@ export function Skills() {
   const handleEnabledFilter = (value: EnabledFilterPref) => {
     setEnabledFilter(value);
     saveEnabledFilter('skills', value);
+  };
+
+  const handleCategoryFilter = (cat: string) => {
+    const next = cat || 'all';
+    setCategoryFilter(next);
+    saveSkillsCategoryFilter(next);
   };
 
   const loadSkills = useCallback(async () => {
@@ -89,20 +96,47 @@ export function Skills() {
     }
   };
 
-  // Sort: featured first, then alphabetical
-  const sorted = [...skills].sort((a, b) => {
-    if (a.featured && !b.featured) return -1;
-    if (!a.featured && b.featured) return 1;
-    return a.name.localeCompare(b.name);
-  });
+  // Sort: featured first, then alphabetical (memoized for stable filter deps)
+  const sorted = useMemo(
+    () =>
+      [...skills].sort((a, b) => {
+        if (a.featured && !b.featured) return -1;
+        if (!a.featured && b.featured) return 1;
+        return a.name.localeCompare(b.name);
+      }),
+    [skills],
+  );
 
   // Categories + enabled + search
-  const categories = ['all', ...Array.from(new Set(skills.map((s) => s.category).filter(Boolean)))];
+  const categories = useMemo(
+    () => [
+      'all',
+      ...Array.from(
+        new Set(
+          skills
+            .map((s) => s.category)
+            .filter((c): c is string => typeof c === 'string' && c.length > 0),
+        ),
+      ),
+    ],
+    [skills],
+  );
+
+  // If a persisted category no longer exists, fall back to all (and rewrite prefs)
+  useEffect(() => {
+    if (skills.length === 0) return;
+    if (categoryFilter === 'all' || categories.includes(categoryFilter)) return;
+    setCategoryFilter('all');
+    saveSkillsCategoryFilter('all');
+  }, [skills.length, categories, categoryFilter]);
+
+  const activeCategory =
+    categoryFilter === 'all' || categories.includes(categoryFilter) ? categoryFilter : 'all';
   const filtered = useMemo(() => {
-    const byCat = categoryFilter === 'all' ? sorted : sorted.filter((s) => s.category === categoryFilter);
+    const byCat = activeCategory === 'all' ? sorted : sorted.filter((s) => s.category === activeCategory);
     const byEnabled = filterByEnabled(byCat, enabledFilter);
     return filterBySearchText(byEnabled, search);
-  }, [sorted, categoryFilter, enabledFilter, search]);
+  }, [sorted, activeCategory, enabledFilter, search]);
 
   const enabledCount = skills.filter((s) => s.enabled).length;
 
@@ -207,11 +241,11 @@ export function Skills() {
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => setCategoryFilter(cat ?? 'all')}
+                onClick={() => handleCategoryFilter(cat ?? 'all')}
                 className="rounded-full px-2.5 py-0.5 text-xs transition-colors"
                 style={{
-                  backgroundColor: categoryFilter === (cat ?? 'all') ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                  color: categoryFilter === (cat ?? 'all') ? '#fff' : 'var(--text-secondary)',
+                  backgroundColor: activeCategory === (cat ?? 'all') ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                  color: activeCategory === (cat ?? 'all') ? '#fff' : 'var(--text-secondary)',
                 }}
               >
                 {cat ?? 'all'}

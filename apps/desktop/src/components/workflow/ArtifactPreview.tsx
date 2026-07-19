@@ -2,8 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { Artifact } from '../../lib/engine.js';
+import {
+  ARTIFACT_VIEWPORT_MODES,
+  loadArtifactViewport,
+  saveArtifactViewport,
+  type ArtifactViewportMode,
+} from '../../lib/artifact-preview-prefs.js';
 
-type ViewportMode = 'full' | 'tablet' | 'mobile';
+type ViewportMode = ArtifactViewportMode;
 
 const VIEWPORT_WIDTH: Record<ViewportMode, string> = {
   full: '100%',
@@ -63,8 +69,13 @@ export function ArtifactPreview({
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [viewport, setViewport] = useState<ViewportMode>('full');
+  const [viewport, setViewport] = useState<ViewportMode>(() => loadArtifactViewport());
   const [copied, setCopied] = useState(false);
+
+  const handleViewport = (mode: ViewportMode) => {
+    setViewport(mode);
+    saveArtifactViewport(mode);
+  };
 
   const handleCopyContent = async () => {
     if (!selectedContent) return;
@@ -313,11 +324,11 @@ export function ArtifactPreview({
       {/* Viewport chrome for HTML previews (Live Artifact polish) */}
       {showAsHtml && (
         <div className="flex items-center gap-1 px-2 py-1 border-b border-white/10 shrink-0">
-          {(['full', 'tablet', 'mobile'] as ViewportMode[]).map((mode) => (
+          {ARTIFACT_VIEWPORT_MODES.map((mode) => (
             <button
               key={mode}
               type="button"
-              onClick={() => setViewport(mode)}
+              onClick={() => handleViewport(mode)}
               className={`rounded px-2 py-0.5 text-[10px] capitalize ${
                 viewport === mode ? 'bg-white/15 text-white' : 'text-white/40 hover:bg-white/5'
               }`}
