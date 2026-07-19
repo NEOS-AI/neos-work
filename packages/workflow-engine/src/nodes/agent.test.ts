@@ -142,5 +142,43 @@ describe('AgentNode LLM model selection', () => {
     const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
     expect(opts?.model).toBe('node-model');
   });
+
+  it('prefers NodeConfigPanel llmModel over legacy model and settings', async () => {
+    const node = new AgentNode('agent_coding', {
+      llmModel: '  panel-model  ',
+      model: 'legacy-model',
+    });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          model: 'settings-model',
+        },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
+    expect(opts?.model).toBe('panel-model');
+  });
+
+  it('uses node llmProvider when selecting the adapter', async () => {
+    const node = new AgentNode('agent_coding', {
+      llmProvider: 'openai',
+      llmModel: 'gpt-4o-mini',
+    });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          OPENAI_API_KEY: 'sk-openai',
+          llmProvider: 'anthropic',
+        },
+      }),
+    );
+    expect(orchestratorCtor).toHaveBeenCalled();
+    const adapter = orchestratorCtor.mock.calls[0]?.[0] as { id?: string };
+    expect(adapter?.id).toBe('openai');
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
+    expect(opts?.model).toBe('gpt-4o-mini');
+  });
 });
 
