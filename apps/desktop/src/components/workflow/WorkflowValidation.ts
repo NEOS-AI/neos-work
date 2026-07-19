@@ -149,6 +149,16 @@ export function validateWorkflowDraft(input: {
           }
         }
       }
+      // Blocks typically need upstream context when the graph has more than one node
+      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      if (!hasIncoming && input.nodes.length > 1) {
+        issues.push({
+          code: 'block_no_upstream',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Block node has no upstream connection.',
+        });
+      }
     }
 
     if (node.type === 'agent_finance' || node.type === 'agent_coding') {
@@ -249,15 +259,28 @@ export function validateWorkflowDraft(input: {
       }
     }
 
-    // Parallel / OR structural checks (plan Task 11)
-    if (node.type === 'or_gate') {
+    // Parallel / gate structural checks (plan Task 11)
+    // Support both palette aliases: or_gate + gate_or, gate_and
+    if (node.type === 'or_gate' || node.type === 'gate_or') {
       const incoming = input.edges.filter((edge) => edge.target === node.id).length;
       if (incoming < 2) {
         issues.push({
           code: 'or_gate_underconnected',
           severity: 'warning',
           nodeId: node.id,
-          message: 'OR gate should have at least two upstream branches to race.',
+          message: 'OR gate should have at least two upstream branches.',
+        });
+      }
+    }
+
+    if (node.type === 'gate_and') {
+      const incoming = input.edges.filter((edge) => edge.target === node.id).length;
+      if (incoming < 2) {
+        issues.push({
+          code: 'gate_and_underconnected',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'AND gate should join at least two upstream branches.',
         });
       }
     }
@@ -360,14 +383,20 @@ export function validateWorkflowDraft(input: {
     issues.push({ code: 'no_output', severity: 'warning', message: 'Workflow has no output node.' });
   }
 
-  // parallel_start without a join (parallel_end or or_gate) is a structural warning
+  // parallel_start without a join (parallel_end / or_gate / gate_or / gate_and) is a structural warning
   const hasParallelStart = input.nodes.some((n) => n.type === 'parallel_start');
-  const hasJoin = input.nodes.some((n) => n.type === 'parallel_end' || n.type === 'or_gate');
+  const hasJoin = input.nodes.some(
+    (n) =>
+      n.type === 'parallel_end' ||
+      n.type === 'or_gate' ||
+      n.type === 'gate_or' ||
+      n.type === 'gate_and',
+  );
   if (hasParallelStart && !hasJoin) {
     issues.push({
       code: 'parallel_missing_join',
       severity: 'warning',
-      message: 'Parallel Start is present but no Parallel End / OR Gate join node was found.',
+      message: 'Parallel Start is present but no Parallel End / gate join node was found.',
     });
   }
 

@@ -6,21 +6,40 @@ import type { WorkflowRun } from '../../lib/engine.js';
 import { formatDuration } from '../../lib/format-duration.js';
 import { formatListCount } from '../../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../../lib/format-relative-time.js';
-import { filterRunsByStatus, type RunStatusFilter } from '../../lib/run-history-filter.js';
+import {
+  filterRunsByStatus,
+  loadRunStatusFilter,
+  RUN_STATUS_FILTERS,
+  saveRunStatusFilter,
+  type RunStatusFilter,
+} from '../../lib/run-history-filter.js';
 import { RunDetailPanel } from './RunDetailPanel.js';
 
 type RunFilter = RunStatusFilter;
 
 const PAGE_SIZE = 20;
 
+const FILTER_LABEL_KEYS: Record<RunStatusFilter, [string, string]> = {
+  all: ['run.filterAll', 'All'],
+  running: ['run.filterRunning', 'Running'],
+  completed: ['run.filterCompleted', 'Completed'],
+  failed: ['run.filterFailed', 'Failed'],
+  cancelled: ['run.filterCancelled', 'Cancelled'],
+};
+
 export function RunHistoryPanel(props: { workflowId: string; refreshKey: number; nodeLabelMap?: Record<string, string> }) {
   const { client } = useEngine();
   const { t } = useTranslation('common');
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<RunFilter>('all');
+  const [filter, setFilter] = useState<RunFilter>(() => loadRunStatusFilter());
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+
+  const handleFilter = (next: RunFilter) => {
+    setFilter(next);
+    saveRunStatusFilter(next);
+  };
 
   useEffect(() => {
     setOffset(0);
@@ -48,13 +67,11 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
 
   const filteredRuns = filterRunsByStatus(runs, filter);
 
-  const FILTERS: { key: RunFilter; label: string }[] = [
-    { key: 'all', label: t('run.filterAll', 'All') },
-    { key: 'running', label: t('run.filterRunning', 'Running') },
-    { key: 'completed', label: t('run.filterCompleted', 'Completed') },
-    { key: 'failed', label: t('run.filterFailed', 'Failed') },
-    { key: 'cancelled', label: t('run.filterCancelled', 'Cancelled') },
-  ];
+  // Keep chip order/keys in sync with RUN_STATUS_FILTERS prefs module
+  const FILTERS = RUN_STATUS_FILTERS.map((key) => {
+    const [i18nKey, fallback] = FILTER_LABEL_KEYS[key];
+    return { key, label: t(i18nKey, fallback) };
+  });
 
   if (runs.length === 0 && offset === 0) {
     return (
@@ -71,7 +88,7 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
         {FILTERS.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setFilter(key)}
+            onClick={() => handleFilter(key)}
             className="rounded px-2 py-0.5 text-[10px] font-medium transition-colors"
             style={{
               backgroundColor: filter === key ? 'var(--bg-accent, #3b82f6)' : 'var(--bg-tertiary)',
@@ -236,7 +253,7 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
         )}
       </div>
 
-      {selectedRunId && (
+      {selectedRunId && filteredRuns.some((r) => r.id === selectedRunId) && (
         <RunDetailPanel
           workflowId={props.workflowId}
           runId={selectedRunId}

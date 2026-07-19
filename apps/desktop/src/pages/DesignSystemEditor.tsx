@@ -36,7 +36,7 @@ export function DesignSystemEditor() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!client || !id || saving) return;
     setSaving(true);
     setSaveMessage(null);
@@ -48,20 +48,42 @@ export function DesignSystemEditor() {
       setSaveMessage('Save failed: ' + (res.error ?? 'unknown'));
     }
     setSaving(false);
-    setTimeout(() => setSaveMessage(null), 3000);
-  };
+  }, [client, id, content, saving]);
 
-  // Cmd+S / Ctrl+S to save
+  // Clear save toast after a short delay (and on unmount)
+  useEffect(() => {
+    if (!saveMessage) return;
+    const t = window.setTimeout(() => setSaveMessage(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [saveMessage]);
+
+  const handleBack = useCallback(() => {
+    if (isDirty && !window.confirm('You have unsaved changes. Leave without saving?')) return;
+    navigate('/design-systems');
+  }, [isDirty, navigate]);
+
+  // Cmd+S / Ctrl+S to save (stable deps — do not rebind every render)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        handleSave();
+        void handleSave();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  });
+  }, [handleSave]);
+
+  // Warn on tab close / refresh when DESIGN.md is dirty
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   if (!ds) {
     return (
@@ -75,7 +97,7 @@ export function DesignSystemEditor() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/design-systems')}
+            onClick={handleBack}
             className="text-white/40 hover:text-white/70 text-sm transition-colors"
           >
             ← Design Systems

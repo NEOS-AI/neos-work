@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
@@ -51,6 +51,18 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
       .catch(() => { setError('Network error.'); })
       .finally(() => { setLoading(false); });
   }, [client, workflowId, runId]);
+
+  // Escape closes run detail panel (PLAN Task 14 UX).
+  // Ref keeps a single listener even when parent passes an inline onClose.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const nodeResults: NodeRunResult[] = run
     ? Object.values(run.nodeResults as Record<string, NodeRunResult>)
