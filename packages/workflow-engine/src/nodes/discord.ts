@@ -5,7 +5,7 @@
  */
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
-import { resolveMessageText } from './message-text.js';
+import { DISCORD_CONTENT_MAX_LENGTH, resolveMessageText } from './message-text.js';
 
 const DISCORD_WEBHOOK_PREFIX = 'https://discord.com/api/webhooks/';
 
@@ -32,6 +32,14 @@ export class DiscordMessageNode implements ExecutableNode {
     const content = resolveMessageText(ctx.config, ctx.inputs);
     if (!content.trim()) {
       return { ok: false, output: null, error: 'Discord message content is empty', durationMs: 0 };
+    }
+    if (content.length > DISCORD_CONTENT_MAX_LENGTH) {
+      return {
+        ok: false,
+        output: null,
+        error: `Discord content exceeds ${DISCORD_CONTENT_MAX_LENGTH} characters`,
+        durationMs: 0,
+      };
     }
 
     try {

@@ -16,6 +16,7 @@ export function ModeSelection() {
     if (!devToken || status === 'connecting') return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       setDevToken('');
     };
     window.addEventListener('keydown', onKey);

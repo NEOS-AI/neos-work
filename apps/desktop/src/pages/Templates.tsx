@@ -49,6 +49,7 @@ export function Templates() {
     if (!search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       setSearch('');
     };
     window.addEventListener('keydown', onKey);

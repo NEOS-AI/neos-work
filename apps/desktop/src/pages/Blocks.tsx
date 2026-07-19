@@ -410,6 +410,7 @@ export function Blocks() {
     if (!modal && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (modal) {
         setModal(null);
         return;

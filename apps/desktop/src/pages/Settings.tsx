@@ -662,10 +662,14 @@ function McpServersSection() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (oauthModal && !oauthConnecting) {
+        e.preventDefault();
         setOauthModal(null);
         return;
       }
-      if (showAddForm && !oauthModal) closeAddForm();
+      if (showAddForm && !oauthModal) {
+        e.preventDefault();
+        closeAddForm();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

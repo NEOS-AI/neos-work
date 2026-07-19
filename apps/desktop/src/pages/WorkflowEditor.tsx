@@ -455,8 +455,15 @@ export function WorkflowEditor() {
               onChange={(e) => setNameInput(e.target.value)}
               onBlur={() => void handleNameCommit()}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleNameCommit();
-                if (e.key === 'Escape') setEditingName(false);
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleNameCommit();
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEditingName(false);
+                }
               }}
             />
           ) : (

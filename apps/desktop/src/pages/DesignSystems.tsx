@@ -45,6 +45,7 @@ export function DesignSystems() {
     if (!isCreating && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (isCreating) {
         cancelCreate();
         return;

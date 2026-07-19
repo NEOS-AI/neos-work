@@ -51,6 +51,7 @@ export function Media() {
     if (!selected && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (selected) {
         setSelected(null);
         return;

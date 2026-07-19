@@ -51,6 +51,7 @@ export function Workflows() {
     if (!showModal && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (showModal) {
         closeCreateModal();
         return;

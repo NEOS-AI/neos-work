@@ -82,6 +82,7 @@ export function Sessions() {
     if (!showNewSessionModal && !sessionSearch) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (showNewSessionModal) {
         setShowNewSessionModal(false);
         return;

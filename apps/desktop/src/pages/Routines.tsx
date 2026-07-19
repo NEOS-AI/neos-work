@@ -69,6 +69,7 @@ export function Routines() {
     if (!createOpen && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (createOpen) {
         closeCreateModal();
         return;

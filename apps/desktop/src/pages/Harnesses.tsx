@@ -56,6 +56,7 @@ export function Harnesses() {
     if (!showModal && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (showModal) {
         closeModal();
         return;

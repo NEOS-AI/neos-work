@@ -3,6 +3,12 @@
  * Prefer textTemplate / content / text config fields; interpolate {{key}} from inputs.
  */
 
+/** Discord webhook content hard limit (matches desktop graph validation). */
+export const DISCORD_CONTENT_MAX_LENGTH = 2000;
+
+/** Slack chat.postMessage text hard limit (matches desktop graph validation). */
+export const SLACK_CONTENT_MAX_LENGTH = 4000;
+
 const MESSAGE_CONFIG_KEYS = ['textTemplate', 'content', 'text'] as const;
 
 /** First non-blank string among config text fields (order: textTemplate → content → text). */

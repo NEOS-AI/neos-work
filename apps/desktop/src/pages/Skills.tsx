@@ -50,6 +50,7 @@ export function Skills() {
     if (!tryPrompt && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (tryPrompt) {
         setTryPrompt(null);
         return;

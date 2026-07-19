@@ -5,7 +5,7 @@
 
 import { WebClient } from '@slack/web-api';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
-import { resolveMessageText } from './message-text.js';
+import { resolveMessageText, SLACK_CONTENT_MAX_LENGTH } from './message-text.js';
 
 export class SlackMessageNode implements ExecutableNode {
   type = 'slack_message' as const;
@@ -26,6 +26,14 @@ export class SlackMessageNode implements ExecutableNode {
 
     if (!text.trim()) {
       return { ok: false, output: null, error: 'Slack message text is empty', durationMs: 0 };
+    }
+    if (text.length > SLACK_CONTENT_MAX_LENGTH) {
+      return {
+        ok: false,
+        output: null,
+        error: `Slack content exceeds ${SLACK_CONTENT_MAX_LENGTH} characters`,
+        durationMs: 0,
+      };
     }
 
     try {
