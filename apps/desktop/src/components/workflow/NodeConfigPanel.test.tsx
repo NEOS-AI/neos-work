@@ -169,6 +169,8 @@ describe('NodeConfigPanel', () => {
 
     expect(screen.getByText(/External CLI agent will be spawned/i)).toBeInTheDocument();
     expect(screen.queryByText('Model')).not.toBeInTheDocument();
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+    await waitFor(() => expect(listHarnesses).toHaveBeenCalled());
   });
 
   it('renders web_search and media config fields', async () => {

@@ -44,4 +44,33 @@ describe('GenUIForm', () => {
     await user.click(screen.getByRole('button', { name: /submit/i }));
     expect(onSubmit).toHaveBeenCalledWith({ name: 'Ada', tone: 'casual' });
   });
+
+  it('submits textarea values', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <GenUIForm
+        schema={{
+          fields: [{ key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'notes-ph' }],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+    await user.type(screen.getByPlaceholderText('notes-ph'), 'line one');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    expect(onSubmit).toHaveBeenCalledWith({ notes: 'line one' });
+  });
+
+  it('submits empty values for empty schema fields', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <GenUIForm
+        schema={{ fields: [{ key: 'x', label: 'X', type: 'text' }] }}
+        onSubmit={onSubmit}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    expect(onSubmit).toHaveBeenCalledWith({ x: '' });
+  });
 });

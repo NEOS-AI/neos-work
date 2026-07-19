@@ -23,4 +23,9 @@ describe('media-prefs', () => {
     localStorage.setItem('neos-media-kind', 'video');
     expect(loadMediaKindFilter()).toBe('all');
   });
+
+  it('round-trips other kind', () => {
+    saveMediaKindFilter('other');
+    expect(loadMediaKindFilter()).toBe('other');
+  });
 });

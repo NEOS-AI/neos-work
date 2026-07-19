@@ -346,6 +346,22 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'missing_discord_content')).toBe(false);
   });
 
+  it('does not warn discord when textTemplate is set (NodeConfig field)', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd1',
+          type: 'discord_message',
+          label: 'Discord',
+          config: { textTemplate: 'Hello {{x}}' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_discord_content')).toBe(false);
+  });
+
   it('warns about isolated nodes when graph has multiple nodes', () => {
     const issues = validateWorkflowDraft({
       nodes: [
@@ -487,6 +503,64 @@ describe('validateWorkflowDraft media/deploy nodes', () => {
       blocks: emptyBlocks,
     });
     expect(issues.some((i) => i.code === 'missing_media_prompt')).toBe(true);
+  });
+
+  it('warns when media audio has no text or upstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'm', type: 'media', label: 'TTS', config: { mediaType: 'audio' } },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e2', source: 'm', target: 'o' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_media_prompt' && i.nodeId === 'm')).toBe(true);
+  });
+
+  it('does not warn media audio when text is set', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'TTS',
+          config: { mediaType: 'audio', text: 'hello' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_media_prompt')).toBe(false);
+  });
+
+  it('warns multiple_outputs when more than one output exists', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o1', type: 'output', label: 'End A', config: {} },
+        { id: 'o2', type: 'output', label: 'End B', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'o1' },
+        { id: 'e2', source: 't', target: 'o2' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'multiple_outputs')).toBe(true);
+    expect(issues.some((i) => i.code === 'no_output')).toBe(false);
+  });
+
+  it('does not warn multiple_outputs for a single output', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'multiple_outputs')).toBe(false);
   });
 });
 

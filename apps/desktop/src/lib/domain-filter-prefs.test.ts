@@ -39,7 +39,16 @@ describe('domain-filter-prefs', () => {
     expect(loadBlocksSourceFilter()).toBe('all');
     saveBlocksSourceFilter('custom');
     expect(loadBlocksSourceFilter()).toBe('custom');
+    saveBlocksSourceFilter('builtin');
+    expect(loadBlocksSourceFilter()).toBe('builtin');
     localStorage.setItem('neos-blocks-source', 'nope');
     expect(loadBlocksSourceFilter()).toBe('all');
+  });
+
+  it('ignores invalid domain on save (leaves previous)', () => {
+    saveDomainFilter('blocks', 'coding');
+    // @ts-expect-error intentional invalid
+    saveDomainFilter('blocks', 'ops');
+    expect(loadDomainFilter('blocks')).toBe('coding');
   });
 });

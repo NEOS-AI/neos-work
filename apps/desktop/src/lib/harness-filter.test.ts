@@ -29,4 +29,19 @@ describe('filterAndSortHarnesses', () => {
     const filtered = filterAndSortHarnesses(harnesses, 'agent_finance');
     expect(filtered.map((h) => h.id)).toEqual(['f1', 'g1']);
   });
+
+  it('returns empty when no harnesses match domain', () => {
+    expect(
+      filterAndSortHarnesses(
+        [{ id: 'x', name: 'Only finance', domain: 'finance' }],
+        'agent_coding',
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not mutate the input array', () => {
+    const input = [...harnesses];
+    filterAndSortHarnesses(input, 'agent_coding');
+    expect(input.map((h) => h.id)).toEqual(['c2', 'f1', 'g1', 'c1']);
+  });
 });

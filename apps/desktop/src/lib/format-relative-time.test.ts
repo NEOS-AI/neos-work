@@ -48,6 +48,12 @@ describe('formatRelativeTime', () => {
     expect(formatRelativeTime('2026-06-03T12:00:00.000Z', now)).toBe('in 2d');
   });
 
+  it('formats longer horizons (months / years)', () => {
+    expect(formatRelativeTime('2026-01-01T12:00:00.000Z', now)).toBe('5mo ago');
+    expect(formatRelativeTime('2024-06-01T12:00:00.000Z', now)).toBe('2y ago');
+    expect(formatRelativeTime('2028-06-01T12:00:00.000Z', now)).toBe('in 2y');
+  });
+
   it('handles SQLite UTC timestamps the same as ISO Z', () => {
     expect(formatRelativeTime('2026-06-01 11:30:00', now)).toBe('30m ago');
   });
@@ -56,11 +62,16 @@ describe('formatRelativeTime', () => {
 describe('formatAbsoluteTime', () => {
   it('returns em dash for empty', () => {
     expect(formatAbsoluteTime(null)).toBe('—');
+    expect(formatAbsoluteTime('')).toBe('—');
   });
 
   it('returns a locale string for valid timestamps', () => {
     const s = formatAbsoluteTime('2026-06-01T12:00:00.000Z');
     expect(s).not.toBe('—');
     expect(s.length).toBeGreaterThan(0);
+  });
+
+  it('returns raw string when unparseable', () => {
+    expect(formatAbsoluteTime('not-a-date')).toBe('not-a-date');
   });
 });

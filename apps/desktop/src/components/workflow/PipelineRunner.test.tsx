@@ -175,5 +175,67 @@ describe('PipelineRunner', () => {
       );
     });
   });
+
+  it('resumes via GenUI choice surface', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-choice') };
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-choice' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: 'choice',
+        schema: {
+          prompt: 'Pick one',
+          options: [
+            { label: 'A', value: 'opt-a' },
+            { label: 'B', value: 'opt-b' },
+          ],
+        },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('Pick one')).toBeInTheDocument());
+    await user.click(screen.getByText('A'));
+    await waitFor(() => {
+      expect(resumePlugin).toHaveBeenCalledWith('plug-1', 'run-choice', 'plan', { choice: 'opt-a' });
+    });
+  });
+
+  it('resumes via GenUI confirmation surface', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-conf') };
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-conf' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: 'confirmation',
+        schema: { prompt: 'Continue deploy?', confirmLabel: 'Yes', cancelLabel: 'No' },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('Continue deploy?')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => {
+      expect(resumePlugin).toHaveBeenCalledWith('plug-1', 'run-conf', 'plan', { confirmed: true });
+    });
+  });
 });
 

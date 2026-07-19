@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -62,5 +63,53 @@ describe('BlockParamForm', () => {
     render(<BlockParamForm block={block} value={{}} onChange={() => {}} />);
     expect(screen.getByLabelText(/Language/i)).toBeInTheDocument();
     expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  it('calls onChange when select and checkbox change', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const block = makeBlock([
+      { key: 'lang', type: 'select', label: 'Language', options: ['en', 'ko'] },
+      { key: 'flag', type: 'boolean', label: 'Flag' },
+    ]);
+    render(
+      <BlockParamForm
+        block={block}
+        value={{ lang: 'en', flag: false }}
+        onChange={onChange}
+      />,
+    );
+
+    await user.selectOptions(screen.getByRole('combobox'), 'ko');
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ lang: 'ko' }));
+
+    await user.click(screen.getByRole('checkbox'));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ flag: true }));
+  });
+
+  it('calls onChange with number values when controlled state updates', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const block = makeBlock([{ key: 'n', type: 'number', label: 'Count' }]);
+
+    function Harness() {
+      const [value, setValue] = React.useState<Record<string, unknown>>({ n: 1 });
+      return (
+        <BlockParamForm
+          block={block}
+          value={value}
+          onChange={(next) => {
+            onChange(next);
+            setValue(next);
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+    const num = screen.getByLabelText(/Count/i);
+    await user.clear(num);
+    await user.type(num, '5');
+    expect(onChange.mock.calls.some((c) => c[0].n === 5)).toBe(true);
   });
 });
