@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/desktop",
-  "version": "0.3.47",
+  "version": "0.3.48",
   "private": true,
   "license": "MIT",
   "type": "module",
