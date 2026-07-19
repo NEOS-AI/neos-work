@@ -33,6 +33,23 @@ export function DesignSystems() {
 
   useEffect(() => { load(); }, [load]);
 
+  const cancelCreate = () => {
+    setIsCreating(false);
+    setNewName('');
+    setNewDescription('');
+    setCreateError(null);
+  };
+
+  // Escape cancels the new design-system form
+  useEffect(() => {
+    if (!isCreating) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancelCreate();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isCreating]);
+
   const handleCreate = async () => {
     if (!client || !newName.trim()) return;
     setCreateError(null);
@@ -126,7 +143,7 @@ export function DesignSystems() {
               Create
             </button>
             <button
-              onClick={() => { setIsCreating(false); setCreateError(null); }}
+              onClick={cancelCreate}
               className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 text-sm transition-colors"
             >
               Cancel

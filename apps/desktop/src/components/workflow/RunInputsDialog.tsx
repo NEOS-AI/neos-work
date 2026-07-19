@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface RunInputsDialogProps {
   /** Initial values from the trigger node's config.initialInputs */
@@ -14,6 +14,15 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
       : '{}',
   );
   const [parseError, setParseError] = useState('');
+
+  // Escape cancels the run-with-inputs dialog
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
 
   const handleConfirm = () => {
     try {

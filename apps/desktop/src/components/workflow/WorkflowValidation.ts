@@ -93,6 +93,27 @@ export function validateWorkflowDraft(input: {
     }
   }
 
+  // Non-empty labels shared by multiple nodes (confusing in logs / history)
+  const labelsByNormalized = new Map<string, DraftNode[]>();
+  for (const node of input.nodes) {
+    const key = node.label.trim().toLowerCase();
+    if (!key) continue;
+    const group = labelsByNormalized.get(key) ?? [];
+    group.push(node);
+    labelsByNormalized.set(key, group);
+  }
+  for (const group of labelsByNormalized.values()) {
+    if (group.length < 2) continue;
+    for (const node of group) {
+      issues.push({
+        code: 'duplicate_node_label',
+        severity: 'warning',
+        nodeId: node.id,
+        message: `Node label "${node.label.trim()}" is used more than once.`,
+      });
+    }
+  }
+
   for (const node of input.nodes) {
     const config = node.config ?? {};
 

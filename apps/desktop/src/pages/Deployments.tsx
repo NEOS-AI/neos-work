@@ -3,6 +3,16 @@ import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Workflow } from '../lib/engine.js';
+import {
+  DEPLOYMENT_PROVIDER_FILTERS,
+  DEPLOYMENT_STATUS_FILTERS,
+  loadDeploymentProviderFilter,
+  loadDeploymentStatusFilter,
+  saveDeploymentProviderFilter,
+  saveDeploymentStatusFilter,
+  type DeploymentProviderFilter,
+  type DeploymentStatusFilter,
+} from '../lib/deployment-filter-prefs.js';
 import { formatListCount } from '../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
@@ -15,19 +25,28 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   pending: { bg: 'var(--bg-tertiary)', color: 'var(--text-muted)' },
 };
 
-const STATUS_FILTERS = ['all', 'success', 'failed', 'deploying', 'pending'] as const;
-const PROVIDER_FILTERS = ['all', 'vercel', 'cloudflare'] as const;
-
 export function Deployments() {
   const { client } = useEngine();
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
   const [loading, setLoading] = useState(true);
   const [filterWorkflowId, setFilterWorkflowId] = useState('');
-  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>('all');
-  const [providerFilter, setProviderFilter] = useState<(typeof PROVIDER_FILTERS)[number]>('all');
+  const [statusFilter, setStatusFilter] = useState<DeploymentStatusFilter>(() => loadDeploymentStatusFilter());
+  const [providerFilter, setProviderFilter] = useState<DeploymentProviderFilter>(() =>
+    loadDeploymentProviderFilter(),
+  );
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const handleStatusFilter = (status: DeploymentStatusFilter) => {
+    setStatusFilter(status);
+    saveDeploymentStatusFilter(status);
+  };
+
+  const handleProviderFilter = (provider: DeploymentProviderFilter) => {
+    setProviderFilter(provider);
+    saveDeploymentProviderFilter(provider);
+  };
 
   const visibleDeployments = useMemo(() => {
     const byStatus = filterByStatus(deployments, statusFilter);
@@ -174,11 +193,11 @@ export function Deployments() {
       </div>
 
       <div className="flex flex-wrap gap-1">
-        {STATUS_FILTERS.map((s) => (
+        {DEPLOYMENT_STATUS_FILTERS.map((s) => (
           <button
             key={s}
             type="button"
-            onClick={() => setStatusFilter(s)}
+            onClick={() => handleStatusFilter(s)}
             className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
             style={{
               backgroundColor: statusFilter === s ? '#3b82f6' : 'var(--bg-tertiary)',
@@ -189,11 +208,11 @@ export function Deployments() {
           </button>
         ))}
         <span className="self-center mx-1 text-xs" style={{ color: 'var(--text-muted)' }}>|</span>
-        {PROVIDER_FILTERS.map((p) => (
+        {DEPLOYMENT_PROVIDER_FILTERS.map((p) => (
           <button
             key={p}
             type="button"
-            onClick={() => setProviderFilter(p)}
+            onClick={() => handleProviderFilter(p)}
             className="rounded-lg px-2.5 py-1 text-xs font-medium capitalize"
             style={{
               backgroundColor: providerFilter === p ? '#10b981' : 'var(--bg-tertiary)',

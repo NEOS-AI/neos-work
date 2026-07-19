@@ -647,15 +647,20 @@ function McpServersSection() {
     loadServers();
   }, [loadServers]);
 
-  // Escape closes MCP OAuth connect modal
+  // Escape closes MCP OAuth connect modal or the add-server form
   useEffect(() => {
-    if (!oauthModal) return;
+    if (!oauthModal && !showAddForm) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !oauthConnecting) setOauthModal(null);
+      if (e.key !== 'Escape') return;
+      if (oauthModal && !oauthConnecting) {
+        setOauthModal(null);
+        return;
+      }
+      if (showAddForm && !oauthModal) setShowAddForm(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [oauthModal, oauthConnecting]);
+  }, [oauthModal, oauthConnecting, showAddForm]);
 
   const handleAdd = async () => {
     if (!client || !formName) return;

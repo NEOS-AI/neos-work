@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ConfirmLeaveModalProps {
@@ -7,6 +8,16 @@ interface ConfirmLeaveModalProps {
 
 export function ConfirmLeaveModal({ onConfirm, onCancel }: ConfirmLeaveModalProps) {
   const { t } = useTranslation('common');
+
+  // Escape keeps the user on the editor (same as Stay)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"

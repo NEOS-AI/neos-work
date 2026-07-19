@@ -40,6 +40,22 @@ export function Workflows() {
   const [sortMode, setSortMode] = useState<SortMode>(() => loadWorkflowListSort());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const closeCreateModal = () => {
+    setShowModal(false);
+    setNewName('');
+    setCreating(false);
+  };
+
+  // Escape closes new-workflow modal and clears draft form
+  useEffect(() => {
+    if (!showModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeCreateModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showModal]);
+
   const handleSortModeChange = (mode: SortMode) => {
     setSortMode(mode);
     saveWorkflowListSort(mode);
@@ -98,8 +114,7 @@ export function Workflows() {
     });
     setCreating(false);
     if (res.ok && res.data) {
-      setShowModal(false);
-      setNewName('');
+      closeCreateModal();
       navigate(`/workflows/${res.data.id}`);
     }
   };
@@ -406,7 +421,7 @@ export function Workflows() {
               </button>
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
+                onClick={closeCreateModal}
                 className="flex-1 rounded-lg py-2 text-sm font-medium"
                 style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)' }}
               >
