@@ -16,7 +16,8 @@ export const DeployNode: ExecutableNode = {
     const serverUrl = settings['SERVER_URL'] ?? 'http://localhost:3001';
     const serverToken = settings['SERVER_TOKEN'] ?? '';
 
-    const content = (inputs['content'] as string) ?? (config?.content as string) ?? '';
+    const rawContent = inputs['content'] ?? config?.content ?? '';
+    const content = typeof rawContent === 'string' ? rawContent.trim() : String(rawContent).trim();
     if (!content) {
       return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
     }

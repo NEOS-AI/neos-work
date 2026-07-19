@@ -272,12 +272,10 @@ export function validateWorkflowDraft(input: {
           message: 'Discord node has no text template or upstream input.',
         });
       }
-      const staticBody =
-        (typeof config.textTemplate === 'string' && config.textTemplate)
-        || (typeof config.content === 'string' && config.content)
-        || (typeof config.text === 'string' && config.text)
-        || '';
-      if (typeof staticBody === 'string' && staticBody.length > DISCORD_CONTENT_MAX_LENGTH) {
+      // Check all static fields (whitespace-only textTemplate must not hide a long content field)
+      const staticBodies = [config.textTemplate, config.content, config.text]
+        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+      if (staticBodies.some((body) => body.length > DISCORD_CONTENT_MAX_LENGTH)) {
         issues.push({
           code: 'discord_content_too_long',
           severity: 'warning',

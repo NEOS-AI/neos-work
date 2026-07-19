@@ -25,7 +25,8 @@ export function Plugins() {
   useEffect(() => {
     if (selected || !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSearch('');
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

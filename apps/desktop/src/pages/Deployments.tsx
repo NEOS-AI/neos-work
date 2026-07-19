@@ -39,6 +39,7 @@ export function Deployments() {
   );
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
 
   const handleStatusFilter = (status: DeploymentStatusFilter) => {
     setStatusFilter(status);
@@ -91,6 +92,7 @@ export function Deployments() {
       const map: Record<string, Workflow> = {};
       for (const w of wRes.data) map[w.id] = w;
       setWorkflows(map);
+      setWorkflowsLoaded(true);
     }
     setLoading(false);
   }, [client, filterWorkflowId]);
@@ -99,21 +101,21 @@ export function Deployments() {
     load();
   }, [load]);
 
-  // Drop stale persisted workflow filter after workflows load (avoids setState mid-load).
+  // Drop stale persisted workflow filter after workflows load (including empty lists).
   useEffect(() => {
-    if (!filterWorkflowId) return;
-    if (Object.keys(workflows).length === 0) return;
+    if (!workflowsLoaded || !filterWorkflowId) return;
     if (!workflows[filterWorkflowId]) {
       setFilterWorkflowId('');
       saveDeploymentWorkflowFilter('');
     }
-  }, [workflows, filterWorkflowId]);
+  }, [workflows, filterWorkflowId, workflowsLoaded]);
 
   // Escape clears search text (list filter hygiene).
   useEffect(() => {
     if (!search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSearch('');
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
