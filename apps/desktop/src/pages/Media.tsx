@@ -62,10 +62,8 @@ export function Media() {
     const res = await client.deleteMediaFile(filename);
     if (res.ok) {
       setFiles((prev) => prev.filter((f) => f.filename !== filename));
-      if (selected?.filename === filename) {
-        setSelected(null);
-        setBlobUrl(null);
-      }
+      // Clear selection only; blob effect cleanup revokes the object URL
+      if (selected?.filename === filename) setSelected(null);
     } else {
       setError((res as { error?: string }).error ?? 'Delete failed');
     }

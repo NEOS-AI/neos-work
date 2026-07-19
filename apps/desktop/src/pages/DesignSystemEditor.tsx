@@ -85,17 +85,19 @@ export function DesignSystemEditor() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [isDirty]);
 
-  // Escape returns to list (confirms when dirty via handleBack)
+  // Escape returns to list (confirms when dirty via handleBack).
+  // Ignore when a nested dialog already handled Escape, or while still loading.
   useEffect(() => {
+    if (!ds) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // Don't fight Cmd/Ctrl+S handler; Escape alone navigates back
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
       handleBack();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleBack]);
+  }, [handleBack, ds]);
 
   if (!ds) {
     return (

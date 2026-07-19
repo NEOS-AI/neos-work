@@ -225,28 +225,36 @@ export function validateWorkflowDraft(input: {
 
     if (node.type === 'discord_message') {
       const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      // NodeConfigPanel stores template as textTemplate (also accept content/text)
       const hasStatic =
-        (typeof config.content === 'string' && config.content.trim().length > 0)
+        (typeof config.textTemplate === 'string' && config.textTemplate.trim().length > 0)
+        || (typeof config.content === 'string' && config.content.trim().length > 0)
         || (typeof config.text === 'string' && config.text.trim().length > 0);
       if (!hasIncoming && !hasStatic) {
         issues.push({
           code: 'missing_discord_content',
           severity: 'warning',
           nodeId: node.id,
-          message: 'Discord node has no content/text or upstream input.',
+          message: 'Discord node has no text template or upstream input.',
         });
       }
     }
 
     if (node.type === 'media') {
-      const hasPrompt = typeof config.prompt === 'string' && config.prompt.trim().length > 0;
       const hasIncoming = input.edges.some((edge) => edge.target === node.id);
-      if (!hasPrompt && !hasIncoming) {
+      const isAudio = config.mediaType === 'audio';
+      // Image uses `prompt`; TTS audio uses `text` (NodeConfigPanel)
+      const hasBody = isAudio
+        ? typeof config.text === 'string' && config.text.trim().length > 0
+        : typeof config.prompt === 'string' && config.prompt.trim().length > 0;
+      if (!hasBody && !hasIncoming) {
         issues.push({
           code: 'missing_media_prompt',
           severity: 'warning',
           nodeId: node.id,
-          message: 'Media node has no prompt or upstream input.',
+          message: isAudio
+            ? 'Media audio node has no text or upstream input.'
+            : 'Media node has no prompt or upstream input.',
         });
       }
     }
@@ -401,8 +409,15 @@ export function validateWorkflowDraft(input: {
       message: `Workflow has ${triggerCount} trigger nodes; only one start trigger is recommended.`,
     });
   }
-  if (!input.nodes.some((node) => node.type === 'output')) {
+  const outputCount = input.nodes.filter((node) => node.type === 'output').length;
+  if (outputCount === 0) {
     issues.push({ code: 'no_output', severity: 'warning', message: 'Workflow has no output node.' });
+  } else if (outputCount > 1) {
+    issues.push({
+      code: 'multiple_outputs',
+      severity: 'warning',
+      message: `Workflow has ${outputCount} output nodes; a single terminal output is recommended.`,
+    });
   }
 
   // parallel_start without a join (parallel_end / or_gate / gate_or / gate_and) is a structural warning

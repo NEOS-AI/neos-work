@@ -174,9 +174,15 @@ export function WorkflowEditor() {
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>(() => loadLayoutDirection());
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
-  const setRightPanelTab = useCallback((tab: RightPanelTab) => {
+  /** User-initiated tab choice — persists across reloads. */
+  const selectRightPanelTab = useCallback((tab: RightPanelTab) => {
     setRightPanelTabState(tab);
     saveEditorRightPanelTab(tab);
+  }, []);
+
+  /** Transient tab switch (run / validation / preview) — does not overwrite prefs. */
+  const showRightPanelTab = useCallback((tab: RightPanelTab) => {
+    setRightPanelTabState(tab);
   }, []);
 
   const stopRef = useRef<(() => void) | null>(null);
@@ -325,13 +331,13 @@ export function WorkflowEditor() {
       setSavedDraft(draft);
     }
     setSaving(false);
-    if (validationIssues.length > 0) setRightPanelTab('config');
+    if (validationIssues.length > 0) showRightPanelTab('config');
   };
 
   const handleRun = async (inputs?: Record<string, unknown>) => {
     if (!client || !workflow) return;
     if (hasValidationErrors) {
-      setRightPanelTab('config');
+      showRightPanelTab('config');
       return;
     }
     // Soft preflight: block hard errors unless user confirms (plan polish)
@@ -345,7 +351,7 @@ export function WorkflowEditor() {
             `Preflight found ${errs.length} issue(s):\n\n${msg}\n\nRun anyway?`,
           );
           if (!proceed) {
-            setRightPanelTab('config');
+            showRightPanelTab('config');
             return;
           }
         }
@@ -359,7 +365,7 @@ export function WorkflowEditor() {
       setSavedDraft(draft);
     }
     setIsRunning(true);
-    setRightPanelTab('run');
+    showRightPanelTab('run');
     setRunEvents([]);
     setRunStatuses({});
     const stop = client.runWorkflow(workflow.id, (event) => {
@@ -387,7 +393,7 @@ export function WorkflowEditor() {
         setHistoryRefreshKey((key) => key + 1);
         if ((event as { artifactId?: string }).artifactId) {
           setLatestArtifactId((event as { artifactId?: string }).artifactId);
-          setRightPanelTab('preview');
+          showRightPanelTab('preview');
         }
       }
       if (event.type === 'run.failed') {
@@ -504,7 +510,7 @@ export function WorkflowEditor() {
         {validationSummary.total > 0 && (
           <button
             type="button"
-            onClick={() => setRightPanelTab('config')}
+            onClick={() => selectRightPanelTab('config')}
             className="rounded-lg px-2.5 py-1.5 text-[10px] font-medium"
             style={{
               backgroundColor: validationSummary.errors > 0 ? '#7f1d1d40' : 'var(--bg-tertiary)',
@@ -660,7 +666,8 @@ export function WorkflowEditor() {
             nodeTypes={customNodeTypes}
             onNodeClick={(_, node) => {
               setSelectedNodeId(node.id);
-              setRightPanelTab('config');
+              // Selecting a node should surface config without rewriting the saved default tab
+              showRightPanelTab('config');
             }}
             fitView
           >
@@ -676,7 +683,7 @@ export function WorkflowEditor() {
             {EDITOR_RIGHT_PANEL_TABS.map((tab) => (
               <button
                 key={tab}
-                onClick={() => setRightPanelTab(tab)}
+                onClick={() => selectRightPanelTab(tab)}
                 className="flex-1 px-2 py-2 text-xs font-medium"
                 style={{
                   color: rightPanelTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -720,7 +727,7 @@ export function WorkflowEditor() {
                 latestArtifactId={latestArtifactId}
                 isRunning={isRunning}
                 onRerunWorkflow={() => {
-                  setRightPanelTab('run');
+                  showRightPanelTab('run');
                   void handleRun();
                 }}
               />

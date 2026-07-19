@@ -128,7 +128,7 @@ export function Skills() {
     if (categoryFilter === 'all' || categories.includes(categoryFilter)) return;
     setCategoryFilter('all');
     saveSkillsCategoryFilter('all');
-  }, [skills.length, categories, categoryFilter]);
+  }, [skills.length, categoryFilter, categories]);
 
   const activeCategory =
     categoryFilter === 'all' || categories.includes(categoryFilter) ? categoryFilter : 'all';
