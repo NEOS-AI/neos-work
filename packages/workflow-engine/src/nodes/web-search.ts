@@ -3,6 +3,7 @@
  */
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
+import { resolveMaxResults, resolveSearchQuery } from './message-text.js';
 
 interface TavilyResult {
   title: string;
@@ -21,16 +22,18 @@ export class WebSearchNode implements ExecutableNode {
       return { ok: false, output: null, error: 'TAVILY_API_KEY not set', durationMs: 0 };
     }
 
-    const query = String(ctx.inputs['query'] ?? ctx.inputs['text'] ?? '');
+    const query = resolveSearchQuery(ctx.config, ctx.inputs);
     if (!query) {
       return { ok: false, output: null, error: 'No query provided', durationMs: 0 };
     }
+
+    const maxResults = resolveMaxResults(ctx.config, 5);
 
     try {
       const res = await fetch('https://api.tavily.com/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: apiKey, query, max_results: 5 }),
+        body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
       });
 

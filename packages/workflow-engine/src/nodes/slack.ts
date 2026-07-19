@@ -5,6 +5,7 @@
 
 import { WebClient } from '@slack/web-api';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
+import { resolveMessageText } from './message-text.js';
 
 export class SlackMessageNode implements ExecutableNode {
   type = 'slack_message' as const;
@@ -17,10 +18,14 @@ export class SlackMessageNode implements ExecutableNode {
     }
 
     const channel = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '');
-    const text = String(ctx.inputs['text'] ?? JSON.stringify(ctx.inputs));
+    const text = resolveMessageText(ctx.config, ctx.inputs);
 
     if (!channel) {
       return { ok: false, output: null, error: 'Slack channel not specified', durationMs: 0 };
+    }
+
+    if (!text.trim()) {
+      return { ok: false, output: null, error: 'Slack message text is empty', durationMs: 0 };
     }
 
     try {

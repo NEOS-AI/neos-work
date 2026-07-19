@@ -184,6 +184,17 @@ export function validateWorkflowDraft(input: {
           message: 'Agent node has no upstream connection.',
         });
       }
+      if (config.maxSteps !== undefined && config.maxSteps !== null && config.maxSteps !== '') {
+        const n = typeof config.maxSteps === 'number' ? config.maxSteps : Number(config.maxSteps);
+        if (!Number.isInteger(n) || n < 1) {
+          issues.push({
+            code: 'invalid_agent_max_steps',
+            severity: 'warning',
+            nodeId: node.id,
+            message: 'Agent max steps should be a positive integer.',
+          });
+        }
+      }
     }
 
     if (node.type === 'web_search') {
@@ -196,6 +207,20 @@ export function validateWorkflowDraft(input: {
           nodeId: node.id,
           message: 'Web Search has no query or upstream input.',
         });
+      }
+      // NodeConfig Max results is 1–20 (Tavily clamp)
+      if (config.maxResults !== undefined && config.maxResults !== null && config.maxResults !== '') {
+        const n = typeof config.maxResults === 'number'
+          ? config.maxResults
+          : Number(config.maxResults);
+        if (!Number.isInteger(n) || n < 1 || n > 20) {
+          issues.push({
+            code: 'invalid_web_search_max_results',
+            severity: 'warning',
+            nodeId: node.id,
+            message: 'Web Search max results should be an integer from 1 to 20.',
+          });
+        }
       }
     }
 
@@ -241,6 +266,21 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'media') {
+      const mediaType = config.mediaType;
+      if (
+        mediaType !== undefined
+        && mediaType !== null
+        && mediaType !== ''
+        && mediaType !== 'image'
+        && mediaType !== 'audio'
+      ) {
+        issues.push({
+          code: 'invalid_media_type',
+          severity: 'error',
+          nodeId: node.id,
+          message: 'Media type must be image or audio.',
+        });
+      }
       const hasIncoming = input.edges.some((edge) => edge.target === node.id);
       const isAudio = config.mediaType === 'audio';
       // Image uses `prompt`; TTS audio uses `text` (NodeConfigPanel)

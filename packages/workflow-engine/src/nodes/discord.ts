@@ -5,6 +5,7 @@
  */
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
+import { resolveMessageText } from './message-text.js';
 
 const DISCORD_WEBHOOK_PREFIX = 'https://discord.com/api/webhooks/';
 
@@ -28,7 +29,10 @@ export class DiscordMessageNode implements ExecutableNode {
       };
     }
 
-    const content = String(ctx.inputs['text'] ?? JSON.stringify(ctx.inputs));
+    const content = resolveMessageText(ctx.config, ctx.inputs);
+    if (!content.trim()) {
+      return { ok: false, output: null, error: 'Discord message content is empty', durationMs: 0 };
+    }
 
     try {
       const res = await fetch(webhookUrl, {

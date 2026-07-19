@@ -19,6 +19,7 @@ export const DEPLOYMENT_PROVIDER_FILTERS: readonly DeploymentProviderFilter[] = 
 
 const STATUS_KEY = 'neos-deployments-status';
 const PROVIDER_KEY = 'neos-deployments-provider';
+const WORKFLOW_KEY = 'neos-deployments-workflow';
 
 export function loadDeploymentStatusFilter(): DeploymentStatusFilter {
   try {
@@ -68,6 +69,27 @@ export function saveDeploymentProviderFilter(provider: DeploymentProviderFilter)
   try {
     if (provider === 'all' || provider === 'vercel' || provider === 'cloudflare') {
       localStorage.setItem(PROVIDER_KEY, provider);
+    }
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/** Persist Deployments workflow dropdown (empty string = all workflows). */
+export function loadDeploymentWorkflowFilter(): string {
+  try {
+    return localStorage.getItem(WORKFLOW_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveDeploymentWorkflowFilter(workflowId: string): void {
+  try {
+    if (!workflowId) {
+      localStorage.removeItem(WORKFLOW_KEY);
+    } else {
+      localStorage.setItem(WORKFLOW_KEY, workflowId);
     }
   } catch {
     // ignore quota / private mode

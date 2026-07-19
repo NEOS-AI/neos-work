@@ -8,8 +8,10 @@ import {
   DEPLOYMENT_STATUS_FILTERS,
   loadDeploymentProviderFilter,
   loadDeploymentStatusFilter,
+  loadDeploymentWorkflowFilter,
   saveDeploymentProviderFilter,
   saveDeploymentStatusFilter,
+  saveDeploymentWorkflowFilter,
   type DeploymentProviderFilter,
   type DeploymentStatusFilter,
 } from '../lib/deployment-filter-prefs.js';
@@ -30,7 +32,7 @@ export function Deployments() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [workflows, setWorkflows] = useState<Record<string, Workflow>>({});
   const [loading, setLoading] = useState(true);
-  const [filterWorkflowId, setFilterWorkflowId] = useState('');
+  const [filterWorkflowId, setFilterWorkflowId] = useState(() => loadDeploymentWorkflowFilter());
   const [statusFilter, setStatusFilter] = useState<DeploymentStatusFilter>(() => loadDeploymentStatusFilter());
   const [providerFilter, setProviderFilter] = useState<DeploymentProviderFilter>(() =>
     loadDeploymentProviderFilter(),
@@ -46,6 +48,11 @@ export function Deployments() {
   const handleProviderFilter = (provider: DeploymentProviderFilter) => {
     setProviderFilter(provider);
     saveDeploymentProviderFilter(provider);
+  };
+
+  const handleWorkflowFilter = (workflowId: string) => {
+    setFilterWorkflowId(workflowId);
+    saveDeploymentWorkflowFilter(workflowId);
   };
 
   const visibleDeployments = useMemo(() => {
@@ -84,6 +91,11 @@ export function Deployments() {
       const map: Record<string, Workflow> = {};
       for (const w of wRes.data) map[w.id] = w;
       setWorkflows(map);
+      // Drop stale persisted workflow filter when the workflow no longer exists
+      if (filterWorkflowId && !map[filterWorkflowId]) {
+        setFilterWorkflowId('');
+        saveDeploymentWorkflowFilter('');
+      }
     }
     setLoading(false);
   }, [client, filterWorkflowId]);
@@ -163,7 +175,7 @@ export function Deployments() {
           />
           <select
             value={filterWorkflowId}
-            onChange={(e) => setFilterWorkflowId(e.target.value)}
+            onChange={(e) => handleWorkflowFilter(e.target.value)}
             className="rounded-lg border px-3 py-1.5 text-sm outline-none"
             style={{
               borderColor: 'var(--border-secondary)',
