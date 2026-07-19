@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   DISCORD_CONTENT_MAX_LENGTH,
+  isMediaImageQuality,
   isMediaImageSize,
   isMediaVoice,
   isValidDeployProjectName,
+  MEDIA_IMAGE_QUALITIES,
   MEDIA_IMAGE_SIZES,
   MEDIA_VOICES,
   SLACK_CONTENT_MAX_LENGTH,
 } from './media-node-options.js';
 
 describe('media-node-options', () => {
-  it('exposes stable size and voice catalogs', () => {
+  it('exposes stable size, voice, and quality catalogs', () => {
     expect([...MEDIA_IMAGE_SIZES]).toEqual(['1024x1024', '1792x1024', '1024x1792']);
     expect([...MEDIA_VOICES]).toEqual(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
+    expect([...MEDIA_IMAGE_QUALITIES]).toEqual(['standard', 'hd']);
     expect(DISCORD_CONTENT_MAX_LENGTH).toBe(2000);
     expect(SLACK_CONTENT_MAX_LENGTH).toBe(4000);
   });
@@ -35,6 +38,17 @@ describe('media-node-options', () => {
     expect(isMediaVoice('robot')).toBe(false);
     expect(isMediaVoice('Alloy')).toBe(false);
     expect(isMediaVoice(0)).toBe(false);
+  });
+
+  it('validates image quality', () => {
+    for (const q of MEDIA_IMAGE_QUALITIES) {
+      expect(isMediaImageQuality(q)).toBe(true);
+    }
+    expect(isMediaImageQuality('ultra')).toBe(false);
+    expect(isMediaImageQuality('HD')).toBe(false);
+    expect(isMediaImageQuality('')).toBe(false);
+    expect(isMediaImageQuality(null)).toBe(false);
+    expect(isMediaImageQuality(1)).toBe(false);
   });
 
   it('validates deploy project names', () => {

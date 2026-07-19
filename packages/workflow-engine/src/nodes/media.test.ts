@@ -113,15 +113,19 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/No prompt/);
   });
 
-  it('falls back invalid size and voice to defaults', async () => {
+  it('falls back invalid size, quality, and voice to defaults', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'x.png' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
     await MediaNode.execute(
-      ctx({ config: { mediaType: 'image', prompt: 'p', size: '512x512' } }),
+      ctx({
+        config: { mediaType: 'image', prompt: 'p', size: '512x512', quality: 'ultra' },
+      }),
     );
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).size).toBe('1024x1024');
+    const imgBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(imgBody.size).toBe('1024x1024');
+    expect(imgBody.quality).toBe('standard');
 
     fetchMock.mockClear();
     fetchMock.mockResolvedValue({
@@ -131,6 +135,17 @@ describe('MediaNode', () => {
       ctx({ config: { mediaType: 'audio', text: 'hi', voice: 'robot' } }),
     );
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).voice).toBe('alloy');
+  });
+
+  it('preserves valid image quality hd', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'hd.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'p', quality: 'hd' } }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).quality).toBe('hd');
   });
 
   it('surfaces network failures for image generation', async () => {

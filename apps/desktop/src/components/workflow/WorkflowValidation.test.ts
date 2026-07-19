@@ -452,6 +452,162 @@ describe('validateWorkflowDraft happy paths', () => {
   });
 });
 
+describe('validateWorkflowDraft agent/media/param polish (v0.3.45)', () => {
+  it('warns missing_llm_model for non-CLI agents without model', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_llm_model' && i.nodeId === 'a')).toBe(true);
+  });
+
+  it('does not warn missing_llm_model for CLI agents or when model set', () => {
+    for (const llmProvider of ['cli-claude', 'cli-gemini', 'cli-codex']) {
+      const cli = validateWorkflowDraft({
+        nodes: [
+          {
+            id: 'a',
+            type: 'agent_coding',
+            label: 'CLI',
+            config: { llmProvider },
+          },
+        ],
+        edges: [],
+        blocks: emptyBlocks,
+      });
+      expect(cli.some((i) => i.code === 'missing_llm_model')).toBe(false);
+    }
+
+    const withModel = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', llmModel: 'claude-sonnet-4' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(withModel.some((i) => i.code === 'missing_llm_model')).toBe(false);
+
+    // Accept legacy `model` alias
+    const withAlias = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_finance',
+          label: 'Agent',
+          config: { harnessId: 'h1', model: 'gpt-4o' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(withAlias.some((i) => i.code === 'missing_llm_model')).toBe(false);
+  });
+
+  it('treats whitespace-only llmModel as missing', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', llmModel: '   ' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_llm_model' && i.nodeId === 'a')).toBe(true);
+  });
+
+  it('warns invalid_media_quality only for image with bad quality', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'x', quality: 'ultra' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'invalid_media_quality')).toBe(true);
+
+    const ok = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'x', quality: 'hd' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(ok.some((i) => i.code === 'invalid_media_quality')).toBe(false);
+
+    // quality on audio is ignored
+    const audio = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 'hi', quality: 'ultra' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(audio.some((i) => i.code === 'invalid_media_quality')).toBe(false);
+  });
+
+  it('treats whitespace-only required block params as missing', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'b',
+          type: 'block',
+          label: 'B',
+          config: { blockId: 'blk1', params: { url: '   ' } },
+        },
+      ],
+      edges: [],
+      blocks: [{ id: 'blk1', paramDefs: [{ key: 'url', type: 'string', label: 'URL' }] }],
+    });
+    expect(issues.some((i) => i.code === 'missing_required_block_param' && i.nodeId === 'b')).toBe(true);
+
+    const filled = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'b',
+          type: 'block',
+          label: 'B',
+          config: { blockId: 'blk1', params: { url: 'https://example.com' } },
+        },
+      ],
+      edges: [],
+      blocks: [{ id: 'blk1', paramDefs: [{ key: 'url', type: 'string', label: 'URL' }] }],
+    });
+    expect(filled.some((i) => i.code === 'missing_required_block_param')).toBe(false);
+  });
+});
+
 describe('validateWorkflowDraft parallel/slack polish (v0.3.44)', () => {
   it('warns parallel_missing_start when Parallel End has no Parallel Start', () => {
     const issues = validateWorkflowDraft({
