@@ -59,6 +59,25 @@ describe('PipelineRunner', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('Escape preventDefault so stacked listeners do not double-fire', () => {
+    const onClose = vi.fn();
+    render(<PipelineRunner plugin={plugin} onClose={onClose} />);
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    window.dispatchEvent(e);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('ignores Escape when defaultPrevented is already set', () => {
+    const onClose = vi.fn();
+    render(<PipelineRunner plugin={plugin} onClose={onClose} />);
+    const stop = (ev: KeyboardEvent) => ev.preventDefault();
+    window.addEventListener('keydown', stop, true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    window.removeEventListener('keydown', stop, true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('starts pipeline and shows stages from events', async () => {
     const user = userEvent.setup();
     let onEvent: ((e: unknown) => void) | null = null;

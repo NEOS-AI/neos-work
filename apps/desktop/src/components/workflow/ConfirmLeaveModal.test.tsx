@@ -39,4 +39,23 @@ describe('ConfirmLeaveModal', () => {
     await user.keyboard('{Escape}');
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it('Escape preventDefault so stacked listeners do not double-fire', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmLeaveModal onConfirm={() => {}} onCancel={onCancel} />);
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    window.dispatchEvent(e);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('ignores Escape when defaultPrevented is already set', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmLeaveModal onConfirm={() => {}} onCancel={onCancel} />);
+    const stop = (ev: KeyboardEvent) => ev.preventDefault();
+    window.addEventListener('keydown', stop, true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    window.removeEventListener('keydown', stop, true);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });

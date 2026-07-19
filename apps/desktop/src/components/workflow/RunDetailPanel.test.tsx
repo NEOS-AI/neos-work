@@ -134,6 +134,29 @@ describe('RunDetailPanel', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('Escape preventDefault so stacked listeners do not double-fire', () => {
+    const onClose = vi.fn();
+    render(
+      <RunDetailPanel workflowId="wf-1" runId="run-1" onClose={onClose} />,
+    );
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    window.dispatchEvent(e);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('ignores Escape when defaultPrevented is already set', () => {
+    const onClose = vi.fn();
+    render(
+      <RunDetailPanel workflowId="wf-1" runId="run-1" onClose={onClose} />,
+    );
+    const stop = (ev: KeyboardEvent) => ev.preventDefault();
+    window.addEventListener('keydown', stop, true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    window.removeEventListener('keydown', stop, true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('Escape calls onClose', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
