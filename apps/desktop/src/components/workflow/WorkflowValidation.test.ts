@@ -587,6 +587,22 @@ describe('validateWorkflowDraft media/deploy/discord polish (v0.3.42)', () => {
     });
     expect(atLimit.some((i) => i.code === 'discord_content_too_long')).toBe(false);
   });
+
+  it('detects long discord content even when textTemplate is blank whitespace', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'discord_message',
+          label: 'D',
+          config: { textTemplate: '   ', content: 'y'.repeat(2001) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'discord_content_too_long')).toBe(true);
+  });
 });
 
 describe('validateWorkflowDraft config bounds (v0.3.41)', () => {

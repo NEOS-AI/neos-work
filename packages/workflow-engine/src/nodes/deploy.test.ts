@@ -26,6 +26,14 @@ describe('DeployNode', () => {
     expect(result.error).toMatch(/No content/);
   });
 
+  it('fails when content is whitespace-only', async () => {
+    const result = await DeployNode.execute(
+      ctx({ config: { provider: 'vercel', projectName: 'x', content: '   ' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/No content/);
+  });
+
   it('posts deploy payload with workflow metadata', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { url: 'https://demo.vercel.app', deploymentId: 'd1' } }),
