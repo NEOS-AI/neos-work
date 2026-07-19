@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { listHarnesses, registerHarness, resolveHarness } from './index.js';
+import { CODING_HARNESSES } from './coding.js';
+import { FINANCE_HARNESSES } from './finance.js';
 import type { AgentHarness } from '@neos-work/shared';
 
 describe('harness registry', () => {
@@ -63,6 +65,33 @@ describe('built-in coding and finance harness catalogs', () => {
       expect(h.outputSchema?.type).toBe('object');
       expect(Array.isArray(h.outputSchema?.required)).toBe(true);
     }
+  });
+
+  it('exports coding harness catalog modules with fixed ids and tools', () => {
+    expect(CODING_HARNESSES).toHaveLength(3);
+    expect(CODING_HARNESSES.map((h) => h.id)).toEqual([
+      'coding_reviewer',
+      'coding_test_writer',
+      'coding_refactor',
+    ]);
+    expect(CODING_HARNESSES.every((h) => h.domain === 'coding' && h.isBuiltIn)).toBe(true);
+    expect(CODING_HARNESSES[0]!.allowedTools).toEqual(
+      expect.arrayContaining(['read_file', 'list_files', 'shell']),
+    );
+    expect(CODING_HARNESSES[0]!.outputSchema?.required).toEqual(
+      expect.arrayContaining(['score', 'issues', 'suggestions', 'summary']),
+    );
+  });
+
+  it('exports finance harness catalog modules with schemas and constraints', () => {
+    expect(FINANCE_HARNESSES).toHaveLength(2);
+    expect(FINANCE_HARNESSES.map((h) => h.id)).toEqual(['finance_analyst', 'finance_risk']);
+    expect(FINANCE_HARNESSES.every((h) => h.domain === 'finance' && h.isBuiltIn)).toBe(true);
+    expect(FINANCE_HARNESSES[0]!.constraints?.maxSteps).toBe(10);
+    expect(FINANCE_HARNESSES[1]!.constraints?.maxSteps).toBe(12);
+    expect(FINANCE_HARNESSES[1]!.outputSchema?.required).toEqual(
+      expect.arrayContaining(['riskLevel', 'factors', 'mitigations', 'recommendation']),
+    );
   });
 
   it('has unique harness ids across all domains', () => {

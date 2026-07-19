@@ -135,6 +135,16 @@ describe('RunDetailPanel', () => {
   });
 
   it('Escape preventDefault so stacked listeners do not double-fire', () => {
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-1',
+        workflowId: 'wf-1',
+        status: 'completed',
+        nodeResults: {},
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
     const onClose = vi.fn();
     render(
       <RunDetailPanel workflowId="wf-1" runId="run-1" onClose={onClose} />,
@@ -146,6 +156,16 @@ describe('RunDetailPanel', () => {
   });
 
   it('ignores Escape when defaultPrevented is already set', () => {
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-1',
+        workflowId: 'wf-1',
+        status: 'completed',
+        nodeResults: {},
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
     const onClose = vi.fn();
     render(
       <RunDetailPanel workflowId="wf-1" runId="run-1" onClose={onClose} />,

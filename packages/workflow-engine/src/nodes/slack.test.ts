@@ -105,4 +105,26 @@ describe('SlackMessageNode', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/ok=false/);
   });
+
+  it('rejects content longer than 4000 characters', async () => {
+    const result = await node.execute(
+      ctx(
+        { SLACK_BOT_TOKEN: 'xoxb-test' },
+        { channel: '#x', textTemplate: 'z'.repeat(4001) },
+        {},
+      ),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/4000/);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('allows content at the 4000 character limit', async () => {
+    const body = 'w'.repeat(4000);
+    const result = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#x', textTemplate: body }, {}),
+    );
+    expect(result.ok).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith({ channel: '#x', text: body });
+  });
 });

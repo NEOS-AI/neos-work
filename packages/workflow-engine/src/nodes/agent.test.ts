@@ -1,6 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const orchestratorCtor = vi.fn();
+const orchestratorRun = vi.fn(async function* () {
+  yield { type: 'done', task: { steps: [] } };
+});
+
 vi.mock('@neos-work/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@neos-work/core')>();
   return {
@@ -9,8 +13,8 @@ vi.mock('@neos-work/core', async (importOriginal) => {
       constructor(...args: unknown[]) {
         orchestratorCtor(...args);
       }
-      async *run() {
-        yield { type: 'done', task: { steps: [] } };
+      run(...args: unknown[]) {
+        return orchestratorRun(...args);
       }
     },
   };
@@ -112,6 +116,14 @@ describe('AgentNode CLI provider', () => {
 describe('AgentNode LLM model selection', () => {
   beforeEach(() => {
     orchestratorCtor.mockClear();
+    orchestratorRun.mockReset();
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'done', task: { steps: [] } };
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('passes model to AgentOrchestrator from settings.model', async () => {
@@ -181,6 +193,34 @@ describe('AgentNode LLM model selection', () => {
     expect(opts?.model).toBe('gpt-4o-mini');
   });
 
+  it('builds ollama adapter when node provider is ollama', async () => {
+    const node = new AgentNode('agent_coding', { llmProvider: 'ollama', llmModel: 'llama3' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          OLLAMA_BASE_URL: 'http://127.0.0.1:11434',
+        },
+      }),
+    );
+    const adapter = orchestratorCtor.mock.calls[0]?.[0] as { id?: string };
+    expect(adapter?.id).toBe('ollama');
+  });
+
+  it('builds google adapter when node provider is google', async () => {
+    const node = new AgentNode('agent_coding', { llmProvider: 'google', llmModel: 'gemini-pro' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          GOOGLE_API_KEY: 'g-key',
+        },
+      }),
+    );
+    const adapter = orchestratorCtor.mock.calls[0]?.[0] as { id?: string };
+    expect(adapter?.id).toBe('google');
+  });
+
   it('clamps node maxSteps to 1–200 when harness has no constraint', async () => {
     const node = new AgentNode('agent_coding', { maxSteps: 999 });
     await node.execute(
@@ -201,6 +241,119 @@ describe('AgentNode LLM model selection', () => {
     );
     const opts = orchestratorCtor.mock.calls[0]?.[2] as { maxIterations?: number };
     expect(opts?.maxIterations).toBe(20);
+  });
+
+  it('prefers harness maxSteps over node config', async () => {
+    // coding_reviewer constraints.maxSteps = 15
+    const node = new AgentNode('agent_coding', {
+      harnessId: 'coding_reviewer',
+      maxSteps: 99,
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { maxIterations?: number };
+    expect(opts?.maxIterations).toBe(15);
+  });
+
+  it('returns error when anthropic key is missing', async () => {
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(ctx({ settings: {} }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/ANTHROPIC_API_KEY/);
+  });
+
+  it('injects memory export into the orchestrator goal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => 'remember the API shape',
+      }),
+    );
+    const node = new AgentNode('agent_coding', { systemPrompt: 'You are helpful.' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: 'http://memory.test',
+          AUTH_TOKEN: 'tok',
+        },
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      'http://memory.test/api/memory/export',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer tok' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('## Agent Memory');
+    expect(goal).toContain('remember the API shape');
+    expect(goal).toContain('You are helpful.');
+  });
+
+  it('keeps base prompt when memory export fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const node = new AgentNode('agent_coding', { systemPrompt: 'Base only' });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('Base only');
+    expect(goal).not.toContain('## Agent Memory');
+  });
+
+  it('prepends design system content on the LLM path', async () => {
+    const node = new AgentNode('agent_coding', { systemPrompt: 'Agent body' });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        designSystemContent: 'Use brand blue',
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('<!-- DESIGN CONTEXT -->');
+    expect(goal).toContain('Use brand blue');
+    expect(goal).toContain('Agent body');
+  });
+
+  it('forwards text progress and returns done output', async () => {
+    const onProgress = vi.fn();
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'text', content: 'hel' };
+      yield { type: 'text', content: 'lo' };
+      yield { type: 'done', task: { steps: [{ output: 'unused' }] } };
+    });
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        onProgress,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('hello');
+    expect(onProgress).toHaveBeenCalledWith('hel', 'hel');
+    expect(onProgress).toHaveBeenCalledWith('lo', 'hello');
+  });
+
+  it('returns orchestrator error events as failures', async () => {
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'error', error: 'rate limited' };
+    });
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('rate limited');
   });
 });
 

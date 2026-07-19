@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DISCORD_CONTENT_MAX_LENGTH,
   resolveMaxResults,
   resolveMessageText,
   resolveSearchQuery,
+  SLACK_CONTENT_MAX_LENGTH,
 } from './message-text.js';
+
+describe('message content limits', () => {
+  it('exports Discord/Slack hard limits aligned with desktop validation', () => {
+    expect(DISCORD_CONTENT_MAX_LENGTH).toBe(2000);
+    expect(SLACK_CONTENT_MAX_LENGTH).toBe(4000);
+  });
+});
 
 describe('resolveMessageText', () => {
   it('prefers textTemplate over content/text and interpolates placeholders', () => {

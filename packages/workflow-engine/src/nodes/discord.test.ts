@@ -84,4 +84,36 @@ describe('DiscordMessageNode', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/empty/i);
   });
+
+  it('rejects content longer than 2000 characters', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx(
+        { DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' },
+        {},
+        { textTemplate: 'x'.repeat(2001) },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/2000/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('allows content at the 2000 character limit', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new DiscordMessageNode();
+    const body = 'y'.repeat(2000);
+    const result = await node.execute(
+      makeCtx(
+        { DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' },
+        {},
+        { textTemplate: body },
+      ),
+    );
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ content: body });
+  });
 });

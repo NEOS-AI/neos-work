@@ -294,4 +294,69 @@ describe('RevisionPanel', () => {
     });
   });
 
+  it('Escape preventDefault so stacked listeners do not double-fire', async () => {
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    window.dispatchEvent(e);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('ignores Escape when defaultPrevented is already set', async () => {
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Snap A')).toBeInTheDocument();
+    });
+
+    const stop = (ev: KeyboardEvent) => ev.preventDefault();
+    window.addEventListener('keydown', stop, true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    window.removeEventListener('keydown', stop, true);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
 });

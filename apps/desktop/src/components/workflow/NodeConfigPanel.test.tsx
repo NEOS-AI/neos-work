@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Node } from '@xyflow/react';
 import { NodeConfigPanel } from './NodeConfigPanel.js';
@@ -281,6 +281,114 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByDisplayValue('hello world')).toBeInTheDocument();
     expect(screen.getByText('Voice')).toBeInTheDocument();
     expect(screen.getByText(/Requires OPENAI_API_KEY/i)).toBeInTheDocument();
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+  });
+
+  it('patches agent maxSteps via NumberField (1–200)', async () => {
+    const onPatchNodeData = vi.fn();
+    const node = {
+      id: 'a3',
+      type: 'agent_coding',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent_coding',
+        label: 'Agent',
+        config: { llmProvider: 'anthropic', maxSteps: 10 },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    expect(screen.getByText('Max steps')).toBeInTheDocument();
+    const steps = screen.getByDisplayValue('10');
+    // Controlled value is not re-rendered from the mock parent; fire a single change.
+    fireEvent.change(steps, { target: { value: '25' } });
+    expect(onPatchNodeData).toHaveBeenCalled();
+    const last = onPatchNodeData.mock.calls.at(-1)?.[1] as { config?: { maxSteps?: number } };
+    expect(last?.config?.maxSteps).toBe(25);
+  });
+
+  it('renders image quality select and patches quality', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    const mediaNode = {
+      id: 'm3',
+      type: 'media',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'media',
+        label: 'Img',
+        config: { mediaType: 'image', prompt: 'cat', quality: 'standard' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={mediaNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    expect(screen.getByText('Quality')).toBeInTheDocument();
+    const quality = screen.getByDisplayValue('standard');
+    await user.selectOptions(quality, 'hd');
+    expect(onPatchNodeData).toHaveBeenCalled();
+    const last = onPatchNodeData.mock.calls.at(-1)?.[1] as { config?: { quality?: string } };
+    expect(last?.config?.quality).toBe('hd');
+  });
+
+  it('renders TTS model select and patches model for audio media', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    const audio = {
+      id: 'm4',
+      type: 'media',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'media',
+        label: 'TTS',
+        config: { mediaType: 'audio', text: 'hi', model: 'tts-1' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={audio}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    expect(screen.getByText('TTS model')).toBeInTheDocument();
+    const model = screen.getByDisplayValue('tts-1');
+    await user.selectOptions(model, 'tts-1-hd');
+    const last = onPatchNodeData.mock.calls.at(-1)?.[1] as { config?: { model?: string } };
+    expect(last?.config?.model).toBe('tts-1-hd');
+  });
+
+  it('renders discord message fields', async () => {
+    const discord = {
+      id: 'dc1',
+      type: 'discord_message',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'discord_message',
+        label: 'Discord',
+        config: { textTemplate: 'ping' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel selectedNode={discord} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByDisplayValue('ping')).toBeInTheDocument();
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
   });
 });
