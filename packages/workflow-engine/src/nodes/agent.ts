@@ -124,15 +124,26 @@ export class AgentNode implements ExecutableNode {
     }
 
     try {
-      const adapter = buildAdapter(ctx.settings);
+      // Prefer node-level llmProvider (NodeConfigPanel), then execution settings
+      const nodeProvider = (this.nodeConfig?.['llmProvider'] ?? this.nodeConfig?.['provider']) as
+        | string
+        | undefined;
+      const adapterSettings =
+        nodeProvider && !nodeProvider.startsWith('cli-')
+          ? { ...ctx.settings, llmProvider: nodeProvider }
+          : ctx.settings;
+      const adapter = buildAdapter(adapterSettings);
       const toolRegistry = buildToolRegistry(toolFilter, ctx.settings);
-      // Prefer node config model, then settings.model (defaults.model), else adapter default
-      const model =
-        (typeof this.nodeConfig?.['model'] === 'string' && this.nodeConfig['model'])
-        || (ctx.settings['model'] || undefined);
+      // Prefer NodeConfig `llmModel` (panel field), then legacy `model`, then settings defaults
+      const rawModel =
+        (typeof this.nodeConfig?.['llmModel'] === 'string' && this.nodeConfig['llmModel'].trim())
+        || (typeof this.nodeConfig?.['model'] === 'string' && this.nodeConfig['model'].trim())
+        || (typeof ctx.settings['model'] === 'string' && ctx.settings['model'].trim())
+        || '';
+      const model = rawModel || undefined;
       const orchestrator = new AgentOrchestrator(adapter, toolRegistry, {
         maxIterations,
-        model: model || undefined,
+        model,
       });
 
       const goal = systemPrompt

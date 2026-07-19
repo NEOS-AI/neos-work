@@ -155,8 +155,9 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               className="w-full rounded border px-2 py-1.5 text-xs"
               style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
               value={typeof config.llmModel === 'string' ? config.llmModel : ''}
-              onChange={(e) => patchConfig({ llmModel: e.target.value })}
+              onChange={(e) => patchConfig({ llmModel: e.target.value || undefined })}
             >
+              <option value="">Select model…</option>
               {(() => {
                 const provider = typeof config.llmProvider === 'string' ? config.llmProvider : 'anthropic';
                 const modelsMap: Record<string, { id: string; name: string }[]> = {

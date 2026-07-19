@@ -33,12 +33,12 @@ export function DesignSystems() {
 
   useEffect(() => { load(); }, [load]);
 
-  const cancelCreate = () => {
+  const cancelCreate = useCallback(() => {
     setIsCreating(false);
     setNewName('');
     setNewDescription('');
     setCreateError(null);
-  };
+  }, []);
 
   // Escape: cancel create form first, otherwise clear search (list filter hygiene).
   useEffect(() => {
@@ -53,7 +53,7 @@ export function DesignSystems() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isCreating, search]);
+  }, [isCreating, search, cancelCreate]);
 
   const handleCreate = async () => {
     if (!client || !newName.trim()) return;
