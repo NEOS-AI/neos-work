@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AppMode } from '../hooks/useEngine.js';
@@ -10,6 +10,17 @@ export function ModeSelection() {
   const { status, error, connect } = useEngine();
   const [remoteUrl, setRemoteUrl] = useState(() => loadRemoteUrl());
   const [devToken, setDevToken] = useState('');
+
+  // Escape clears the optional bearer token field (not while connecting).
+  useEffect(() => {
+    if (!devToken || status === 'connecting') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      setDevToken('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [devToken, status]);
 
   const handleSelect = (mode: AppMode) => {
     if (mode === 'client' && !remoteUrl) return;

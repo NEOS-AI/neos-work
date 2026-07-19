@@ -44,6 +44,17 @@ export function Templates() {
     }).finally(() => setLoading(false));
   }, [client]);
 
+  // Escape clears search (list filter hygiene).
+  useEffect(() => {
+    if (!search) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      setSearch('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [search]);
+
   const handleUse = async (tpl: TemplateWorkflow) => {
     if (!client || creating) return;
     setCreating(tpl.name);

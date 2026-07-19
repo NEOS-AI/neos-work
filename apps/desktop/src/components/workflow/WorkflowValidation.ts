@@ -4,6 +4,7 @@ import {
   isMediaImageSize,
   isMediaVoice,
   isValidDeployProjectName,
+  SLACK_CONTENT_MAX_LENGTH,
 } from '../../lib/media-node-options.js';
 
 export type WorkflowValidationSeverity = 'error' | 'warning';
@@ -253,6 +254,16 @@ export function validateWorkflowDraft(input: {
           severity: 'warning',
           nodeId: node.id,
           message: 'Slack node has no text template or upstream input.',
+        });
+      }
+      const slackBodies = [config.textTemplate, config.content, config.text]
+        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+      if (slackBodies.some((body) => body.length > SLACK_CONTENT_MAX_LENGTH)) {
+        issues.push({
+          code: 'slack_content_too_long',
+          severity: 'warning',
+          nodeId: node.id,
+          message: `Slack content exceeds ${SLACK_CONTENT_MAX_LENGTH} characters.`,
         });
       }
     }
@@ -533,6 +544,16 @@ export function validateWorkflowDraft(input: {
       code: 'parallel_missing_join',
       severity: 'warning',
       message: 'Parallel Start is present but no Parallel End / gate join node was found.',
+    });
+  }
+
+  // parallel_end without a fan-out start is also incomplete structure (plan Task 11)
+  const hasParallelEnd = input.nodes.some((n) => n.type === 'parallel_end');
+  if (hasParallelEnd && !hasParallelStart) {
+    issues.push({
+      code: 'parallel_missing_start',
+      severity: 'warning',
+      message: 'Parallel End is present but no Parallel Start node was found.',
     });
   }
 
