@@ -8,6 +8,10 @@ describe('sortByName', () => {
     expect(sorted.map((i) => i.name)).toEqual(['Alpha', 'beta', 'zeta']);
     expect(items[0]!.name).toBe('zeta');
   });
+
+  it('handles empty list', () => {
+    expect(sortByName([])).toEqual([]);
+  });
 });
 
 describe('sortByDateDesc', () => {
@@ -26,5 +30,16 @@ describe('sortByDateDesc', () => {
       { id: 'new', createdAt: '2024-06-01 12:00:00' },
     ];
     expect(sortByDateDesc(items, (i) => i.createdAt).map((i) => i.id)).toEqual(['new', 'old']);
+  });
+
+  it('treats invalid/missing dates as epoch and does not mutate input', () => {
+    const items = [
+      { id: 'bad', createdAt: 'not-a-date' },
+      { id: 'ok', createdAt: '2024-01-01T00:00:00.000Z' },
+      { id: 'empty', createdAt: undefined as unknown as string },
+    ];
+    const sorted = sortByDateDesc(items, (i) => i.createdAt);
+    expect(sorted.map((i) => i.id)[0]).toBe('ok');
+    expect(items[0]!.id).toBe('bad');
   });
 });

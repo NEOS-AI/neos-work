@@ -21,6 +21,21 @@ describe('pickRecentWorkflows', () => {
     expect(pickRecentWorkflows(items, 0)).toEqual([]);
     expect(pickRecentWorkflows([], 5)).toEqual([]);
   });
+
+  it('floors fractional limits and clamps negatives to empty', () => {
+    expect(pickRecentWorkflows(items, 2.9).map((w) => w.id)).toEqual(['2', '3']);
+    expect(pickRecentWorkflows(items, -3)).toEqual([]);
+  });
+
+  it('defaults limit to 5 when omitted', () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      id: String(i),
+      name: `W${i}`,
+      domain: 'general',
+      updatedAt: `202${i}-01-01T00:00:00.000Z`,
+    }));
+    expect(pickRecentWorkflows(many)).toHaveLength(5);
+  });
 });
 
 describe('pickRecentByDate / pickRecentRoutines', () => {
@@ -67,5 +82,13 @@ describe('pickRecentDeployments', () => {
   it('returns empty for zero limit or empty list', () => {
     expect(pickRecentDeployments(deployments, 0)).toEqual([]);
     expect(pickRecentDeployments([], 5)).toEqual([]);
+  });
+
+  it('sorts invalid createdAt after valid ones', () => {
+    const mixed = [
+      { id: 'bad', createdAt: 'x', status: 'pending', provider: 'vercel' },
+      ...deployments,
+    ];
+    expect(pickRecentDeployments(mixed, 3).map((d) => d.id)).toEqual(['d2', 'd3', 'd1']);
   });
 });

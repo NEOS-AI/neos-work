@@ -103,6 +103,11 @@ describe('filterByEnabled', () => {
     expect(filterByEnabled(items, 'all')).toHaveLength(3);
     expect(filterByEnabled(items, undefined)).toHaveLength(3);
   });
+
+  it('returns all for unknown enabledFilter values', () => {
+    const items = [{ name: 'a', enabled: true }, { name: 'b', enabled: false }];
+    expect(filterByEnabled(items, 'maybe')).toHaveLength(2);
+  });
 });
 
 describe('filterByTextMatch', () => {
@@ -131,6 +136,12 @@ describe('filterByFieldValue', () => {
     expect(filterByFieldValue(items, 'provider', 'vercel')).toHaveLength(2);
     expect(filterByFieldValue(items, 'provider', 'cloudflare')).toHaveLength(1);
     expect(filterByFieldValue(items, 'provider', 'all')).toHaveLength(3);
+  });
+
+  it('coerces missing field values to empty string', () => {
+    const items = [{ provider: 'vercel' }, { name: 'no-provider' } as { provider?: string; name: string }];
+    expect(filterByFieldValue(items, 'provider', 'vercel')).toHaveLength(1);
+    expect(filterByFieldValue(items, 'provider', '')).toEqual(items);
   });
 });
 

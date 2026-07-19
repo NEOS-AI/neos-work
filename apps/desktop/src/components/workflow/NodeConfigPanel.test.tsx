@@ -225,4 +225,60 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByText(/no required settings/i)).toBeInTheDocument();
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
   });
+
+  it('renders slack and deploy node fields', async () => {
+    const slack = {
+      id: 'sl',
+      type: 'slack_message',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'slack_message',
+        label: 'Slack',
+        config: { channel: '#alerts', textTemplate: 'hi' },
+      },
+    } as unknown as Node;
+
+    const { rerender } = render(
+      <NodeConfigPanel selectedNode={slack} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByDisplayValue('#alerts')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('hi')).toBeInTheDocument();
+
+    const deploy = {
+      id: 'd1',
+      type: 'deploy',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'deploy',
+        label: 'Deploy',
+        config: { provider: 'cloudflare', projectName: 'site' },
+      },
+    } as unknown as Node;
+    rerender(
+      <NodeConfigPanel selectedNode={deploy} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByText('Provider')).toBeInTheDocument();
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+  });
+
+  it('renders media audio fields when mediaType is audio', async () => {
+    const audio = {
+      id: 'm2',
+      type: 'media',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'media',
+        label: 'TTS',
+        config: { mediaType: 'audio', text: 'hello world', voice: 'nova' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel selectedNode={audio} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByDisplayValue('hello world')).toBeInTheDocument();
+    expect(screen.getByText('Voice')).toBeInTheDocument();
+    expect(screen.getByText(/Requires OPENAI_API_KEY/i)).toBeInTheDocument();
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+  });
 });
