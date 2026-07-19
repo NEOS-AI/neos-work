@@ -27,8 +27,9 @@ export const MediaNode: ExecutableNode = {
     const start = Date.now();
     const { config, settings, inputs } = ctx;
     const mediaType = (config?.mediaType as string) ?? 'image';
-    const serverUrl = settings['SERVER_URL'] ?? 'http://localhost:3001';
-    const serverToken = settings['SERVER_TOKEN'] ?? '';
+    const serverUrl = String(settings['SERVER_URL'] ?? 'http://localhost:3001').trim()
+      || 'http://localhost:3001';
+    const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
 
     if (mediaType === 'image') {
       const prompt = resolvePrompt(config, inputs);

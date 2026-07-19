@@ -12,21 +12,25 @@ function buildAdapter(settings: Record<string, string>) {
   const provider = settings['llmProvider'] ?? 'anthropic';
 
   if (provider === 'openai') {
-    const apiKey = settings['OPENAI_API_KEY'];
-    const baseUrl = settings['OPENAI_BASE_URL'];
+    const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim() || undefined;
+    const baseUrl = String(settings['OPENAI_BASE_URL'] ?? '').trim() || undefined;
     return new OpenAIAdapter({ provider: 'openai', apiKey, baseUrl });
   }
 
   if (provider === 'ollama') {
-    const baseUrl = settings['OLLAMA_BASE_URL'];
+    const baseUrl = String(settings['OLLAMA_BASE_URL'] ?? '').trim() || undefined;
     return new OpenAIAdapter({ provider: 'ollama', baseUrl });
   }
 
-  if (provider === 'google' && settings['GOOGLE_API_KEY']) {
-    return new GoogleAdapter(settings['GOOGLE_API_KEY']);
+  if (provider === 'google') {
+    const apiKey = String(settings['GOOGLE_API_KEY'] ?? '').trim();
+    if (!apiKey) {
+      throw new Error('GOOGLE_API_KEY is not configured');
+    }
+    return new GoogleAdapter(apiKey);
   }
 
-  const apiKey = settings['ANTHROPIC_API_KEY'];
+  const apiKey = String(settings['ANTHROPIC_API_KEY'] ?? '').trim();
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured');
   }
@@ -88,8 +92,9 @@ export class AgentNode implements ExecutableNode {
       ? [harness.systemPrompt, this.nodeConfig?.['systemPrompt']].filter(Boolean).join('\n\n---\n')
       : String(this.nodeConfig?.['systemPrompt'] ?? '');
 
-    const serverUrl = ctx.settings['SERVER_URL'] ?? 'http://localhost:3579';
-    const authToken = ctx.settings['AUTH_TOKEN'] ?? '';
+    const serverUrl = String(ctx.settings['SERVER_URL'] ?? 'http://localhost:3579').trim()
+      || 'http://localhost:3579';
+    const authToken = String(ctx.settings['AUTH_TOKEN'] ?? '').trim();
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
     // Prepend Design System context if injected

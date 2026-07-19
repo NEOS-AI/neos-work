@@ -13,8 +13,9 @@ export const DeployNode: ExecutableNode = {
     const rawProvider = (config?.provider as string) ?? 'vercel';
     const provider =
       rawProvider === 'cloudflare' || rawProvider === 'vercel' ? rawProvider : 'vercel';
-    const serverUrl = settings['SERVER_URL'] ?? 'http://localhost:3001';
-    const serverToken = settings['SERVER_TOKEN'] ?? '';
+    const serverUrl = String(settings['SERVER_URL'] ?? 'http://localhost:3001').trim()
+      || 'http://localhost:3001';
+    const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
 
     const rawContent = inputs['content'] ?? config?.content ?? '';
     const content = typeof rawContent === 'string' ? rawContent.trim() : String(rawContent).trim();
@@ -26,35 +27,44 @@ export const DeployNode: ExecutableNode = {
       config?.projectName ?? inputs['projectName'] ?? 'neos-deploy',
     ).trim() || 'neos-deploy';
 
-    const res = await fetch(`${serverUrl}/api/deploy`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serverToken}`,
-      },
-      body: JSON.stringify({
-        provider,
-        content,
-        projectName,
-        workflowId: ctx.workflowId,
-        runId: ctx.runId,
-      }),
-      signal: ctx.signal,
-    });
+    try {
+      const res = await fetch(`${serverUrl}/api/deploy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serverToken}`,
+        },
+        body: JSON.stringify({
+          provider,
+          content,
+          projectName,
+          workflowId: ctx.workflowId,
+          runId: ctx.runId,
+        }),
+        signal: ctx.signal,
+      });
 
-    const data = await res.json() as { ok: boolean; data?: { url: string; deploymentId?: string }; error?: string };
-    if (!data.ok) {
+      const data = await res.json() as { ok: boolean; data?: { url: string; deploymentId?: string }; error?: string };
+      if (!data.ok) {
+        return {
+          ok: false,
+          output: null,
+          error: data.error ?? 'Deploy failed',
+          durationMs: Date.now() - start,
+        };
+      }
+      return {
+        ok: true,
+        output: `Deployed to ${provider}: ${data.data?.url ?? 'unknown URL'}`,
+        durationMs: Date.now() - start,
+      };
+    } catch (err) {
       return {
         ok: false,
         output: null,
-        error: data.error ?? 'Deploy failed',
+        error: err instanceof Error ? err.message : 'Deploy failed',
         durationMs: Date.now() - start,
       };
     }
-    return {
-      ok: true,
-      output: `Deployed to ${provider}: ${data.data?.url ?? 'unknown URL'}`,
-      durationMs: Date.now() - start,
-    };
   },
 };
