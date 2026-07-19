@@ -526,4 +526,252 @@ describe('EngineClient', () => {
     await client.getPlugin('p1');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/plugins/p1');
   });
+
+  it('session messages, cancel, and tool confirm', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+
+    await client.listMessages('s1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
+      'http://engine.test/api/session/s1/messages',
+    );
+
+    await client.cancelSession('s1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
+      'http://engine.test/api/session/s1/cancel',
+    );
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.confirmTool('s1', 'tu-1', true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/tool-confirm/tu-1');
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ approved: true });
+  });
+
+  it('chat SSE yields chunks and errors on non-ok response', async () => {
+    const client = new EngineClient('http://engine.test');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode('data: {"type":"token","content":"hi"}\n\ndata: not-json\n\n'),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+
+    const chunks: unknown[] = [];
+    for await (const c of client.chat('s1', 'hello')) {
+      chunks.push(c);
+    }
+    expect(chunks).toEqual([{ type: 'token', content: 'hi' }]);
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 500, statusText: 'Err' }));
+    const errChunks: unknown[] = [];
+    for await (const c of client.chat('s1', 'x')) {
+      errChunks.push(c);
+    }
+    expect(errChunks[0]).toMatchObject({ type: 'error' });
+  });
+
+  it('runAgent SSE maps event name into chunk type', async () => {
+    const client = new EngineClient('http://engine.test');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode('event: tool_call\ndata: {"name":"shell"}\n\n'),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+
+    const chunks: unknown[] = [];
+    for await (const c of client.runAgent('s1', 'run')) {
+      chunks.push(c);
+    }
+    expect(chunks[0]).toMatchObject({ type: 'tool_call', name: 'shell' });
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 503, statusText: 'Down' }));
+    const err: unknown[] = [];
+    for await (const c of client.runAgent('s1', 'x')) {
+      err.push(c);
+    }
+    expect(err[0]).toMatchObject({ type: 'error' });
+  });
+
+  it('harness and block CRUD with domain query', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.createHarness({
+      id: 'h1',
+      name: 'H',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'p',
+      allowedTools: [],
+    });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/harness/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.updateHarness('h1', { name: 'H2' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    await client.deleteHarness('h1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.listBlocks('coding');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('domain=coding');
+
+    await client.createBlock({
+      id: 'b1',
+      name: 'B',
+      domain: 'general',
+      category: 'c',
+      description: 'd',
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: 'i',
+      outputDescription: 'o',
+    });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.updateBlock('b1', { name: 'B2' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    await client.deleteBlock('b1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await client.getTemplates('finance');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('domain=finance');
+  });
+
+  it('memory update/toggle, routine update, media helpers', async () => {
+    const client = new EngineClient('http://engine.test');
+    client.setAuthToken('tok');
+    fetchMock.mockImplementation(async () =>
+      jsonResponse({ ok: true, data: {} }, { status: 200 }),
+    );
+
+    await client.updateMemory('m1', { content: 'x' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/memory/m1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    await client.toggleMemory('m1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/toggle/);
+
+    await client.updateRoutine('r1', { enabled: false });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    expect(client.mediaFileUrl('a b.png')).toBe(
+      'http://engine.test/api/media/file/a%20b.png',
+    );
+
+    const blob = new Blob(['img-bytes']);
+    fetchMock.mockResolvedValueOnce(new Response(blob, { status: 200 }));
+    const got = await client.fetchMediaBlob('x.png');
+    // jsdom may use a different Blob realm than the global under test
+    expect(got.size).toBeGreaterThan(0);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/media/file/x.png');
+    expect(fetchMock.mock.calls.at(-1)![1].headers.Authorization).toBe('Bearer tok');
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await expect(client.fetchMediaBlob('missing.png')).rejects.toThrow(/Failed to load media/);
+  });
+
+  it('MCP OAuth start/refresh and workspace update', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () =>
+      jsonResponse({ ok: true, data: { authUrl: 'https://auth', state: 'st' } }),
+    );
+
+    await client.startMcpOAuth({
+      serverId: 'm1',
+      authorizationEndpoint: 'https://a',
+      tokenEndpoint: 'https://t',
+      clientId: 'cid',
+      redirectUri: 'http://localhost/cb',
+    });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/oauth\/start/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.refreshMcpOAuth('m1', { tokenEndpoint: 'https://t', clientId: 'cid' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/refresh/);
+
+    await client.updateWorkspace('ws1', { name: 'Renamed' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/workspace/ws1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/PUT|PATCH/);
+  });
+
+  it('artifact update, export zip, import claude design, plugin run/resume', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.updateArtifact('a1', { name: 'T' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/PUT|PATCH/);
+
+    await client.resumePlugin('p1', 'run1', 'stage1', { ok: true });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/resume/);
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
+      stageId: 'stage1',
+      response: { ok: true },
+    });
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode('data: {"type":"pipeline.started","runId":"run-9"}\n\n'),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+    const events: unknown[] = [];
+    const { stop, runIdPromise } = client.runPlugin('p1', { q: 1 }, (e) => events.push(e));
+    await expect(runIdPromise).resolves.toBe('run-9');
+    expect(events[0]).toMatchObject({ type: 'pipeline.started', runId: 'run-9' });
+    stop();
+
+    // export zip download
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Blob(['zip']), { status: 200 }),
+    );
+    const click = vi.fn();
+    const createElement = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'a') {
+        return { href: '', download: '', click } as unknown as HTMLAnchorElement;
+      }
+      return document.createElement(tag);
+    });
+    const createObjectURL = vi.fn(() => 'blob:zip');
+    const revokeObjectURL = vi.fn();
+    const urlProto = URL as unknown as {
+      createObjectURL?: typeof createObjectURL;
+      revokeObjectURL?: typeof revokeObjectURL;
+    };
+    const prevCreate = urlProto.createObjectURL;
+    const prevRevoke = urlProto.revokeObjectURL;
+    urlProto.createObjectURL = createObjectURL;
+    urlProto.revokeObjectURL = revokeObjectURL;
+    await client.exportWorkflowZip('w1', 'out.zip');
+    expect(click).toHaveBeenCalled();
+    createElement.mockRestore();
+    urlProto.createObjectURL = prevCreate;
+    urlProto.revokeObjectURL = prevRevoke;
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'w' } }));
+    const file = new File(['z'], 'd.zip', { type: 'application/zip' });
+    await client.importClaudeDesignZip(file);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/claude|import/i);
+    expect(fetchMock.mock.calls.at(-1)![1].body).toBeInstanceOf(FormData);
+  });
 });

@@ -48,6 +48,37 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'duplicate_node_id' && i.nodeId === 'dup')).toBe(true);
   });
 
+  it('warns duplicate_node_label when two nodes share a label (case-insensitive)', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'a', type: 'agent_coding', label: 'Worker', config: { harnessId: 'h1' } },
+        { id: 'b', type: 'agent_coding', label: '  worker  ', config: { harnessId: 'h1' } },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'b' },
+        { id: 'e3', source: 'b', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    const dups = issues.filter((i) => i.code === 'duplicate_node_label');
+    expect(dups.map((i) => i.nodeId).sort()).toEqual(['a', 'b']);
+  });
+
+  it('does not warn duplicate_node_label for blank labels (missing_node_label covers those)', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: '1', type: 'trigger', label: '  ', config: {} },
+        { id: '2', type: 'output', label: '', config: {} },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'duplicate_node_label')).toBe(false);
+  });
+
   it('returns missing_block_id error when block node has no blockId', () => {
     const issues = validateWorkflowDraft({
       nodes: [{ id: 'b1', type: 'block', label: 'My Block', config: {} }],

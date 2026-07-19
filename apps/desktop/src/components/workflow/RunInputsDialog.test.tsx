@@ -66,4 +66,14 @@ describe('RunInputsDialog', () => {
     await user.click(screen.getByRole('button', { name: /cancel/i }));
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it('Escape calls onCancel', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(
+      <RunInputsDialog defaultInputs={{}} onConfirm={() => {}} onCancel={onCancel} />,
+    );
+    await user.keyboard('{Escape}');
+    expect(onCancel).toHaveBeenCalled();
+  });
 });

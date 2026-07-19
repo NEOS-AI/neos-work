@@ -31,4 +31,12 @@ describe('ConfirmLeaveModal', () => {
     await user.click(screen.getByRole('button', { name: /workflow.leave|leave/i }));
     expect(onConfirm).toHaveBeenCalled();
   });
+
+  it('Escape calls onCancel (stay)', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<ConfirmLeaveModal onConfirm={() => {}} onCancel={onCancel} />);
+    await user.keyboard('{Escape}');
+    expect(onCancel).toHaveBeenCalled();
+  });
 });
