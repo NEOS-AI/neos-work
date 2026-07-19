@@ -3,17 +3,25 @@
  * Prefer textTemplate / content / text config fields; interpolate {{key}} from inputs.
  */
 
+const MESSAGE_CONFIG_KEYS = ['textTemplate', 'content', 'text'] as const;
+
+/** First non-blank string among config text fields (order: textTemplate → content → text). */
+function pickConfigMessage(config: Record<string, unknown> | undefined): string {
+  if (!config) return '';
+  for (const key of MESSAGE_CONFIG_KEYS) {
+    const v = config[key];
+    if (typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return '';
+}
+
 export function resolveMessageText(
   config: Record<string, unknown> | undefined,
   inputs: Record<string, unknown>,
 ): string {
-  const raw =
-    (typeof config?.['textTemplate'] === 'string' && config['textTemplate']) ||
-    (typeof config?.['content'] === 'string' && config['content']) ||
-    (typeof config?.['text'] === 'string' && config['text']) ||
-    '';
+  const raw = pickConfigMessage(config);
 
-  if (typeof raw === 'string' && raw.trim().length > 0) {
+  if (raw) {
     let text = raw;
     for (const [key, val] of Object.entries(inputs)) {
       const replacement = typeof val === 'string' ? val : JSON.stringify(val);

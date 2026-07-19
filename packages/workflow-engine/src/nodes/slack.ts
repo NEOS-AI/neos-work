@@ -17,7 +17,7 @@ export class SlackMessageNode implements ExecutableNode {
       return { ok: false, output: null, error: 'SLACK_BOT_TOKEN not set', durationMs: 0 };
     }
 
-    const channel = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '');
+    const channel = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '').trim();
     const text = resolveMessageText(ctx.config, ctx.inputs);
 
     if (!channel) {
@@ -32,8 +32,17 @@ export class SlackMessageNode implements ExecutableNode {
       const client = new WebClient(token);
       const result = await client.chat.postMessage({ channel, text });
 
+      if (!result.ok) {
+        return {
+          ok: false,
+          output: null,
+          error: 'Slack API returned ok=false',
+          durationMs: Date.now() - start,
+        };
+      }
+
       return {
-        ok: Boolean(result.ok),
+        ok: true,
         output: { ts: result.ts, channel: result.channel },
         durationMs: Date.now() - start,
       };

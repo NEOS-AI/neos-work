@@ -91,11 +91,6 @@ export function Deployments() {
       const map: Record<string, Workflow> = {};
       for (const w of wRes.data) map[w.id] = w;
       setWorkflows(map);
-      // Drop stale persisted workflow filter when the workflow no longer exists
-      if (filterWorkflowId && !map[filterWorkflowId]) {
-        setFilterWorkflowId('');
-        saveDeploymentWorkflowFilter('');
-      }
     }
     setLoading(false);
   }, [client, filterWorkflowId]);
@@ -103,6 +98,26 @@ export function Deployments() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Drop stale persisted workflow filter after workflows load (avoids setState mid-load).
+  useEffect(() => {
+    if (!filterWorkflowId) return;
+    if (Object.keys(workflows).length === 0) return;
+    if (!workflows[filterWorkflowId]) {
+      setFilterWorkflowId('');
+      saveDeploymentWorkflowFilter('');
+    }
+  }, [workflows, filterWorkflowId]);
+
+  // Escape clears search text (list filter hygiene).
+  useEffect(() => {
+    if (!search) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSearch('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [search]);
 
   const handleDelete = async (id: string) => {
     if (!client) return;

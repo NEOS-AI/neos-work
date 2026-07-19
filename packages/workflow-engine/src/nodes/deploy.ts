@@ -10,7 +10,9 @@ export const DeployNode: ExecutableNode = {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
     const { config, settings, inputs } = ctx;
-    const provider = (config?.provider as string) ?? 'vercel';
+    const rawProvider = (config?.provider as string) ?? 'vercel';
+    const provider =
+      rawProvider === 'cloudflare' || rawProvider === 'vercel' ? rawProvider : 'vercel';
     const serverUrl = settings['SERVER_URL'] ?? 'http://localhost:3001';
     const serverToken = settings['SERVER_TOKEN'] ?? '';
 
@@ -19,7 +21,9 @@ export const DeployNode: ExecutableNode = {
       return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
     }
 
-    const projectName = (config?.projectName as string) ?? (inputs['projectName'] as string) ?? 'neos-deploy';
+    const projectName = String(
+      config?.projectName ?? inputs['projectName'] ?? 'neos-deploy',
+    ).trim() || 'neos-deploy';
 
     const res = await fetch(`${serverUrl}/api/deploy`, {
       method: 'POST',

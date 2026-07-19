@@ -1,4 +1,10 @@
 import type { WorkflowBlock } from '../../lib/engine.js';
+import {
+  DISCORD_CONTENT_MAX_LENGTH,
+  isMediaImageSize,
+  isMediaVoice,
+  isValidDeployProjectName,
+} from '../../lib/media-node-options.js';
 
 export type WorkflowValidationSeverity = 'error' | 'warning';
 
@@ -166,7 +172,10 @@ export function validateWorkflowDraft(input: {
       const isCli =
         provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
       // CLI agents do not require a harness (plan Task 3)
-      if (!isCli && typeof config.harnessId !== 'string') {
+      // Treat empty / whitespace harnessId as missing (HarnessSelector can clear selection)
+      const harnessId =
+        typeof config.harnessId === 'string' ? config.harnessId.trim() : '';
+      if (!isCli && !harnessId) {
         issues.push({
           code: 'missing_harness_id',
           severity: 'warning',
@@ -263,6 +272,19 @@ export function validateWorkflowDraft(input: {
           message: 'Discord node has no text template or upstream input.',
         });
       }
+      const staticBody =
+        (typeof config.textTemplate === 'string' && config.textTemplate)
+        || (typeof config.content === 'string' && config.content)
+        || (typeof config.text === 'string' && config.text)
+        || '';
+      if (typeof staticBody === 'string' && staticBody.length > DISCORD_CONTENT_MAX_LENGTH) {
+        issues.push({
+          code: 'discord_content_too_long',
+          severity: 'warning',
+          nodeId: node.id,
+          message: `Discord content exceeds ${DISCORD_CONTENT_MAX_LENGTH} characters.`,
+        });
+      }
     }
 
     if (node.type === 'media') {
@@ -297,6 +319,27 @@ export function validateWorkflowDraft(input: {
             : 'Media node has no prompt or upstream input.',
         });
       }
+      // Image size / TTS voice must match NodeConfigPanel allow-lists when set
+      if (!isAudio && config.size !== undefined && config.size !== null && config.size !== '') {
+        if (!isMediaImageSize(config.size)) {
+          issues.push({
+            code: 'invalid_media_size',
+            severity: 'warning',
+            nodeId: node.id,
+            message: 'Media image size must be 1024x1024, 1792x1024, or 1024x1792.',
+          });
+        }
+      }
+      if (isAudio && config.voice !== undefined && config.voice !== null && config.voice !== '') {
+        if (!isMediaVoice(config.voice)) {
+          issues.push({
+            code: 'invalid_media_voice',
+            severity: 'warning',
+            nodeId: node.id,
+            message: 'Media audio voice is not a supported OpenAI TTS voice.',
+          });
+        }
+      }
     }
 
     if (node.type === 'deploy') {
@@ -317,6 +360,14 @@ export function validateWorkflowDraft(input: {
           severity: 'warning',
           nodeId: node.id,
           message: 'Deploy node has no project name.',
+        });
+      } else if (!isValidDeployProjectName(projectName)) {
+        issues.push({
+          code: 'invalid_deploy_project',
+          severity: 'warning',
+          nodeId: node.id,
+          message:
+            'Deploy project name should start with a letter or digit and use only letters, digits, hyphens, or underscores.',
         });
       }
       const hasContent =

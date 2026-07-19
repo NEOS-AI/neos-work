@@ -21,6 +21,16 @@ export function Plugins() {
     });
   }, [client]);
 
+  // Escape clears search when the pipeline runner is not open (runner handles its own Escape).
+  useEffect(() => {
+    if (selected || !search) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSearch('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected, search]);
+
   const filtered = useMemo(() => {
     return sortByName(filterBySearchText(plugins, search));
   }, [plugins, search]);

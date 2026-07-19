@@ -78,7 +78,8 @@ export function saveDeploymentProviderFilter(provider: DeploymentProviderFilter)
 /** Persist Deployments workflow dropdown (empty string = all workflows). */
 export function loadDeploymentWorkflowFilter(): string {
   try {
-    return localStorage.getItem(WORKFLOW_KEY) ?? '';
+    const v = localStorage.getItem(WORKFLOW_KEY)?.trim() ?? '';
+    return v;
   } catch {
     return '';
   }
@@ -86,10 +87,11 @@ export function loadDeploymentWorkflowFilter(): string {
 
 export function saveDeploymentWorkflowFilter(workflowId: string): void {
   try {
-    if (!workflowId) {
+    const id = workflowId.trim();
+    if (!id) {
       localStorage.removeItem(WORKFLOW_KEY);
     } else {
-      localStorage.setItem(WORKFLOW_KEY, workflowId);
+      localStorage.setItem(WORKFLOW_KEY, id);
     }
   } catch {
     // ignore quota / private mode

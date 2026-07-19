@@ -6,6 +6,7 @@ import type { WorkflowBlock } from '../../lib/engine.js';
 import { useEngine } from '../../hooks/useEngine.js';
 import type { DesignSystem } from '../../lib/engine.js';
 import { ANTHROPIC_MODELS, GOOGLE_MODELS, OLLAMA_PRESET_MODELS, OPENAI_MODELS } from '@neos-work/shared';
+import { MEDIA_IMAGE_SIZES, MEDIA_VOICES } from '../../lib/media-node-options.js';
 import { BlockParamForm } from './BlockParamForm.js';
 import { BlockSelector, defaultsForBlock } from './BlockSelector.js';
 import { CheckboxField, NumberField, TextAreaField, TextField } from './fields.js';
@@ -327,9 +328,9 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                   value={typeof config.size === 'string' ? config.size : '1024x1024'}
                   onChange={(e) => patchConfig({ size: e.target.value })}
                 >
-                  <option value="1024x1024">1024×1024</option>
-                  <option value="1792x1024">1792×1024</option>
-                  <option value="1024x1792">1024×1792</option>
+                  {MEDIA_IMAGE_SIZES.map((s) => (
+                    <option key={s} value={s}>{s.replace('x', '×')}</option>
+                  ))}
                 </select>
               </div>
             </>
@@ -350,7 +351,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                   value={typeof config.voice === 'string' ? config.voice : 'alloy'}
                   onChange={(e) => patchConfig({ voice: e.target.value })}
                 >
-                  {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map((v) => (
+                  {MEDIA_VOICES.map((v) => (
                     <option key={v} value={v}>{v}</option>
                   ))}
                 </select>
