@@ -753,7 +753,7 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
           id: 'd',
           type: 'deploy',
           label: 'Deploy',
-          config: { provider: 'vercel', content: '<html></html>' },
+          config: { provider: 'vercel', projectName: 'site', content: '<html></html>' },
         },
         { id: 'o', type: 'output', label: 'End', config: {} },
       ],
@@ -764,6 +764,38 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
       blocks: [],
     });
     expect(issues.some((i) => i.code === 'missing_deploy_content')).toBe(false);
+  });
+
+  it('warns missing_deploy_project when projectName is blank', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'Deploy',
+          config: { provider: 'vercel', content: '<html></html>' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_deploy_project' && i.nodeId === 'd')).toBe(true);
+  });
+
+  it('does not warn missing_deploy_project when projectName is set', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'Deploy',
+          config: { provider: 'cloudflare', projectName: 'my-site', content: 'x' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_deploy_project')).toBe(false);
   });
 
   it('warns agent_no_upstream when agent is disconnected in multi-node graph', () => {

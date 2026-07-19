@@ -1,10 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunLogPanel, filterRunLogEvents, linkifyText } from './RunLogPanel.js';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
 
 describe('RunLogPanel', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('shows empty state', () => {
     render(<RunLogPanel events={[]} nodeLabelMap={{}} />);
     expect(screen.getByText(/no runs/i)).toBeInTheDocument();
@@ -20,6 +24,33 @@ describe('RunLogPanel', () => {
     expect(screen.getByText(/Run run-abcd/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Coder/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/streaming/i)).toBeInTheDocument();
+  });
+
+  it('persists log filter chip selection', async () => {
+    const user = userEvent.setup();
+    const events: WorkflowSSEEvent[] = [
+      { type: 'run.started', runId: 'run-1' },
+      { type: 'node.progress', nodeId: 'n1', chunk: 'x', accumulated: 'x' },
+      { type: 'node.failed', nodeId: 'n2', error: 'boom' },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{}} />);
+    await user.click(screen.getByRole('button', { name: 'Failed' }));
+    expect(localStorage.getItem('neos-run-log-filter')).toBe('failed');
+    expect(screen.getByText(/boom/)).toBeInTheDocument();
+    // Progress events are filtered out (chip label "Progress" still remains)
+    expect(screen.queryByText(/streaming/i)).not.toBeInTheDocument();
+  });
+
+  it('restores log filter from localStorage', () => {
+    localStorage.setItem('neos-run-log-filter', 'failed');
+    const events: WorkflowSSEEvent[] = [
+      { type: 'run.started', runId: 'run-1' },
+      { type: 'node.failed', nodeId: 'n2', error: 'boom' },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{}} />);
+    expect(screen.getByText(/boom/)).toBeInTheDocument();
+    // lifecycle event hidden when Failed chip is restored
+    expect(screen.queryByText(/Run run/i)).not.toBeInTheDocument();
   });
 
   it('renders completed and failed events', async () => {
