@@ -180,5 +180,27 @@ describe('AgentNode LLM model selection', () => {
     const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
     expect(opts?.model).toBe('gpt-4o-mini');
   });
+
+  it('clamps node maxSteps to 1–200 when harness has no constraint', async () => {
+    const node = new AgentNode('agent_coding', { maxSteps: 999 });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { maxIterations?: number };
+    expect(opts?.maxIterations).toBe(200);
+  });
+
+  it('defaults invalid maxSteps to 20', async () => {
+    const node = new AgentNode('agent_coding', { maxSteps: 0 });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { maxIterations?: number };
+    expect(opts?.maxIterations).toBe(20);
+  });
 });
 
