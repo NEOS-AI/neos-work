@@ -27,6 +27,81 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'no_output')).toBe(true);
   });
 
+  it('warns multiple_triggers when more than one trigger exists', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't1', type: 'trigger', label: 'Start A', config: {} },
+        { id: 't2', type: 'trigger', label: 'Start B', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', target: 'o' },
+        { id: 'e2', source: 't2', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'multiple_triggers')).toBe(true);
+    expect(issues.some((i) => i.code === 'no_trigger')).toBe(false);
+  });
+
+  it('does not warn multiple_triggers for a single trigger', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'multiple_triggers')).toBe(false);
+    expect(issues.some((i) => i.code === 'no_trigger')).toBe(false);
+  });
+
+  it('accepts gate_and with two upstreams and does not flag underconnected', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'a', type: 'agent_coding', label: 'A', config: { harnessId: 'h1' } },
+        { id: 'b', type: 'agent_coding', label: 'B', config: { harnessId: 'h1' } },
+        { id: 'and', type: 'gate_and', label: 'AND', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 't', target: 'b' },
+        { id: 'e3', source: 'a', target: 'and' },
+        { id: 'e4', source: 'b', target: 'and' },
+        { id: 'e5', source: 'and', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'gate_and_underconnected')).toBe(false);
+  });
+
+  it('treats gate_or as a parallel join for parallel_missing_join', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'ps', type: 'parallel_start', label: 'Fan-out', config: {} },
+        { id: 'a', type: 'agent_coding', label: 'A', config: { harnessId: 'h1' } },
+        { id: 'b', type: 'agent_coding', label: 'B', config: { harnessId: 'h1' } },
+        { id: 'or', type: 'gate_or', label: 'OR', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'ps' },
+        { id: 'e2', source: 'ps', target: 'a' },
+        { id: 'e3', source: 'ps', target: 'b' },
+        { id: 'e4', source: 'a', target: 'or' },
+        { id: 'e5', source: 'b', target: 'or' },
+        { id: 'e6', source: 'or', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'parallel_missing_join')).toBe(false);
+    expect(issues.some((i) => i.code === 'or_gate_underconnected')).toBe(false);
+  });
+
   it('returns missing_node_label error when label is blank', () => {
     const issues = validateWorkflowDraft({
       nodes: [{ id: '1', type: 'trigger', label: '  ', config: {} }],
@@ -202,6 +277,55 @@ describe('validateWorkflowDraft', () => {
       blocks: emptyBlocks,
     });
     expect(issues.some((i) => i.code === 'missing_slack_channel' && i.nodeId === 's1')).toBe(true);
+    expect(issues.some((i) => i.code === 'missing_slack_content' && i.nodeId === 's1')).toBe(true);
+  });
+
+  it('warns missing_slack_content when channel set but no template or upstream', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', config: {} },
+        { id: 's1', type: 'slack_message', label: 'Slack', config: { channel: '#general' } },
+        { id: 'o', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_slack_channel')).toBe(false);
+    expect(issues.some((i) => i.code === 'missing_slack_content' && i.nodeId === 's1')).toBe(true);
+  });
+
+  it('does not warn missing_slack_content when textTemplate is set', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 's1',
+          type: 'slack_message',
+          label: 'Slack',
+          config: { channel: '#general', textTemplate: 'hello {{out}}' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_slack_content')).toBe(false);
+  });
+
+  it('does not warn missing_slack_content when upstream is connected', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', config: {} },
+        { id: 's1', type: 'slack_message', label: 'Slack', config: { channel: '#alerts' } },
+        { id: 'o', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 's1' },
+        { id: 'e2', source: 's1', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_slack_content')).toBe(false);
   });
 
   it('returns missing_discord_content when discord has no content or upstream', () => {

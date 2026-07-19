@@ -67,6 +67,7 @@ describe('ArtifactPreview', () => {
     refreshArtifact.mockReset();
     deleteArtifact.mockReset();
     updateArtifact.mockReset();
+    localStorage.clear();
   });
 
   it('shows empty state when no artifacts', async () => {
@@ -103,10 +104,34 @@ describe('ArtifactPreview', () => {
 
     expect(screen.getByRole('button', { name: /mobile/i })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /mobile/i }));
+    expect(localStorage.getItem('neos-artifact-viewport')).toBe('mobile');
     await user.click(screen.getByRole('button', { name: /reload/i }));
     await waitFor(() => {
       expect(refreshArtifact).toHaveBeenCalledWith('a1', 'reload');
     });
+  });
+
+  it('restores viewport mode from localStorage prefs', async () => {
+    localStorage.setItem('neos-artifact-viewport', 'tablet');
+    const art = {
+      id: 'a1',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html><body>hi</body></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => {
+      expect(document.querySelector('iframe')).toBeTruthy();
+    });
+    const tablet = screen.getByRole('button', { name: /tablet/i });
+    // Selected viewport chip uses the solid highlight class
+    expect(tablet.className).toContain('bg-white/15');
   });
 
   it('renders markdown as preformatted text', async () => {
