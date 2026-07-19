@@ -40,4 +40,13 @@ describe('serializeNodeOutput', () => {
     expect(serializeNodeOutput('hello')).toBe('hello');
     expect(serializeNodeOutput({ a: 1 })).toBe('{\n  "a": 1\n}');
   });
+
+  it('serializes null, numbers, arrays, and falls back for circular values', () => {
+    expect(serializeNodeOutput(null)).toBe('null');
+    expect(serializeNodeOutput(42)).toBe('42');
+    expect(serializeNodeOutput([1, 2])).toBe('[\n  1,\n  2\n]');
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(serializeNodeOutput(circular)).toBe('[object Object]');
+  });
 });

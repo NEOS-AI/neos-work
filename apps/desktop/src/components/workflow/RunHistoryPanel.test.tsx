@@ -46,6 +46,7 @@ describe('RunHistoryPanel', () => {
     clearWorkflowRuns.mockReset();
     deleteWorkflowRun.mockReset();
     getWorkflowRun.mockReset();
+    localStorage.clear();
   });
 
   it('shows empty state when no runs', async () => {
@@ -81,6 +82,26 @@ describe('RunHistoryPanel', () => {
     expect(screen.getByText('failed')).toBeInTheDocument();
     expect(screen.queryByText('completed')).not.toBeInTheDocument();
     expect(screen.getByText(/1\/3/)).toBeInTheDocument();
+    expect(localStorage.getItem('neos-run-history-status')).toBe('failed');
+  });
+
+  it('restores status filter from localStorage prefs', async () => {
+    localStorage.setItem('neos-run-history-status', 'failed');
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [
+        makeRun('run-completed-1', 'completed'),
+        makeRun('run-failed-1', 'failed'),
+      ],
+    });
+
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('failed')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('completed')).not.toBeInTheDocument();
+    expect(screen.getByText(/1\/2/)).toBeInTheDocument();
   });
 
   it('shows empty filter message when chip matches nothing', async () => {

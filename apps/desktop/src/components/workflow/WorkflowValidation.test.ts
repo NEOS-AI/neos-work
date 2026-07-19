@@ -400,6 +400,51 @@ describe('validateWorkflowDraft parallel / OR gates', () => {
     expect(issues.some((i) => i.code === 'or_gate_underconnected')).toBe(true);
   });
 
+  it('warns when gate_or (palette alias) is underconnected', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'or', type: 'gate_or', label: 'OR', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'or' },
+        { id: 'e2', source: 'or', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'or_gate_underconnected' && i.nodeId === 'or')).toBe(true);
+  });
+
+  it('warns when gate_and has fewer than two predecessors', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'and', type: 'gate_and', label: 'AND', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'and' },
+        { id: 'e2', source: 'and', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'gate_and_underconnected' && i.nodeId === 'and')).toBe(true);
+  });
+
+  it('warns block_no_upstream when block is disconnected in multi-node graph', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', config: {} },
+        { id: 'b', type: 'block', label: 'Block', config: { blockId: 'blk1' } },
+        { id: 'o', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: [{ id: 'blk1', paramDefs: [] }],
+    });
+    expect(issues.some((i) => i.code === 'block_no_upstream' && i.nodeId === 'b')).toBe(true);
+  });
+
   it('accepts parallel_start with two branches and parallel_end', () => {
     const issues = validateWorkflowDraft({
       nodes: [

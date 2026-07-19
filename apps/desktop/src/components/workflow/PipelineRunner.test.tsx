@@ -132,5 +132,48 @@ describe('PipelineRunner', () => {
     expect(stop).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /run pipeline/i })).toBeInTheDocument();
   });
+
+  it('shows waiting stage and resumes via GenUI form submit', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-wait') };
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+
+    // Ensure runId is set before resume (runIdPromise + event path)
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-wait' });
+      onEvent?.({ type: 'stage.started', stageId: 'plan', stageName: 'Plan' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        stageName: 'Plan',
+        surface: 'form',
+        schema: {
+          fields: [{ key: 'note', label: 'Note', type: 'text', placeholder: 'note-ph' }],
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Your input needed/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('note-ph')).toBeInTheDocument();
+    });
+    await user.type(screen.getByPlaceholderText('note-ph'), 'ship');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+
+    await waitFor(() => {
+      expect(resumePlugin).toHaveBeenCalledWith(
+        'plug-1',
+        'run-wait',
+        'plan',
+        expect.objectContaining({ note: 'ship' }),
+      );
+    });
+  });
 });
 

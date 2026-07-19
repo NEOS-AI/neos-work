@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { Node } from '@xyflow/react';
 import { NodeConfigPanel } from './NodeConfigPanel.js';
 
@@ -79,7 +80,7 @@ describe('NodeConfigPanel', () => {
       id: 't1',
       type: 'trigger',
       position: { x: 0, y: 0 },
-      data: { label: 'Start', config: {} },
+      data: { nodeType: 'trigger', label: 'Start', config: {} },
     } as unknown as Node;
 
     render(
@@ -99,6 +100,129 @@ describe('NodeConfigPanel', () => {
 
     expect(screen.getByDisplayValue('Start')).toBeInTheDocument();
     expect(screen.getByText(/Trigger node has no downstream connection/i)).toBeInTheDocument();
+    expect(screen.getByText(/Initial inputs/i)).toBeInTheDocument();
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+  });
+
+  it('renders agent provider/model fields and patches label', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'h-code',
+          name: 'Coder',
+          domain: 'coding',
+          description: 'd',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: true,
+        },
+      ],
+    });
+
+    const node = {
+      id: 'a1',
+      type: 'agent_coding',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent_coding',
+        label: 'Agent',
+        config: { llmProvider: 'anthropic', harnessId: 'h-code' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    expect(screen.getByText('Provider')).toBeInTheDocument();
+    expect(screen.getByText('Model')).toBeInTheDocument();
+    expect(screen.getByText('Additional system prompt')).toBeInTheDocument();
+
+    const label = screen.getByDisplayValue('Agent');
+    await user.clear(label);
+    await user.type(label, 'X');
+    expect(onPatchNodeData).toHaveBeenCalled();
+  });
+
+  it('shows CLI hint when agent provider is cli-*', async () => {
+    const node = {
+      id: 'a2',
+      type: 'agent_coding',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent_coding',
+        label: 'CLI Agent',
+        config: { llmProvider: 'cli-claude' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel selectedNode={node} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+
+    expect(screen.getByText(/External CLI agent will be spawned/i)).toBeInTheDocument();
+    expect(screen.queryByText('Model')).not.toBeInTheDocument();
+  });
+
+  it('renders web_search and media config fields', async () => {
+    const searchNode = {
+      id: 's1',
+      type: 'web_search',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'web_search', label: 'Search', config: { query: 'neos' } },
+    } as unknown as Node;
+
+    const { rerender } = render(
+      <NodeConfigPanel selectedNode={searchNode} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByDisplayValue('neos')).toBeInTheDocument();
+    expect(screen.getByText('Max results')).toBeInTheDocument();
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+
+    const mediaNode = {
+      id: 'm1',
+      type: 'media',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'media', label: 'Img', config: { mediaType: 'image', prompt: 'cat' } },
+    } as unknown as Node;
+
+    rerender(
+      <NodeConfigPanel selectedNode={mediaNode} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByText('Media type')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('cat')).toBeInTheDocument();
+  });
+
+  it('shows gate helper copy for parallel_start and gate_and', async () => {
+    const ps = {
+      id: 'ps',
+      type: 'parallel_start',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'parallel_start', label: 'Fan', config: {} },
+    } as unknown as Node;
+
+    const { rerender } = render(
+      <NodeConfigPanel selectedNode={ps} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByText(/Fan-out: successors run as parallel branches/i)).toBeInTheDocument();
+
+    const and = {
+      id: 'and',
+      type: 'gate_and',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'gate_and', label: 'AND', config: {} },
+    } as unknown as Node;
+    rerender(
+      <NodeConfigPanel selectedNode={and} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    expect(screen.getByText(/no required settings/i)).toBeInTheDocument();
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
   });
 });

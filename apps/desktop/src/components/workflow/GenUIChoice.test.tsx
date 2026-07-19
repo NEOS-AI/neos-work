@@ -41,4 +41,17 @@ describe('GenUIChoice', () => {
     await user.click(screen.getByText('Label Only'));
     expect(onSelect).toHaveBeenCalledWith('Label Only');
   });
+
+  it('renders preview images when previewUrl is set', () => {
+    render(
+      <GenUIChoice
+        schema={{
+          options: [{ label: 'With Preview', value: 'p1', previewUrl: 'https://example.com/p.png' }],
+        }}
+        onSelect={() => {}}
+      />,
+    );
+    const img = screen.getByRole('img', { name: 'With Preview' });
+    expect(img).toHaveAttribute('src', 'https://example.com/p.png');
+  });
 });

@@ -133,4 +133,23 @@ describe('RunDetailPanel', () => {
     await user.click(screen.getByText('✕'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('Escape calls onClose', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-esc',
+        workflowId: 'wf',
+        status: 'completed',
+        nodeResults: {},
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+    render(<RunDetailPanel workflowId="wf" runId="run-esc" onClose={onClose} />);
+    await waitFor(() => expect(screen.getByText('✕')).toBeInTheDocument());
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
+  });
 });

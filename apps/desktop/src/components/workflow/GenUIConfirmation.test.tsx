@@ -30,4 +30,12 @@ describe('GenUIConfirmation', () => {
     await user.click(screen.getByRole('button', { name: 'No' }));
     expect(onConfirm).toHaveBeenCalledWith(false);
   });
+
+  it('works without schema (default labels only)', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(<GenUIConfirmation onConfirm={onConfirm} />);
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(onConfirm).toHaveBeenCalledWith(true);
+  });
 });

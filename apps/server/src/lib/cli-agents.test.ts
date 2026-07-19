@@ -29,6 +29,11 @@ vi.mock('node:child_process', () => ({
   execFile: execFileImpl,
 }));
 
+// Avoid real SQLite/settings I/O during spawn (and keep spawn timing deterministic under load)
+vi.mock('../db/settings.js', () => ({
+  getSetting: vi.fn(() => undefined),
+}));
+
 import {
   buildCliArgs,
   buildNeosCliEnv,
@@ -208,10 +213,11 @@ describe('spawnCliAgent', () => {
   });
 
   /** spawnCliAgent awaits settings import before calling spawn */
-  async function waitForSpawn() {
-    for (let i = 0; i < 50; i++) {
+  async function waitForSpawn(timeoutMs = 2000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
       if (spawnMock.mock.calls.length > 0) return;
-      await new Promise((r) => setTimeout(r, 5));
+      await new Promise((r) => setTimeout(r, 10));
     }
     throw new Error('spawn was not called');
   }

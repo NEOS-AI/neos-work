@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { filterRunsByStatus } from './run-history-filter.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  filterRunsByStatus,
+  loadRunStatusFilter,
+  RUN_STATUS_FILTERS,
+  saveRunStatusFilter,
+} from './run-history-filter.js';
 
 describe('filterRunsByStatus', () => {
   const runs = [
@@ -25,5 +30,39 @@ describe('filterRunsByStatus', () => {
 
   it('returns empty when no status matches', () => {
     expect(filterRunsByStatus(runs, 'unknown-status')).toEqual([]);
+  });
+});
+
+describe('run status filter prefs', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('exposes stable chip options', () => {
+    expect(RUN_STATUS_FILTERS).toEqual([
+      'all',
+      'running',
+      'completed',
+      'failed',
+      'cancelled',
+    ]);
+  });
+
+  it('defaults to all', () => {
+    expect(loadRunStatusFilter()).toBe('all');
+  });
+
+  it('round-trips status filters', () => {
+    saveRunStatusFilter('failed');
+    expect(loadRunStatusFilter()).toBe('failed');
+    saveRunStatusFilter('running');
+    expect(loadRunStatusFilter()).toBe('running');
+    saveRunStatusFilter('all');
+    expect(loadRunStatusFilter()).toBe('all');
+  });
+
+  it('ignores invalid stored values', () => {
+    localStorage.setItem('neos-run-history-status', 'pending');
+    expect(loadRunStatusFilter()).toBe('all');
   });
 });
