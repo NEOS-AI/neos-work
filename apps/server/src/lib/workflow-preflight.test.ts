@@ -284,4 +284,65 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'no_trigger')).toBe(true);
     expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
+
+  it('treats whitespace-only secrets as missing', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 's', type: 'web_search', config: {} },
+          { id: 'sl', type: 'slack_message', config: { channel: '#x' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 's' },
+          { id: 'e2', source: 's', target: 'sl' },
+          { id: 'e3', source: 'sl', target: 'o' },
+        ],
+      },
+      { TAVILY_API_KEY: '   ', SLACK_BOT_TOKEN: '\t' },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_tavily_key')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'missing_slack_token')).toBe(true);
+  });
+
+  it('flags invalid Discord webhook URLs (SSRF allow-list)', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'di', type: 'discord_message', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'di' },
+          { id: 'e2', source: 'di', target: 'o' },
+        ],
+      },
+      { DISCORD_WEBHOOK_URL: 'https://evil.example.com/hooks/1' },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'invalid_discord_webhook')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'missing_discord_webhook')).toBe(false);
+  });
+
+  it('accepts a valid Discord webhook prefix', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'di', type: 'discord_message', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'di' },
+          { id: 'e2', source: 'di', target: 'o' },
+        ],
+      },
+      { DISCORD_WEBHOOK_URL: '  https://discord.com/api/webhooks/1/token  ' },
+    );
+    expect(r.issues.some((i) => i.code === 'invalid_discord_webhook')).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_discord_webhook')).toBe(false);
+  });
 });

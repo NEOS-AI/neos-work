@@ -43,6 +43,15 @@ describe('SlackMessageNode', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
+  it('treats whitespace-only bot token as missing', async () => {
+    const result = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: '   ' }, { channel: '#general' }, { text: 'hi' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/SLACK_BOT_TOKEN/);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   it('requires channel', async () => {
     const result = await node.execute(ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, {}, { text: 'hi' }));
     expect(result.ok).toBe(false);
@@ -104,6 +113,20 @@ describe('SlackMessageNode', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/ok=false/);
+  });
+
+  it('includes Slack API error string when ok=false', async () => {
+    postMessage.mockResolvedValueOnce({
+      ok: false,
+      error: 'channel_not_found',
+      ts: undefined,
+      channel: undefined,
+    });
+    const result = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#missing' }, { text: 'hi' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/channel_not_found/);
   });
 
   it('rejects content longer than 4000 characters', async () => {

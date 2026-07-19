@@ -85,6 +85,25 @@ describe('DiscordMessageNode', () => {
     expect(result.error).toMatch(/empty/i);
   });
 
+  it('trims webhook URL before SSRF check and send', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new DiscordMessageNode();
+    const url = 'https://discord.com/api/webhooks/123/token';
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: `  ${url}  ` }, { text: 'padded' }),
+    );
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(url, expect.any(Object));
+  });
+
+  it('treats whitespace-only webhook URL as missing', async () => {
+    const node = new DiscordMessageNode();
+    const result = await node.execute(makeCtx({ DISCORD_WEBHOOK_URL: '   ' }, { text: 'hi' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/DISCORD_WEBHOOK_URL/);
+  });
+
   it('rejects content longer than 2000 characters', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);

@@ -97,4 +97,10 @@ describe('resolveSearchQuery', () => {
     expect(resolveSearchQuery({ query: '' }, { text: false })).toBe('false');
     expect(resolveSearchQuery({ query: '   ' }, { query: 'fallback' })).toBe('fallback');
   });
+
+  it('trims upstream query/text and treats whitespace-only as empty', () => {
+    expect(resolveSearchQuery({}, { query: '  hello  ' })).toBe('hello');
+    expect(resolveSearchQuery({}, { text: '   ' })).toBe('');
+    expect(resolveSearchQuery({}, { query: '   ' })).toBe('');
+  });
 });

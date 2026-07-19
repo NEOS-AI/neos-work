@@ -31,8 +31,20 @@ describe('WebSearchNode', () => {
     expect(result.error).toMatch(/TAVILY_API_KEY/);
   });
 
+  it('treats whitespace-only TAVILY_API_KEY as missing', async () => {
+    const result = await node.execute(ctx({ TAVILY_API_KEY: '   ' }, { query: 'hello' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/TAVILY_API_KEY/);
+  });
+
   it('requires a query', async () => {
     const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, {}));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/No query/);
+  });
+
+  it('rejects whitespace-only query from inputs', async () => {
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: '   ' }));
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/No query/);
   });
