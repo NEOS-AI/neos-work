@@ -6,12 +6,20 @@ export type MediaImageSize = (typeof MEDIA_IMAGE_SIZES)[number];
 export const MEDIA_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const;
 export type MediaVoice = (typeof MEDIA_VOICES)[number];
 
+/** DALL·E quality options (server media-generator). */
+export const MEDIA_IMAGE_QUALITIES = ['standard', 'hd'] as const;
+export type MediaImageQuality = (typeof MEDIA_IMAGE_QUALITIES)[number];
+
 export function isMediaImageSize(value: unknown): value is MediaImageSize {
   return typeof value === 'string' && (MEDIA_IMAGE_SIZES as readonly string[]).includes(value);
 }
 
 export function isMediaVoice(value: unknown): value is MediaVoice {
   return typeof value === 'string' && (MEDIA_VOICES as readonly string[]).includes(value);
+}
+
+export function isMediaImageQuality(value: unknown): value is MediaImageQuality {
+  return typeof value === 'string' && (MEDIA_IMAGE_QUALITIES as readonly string[]).includes(value);
 }
 
 /** Discord webhook content hard limit. */

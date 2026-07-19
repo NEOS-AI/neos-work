@@ -1,6 +1,7 @@
 import type { WorkflowBlock } from '../../lib/engine.js';
 import {
   DISCORD_CONTENT_MAX_LENGTH,
+  isMediaImageQuality,
   isMediaImageSize,
   isMediaVoice,
   isValidDeployProjectName,
@@ -73,7 +74,10 @@ function hasCycle(nodes: Array<{ id: string }>, edges: Array<{ source: string; t
 }
 
 function isBlank(value: unknown): boolean {
-  return value === undefined || value === null || value === '';
+  if (value === undefined || value === null || value === '') return true;
+  // Treat whitespace-only strings as blank for required block params
+  if (typeof value === 'string' && value.trim().length === 0) return true;
+  return false;
 }
 
 export function validateWorkflowDraft(input: {
@@ -182,6 +186,21 @@ export function validateWorkflowDraft(input: {
           severity: 'warning',
           nodeId: node.id,
           message: 'Agent node has no harness selected.',
+        });
+      }
+      // Non-CLI agents should pick a model (NodeConfig model select)
+      const llmModel =
+        typeof config.llmModel === 'string'
+          ? config.llmModel.trim()
+          : typeof config.model === 'string'
+            ? config.model.trim()
+            : '';
+      if (!isCli && !llmModel) {
+        issues.push({
+          code: 'missing_llm_model',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Agent node has no model selected.',
         });
       }
       // Agents typically need upstream context when the graph has more than one node
@@ -346,6 +365,16 @@ export function validateWorkflowDraft(input: {
             severity: 'warning',
             nodeId: node.id,
             message: 'Media audio voice is not a supported OpenAI TTS voice.',
+          });
+        }
+      }
+      if (!isAudio && config.quality !== undefined && config.quality !== null && config.quality !== '') {
+        if (!isMediaImageQuality(config.quality)) {
+          issues.push({
+            code: 'invalid_media_quality',
+            severity: 'warning',
+            nodeId: node.id,
+            message: 'Media image quality must be standard or hd.',
           });
         }
       }

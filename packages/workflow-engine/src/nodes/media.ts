@@ -6,6 +6,7 @@ import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 
 /** Aligned with desktop NodeConfigPanel / media-node-options allow-lists. */
 const IMAGE_SIZES = new Set(['1024x1024', '1792x1024', '1024x1792']);
+const IMAGE_QUALITIES = new Set(['standard', 'hd']);
 const TTS_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
 
 function resolvePrompt(config: Record<string, unknown> | undefined, inputs: Record<string, unknown>): string {
@@ -41,7 +42,8 @@ export const MediaNode: ExecutableNode = {
 
       const rawSize = typeof config?.size === 'string' ? config.size : '1024x1024';
       const size = IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024';
-      const quality = (config?.quality as string) ?? 'standard';
+      const rawQuality = typeof config?.quality === 'string' ? config.quality : 'standard';
+      const quality = IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard';
 
       try {
         const res = await fetch(`${serverUrl}/api/media/image`, {

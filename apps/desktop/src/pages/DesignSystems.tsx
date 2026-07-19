@@ -40,15 +40,20 @@ export function DesignSystems() {
     setCreateError(null);
   };
 
-  // Escape cancels the new design-system form
+  // Escape: cancel create form first, otherwise clear search (list filter hygiene).
   useEffect(() => {
-    if (!isCreating) return;
+    if (!isCreating && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') cancelCreate();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (isCreating) {
+        cancelCreate();
+        return;
+      }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isCreating]);
+  }, [isCreating, search]);
 
   const handleCreate = async () => {
     if (!client || !newName.trim()) return;
