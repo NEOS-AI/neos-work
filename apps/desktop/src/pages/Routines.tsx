@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
@@ -53,21 +53,31 @@ export function Routines() {
 
   useEffect(() => { load(); }, [client]);
 
-  // Escape: close create modal first, otherwise clear search
+  const closeCreateModal = useCallback(() => {
+    setCreateOpen(false);
+    setFormError('');
+    setFormName('');
+    setFormWorkflowId('');
+    setFormSchedule('0 9 * * *');
+    setFormTimezone('UTC');
+    setFormEnabled(true);
+    setSubmitting(false);
+  }, []);
+
+  // Escape: close create modal first (and clear draft), otherwise clear search
   useEffect(() => {
     if (!createOpen && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (createOpen) {
-        setCreateOpen(false);
-        setFormError('');
+        closeCreateModal();
         return;
       }
       if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [createOpen, search]);
+  }, [createOpen, search, closeCreateModal]);
 
   useEffect(() => {
     if (!client || !selectedId) return;

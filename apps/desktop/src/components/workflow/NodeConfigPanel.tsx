@@ -198,6 +198,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             label="Max steps"
             value={typeof config.maxSteps === 'number' ? config.maxSteps : undefined}
             min={1}
+            max={200}
             onChange={(maxSteps) => patchConfig({ maxSteps })}
           />
         </div>

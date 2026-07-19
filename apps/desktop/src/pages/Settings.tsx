@@ -660,7 +660,7 @@ function McpServersSection() {
   useEffect(() => {
     if (!oauthModal && !showAddForm) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (oauthModal && !oauthConnecting) {
         setOauthModal(null);
         return;
