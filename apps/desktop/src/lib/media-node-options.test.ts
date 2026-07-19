@@ -3,19 +3,22 @@ import {
   DISCORD_CONTENT_MAX_LENGTH,
   isMediaImageQuality,
   isMediaImageSize,
+  isMediaTtsModel,
   isMediaVoice,
   isValidDeployProjectName,
   MEDIA_IMAGE_QUALITIES,
   MEDIA_IMAGE_SIZES,
+  MEDIA_TTS_MODELS,
   MEDIA_VOICES,
   SLACK_CONTENT_MAX_LENGTH,
 } from './media-node-options.js';
 
 describe('media-node-options', () => {
-  it('exposes stable size, voice, and quality catalogs', () => {
+  it('exposes stable size, voice, quality, and TTS model catalogs', () => {
     expect([...MEDIA_IMAGE_SIZES]).toEqual(['1024x1024', '1792x1024', '1024x1792']);
     expect([...MEDIA_VOICES]).toEqual(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
     expect([...MEDIA_IMAGE_QUALITIES]).toEqual(['standard', 'hd']);
+    expect([...MEDIA_TTS_MODELS]).toEqual(['tts-1', 'tts-1-hd']);
     expect(DISCORD_CONTENT_MAX_LENGTH).toBe(2000);
     expect(SLACK_CONTENT_MAX_LENGTH).toBe(4000);
   });
@@ -49,6 +52,19 @@ describe('media-node-options', () => {
     expect(isMediaImageQuality('')).toBe(false);
     expect(isMediaImageQuality(null)).toBe(false);
     expect(isMediaImageQuality(1)).toBe(false);
+  });
+
+  it('validates TTS models', () => {
+    for (const m of MEDIA_TTS_MODELS) {
+      expect(isMediaTtsModel(m)).toBe(true);
+    }
+    expect(isMediaTtsModel('tts-2')).toBe(false);
+    expect(isMediaTtsModel('whisper-1')).toBe(false);
+    expect(isMediaTtsModel('TTS-1')).toBe(false);
+    expect(isMediaTtsModel('')).toBe(false);
+    expect(isMediaTtsModel(null)).toBe(false);
+    expect(isMediaTtsModel(undefined)).toBe(false);
+    expect(isMediaTtsModel(1)).toBe(false);
   });
 
   it('validates deploy project names', () => {

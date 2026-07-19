@@ -452,6 +452,84 @@ describe('validateWorkflowDraft happy paths', () => {
   });
 });
 
+describe('validateWorkflowDraft media tts model (v0.3.46)', () => {
+  it('warns invalid_media_tts_model for bad audio model', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 'hi', model: 'whisper-1' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'invalid_media_tts_model')).toBe(true);
+  });
+
+  it('accepts tts-1 / tts-1-hd and ignores unset model or model on image nodes', () => {
+    for (const model of ['tts-1', 'tts-1-hd'] as const) {
+      const ok = validateWorkflowDraft({
+        nodes: [
+          {
+            id: 'm',
+            type: 'media',
+            label: 'M',
+            config: { mediaType: 'audio', text: 'hi', model },
+          },
+        ],
+        edges: [],
+        blocks: emptyBlocks,
+      });
+      expect(ok.some((i) => i.code === 'invalid_media_tts_model')).toBe(false);
+    }
+
+    const unset = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 'hi' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(unset.some((i) => i.code === 'invalid_media_tts_model')).toBe(false);
+
+    const empty = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 'hi', model: '' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(empty.some((i) => i.code === 'invalid_media_tts_model')).toBe(false);
+
+    const image = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'x', model: 'whisper-1' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(image.some((i) => i.code === 'invalid_media_tts_model')).toBe(false);
+  });
+});
+
 describe('validateWorkflowDraft agent/media/param polish (v0.3.45)', () => {
   it('warns missing_llm_model for non-CLI agents without model', () => {
     const issues = validateWorkflowDraft({

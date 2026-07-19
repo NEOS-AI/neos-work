@@ -113,7 +113,7 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/No prompt/);
   });
 
-  it('falls back invalid size, quality, and voice to defaults', async () => {
+  it('falls back invalid size, quality, voice, and tts model to defaults', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'x.png' } }),
     });
@@ -132,9 +132,49 @@ describe('MediaNode', () => {
       json: async () => ({ ok: true, data: { filename: 'a.mp3' } }),
     });
     await MediaNode.execute(
-      ctx({ config: { mediaType: 'audio', text: 'hi', voice: 'robot' } }),
+      ctx({
+        config: { mediaType: 'audio', text: 'hi', voice: 'robot', model: 'whisper-1' },
+      }),
     );
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).voice).toBe('alloy');
+    const audioBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(audioBody.voice).toBe('alloy');
+    expect(audioBody.model).toBe('tts-1');
+  });
+
+  it('preserves valid tts-1-hd model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'hd.mp3' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hi', model: 'tts-1-hd' } }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).model).toBe('tts-1-hd');
+  });
+
+  it('defaults audio model to tts-1 when unset', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'd.mp3' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hi' } }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).model).toBe('tts-1');
+  });
+
+  it('propagates audio API error payload', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ ok: false, error: 'tts quota' }),
+      }),
+    );
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hi' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('tts quota');
   });
 
   it('preserves valid image quality hd', async () => {
