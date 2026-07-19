@@ -22,6 +22,14 @@ export function isMediaImageQuality(value: unknown): value is MediaImageQuality 
   return typeof value === 'string' && (MEDIA_IMAGE_QUALITIES as readonly string[]).includes(value);
 }
 
+/** OpenAI TTS model options (server media-generator). */
+export const MEDIA_TTS_MODELS = ['tts-1', 'tts-1-hd'] as const;
+export type MediaTtsModel = (typeof MEDIA_TTS_MODELS)[number];
+
+export function isMediaTtsModel(value: unknown): value is MediaTtsModel {
+  return typeof value === 'string' && (MEDIA_TTS_MODELS as readonly string[]).includes(value);
+}
+
 /** Discord webhook content hard limit. */
 export const DISCORD_CONTENT_MAX_LENGTH = 2000;
 

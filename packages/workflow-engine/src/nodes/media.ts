@@ -8,6 +8,7 @@ import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 const IMAGE_SIZES = new Set(['1024x1024', '1792x1024', '1024x1792']);
 const IMAGE_QUALITIES = new Set(['standard', 'hd']);
 const TTS_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
+const TTS_MODELS = new Set(['tts-1', 'tts-1-hd']);
 
 function resolvePrompt(config: Record<string, unknown> | undefined, inputs: Record<string, unknown>): string {
   const raw = config?.['prompt'] ?? inputs['prompt'] ?? '';
@@ -93,7 +94,8 @@ export const MediaNode: ExecutableNode = {
 
       const rawVoice = typeof config?.voice === 'string' ? config.voice : 'alloy';
       const voice = TTS_VOICES.has(rawVoice) ? rawVoice : 'alloy';
-      const model = (config?.model as string) ?? 'tts-1';
+      const rawModel = typeof config?.model === 'string' ? config.model : 'tts-1';
+      const model = TTS_MODELS.has(rawModel) ? rawModel : 'tts-1';
 
       try {
         const res = await fetch(`${serverUrl}/api/media/audio`, {

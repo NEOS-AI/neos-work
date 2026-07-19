@@ -3,6 +3,7 @@ import {
   DISCORD_CONTENT_MAX_LENGTH,
   isMediaImageQuality,
   isMediaImageSize,
+  isMediaTtsModel,
   isMediaVoice,
   isValidDeployProjectName,
   SLACK_CONTENT_MAX_LENGTH,
@@ -375,6 +376,16 @@ export function validateWorkflowDraft(input: {
             severity: 'warning',
             nodeId: node.id,
             message: 'Media image quality must be standard or hd.',
+          });
+        }
+      }
+      if (isAudio && config.model !== undefined && config.model !== null && config.model !== '') {
+        if (!isMediaTtsModel(config.model)) {
+          issues.push({
+            code: 'invalid_media_tts_model',
+            severity: 'warning',
+            nodeId: node.id,
+            message: 'Media audio model must be tts-1 or tts-1-hd.',
           });
         }
       }

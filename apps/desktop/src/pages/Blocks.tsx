@@ -405,15 +405,20 @@ export function Blocks() {
 
   useEffect(() => { load(); }, [client]);
 
-  // Escape closes create/edit block modal
+  // Escape: close create/edit modal first, otherwise clear search
   useEffect(() => {
-    if (!modal) return;
+    if (!modal && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setModal(null);
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (modal) {
+        setModal(null);
+        return;
+      }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [modal]);
+  }, [modal, search]);
 
   const handleSave = async (data: Omit<WorkflowBlock, 'isBuiltIn'>) => {
     if (!client) return;

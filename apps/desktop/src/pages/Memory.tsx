@@ -188,6 +188,21 @@ export default function Memory() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Escape: close modal first, otherwise clear search
+  useEffect(() => {
+    if (!modal && !search) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (modal) {
+        setModal(null);
+        return;
+      }
+      if (search) setSearch('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [modal, search]);
+
   const handleSave = async (data: CreateMemoryInput) => {
     if (!client) return;
     if (modal?.mode === 'edit') {

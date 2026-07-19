@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
@@ -46,20 +46,25 @@ export function Harnesses() {
 
   const openCreate = () => { setEditTarget(null); setShowModal(true); };
   const openEdit = (h: AgentHarness) => { setEditTarget(h); setShowModal(true); };
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setShowModal(false);
     setEditTarget(null);
-  };
+  }, []);
 
-  // Escape closes harness create/edit modal and clears edit target
+  // Escape: close modal first, otherwise clear search
   useEffect(() => {
-    if (!showModal) return;
+    if (!showModal && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeModal();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (showModal) {
+        closeModal();
+        return;
+      }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showModal]);
+  }, [showModal, search, closeModal]);
 
   const handleDelete = async (h: AgentHarness) => {
     if (!client || h.isBuiltIn) return;

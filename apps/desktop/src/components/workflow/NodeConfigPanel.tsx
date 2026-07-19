@@ -6,7 +6,12 @@ import type { WorkflowBlock } from '../../lib/engine.js';
 import { useEngine } from '../../hooks/useEngine.js';
 import type { DesignSystem } from '../../lib/engine.js';
 import { ANTHROPIC_MODELS, GOOGLE_MODELS, OLLAMA_PRESET_MODELS, OPENAI_MODELS } from '@neos-work/shared';
-import { MEDIA_IMAGE_SIZES, MEDIA_VOICES } from '../../lib/media-node-options.js';
+import {
+  MEDIA_IMAGE_QUALITIES,
+  MEDIA_IMAGE_SIZES,
+  MEDIA_TTS_MODELS,
+  MEDIA_VOICES,
+} from '../../lib/media-node-options.js';
 import { BlockParamForm } from './BlockParamForm.js';
 import { BlockSelector, defaultsForBlock } from './BlockSelector.js';
 import { CheckboxField, NumberField, TextAreaField, TextField } from './fields.js';
@@ -334,6 +339,19 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                   ))}
                 </select>
               </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Quality</label>
+                <select
+                  className="w-full rounded border px-2 py-1.5 text-xs"
+                  style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  value={typeof config.quality === 'string' ? config.quality : 'standard'}
+                  onChange={(e) => patchConfig({ quality: e.target.value })}
+                >
+                  {MEDIA_IMAGE_QUALITIES.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+              </div>
             </>
           )}
           {config.mediaType === 'audio' && (
@@ -354,6 +372,19 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                 >
                   {MEDIA_VOICES.map((v) => (
                     <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>TTS model</label>
+                <select
+                  className="w-full rounded border px-2 py-1.5 text-xs"
+                  style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                  value={typeof config.model === 'string' ? config.model : 'tts-1'}
+                  onChange={(e) => patchConfig({ model: e.target.value })}
+                >
+                  {MEDIA_TTS_MODELS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
               </div>
