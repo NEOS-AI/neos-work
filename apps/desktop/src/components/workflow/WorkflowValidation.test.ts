@@ -992,7 +992,7 @@ describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
     }
   });
 
-  it('warns invalid_agent_max_steps when non-positive or non-integer', () => {
+  it('warns invalid_agent_max_steps when non-positive, non-integer, or above 200', () => {
     const zero = validateWorkflowDraft({
       nodes: [
         {
@@ -1021,6 +1021,35 @@ describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
     });
     expect(fractional.some((i) => i.code === 'invalid_agent_max_steps')).toBe(true);
 
+    const tooHigh = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', maxSteps: 201 },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(tooHigh.some((i) => i.code === 'invalid_agent_max_steps')).toBe(true);
+
+    // String form still validated via Number()
+    const stringHigh = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', maxSteps: '500' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(stringHigh.some((i) => i.code === 'invalid_agent_max_steps')).toBe(true);
+
     const ok = validateWorkflowDraft({
       nodes: [
         {
@@ -1034,6 +1063,35 @@ describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
       blocks: emptyBlocks,
     });
     expect(ok.some((i) => i.code === 'invalid_agent_max_steps')).toBe(false);
+
+    const atCap = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', maxSteps: 200 },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(atCap.some((i) => i.code === 'invalid_agent_max_steps')).toBe(false);
+
+    // Unset maxSteps is allowed (runtime default applies)
+    const unset = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(unset.some((i) => i.code === 'invalid_agent_max_steps')).toBe(false);
   });
 });
 

@@ -91,6 +91,87 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'missing_vercel_token')).toBe(true);
   });
 
+  it('defaults missing or unknown deploy provider to vercel for token checks', () => {
+    for (const config of [{}, { provider: 'netlify' }] as const) {
+      const r = assessWorkflowPreflight(
+        {
+          nodes: [
+            { id: 't', type: 'trigger', config: {} },
+            { id: 'd', type: 'deploy', config },
+            { id: 'o', type: 'output', config: {} },
+          ],
+          edges: [
+            { id: 'e1', source: 't', target: 'd' },
+            { id: 'e2', source: 'd', target: 'o' },
+          ],
+        },
+        {},
+      );
+      expect(r.ok).toBe(false);
+      expect(r.issues.some((i) => i.code === 'missing_vercel_token')).toBe(true);
+    }
+
+    const withToken = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: 'netlify' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      { VERCEL_API_TOKEN: 'v' },
+    );
+    expect(withToken.issues.some((i) => i.code === 'missing_vercel_token')).toBe(false);
+  });
+
+  it('skips cloud API key checks for ollama agents', () => {
+    for (const config of [
+      { llmProvider: 'ollama' },
+      { provider: 'ollama' },
+    ]) {
+      const r = assessWorkflowPreflight(
+        {
+          nodes: [
+            { id: 't', type: 'trigger', config: {} },
+            { id: 'a', type: 'agent_coding', config },
+            { id: 'o', type: 'output', config: {} },
+          ],
+          edges: [
+            { id: 'e1', source: 't', target: 'a' },
+            { id: 'e2', source: 'a', target: 'o' },
+          ],
+        },
+        {},
+      );
+      expect(r.issues.some((i) => i.code === 'missing_anthropic_key')).toBe(false);
+      expect(r.issues.some((i) => i.code === 'missing_openai_key')).toBe(false);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('requires OpenAI key for openai agents', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_finance', config: { llmProvider: 'openai' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_openai_key')).toBe(true);
+  });
+
   it('requires Cloudflare credentials for cloudflare deploy', () => {
     const r = assessWorkflowPreflight(
       {
