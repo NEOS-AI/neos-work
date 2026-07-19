@@ -452,6 +452,116 @@ describe('validateWorkflowDraft happy paths', () => {
   });
 });
 
+describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
+  it('warns invalid_web_search_max_results outside 1–20', () => {
+    const bad = validateWorkflowDraft({
+      nodes: [{ id: 'w', type: 'web_search', label: 'S', config: { query: 'q', maxResults: 50 } }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(bad.some((i) => i.code === 'invalid_web_search_max_results' && i.nodeId === 'w')).toBe(true);
+
+    const fractional = validateWorkflowDraft({
+      nodes: [{ id: 'w', type: 'web_search', label: 'S', config: { query: 'q', maxResults: 2.5 } }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(fractional.some((i) => i.code === 'invalid_web_search_max_results')).toBe(true);
+
+    const zero = validateWorkflowDraft({
+      nodes: [{ id: 'w', type: 'web_search', label: 'S', config: { query: 'q', maxResults: 0 } }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(zero.some((i) => i.code === 'invalid_web_search_max_results')).toBe(true);
+
+    const ok = validateWorkflowDraft({
+      nodes: [{ id: 'w', type: 'web_search', label: 'S', config: { query: 'q', maxResults: 10 } }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(ok.some((i) => i.code === 'invalid_web_search_max_results')).toBe(false);
+  });
+
+  it('errors on invalid_media_type but allows image/audio/empty', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'video', prompt: 'x' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'invalid_media_type' && i.severity === 'error')).toBe(true);
+
+    for (const mediaType of ['image', 'audio', '', undefined] as const) {
+      const ok = validateWorkflowDraft({
+        nodes: [
+          {
+            id: 'm',
+            type: 'media',
+            label: 'M',
+            config: mediaType === undefined
+              ? { prompt: 'x' }
+              : { mediaType, prompt: 'x', text: 'tts' },
+          },
+        ],
+        edges: [],
+        blocks: emptyBlocks,
+      });
+      expect(ok.some((i) => i.code === 'invalid_media_type')).toBe(false);
+    }
+  });
+
+  it('warns invalid_agent_max_steps when non-positive or non-integer', () => {
+    const zero = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', maxSteps: 0 },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(zero.some((i) => i.code === 'invalid_agent_max_steps' && i.nodeId === 'a')).toBe(true);
+
+    const fractional = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_finance',
+          label: 'Agent',
+          config: { harnessId: 'h1', maxSteps: 1.5 },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(fractional.some((i) => i.code === 'invalid_agent_max_steps')).toBe(true);
+
+    const ok = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { harnessId: 'h1', maxSteps: 8 },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(ok.some((i) => i.code === 'invalid_agent_max_steps')).toBe(false);
+  });
+});
+
 describe('validateWorkflowDraft media/deploy nodes', () => {
   it('does not require blockId for media or deploy nodes', () => {
     const issues = validateWorkflowDraft({

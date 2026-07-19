@@ -2,13 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DiscordMessageNode } from './discord.js';
 import type { NodeContext } from '../types.js';
 
-function makeCtx(settings: Record<string, string>, inputs: Record<string, unknown> = {}): NodeContext {
+function makeCtx(
+  settings: Record<string, string>,
+  inputs: Record<string, unknown> = {},
+  config?: Record<string, unknown>,
+): NodeContext {
   return {
     workflowId: 'wf',
     runId: 'run',
     nodeId: 'discord',
     inputs,
     settings,
+    config,
   };
 }
 
@@ -57,5 +62,26 @@ describe('DiscordMessageNode', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/500/);
+  });
+
+  it('uses textTemplate with interpolation for webhook content', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new DiscordMessageNode();
+    const url = 'https://discord.com/api/webhooks/123/token';
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: url }, { name: 'world' }, { textTemplate: 'Hello {{name}}' }),
+    );
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ content: 'Hello world' });
+  });
+
+  it('rejects empty content', async () => {
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, {}),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/empty/i);
   });
 });
