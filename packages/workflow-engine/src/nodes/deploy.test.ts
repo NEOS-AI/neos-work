@@ -75,4 +75,50 @@ describe('DeployNode', () => {
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer t');
   });
+
+  it('trims projectName and falls back invalid provider to vercel', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://x.app' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await DeployNode.execute(
+      ctx({
+        config: { provider: 'netlify', projectName: '  my-app  ', content: '<p/>' },
+        inputs: {},
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.provider).toBe('vercel');
+    expect(body.projectName).toBe('my-app');
+  });
+
+  it('uses neos-deploy when projectName is blank after trim', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://x.app' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await DeployNode.execute(
+      ctx({
+        config: { provider: 'vercel', projectName: '   ', content: '<p/>' },
+        inputs: {},
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.projectName).toBe('neos-deploy');
+  });
+
+  it('keeps cloudflare provider', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://cf.pages.dev' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await DeployNode.execute(
+      ctx({
+        config: { provider: 'cloudflare', projectName: 'site', content: '<p/>' },
+        inputs: {},
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.provider).toBe('cloudflare');
+  });
 });

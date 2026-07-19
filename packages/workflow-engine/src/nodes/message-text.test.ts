@@ -30,8 +30,14 @@ describe('resolveMessageText', () => {
     expect(resolveMessageText({ text: 'from text' }, {})).toBe('from text');
   });
 
-  it('treats whitespace-only templates as missing', () => {
+  it('treats whitespace-only templates as missing and tries next config key', () => {
     expect(resolveMessageText({ textTemplate: '   ' }, { text: 'upstream' })).toBe('upstream');
+    expect(
+      resolveMessageText(
+        { textTemplate: '   ', content: 'from content' },
+        { text: 'upstream' },
+      ),
+    ).toBe('from content');
   });
 
   it('falls back to inputs.text then JSON of inputs', () => {

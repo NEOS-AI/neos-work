@@ -63,6 +63,16 @@ describe('deployment-filter-prefs', () => {
     expect(localStorage.getItem('neos-deployments-workflow')).toBeNull();
   });
 
+  it('trims workflow filter ids on load and save', () => {
+    saveDeploymentWorkflowFilter('  wf-trim  ');
+    expect(localStorage.getItem('neos-deployments-workflow')).toBe('wf-trim');
+    expect(loadDeploymentWorkflowFilter()).toBe('wf-trim');
+    localStorage.setItem('neos-deployments-workflow', '  spaced  ');
+    expect(loadDeploymentWorkflowFilter()).toBe('spaced');
+    saveDeploymentWorkflowFilter('   ');
+    expect(localStorage.getItem('neos-deployments-workflow')).toBeNull();
+  });
+
   it('load returns empty when localStorage throws', () => {
     const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('denied');

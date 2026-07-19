@@ -49,6 +49,15 @@ describe('SlackMessageNode', () => {
     expect(result.error).toMatch(/channel/);
   });
 
+  it('rejects whitespace-only channel', async () => {
+    const result = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '   ' }, { text: 'hi' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/channel/);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   it('rejects empty message when no template or inputs', async () => {
     const result = await node.execute(ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#x' }, {}));
     expect(result.ok).toBe(false);
@@ -86,5 +95,14 @@ describe('SlackMessageNode', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/rate limited/);
+  });
+
+  it('fails when Slack returns ok=false without throwing', async () => {
+    postMessage.mockResolvedValueOnce({ ok: false, ts: undefined, channel: undefined });
+    const result = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#x' }, { text: 'hi' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/ok=false/);
   });
 });

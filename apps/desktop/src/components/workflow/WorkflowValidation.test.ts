@@ -452,6 +452,143 @@ describe('validateWorkflowDraft happy paths', () => {
   });
 });
 
+describe('validateWorkflowDraft media/deploy/discord polish (v0.3.42)', () => {
+  it('warns invalid_media_size and invalid_media_voice', () => {
+    const size = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'x', size: '512x512' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(size.some((i) => i.code === 'invalid_media_size')).toBe(true);
+
+    const voice = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 'hi', voice: 'robot' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(voice.some((i) => i.code === 'invalid_media_voice')).toBe(true);
+
+    const ok = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'x', size: '1024x1024' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(ok.some((i) => i.code === 'invalid_media_size')).toBe(false);
+  });
+
+  it('does not apply image size rules to audio or unset size', () => {
+    const audio = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 'hi', size: '512x512', voice: 'alloy' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(audio.some((i) => i.code === 'invalid_media_size')).toBe(false);
+
+    const unset = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'x' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(unset.some((i) => i.code === 'invalid_media_size')).toBe(false);
+  });
+
+  it('warns invalid_deploy_project for illegal names', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'D',
+          config: { provider: 'vercel', projectName: '-bad name', content: '<html/>' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'invalid_deploy_project')).toBe(true);
+
+    const ok = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'D',
+          config: { provider: 'vercel', projectName: 'neos-app', content: '<html/>' },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(ok.some((i) => i.code === 'invalid_deploy_project')).toBe(false);
+  });
+
+  it('warns discord_content_too_long only above 2000 chars', () => {
+    const long = 'x'.repeat(2001);
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'discord_message',
+          label: 'D',
+          config: { textTemplate: long },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'discord_content_too_long')).toBe(true);
+
+    const atLimit = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'discord_message',
+          label: 'D',
+          config: { textTemplate: 'x'.repeat(2000) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(atLimit.some((i) => i.code === 'discord_content_too_long')).toBe(false);
+  });
+});
+
 describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
   it('warns invalid_web_search_max_results outside 1–20', () => {
     const bad = validateWorkflowDraft({
@@ -837,6 +974,24 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
       blocks: [],
     });
     expect(issues.some((i) => i.code === 'missing_harness_id')).toBe(true);
+  });
+
+  it('warns missing_harness_id for empty or whitespace harnessId', () => {
+    for (const harnessId of ['', '   ']) {
+      const issues = validateWorkflowDraft({
+        nodes: [
+          {
+            id: 'a',
+            type: 'agent_coding',
+            label: 'Agent',
+            config: { harnessId },
+          },
+        ],
+        edges: [],
+        blocks: [],
+      });
+      expect(issues.some((i) => i.code === 'missing_harness_id' && i.nodeId === 'a')).toBe(true);
+    }
   });
 
   it('warns when deploy has no content or upstream', () => {

@@ -26,6 +26,47 @@ describe('inferRequiredSettings', () => {
     expect(keys).toHaveLength(2);
   });
 
+  it('maps media to OPENAI_API_KEY', () => {
+    expect(inferRequiredSettings(tpl('media'))).toEqual(['OPENAI_API_KEY']);
+  });
+
+  it('maps deploy to vercel token by default and cloudflare pair when configured', () => {
+    expect(
+      inferRequiredSettings({
+        nodes: [{ type: 'deploy', config: {} }],
+      }),
+    ).toEqual(['VERCEL_API_TOKEN']);
+    expect(
+      inferRequiredSettings({
+        nodes: [{ type: 'deploy', config: { provider: 'vercel' } }],
+      }),
+    ).toEqual(['VERCEL_API_TOKEN']);
+    expect(
+      inferRequiredSettings({
+        nodes: [{ type: 'deploy', config: { provider: 'cloudflare' } }],
+      }),
+    ).toEqual(expect.arrayContaining(['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']));
+    // unknown provider treated as vercel default
+    expect(
+      inferRequiredSettings({
+        nodes: [{ type: 'deploy', config: { provider: 'netlify' } }],
+      }),
+    ).toEqual(['VERCEL_API_TOKEN']);
+  });
+
+  it('unions media and deploy secrets without duplicating openai key', () => {
+    const keys = inferRequiredSettings({
+      nodes: [
+        { type: 'media' },
+        { type: 'media' },
+        { type: 'deploy', config: { provider: 'vercel' } },
+      ],
+    });
+    expect(keys.filter((k) => k === 'OPENAI_API_KEY')).toHaveLength(1);
+    expect(keys).toEqual(expect.arrayContaining(['OPENAI_API_KEY', 'VERCEL_API_TOKEN']));
+    expect(keys).toHaveLength(2);
+  });
+
   it('dedupes keys when multiple nodes share a secret', () => {
     const keys = inferRequiredSettings(tpl('web_search', 'web_search', 'block', 'block'));
     expect(keys.filter((k) => k === 'TAVILY_API_KEY')).toHaveLength(1);
@@ -35,7 +76,7 @@ describe('inferRequiredSettings', () => {
 
   it('unions secrets across mixed node types', () => {
     const keys = inferRequiredSettings(
-      tpl('trigger', 'web_search', 'slack_message', 'block', 'output'),
+      tpl('trigger', 'web_search', 'slack_message', 'block', 'media', 'output'),
     );
     expect(keys).toEqual(
       expect.arrayContaining([
@@ -43,9 +84,10 @@ describe('inferRequiredSettings', () => {
         'SLACK_BOT_TOKEN',
         'KIS_APP_KEY',
         'KIS_APP_SECRET',
+        'OPENAI_API_KEY',
       ]),
     );
     expect(keys).not.toContain('DISCORD_WEBHOOK_URL');
-    expect(keys).toHaveLength(4);
+    expect(keys).toHaveLength(5);
   });
 });
