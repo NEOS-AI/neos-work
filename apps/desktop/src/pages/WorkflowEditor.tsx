@@ -151,6 +151,10 @@ export function WorkflowEditor() {
   }, []);
 
   const stopRef = useRef<(() => void) | null>(null);
+  /** When true, name-field blur must not persist (Escape cancel). */
+  const skipNameBlurCommitRef = useRef(false);
+  /** Prevent Enter+blur double commit. */
+  const nameCommitInFlightRef = useRef(false);
 
   const loadWorkflow = useCallback(async () => {
     if (!client || !id) return;
@@ -281,11 +285,26 @@ export function WorkflowEditor() {
   }, [setNodes]);
 
   const handleNameCommit = async () => {
+    if (skipNameBlurCommitRef.current) {
+      skipNameBlurCommitRef.current = false;
+      return;
+    }
+    if (nameCommitInFlightRef.current) return;
     const trimmed = nameInput.trim().slice(0, 200);
+    nameCommitInFlightRef.current = true;
     setEditingName(false);
-    if (!trimmed || !client || !workflow || trimmed === workflow.name) return;
-    const res = await client.updateWorkflow(workflow.id, { ...draft, name: trimmed });
-    if (res.ok && res.data) setWorkflow(res.data);
+    try {
+      if (!trimmed || !client || !workflow || trimmed === workflow.name) return;
+      const res = await client.updateWorkflow(workflow.id, { ...draft, name: trimmed });
+      if (res.ok && res.data) setWorkflow(res.data);
+    } finally {
+      nameCommitInFlightRef.current = false;
+    }
+  };
+
+  const cancelNameEdit = () => {
+    skipNameBlurCommitRef.current = true;
+    setEditingName(false);
   };
 
   const handleSave = async () => {
@@ -462,14 +481,18 @@ export function WorkflowEditor() {
                 if (e.key === 'Escape') {
                   e.preventDefault();
                   e.stopPropagation();
-                  setEditingName(false);
+                  cancelNameEdit();
                 }
               }}
             />
           ) : (
             <span
               className="cursor-text hover:opacity-80"
-              onClick={() => { setNameInput(workflow.name); setEditingName(true); }}
+              onClick={() => {
+                skipNameBlurCommitRef.current = false;
+                setNameInput(workflow.name);
+                setEditingName(true);
+              }}
               title={t('workflow.rename')}
             >
               {workflow.name}

@@ -3,11 +3,10 @@
  * Prefer textTemplate / content / text config fields; interpolate {{key}} from inputs.
  */
 
-/** Discord webhook content hard limit (matches desktop graph validation). */
-export const DISCORD_CONTENT_MAX_LENGTH = 2000;
-
-/** Slack chat.postMessage text hard limit (matches desktop graph validation). */
-export const SLACK_CONTENT_MAX_LENGTH = 4000;
+export {
+  DISCORD_CONTENT_MAX_LENGTH,
+  SLACK_CONTENT_MAX_LENGTH,
+} from '@neos-work/shared';
 
 const MESSAGE_CONFIG_KEYS = ['textTemplate', 'content', 'text'] as const;
 
@@ -57,7 +56,7 @@ export function resolveSearchQuery(
   const fromConfig = config?.['query'];
   if (typeof fromConfig === 'string' && fromConfig.trim()) return fromConfig.trim();
   const fromInput = inputs['query'] ?? inputs['text'];
-  if (typeof fromInput === 'string') return fromInput;
-  if (fromInput !== undefined && fromInput !== null) return String(fromInput);
+  if (typeof fromInput === 'string') return fromInput.trim();
+  if (fromInput !== undefined && fromInput !== null) return String(fromInput).trim();
   return '';
 }

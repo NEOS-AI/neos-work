@@ -12,7 +12,7 @@ export class SlackMessageNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const token = ctx.settings['SLACK_BOT_TOKEN'];
+    const token = String(ctx.settings['SLACK_BOT_TOKEN'] ?? '').trim();
     if (!token) {
       return { ok: false, output: null, error: 'SLACK_BOT_TOKEN not set', durationMs: 0 };
     }
@@ -41,10 +41,13 @@ export class SlackMessageNode implements ExecutableNode {
       const result = await client.chat.postMessage({ channel, text });
 
       if (!result.ok) {
+        const apiError = typeof result.error === 'string' && result.error.trim()
+          ? result.error.trim()
+          : undefined;
         return {
           ok: false,
           output: null,
-          error: 'Slack API returned ok=false',
+          error: apiError ? `Slack API error: ${apiError}` : 'Slack API returned ok=false',
           durationMs: Date.now() - start,
         };
       }

@@ -17,7 +17,7 @@ export class WebSearchNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const apiKey = ctx.settings['TAVILY_API_KEY'];
+    const apiKey = String(ctx.settings['TAVILY_API_KEY'] ?? '').trim();
     if (!apiKey) {
       return { ok: false, output: null, error: 'TAVILY_API_KEY not set', durationMs: 0 };
     }

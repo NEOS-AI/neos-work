@@ -5,3 +5,4 @@ export * from './types/skill.js';
 export * from './types/workflow.js';
 export * from './types/memory.js';
 export * from './models.js';
+export * from './messaging.js';

@@ -15,6 +15,13 @@ export interface WorkflowLike {
   edges: Array<{ id: string; source: string; target: string }>;
 }
 
+const DISCORD_WEBHOOK_PREFIX = 'https://discord.com/api/webhooks/';
+
+/** Treat missing or whitespace-only secret values as unset. */
+function secret(secrets: Record<string, string>, key: string): string {
+  return String(secrets[key] ?? '').trim();
+}
+
 /**
  * Assess whether a workflow is ready to run given available secrets/settings.
  */
@@ -47,7 +54,7 @@ export function assessWorkflowPreflight(
   for (const node of nodes) {
     const config = node.config ?? {};
 
-    if (node.type === 'web_search' && !secrets.TAVILY_API_KEY) {
+    if (node.type === 'web_search' && !secret(secrets, 'TAVILY_API_KEY')) {
       issues.push({
         code: 'missing_tavily_key',
         severity: 'error',
@@ -56,7 +63,7 @@ export function assessWorkflowPreflight(
       });
     }
 
-    if (node.type === 'slack_message' && !secrets.SLACK_BOT_TOKEN) {
+    if (node.type === 'slack_message' && !secret(secrets, 'SLACK_BOT_TOKEN')) {
       issues.push({
         code: 'missing_slack_token',
         severity: 'error',
@@ -65,16 +72,27 @@ export function assessWorkflowPreflight(
       });
     }
 
-    if (node.type === 'discord_message' && !secrets.DISCORD_WEBHOOK_URL) {
-      issues.push({
-        code: 'missing_discord_webhook',
-        severity: 'error',
-        nodeId: node.id,
-        message: 'Discord node requires DISCORD_WEBHOOK_URL in settings.',
-      });
+    if (node.type === 'discord_message') {
+      const webhook = secret(secrets, 'DISCORD_WEBHOOK_URL');
+      if (!webhook) {
+        issues.push({
+          code: 'missing_discord_webhook',
+          severity: 'error',
+          nodeId: node.id,
+          message: 'Discord node requires DISCORD_WEBHOOK_URL in settings.',
+        });
+      } else if (!webhook.startsWith(DISCORD_WEBHOOK_PREFIX)) {
+        // Align with DiscordMessageNode SSRF allow-list
+        issues.push({
+          code: 'invalid_discord_webhook',
+          severity: 'error',
+          nodeId: node.id,
+          message: 'Discord webhook URL must start with https://discord.com/api/webhooks/.',
+        });
+      }
     }
 
-    if (node.type === 'media' && !secrets.OPENAI_API_KEY) {
+    if (node.type === 'media' && !secret(secrets, 'OPENAI_API_KEY')) {
       issues.push({
         code: 'missing_openai_key',
         severity: 'error',
@@ -86,7 +104,7 @@ export function assessWorkflowPreflight(
     if (node.type === 'deploy') {
       // Match DeployNode runtime: unknown/missing provider defaults to vercel
       const provider = config.provider === 'cloudflare' ? 'cloudflare' : 'vercel';
-      if (provider === 'vercel' && !secrets.VERCEL_API_TOKEN) {
+      if (provider === 'vercel' && !secret(secrets, 'VERCEL_API_TOKEN')) {
         issues.push({
           code: 'missing_vercel_token',
           severity: 'error',
@@ -94,7 +112,10 @@ export function assessWorkflowPreflight(
           message: 'Deploy (Vercel) requires VERCEL_API_TOKEN in settings.',
         });
       }
-      if (provider === 'cloudflare' && (!secrets.CLOUDFLARE_API_TOKEN || !secrets.CLOUDFLARE_ACCOUNT_ID)) {
+      if (
+        provider === 'cloudflare'
+        && (!secret(secrets, 'CLOUDFLARE_API_TOKEN') || !secret(secrets, 'CLOUDFLARE_ACCOUNT_ID'))
+      ) {
         issues.push({
           code: 'missing_cloudflare_creds',
           severity: 'error',
@@ -114,14 +135,14 @@ export function assessWorkflowPreflight(
         // Local Ollama — no cloud API key required
         continue;
       }
-      if (provider === 'openai' && !secrets.OPENAI_API_KEY) {
+      if (provider === 'openai' && !secret(secrets, 'OPENAI_API_KEY')) {
         issues.push({
           code: 'missing_openai_key',
           severity: 'error',
           nodeId: node.id,
           message: 'OpenAI agent requires OPENAI_API_KEY in settings.',
         });
-      } else if (provider === 'google' && !secrets.GOOGLE_API_KEY) {
+      } else if (provider === 'google' && !secret(secrets, 'GOOGLE_API_KEY')) {
         issues.push({
           code: 'missing_google_key',
           severity: 'error',
@@ -129,7 +150,7 @@ export function assessWorkflowPreflight(
           message: 'Google agent requires GOOGLE_API_KEY in settings.',
         });
       } else if (provider === 'anthropic' || !provider) {
-        if (!secrets.ANTHROPIC_API_KEY) {
+        if (!secret(secrets, 'ANTHROPIC_API_KEY')) {
           issues.push({
             code: 'missing_anthropic_key',
             severity: 'error',

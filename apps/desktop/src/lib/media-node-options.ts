@@ -30,11 +30,11 @@ export function isMediaTtsModel(value: unknown): value is MediaTtsModel {
   return typeof value === 'string' && (MEDIA_TTS_MODELS as readonly string[]).includes(value);
 }
 
-/** Discord webhook content hard limit. */
-export const DISCORD_CONTENT_MAX_LENGTH = 2000;
-
-/** Slack chat.postMessage text hard limit. */
-export const SLACK_CONTENT_MAX_LENGTH = 4000;
+/** Re-export shared messaging limits (single source of truth). */
+export {
+  DISCORD_CONTENT_MAX_LENGTH,
+  SLACK_CONTENT_MAX_LENGTH,
+} from '@neos-work/shared';
 
 /**
  * Deploy project names: start with alnum, then alnum/hyphen/underscore.

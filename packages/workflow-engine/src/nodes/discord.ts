@@ -14,7 +14,7 @@ export class DiscordMessageNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const webhookUrl = ctx.settings['DISCORD_WEBHOOK_URL'];
+    const webhookUrl = String(ctx.settings['DISCORD_WEBHOOK_URL'] ?? '').trim();
     if (!webhookUrl) {
       return { ok: false, output: null, error: 'DISCORD_WEBHOOK_URL not set', durationMs: 0 };
     }
