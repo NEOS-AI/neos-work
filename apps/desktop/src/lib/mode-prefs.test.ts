@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadRemoteUrl, saveRemoteUrl } from './mode-prefs.js';
 
 describe('mode-prefs', () => {
@@ -19,5 +19,22 @@ describe('mode-prefs', () => {
     saveRemoteUrl('http://example:1');
     saveRemoteUrl('   ');
     expect(loadRemoteUrl()).toBe('');
+    expect(localStorage.getItem('neos-remote-url')).toBeNull();
+  });
+
+  it('load returns empty when localStorage throws', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    expect(loadRemoteUrl()).toBe('');
+    spy.mockRestore();
+  });
+
+  it('save swallows localStorage errors', () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(() => saveRemoteUrl('http://x:1')).not.toThrow();
+    spy.mockRestore();
   });
 });

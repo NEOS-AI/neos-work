@@ -6,6 +6,7 @@ import {
   isValidDeployProjectName,
   MEDIA_IMAGE_SIZES,
   MEDIA_VOICES,
+  SLACK_CONTENT_MAX_LENGTH,
 } from './media-node-options.js';
 
 describe('media-node-options', () => {
@@ -13,6 +14,7 @@ describe('media-node-options', () => {
     expect([...MEDIA_IMAGE_SIZES]).toEqual(['1024x1024', '1792x1024', '1024x1792']);
     expect([...MEDIA_VOICES]).toEqual(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
     expect(DISCORD_CONTENT_MAX_LENGTH).toBe(2000);
+    expect(SLACK_CONTENT_MAX_LENGTH).toBe(4000);
   });
 
   it('validates image sizes', () => {

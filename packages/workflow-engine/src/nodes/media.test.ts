@@ -104,4 +104,97 @@ describe('MediaNode', () => {
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer tok');
   });
+
+  it('rejects whitespace-only image prompt', async () => {
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: '   ' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/No prompt/);
+  });
+
+  it('falls back invalid size and voice to defaults', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'x.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'p', size: '512x512' } }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).size).toBe('1024x1024');
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'a.mp3' } }),
+    });
+    await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hi', voice: 'robot' } }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).voice).toBe('alloy');
+  });
+
+  it('surfaces network failures for image generation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'p' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/offline/);
+  });
+
+  it('rejects whitespace-only audio text', async () => {
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: '  \t  ' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/No text/);
+  });
+
+  it('uses inputs.text for audio and preserves valid voice/size', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 't.mp3' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'audio', voice: 'shimmer' },
+        inputs: { text: '  spoken  ' },
+      }),
+    );
+    const audioBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(audioBody.text).toBe('spoken');
+    expect(audioBody.voice).toBe('shimmer');
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'w.png' } }),
+    });
+    await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'wide', size: '1792x1024' } }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).size).toBe('1792x1024');
+  });
+
+  it('surfaces network failures for audio generation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hi' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/down/);
+  });
+
+  it('trims non-string prompt values via String()', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'n.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image' },
+        inputs: { prompt: 42 as unknown as string },
+      }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).prompt).toBe('42');
+  });
 });

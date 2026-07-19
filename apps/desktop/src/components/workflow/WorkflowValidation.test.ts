@@ -452,6 +452,94 @@ describe('validateWorkflowDraft happy paths', () => {
   });
 });
 
+describe('validateWorkflowDraft parallel/slack polish (v0.3.44)', () => {
+  it('warns parallel_missing_start when Parallel End has no Parallel Start', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', config: {} },
+        { id: 'pe', type: 'parallel_end', label: 'Join', config: {} },
+        { id: 'o', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'pe' },
+        { id: 'e2', source: 'pe', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'parallel_missing_start')).toBe(true);
+  });
+
+  it('does not warn parallel_missing_start when Parallel Start is present', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'T', config: {} },
+        { id: 'ps', type: 'parallel_start', label: 'Fan', config: {} },
+        { id: 'a', type: 'output', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+        { id: 'pe', type: 'parallel_end', label: 'Join', config: {} },
+        { id: 'o', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'ps' },
+        { id: 'e2', source: 'ps', target: 'a' },
+        { id: 'e3', source: 'ps', target: 'b' },
+        { id: 'e4', source: 'a', target: 'pe' },
+        { id: 'e5', source: 'b', target: 'pe' },
+        { id: 'e6', source: 'pe', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'parallel_missing_start')).toBe(false);
+    expect(issues.some((i) => i.code === 'parallel_missing_join')).toBe(false);
+  });
+
+  it('warns slack_content_too_long', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 's',
+          type: 'slack_message',
+          label: 'S',
+          config: { channel: '#x', textTemplate: 'z'.repeat(4001) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'slack_content_too_long')).toBe(true);
+  });
+
+  it('allows slack content at the 4000 limit and checks alternate fields', () => {
+    const atLimit = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 's',
+          type: 'slack_message',
+          label: 'S',
+          config: { channel: '#x', textTemplate: 'a'.repeat(4000) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(atLimit.some((i) => i.code === 'slack_content_too_long')).toBe(false);
+
+    const viaContent = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 's',
+          type: 'slack_message',
+          label: 'S',
+          config: { channel: '#x', textTemplate: '   ', content: 'b'.repeat(4001) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(viaContent.some((i) => i.code === 'slack_content_too_long')).toBe(true);
+  });
+});
+
 describe('validateWorkflowDraft media/deploy/discord polish (v0.3.42)', () => {
   it('warns invalid_media_size and invalid_media_voice', () => {
     const size = validateWorkflowDraft({
