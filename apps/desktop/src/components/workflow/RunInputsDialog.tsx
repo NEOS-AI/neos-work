@@ -18,7 +18,9 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
   // Escape cancels the run-with-inputs dialog
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      onCancel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

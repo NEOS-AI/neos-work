@@ -55,13 +55,14 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   // Escape closes the history panel (plan Task 16 UX)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       // Cancel label edit first; do not close the panel or save via blur
       if (editingId) {
         e.preventDefault();
         cancelLabelEdit();
         return;
       }
+      e.preventDefault();
       onClose();
     };
     window.addEventListener('keydown', onKey);

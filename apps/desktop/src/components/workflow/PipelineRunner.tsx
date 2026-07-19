@@ -37,7 +37,8 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
   // Escape closes modal; stop in-flight pipeline stream when closing
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       stopFn?.();
       onClose();
     };

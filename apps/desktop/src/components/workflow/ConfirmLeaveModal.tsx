@@ -12,7 +12,9 @@ export function ConfirmLeaveModal({ onConfirm, onCancel }: ConfirmLeaveModalProp
   // Escape keeps the user on the editor (same as Stay)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      onCancel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

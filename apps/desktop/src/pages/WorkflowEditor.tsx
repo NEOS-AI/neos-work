@@ -177,7 +177,8 @@ export function WorkflowEditor() {
   useEffect(() => {
     if (!scheduleOpen && !shortcutsOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
       if (scheduleOpen) setScheduleOpen(false);
       if (shortcutsOpen) setShortcutsOpen(false);
     };

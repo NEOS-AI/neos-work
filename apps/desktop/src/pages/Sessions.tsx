@@ -77,6 +77,21 @@ export function Sessions() {
     loadSessions();
   }, [loadSessions]);
 
+  // Escape: close new-session modal first, otherwise clear session search
+  useEffect(() => {
+    if (!showNewSessionModal && !sessionSearch) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (showNewSessionModal) {
+        setShowNewSessionModal(false);
+        return;
+      }
+      if (sessionSearch) setSessionSearch('');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showNewSessionModal, sessionSearch]);
+
   const handleCreateSession = async (params: {
     provider: string;
     model: string;
@@ -241,7 +256,9 @@ function NewSessionModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
