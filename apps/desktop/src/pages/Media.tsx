@@ -46,15 +46,20 @@ export function Media() {
 
   useEffect(() => { void load(); }, [load]);
 
-  // Escape clears media preview selection (blob URL revoked by the selected effect cleanup)
+  // Escape: clear preview first, otherwise clear search (blob URL revoked by selected effect cleanup)
   useEffect(() => {
-    if (!selected) return;
+    if (!selected && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelected(null);
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (selected) {
+        setSelected(null);
+        return;
+      }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected]);
+  }, [selected, search]);
 
   const handleDelete = async (filename: string) => {
     if (!client) return;

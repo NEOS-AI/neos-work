@@ -40,21 +40,26 @@ export function Workflows() {
   const [sortMode, setSortMode] = useState<SortMode>(() => loadWorkflowListSort());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const closeCreateModal = () => {
+  const closeCreateModal = useCallback(() => {
     setShowModal(false);
     setNewName('');
     setCreating(false);
-  };
+  }, []);
 
-  // Escape closes new-workflow modal and clears draft form
+  // Escape: close create modal first, otherwise clear search
   useEffect(() => {
-    if (!showModal) return;
+    if (!showModal && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeCreateModal();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (showModal) {
+        closeCreateModal();
+        return;
+      }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showModal]);
+  }, [showModal, search, closeCreateModal]);
 
   const handleSortModeChange = (mode: SortMode) => {
     setSortMode(mode);

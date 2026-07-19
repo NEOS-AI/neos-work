@@ -84,7 +84,8 @@ export function assessWorkflowPreflight(
     }
 
     if (node.type === 'deploy') {
-      const provider = config.provider;
+      // Match DeployNode runtime: unknown/missing provider defaults to vercel
+      const provider = config.provider === 'cloudflare' ? 'cloudflare' : 'vercel';
       if (provider === 'vercel' && !secrets.VERCEL_API_TOKEN) {
         issues.push({
           code: 'missing_vercel_token',
@@ -107,6 +108,10 @@ export function assessWorkflowPreflight(
       const provider = (config.provider ?? config.llmProvider ?? secrets.llmProvider ?? 'anthropic') as string;
       if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
         // CLI path — runtime detect; soft warning only
+        continue;
+      }
+      if (provider === 'ollama') {
+        // Local Ollama — no cloud API key required
         continue;
       }
       if (provider === 'openai' && !secrets.OPENAI_API_KEY) {

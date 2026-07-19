@@ -216,12 +216,13 @@ export function validateWorkflowDraft(input: {
       }
       if (config.maxSteps !== undefined && config.maxSteps !== null && config.maxSteps !== '') {
         const n = typeof config.maxSteps === 'number' ? config.maxSteps : Number(config.maxSteps);
-        if (!Number.isInteger(n) || n < 1) {
+        // Cap at 200 — beyond that runs are usually accidental misconfig
+        if (!Number.isInteger(n) || n < 1 || n > 200) {
           issues.push({
             code: 'invalid_agent_max_steps',
             severity: 'warning',
             nodeId: node.id,
-            message: 'Agent max steps should be a positive integer.',
+            message: 'Agent max steps should be an integer from 1 to 200.',
           });
         }
       }

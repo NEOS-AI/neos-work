@@ -53,18 +53,21 @@ export function Routines() {
 
   useEffect(() => { load(); }, [client]);
 
-  // Escape closes create-routine modal
+  // Escape: close create modal first, otherwise clear search
   useEffect(() => {
-    if (!createOpen) return;
+    if (!createOpen && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (createOpen) {
         setCreateOpen(false);
         setFormError('');
+        return;
       }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [createOpen]);
+  }, [createOpen, search]);
 
   useEffect(() => {
     if (!client || !selectedId) return;

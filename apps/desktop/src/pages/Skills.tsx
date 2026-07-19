@@ -45,15 +45,20 @@ export function Skills() {
     loadSkills();
   }, [loadSkills]);
 
-  // Escape closes try-prompt modal
+  // Escape: close try-prompt first, otherwise clear search
   useEffect(() => {
-    if (!tryPrompt) return;
+    if (!tryPrompt && !search) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTryPrompt(null);
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (tryPrompt) {
+        setTryPrompt(null);
+        return;
+      }
+      if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tryPrompt]);
+  }, [tryPrompt, search]);
 
   const handleScan = async () => {
     if (!client || isScanning) return;
