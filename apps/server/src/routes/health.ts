@@ -9,7 +9,7 @@ const health = new Hono();
 health.get('/', (c) => {
   const response: HealthResponse = {
     status: 'ok',
-    version: '0.3.53',
+    version: '0.3.54',
     uptime: Math.floor((Date.now() - startTime) / 1000),
   };
   return c.json(response);
