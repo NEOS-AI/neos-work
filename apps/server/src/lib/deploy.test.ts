@@ -30,6 +30,18 @@ describe('deploy helpers', () => {
     vi.restoreAllMocks();
   });
 
+  it('surfaces network failures for deployToVercel', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    await expect(
+      deployToVercel({ projectName: 'x', content: '<p/>', apiToken: 'tok' }),
+    ).rejects.toThrow(/ECONNREFUSED/);
+  });
+
+  it('surfaces network failures for getVercelDeploymentStatus', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    await expect(getVercelDeploymentStatus('dpl_1', 'tok')).rejects.toThrow(/offline/);
+  });
+
   describe('getVercelDeploymentStatus', () => {
     it('maps READY → success', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

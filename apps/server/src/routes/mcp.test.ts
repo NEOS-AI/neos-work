@@ -107,6 +107,38 @@ describe('mcp routes', () => {
     expect(created.data.url).toBe('https://example.com/mcp');
   });
 
+  it('oauth refresh validates http endpoint and trims fields', async () => {
+    const missing = await mcp.request('/oauth/s1/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tokenEndpoint: '  ', clientId: 'cid' }),
+    });
+    expect(missing.status).toBe(400);
+
+    const badUrl = await mcp.request('/oauth/s1/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenEndpoint: 'ftp://auth.example/token',
+        clientId: 'cid',
+      }),
+    });
+    expect(badUrl.status).toBe(400);
+
+    // No stored refresh token → 400 after validation
+    const noTok = await mcp.request('/oauth/s1/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenEndpoint: '  https://auth.example/token  ',
+        clientId: '  cid  ',
+      }),
+    });
+    expect(noTok.status).toBe(400);
+    const body = await noTok.json() as { error: string };
+    expect(body.error).toMatch(/refresh token/i);
+  });
+
   it('oauth/start trims fields and rejects non-http endpoints', async () => {
     const missing = await mcp.request('/oauth/start', {
       method: 'POST',

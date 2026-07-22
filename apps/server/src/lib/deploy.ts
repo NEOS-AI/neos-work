@@ -20,14 +20,24 @@ export interface RemoteDeployStatusResult {
   readyState?: string;
 }
 
+function networkError(err: unknown, fallback: string): Error {
+  if (err instanceof Error) return err;
+  return new Error(fallback);
+}
+
 /** Poll Vercel deployment status by deployment id. */
 export async function getVercelDeploymentStatus(
   deploymentId: string,
   apiToken: string,
 ): Promise<RemoteDeployStatusResult> {
-  const res = await fetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(deploymentId)}`, {
-    headers: { Authorization: `Bearer ${apiToken}` },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(deploymentId)}`, {
+      headers: { Authorization: `Bearer ${apiToken.trim()}` },
+    });
+  } catch (err) {
+    throw networkError(err, 'Vercel status network error');
+  }
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(errBody.error?.message ?? `Vercel status error ${res.status}`);
@@ -60,10 +70,15 @@ export async function getCloudflareDeploymentStatus(options: {
   apiToken: string;
 }): Promise<RemoteDeployStatusResult> {
   const { accountId, projectName, deploymentId, apiToken } = options;
-  const res = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/deployments/${encodeURIComponent(deploymentId)}`,
-    { headers: { Authorization: `Bearer ${apiToken}` } },
-  );
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/deployments/${encodeURIComponent(deploymentId)}`,
+      { headers: { Authorization: `Bearer ${apiToken.trim()}` } },
+    );
+  } catch (err) {
+    throw networkError(err, 'Cloudflare status network error');
+  }
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as { errors?: { message: string }[] };
     throw new Error(errBody.errors?.[0]?.message ?? `Cloudflare status error ${res.status}`);
@@ -106,14 +121,19 @@ export async function deployToVercel(options: {
     target: 'production',
   };
 
-  const res = await fetch('https://api.vercel.com/v13/deployments', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(deployBody),
-  });
+  let res: Response;
+  try {
+    res = await fetch('https://api.vercel.com/v13/deployments', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiToken.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(deployBody),
+    });
+  } catch (err) {
+    throw networkError(err, 'Vercel deploy network error');
+  }
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
@@ -138,14 +158,18 @@ export async function deployToCloudflare(options: {
   const { projectName, content, accountId, apiToken } = options;
 
   // First ensure project exists
-  await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name: projectName, production_branch: 'main' }),
-  });
+  try {
+    await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiToken.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: projectName, production_branch: 'main' }),
+    });
+  } catch {
+    // Ignore create-project network errors; deploy may still succeed if project exists
+  }
   // Ignore "already exists" error
 
   // Create a direct upload deployment via multipart form
@@ -156,14 +180,19 @@ export async function deployToCloudflare(options: {
   );
   formData.append('/index.html', new Blob([content], { type: 'text/html' }), 'index.html');
 
-  const deployRes = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}/deployments`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiToken}` },
-      body: formData,
-    },
-  );
+  let deployRes: Response;
+  try {
+    deployRes = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}/deployments`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiToken.trim()}` },
+        body: formData,
+      },
+    );
+  } catch (err) {
+    throw networkError(err, 'Cloudflare deploy network error');
+  }
 
   if (!deployRes.ok) {
     const errBody = await deployRes.json().catch(() => ({})) as { errors?: { message: string }[] };

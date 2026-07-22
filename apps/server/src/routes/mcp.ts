@@ -348,7 +348,8 @@ mcp.get('/oauth/callback', async (c) => {
  * Returns connection status for a given MCP server.
  */
 mcp.get('/oauth/:serverId/status', async (c) => {
-  const serverId = c.req.param('serverId');
+  const serverId = c.req.param('serverId').trim();
+  if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   const status = await getTokenStatus(serverId);
   return c.json({ ok: true, data: status });
 });
@@ -359,11 +360,18 @@ mcp.get('/oauth/:serverId/status', async (c) => {
  * Body: { tokenEndpoint, clientId }
  */
 mcp.post('/oauth/:serverId/refresh', async (c) => {
-  const serverId = c.req.param('serverId');
+  const serverId = c.req.param('serverId').trim();
+  if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   try {
-    const body = await c.req.json<{ tokenEndpoint: string; clientId: string }>();
-    if (!body.tokenEndpoint || !body.clientId) {
+    const body = await c.req.json<{ tokenEndpoint: string; clientId: string }>().catch(() => null);
+    const tokenEndpoint =
+      typeof body?.tokenEndpoint === 'string' ? body.tokenEndpoint.trim() : '';
+    const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : '';
+    if (!tokenEndpoint || !clientId) {
       return c.json({ ok: false, error: 'tokenEndpoint and clientId required' }, 400);
+    }
+    if (!isSafeHttpBaseUrl(tokenEndpoint)) {
+      return c.json({ ok: false, error: 'tokenEndpoint must be http(s)' }, 400);
     }
 
     const existing = await loadToken(serverId);
@@ -371,15 +379,21 @@ mcp.post('/oauth/:serverId/refresh', async (c) => {
       return c.json({ ok: false, error: 'No refresh token available' }, 400);
     }
 
-    const tokenRes = await fetch(body.tokenEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: existing.refreshToken,
-        client_id: body.clientId,
-      }).toString(),
-    });
+    let tokenRes: Response;
+    try {
+      tokenRes = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: existing.refreshToken,
+          client_id: clientId,
+        }).toString(),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Token refresh network error';
+      return c.json({ ok: false, error: msg }, 502);
+    }
 
     if (!tokenRes.ok) {
       return c.json({ ok: false, error: `Token refresh failed: ${tokenRes.status}` }, 502);
@@ -418,7 +432,8 @@ mcp.post('/oauth/:serverId/refresh', async (c) => {
  * Revoke and delete stored token for the given MCP server.
  */
 mcp.delete('/oauth/:serverId', async (c) => {
-  const serverId = c.req.param('serverId');
+  const serverId = c.req.param('serverId').trim();
+  if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   await deleteToken(serverId);
   return c.json({ ok: true });
 });

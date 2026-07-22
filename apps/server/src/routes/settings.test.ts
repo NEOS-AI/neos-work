@@ -52,6 +52,27 @@ describe('settings routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PUT blank sensitive value deletes the setting', async () => {
+    const put = await settings.request(`/${SENSITIVE}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'sk-to-clear' }),
+    });
+    expect(put.status).toBe(200);
+
+    const clear = await settings.request(`/${SENSITIVE}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: '   ' }),
+    });
+    expect(clear.status).toBe(200);
+    const body = await clear.json() as { data?: { deleted?: boolean } };
+    expect(body.data?.deleted).toBe(true);
+
+    const get = await settings.request(`/${SENSITIVE}`);
+    expect(get.status).toBe(404);
+  });
+
   it('verify-key rejects missing/whitespace key and unknown provider', async () => {
     const blank = await settings.request('/verify-key', {
       method: 'POST',
