@@ -12,7 +12,10 @@ function buildAdapter(settings: Record<string, string>) {
   const provider = settings['llmProvider'] ?? 'anthropic';
 
   if (provider === 'openai') {
-    const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim() || undefined;
+    const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY is not configured');
+    }
     const baseUrl = String(settings['OPENAI_BASE_URL'] ?? '').trim() || undefined;
     return new OpenAIAdapter({ provider: 'openai', apiKey, baseUrl });
   }
@@ -85,7 +88,11 @@ export class AgentNode implements ExecutableNode {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
 
-    const harnessId = this.nodeConfig?.['harnessId'] as string | undefined;
+    const rawHarnessId = this.nodeConfig?.['harnessId'];
+    const harnessId =
+      typeof rawHarnessId === 'string' ? rawHarnessId.trim()
+        : rawHarnessId != null && rawHarnessId !== '' ? String(rawHarnessId).trim()
+          : '';
     const harness = harnessId ? resolveHarness(harnessId) : undefined;
 
     const baseSystemPrompt = harness
@@ -97,9 +104,11 @@ export class AgentNode implements ExecutableNode {
     const authToken = String(ctx.settings['AUTH_TOKEN'] ?? '').trim();
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
-    // Prepend Design System context if injected
-    if (ctx.designSystemContent) {
-      systemPrompt = `<!-- DESIGN CONTEXT -->\n${ctx.designSystemContent}\n<!-- /DESIGN CONTEXT -->\n\n${systemPrompt}`;
+    // Prepend Design System context if injected (skip whitespace-only payloads)
+    const designCtx =
+      typeof ctx.designSystemContent === 'string' ? ctx.designSystemContent.trim() : '';
+    if (designCtx) {
+      systemPrompt = `<!-- DESIGN CONTEXT -->\n${designCtx}\n<!-- /DESIGN CONTEXT -->\n\n${systemPrompt}`;
     }
 
     // Prefer harness constraint; else node config (clamped 1–200 to match editor validation)

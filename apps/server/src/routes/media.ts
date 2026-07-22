@@ -8,8 +8,7 @@
 import { Hono } from 'hono';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import { getSetting } from '../db/settings.js';
+import { getSecretSetting } from '../db/settings.js';
 import { generateImage, generateAudio, listMediaFiles, MEDIA_DIR as MEDIA_DIR_EXPORT } from '../lib/media-generator.js';
 
 const media = new Hono();
@@ -26,8 +25,8 @@ media.get('/files', async (c) => {
  * Media config status (plan Task 7) — does not return the secret value.
  */
 media.get('/config', (c) => {
-  const hasOpenAi = !!getSetting('OPENAI_API_KEY');
-  const baseUrl = getSetting('OPENAI_BASE_URL');
+  const hasOpenAi = !!getSecretSetting('OPENAI_API_KEY');
+  const baseUrl = getSecretSetting('OPENAI_BASE_URL');
   return c.json({
     ok: true,
     data: {
@@ -47,19 +46,20 @@ media.post('/image', async (c) => {
     quality?: 'standard' | 'hd';
   }>();
 
-  if (!body.prompt || typeof body.prompt !== 'string') {
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  if (!prompt) {
     return c.json({ ok: false, error: 'prompt is required' }, 400);
   }
-  if (body.prompt.length > 4000) {
+  if (prompt.length > 4000) {
     return c.json({ ok: false, error: 'prompt too long' }, 400);
   }
 
-  const apiKey = getSetting('OPENAI_API_KEY');
+  const apiKey = getSecretSetting('OPENAI_API_KEY');
   if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
 
   try {
     const result = await generateImage({
-      prompt: body.prompt,
+      prompt,
       size: body.size,
       quality: body.quality,
       apiKey,
@@ -85,19 +85,20 @@ media.post('/audio', async (c) => {
     model?: 'tts-1' | 'tts-1-hd';
   }>();
 
-  if (!body.text || typeof body.text !== 'string') {
+  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  if (!text) {
     return c.json({ ok: false, error: 'text is required' }, 400);
   }
-  if (body.text.length > 4096) {
+  if (text.length > 4096) {
     return c.json({ ok: false, error: 'text too long (max 4096 chars)' }, 400);
   }
 
-  const apiKey = getSetting('OPENAI_API_KEY');
+  const apiKey = getSecretSetting('OPENAI_API_KEY');
   if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
 
   try {
     const result = await generateAudio({
-      text: body.text,
+      text,
       voice: body.voice,
       model: body.model,
       apiKey,
@@ -157,13 +158,14 @@ media.post('/generate', async (c) => {
     return c.json({ ok: false, error: 'surface must be image or audio' }, 400);
   }
 
-  const apiKey = getSetting('OPENAI_API_KEY');
+  const apiKey = getSecretSetting('OPENAI_API_KEY');
   if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
 
   try {
     if (body.surface === 'image') {
-      const prompt = body.prompt ?? body.text;
-      if (!prompt || typeof prompt !== 'string') {
+      const rawPrompt = body.prompt ?? body.text;
+      const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
+      if (!prompt) {
         return c.json({ ok: false, error: 'prompt is required for image' }, 400);
       }
       if (prompt.length > 4000) {
@@ -186,8 +188,9 @@ media.post('/generate', async (c) => {
       });
     }
 
-    const text = body.text ?? body.prompt;
-    if (!text || typeof text !== 'string') {
+    const rawText = body.text ?? body.prompt;
+    const text = typeof rawText === 'string' ? rawText.trim() : '';
+    if (!text) {
       return c.json({ ok: false, error: 'text is required for audio' }, 400);
     }
     if (text.length > 4096) {

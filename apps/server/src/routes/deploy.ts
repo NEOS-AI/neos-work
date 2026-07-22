@@ -7,7 +7,7 @@
  */
 
 import { Hono } from 'hono';
-import { getSetting } from '../db/settings.js';
+import { getSecretSetting } from '../db/settings.js';
 import {
   deployToVercel,
   deployToCloudflare,
@@ -38,15 +38,15 @@ deploy.post('/preflight', async (c) => {
   const checks: Array<{ key: string; ok: boolean; message: string }> = [];
 
   if (provider === 'vercel') {
-    const token = getSetting('VERCEL_API_TOKEN');
+    const token = getSecretSetting('VERCEL_API_TOKEN');
     checks.push({
       key: 'VERCEL_API_TOKEN',
       ok: Boolean(token),
       message: token ? 'Vercel API token configured' : 'Missing Vercel API token in Settings',
     });
   } else {
-    const token = getSetting('CLOUDFLARE_API_TOKEN');
-    const accountId = getSetting('CLOUDFLARE_ACCOUNT_ID');
+    const token = getSecretSetting('CLOUDFLARE_API_TOKEN');
+    const accountId = getSecretSetting('CLOUDFLARE_ACCOUNT_ID');
     checks.push({
       key: 'CLOUDFLARE_API_TOKEN',
       ok: Boolean(token),
@@ -59,7 +59,8 @@ deploy.post('/preflight', async (c) => {
     });
   }
 
-  const projectName = (body as { projectName?: string }).projectName ?? 'neos-deploy';
+  const rawProject = (body as { projectName?: string }).projectName;
+  const projectName = (typeof rawProject === 'string' ? rawProject.trim() : '') || 'neos-deploy';
   checks.push({
     key: 'projectName',
     ok: Boolean(projectName && projectName.length <= 100),
@@ -103,7 +104,7 @@ deploy.post('/:id/refresh', async (c) => {
 
   try {
     if (row.provider === 'vercel') {
-      const apiToken = getSetting('VERCEL_API_TOKEN');
+      const apiToken = getSecretSetting('VERCEL_API_TOKEN');
       if (!apiToken) return c.json({ ok: false, error: 'Vercel API token not configured' }, 400);
       const remote = await getVercelDeploymentStatus(row.deploymentId, apiToken);
       const updated = updateDeployment(row.id, {
@@ -115,8 +116,8 @@ deploy.post('/:id/refresh', async (c) => {
     }
 
     if (row.provider === 'cloudflare') {
-      const apiToken = getSetting('CLOUDFLARE_API_TOKEN');
-      const accountId = getSetting('CLOUDFLARE_ACCOUNT_ID');
+      const apiToken = getSecretSetting('CLOUDFLARE_API_TOKEN');
+      const accountId = getSecretSetting('CLOUDFLARE_ACCOUNT_ID');
       if (!apiToken || !accountId) {
         return c.json({ ok: false, error: 'Cloudflare credentials not configured' }, 400);
       }
@@ -157,17 +158,19 @@ deploy.post('/', async (c) => {
     runId?: string;
   }>();
 
-  if (!body.provider || !body.content) {
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (!body.provider || !content) {
     return c.json({ ok: false, error: 'provider and content are required' }, 400);
   }
   if (!['vercel', 'cloudflare'].includes(body.provider)) {
     return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
   }
-  if (body.content.length > 5_000_000) {
+  if (content.length > 5_000_000) {
     return c.json({ ok: false, error: 'content too large' }, 400);
   }
 
-  const projectName = body.projectName ?? 'neos-deploy';
+  const projectName =
+    (typeof body.projectName === 'string' ? body.projectName.trim() : '') || 'neos-deploy';
 
   const record = createDeployment({
     workflowId: body.workflowId,
@@ -179,12 +182,12 @@ deploy.post('/', async (c) => {
 
   try {
     if (body.provider === 'vercel') {
-      const apiToken = getSetting('VERCEL_API_TOKEN');
+      const apiToken = getSecretSetting('VERCEL_API_TOKEN');
       if (!apiToken) {
         updateDeployment(record.id, { status: 'failed', statusMessage: 'Vercel API token not configured' });
         return c.json({ ok: false, error: 'Vercel API token not configured' }, 400);
       }
-      const result = await deployToVercel({ projectName, content: body.content, apiToken });
+      const result = await deployToVercel({ projectName, content, apiToken });
       const updated = updateDeployment(record.id, {
         status: 'success',
         url: result.url,
@@ -192,8 +195,8 @@ deploy.post('/', async (c) => {
       });
       return c.json({ ok: true, data: { ...result, recordId: updated?.id ?? record.id } });
     } else {
-      const apiToken = getSetting('CLOUDFLARE_API_TOKEN');
-      const accountId = getSetting('CLOUDFLARE_ACCOUNT_ID');
+      const apiToken = getSecretSetting('CLOUDFLARE_API_TOKEN');
+      const accountId = getSecretSetting('CLOUDFLARE_ACCOUNT_ID');
       if (!apiToken || !accountId) {
         updateDeployment(record.id, {
           status: 'failed',
@@ -203,7 +206,7 @@ deploy.post('/', async (c) => {
       }
       const result = await deployToCloudflare({
         projectName,
-        content: body.content,
+        content,
         accountId,
         apiToken,
       });

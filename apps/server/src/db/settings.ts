@@ -38,6 +38,21 @@ export function getSetting(key: string): string | undefined {
   return row.value;
 }
 
+/** Trim and treat whitespace-only values as unset (align with preflight `secret()`). */
+function trimmedSecret(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Like getSetting but trims and treats whitespace-only as unset.
+ * Prefer for API keys / tokens at route boundaries.
+ */
+export function getSecretSetting(key: string): string | undefined {
+  return trimmedSecret(getSetting(key));
+}
+
 export function setSetting(key: string, value: string): void {
   const db = getDb();
   const storedValue = isSensitiveKey(key) ? encrypt(value) : value;
@@ -88,13 +103,13 @@ const UI_KEY_ALIASES: Array<[string, string]> = [
 export function getWorkflowSecrets(): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key of WORKFLOW_SECRET_KEYS) {
-    const value = getSetting(key);
+    const value = trimmedSecret(getSetting(key));
     if (value !== undefined) result[key] = value;
   }
   // Prefer explicit ANTHROPIC/GOOGLE keys; fall back to UI apiKey.* aliases
   for (const [uiKey, engineKey] of UI_KEY_ALIASES) {
     if (!result[engineKey]) {
-      const value = getSetting(uiKey);
+      const value = trimmedSecret(getSetting(uiKey));
       if (value !== undefined) result[engineKey] = value;
     }
   }
@@ -133,21 +148,25 @@ export function getExecutionSettings(runtime?: {
   }
 
   // Settings UI defaults → agent adapter selection (plan multi-LLM)
-  const defaultProvider = getSetting('defaults.provider');
+  const defaultProvider = getSecretSetting('defaults.provider');
   if (defaultProvider && !result.llmProvider) {
     result.llmProvider = defaultProvider;
   }
-  const defaultModel = getSetting('defaults.model');
+  const defaultModel = getSecretSetting('defaults.model');
   if (defaultModel && !result.model) {
     result.model = defaultModel;
   }
 
   if (runtime?.serverUrl) {
-    result.SERVER_URL = runtime.serverUrl;
+    const url = runtime.serverUrl.trim();
+    if (url) result.SERVER_URL = url;
   }
   if (runtime?.authToken) {
-    result.SERVER_TOKEN = runtime.authToken;
-    result.AUTH_TOKEN = runtime.authToken;
+    const token = runtime.authToken.trim();
+    if (token) {
+      result.SERVER_TOKEN = token;
+      result.AUTH_TOKEN = token;
+    }
   }
   return result;
 }

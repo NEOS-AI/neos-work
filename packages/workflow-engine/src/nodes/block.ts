@@ -13,7 +13,11 @@ export class BlockNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const blockId = ctx.config?.['blockId'] as string | undefined;
+    const rawBlockId = ctx.config?.['blockId'];
+    const blockId =
+      typeof rawBlockId === 'string' ? rawBlockId.trim()
+        : rawBlockId != null && rawBlockId !== '' ? String(rawBlockId).trim()
+          : '';
     if (!blockId) {
       return { ok: false, output: null, error: 'blockId is required for block nodes', durationMs: 0 };
     }

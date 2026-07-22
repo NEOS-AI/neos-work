@@ -72,10 +72,14 @@ function runSpawn(
 
 // ── code_eval ─────────────────────────────────────────────────────────────────
 
+const CODE_LANGUAGES = new Set(['js', 'ts', 'python']);
+
 async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
   const code = String(ctx.params['code'] ?? '');
-  const language = String(ctx.params['language'] ?? 'js');
+  const rawLanguage = String(ctx.params['language'] ?? 'js').trim().toLowerCase();
+  // Unknown / whitespace language → js (matches paramDefs options)
+  const language = CODE_LANGUAGES.has(rawLanguage) ? rawLanguage : 'js';
 
   if (!code.trim()) {
     return { ok: false, output: null, error: 'No code provided', durationMs: Date.now() - start };
@@ -128,7 +132,7 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
 
 async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
-  const inputPath = String(ctx.params['path'] ?? '');
+  const inputPath = String(ctx.params['path'] ?? '').trim();
 
   if (!inputPath) {
     return { ok: false, output: null, error: 'No path provided', durationMs: Date.now() - start };
@@ -156,7 +160,7 @@ async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult>
 
 async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
-  const inputPath = String(ctx.params['path'] ?? '');
+  const inputPath = String(ctx.params['path'] ?? '').trim();
   const content = String(ctx.params['content'] ?? '');
 
   if (!inputPath) {
@@ -187,7 +191,8 @@ async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult
 
 async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
-  const repoPath = ctx.params['repoPath'] ? String(ctx.params['repoPath']) : process.cwd();
+  const rawRepo = ctx.params['repoPath'] != null ? String(ctx.params['repoPath']).trim() : '';
+  const repoPath = rawRepo || process.cwd();
 
   // Validate repo path is not going outside reasonable bounds
   if (path.isAbsolute(repoPath) && !repoPath.startsWith(os.homedir())) {
@@ -213,10 +218,25 @@ async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> 
 async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
   const command = String(ctx.params['command'] ?? '');
-  const cwd = ctx.params['cwd'] ? String(ctx.params['cwd']) : process.cwd();
+  const rawCwd = ctx.params['cwd'] != null ? String(ctx.params['cwd']).trim() : '';
+  const cwd = rawCwd || process.cwd();
 
   if (!command.trim()) {
     return { ok: false, output: null, error: 'No command provided', durationMs: Date.now() - start };
+  }
+
+  // Absolute cwd must stay under home (or be process.cwd for CI checkouts)
+  if (
+    path.isAbsolute(cwd)
+    && path.resolve(cwd) !== path.resolve(process.cwd())
+    && !cwd.startsWith(os.homedir())
+  ) {
+    return {
+      ok: false,
+      output: null,
+      error: 'Working directory must be within home directory',
+      durationMs: Date.now() - start,
+    };
   }
 
   const [bin, ...args] = command.trim().split(/\s+/);
