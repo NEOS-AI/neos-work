@@ -15,6 +15,40 @@ import { registerHarness } from '@neos-work/workflow-engine';
 
 const harness = new Hono();
 
+/** Clamp harness constraints to agent editor bounds (maxSteps 1–200). */
+function normalizeConstraints(
+  raw: { maxSteps?: number; maxTokens?: number; timeoutMs?: number } | undefined,
+): { maxSteps?: number; maxTokens?: number; timeoutMs?: number } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: { maxSteps?: number; maxTokens?: number; timeoutMs?: number } = {};
+  if (raw.maxSteps !== undefined) {
+    const n = Number(raw.maxSteps);
+    if (Number.isFinite(n) && n >= 1) {
+      out.maxSteps = Math.min(200, Math.floor(n));
+    }
+  }
+  if (raw.maxTokens !== undefined) {
+    const n = Number(raw.maxTokens);
+    if (Number.isFinite(n) && n >= 1) {
+      out.maxTokens = Math.min(1_000_000, Math.floor(n));
+    }
+  }
+  if (raw.timeoutMs !== undefined) {
+    const n = Number(raw.timeoutMs);
+    if (Number.isFinite(n) && n >= 1) {
+      out.timeoutMs = Math.min(3_600_000, Math.floor(n));
+    }
+  }
+  return out;
+}
+
+function normalizeAllowedTools(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw
+    .map((t) => (typeof t === 'string' ? t.trim() : String(t ?? '').trim()))
+    .filter(Boolean);
+}
+
 harness.get('/', (c) => {
   const all = listHarnesses();
   const custom = db.listCustomHarnesses();
@@ -55,6 +89,7 @@ harness.post('/', async (c) => {
   if (!Array.isArray(body.allowedTools)) {
     return c.json({ ok: false, error: 'allowedTools must be an array' }, 400);
   }
+  const allowedTools = normalizeAllowedTools(body.allowedTools) ?? [];
 
   const description =
     typeof body.description === 'string' ? body.description.trim() : (body.description ?? '');
@@ -67,8 +102,8 @@ harness.post('/', async (c) => {
     domain: domain as never,
     description,
     systemPrompt,
-    allowedTools: body.allowedTools,
-    constraints: body.constraints,
+    allowedTools,
+    constraints: normalizeConstraints(body.constraints),
   });
 
   // Register in runtime harness registry
@@ -110,6 +145,17 @@ harness.put('/:id', async (c) => {
   }
   if (typeof body.domain === 'string') {
     patch.domain = body.domain.trim() || 'general';
+  }
+  if (body.allowedTools !== undefined) {
+    if (!Array.isArray(body.allowedTools)) {
+      return c.json({ ok: false, error: 'allowedTools must be an array' }, 400);
+    }
+    patch.allowedTools = normalizeAllowedTools(body.allowedTools) ?? [];
+  }
+  if (body.constraints !== undefined) {
+    patch.constraints = normalizeConstraints(
+      body.constraints as { maxSteps?: number; maxTokens?: number; timeoutMs?: number },
+    );
   }
 
   const updated = db.updateCustomHarness(id, patch as never);

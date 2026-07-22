@@ -140,4 +140,19 @@ describe('media routes', () => {
     const body = await res.json() as { error: string };
     expect(body.error).toMatch(/Invalid/i);
   });
+
+  it('POST /generate normalizes surface case and whitespace', async () => {
+    setSetting('OPENAI_API_KEY', '   ');
+    // Missing key after normalize still 400; surface itself is accepted as image
+    const res = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: '  IMAGE  ', prompt: 'a cat' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    // Should fail on API key, not surface validation
+    expect(body.error).toMatch(/OpenAI|key|configured/i);
+    expect(body.error).not.toMatch(/surface/i);
+  });
 });

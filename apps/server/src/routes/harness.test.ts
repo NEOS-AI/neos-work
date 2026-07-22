@@ -79,4 +79,43 @@ describe('harness routes', () => {
     const res = await harness.request('/no-such-harness-xyz');
     expect(res.status).toBe(404);
   });
+
+  it('clamps constraints.maxSteps and trims allowedTools', async () => {
+    const create = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        systemPrompt: 'prompt',
+        allowedTools: ['  read  ', '  ', 'write'],
+        constraints: { maxSteps: 999, maxTokens: 100, timeoutMs: 5000 },
+      }),
+    });
+    expect([200, 201]).toContain(create.status);
+    const created = await create.json() as {
+      data: {
+        id: string;
+        allowedTools: string[];
+        constraints?: { maxSteps?: number; maxTokens?: number; timeoutMs?: number };
+      };
+    };
+    expect(created.data.allowedTools).toEqual(['read', 'write']);
+    expect(created.data.constraints?.maxSteps).toBe(200);
+    expect(created.data.constraints?.maxTokens).toBe(100);
+
+    const put = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        constraints: { maxSteps: 50 },
+        allowedTools: ['  grep  ', ''],
+      }),
+    });
+    expect(put.status).toBe(200);
+    const updated = await put.json() as {
+      data: { allowedTools: string[]; constraints?: { maxSteps?: number } };
+    };
+    expect(updated.data.allowedTools).toEqual(['grep']);
+    expect(updated.data.constraints?.maxSteps).toBe(50);
+  });
 });

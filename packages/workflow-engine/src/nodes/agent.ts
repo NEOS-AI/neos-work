@@ -111,14 +111,21 @@ export class AgentNode implements ExecutableNode {
       systemPrompt = `<!-- DESIGN CONTEXT -->\n${designCtx}\n<!-- /DESIGN CONTEXT -->\n\n${systemPrompt}`;
     }
 
-    // Prefer harness constraint; else node config (clamped 1–200 to match editor validation)
+    // Prefer harness constraint; else node config (both clamped 1–200 to match editor validation)
     const fromConfig = Number(this.nodeConfig?.['maxSteps'] ?? 20);
     const configSteps =
       Number.isFinite(fromConfig) && fromConfig >= 1
         ? Math.min(200, Math.floor(fromConfig))
         : 20;
-    const maxIterations = harness?.constraints?.maxSteps ?? configSteps;
-    const toolFilter = harness?.allowedTools;
+    const rawHarnessSteps = Number(harness?.constraints?.maxSteps);
+    const harnessSteps =
+      Number.isFinite(rawHarnessSteps) && rawHarnessSteps >= 1
+        ? Math.min(200, Math.floor(rawHarnessSteps))
+        : undefined;
+    const maxIterations = harnessSteps ?? configSteps;
+    const toolFilter = harness?.allowedTools
+      ?.map((t) => String(t).trim())
+      .filter(Boolean);
 
     // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig)
     const provider = (this.nodeConfig?.['provider'] ?? this.nodeConfig?.['llmProvider']) as string | undefined;

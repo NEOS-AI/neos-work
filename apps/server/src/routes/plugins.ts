@@ -72,14 +72,18 @@ plugins.post('/upgrade-from-skill', async (c) => {
 });
 
 plugins.get('/:id', async (c) => {
-  const plugin = await getPlugin(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const plugin = await getPlugin(id);
   if (!plugin) return c.json({ ok: false, error: 'Not found' }, 404);
   const { dir: _, ...p } = plugin;
   return c.json({ ok: true, data: p });
 });
 
 plugins.post('/:id/run', async (c) => {
-  const plugin = await getPlugin(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const plugin = await getPlugin(id);
   if (!plugin) return c.json({ ok: false, error: 'Not found' }, 404);
 
   let inputs: Record<string, unknown> = {};
@@ -106,9 +110,14 @@ plugins.post('/:id/run', async (c) => {
 });
 
 plugins.post('/:id/run/:runId/resume', async (c) => {
-  const body = await c.req.json<{ stageId: string; response: Record<string, unknown> }>();
-  if (!body.stageId) return c.json({ ok: false, error: 'stageId required' }, 400);
-  const ok = resumeRun(c.req.param('runId'), body.stageId, body.response ?? {});
+  const body = await c.req.json<{ stageId: string; response: Record<string, unknown> }>().catch(
+    () => null,
+  );
+  const stageId = typeof body?.stageId === 'string' ? body.stageId.trim() : '';
+  if (!stageId) return c.json({ ok: false, error: 'stageId required' }, 400);
+  const runId = c.req.param('runId').trim();
+  if (!runId) return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
+  const ok = resumeRun(runId, stageId, body?.response ?? {});
   if (!ok) return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
   return c.json({ ok: true });
 });

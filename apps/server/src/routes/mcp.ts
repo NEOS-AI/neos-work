@@ -138,6 +138,11 @@ mcp.post('/', async (c) => {
     const command =
       typeof body.command === 'string' ? body.command.trim() : body.command;
     const url = typeof body.url === 'string' ? body.url.trim() : body.url;
+    const args = Array.isArray(body.args)
+      ? body.args
+          .map((a) => (typeof a === 'string' ? a.trim() : String(a ?? '').trim()))
+          .filter((a) => a.length > 0)
+      : body.args;
     if (body.transport === 'stdio' && !command) {
       return c.json({ ok: false, error: 'command is required for stdio transport' }, 400);
     }
@@ -152,7 +157,7 @@ mcp.post('/', async (c) => {
       name,
       transport: body.transport,
       command,
-      args: body.args,
+      args,
       url,
     });
     return c.json({ ok: true, data: rowToResponse(row) }, 201);

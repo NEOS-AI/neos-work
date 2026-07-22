@@ -258,6 +258,31 @@ describe('AgentNode LLM model selection', () => {
     expect(opts?.maxIterations).toBe(15);
   });
 
+  it('clamps harness maxSteps to 200', async () => {
+    const { registerHarness } = await import('../harness/index.js');
+    registerHarness({
+      id: 'cov_agent_maxsteps_clamp',
+      name: 'Clamp Test',
+      domain: 'coding',
+      description: 'test',
+      systemPrompt: 'test',
+      allowedTools: ['  read  ', '  ', 'write'],
+      constraints: { maxSteps: 999 },
+      isBuiltIn: false,
+    });
+    const node = new AgentNode('agent_coding', {
+      harnessId: 'cov_agent_maxsteps_clamp',
+      maxSteps: 10,
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { maxIterations?: number };
+    expect(opts?.maxIterations).toBe(200);
+  });
+
   it('returns error when anthropic key is missing', async () => {
     const node = new AgentNode('agent_coding', {});
     const result = await node.execute(ctx({ settings: {} }));
