@@ -24,6 +24,37 @@ describe('BlockNode', () => {
     expect(result.error).toMatch(/blockId is required/);
   });
 
+  it('treats whitespace-only blockId as missing', async () => {
+    const result = await node.execute(ctx({ blockId: '   ' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/blockId is required/);
+  });
+
+  it('trims blockId before resolve', async () => {
+    const meta: WorkflowBlock = {
+      id: 'cov_trim_block',
+      name: 'Trim Block',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'native',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    };
+    registerNativeBlock(
+      {
+        blockId: 'cov_trim_block',
+        execute: async () => ({ ok: true, output: 'trimmed', durationMs: 0 }),
+      },
+      meta,
+    );
+    const result = await node.execute(ctx({ blockId: '  cov_trim_block  ' }));
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('trimmed');
+  });
+
   it('fails when block metadata is missing', async () => {
     const result = await node.execute(ctx({ blockId: 'does-not-exist-xyz' }));
     expect(result.ok).toBe(false);

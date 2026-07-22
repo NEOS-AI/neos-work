@@ -34,6 +34,18 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/No code/);
     });
 
+    it('rejects whitespace-only code', async () => {
+      const result = await exec().execute(ctx({ code: '   ' }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/No code/);
+    });
+
+    it('falls back unknown language to js', async () => {
+      const result = await exec().execute(ctx({ code: '3 + 4', language: 'ruby' }));
+      expect(result.ok).toBe(true);
+      expect(String(result.output)).toContain('7');
+    });
+
     it('evaluates simple JS expression', async () => {
       const result = await exec().execute(ctx({ code: '1 + 2', language: 'js' }));
       expect(result.ok).toBe(true);
@@ -62,6 +74,16 @@ describe('coding blocks', () => {
       expect(String(result.output)).toContain('10');
     });
 
+    it('falls back unknown or whitespace language to js', async () => {
+      const unknown = await exec().execute(ctx({ code: '3 + 4', language: 'ruby' }));
+      expect(unknown.ok).toBe(true);
+      expect(String(unknown.output)).toContain('7');
+
+      const blank = await exec().execute(ctx({ code: '5 + 5', language: '   ' }));
+      expect(blank.ok).toBe(true);
+      expect(String(blank.output)).toContain('10');
+    });
+
     it('runs python language via python3 -c when available', async () => {
       const result = await exec().execute(ctx({ code: 'print(1+1)', language: 'python' }));
       // python3 may be missing in some CI images — only assert structured result
@@ -87,6 +109,12 @@ describe('coding blocks', () => {
 
     it('rejects empty path for file_read', async () => {
       const result = await read().execute(ctx({ path: '' }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/No path/);
+    });
+
+    it('rejects whitespace-only path for file_read', async () => {
+      const result = await read().execute(ctx({ path: '   ' }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/No path/);
     });
@@ -184,6 +212,15 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/home directory/);
     });
 
+    it('treats whitespace-only repoPath as cwd', async () => {
+      const result = await git().execute(ctx({ repoPath: '   ' }));
+      expect(typeof result.durationMs).toBe('number');
+      // Should not fail the home-directory guard
+      if (result.error) {
+        expect(result.error).not.toMatch(/home directory/);
+      }
+    });
+
     it('runs git diff in current repo (may be empty)', async () => {
       const result = await git().execute(ctx({ repoPath: process.cwd() }));
       // repo is a git checkout; either success with diff text or structured failure
@@ -193,6 +230,25 @@ describe('coding blocks', () => {
       } else {
         expect(result.error).toBeTruthy();
       }
+    });
+  });
+
+  describe('test_runner cwd hygiene', () => {
+    const runner = () => getNativeExecutor('test_runner')!;
+
+    it('rejects absolute cwd outside home (not process.cwd)', async () => {
+      const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: '/var/empty' }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/home directory/);
+    });
+
+    it('treats whitespace-only cwd as process.cwd', async () => {
+      const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: '   ' }));
+      // Must not hit the home-directory guard
+      if (result.error) {
+        expect(result.error).not.toMatch(/home directory/);
+      }
+      expect(result.meta === undefined || typeof result.meta?.exitCode === 'number').toBe(true);
     });
   });
 });

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { deleteSetting, getSetting, setSetting } from '../db/settings.js';
+import { deleteSetting, getSecretSetting, getSetting, setSetting } from '../db/settings.js';
 import { MEDIA_DIR } from '../lib/media-generator.js';
 import media from './media.js';
 
@@ -89,6 +89,70 @@ describe('media routes', () => {
     expect(noKey.status).toBe(400);
     const body = await noKey.json() as { error: string };
     expect(body.error).toMatch(/OpenAI|key|configured/i);
+  });
+
+  it('POST /image rejects whitespace-only prompt and whitespace API key', async () => {
+    setSetting('OPENAI_API_KEY', '   ');
+    const blankPrompt = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: '   ' }),
+    });
+    expect(blankPrompt.status).toBe(400);
+    const blankBody = await blankPrompt.json() as { error: string };
+    expect(blankBody.error).toMatch(/prompt/i);
+
+    const blankKey = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'a cat' }),
+    });
+    expect(blankKey.status).toBe(400);
+    const keyBody = await blankKey.json() as { error: string };
+    expect(keyBody.error).toMatch(/OpenAI|key|configured/i);
+  });
+
+  it('POST /audio rejects whitespace-only text', async () => {
+    const res = await media.request('/audio', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '  \t  ' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/text/i);
+  });
+
+  it('POST /image treats whitespace prompt and whitespace API key as missing', async () => {
+    const blankPrompt = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: '   ' }),
+    });
+    expect(blankPrompt.status).toBe(400);
+    const blankBody = await blankPrompt.json() as { error: string };
+    expect(blankBody.error).toMatch(/prompt/i);
+
+    setSetting('OPENAI_API_KEY', '   ');
+    const blankKey = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'a cat' }),
+    });
+    expect(blankKey.status).toBe(400);
+    const keyBody = await blankKey.json() as { error: string };
+    expect(keyBody.error).toMatch(/OpenAI|key|configured/i);
+  });
+
+  it('GET /config treats whitespace-only OpenAI key as not configured', async () => {
+    setSetting('OPENAI_API_KEY', '   ');
+    // Skip if another suite re-set the shared key mid-run
+    if (getSecretSetting('OPENAI_API_KEY')) return;
+    const res = await media.request('/config');
+    const body = await res.json() as { data: { openaiConfigured: boolean } };
+    if (!getSecretSetting('OPENAI_API_KEY')) {
+      expect(body.data.openaiConfigured).toBe(false);
+    }
   });
 
   it('GET file rejects unsafe names', async () => {

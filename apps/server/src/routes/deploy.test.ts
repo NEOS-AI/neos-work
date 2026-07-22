@@ -76,6 +76,34 @@ describe('deploy routes', () => {
     expect(ready).toBe(true);
   });
 
+  it('preflight treats whitespace-only vercel token as missing', async () => {
+    setSetting('VERCEL_API_TOKEN', '   ');
+    const res = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'vercel' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      data?: { ready: boolean; checks?: Array<{ key: string; ok: boolean }> };
+    };
+    expect(body.data?.ready).toBe(false);
+    const tokenCheck = body.data?.checks?.find((c) => c.key === 'VERCEL_API_TOKEN');
+    expect(tokenCheck?.ok).toBe(false);
+  });
+
+  it('POST deploy rejects whitespace-only content', async () => {
+    setSetting('VERCEL_API_TOKEN', 'tok-test');
+    const res = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'vercel', content: '   ' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error?: string };
+    expect(body.error).toMatch(/content/i);
+  });
+
   it('preflight rejects invalid provider', async () => {
     const res = await deploy.request('/preflight', {
       method: 'POST',

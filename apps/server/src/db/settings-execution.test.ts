@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   deleteSetting,
   getExecutionSettings,
+  getSecretSetting,
   getWorkflowSecrets,
   isSafeHttpBaseUrl,
   setSetting,
@@ -29,11 +30,42 @@ afterEach(() => {
   }
 });
 
+describe('getSecretSetting', () => {
+  it('trims values and treats whitespace-only as unset', () => {
+    setSetting('OPENAI_API_KEY', '  sk-trim  ');
+    expect(getSecretSetting('OPENAI_API_KEY')).toBe('sk-trim');
+    setSetting('OPENAI_API_KEY', '   ');
+    expect(getSecretSetting('OPENAI_API_KEY')).toBeUndefined();
+    expect(getSecretSetting('OPENAI_API_KEY_MISSING')).toBeUndefined();
+  });
+});
+
+describe('getSecretSetting / whitespace secrets', () => {
+  it('trims secret values and treats whitespace-only as unset', () => {
+    setSetting('OPENAI_API_KEY', '  sk-trim  ');
+    expect(getSecretSetting('OPENAI_API_KEY')).toBe('sk-trim');
+
+    setSetting('OPENAI_API_KEY', '   ');
+    expect(getSecretSetting('OPENAI_API_KEY')).toBeUndefined();
+    expect(getWorkflowSecrets().OPENAI_API_KEY).toBeUndefined();
+  });
+});
+
 describe('getWorkflowSecrets aliases', () => {
   it('includes OPENAI_API_KEY when set', () => {
     setSetting('OPENAI_API_KEY', 'sk-test');
     const secrets = getWorkflowSecrets();
     expect(secrets.OPENAI_API_KEY).toBe('sk-test');
+  });
+
+  it('trims secrets and omits whitespace-only values', () => {
+    setSetting('OPENAI_API_KEY', '  sk-pad  ');
+    setSetting('VERCEL_API_TOKEN', '   ');
+    setSetting('apiKey.anthropic', '  sk-ant  ');
+    const secrets = getWorkflowSecrets();
+    expect(secrets.OPENAI_API_KEY).toBe('sk-pad');
+    expect(secrets.VERCEL_API_TOKEN).toBeUndefined();
+    expect(secrets.ANTHROPIC_API_KEY).toBe('sk-ant');
   });
 
   it('maps apiKey.anthropic to ANTHROPIC_API_KEY', () => {
@@ -77,6 +109,24 @@ describe('getExecutionSettings', () => {
     expect(s.AUTH_TOKEN).toBe('runtime-tok');
   });
 
+  it('trims runtime serverUrl/authToken and omits whitespace-only', () => {
+    const trimmed = getExecutionSettings({
+      serverUrl: '  http://127.0.0.1:9  ',
+      authToken: '  tok  ',
+    });
+    expect(trimmed.SERVER_URL).toBe('http://127.0.0.1:9');
+    expect(trimmed.SERVER_TOKEN).toBe('tok');
+    expect(trimmed.AUTH_TOKEN).toBe('tok');
+
+    const blank = getExecutionSettings({
+      serverUrl: '   ',
+      authToken: '   ',
+    });
+    expect(blank.SERVER_URL).toBeUndefined();
+    expect(blank.SERVER_TOKEN).toBeUndefined();
+    expect(blank.AUTH_TOKEN).toBeUndefined();
+  });
+
   it('merges secrets with runtime without dropping keys', () => {
     setSetting('OPENAI_API_KEY', 'sk-merge');
     const s = getExecutionSettings({
@@ -100,6 +150,20 @@ describe('getExecutionSettings', () => {
     const s = getExecutionSettings();
     expect(s.llmProvider).toBe('openai');
     expect(s.model).toBe('gpt-4o');
+  });
+
+  it('trims defaults.provider and defaults.model; ignores whitespace-only', () => {
+    setSetting('defaults.provider', '  ollama  ');
+    setSetting('defaults.model', '  llama3  ');
+    const s = getExecutionSettings();
+    expect(s.llmProvider).toBe('ollama');
+    expect(s.model).toBe('llama3');
+
+    setSetting('defaults.provider', '   ');
+    setSetting('defaults.model', '   ');
+    const blank = getExecutionSettings();
+    expect(blank.llmProvider).toBeUndefined();
+    expect(blank.model).toBeUndefined();
   });
 
   it('strips unsafe OPENAI_BASE_URL and OLLAMA_BASE_URL', () => {

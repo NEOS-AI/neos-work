@@ -34,4 +34,13 @@ describe('tauri helpers outside Tauri', () => {
     // Dynamic import of @tauri-apps/api/core will fail / throw → false
     expect(await startEngine()).toBe(false);
   });
+
+  it('stopEngine / getAuthToken / getEnginePort tolerate invoke failures when Tauri-flagged', async () => {
+    // @ts-expect-error stub
+    window.__TAURI_INTERNALS__ = {};
+    // invoke path throws without a real Tauri runtime — helpers should swallow errors
+    await expect(stopEngine()).resolves.toBeUndefined();
+    expect(await getAuthToken()).toBeNull();
+    expect(await getEnginePort()).toBeNull();
+  });
 });

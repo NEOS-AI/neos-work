@@ -283,6 +283,34 @@ describe('AgentNode LLM model selection', () => {
     expect(result.error).toMatch(/GOOGLE_API_KEY/);
   });
 
+  it('errors when openai provider has no API key', async () => {
+    const node = new AgentNode('agent_coding', { llmProvider: 'openai' });
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test', OPENAI_API_KEY: '  ' },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/OPENAI_API_KEY/);
+  });
+
+  it('ignores whitespace-only harnessId and designSystemContent', async () => {
+    const node = new AgentNode('agent_coding', {
+      harnessId: '   ',
+      systemPrompt: 'Base only',
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        designSystemContent: '  \n  ',
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('Base only');
+    expect(goal).not.toContain('DESIGN CONTEXT');
+    expect(goal).not.toContain('시니어');
+  });
+
   it('injects memory export into the orchestrator goal', async () => {
     vi.stubGlobal(
       'fetch',
