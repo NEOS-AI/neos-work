@@ -53,6 +53,13 @@ describe('skills routes', () => {
     });
     expect(bad.status).toBe(400);
 
+    const noBody = await skills.request(`/${id}/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(noBody.status).toBe(400);
+
     const off = await skills.request(`/${id}/toggle`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

@@ -16,7 +16,8 @@ const blocks = new Hono();
 
 // GET /api/blocks
 blocks.get('/', (c) => {
-  const domain = c.req.query('domain');
+  const domainRaw = c.req.query('domain');
+  const domain = domainRaw?.trim() || undefined;
   const builtIn = listBlocks(domain);
   const custom = listCustomBlocks(domain);
   return c.json({ ok: true, data: [...builtIn, ...custom] });
@@ -68,7 +69,8 @@ blocks.post('/', async (c) => {
 
 // GET /api/blocks/:id
 blocks.get('/:id', (c) => {
-  const { id } = c.req.param();
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Block not found' }, 404);
   const builtInMeta = listBlocks().find((b) => b.id === id);
   if (builtInMeta) return c.json({ ok: true, data: builtInMeta });
 
@@ -79,17 +81,44 @@ blocks.get('/:id', (c) => {
 
 // PUT /api/blocks/:id
 blocks.put('/:id', async (c) => {
-  const { id } = c.req.param();
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
   const body = await c.req.json<Partial<WorkflowBlock>>();
 
-  const updated = updateCustomBlock(id, body);
+  const patch: Partial<WorkflowBlock> = { ...body };
+  if (body.name !== undefined) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return c.json({ ok: false, error: 'name cannot be empty' }, 400);
+    patch.name = name;
+  }
+  if (typeof body.domain === 'string') {
+    patch.domain = body.domain.trim() || 'general';
+  }
+  if (typeof body.category === 'string') {
+    patch.category = body.category.trim() || 'custom';
+  }
+  if (typeof body.description === 'string') {
+    patch.description = body.description.trim();
+  }
+  if (typeof body.promptTemplate === 'string') {
+    patch.promptTemplate = body.promptTemplate.trim();
+  }
+  if (typeof body.inputDescription === 'string') {
+    patch.inputDescription = body.inputDescription.trim();
+  }
+  if (typeof body.outputDescription === 'string') {
+    patch.outputDescription = body.outputDescription.trim();
+  }
+
+  const updated = updateCustomBlock(id, patch);
   if (!updated) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
   return c.json({ ok: true, data: updated });
 });
 
 // DELETE /api/blocks/:id
 blocks.delete('/:id', (c) => {
-  const { id } = c.req.param();
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
   const deleted = deleteCustomBlock(id);
   if (!deleted) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
   return c.json({ ok: true });

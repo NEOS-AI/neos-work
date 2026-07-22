@@ -120,9 +120,10 @@ skills.post('/scan', async (c) => {
 
 // POST /api/skills/:id/toggle — enable or disable a skill
 skills.post('/:id/toggle', async (c) => {
-  const id = c.req.param('id');
-  const body = await c.req.json<{ enabled: boolean }>();
-  if (typeof body.enabled !== 'boolean') {
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
+  const body = await c.req.json<{ enabled: boolean }>().catch(() => null);
+  if (!body || typeof body.enabled !== 'boolean') {
     return c.json({ ok: false, error: 'Missing or invalid "enabled" field' }, 400);
   }
   const updated = toggleSkill(id, body.enabled);
@@ -132,7 +133,8 @@ skills.post('/:id/toggle', async (c) => {
 
 // DELETE /api/skills/:id — remove a skill from the registry
 skills.delete('/:id', (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
   const deleted = deleteSkillById(id);
   if (!deleted) return c.json({ ok: false, error: 'Skill not found' }, 404);
   return c.json({ ok: true });

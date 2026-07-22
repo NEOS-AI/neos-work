@@ -28,9 +28,14 @@ function getRateLimitStatus(workflowId: string) {
   return webhookRateLimiter.status(workflowId);
 }
 
+function paramWorkflowId(c: { req: { param: (k: string) => string } }): string {
+  return c.req.param('workflowId').trim();
+}
+
 // GET webhook secret
 webhooks.get('/:workflowId/secret', (c) => {
-  const workflowId = c.req.param('workflowId');
+  const workflowId = paramWorkflowId(c);
+  if (!workflowId) return c.json({ ok: false, error: 'Not found' }, 404);
   const wf = db.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
 
@@ -46,7 +51,8 @@ webhooks.get('/:workflowId/secret', (c) => {
 
 // GET rate-limit status (no secret)
 webhooks.get('/:workflowId/rate-limit', (c) => {
-  const workflowId = c.req.param('workflowId');
+  const workflowId = paramWorkflowId(c);
+  if (!workflowId) return c.json({ ok: false, error: 'Not found' }, 404);
   const wf = db.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: getRateLimitStatus(workflowId) });
@@ -54,7 +60,8 @@ webhooks.get('/:workflowId/rate-limit', (c) => {
 
 // POST regenerate secret
 webhooks.post('/:workflowId/regenerate', (c) => {
-  const workflowId = c.req.param('workflowId');
+  const workflowId = paramWorkflowId(c);
+  if (!workflowId) return c.json({ ok: false, error: 'Not found' }, 404);
   const wf = db.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
 
@@ -64,7 +71,8 @@ webhooks.post('/:workflowId/regenerate', (c) => {
 
 // POST /api/webhook/:workflowId — trigger workflow
 webhooks.post('/:workflowId', async (c) => {
-  const workflowId = c.req.param('workflowId');
+  const workflowId = paramWorkflowId(c);
+  if (!workflowId) return c.json({ ok: false, error: 'Not found' }, 404);
 
   // Rate limit check
   if (!checkRateLimit(workflowId)) {

@@ -87,5 +87,27 @@ describe('blocks routes', () => {
     expect(created.data.category).toBe('test');
     expect(created.data.description).toBe('route cov');
     expect(created.data.promptTemplate).toBe('Hello {{inputs}}');
+
+    const put = await blocks.request(`/${ID}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '  Renamed Block  ',
+        domain: '  coding  ',
+        description: '  updated  ',
+      }),
+    });
+    expect(put.status).toBe(200);
+    const updated = await put.json() as { data: { name: string; domain: string; description: string } };
+    expect(updated.data.name).toBe('Renamed Block');
+    expect(updated.data.domain).toBe('coding');
+    expect(updated.data.description).toBe('updated');
+
+    const putBlank = await blocks.request(`/${ID}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(putBlank.status).toBe(400);
   });
 });

@@ -83,7 +83,7 @@ deploy.post('/preflight', async (c) => {
 });
 
 deploy.get('/', (c) => {
-  const workflowId = c.req.query('workflowId') || undefined;
+  const workflowId = (c.req.query('workflowId') ?? '').trim() || undefined;
   const limitRaw = c.req.query('limit');
   const limit = limitRaw ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500) : 100;
   const rows = listDeployments({ workflowId, limit });
@@ -91,7 +91,9 @@ deploy.get('/', (c) => {
 });
 
 deploy.get('/:id', (c) => {
-  const row = getDeployment(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const row = getDeployment(id);
   if (!row) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: row });
 });
@@ -100,7 +102,9 @@ deploy.get('/:id', (c) => {
  * Poll remote provider for deployment status and update local history row.
  */
 deploy.post('/:id/refresh', async (c) => {
-  const row = getDeployment(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const row = getDeployment(id);
   if (!row) return c.json({ ok: false, error: 'Not found' }, 404);
   if (!row.deploymentId) {
     return c.json({ ok: false, error: 'No remote deployment id to poll' }, 400);
@@ -148,7 +152,9 @@ deploy.post('/:id/refresh', async (c) => {
 });
 
 deploy.delete('/:id', (c) => {
-  const ok = deleteDeployment(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const ok = deleteDeployment(id);
   if (!ok) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
 });
