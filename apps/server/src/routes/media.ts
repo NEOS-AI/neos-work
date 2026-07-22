@@ -154,9 +154,13 @@ media.post('/generate', async (c) => {
     model?: 'tts-1' | 'tts-1-hd';
   }>().catch(() => null);
 
-  if (!body?.surface || (body.surface !== 'image' && body.surface !== 'audio')) {
+  const surface =
+    typeof body?.surface === 'string' ? body.surface.trim().toLowerCase() : '';
+  if (surface !== 'image' && surface !== 'audio') {
     return c.json({ ok: false, error: 'surface must be image or audio' }, 400);
   }
+  // Rebind for typed branches below
+  body!.surface = surface as 'image' | 'audio';
 
   const apiKey = getSecretSetting('OPENAI_API_KEY');
   if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);

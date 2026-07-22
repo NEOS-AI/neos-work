@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { Hono } from 'hono';
 
 import { getDb } from '../db/schema.js';
+import { isSafeHttpBaseUrl } from '../db/settings.js';
 import { safeError } from '../lib/errors.js';
 import {
   saveToken,
@@ -127,25 +128,32 @@ mcp.post('/', async (c) => {
       url?: string;
     }>();
 
-    if (!body.name || typeof body.name !== 'string' || body.name.length > 200) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 200) {
       return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
     }
     if (!['stdio', 'http'].includes(body.transport)) {
       return c.json({ ok: false, error: 'transport must be "stdio" or "http"' }, 400);
     }
-    if (body.transport === 'stdio' && !body.command) {
+    const command =
+      typeof body.command === 'string' ? body.command.trim() : body.command;
+    const url = typeof body.url === 'string' ? body.url.trim() : body.url;
+    if (body.transport === 'stdio' && !command) {
       return c.json({ ok: false, error: 'command is required for stdio transport' }, 400);
     }
-    if (body.transport === 'http' && !body.url) {
+    if (body.transport === 'http' && !url) {
       return c.json({ ok: false, error: 'url is required for http transport' }, 400);
+    }
+    if (body.transport === 'http' && url && !isSafeHttpBaseUrl(url)) {
+      return c.json({ ok: false, error: 'url must be http(s)' }, 400);
     }
 
     const row = createMcpServer({
-      name: body.name,
+      name,
       transport: body.transport,
-      command: body.command,
+      command,
       args: body.args,
-      url: body.url,
+      url,
     });
     return c.json({ ok: true, data: rowToResponse(row) }, 201);
   } catch (err) {
@@ -194,8 +202,23 @@ mcp.post('/oauth/start', async (c) => {
       scope?: string;
     }>();
 
-    if (!body.serverId || !body.authorizationEndpoint || !body.tokenEndpoint || !body.clientId || !body.redirectUri) {
+    const serverId = typeof body.serverId === 'string' ? body.serverId.trim() : '';
+    const authorizationEndpoint =
+      typeof body.authorizationEndpoint === 'string' ? body.authorizationEndpoint.trim() : '';
+    const tokenEndpoint =
+      typeof body.tokenEndpoint === 'string' ? body.tokenEndpoint.trim() : '';
+    const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
+    const redirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : '';
+    const scope = typeof body.scope === 'string' ? body.scope.trim() || undefined : undefined;
+
+    if (!serverId || !authorizationEndpoint || !tokenEndpoint || !clientId || !redirectUri) {
       return c.json({ ok: false, error: 'Missing required fields' }, 400);
+    }
+    if (!isSafeHttpBaseUrl(authorizationEndpoint) || !isSafeHttpBaseUrl(tokenEndpoint)) {
+      return c.json({ ok: false, error: 'authorizationEndpoint and tokenEndpoint must be http(s)' }, 400);
+    }
+    if (!isSafeHttpBaseUrl(redirectUri)) {
+      return c.json({ ok: false, error: 'redirectUri must be http(s)' }, 400);
     }
 
     cleanExpiredFlows();
@@ -204,23 +227,23 @@ mcp.post('/oauth/start', async (c) => {
     const codeChallenge = generateCodeChallenge(codeVerifier);
     const state = generateState();
 
-    const authUrl = new URL(body.authorizationEndpoint);
+    const authUrl = new URL(authorizationEndpoint);
     authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('client_id', body.clientId);
-    authUrl.searchParams.set('redirect_uri', body.redirectUri);
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('state', state);
     authUrl.searchParams.set('code_challenge', codeChallenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
-    if (body.scope) authUrl.searchParams.set('scope', body.scope);
+    if (scope) authUrl.searchParams.set('scope', scope);
 
     pendingFlows.set(state, {
-      serverId: body.serverId,
+      serverId,
       codeVerifier,
       state,
       authUrl: authUrl.toString(),
-      redirectUri: body.redirectUri,
-      tokenUrl: body.tokenEndpoint,
-      clientId: body.clientId,
+      redirectUri,
+      tokenUrl: tokenEndpoint,
+      clientId,
       createdAt: Date.now(),
     });
 

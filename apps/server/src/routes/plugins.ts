@@ -36,9 +36,11 @@ plugins.post('/upgrade-from-skill', async (c) => {
   };
   const body: UpgradeBody = await c.req.json<UpgradeBody>().catch(() => ({}));
 
-  let skillDirName = body.skillDirName;
-  if (!skillDirName && body.skillId) {
-    const row = getDb().prepare('SELECT path, name FROM skill WHERE id = ?').get(body.skillId) as
+  const skillId = typeof body.skillId === 'string' ? body.skillId.trim() : undefined;
+  let skillDirName =
+    typeof body.skillDirName === 'string' ? body.skillDirName.trim() || undefined : undefined;
+  if (!skillDirName && skillId) {
+    const row = getDb().prepare('SELECT path, name FROM skill WHERE id = ?').get(skillId) as
       | { path: string; name: string }
       | undefined;
     if (!row) return c.json({ ok: false, error: 'Skill not found' }, 404);
@@ -51,11 +53,15 @@ plugins.post('/upgrade-from-skill', async (c) => {
     return c.json({ ok: false, error: 'skillId or skillDirName required' }, 400);
   }
 
+  const name = typeof body.name === 'string' ? body.name.trim() || undefined : undefined;
+  const description =
+    typeof body.description === 'string' ? body.description.trim() || undefined : undefined;
+
   try {
     const plugin = await upgradeSkillToPlugin({
       skillDirName,
-      name: body.name,
-      description: body.description,
+      name,
+      description,
     });
     const { dir: _, skillContent: __, ...safe } = plugin;
     return c.json({ ok: true, data: safe }, 201);

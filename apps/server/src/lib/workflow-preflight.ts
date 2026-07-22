@@ -3,6 +3,8 @@
  * Used by POST /api/workflow/:id/preflight before a run.
  */
 
+import { isValidDeployProjectName } from '@neos-work/shared';
+
 export interface PreflightIssue {
   code: string;
   severity: 'error' | 'warning';
@@ -121,6 +123,18 @@ export function assessWorkflowPreflight(
           severity: 'error',
           nodeId: node.id,
           message: 'Deploy (Cloudflare) requires API token and account id in settings.',
+        });
+      }
+      const projectName =
+        typeof config.projectName === 'string' ? config.projectName.trim() : '';
+      // Blank projectName falls back to neos-deploy at runtime — only flag non-empty invalid names
+      if (projectName && !isValidDeployProjectName(projectName)) {
+        issues.push({
+          code: 'invalid_deploy_project',
+          severity: 'error',
+          nodeId: node.id,
+          message:
+            'Deploy project name must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63).',
         });
       }
     }

@@ -46,7 +46,9 @@ harness.post('/', async (c) => {
     constraints?: { maxSteps?: number; maxTokens?: number; timeoutMs?: number };
   }>();
 
-  if (!body.name || !body.systemPrompt) {
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const systemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
+  if (!name || !systemPrompt) {
     return c.json({ ok: false, error: 'name and systemPrompt are required' }, 400);
   }
 
@@ -54,12 +56,17 @@ harness.post('/', async (c) => {
     return c.json({ ok: false, error: 'allowedTools must be an array' }, 400);
   }
 
+  const description =
+    typeof body.description === 'string' ? body.description.trim() : (body.description ?? '');
+  const domain =
+    typeof body.domain === 'string' ? body.domain.trim() || 'general' : (body.domain ?? 'general');
+
   const newHarness = db.createCustomHarness({
     id: nanoid(12),
-    name: body.name,
-    domain: (body.domain ?? 'general') as never,
-    description: body.description ?? '',
-    systemPrompt: body.systemPrompt,
+    name,
+    domain: domain as never,
+    description,
+    systemPrompt,
     allowedTools: body.allowedTools,
     constraints: body.constraints,
   });
@@ -87,7 +94,25 @@ harness.put('/:id', async (c) => {
     constraints: object;
   }>>();
 
-  const updated = db.updateCustomHarness(id, body as never);
+  const patch: Record<string, unknown> = { ...body };
+  if (body.name !== undefined) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return c.json({ ok: false, error: 'name is required' }, 400);
+    patch.name = name;
+  }
+  if (body.systemPrompt !== undefined) {
+    const systemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
+    if (!systemPrompt) return c.json({ ok: false, error: 'systemPrompt is required' }, 400);
+    patch.systemPrompt = systemPrompt;
+  }
+  if (typeof body.description === 'string') {
+    patch.description = body.description.trim();
+  }
+  if (typeof body.domain === 'string') {
+    patch.domain = body.domain.trim() || 'general';
+  }
+
+  const updated = db.updateCustomHarness(id, patch as never);
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
 
   // Sync to runtime registry
