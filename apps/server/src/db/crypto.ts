@@ -17,11 +17,15 @@ const SENSITIVE_PREFIXES = [
   'apiKey.',
   'ANTHROPIC_API_KEY',
   'GOOGLE_API_KEY',
+  'OPENAI_API_KEY',
   'TAVILY_API_KEY',
   'SLACK_BOT_TOKEN',
   'DISCORD_WEBHOOK_URL',
   'KIS_APP_KEY',
   'KIS_APP_SECRET',
+  'VERCEL_API_TOKEN',
+  'CLOUDFLARE_API_TOKEN',
+  'CLOUDFLARE_ACCOUNT_ID',
 ];
 
 export function isSensitiveKey(key: string): boolean {

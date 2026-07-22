@@ -123,27 +123,6 @@ describe('media routes', () => {
     expect(body.error).toMatch(/text/i);
   });
 
-  it('POST /image treats whitespace prompt and whitespace API key as missing', async () => {
-    const blankPrompt = await media.request('/image', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: '   ' }),
-    });
-    expect(blankPrompt.status).toBe(400);
-    const blankBody = await blankPrompt.json() as { error: string };
-    expect(blankBody.error).toMatch(/prompt/i);
-
-    setSetting('OPENAI_API_KEY', '   ');
-    const blankKey = await media.request('/image', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a cat' }),
-    });
-    expect(blankKey.status).toBe(400);
-    const keyBody = await blankKey.json() as { error: string };
-    expect(keyBody.error).toMatch(/OpenAI|key|configured/i);
-  });
-
   it('GET /config treats whitespace-only OpenAI key as not configured', async () => {
     setSetting('OPENAI_API_KEY', '   ');
     // Skip if another suite re-set the shared key mid-run

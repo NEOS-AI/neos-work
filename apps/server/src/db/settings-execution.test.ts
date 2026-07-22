@@ -17,6 +17,8 @@ const KEYS = [
   'apiKey.google',
   'GOOGLE_API_KEY',
   'TAVILY_API_KEY',
+  'KIS_APP_KEY',
+  'KIS_APP_SECRET',
   'VERCEL_API_TOKEN',
   'CLOUDFLARE_API_TOKEN',
   'CLOUDFLARE_ACCOUNT_ID',
@@ -30,16 +32,6 @@ afterEach(() => {
   }
 });
 
-describe('getSecretSetting', () => {
-  it('trims values and treats whitespace-only as unset', () => {
-    setSetting('OPENAI_API_KEY', '  sk-trim  ');
-    expect(getSecretSetting('OPENAI_API_KEY')).toBe('sk-trim');
-    setSetting('OPENAI_API_KEY', '   ');
-    expect(getSecretSetting('OPENAI_API_KEY')).toBeUndefined();
-    expect(getSecretSetting('OPENAI_API_KEY_MISSING')).toBeUndefined();
-  });
-});
-
 describe('getSecretSetting / whitespace secrets', () => {
   it('trims secret values and treats whitespace-only as unset', () => {
     setSetting('OPENAI_API_KEY', '  sk-trim  ');
@@ -47,6 +39,7 @@ describe('getSecretSetting / whitespace secrets', () => {
 
     setSetting('OPENAI_API_KEY', '   ');
     expect(getSecretSetting('OPENAI_API_KEY')).toBeUndefined();
+    expect(getSecretSetting('OPENAI_API_KEY_MISSING')).toBeUndefined();
     expect(getWorkflowSecrets().OPENAI_API_KEY).toBeUndefined();
   });
 });
@@ -59,13 +52,14 @@ describe('getWorkflowSecrets aliases', () => {
   });
 
   it('trims secrets and omits whitespace-only values', () => {
-    setSetting('OPENAI_API_KEY', '  sk-pad  ');
-    setSetting('VERCEL_API_TOKEN', '   ');
-    setSetting('apiKey.anthropic', '  sk-ant  ');
+    // Prefer keys rarely touched by parallel route suites (media/deploy)
+    setSetting('KIS_APP_KEY', '  kis-key  ');
+    setSetting('KIS_APP_SECRET', '   ');
+    setSetting('TAVILY_API_KEY', '  tvly-pad  ');
     const secrets = getWorkflowSecrets();
-    expect(secrets.OPENAI_API_KEY).toBe('sk-pad');
-    expect(secrets.VERCEL_API_TOKEN).toBeUndefined();
-    expect(secrets.ANTHROPIC_API_KEY).toBe('sk-ant');
+    expect(secrets.KIS_APP_KEY).toBe('kis-key');
+    expect(secrets.KIS_APP_SECRET).toBeUndefined();
+    expect(secrets.TAVILY_API_KEY).toBe('tvly-pad');
   });
 
   it('maps apiKey.anthropic to ANTHROPIC_API_KEY', () => {
