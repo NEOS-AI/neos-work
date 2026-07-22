@@ -27,23 +27,48 @@ describe('harness routes', () => {
     });
     expect(bad.status).toBe(400);
 
+    const blank = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '   ',
+        systemPrompt: '  You  ',
+        allowedTools: [],
+      }),
+    });
+    expect(blank.status).toBe(400);
+
     const create = await harness.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        name: NAME,
-        domain: 'coding',
-        description: 'route test',
-        systemPrompt: 'You are a test harness.',
+        name: `  ${NAME}  `,
+        domain: '  coding  ',
+        description: '  route test  ',
+        systemPrompt: '  You are a test harness.  ',
         allowedTools: ['read'],
       }),
     });
     expect([200, 201]).toContain(create.status);
-    const created = await create.json() as { ok: boolean; data: { id: string; name: string } };
+    const created = await create.json() as {
+      ok: boolean;
+      data: { id: string; name: string; domain: string; description: string; systemPrompt: string };
+    };
     expect(created.data.name).toBe(NAME);
+    expect(created.data.domain).toBe('coding');
+    expect(created.data.description).toBe('route test');
+    expect(created.data.systemPrompt).toBe('You are a test harness.');
     const id = created.data.id;
     const get = await harness.request(`/${id}`);
     expect(get.status).toBe(200);
+
+    const putBlank = await harness.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(putBlank.status).toBe(400);
+
     const del = await harness.request(`/${id}`, { method: 'DELETE' });
     expect([200, 204]).toContain(del.status);
     // In-memory registry may still resolve the id until process restart; DB should be cleared

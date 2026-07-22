@@ -91,6 +91,42 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'missing_vercel_token')).toBe(true);
   });
 
+  it('flags invalid deploy project names when non-empty', () => {
+    const bad = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: 'vercel', projectName: '-bad' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      { VERCEL_API_TOKEN: 'tok' },
+    );
+    expect(bad.ok).toBe(false);
+    expect(bad.issues.some((i) => i.code === 'invalid_deploy_project')).toBe(true);
+
+    const blankOk = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: 'vercel', projectName: '   ' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      { VERCEL_API_TOKEN: 'tok' },
+    );
+    // Blank falls back to neos-deploy at runtime — not an invalid_deploy_project error
+    expect(blankOk.issues.some((i) => i.code === 'invalid_deploy_project')).toBe(false);
+  });
+
   it('defaults missing or unknown deploy provider to vercel for token checks', () => {
     for (const config of [{}, { provider: 'netlify' }] as const) {
       const r = assessWorkflowPreflight(

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -21,6 +21,11 @@ describe('discoverSkills', () => {
     expect(skills.filter((s) => s.source === 'local')).toEqual([]);
   });
 
+  it('returns only global scan when workspacePath is omitted', async () => {
+    const skills = await discoverSkills();
+    expect(skills.every((s) => s.source === 'global')).toBe(true);
+  });
+
   it('discovers local SKILL.md-style files under .neos-work/skills', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });
@@ -39,7 +44,27 @@ Body here
     const skills = await discoverSkills(workspace);
     const local = skills.filter((s) => s.source === 'local');
     expect(local).toHaveLength(1);
-    expect(local[0].manifest.name).toBe('demo');
-    expect(local[0].content).toContain('Body here');
+    expect(local[0]!.manifest.name).toBe('demo');
+    expect(local[0]!.content).toContain('Body here');
+  });
+
+  it('skips directories and unreadable entries under skills', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(join(dir, 'nested-dir'), { recursive: true });
+    await writeFile(
+      join(dir, 'ok.md'),
+      `---
+name: ok
+description: ok
+---
+x
+`,
+    );
+    // dangling symlink .md file → unreadable / not a regular file
+    await symlink(join(dir, 'missing-target.md'), join(dir, 'link.md'));
+
+    const skills = await discoverSkills(workspace);
+    const local = skills.filter((s) => s.source === 'local');
+    expect(local.map((s) => s.manifest.name)).toEqual(['ok']);
   });
 });
