@@ -25,6 +25,17 @@ describe('ContextManager', () => {
     expect(cm.needsCompression(messages)).toBe(true);
   });
 
+  it('ignores non-text multimodal blocks for token estimate', () => {
+    const cm = new ContextManager(5);
+    const messages = [
+      msg('user', [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'x'.repeat(1000) } } as never,
+      ]),
+    ];
+    // no text → 0 tokens → no compression
+    expect(cm.needsCompression(messages)).toBe(false);
+  });
+
   it('compress returns messages unchanged when within recent window', async () => {
     const cm = new ContextManager();
     const messages = Array.from({ length: 5 }, (_, i) => msg('user', `m${i}`));
@@ -45,7 +56,40 @@ describe('ContextManager', () => {
       role: 'system',
       content: '[이전 대화 요약]\nolder summary',
     });
-    expect(out[1].content).toBe('msg-5');
-    expect(out[out.length - 1].content).toBe('msg-24');
+    expect(out[1]!.content).toBe('msg-5');
+    expect(out[out.length - 1]!.content).toBe('msg-24');
+  });
+
+  it('compress stringifies multimodal older messages in transcript', async () => {
+    const cm = new ContextManager();
+    const older = Array.from({ length: 5 }, (_, i) =>
+      msg('user', [{ type: 'text', text: `old-${i}` }]),
+    );
+    const recent = Array.from({ length: 20 }, (_, i) => msg('assistant', `recent-${i}`));
+    const messages = [...older, ...recent];
+
+    let captured = '';
+    const adapter = mockAdapter(['sum']);
+    const base = adapter.chat.bind(adapter);
+    adapter.chat = async function* (params) {
+      captured = JSON.stringify(params.messages);
+      yield* base(params);
+    };
+
+    const out = await cm.compress(messages, adapter);
+    expect(out[0]!.content).toContain('sum');
+    expect(captured).toContain('old-0');
+    // multimodal content is JSON.stringified in transcript
+    expect(captured).toContain('type');
+  });
+
+  it('compress at exactly RECENT_WINDOW does not summarize', async () => {
+    const cm = new ContextManager();
+    const messages = Array.from({ length: 20 }, (_, i) => msg('user', `m${i}`));
+    const adapter = mockAdapter(['should-not-run']);
+    const spy = vi.spyOn(adapter, 'chat');
+    const out = await cm.compress(messages, adapter);
+    expect(out).toEqual(messages);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -56,6 +56,10 @@ designSystems.put('/:id/content', async (c) => {
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
   }
+  // Reject pure-whitespace so getDesignSystemContent does not treat it as missing later
+  if (!body.content.trim()) {
+    return c.json({ ok: false, error: 'content cannot be empty' }, 400);
+  }
   const updated = await store.updateDesignSystemContent(c.req.param('id'), body.content);
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });

@@ -20,6 +20,49 @@ describe('memory routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('trims fields, normalizes type, rejects blank/invalid', async () => {
+    const blank = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '  ', type: 'user', content: 'x' }),
+    });
+    expect(blank.status).toBe(400);
+
+    const badType = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME, type: 'nope', content: 'x' }),
+    });
+    expect(badType.status).toBe(400);
+
+    const create = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `  ${NAME}  `,
+        type: '  USER  ',
+        content: '  route coverage memory  ',
+        enabled: true,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as {
+      data: { id: string; name: string; type: string; content: string };
+    };
+    expect(created.data.name).toBe(NAME);
+    expect(created.data.type).toBe('user');
+    expect(created.data.content).toBe('route coverage memory');
+
+    const putBlank = await memory.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '   ' }),
+    });
+    expect(putBlank.status).toBe(400);
+
+    await memory.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('CRUD + toggle + export', async () => {
     const create = await memory.request('/', {
       method: 'POST',

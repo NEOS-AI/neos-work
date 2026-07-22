@@ -184,15 +184,19 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
   const workflowRunId = routineRun.runId;
   const workflowRun = workflowRunId ? workflowDb.getRun(workflowRunId) : undefined;
 
-  const slugBase = (body.name ?? routine.name)
+  const rawName =
+    typeof body.name === 'string' && body.name.trim() ? body.name.trim() : routine.name;
+  const slugBase = rawName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 48) || 'crystallized-skill';
   const skillName = `${slugBase}-${routineRun.id.slice(0, 8)}`;
   const description =
-    body.description ??
-    `Crystallized from routine "${routine.name}"` +
+    (typeof body.description === 'string' && body.description.trim()
+      ? body.description.trim()
+      : undefined)
+    ?? `Crystallized from routine "${routine.name}"` +
       (workflow ? ` / workflow "${workflow.name}"` : '');
 
   const outputsSummary = workflowRun

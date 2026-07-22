@@ -25,24 +25,34 @@ blocks.get('/', (c) => {
 // POST /api/blocks
 blocks.post('/', async (c) => {
   const body = await c.req.json<Omit<WorkflowBlock, 'isBuiltIn'>>();
-  if (!body.id || !body.name) {
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!id || !name) {
     return c.json({ ok: false, error: 'id and name are required' }, 400);
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    return c.json({ ok: false, error: 'id must be alphanumeric (- and _ allowed)' }, 400);
   }
   if (!['native', 'prompt', 'skill'].includes(body.implementationType)) {
     return c.json({ ok: false, error: 'implementationType must be native | prompt | skill' }, 400);
   }
-  if (body.implementationType === 'prompt' && !body.promptTemplate) {
+  const promptTemplate =
+    typeof body.promptTemplate === 'string' ? body.promptTemplate.trim() : body.promptTemplate;
+  if (body.implementationType === 'prompt' && !promptTemplate) {
     return c.json({ ok: false, error: 'promptTemplate is required for prompt blocks' }, 400);
   }
 
   const block = createCustomBlock({
     ...body,
+    id,
+    name,
+    promptTemplate,
     paramDefs: body.paramDefs ?? [],
     inputDescription: body.inputDescription ?? '',
     outputDescription: body.outputDescription ?? '',
-    category: body.category ?? 'custom',
-    domain: body.domain ?? 'general',
-    description: body.description ?? '',
+    category: (typeof body.category === 'string' ? body.category.trim() : '') || 'custom',
+    domain: (typeof body.domain === 'string' ? body.domain.trim() : '') || 'general',
+    description: typeof body.description === 'string' ? body.description.trim() : (body.description ?? ''),
   });
 
   // If native, register an executor shim that returns a stub (real execution needs server restart)

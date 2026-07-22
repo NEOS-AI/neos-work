@@ -74,6 +74,29 @@ describe('session routes', () => {
     });
     expect(badModel.status).toBe(400);
   });
+
+  it('trims workspaceId/title and rejects blank title when provided', async () => {
+    const blankTitle = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspaceId: 'default', title: '   ' }),
+    });
+    expect(blankTitle.status).toBe(400);
+
+    const create = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: '  default  ',
+        title: `  ${TITLE}  `,
+        provider: '  Anthropic  ',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; title: string | null; workspaceId?: string } };
+    expect(created.data.title).toBe(TITLE);
+    await session.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
 });
 
 describe('workspace routes', () => {

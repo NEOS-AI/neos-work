@@ -5,6 +5,8 @@ describe('estimateNextCronRun', () => {
   it('returns null for invalid expressions', () => {
     expect(estimateNextCronRun('not a cron')).toBeNull();
     expect(estimateNextCronRun('* * *')).toBeNull();
+    expect(estimateNextCronRun('')).toBeNull();
+    expect(estimateNextCronRun('* * * * * *')).toBeNull(); // 6 fields
   });
 
   it('finds next hourly run at minute 0', () => {
@@ -45,6 +47,14 @@ describe('estimateNextCronRun', () => {
     expect(estimateNextCronRun('60 * * * *')).toBeNull();
     expect(estimateNextCronRun('* 24 * * *')).toBeNull();
     expect(estimateNextCronRun('* * 0 * *')).toBeNull();
+    expect(estimateNextCronRun('* * * 13 *')).toBeNull();
+    expect(estimateNextCronRun('* * * * 7')).toBeNull();
+  });
+
+  it('returns null for invalid step or inverted range', () => {
+    expect(estimateNextCronRun('*/0 * * * *')).toBeNull();
+    expect(estimateNextCronRun('10-5 * * * *')).toBeNull();
+    expect(estimateNextCronRun('abc * * * *')).toBeNull();
   });
 
   it('matches weekday-restricted schedules', () => {
@@ -61,4 +71,28 @@ describe('estimateNextCronRun', () => {
     const next = estimateNextCronRun('0 9 * * *', { from, timezone: 'UTC' });
     expect(next!.toISOString()).toBe('2026-06-02T09:00:00.000Z');
   });
+
+  it('defaults timezone to UTC when omitted', () => {
+    const from = new Date('2026-01-01T10:15:00.000Z');
+    const next = estimateNextCronRun('0 * * * *', { from });
+    expect(next!.toISOString()).toBe('2026-01-01T11:00:00.000Z');
+  });
+
+  it('returns null when horizon is too short to match', () => {
+    const from = new Date('2026-01-01T00:00:00.000Z');
+    // only Jan 10 at 12:00 — but horizon 1 day from Jan 1
+    const next = estimateNextCronRun('0 12 10 1 *', {
+      from,
+      timezone: 'UTC',
+      horizonDays: 1,
+    });
+    expect(next).toBeNull();
+  });
+
+  it('matches month-restricted schedules', () => {
+    // only June, day 15 at 00:00 — from May
+    const from = new Date('2026-05-01T00:00:00.000Z');
+    const next = estimateNextCronRun('0 0 15 6 *', { from, timezone: 'UTC' });
+    expect(next!.toISOString()).toBe('2026-06-15T00:00:00.000Z');
+  }, 15_000);
 });

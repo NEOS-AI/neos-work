@@ -53,12 +53,21 @@ describe('workflow-revisions routes', () => {
     const get = await workflowRevisions.request(`/${wf.id}/${rev.id}`);
     expect(get.status).toBe(200);
 
+    const patchBlank = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: '   ' }),
+    });
+    expect(patchBlank.status).toBe(400);
+
     const patch = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ label: 'renamed-label' }),
+      body: JSON.stringify({ label: '  renamed-label  ' }),
     });
     expect(patch.status).toBe(200);
+    const patched = await patch.json() as { data: { label?: string } };
+    expect(patched.data.label).toBe('renamed-label');
 
     // mutate live workflow then restore
     workflows.updateWorkflow(wf.id, {

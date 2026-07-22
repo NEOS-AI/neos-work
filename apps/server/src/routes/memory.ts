@@ -10,7 +10,7 @@
  */
 
 import { Hono } from 'hono';
-import type { CreateMemoryInput, UpdateMemoryInput } from '@neos-work/shared';
+import type { CreateMemoryInput, MemoryType, UpdateMemoryInput } from '@neos-work/shared';
 import {
   listMemories,
   getMemory,
@@ -22,6 +22,14 @@ import {
 } from '../lib/memory-store.js';
 
 const memory = new Hono();
+
+const MEMORY_TYPES = new Set<MemoryType>(['user', 'session', 'skill', 'reference']);
+
+function parseMemoryType(raw: unknown): MemoryType | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const t = raw.trim().toLowerCase() as MemoryType;
+  return MEMORY_TYPES.has(t) ? t : undefined;
+}
 
 memory.get('/', (c) => {
   return c.json({ ok: true, data: listMemories() });
@@ -35,10 +43,18 @@ memory.get('/export', (c) => {
 
 memory.post('/', async (c) => {
   const body = await c.req.json<CreateMemoryInput>();
-  if (!body.name || !body.type || !body.content) {
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  const type = parseMemoryType(body.type);
+  if (!name || !type || !content) {
     return c.json({ ok: false, error: 'name, type, and content are required' }, 400);
   }
-  const item = createMemory(body);
+  const item = createMemory({
+    name,
+    type,
+    content,
+    enabled: body.enabled,
+  });
   return c.json({ ok: true, data: item }, 201);
 });
 
@@ -50,7 +66,25 @@ memory.get('/:id', (c) => {
 
 memory.put('/:id', async (c) => {
   const body = await c.req.json<UpdateMemoryInput>();
-  const item = updateMemory(c.req.param('id'), body);
+  const patch: UpdateMemoryInput = {};
+  if (body.name !== undefined) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) return c.json({ ok: false, error: 'name cannot be empty' }, 400);
+    patch.name = name;
+  }
+  if (body.content !== undefined) {
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (!content) return c.json({ ok: false, error: 'content cannot be empty' }, 400);
+    patch.content = content;
+  }
+  if (body.type !== undefined) {
+    const type = parseMemoryType(body.type);
+    if (!type) return c.json({ ok: false, error: 'invalid memory type' }, 400);
+    patch.type = type;
+  }
+  if (body.enabled !== undefined) patch.enabled = body.enabled;
+
+  const item = updateMemory(c.req.param('id'), patch);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: item });
 });

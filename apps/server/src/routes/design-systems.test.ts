@@ -69,6 +69,13 @@ describe('design-systems routes', () => {
     const contentBody = await contentGet.json() as { data: { content: string } };
     expect(contentBody.data.content.length).toBeGreaterThan(0);
 
+    const putBlank = await designSystems.request(`/${id}/content`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '   \n\t  ' }),
+    });
+    expect(putBlank.status).toBe(400);
+
     const put = await designSystems.request(`/${id}/content`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },

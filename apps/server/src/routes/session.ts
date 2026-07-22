@@ -148,28 +148,38 @@ session.post('/', async (c) => {
   }>();
 
   // Input validation
-  if (!body.workspaceId || typeof body.workspaceId !== 'string' || body.workspaceId.length > 100) {
+  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
+  if (!workspaceId || workspaceId.length > 100) {
     return c.json({ ok: false, error: 'Invalid or missing workspaceId' }, 400);
   }
-  if (body.provider && !['anthropic', 'google'].includes(body.provider)) {
+  const provider =
+    typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : body.provider;
+  if (provider && !['anthropic', 'google'].includes(provider)) {
     return c.json({ ok: false, error: 'Invalid provider' }, 400);
   }
-  if (body.model && !ALL_MODELS.some((m) => m.id === body.model)) {
+  const model = typeof body.model === 'string' ? body.model.trim() : body.model;
+  if (model && !ALL_MODELS.some((m) => m.id === model)) {
     return c.json({ ok: false, error: 'Invalid model' }, 400);
   }
-  if (body.thinkingMode && !THINKING_MODES.includes(body.thinkingMode as ThinkingMode)) {
+  const thinkingMode =
+    typeof body.thinkingMode === 'string' ? body.thinkingMode.trim() : body.thinkingMode;
+  if (thinkingMode && !THINKING_MODES.includes(thinkingMode as ThinkingMode)) {
     return c.json({ ok: false, error: 'Invalid thinkingMode' }, 400);
   }
-  if (body.title && (typeof body.title !== 'string' || body.title.length > 200)) {
+  const title =
+    body.title !== undefined
+      ? (typeof body.title === 'string' ? body.title.trim() : '')
+      : undefined;
+  if (title !== undefined && (!title || title.length > 200)) {
     return c.json({ ok: false, error: 'Invalid title' }, 400);
   }
 
   const created = db.createSession({
-    workspaceId: body.workspaceId,
-    title: body.title,
-    provider: body.provider,
-    model: body.model,
-    thinkingMode: body.thinkingMode,
+    workspaceId,
+    title,
+    provider,
+    model,
+    thinkingMode,
   });
   return c.json({ ok: true, data: created }, 201);
 });
@@ -212,10 +222,11 @@ session.post('/:id/chat', async (c) => {
 
   // Input validation
   const MAX_CONTENT_LENGTH = 100_000; // 100KB
-  if (!body.content || typeof body.content !== 'string') {
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (!content) {
     return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
   }
-  if (body.content.length > MAX_CONTENT_LENGTH) {
+  if (content.length > MAX_CONTENT_LENGTH) {
     return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);
   }
 
@@ -226,12 +237,12 @@ session.post('/:id/chat', async (c) => {
   }
 
   // Save user message
-  db.addMessage({ sessionId, role: 'user', content: body.content });
+  db.addMessage({ sessionId, role: 'user', content });
 
   // Auto-set title from first message
   const MAX_TITLE_LENGTH = 60;
   if (!s.title) {
-    const title = body.content.slice(0, MAX_TITLE_LENGTH) + (body.content.length > MAX_TITLE_LENGTH ? '...' : '');
+    const title = content.slice(0, MAX_TITLE_LENGTH) + (content.length > MAX_TITLE_LENGTH ? '...' : '');
     db.updateSessionTitle(sessionId, title);
   }
 
@@ -490,10 +501,11 @@ session.post('/:id/agent', async (c) => {
   const body = await c.req.json<{ content: string }>();
 
   const MAX_CONTENT_LENGTH = 100_000;
-  if (!body.content || typeof body.content !== 'string') {
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (!content) {
     return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
   }
-  if (body.content.length > MAX_CONTENT_LENGTH) {
+  if (content.length > MAX_CONTENT_LENGTH) {
     return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);
   }
 
@@ -503,10 +515,10 @@ session.post('/:id/agent', async (c) => {
   }
 
   // Save user message and set session title
-  db.addMessage({ sessionId, role: 'user', content: body.content });
+  db.addMessage({ sessionId, role: 'user', content });
   const MAX_TITLE_LENGTH = 60;
   if (!s.title) {
-    const title = body.content.slice(0, MAX_TITLE_LENGTH) + (body.content.length > MAX_TITLE_LENGTH ? '...' : '');
+    const title = content.slice(0, MAX_TITLE_LENGTH) + (content.length > MAX_TITLE_LENGTH ? '...' : '');
     db.updateSessionTitle(sessionId, title);
   }
 
@@ -586,7 +598,7 @@ session.post('/:id/agent', async (c) => {
 
       let accumulatedText = '';
 
-      for await (const event of orchestrator.run(body.content, abortSignal)) {
+      for await (const event of orchestrator.run(content, abortSignal)) {
         if (clientDisconnected) break;
 
         switch (event.type) {

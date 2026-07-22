@@ -38,4 +38,54 @@ describe('blocks routes', () => {
     // route may only support list or get
     expect([404, 405, 200]).toContain(res.status);
   });
+
+  it('POST trims id/name and rejects invalid id or blank name', async () => {
+    const blank = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: '  ',
+        name: 'x',
+        implementationType: 'prompt',
+        promptTemplate: 'hi',
+      }),
+    });
+    expect(blank.status).toBe(400);
+
+    const badId = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'bad id!',
+        name: 'x',
+        implementationType: 'prompt',
+        promptTemplate: 'hi',
+      }),
+    });
+    expect(badId.status).toBe(400);
+
+    const create = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: `  ${ID}  `,
+        name: '  Cov Block Route  ',
+        domain: '  general  ',
+        category: '  test  ',
+        description: '  route cov  ',
+        implementationType: 'prompt',
+        promptTemplate: '  Hello {{inputs}}  ',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as {
+      data: { id: string; name: string; domain: string; category: string; description: string; promptTemplate?: string };
+    };
+    expect(created.data.id).toBe(ID);
+    expect(created.data.name).toBe('Cov Block Route');
+    expect(created.data.domain).toBe('general');
+    expect(created.data.category).toBe('test');
+    expect(created.data.description).toBe('route cov');
+    expect(created.data.promptTemplate).toBe('Hello {{inputs}}');
+  });
 });
