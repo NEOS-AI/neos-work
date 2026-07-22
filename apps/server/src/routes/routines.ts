@@ -54,25 +54,31 @@ routines.post('/', async (c) => {
     inputs?: Record<string, unknown>;
   }>();
 
-  if (!body.name || typeof body.name !== 'string' || body.name.length > 200) {
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const workflowId = typeof body.workflowId === 'string' ? body.workflowId.trim() : '';
+  const schedule = typeof body.schedule === 'string' ? body.schedule.trim() : '';
+  const timezone =
+    typeof body.timezone === 'string' ? body.timezone.trim() || undefined : undefined;
+
+  if (!name || name.length > 200) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
-  if (!body.workflowId || typeof body.workflowId !== 'string') {
+  if (!workflowId) {
     return c.json({ ok: false, error: 'workflowId is required' }, 400);
   }
-  if (!body.schedule || typeof body.schedule !== 'string') {
+  if (!schedule) {
     return c.json({ ok: false, error: 'schedule is required' }, 400);
   }
 
   // Validate workflow exists
-  const wf = workflowDb.getWorkflow(body.workflowId);
+  const wf = workflowDb.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Workflow not found' }, 404);
 
   const routine = db.createRoutine({
-    name: body.name,
-    workflowId: body.workflowId,
-    schedule: body.schedule,
-    timezone: body.timezone,
+    name,
+    workflowId,
+    schedule,
+    timezone,
     enabled: body.enabled !== false,
     inputs: body.inputs,
   });
@@ -94,10 +100,29 @@ routines.put('/:id', async (c) => {
     inputs?: Record<string, unknown>;
   }>();
 
+  const name =
+    body.name !== undefined
+      ? (typeof body.name === 'string' ? body.name.trim() : '')
+      : undefined;
+  if (name !== undefined && (!name || name.length > 200)) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  const schedule =
+    body.schedule !== undefined
+      ? (typeof body.schedule === 'string' ? body.schedule.trim() : '')
+      : undefined;
+  if (schedule !== undefined && !schedule) {
+    return c.json({ ok: false, error: 'schedule is required' }, 400);
+  }
+  const timezone =
+    body.timezone !== undefined
+      ? (typeof body.timezone === 'string' ? body.timezone.trim() || 'UTC' : 'UTC')
+      : undefined;
+
   const updated = db.updateRoutine(id, {
-    name: body.name,
-    schedule: body.schedule,
-    timezone: body.timezone,
+    name,
+    schedule,
+    timezone,
     enabled: body.enabled,
     inputs: body.inputs,
   });

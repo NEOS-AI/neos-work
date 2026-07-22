@@ -6,3 +6,4 @@ export * from './types/workflow.js';
 export * from './types/memory.js';
 export * from './models.js';
 export * from './messaging.js';
+export * from './deploy.js';

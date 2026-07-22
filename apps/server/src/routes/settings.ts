@@ -67,23 +67,25 @@ settings.delete('/:key', (c) => {
 
 // POST /api/settings/verify-key — validate an API key
 settings.post('/verify-key', async (c) => {
-  const body = await c.req.json<{ provider: string; key: string }>();
-  if (!body.provider || !body.key) {
+  const body = await c.req.json<{ provider: string; key: string }>().catch(() => null);
+  const provider = typeof body?.provider === 'string' ? body.provider.trim().toLowerCase() : '';
+  const key = typeof body?.key === 'string' ? body.key.trim() : '';
+  if (!provider || !key) {
     return c.json({ ok: false, error: 'Missing provider or key' }, 400);
   }
 
   try {
     const registry = new ProviderRegistry();
-    if (body.provider === 'anthropic') {
-      registry.register(new AnthropicAdapter(body.key));
-    } else if (body.provider === 'google') {
-      registry.register(new GoogleAdapter(body.key));
+    if (provider === 'anthropic') {
+      registry.register(new AnthropicAdapter(key));
+    } else if (provider === 'google') {
+      registry.register(new GoogleAdapter(key));
     } else {
-      return c.json({ ok: false, error: `Unknown provider: ${body.provider}` }, 400);
+      return c.json({ ok: false, error: `Unknown provider: ${provider}` }, 400);
     }
 
-    const adapter = registry.get(body.provider as 'anthropic' | 'google')!;
-    const valid = await adapter.validateApiKey(body.key);
+    const adapter = registry.get(provider as 'anthropic' | 'google')!;
+    const valid = await adapter.validateApiKey(key);
     return c.json({ ok: true, data: { valid } });
   } catch (error) {
     console.error('[verify-key]', error instanceof Error ? error.message : error);

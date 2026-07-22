@@ -71,6 +71,16 @@ describe('createBrowserTools', () => {
     );
   });
 
+  it('browser_screenshot defaults fullPage to false', async () => {
+    const page = {
+      screenshot: vi.fn(async () => Buffer.from('x')),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const shot = tools.find((t) => t.name === 'browser_screenshot')!;
+    await shot.execute({});
+    expect(page.screenshot).toHaveBeenCalledWith({ fullPage: false });
+  });
+
   it('browser_extract_text uses selector or full body', async () => {
     const locator = { innerText: vi.fn(async () => 'partial') };
     const page = {
@@ -103,5 +113,37 @@ describe('createBrowserTools', () => {
     expect(result.output).toEqual({
       links: [{ text: 'Home', href: 'https://x.test/' }],
     });
+  });
+
+  it('browser_extract_links passes null selector for whole page', async () => {
+    const page = {
+      evaluate: vi.fn(async (_fn: unknown, sel: string | null) => {
+        expect(sel).toBeNull();
+        return [];
+      }),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const extract = tools.find((t) => t.name === 'browser_extract_links')!;
+    const result = await extract.execute({});
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ links: [] });
+  });
+
+  it('propagates page errors from navigate and click', async () => {
+    const page = {
+      goto: vi.fn(async () => {
+        throw new Error('net::ERR');
+      }),
+      click: vi.fn(async () => {
+        throw new Error('timeout');
+      }),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    await expect(tools.find((t) => t.name === 'browser_navigate')!.execute({ url: 'https://x' })).rejects.toThrow(
+      /net::ERR/,
+    );
+    await expect(tools.find((t) => t.name === 'browser_click')!.execute({ selector: '#x' })).rejects.toThrow(
+      /timeout/,
+    );
   });
 });

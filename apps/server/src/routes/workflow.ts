@@ -53,13 +53,16 @@ workflow.post('/', async (c) => {
     edges?: unknown[];
   }>();
 
-  if (!body.name || typeof body.name !== 'string' || body.name.length > 200) {
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (!name || name.length > 200) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
+  const description =
+    typeof body.description === 'string' ? body.description.trim() || undefined : body.description;
 
   const wf = db.createWorkflow({
-    name: body.name,
-    description: body.description,
+    name,
+    description,
     domain: body.domain ?? 'general',
     nodes: (body.nodes as never) ?? [],
     edges: (body.edges as never) ?? [],
@@ -78,9 +81,17 @@ workflow.put('/:id', async (c) => {
     edges?: unknown[];
   }>();
 
-  if (body.name !== undefined && (typeof body.name !== 'string' || body.name.length > 200)) {
+  const name =
+    body.name !== undefined
+      ? (typeof body.name === 'string' ? body.name.trim() : '')
+      : undefined;
+  if (name !== undefined && (!name || name.length > 200)) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
+  const description =
+    body.description !== undefined && typeof body.description === 'string'
+      ? body.description.trim()
+      : body.description;
 
   // Auto-snapshot before update (Task 16: version history)
   const current = db.getWorkflow(id);
@@ -96,8 +107,8 @@ workflow.put('/:id', async (c) => {
   }
 
   const updated = db.updateWorkflow(id, {
-    name: body.name,
-    description: body.description,
+    name,
+    description,
     designSystemId: body.designSystemId,
     nodes: body.nodes as never,
     edges: body.edges as never,

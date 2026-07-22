@@ -153,6 +153,20 @@ describe('DeployNode', () => {
     expect(body.projectName).toBe('neos-deploy');
   });
 
+  it('rejects invalid project names before calling the API', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await DeployNode.execute(
+      ctx({
+        config: { provider: 'vercel', projectName: '-bad-name', content: '<p/>' },
+        inputs: {},
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/project name/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('keeps cloudflare provider', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { url: 'https://cf.pages.dev' } }),

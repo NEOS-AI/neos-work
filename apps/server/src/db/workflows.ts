@@ -85,13 +85,18 @@ export function createWorkflow(input: {
 }): Workflow {
   const db = getDb();
   const id = crypto.randomUUID();
+  const name = input.name.trim();
+  const description =
+    input.description !== undefined
+      ? (input.description.trim() || null)
+      : null;
   db.prepare(
     `INSERT INTO workflow (id, name, description, domain, nodes_json, edges_json)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
-    input.name,
-    input.description ?? null,
+    name,
+    description,
     input.domain,
     JSON.stringify(input.nodes),
     JSON.stringify(input.edges),
@@ -113,8 +118,12 @@ export function updateWorkflow(
   const existing = db.prepare('SELECT * FROM workflow WHERE id = ?').get(id) as WorkflowRow | undefined;
   if (!existing) return undefined;
 
-  const name = input.name ?? existing.name;
-  const description = input.description !== undefined ? input.description : existing.description;
+  const name =
+    input.name !== undefined ? input.name.trim() || existing.name : existing.name;
+  const description =
+    input.description !== undefined
+      ? (input.description.trim() || null)
+      : existing.description;
   const designSystemId = input.designSystemId !== undefined
     ? ((input.designSystemId ?? '').trim() || null)
     : existing.design_system_id;
@@ -243,13 +252,15 @@ export function regenerateWebhookSecret(workflowId: string): string {
 /** Constant-time HMAC-SHA256 signature verification. */
 export function verifyWebhookSignature(secret: string, body: string, signatureHeader: string): boolean {
   try {
+    const key = secret.trim();
+    if (!key) return false;
     const header = signatureHeader.trim();
     const eq = header.indexOf('=');
     if (eq <= 0) return false;
     const algo = header.slice(0, eq).trim();
     const sig = header.slice(eq + 1).trim();
     if (algo !== 'sha256' || !sig) return false;
-    const expected = createHmac('sha256', secret).update(body).digest('hex');
+    const expected = createHmac('sha256', key).update(body).digest('hex');
     const a = Buffer.from(sig, 'hex');
     const b = Buffer.from(expected, 'hex');
     if (a.length !== b.length) return false;

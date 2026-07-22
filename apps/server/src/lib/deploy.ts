@@ -3,13 +3,8 @@
  * These make REST API calls to each platform's deployment API.
  */
 
-/**
- * Deploy project names: start with alnum, then alnum/hyphen/underscore (max 63).
- * Matches desktop `isValidDeployProjectName` / graph validation.
- */
-export function isValidDeployProjectName(name: string): boolean {
-  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/.test(name);
-}
+/** Re-export shared deploy project name validator (single source of truth). */
+export { isValidDeployProjectName } from '@neos-work/shared';
 
 export interface DeployResult {
   url: string;

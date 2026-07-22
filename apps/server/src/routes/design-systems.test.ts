@@ -26,6 +26,26 @@ describe('design-systems routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('trims name/description and rejects whitespace-only name', async () => {
+    const blank = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(blank.status).toBe(400);
+
+    const create = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `  ${NAME}  `, description: '  spaced  ' }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; name: string; description?: string } };
+    expect(created.data.name).toBe(NAME);
+    expect(created.data.description).toBe('spaced');
+    await designSystems.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('creates, gets, lists, updates content, deletes', async () => {
     const create = await designSystems.request('/', {
       method: 'POST',

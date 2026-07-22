@@ -37,6 +37,21 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/Unknown media type/);
   });
 
+  it('normalizes mediaType case and whitespace', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'img.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await MediaNode.execute(
+      ctx({
+        config: { mediaType: '  Image  ', prompt: 'a cat' },
+        settings: { SERVER_URL: 'http://localhost:3001' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+  });
+
   it('trims SERVER_URL and SERVER_TOKEN before calling the API', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'img.png' } }),

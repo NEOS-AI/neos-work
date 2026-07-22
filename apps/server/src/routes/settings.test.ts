@@ -51,4 +51,22 @@ describe('settings routes', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('verify-key rejects missing/whitespace key and unknown provider', async () => {
+    const blank = await settings.request('/verify-key', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'anthropic', key: '   ' }),
+    });
+    expect(blank.status).toBe(400);
+
+    const unknown = await settings.request('/verify-key', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: '  OpenAI  ', key: 'sk-test' }),
+    });
+    expect(unknown.status).toBe(400);
+    const body = await unknown.json() as { error: string };
+    expect(body.error).toMatch(/Unknown provider/i);
+  });
 });

@@ -101,7 +101,8 @@ export async function generateImage(options: {
     '1024x1024' | '1792x1024' | '1024x1792';
   const rawQuality = options.quality ?? 'standard';
   const quality = (IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard') as 'standard' | 'hd';
-  const apiKey = options.apiKey;
+  const apiKey = options.apiKey.trim();
+  if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
 
   const response = await client.images.generate({
@@ -145,7 +146,8 @@ export async function generateAudio(options: {
     'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
   const rawModel = options.model ?? 'tts-1';
   const model = (TTS_MODELS.has(rawModel) ? rawModel : 'tts-1') as 'tts-1' | 'tts-1-hd';
-  const apiKey = options.apiKey;
+  const apiKey = options.apiKey.trim();
+  if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
 
   const mp3 = await client.audio.speech.create({

@@ -20,10 +20,13 @@ designSystems.get('/', async (c) => {
 
 designSystems.post('/', async (c) => {
   const body = await c.req.json<{ name: string; description?: string }>().catch(() => null);
-  if (!body?.name || typeof body.name !== 'string') {
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  const description =
+    typeof body?.description === 'string' ? body.description.trim() || undefined : undefined;
+  if (!name) {
     return c.json({ ok: false, error: 'name is required (alphanumeric, - and _ only)' }, 400);
   }
-  const ds = await store.createDesignSystem(body.name, body.description);
+  const ds = await store.createDesignSystem(name, description);
   if (!ds) {
     return c.json({ ok: false, error: 'Name must be alphanumeric (- and _ allowed) and must not already exist' }, 409);
   }

@@ -38,6 +38,37 @@ describe('workflow routes CRUD', () => {
     expect(res.status).toBe(400);
   });
 
+  it('trims name/description and rejects whitespace-only name', async () => {
+    const blank = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ', domain: 'general', ...minimalGraph }),
+    });
+    expect(blank.status).toBe(400);
+
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `  ${WF_NAME}_trim  `,
+        description: '  padded  ',
+        domain: 'general',
+        ...minimalGraph,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; name: string; description?: string } };
+    expect(created.data.name).toBe(`${WF_NAME}_trim`);
+    expect(created.data.description).toBe('padded');
+
+    const putBlank = await workflow.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '  ' }),
+    });
+    expect(putBlank.status).toBe(400);
+  });
+
   it('creates, lists, gets, updates, duplicates, deletes', async () => {
     const create = await workflow.request('/', {
       method: 'POST',

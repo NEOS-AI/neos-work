@@ -65,6 +65,10 @@ describe('generateImage', () => {
     await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Failed to download/);
   });
 
+  it('rejects blank apiKey after trim', async () => {
+    await expect(generateImage({ prompt: 'x', apiKey: '   ' })).rejects.toThrow(/apiKey/i);
+  });
+
   it('clamps invalid size/quality and rejects blank prompt', async () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png' }],

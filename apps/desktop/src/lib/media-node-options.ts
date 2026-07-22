@@ -36,10 +36,5 @@ export {
   SLACK_CONTENT_MAX_LENGTH,
 } from '@neos-work/shared';
 
-/**
- * Deploy project names: start with alnum, then alnum/hyphen/underscore.
- * Matches common Vercel / Cloudflare project name constraints (simplified).
- */
-export function isValidDeployProjectName(name: string): boolean {
-  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/.test(name);
-}
+/** Re-export shared deploy project name validator (single source of truth). */
+export { isValidDeployProjectName } from '@neos-work/shared';

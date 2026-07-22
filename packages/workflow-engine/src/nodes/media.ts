@@ -26,7 +26,8 @@ export const MediaNode: ExecutableNode = {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
     const { config, settings, inputs } = ctx;
-    const mediaType = (config?.mediaType as string) ?? 'image';
+    // Normalize case/whitespace so "Image" / " AUDIO " work like the panel options
+    const mediaType = String(config?.mediaType ?? 'image').trim().toLowerCase() || 'image';
     const serverUrl = String(settings['SERVER_URL'] ?? 'http://localhost:3001').trim()
       || 'http://localhost:3001';
     const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();

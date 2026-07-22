@@ -31,6 +31,48 @@ describe('routines routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects whitespace-only name and trims fields on create', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+
+    const blank = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '   ',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+      }),
+    });
+    expect(blank.status).toBe(400);
+
+    const create = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '  Trimmed Routine  ',
+        workflowId: `  ${wf.id}  `,
+        schedule: '  0 9 * * *  ',
+        timezone: '  UTC  ',
+        enabled: false,
+      }),
+    });
+    expect([200, 201]).toContain(create.status);
+    const created = await create.json() as {
+      data: { id: string; name: string; workflowId: string; schedule: string; timezone: string };
+    };
+    expect(created.data.name).toBe('Trimmed Routine');
+    expect(created.data.workflowId).toBe(wf.id);
+    expect(created.data.schedule).toBe('0 9 * * *');
+    expect(created.data.timezone).toBe('UTC');
+
+    await routines.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('creates, lists, gets, updates schedule, deletes', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

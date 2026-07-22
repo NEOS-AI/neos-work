@@ -208,7 +208,6 @@ describe('executeWorkflow media/deploy nodes', () => {
     });
     expect(events.some((e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'media')).toBe(true);
   });
-});
 
   it('fails web_search node when TAVILY_API_KEY missing', async () => {
     const events: WorkflowSSEEvent[] = [];
@@ -229,3 +228,123 @@ describe('executeWorkflow media/deploy nodes', () => {
     expect(failed).toBeDefined();
     expect((failed as { error: string }).error).toMatch(/TAVILY_API_KEY/);
   });
+});
+
+describe('executeWorkflow graph failure and skip paths', () => {
+  it('emits run.failed when the graph has a cycle', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-cycle',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'a', type: 'output', label: 'A', position: { x: 0, y: 0 }, config: {} },
+          { id: 'b', type: 'output', label: 'B', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'a', target: 'b' },
+          { id: 'e2', source: 'b', target: 'a' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    expect(events[0]).toMatchObject({ type: 'run.started', runId: 'run-cycle' });
+    expect(events.some((e) => e.type === 'run.failed')).toBe(true);
+    expect(events.some((e) => e.type === 'run.completed')).toBe(false);
+  });
+
+  it('skips downstream nodes when all upstream failed', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-skip-upstream',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'block',
+            type: 'block',
+            label: 'Block',
+            position: { x: 1, y: 0 },
+            config: {}, // missing blockId → fails
+          },
+          { id: 'output', type: 'output', label: 'Output', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'block' },
+          { id: 'e2', source: 'block', target: 'output' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const failed = events.filter((e) => e.type === 'node.failed') as Array<{
+      nodeId: string;
+      error: string;
+    }>;
+    expect(failed.some((e) => e.nodeId === 'block')).toBe(true);
+    expect(failed.some((e) => e.nodeId === 'output' && /Skipped: all upstream/.test(e.error))).toBe(
+      true,
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-skip-upstream' });
+  });
+
+  it('stops early when signal is already aborted', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    const controller = new AbortController();
+    controller.abort();
+
+    await executeWorkflow({
+      runId: 'run-aborted',
+      signal: controller.signal,
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'output', type: 'output', label: 'Output', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'output' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(events[0]).toMatchObject({ type: 'run.started', runId: 'run-aborted' });
+    // aborted before any node work
+    expect(events.some((e) => e.type === 'node.started')).toBe(false);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-aborted' });
+  });
+
+  it('AND gate fails when any upstream failed', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-and-fail',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'block',
+            type: 'block',
+            label: 'Block',
+            position: { x: 1, y: 0 },
+            config: {},
+          },
+          { id: 'ok', type: 'output', label: 'Ok', position: { x: 1, y: 1 }, config: {} },
+          { id: 'and', type: 'gate_and', label: 'AND', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'block' },
+          { id: 'e2', source: 'trigger', target: 'ok' },
+          { id: 'e3', source: 'block', target: 'and' },
+          { id: 'e4', source: 'ok', target: 'and' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const andFailed = events.find(
+      (e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'and',
+    ) as { error: string } | undefined;
+    expect(andFailed?.error).toMatch(/AND gate/);
+  });
+});

@@ -2,7 +2,10 @@
  * DeployNode — deploys content to Vercel or Cloudflare Pages via server API
  */
 
+import { isValidDeployProjectName } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
+
+export { isValidDeployProjectName };
 
 export const DeployNode: ExecutableNode = {
   type: 'deploy',
@@ -26,6 +29,15 @@ export const DeployNode: ExecutableNode = {
     const projectName = String(
       config?.projectName ?? inputs['projectName'] ?? 'neos-deploy',
     ).trim() || 'neos-deploy';
+    if (!isValidDeployProjectName(projectName)) {
+      return {
+        ok: false,
+        output: null,
+        error:
+          'Invalid project name: must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63)',
+        durationMs: Date.now() - start,
+      };
+    }
 
     try {
       const res = await fetch(`${serverUrl}/api/deploy`, {
