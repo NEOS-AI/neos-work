@@ -44,6 +44,14 @@ describe('settings CRUD + encryption migration', () => {
     expect(getSetting('apiKey.anthropic')).toBe('sk-ant-secret');
   });
 
+  it('trims sensitive values on write', () => {
+    setSetting('apiKey.anthropic', '  sk-pad-secret  ');
+    expect(getSetting('apiKey.anthropic')).toBe('sk-pad-secret');
+    // Non-sensitive values keep intentional padding
+    setSetting('theme', '  dark  ');
+    expect(getSetting('theme')).toBe('  dark  ');
+  });
+
   it('getAllSettings decrypts sensitive values', () => {
     setSetting('theme', 'light');
     setSetting('apiKey.anthropic', 'sk-all');

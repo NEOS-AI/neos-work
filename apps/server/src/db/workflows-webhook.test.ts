@@ -38,4 +38,10 @@ describe('verifyWebhookSignature', () => {
     expect(verifyWebhookSignature(secret, body, `SHA256=${sig}`)).toBe(false);
     expect(verifyWebhookSignature(secret, body, `sha256:${sig}`)).toBe(false);
   });
+
+  it('trims surrounding whitespace on the signature header', () => {
+    const sig = createHmac('sha256', secret).update(body).digest('hex');
+    expect(verifyWebhookSignature(secret, body, `  sha256=${sig}  `)).toBe(true);
+    expect(verifyWebhookSignature(secret, body, `sha256=  ${sig}`)).toBe(true);
+  });
 });

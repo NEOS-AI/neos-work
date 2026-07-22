@@ -65,6 +65,19 @@ describe('design-system-store', () => {
     expect(await updateDesignSystemContent('nope', 'x')).toBe(false);
     expect(await deleteDesignSystem('nope')).toBe(false);
   });
+
+  it('trims ids and treats whitespace-only DESIGN.md as missing', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+
+    expect(await getDesignSystem(`  ${created!.id}  `)).not.toBeNull();
+    expect(await getDesignSystem('   ')).toBeNull();
+
+    await updateDesignSystemContent(created!.id, '   \n\t  ');
+    expect(await getDesignSystemContent(created!.id)).toBeNull();
+
+    await deleteDesignSystem(created!.id);
+  });
 });
 
 describe('design-system-store scan edge cases', () => {

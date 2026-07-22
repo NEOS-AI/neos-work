@@ -64,6 +64,38 @@ describe('generateImage', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
     await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Failed to download/);
   });
+
+  it('clamps invalid size/quality and rejects blank prompt', async () => {
+    generateMock.mockResolvedValue({
+      data: [{ url: 'https://cdn.example/img.png' }],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1]).buffer,
+      }),
+    );
+
+    await expect(generateImage({ prompt: '   ', apiKey: 'sk' })).rejects.toThrow(/prompt/i);
+
+    const result = await generateImage({
+      prompt: '  a dog  ',
+      // @ts-expect-error intentional invalid options
+      size: '512x512',
+      // @ts-expect-error intentional invalid options
+      quality: 'ultra',
+      apiKey: 'sk',
+    });
+    created.push(result.filePath);
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'a dog',
+        size: '1024x1024',
+        quality: 'standard',
+      }),
+    );
+  });
 });
 
 describe('generateAudio', () => {
@@ -81,5 +113,30 @@ describe('generateAudio', () => {
     const st = await fs.stat(result.filePath);
     expect(st.size).toBe(2);
     expect(path.basename(result.filePath)).toMatch(/^audio_.*\.mp3$/);
+  });
+
+  it('clamps invalid voice/model and rejects blank text', async () => {
+    speechCreateMock.mockResolvedValue({
+      arrayBuffer: async () => new Uint8Array([1]).buffer,
+    });
+
+    await expect(generateAudio({ text: '  ', apiKey: 'sk' })).rejects.toThrow(/text/i);
+
+    const result = await generateAudio({
+      text: '  hi  ',
+      // @ts-expect-error intentional invalid options
+      voice: 'robot',
+      // @ts-expect-error intentional invalid options
+      model: 'tts-2',
+      apiKey: 'sk',
+    });
+    created.push(result.filePath);
+    expect(speechCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: 'hi',
+        voice: 'alloy',
+        model: 'tts-1',
+      }),
+    );
   });
 });

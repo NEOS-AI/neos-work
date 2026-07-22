@@ -104,6 +104,38 @@ describe('deploy routes', () => {
     expect(body.error).toMatch(/content/i);
   });
 
+  it('POST deploy rejects invalid project name', async () => {
+    setSetting('VERCEL_API_TOKEN', 'tok-test');
+    const res = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'vercel',
+        content: '<html></html>',
+        projectName: '-bad-name',
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error?: string };
+    expect(body.error).toMatch(/project name/i);
+  });
+
+  it('preflight flags invalid project name as not ready', async () => {
+    setSetting('VERCEL_API_TOKEN', 'tok-test');
+    const res = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'vercel', projectName: 'has space' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      data?: { ready: boolean; checks?: Array<{ key: string; ok: boolean }> };
+    };
+    expect(body.data?.ready).toBe(false);
+    const projectCheck = body.data?.checks?.find((c) => c.key === 'projectName');
+    expect(projectCheck?.ok).toBe(false);
+  });
+
   it('preflight rejects invalid provider', async () => {
     const res = await deploy.request('/preflight', {
       method: 'POST',
