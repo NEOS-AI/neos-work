@@ -82,13 +82,26 @@ export interface GenerateImageResult {
   revisedPrompt?: string;
 }
 
+/** Aligned with desktop media-node-options / MediaNode runtime allow-lists. */
+export const IMAGE_SIZES = new Set(['1024x1024', '1792x1024', '1024x1792']);
+export const IMAGE_QUALITIES = new Set(['standard', 'hd']);
+export const TTS_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
+export const TTS_MODELS = new Set(['tts-1', 'tts-1-hd']);
+
 export async function generateImage(options: {
   prompt: string;
   size?: '1024x1024' | '1792x1024' | '1024x1792';
   quality?: 'standard' | 'hd';
   apiKey: string;
 }): Promise<GenerateImageResult> {
-  const { prompt, size = '1024x1024', quality = 'standard', apiKey } = options;
+  const prompt = options.prompt.trim();
+  if (!prompt) throw new Error('prompt is required');
+  const rawSize = options.size ?? '1024x1024';
+  const size = (IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024') as
+    '1024x1024' | '1792x1024' | '1024x1792';
+  const rawQuality = options.quality ?? 'standard';
+  const quality = (IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard') as 'standard' | 'hd';
+  const apiKey = options.apiKey;
   const client = getClient(apiKey);
 
   const response = await client.images.generate({
@@ -125,7 +138,14 @@ export async function generateAudio(options: {
   model?: 'tts-1' | 'tts-1-hd';
   apiKey: string;
 }): Promise<GenerateAudioResult> {
-  const { text, voice = 'alloy', model = 'tts-1', apiKey } = options;
+  const text = options.text.trim();
+  if (!text) throw new Error('text is required');
+  const rawVoice = options.voice ?? 'alloy';
+  const voice = (TTS_VOICES.has(rawVoice) ? rawVoice : 'alloy') as
+    'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+  const rawModel = options.model ?? 'tts-1';
+  const model = (TTS_MODELS.has(rawModel) ? rawModel : 'tts-1') as 'tts-1' | 'tts-1-hd';
+  const apiKey = options.apiKey;
   const client = getClient(apiKey);
 
   const mp3 = await client.audio.speech.create({

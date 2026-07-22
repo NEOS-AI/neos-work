@@ -103,15 +103,19 @@ export async function listDesignSystems(): Promise<DesignSystem[]> {
 }
 
 export async function getDesignSystem(id: string): Promise<DesignSystem | null> {
+  const trimmed = id.trim();
+  if (!trimmed) return null;
   const all = await listDesignSystems();
-  return all.find((ds) => ds.id === id) ?? null;
+  return all.find((ds) => ds.id === trimmed) ?? null;
 }
 
 export async function getDesignSystemContent(id: string): Promise<string | null> {
   const ds = await getDesignSystem(id);
   if (!ds) return null;
   try {
-    return await fs.readFile(path.join(ds.path, 'DESIGN.md'), 'utf8');
+    const content = await fs.readFile(path.join(ds.path, 'DESIGN.md'), 'utf8');
+    // Whitespace-only DESIGN.md is treated as missing (Agent skips empty DESIGN CONTEXT)
+    return content.trim().length > 0 ? content : null;
   } catch {
     return null;
   }

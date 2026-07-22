@@ -116,7 +116,7 @@ export function updateWorkflow(
   const name = input.name ?? existing.name;
   const description = input.description !== undefined ? input.description : existing.description;
   const designSystemId = input.designSystemId !== undefined
-    ? (input.designSystemId || null)
+    ? ((input.designSystemId ?? '').trim() || null)
     : existing.design_system_id;
   const nodes = input.nodes !== undefined ? JSON.stringify(input.nodes) : existing.nodes_json;
   const edges = input.edges !== undefined ? JSON.stringify(input.edges) : existing.edges_json;
@@ -243,7 +243,11 @@ export function regenerateWebhookSecret(workflowId: string): string {
 /** Constant-time HMAC-SHA256 signature verification. */
 export function verifyWebhookSignature(secret: string, body: string, signatureHeader: string): boolean {
   try {
-    const [algo, sig] = signatureHeader.split('=');
+    const header = signatureHeader.trim();
+    const eq = header.indexOf('=');
+    if (eq <= 0) return false;
+    const algo = header.slice(0, eq).trim();
+    const sig = header.slice(eq + 1).trim();
     if (algo !== 'sha256' || !sig) return false;
     const expected = createHmac('sha256', secret).update(body).digest('hex');
     const a = Buffer.from(sig, 'hex');

@@ -13,6 +13,7 @@ import {
   deployToCloudflare,
   getVercelDeploymentStatus,
   getCloudflareDeploymentStatus,
+  isValidDeployProjectName,
 } from '../lib/deploy.js';
 import {
   createDeployment,
@@ -61,10 +62,13 @@ deploy.post('/preflight', async (c) => {
 
   const rawProject = (body as { projectName?: string }).projectName;
   const projectName = (typeof rawProject === 'string' ? rawProject.trim() : '') || 'neos-deploy';
+  const projectOk = isValidDeployProjectName(projectName);
   checks.push({
     key: 'projectName',
-    ok: Boolean(projectName && projectName.length <= 100),
-    message: projectName ? `Project name: ${projectName}` : 'Project name required',
+    ok: projectOk,
+    message: projectOk
+      ? `Project name: ${projectName}`
+      : 'Project name must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63).',
   });
 
   const ready = checks.every((ch) => ch.ok);
@@ -171,6 +175,13 @@ deploy.post('/', async (c) => {
 
   const projectName =
     (typeof body.projectName === 'string' ? body.projectName.trim() : '') || 'neos-deploy';
+  if (!isValidDeployProjectName(projectName)) {
+    return c.json({
+      ok: false,
+      error:
+        'Invalid project name: must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63).',
+    }, 400);
+  }
 
   const record = createDeployment({
     workflowId: body.workflowId,

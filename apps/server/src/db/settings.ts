@@ -55,7 +55,11 @@ export function getSecretSetting(key: string): string | undefined {
 
 export function setSetting(key: string, value: string): void {
   const db = getDb();
-  const storedValue = isSensitiveKey(key) ? encrypt(value) : value;
+  // Trim secrets on write so `"  sk  "` never persists padded (align with getSecretSetting).
+  // Empty secrets stay as plain "" (encrypting empty breaks isEncrypted shape / decrypt path).
+  const normalized = isSensitiveKey(key) ? value.trim() : value;
+  const storedValue =
+    isSensitiveKey(key) && normalized.length > 0 ? encrypt(normalized) : normalized;
   db.prepare(
     `INSERT INTO setting (key, value, updated_at) VALUES (?, ?, datetime('now'))
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,

@@ -3,6 +3,14 @@
  * These make REST API calls to each platform's deployment API.
  */
 
+/**
+ * Deploy project names: start with alnum, then alnum/hyphen/underscore (max 63).
+ * Matches desktop `isValidDeployProjectName` / graph validation.
+ */
+export function isValidDeployProjectName(name: string): boolean {
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/.test(name);
+}
+
 export interface DeployResult {
   url: string;
   deploymentId?: string;
