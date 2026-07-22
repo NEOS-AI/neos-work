@@ -109,8 +109,12 @@ async function executeStage(
   settings: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<string> {
-  const apiKey = settings['ANTHROPIC_API_KEY'] ?? settings['OPENAI_API_KEY'];
-  if (!apiKey) return `[Stage ${stage.name}: No LLM API key configured]`;
+  // Trim first so whitespace-only Anthropic does not block OpenAI fallback
+  const anthropicKey = String(settings['ANTHROPIC_API_KEY'] ?? '').trim();
+  const openaiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
+  if (!anthropicKey && !openaiKey) {
+    return `[Stage ${stage.name}: No LLM API key configured]`;
+  }
 
   // Interpolate {{key}} placeholders in prompt
   let prompt = stage.prompt ?? `Perform the ${stage.name} step.`;
@@ -121,16 +125,14 @@ async function executeStage(
     prompt = prompt.replaceAll(`{{${key}}}`, String(val));
   }
 
-// Simple fetch call to Anthropic Messages API
-  if (settings['ANTHROPIC_API_KEY']) {
+  // Anthropic Messages API
+  if (anthropicKey) {
     try {
-      const apiKey = String(settings['ANTHROPIC_API_KEY']).trim();
-      if (!apiKey) return `[Stage ${stage.name}: No LLM API key configured]`;
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
+          'x-api-key': anthropicKey,
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
@@ -153,13 +155,11 @@ async function executeStage(
 
   // Fallback: OpenAI
   try {
-    const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
-    if (!apiKey) return `[Stage ${stage.name}: No LLM API key configured]`;
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',

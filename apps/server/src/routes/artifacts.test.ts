@@ -20,6 +20,28 @@ describe('artifacts routes', () => {
   it('requires workflowId or runId on list', async () => {
     const res = await artifacts.request('/');
     expect(res.status).toBe(400);
+    const blank = await artifacts.request('/?workflowId=%20%20%20');
+    expect(blank.status).toBe(400);
+  });
+
+  it('rejects whitespace-only content on create', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const res = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'x.html',
+        contentType: 'text/html',
+        content: '   \n  ',
+      }),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('CRUD, preview, patch, refresh reload/rerun', async () => {

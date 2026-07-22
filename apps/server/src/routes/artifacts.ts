@@ -16,8 +16,8 @@ import * as db from '../db/artifacts.js';
 const artifacts = new Hono();
 
 artifacts.get('/', (c) => {
-  const workflowId = c.req.query('workflowId');
-  const runId = c.req.query('runId');
+  const workflowId = (c.req.query('workflowId') ?? '').trim();
+  const runId = (c.req.query('runId') ?? '').trim();
 
   if (runId) {
     return c.json({ ok: true, data: db.listArtifactsByRun(runId) });
@@ -29,7 +29,9 @@ artifacts.get('/', (c) => {
 });
 
 artifacts.get('/:id', (c) => {
-  const artifact = db.getArtifact(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: artifact });
 });
@@ -39,7 +41,9 @@ artifacts.get('/:id', (c) => {
  * Returns raw HTML (or text) for iframe / srcDoc consumers.
  */
 artifacts.get('/:id/preview', (c) => {
-  const artifact = db.getArtifact(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
   const content = artifact.content ?? '';
   const isHtml = (artifact.contentType ?? '').includes('html');
@@ -70,6 +74,11 @@ artifacts.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
 
+  // Allow empty content; reject pure-whitespace accidental paste
+  if (typeof body?.content === 'string' && body.content.length > 0 && !body.content.trim()) {
+    return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
+  }
+
   const artifact = db.createArtifact({
     workflowId,
     runId: typeof body?.runId === 'string' ? body.runId.trim() || undefined : body?.runId,
@@ -82,6 +91,8 @@ artifacts.post('/', async (c) => {
 });
 
 artifacts.put('/:id', async (c) => {
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ content: string }>().catch(() => null);
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
@@ -90,13 +101,15 @@ artifacts.put('/:id', async (c) => {
   if (body.content.length > 0 && !body.content.trim()) {
     return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
   }
-  const updated = db.updateArtifactContent(c.req.param('id'), body.content);
+  const updated = db.updateArtifactContent(id, body.content);
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: updated });
 });
 
 /** Plan Task 4 — PATCH name and/or content */
 artifacts.patch('/:id', async (c) => {
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ name?: string; content?: string }>().catch(() => null);
   if (!body || (body.name === undefined && body.content === undefined)) {
     return c.json({ ok: false, error: 'name and/or content required' }, 400);
@@ -116,7 +129,7 @@ artifacts.patch('/:id', async (c) => {
       return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
     }
   }
-  const updated = db.updateArtifact(c.req.param('id'), {
+  const updated = db.updateArtifact(id, {
     name,
     content: body.content,
   });
@@ -125,7 +138,9 @@ artifacts.patch('/:id', async (c) => {
 });
 
 artifacts.delete('/:id', (c) => {
-  const deleted = db.deleteArtifact(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const deleted = db.deleteArtifact(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
 });
@@ -137,12 +152,14 @@ artifacts.delete('/:id', (c) => {
  * - rerun: instruct client/server to re-run the parent workflow (returns workflowId)
  */
 artifacts.post('/:id/refresh', async (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
 
   const body = await c.req.json<{ mode?: 'reload' | 'rerun' }>().catch(() => ({} as { mode?: string }));
-  const mode = body.mode === 'rerun' ? 'rerun' : 'reload';
+  const rawMode = typeof body.mode === 'string' ? body.mode.trim().toLowerCase() : '';
+  const mode = rawMode === 'rerun' ? 'rerun' : 'reload';
 
   if (mode === 'rerun') {
     // Client should call POST /api/workflow/:workflowId/run and listen for new artifacts

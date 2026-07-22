@@ -83,6 +83,33 @@ describe('plugin-runner', () => {
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
 
+  it('treats whitespace-only API keys as missing', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'llm-ws',
+      name: 'LLM WS',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          prompt: 'Plan {{goal}}',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'ship' },
+      settings: { ANTHROPIC_API_KEY: '   ', OPENAI_API_KEY: '  ' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const completed = events.find((e) => e.type === 'stage.completed');
+    expect(String(completed?.output ?? '')).toMatch(/No LLM API key/i);
+  });
+
   it('surfaces network failures for LLM stage without throwing', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',
@@ -111,6 +138,41 @@ describe('plugin-runner', () => {
     const completed = events.find((e) => e.type === 'stage.completed');
     expect(String(completed?.output ?? '')).toMatch(/network down/i);
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
+  });
+
+  it('falls through whitespace Anthropic key to OpenAI', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'llm-fallback',
+      name: 'LLM Fallback',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          prompt: 'Plan {{goal}}',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'openai-ok' } }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'ship' },
+      settings: { ANTHROPIC_API_KEY: '   ', OPENAI_API_KEY: 'sk-openai' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const completed = events.find((e) => e.type === 'stage.completed');
+    expect(String(completed?.output ?? '')).toBe('openai-ok');
+    expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain('api.openai.com');
   });
 });
 
