@@ -38,21 +38,34 @@ describe('artifacts routes', () => {
     });
     expect(bad.status).toBe(400);
 
-    const create = await artifacts.request('/', {
+    const blankName = await artifacts.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         workflowId: wf.id,
-        runId,
-        name: 'preview.html',
+        name: '   ',
         contentType: 'text/html',
+      }),
+    });
+    expect(blankName.status).toBe(400);
+
+    const create = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: `  ${wf.id}  `,
+        runId: `  ${runId}  `,
+        name: '  preview.html  ',
+        contentType: '  text/html  ',
         content: '<html><body>hi</body></html>',
-        nodeId: 'agent-1',
+        nodeId: '  agent-1  ',
       }),
     });
     expect(create.status).toBe(201);
-    const created = await create.json() as { data: { id: string } };
+    const created = await create.json() as { data: { id: string; name: string; contentType: string } };
     const id = created.data.id;
+    expect(created.data.name).toBe('preview.html');
+    expect(created.data.contentType).toBe('text/html');
 
     const list = await artifacts.request(`/?workflowId=${wf.id}`);
     const listBody = await list.json() as { data: Array<{ id: string }> };
@@ -70,6 +83,13 @@ describe('artifacts routes', () => {
     expect(preview.headers.get('content-type')).toMatch(/html/);
     expect(await preview.text()).toContain('hi');
 
+    const putWs = await artifacts.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '   \n  ' }),
+    });
+    expect(putWs.status).toBe(400);
+
     const put = await artifacts.request(`/${id}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -77,10 +97,17 @@ describe('artifacts routes', () => {
     });
     expect(put.status).toBe(200);
 
+    const patchBlank = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(patchBlank.status).toBe(400);
+
     const patch = await artifacts.request(`/${id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'renamed.html' }),
+      body: JSON.stringify({ name: '  renamed.html  ' }),
     });
     expect(patch.status).toBe(200);
     const patched = await patch.json() as { data: { name: string } };

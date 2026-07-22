@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resumeRun, runPlugin } from './plugin-runner.js';
 import type { PluginManifest } from './plugin-store.js';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('plugin-runner', () => {
   it('resumeRun returns false for unknown run', () => {
@@ -75,6 +80,36 @@ describe('plugin-runner', () => {
     });
     const completed = events.find((e) => e.type === 'stage.completed');
     expect(String(completed?.output ?? '')).toMatch(/No LLM API key/i);
+    expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
+  });
+
+  it('surfaces network failures for LLM stage without throwing', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'llm-net',
+      name: 'LLM Net',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          prompt: 'Plan {{goal}}',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'ship' },
+      settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    vi.unstubAllGlobals();
+    const completed = events.find((e) => e.type === 'stage.completed');
+    expect(String(completed?.output ?? '')).toMatch(/network down/i);
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
 });

@@ -12,7 +12,14 @@ describe('validateWorkspacePath', () => {
 
   it('rejects empty and outside home', () => {
     expect(validateWorkspacePath('')).toBe(false);
+    expect(validateWorkspacePath('   ')).toBe(false);
     expect(validateWorkspacePath('/tmp/outside')).toBe(false);
     expect(validateWorkspacePath('/etc/passwd')).toBe(false);
+  });
+
+  it('trims paths before validation', () => {
+    const home = homedir();
+    expect(validateWorkspacePath(`  ${home}  `)).toBe(true);
+    expect(validateWorkspacePath(`  ${path.join(home, 'projects')}  `)).toBe(true);
   });
 });

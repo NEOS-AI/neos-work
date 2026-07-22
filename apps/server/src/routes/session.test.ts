@@ -110,6 +110,33 @@ describe('workspace routes', () => {
     expect(del.status).toBe(400);
   });
 
+  it('trims name/path and rejects blank name', async () => {
+    const blank = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(blank.status).toBe(400);
+
+    const { homedir } = await import('node:os');
+    const { join } = await import('node:path');
+    const homePath = join(homedir(), 'neos-cov-ws');
+    const create = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '  Cov Workspace  ',
+        path: `  ${homePath}  `,
+        type: '  local  ',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; name: string; path?: string } };
+    expect(created.data.name).toBe('Cov Workspace');
+    expect(created.data.path).toBe(homePath);
+    await workspace.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('rejects path outside home', async () => {
     const res = await workspace.request('/', {
       method: 'POST',

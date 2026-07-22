@@ -121,40 +121,60 @@ async function executeStage(
     prompt = prompt.replaceAll(`{{${key}}}`, String(val));
   }
 
-  // Simple fetch call to Anthropic Messages API
+// Simple fetch call to Anthropic Messages API
   if (settings['ANTHROPIC_API_KEY']) {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': settings['ANTHROPIC_API_KEY'],
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 2048,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-      signal,
-    });
-    const data = await res.json() as { content?: { text: string }[] };
-    return data.content?.[0]?.text ?? '';
+    try {
+      const apiKey = String(settings['ANTHROPIC_API_KEY']).trim();
+      if (!apiKey) return `[Stage ${stage.name}: No LLM API key configured]`;
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-haiku-20241022',
+          max_tokens: 2048,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+        signal,
+      });
+      if (!res.ok) {
+        return `[Stage ${stage.name}: Anthropic API error ${res.status}]`;
+      }
+      const data = await res.json() as { content?: { text: string }[] };
+      return data.content?.[0]?.text ?? '';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'LLM request failed';
+      return `[Stage ${stage.name}: ${msg}]`;
+    }
   }
 
   // Fallback: OpenAI
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings['OPENAI_API_KEY']}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 2048,
-    }),
-    signal,
-  });
-  const data = await res.json() as { choices?: { message: { content: string } }[] };
-  return data.choices?.[0]?.message.content ?? '';
+  try {
+    const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
+    if (!apiKey) return `[Stage ${stage.name}: No LLM API key configured]`;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2048,
+      }),
+      signal,
+    });
+    if (!res.ok) {
+      return `[Stage ${stage.name}: OpenAI API error ${res.status}]`;
+    }
+    const data = await res.json() as { choices?: { message: { content: string } }[] };
+    return data.choices?.[0]?.message.content ?? '';
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'LLM request failed';
+    return `[Stage ${stage.name}: ${msg}]`;
+  }
 }

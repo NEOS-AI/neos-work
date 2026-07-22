@@ -60,17 +60,23 @@ artifacts.post('/', async (c) => {
     nodeId?: string;
   }>().catch(() => null);
 
-  if (!body?.workflowId || !body.name || !body.contentType) {
+  const workflowId = typeof body?.workflowId === 'string' ? body.workflowId.trim() : '';
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  const contentType = typeof body?.contentType === 'string' ? body.contentType.trim() : '';
+  if (!workflowId || !name || !contentType) {
     return c.json({ ok: false, error: 'workflowId, name, contentType required' }, 400);
+  }
+  if (name.length > 200) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
 
   const artifact = db.createArtifact({
-    workflowId: body.workflowId,
-    runId: body.runId,
-    name: body.name,
-    contentType: body.contentType,
-    content: body.content,
-    nodeId: body.nodeId,
+    workflowId,
+    runId: typeof body?.runId === 'string' ? body.runId.trim() || undefined : body?.runId,
+    name,
+    contentType,
+    content: body?.content,
+    nodeId: typeof body?.nodeId === 'string' ? body.nodeId.trim() || undefined : body?.nodeId,
   });
   return c.json({ ok: true, data: artifact }, 201);
 });
@@ -79,6 +85,10 @@ artifacts.put('/:id', async (c) => {
   const body = await c.req.json<{ content: string }>().catch(() => null);
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
+  }
+  // Allow empty content (clear), but not pure-whitespace-as-accidental
+  if (body.content.length > 0 && !body.content.trim()) {
+    return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
   }
   const updated = db.updateArtifactContent(c.req.param('id'), body.content);
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -91,16 +101,23 @@ artifacts.patch('/:id', async (c) => {
   if (!body || (body.name === undefined && body.content === undefined)) {
     return c.json({ ok: false, error: 'name and/or content required' }, 400);
   }
+  let name: string | undefined;
   if (body.name !== undefined) {
-    if (typeof body.name !== 'string' || body.name.trim().length === 0 || body.name.length > 200) {
+    name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name || name.length > 200) {
       return c.json({ ok: false, error: 'Invalid name' }, 400);
     }
   }
-  if (body.content !== undefined && typeof body.content !== 'string') {
-    return c.json({ ok: false, error: 'content must be a string' }, 400);
+  if (body.content !== undefined) {
+    if (typeof body.content !== 'string') {
+      return c.json({ ok: false, error: 'content must be a string' }, 400);
+    }
+    if (body.content.length > 0 && !body.content.trim()) {
+      return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
+    }
   }
   const updated = db.updateArtifact(c.req.param('id'), {
-    name: body.name?.trim(),
+    name,
     content: body.content,
   });
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
