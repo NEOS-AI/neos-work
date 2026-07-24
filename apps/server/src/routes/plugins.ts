@@ -110,14 +110,22 @@ plugins.post('/:id/run', async (c) => {
 });
 
 plugins.post('/:id/run/:runId/resume', async (c) => {
+  const pluginId = c.req.param('id').trim();
+  if (!pluginId) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ stageId: string; response: Record<string, unknown> }>().catch(
     () => null,
   );
-  const stageId = typeof body?.stageId === 'string' ? body.stageId.trim() : '';
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  const stageId = typeof body.stageId === 'string' ? body.stageId.trim() : '';
   if (!stageId) return c.json({ ok: false, error: 'stageId required' }, 400);
   const runId = c.req.param('runId').trim();
   if (!runId) return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
-  const ok = resumeRun(runId, stageId, body?.response ?? {});
+  // Ensure plugin still exists before resuming (id is part of the public path)
+  const plugin = await getPlugin(pluginId);
+  if (!plugin) return c.json({ ok: false, error: 'Not found' }, 404);
+  const ok = resumeRun(runId, stageId, body.response ?? {});
   if (!ok) return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
   return c.json({ ok: true });
 });

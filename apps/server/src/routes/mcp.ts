@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 
 import { getDb } from '../db/schema.js';
 import { isSafeHttpBaseUrl } from '../db/settings.js';
-import { safeError } from '../lib/errors.js';
+import { escapeHtml, safeError } from '../lib/errors.js';
 import {
   saveToken,
   loadToken,
@@ -210,7 +210,10 @@ mcp.post('/oauth/start', async (c) => {
       clientId: string;
       redirectUri: string;
       scope?: string;
-    }>();
+    }>().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+    }
 
     const serverId = typeof body.serverId === 'string' ? body.serverId.trim() : '';
     const authorizationEndpoint =
@@ -269,12 +272,15 @@ mcp.post('/oauth/start', async (c) => {
  * Exchanges it for tokens and stores them.
  */
 mcp.get('/oauth/callback', async (c) => {
-  const code = c.req.query('code');
-  const state = c.req.query('state');
-  const error = c.req.query('error');
+  const code = (c.req.query('code') ?? '').trim();
+  const state = (c.req.query('state') ?? '').trim();
+  const error = (c.req.query('error') ?? '').trim();
 
   if (error) {
-    return c.html(`<html><body><h2>OAuth Error</h2><p>${error}</p><script>window.close();</script></body></html>`, 400);
+    return c.html(
+      `<html><body><h2>OAuth Error</h2><p>${escapeHtml(error)}</p><script>window.close();</script></body></html>`,
+      400,
+    );
   }
 
   if (!code || !state) {
@@ -300,21 +306,32 @@ mcp.get('/oauth/callback', async (c) => {
 
   try {
     // Token exchange
-    const tokenRes = await fetch(flow.tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: flow.redirectUri,
-        client_id: flow.clientId,
-        code_verifier: flow.codeVerifier,
-      }).toString(),
-    });
+    let tokenRes: Response;
+    try {
+      tokenRes = await fetch(flow.tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: flow.redirectUri,
+          client_id: flow.clientId,
+          code_verifier: flow.codeVerifier,
+        }).toString(),
+      });
+    } catch {
+      return c.html(
+        '<html><body><h2>Token exchange failed</h2><p>Network error contacting token endpoint</p></body></html>',
+        502,
+      );
+    }
 
     if (!tokenRes.ok) {
-      const msg = await tokenRes.text();
-      return c.html(`<html><body><h2>Token exchange failed</h2><pre>${msg}</pre></body></html>`, 500);
+      const msg = await tokenRes.text().catch(() => '');
+      return c.html(
+        `<html><body><h2>Token exchange failed</h2><pre>${escapeHtml(msg.slice(0, 2000))}</pre></body></html>`,
+        500,
+      );
     }
 
     const tokenData = await tokenRes.json() as {
@@ -325,17 +342,30 @@ mcp.get('/oauth/callback', async (c) => {
       token_type?: string;
     };
 
+    if (typeof tokenData.access_token !== 'string' || !tokenData.access_token.trim()) {
+      return c.html(
+        '<html><body><h2>Token exchange failed</h2><p>Missing access_token in response</p></body></html>',
+        500,
+      );
+    }
+
     const expiresAt = tokenData.expires_in
       ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
       : undefined;
 
     const token: McpOAuthToken = {
       serverId: flow.serverId,
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token,
+      accessToken: tokenData.access_token.trim(),
+      refreshToken:
+        typeof tokenData.refresh_token === 'string'
+          ? tokenData.refresh_token.trim() || undefined
+          : tokenData.refresh_token,
       expiresAt,
-      scope: tokenData.scope,
-      tokenType: tokenData.token_type,
+      scope: typeof tokenData.scope === 'string' ? tokenData.scope.trim() || undefined : tokenData.scope,
+      tokenType:
+        typeof tokenData.token_type === 'string'
+          ? tokenData.token_type.trim() || undefined
+          : tokenData.token_type,
     };
 
     await saveToken(token);
@@ -344,7 +374,10 @@ mcp.get('/oauth/callback', async (c) => {
       `<html><body><h2>Connected successfully</h2><p>You can close this window.</p><script>window.close();</script></body></html>`,
     );
   } catch (err) {
-    return c.html(`<html><body><h2>Error</h2><p>${safeError(err, 'token-exchange')}</p></body></html>`, 500);
+    return c.html(
+      `<html><body><h2>Error</h2><p>${escapeHtml(safeError(err, 'token-exchange'))}</p></body></html>`,
+      500,
+    );
   }
 });
 

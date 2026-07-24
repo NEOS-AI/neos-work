@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { safeError } from './errors.js';
+import { escapeHtml, safeError } from './errors.js';
 
 describe('safeError', () => {
   afterEach(() => {
@@ -18,5 +18,17 @@ describe('safeError', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(safeError('boom', 'ctx')).toBe('An internal error occurred');
     expect(spy).toHaveBeenCalled();
+  });
+});
+
+describe('escapeHtml', () => {
+  it('escapes HTML special characters', () => {
+    expect(escapeHtml(`<script>alert("x")</script>&'`)).toBe(
+      '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;&#39;',
+    );
+  });
+
+  it('leaves plain text unchanged', () => {
+    expect(escapeHtml('access_denied')).toBe('access_denied');
   });
 });

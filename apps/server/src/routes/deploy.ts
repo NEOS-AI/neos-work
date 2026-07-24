@@ -84,7 +84,7 @@ deploy.post('/preflight', async (c) => {
 
 deploy.get('/', (c) => {
   const workflowId = (c.req.query('workflowId') ?? '').trim() || undefined;
-  const limitRaw = c.req.query('limit');
+  const limitRaw = (c.req.query('limit') ?? '').trim();
   const limit = limitRaw ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500) : 100;
   const rows = listDeployments({ workflowId, limit });
   return c.json({ ok: true, data: rows });

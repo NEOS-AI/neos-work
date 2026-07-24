@@ -33,6 +33,30 @@ describe('blocks routes', () => {
     expect(body.data.some((b) => b.isBuiltIn === true || b.id !== ID)).toBe(true);
   });
 
+  it('list domain query trims and lower-cases', async () => {
+    createCustomBlock({
+      id: ID,
+      name: 'Cov Block Route',
+      domain: 'coding',
+      category: 'test',
+      description: 'route cov',
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: 'in',
+      outputDescription: 'out',
+    });
+    const filtered = await blocks.request('/?domain=%20CODING%20');
+    expect(filtered.status).toBe(200);
+    const body = await filtered.json() as { data: Array<{ id: string; domain?: string }> };
+    expect(body.data.some((b) => b.id === ID)).toBe(true);
+    expect(body.data.every((b) => !b.domain || b.domain === 'coding')).toBe(true);
+
+    const blank = await blocks.request('/?domain=%20%20');
+    expect(blank.status).toBe(200);
+    const all = await blank.json() as { data: Array<{ id: string }> };
+    expect(all.data.some((b) => b.id === ID)).toBe(true);
+  });
+
   it('GET missing custom block returns 404', async () => {
     const res = await blocks.request('/no-such-custom-block-xyz');
     // route may only support list or get

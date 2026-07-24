@@ -8,3 +8,13 @@ export function safeError(error: unknown, context: string): string {
   console.error(`[${context}]`, message);
   return 'An internal error occurred';
 }
+
+/** Escape text for safe embedding in HTML (MCP OAuth callback pages, etc.). */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

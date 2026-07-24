@@ -44,6 +44,17 @@ describe('artifacts routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects invalid JSON body on create', async () => {
+    const res = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/Invalid JSON/i);
+  });
+
   it('CRUD, preview, patch, refresh reload/rerun', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

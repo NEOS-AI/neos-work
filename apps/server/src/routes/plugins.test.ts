@@ -26,6 +26,34 @@ describe('plugins routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('returns 404 for blank path id after trim', async () => {
+    const res = await plugins.request('/%20%20');
+    expect(res.status).toBe(404);
+  });
+
+  it('resume rejects invalid JSON and unknown plugin', async () => {
+    const badJson = await plugins.request('/p1/run/r1/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const missingStage = await plugins.request('/p1/run/r1/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ response: {} }),
+    });
+    expect(missingStage.status).toBe(400);
+
+    const unknown = await plugins.request('/no-such-plugin-xyz/run/r1/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId: 's1', response: {} }),
+    });
+    expect(unknown.status).toBe(404);
+  });
+
   it('rejects upgrade without skillId/skillDirName', async () => {
     const res = await plugins.request('/upgrade-from-skill', {
       method: 'POST',

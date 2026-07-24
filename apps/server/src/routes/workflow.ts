@@ -161,7 +161,10 @@ workflow.post('/import', async (c) => {
     };
   }>().catch(() => null);
 
-  if (!body || body.version !== '1' || !body.workflow) {
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  if (body.version !== '1' || !body.workflow) {
     return c.json({ ok: false, error: 'Invalid import format or unsupported version' }, 400);
   }
 

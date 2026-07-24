@@ -63,10 +63,13 @@ artifacts.post('/', async (c) => {
     content?: string;
     nodeId?: string;
   }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
-  const workflowId = typeof body?.workflowId === 'string' ? body.workflowId.trim() : '';
-  const name = typeof body?.name === 'string' ? body.name.trim() : '';
-  const contentType = typeof body?.contentType === 'string' ? body.contentType.trim() : '';
+  const workflowId = typeof body.workflowId === 'string' ? body.workflowId.trim() : '';
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const contentType = typeof body.contentType === 'string' ? body.contentType.trim() : '';
   if (!workflowId || !name || !contentType) {
     return c.json({ ok: false, error: 'workflowId, name, contentType required' }, 400);
   }
@@ -75,17 +78,17 @@ artifacts.post('/', async (c) => {
   }
 
   // Allow empty content; reject pure-whitespace accidental paste
-  if (typeof body?.content === 'string' && body.content.length > 0 && !body.content.trim()) {
+  if (typeof body.content === 'string' && body.content.length > 0 && !body.content.trim()) {
     return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
   }
 
   const artifact = db.createArtifact({
     workflowId,
-    runId: typeof body?.runId === 'string' ? body.runId.trim() || undefined : body?.runId,
+    runId: typeof body.runId === 'string' ? body.runId.trim() || undefined : body.runId,
     name,
     contentType,
-    content: body?.content,
-    nodeId: typeof body?.nodeId === 'string' ? body.nodeId.trim() || undefined : body?.nodeId,
+    content: body.content,
+    nodeId: typeof body.nodeId === 'string' ? body.nodeId.trim() || undefined : body.nodeId,
   });
   return c.json({ ok: true, data: artifact }, 201);
 });

@@ -78,6 +78,17 @@ describe('workflow routes CRUD', () => {
     expect(putBlank.status).toBe(400);
   });
 
+  it('rejects import with invalid JSON body', async () => {
+    const res = await workflow.request('/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/Invalid JSON/i);
+  });
+
   it('normalizes domain on create and trims import name/description', async () => {
     const create = await workflow.request('/', {
       method: 'POST',

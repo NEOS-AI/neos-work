@@ -155,7 +155,40 @@ describe('mcp routes', () => {
     expect(body.error).toMatch(/refresh token/i);
   });
 
+  it('oauth/start rejects invalid JSON body', async () => {
+    const res = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('oauth/callback trims query and escapes HTML error', async () => {
+    const missing = await mcp.request('/oauth/callback?code=%20%20&state=%20');
+    expect(missing.status).toBe(400);
+    const missingBody = await missing.text();
+    expect(missingBody).toMatch(/Missing code or state/i);
+
+    const err = await mcp.request(
+      '/oauth/callback?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+    );
+    expect(err.status).toBe(400);
+    const html = await err.text();
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<script>alert(1)</script>');
+  });
+
   it('oauth/start trims fields and rejects non-http endpoints', async () => {
+    const badJson = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+    const badJsonBody = await badJson.json() as { error: string };
+    expect(badJsonBody.error).toMatch(/Invalid JSON/i);
+
     const missing = await mcp.request('/oauth/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

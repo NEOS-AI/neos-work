@@ -119,6 +119,79 @@ describe('session routes', () => {
 
     await session.request(`/${created.data.id}`, { method: 'DELETE' });
   });
+
+  it('trims list workspaceId query and blank path ids', async () => {
+    const blankWs = await session.request('/?workspaceId=%20%20');
+    expect(blankWs.status).toBe(200);
+    const all = await blankWs.json() as { ok: boolean; data: unknown[] };
+    expect(all.ok).toBe(true);
+    expect(Array.isArray(all.data)).toBe(true);
+
+    const trimmed = await session.request('/?workspaceId=%20default%20');
+    expect(trimmed.status).toBe(200);
+
+    const blankGet = await session.request('/%20');
+    expect(blankGet.status).toBe(404);
+    const blankMsgs = await session.request('/%20/messages');
+    expect(blankMsgs.status).toBe(404);
+    const blankDel = await session.request('/%20', { method: 'DELETE' });
+    expect(blankDel.status).toBe(404);
+    const blankCancel = await session.request('/%20/cancel', { method: 'POST' });
+    expect(blankCancel.status).toBe(404);
+  });
+
+  it('chat and agent reject invalid JSON / empty content before LLM', async () => {
+    const create = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: 'default',
+        title: `${TITLE}-msg`,
+        provider: 'anthropic',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string } };
+    const id = created.data.id;
+
+    const chatBadJson = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    // May hit "No API key" (400) first when keys missing, or Invalid JSON
+    expect(chatBadJson.status).toBe(400);
+
+    const chatEmpty = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '   ' }),
+    });
+    expect(chatEmpty.status).toBe(400);
+
+    const agentBadJson = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(agentBadJson.status).toBe(400);
+
+    const agentEmpty = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '' }),
+    });
+    expect(agentEmpty.status).toBe(400);
+
+    const missing = await session.request('/no-such-session/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'hi' }),
+    });
+    expect(missing.status).toBe(404);
+
+    await session.request(`/${id}`, { method: 'DELETE' });
+  });
 });
 
 describe('workspace routes', () => {
