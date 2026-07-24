@@ -98,8 +98,17 @@ export function updateAgentStep(
     values.push(serializeStepData(updates.data));
   }
   if (updates.error !== undefined) {
-    const error =
-      typeof updates.error === 'string' ? updates.error.trim() || null : updates.error;
+    // Cap error text (runaway tool dump defense)
+    const ERROR_MAX = 4_000;
+    let error: string | null =
+      typeof updates.error === 'string'
+        ? updates.error.trim() || null
+        : updates.error == null
+          ? null
+          : String(updates.error);
+    if (error && error.length > ERROR_MAX) {
+      error = error.slice(0, ERROR_MAX) + '…[truncated]';
+    }
     fields.push('error = ?');
     values.push(error);
   }

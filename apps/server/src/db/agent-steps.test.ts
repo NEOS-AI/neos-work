@@ -74,6 +74,20 @@ describe('agent_step CRUD', () => {
     expect(listAgentSteps(session.id)).toEqual([]);
   });
 
+  it('truncates oversized error strings on update', () => {
+    const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
+    sessionId = session.id;
+    const s = createAgentStep({
+      sessionId: session.id,
+      stepIndex: 0,
+      type: 'error',
+    });
+    expect(updateAgentStep(s.id, { error: 'e'.repeat(5_000) })).toBe(true);
+    const got = getAgentStep(s.id);
+    expect(got?.error?.length).toBeLessThanOrEqual(4_020);
+    expect(got?.error).toMatch(/\[truncated\]$/);
+  });
+
   it('truncates oversized step data payloads', () => {
     const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
     sessionId = session.id;

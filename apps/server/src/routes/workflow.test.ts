@@ -414,6 +414,20 @@ describe('workflow routes export/import/preflight/runs', () => {
     expect(missingBody.error).toMatch(/Missing file/i);
   });
 
+  it('import.zip rejects Content-Length over 50 MiB before reading body', async () => {
+    const max = 50 * 1024 * 1024;
+    const res = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/zip',
+        'content-length': String(max + 1),
+      },
+      body: 'tiny',
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/ZIP exceeds max size/i);
+  });
+
   it('export.zip then import.zip round-trips a workflow', async () => {
     const wf = workflows.createWorkflow({
       name: `${WF_NAME}-zip-rt`,

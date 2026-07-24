@@ -62,6 +62,15 @@ describe('resolveMessageText', () => {
       resolveMessageText({ textTemplate: 'obj={{data}}' }, { data: { ok: true } }),
     ).toBe('obj={"ok":true}');
   });
+
+  it('skips unsafe placeholder keys during interpolation', () => {
+    expect(
+      resolveMessageText(
+        { textTemplate: 'a={{ok}} b={{bad key}} c={{x.y}}' },
+        { ok: '1', 'bad key': 'NO', 'x.y': 'NO' },
+      ),
+    ).toBe('a=1 b={{bad key}} c={{x.y}}');
+  });
 });
 
 describe('resolveMaxResults', () => {
@@ -104,5 +113,10 @@ describe('resolveSearchQuery', () => {
     expect(resolveSearchQuery({}, { query: '  hello  ' })).toBe('hello');
     expect(resolveSearchQuery({}, { text: '   ' })).toBe('');
     expect(resolveSearchQuery({}, { query: '   ' })).toBe('');
+  });
+
+  it('rejects control-char queries and caps length', () => {
+    expect(resolveSearchQuery({ query: 'hi\nthere' }, {})).toBe('');
+    expect(resolveSearchQuery({}, { query: 'a'.repeat(2_500) }).length).toBe(2_000);
   });
 });

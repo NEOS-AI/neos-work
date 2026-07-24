@@ -100,6 +100,41 @@ describe('createWebSearchTool', () => {
     expect(blank.error).toMatch(/query/i);
   });
 
+  it('rejects control-char queries and truncates long queries / snippets', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    const ctrl = await createWebSearchTool().execute({ query: `bad${'\n'}q` });
+    expect(ctrl.success).toBe(false);
+    expect(ctrl.error).toMatch(/control characters/i);
+
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'T'.repeat(800),
+              url: 'https://example.com',
+              content: 'S'.repeat(5_000),
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const longQ = 'q'.repeat(3_000);
+    const result = await createWebSearchTool().execute({ query: longQ });
+    expect(result.success).toBe(true);
+    const body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit)
+        .body as string,
+    );
+    expect(body.query.length).toBe(2_000);
+    const out = result.output as { results: Array<{ title: string; snippet: string }> };
+    expect(out.results[0]!.title.length).toBe(500);
+    expect(out.results[0]!.snippet.length).toBe(2_000);
+  });
+
+
   it('floors and clamps maxResults (string/zero/negative)', async () => {
     process.env['TAVILY_API_KEY'] = 'k';
     globalThis.fetch = vi.fn(async () =>

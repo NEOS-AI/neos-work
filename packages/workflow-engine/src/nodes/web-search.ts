@@ -34,7 +34,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.90',
+          'User-Agent': 'neos-work/0.3.91',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
@@ -54,7 +54,14 @@ export class WebSearchNode implements ExecutableNode {
       }
 
       const data = await res.json() as { results?: TavilyResult[] };
-      const results = Array.isArray(data.results) ? data.results : [];
+      const raw = Array.isArray(data.results) ? data.results : [];
+      // Clip title/content so runaway Tavily payloads do not bloat node results
+      const results = raw.map((r) => ({
+        title: typeof r.title === 'string' ? r.title.trim().slice(0, 500) : '',
+        url: typeof r.url === 'string' ? r.url.trim() : '',
+        content: typeof r.content === 'string' ? r.content.trim().slice(0, 2_000) : '',
+        score: typeof r.score === 'number' && Number.isFinite(r.score) ? r.score : 0,
+      }));
       return {
         ok: true,
         output: results,

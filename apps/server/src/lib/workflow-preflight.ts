@@ -47,6 +47,19 @@ export function assessWorkflowPreflight(
     issues.push({ code: 'no_output', severity: 'warning', message: 'Workflow has no output node.' });
   }
 
+  // Blank / whitespace-only node ids are unusable at runtime
+  for (const n of nodes) {
+    const id = typeof n.id === 'string' ? n.id.trim() : '';
+    if (!id) {
+      issues.push({
+        code: 'blank_node_id',
+        severity: 'error',
+        message: 'Workflow has a node with a blank id.',
+      });
+      break;
+    }
+  }
+
   for (const edge of edges) {
     const source = typeof edge.source === 'string' ? edge.source.trim() : '';
     const target = typeof edge.target === 'string' ? edge.target.trim() : '';

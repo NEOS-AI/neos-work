@@ -89,7 +89,19 @@ plugins.post('/:id/run', async (c) => {
   let inputs: Record<string, unknown> = {};
   try {
     const body = await c.req.json<{ inputs?: Record<string, unknown> }>();
-    if (body.inputs) inputs = body.inputs;
+    // Only plain objects (not arrays) as plugin inputs
+    if (
+      body.inputs
+      && typeof body.inputs === 'object'
+      && !Array.isArray(body.inputs)
+    ) {
+      const serialized = JSON.stringify(body.inputs);
+      // Cap inputs payload (plan Task 5)
+      if (serialized.length > 256_000) {
+        return c.json({ ok: false, error: 'inputs payload too large' }, 400);
+      }
+      inputs = body.inputs;
+    }
   } catch {
     // No body
   }

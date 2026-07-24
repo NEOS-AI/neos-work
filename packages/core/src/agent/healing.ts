@@ -42,18 +42,27 @@ export class ReflectionStrategy implements HealingStrategy {
     history: AgentStep[],
     signal?: AbortSignal,
   ): Promise<HealingResult> {
+    // Bound history / input blobs so healing prompts stay small
     const historyStr = history
+      .slice(-20)
       .map(
         (s) =>
-          `[${s.status}] ${s.description}${s.error ? ` (에러: ${s.error})` : ''}`,
+          `[${s.status}] ${String(s.description ?? '').slice(0, 500)}${
+            s.error ? ` (에러: ${String(s.error).slice(0, 300)})` : ''
+          }`,
       )
-      .join('\n');
+      .join('\n')
+      .slice(0, 8_000);
+
+    const inputStr = step.input
+      ? JSON.stringify(step.input).slice(0, 2_000)
+      : '';
 
     const prompt = `에이전트 step이 실패했습니다.
 
-목표: ${step.description}
-${step.toolName ? `툴: ${step.toolName}` : ''}
-${step.input ? `입력: ${JSON.stringify(step.input)}` : ''}
+목표: ${String(step.description ?? '').slice(0, 1_000)}
+${step.toolName ? `툴: ${String(step.toolName).slice(0, 100)}` : ''}
+${inputStr ? `입력: ${inputStr}` : ''}
 에러: ${typeof error === 'string' ? error.trim().slice(0, 2000) : String(error ?? '').slice(0, 2000)}
 
 완료된 이전 steps:

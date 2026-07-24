@@ -262,6 +262,25 @@ describe('workflow runs CRUD', () => {
     workflows.deleteWorkflow(gen.id);
   });
 
+  it('createWorkflow rejects control-char names and overlong names', () => {
+    expect(() =>
+      workflows.createWorkflow({
+        name: 'bad\nname',
+        domain: 'general',
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      workflows.createWorkflow({
+        name: 'x'.repeat(201),
+        domain: 'general',
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow(/max length/i);
+  });
+
   it('safe-parses corrupt nodes/edges/nodeResults JSON and coerces non-array updates', () => {
     const wf = workflows.createWorkflow({
       name: NAME,

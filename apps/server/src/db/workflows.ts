@@ -113,6 +113,12 @@ function normalizeWorkflowDomain(raw: unknown): Workflow['domain'] {
     : 'general';
 }
 
+/** Cap workflow name / description (UI + DB hygiene). */
+export const WORKFLOW_NAME_MAX_CHARS = 200;
+export const WORKFLOW_DESCRIPTION_MAX_CHARS = 4_000;
+/** Cap serialized graph size (nodes+edges JSON) — runaway paste defense. */
+export const WORKFLOW_GRAPH_JSON_MAX_CHARS = 5 * 1024 * 1024;
+
 export function createWorkflow(input: {
   name: string;
   description?: string;
@@ -124,13 +130,29 @@ export function createWorkflow(input: {
   if (!name) {
     throw new Error('name is required');
   }
-  const description =
+  if (/[\0\r\n]/.test(name)) {
+    throw new Error('name contains invalid control characters');
+  }
+  if (name.length > WORKFLOW_NAME_MAX_CHARS) {
+    throw new Error(`name exceeds max length (${WORKFLOW_NAME_MAX_CHARS})`);
+  }
+  let description: string | null =
     input.description !== undefined
       ? (typeof input.description === 'string' ? input.description.trim() || null : null)
       : null;
+  if (description && description.length > WORKFLOW_DESCRIPTION_MAX_CHARS) {
+    description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
+  }
   const domain = normalizeWorkflowDomain(input.domain);
   const nodes = Array.isArray(input.nodes) ? input.nodes : [];
   const edges = Array.isArray(input.edges) ? input.edges : [];
+  const nodesJson = JSON.stringify(nodes);
+  const edgesJson = JSON.stringify(edges);
+  if (nodesJson.length + edgesJson.length > WORKFLOW_GRAPH_JSON_MAX_CHARS) {
+    throw new Error(
+      `workflow graph exceeds max size (${WORKFLOW_GRAPH_JSON_MAX_CHARS} characters)`,
+    );
+  }
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(
@@ -141,8 +163,8 @@ export function createWorkflow(input: {
     name,
     description,
     domain,
-    JSON.stringify(nodes),
-    JSON.stringify(edges),
+    nodesJson,
+    edgesJson,
   );
   return getWorkflow(id)!;
 }
@@ -163,14 +185,21 @@ export function updateWorkflow(
   const existing = db.prepare('SELECT * FROM workflow WHERE id = ?').get(trimmed) as WorkflowRow | undefined;
   if (!existing) return undefined;
 
-  const name =
+  let name =
     input.name !== undefined
       ? (typeof input.name === 'string' ? input.name.trim() || existing.name : existing.name)
       : existing.name;
-  const description =
+  if (/[\0\r\n]/.test(name) || name.length > WORKFLOW_NAME_MAX_CHARS) {
+    // Invalid rename leaves row unchanged
+    return undefined;
+  }
+  let description =
     input.description !== undefined
       ? (typeof input.description === 'string' ? input.description.trim() || null : null)
       : existing.description;
+  if (description && description.length > WORKFLOW_DESCRIPTION_MAX_CHARS) {
+    description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
+  }
   const designSystemId = input.designSystemId !== undefined
     ? (typeof input.designSystemId === 'string'
         ? input.designSystemId.trim() || null
@@ -184,6 +213,9 @@ export function updateWorkflow(
     input.edges !== undefined
       ? JSON.stringify(Array.isArray(input.edges) ? input.edges : [])
       : existing.edges_json;
+  if (nodes.length + edges.length > WORKFLOW_GRAPH_JSON_MAX_CHARS) {
+    return undefined;
+  }
 
   db.prepare(
     `UPDATE workflow SET name = ?, description = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')

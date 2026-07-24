@@ -112,6 +112,43 @@ describe('GoogleAdapter', () => {
     expect(contents[1]?.role).toBe('model');
   });
 
+  it('clamps invalid maxTokens to default 4096 and caps huge values', async () => {
+    generateContentStream.mockResolvedValue(streamOf([]));
+    const adapter = new GoogleAdapter('sk');
+
+    for await (const _ of adapter.chat({
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: Number.NaN,
+    })) {
+      /* drain */
+    }
+    let req = generateContentStream.mock.calls[0] as [Record<string, unknown>];
+    expect((req[0].config as { maxOutputTokens: number }).maxOutputTokens).toBe(4096);
+
+    generateContentStream.mockResolvedValue(streamOf([]));
+    for await (const _ of adapter.chat({
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 999_999,
+    })) {
+      /* drain */
+    }
+    req = generateContentStream.mock.calls[1] as [Record<string, unknown>];
+    expect((req[0].config as { maxOutputTokens: number }).maxOutputTokens).toBe(128_000);
+
+    generateContentStream.mockResolvedValue(streamOf([]));
+    for await (const _ of adapter.chat({
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: -5,
+    })) {
+      /* drain */
+    }
+    req = generateContentStream.mock.calls[2] as [Record<string, unknown>];
+    expect((req[0].config as { maxOutputTokens: number }).maxOutputTokens).toBe(4096);
+  });
+
   it('chat omits thinking and tools when not requested', async () => {
     generateContentStream.mockResolvedValue(
       streamOf([

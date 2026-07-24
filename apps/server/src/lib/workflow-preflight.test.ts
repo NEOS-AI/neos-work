@@ -40,6 +40,21 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
+  it('flags blank node ids', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: '   ', type: 'output', config: {} },
+        ],
+        edges: [],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'blank_node_id')).toBe(true);
+  });
+
   it('errors when web_search lacks Tavily key', () => {
     const r = assessWorkflowPreflight(
       {

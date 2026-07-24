@@ -88,6 +88,10 @@ export function getCustomBlock(id: string): WorkflowBlock | null {
   return row ? rowToBlock(row) : null;
 }
 
+/** Cap prompt-template blocks (plan Task 12). */
+export const BLOCK_PROMPT_TEMPLATE_MAX_CHARS = 50_000;
+export const BLOCK_DESCRIPTION_MAX_CHARS = 2_000;
+
 export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): WorkflowBlock {
   const id = typeof block.id === 'string' ? block.id.trim() : '';
   const name = typeof block.name === 'string' ? block.name.trim() : '';
@@ -97,13 +101,24 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
   }
+  if (name.length > 200) {
+    throw new Error('name exceeds max length (200)');
+  }
   const domain = normalizeDomain(block.domain);
   const category =
     (typeof block.category === 'string' ? block.category.trim() : '') || 'custom';
-  const description =
+  let description =
     typeof block.description === 'string' ? block.description.trim() : (block.description ?? '');
-  const promptTemplate =
+  if (typeof description === 'string' && description.length > BLOCK_DESCRIPTION_MAX_CHARS) {
+    description = description.slice(0, BLOCK_DESCRIPTION_MAX_CHARS);
+  }
+  let promptTemplate =
     typeof block.promptTemplate === 'string' ? block.promptTemplate.trim() || undefined : block.promptTemplate;
+  if (typeof promptTemplate === 'string' && promptTemplate.length > BLOCK_PROMPT_TEMPLATE_MAX_CHARS) {
+    throw new Error(
+      `promptTemplate exceeds max size (${BLOCK_PROMPT_TEMPLATE_MAX_CHARS} characters)`,
+    );
+  }
   const skillId =
     typeof block.skillId === 'string' ? block.skillId.trim() || undefined : block.skillId;
   const inputDescription =
@@ -170,7 +185,7 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
   // Normalize string fields the same way as create (defense-in-depth for direct DB callers)
   if (patch.name !== undefined) {
     const name = typeof patch.name === 'string' ? patch.name.trim() : '';
-    if (!name) return null;
+    if (!name || name.length > 200) return null;
     updated.name = name;
   }
   if (patch.domain !== undefined) {
@@ -180,10 +195,16 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     updated.category = patch.category.trim() || 'custom';
   }
   if (typeof patch.description === 'string') {
-    updated.description = patch.description.trim();
+    const d = patch.description.trim();
+    updated.description =
+      d.length > BLOCK_DESCRIPTION_MAX_CHARS
+        ? d.slice(0, BLOCK_DESCRIPTION_MAX_CHARS)
+        : d;
   }
   if (typeof patch.promptTemplate === 'string') {
-    updated.promptTemplate = patch.promptTemplate.trim() || undefined;
+    const pt = patch.promptTemplate.trim() || undefined;
+    if (pt && pt.length > BLOCK_PROMPT_TEMPLATE_MAX_CHARS) return null;
+    updated.promptTemplate = pt;
   }
   if (typeof patch.skillId === 'string') {
     updated.skillId = patch.skillId.trim() || undefined;

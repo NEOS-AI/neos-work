@@ -44,10 +44,24 @@ export function createWebSearchTool(): Tool {
       }
 
       try {
-        const query =
+        /** Cap query length (align with WebSearchNode SEARCH_QUERY_MAX_CHARS). */
+        const SEARCH_QUERY_MAX = 2_000;
+        const SNIPPET_MAX = 2_000;
+        const TITLE_MAX = 500;
+        let query =
           typeof input.query === 'string' ? input.query.trim() : String(input.query ?? '').trim();
         if (!query) {
           return { success: false, output: null, error: 'query is required' };
+        }
+        if (/[\0\r\n]/.test(query)) {
+          return {
+            success: false,
+            output: null,
+            error: 'query contains invalid control characters',
+          };
+        }
+        if (query.length > SEARCH_QUERY_MAX) {
+          query = query.slice(0, SEARCH_QUERY_MAX);
         }
         const maxResults = clampMaxResults(input.maxResults, 5);
 
@@ -56,7 +70,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.90',
+            'User-Agent': 'neos-work/0.3.91',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
@@ -70,16 +84,25 @@ export function createWebSearchTool(): Tool {
           };
         }
 
-        const data = await response.json() as { results?: Array<{ title: string; url: string; content: string }> };
-        const results = (data.results ?? []).map((r) => ({
-          title: r.title,
-          url: r.url,
-          snippet: r.content,
-        }));
+        const data = await response.json() as {
+          results?: Array<{ title?: string; url?: string; content?: string }>;
+        };
+        const rawResults = Array.isArray(data.results) ? data.results : [];
+        const results = rawResults.map((r) => {
+          const title = typeof r.title === 'string' ? r.title.trim().slice(0, TITLE_MAX) : '';
+          const url = typeof r.url === 'string' ? r.url.trim() : '';
+          const snippet =
+            typeof r.content === 'string' ? r.content.trim().slice(0, SNIPPET_MAX) : '';
+          return { title, url, snippet };
+        });
 
         return { success: true, output: { results } };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return {
+          success: false,
+          output: null,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
     },
   };

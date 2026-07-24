@@ -57,6 +57,48 @@ describe('plugin-runner', () => {
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
 
+  it('caps oversized HITL resume payloads at 200 KiB', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'hitl-cap',
+      name: 'HITL Cap',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'form1',
+          name: 'Form',
+          kind: 'form',
+          humanInLoop: true,
+          outputKey: 'answer',
+          schema: { fields: [] },
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    let runId: string | null = null;
+    const done = runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => {
+        events.push(e as unknown as Record<string, unknown>);
+        if (e.type === 'pipeline.started') runId = e.runId;
+        if (e.type === 'stage.waiting' && runId) {
+          setTimeout(() => {
+            expect(
+              resumeRun(runId!, e.stageId, { blob: 'x'.repeat(250_000) }),
+            ).toBe(true);
+          }, 0);
+        }
+      },
+    });
+    await done;
+    const completed = events.find((e) => e.type === 'stage.completed');
+    const out = String(completed?.output ?? '');
+    expect(out).toContain('…[truncated]');
+    expect(out.length).toBeLessThanOrEqual(200_000 + 20);
+  });
+
   it('returns placeholder when no API key for LLM stage', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',

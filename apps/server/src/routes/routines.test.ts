@@ -231,8 +231,25 @@ describe('routines routes', () => {
     // May succeed (200) or fail if skill FS/DB setup is limited — accept 200 or structured error
     expect([200, 201, 400, 500]).toContain(ok.status);
     if (ok.status === 200 || ok.status === 201) {
-      const body = await ok.json() as { data?: { name?: string; path?: string } };
+      const body = await ok.json() as { data?: { name?: string; path?: string; description?: string } };
       expect(body.data?.name || body.data?.path).toBeTruthy();
+    }
+
+    // Description cap at 4_000 chars (Task 2 crystallize polish)
+    const longDesc = await routines.request(`/${routine.id}/runs/${run.id}/crystallize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Long Desc Skill',
+        description: 'D'.repeat(5_000),
+      }),
+    });
+    expect([200, 201, 400, 500]).toContain(longDesc.status);
+    if (longDesc.status === 200 || longDesc.status === 201) {
+      const body = await longDesc.json() as { data?: { description?: string | null } };
+      if (typeof body.data?.description === 'string') {
+        expect(body.data.description.length).toBeLessThanOrEqual(4_000);
+      }
     }
   });
 

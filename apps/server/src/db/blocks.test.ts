@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  BLOCK_DESCRIPTION_MAX_CHARS,
+  BLOCK_PROMPT_TEMPLATE_MAX_CHARS,
   createCustomBlock,
   deleteCustomBlock,
   getCustomBlock,
@@ -48,6 +50,15 @@ describe('normalizeImplementationType', () => {
 });
 
 describe('custom blocks CRUD', () => {
+  it('rejects oversized promptTemplate', () => {
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock(IDS[0]!),
+        promptTemplate: 'p'.repeat(50_001),
+      }),
+    ).toThrow(/promptTemplate exceeds/i);
+  });
+
   it('trims fields on create and rejects blank/invalid id', () => {
     expect(() =>
       createCustomBlock({ ...sampleBlock('bad id!'), id: 'bad id!' }),
@@ -212,6 +223,35 @@ describe('custom blocks CRUD', () => {
       .prepare(`UPDATE custom_block SET param_defs_json = ? WHERE id = ?`)
       .run(JSON.stringify({ key: 'x' }), IDS[0]!);
     expect(getCustomBlock(IDS[0]!)?.paramDefs).toEqual([]);
+  });
+
+  it('caps description and rejects oversized promptTemplate / name', () => {
+    const created = createCustomBlock({
+      ...sampleBlock(IDS[0]!),
+      description: 'd'.repeat(BLOCK_DESCRIPTION_MAX_CHARS + 50),
+    });
+    expect(created.description.length).toBe(BLOCK_DESCRIPTION_MAX_CHARS);
+
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock(IDS[1]!),
+        promptTemplate: 'p'.repeat(BLOCK_PROMPT_TEMPLATE_MAX_CHARS + 1),
+      }),
+    ).toThrow(/promptTemplate exceeds/i);
+
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock(IDS[1]!),
+        name: 'n'.repeat(201),
+      }),
+    ).toThrow(/max length/i);
+
+    createCustomBlock(sampleBlock(IDS[1]!));
+    expect(
+      updateCustomBlock(IDS[1]!, {
+        promptTemplate: 'p'.repeat(BLOCK_PROMPT_TEMPLATE_MAX_CHARS + 1),
+      }),
+    ).toBeNull();
   });
 });
 

@@ -32,6 +32,8 @@ export function resolveMessageText(
   if (raw) {
     let text = raw;
     for (const [key, val] of Object.entries(inputs)) {
+      // Only interpolate safe placeholder keys (alnum/_/-) — matches plugin runner
+      if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
       const replacement = typeof val === 'string' ? val : JSON.stringify(val);
       text = text.split(`{{${key}}}`).join(replacement);
     }
@@ -51,15 +53,28 @@ export function resolveMaxResults(config: Record<string, unknown> | undefined, f
   return Math.min(20, Math.max(1, Math.floor(n)));
 }
 
+/** Cap web search query length (Tavily practical bound). */
+export const SEARCH_QUERY_MAX_CHARS = 2_000;
+
+function normalizeSearchQuery(raw: string): string {
+  const q = raw.trim();
+  if (!q || /[\0\r\n]/.test(q)) return '';
+  return q.length > SEARCH_QUERY_MAX_CHARS ? q.slice(0, SEARCH_QUERY_MAX_CHARS) : q;
+}
+
 /** Prefer config.query, then common upstream input keys. */
 export function resolveSearchQuery(
   config: Record<string, unknown> | undefined,
   inputs: Record<string, unknown>,
 ): string {
   const fromConfig = config?.['query'];
-  if (typeof fromConfig === 'string' && fromConfig.trim()) return fromConfig.trim();
+  if (typeof fromConfig === 'string' && fromConfig.trim()) {
+    return normalizeSearchQuery(fromConfig);
+  }
   const fromInput = inputs['query'] ?? inputs['text'];
-  if (typeof fromInput === 'string') return fromInput.trim();
-  if (fromInput !== undefined && fromInput !== null) return String(fromInput).trim();
+  if (typeof fromInput === 'string') return normalizeSearchQuery(fromInput);
+  if (fromInput !== undefined && fromInput !== null) {
+    return normalizeSearchQuery(String(fromInput));
+  }
   return '';
 }

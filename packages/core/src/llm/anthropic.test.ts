@@ -114,6 +114,40 @@ describe('AnthropicAdapter', () => {
     expect((params.max_tokens as number) > 128).toBe(true);
   });
 
+  it('clamps invalid maxTokens to default 4096 and caps huge values', async () => {
+    streamMock.mockReturnValue(events([]));
+    const adapter = new AnthropicAdapter('sk');
+
+    for await (const _ of adapter.chat({
+      model: 'claude-haiku-4-5-20251001',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: Number.NaN,
+    })) {
+      /* drain */
+    }
+    expect((streamMock.mock.calls[0] as [Record<string, unknown>])[0].max_tokens).toBe(4096);
+
+    streamMock.mockReturnValue(events([]));
+    for await (const _ of adapter.chat({
+      model: 'claude-haiku-4-5-20251001',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 999_999,
+    })) {
+      /* drain */
+    }
+    expect((streamMock.mock.calls[1] as [Record<string, unknown>])[0].max_tokens).toBe(128_000);
+
+    streamMock.mockReturnValue(events([]));
+    for await (const _ of adapter.chat({
+      model: 'claude-haiku-4-5-20251001',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 0,
+    })) {
+      /* drain */
+    }
+    expect((streamMock.mock.calls[2] as [Record<string, unknown>])[0].max_tokens).toBe(4096);
+  });
+
   it('chat wraps invalid tool JSON as _raw fallback', async () => {
     streamMock.mockReturnValue(
       events([

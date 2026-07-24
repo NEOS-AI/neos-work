@@ -96,10 +96,13 @@ export class Planner {
       const parsed = JSON.parse(jsonMatch[0]) as unknown[];
       if (!Array.isArray(parsed)) return [];
 
+      // Cap step count so runaway planner JSON cannot bloat the orchestrator
+      const MAX_PLAN_STEPS = 50;
       return parsed
         .filter((item): item is Record<string, unknown> =>
           typeof item === 'object' && item !== null,
         )
+        .slice(0, MAX_PLAN_STEPS)
         .map((item) => {
           const descriptionRaw =
             typeof item['description'] === 'string'
@@ -107,9 +110,12 @@ export class Planner {
               : String(item ?? '').trim();
           const toolRaw =
             typeof item['toolName'] === 'string' ? item['toolName'].trim() : '';
+          // Cap description length
+          const description = (descriptionRaw || 'Execute the goal directly').slice(0, 2_000);
+          const toolName = toolRaw ? toolRaw.slice(0, 100) : undefined;
           return {
-            description: descriptionRaw || 'Execute the goal directly',
-            toolName: toolRaw || undefined,
+            description,
+            toolName: toolName || undefined,
           };
         })
         .filter((s) => s.description.length > 0);

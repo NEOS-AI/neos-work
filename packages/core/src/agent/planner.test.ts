@@ -21,6 +21,18 @@ describe('Planner', () => {
     expect(steps[1].id).toBeTruthy();
   });
 
+  it('caps plan steps at 50 and trims long descriptions', async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      description: 'step ' + i + ' ' + 'x'.repeat(3_000),
+      toolName: 't'.repeat(200),
+    }));
+    const adapter = mockAdapter([JSON.stringify(many)]);
+    const steps = await new Planner(adapter).plan('goal');
+    expect(steps).toHaveLength(50);
+    expect(steps[0]!.description.length).toBeLessThanOrEqual(2_000);
+    expect(steps[0]!.toolName!.length).toBeLessThanOrEqual(100);
+  });
+
   it('extracts JSON from markdown fences / surrounding text', async () => {
     const adapter = mockAdapter([
       'Here is the plan:\n```json\n[{"description":"One"}]\n```\n',
