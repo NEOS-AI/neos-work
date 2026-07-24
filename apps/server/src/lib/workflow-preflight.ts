@@ -86,8 +86,8 @@ export function assessWorkflowPreflight(
           nodeId: node.id,
           message: 'Discord node requires DISCORD_WEBHOOK_URL in settings.',
         });
-      } else if (!webhook.startsWith(DISCORD_WEBHOOK_PREFIX)) {
-        // Align with DiscordMessageNode SSRF allow-list
+      } else if (!webhook.toLowerCase().startsWith(DISCORD_WEBHOOK_PREFIX)) {
+        // Align with DiscordMessageNode SSRF allow-list (case-insensitive)
         issues.push({
           code: 'invalid_discord_webhook',
           severity: 'error',

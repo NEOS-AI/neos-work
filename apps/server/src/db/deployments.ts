@@ -52,11 +52,19 @@ function rowToDeployment(row: DeploymentRow): Deployment {
     projectName: row.project_name ?? undefined,
     url: row.url ?? undefined,
     deploymentId: row.deployment_id ?? undefined,
-    status: row.status as Deployment['status'],
+    status: normalizeDeployStatus(row.status, 'pending'),
     statusMessage: row.status_message ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+
+const DEPLOY_STATUSES = new Set(['pending', 'deploying', 'success', 'failed']);
+
+function normalizeDeployStatus(raw: unknown, fallback: Deployment['status'] = 'pending'): Deployment['status'] {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return DEPLOY_STATUSES.has(s) ? (s as Deployment['status']) : fallback;
 }
 
 function normalizeDeployProvider(raw: unknown): string {
@@ -86,8 +94,7 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
     typeof input.statusMessage === 'string'
       ? input.statusMessage.trim() || null
       : (input.statusMessage ?? null);
-  const status =
-    typeof input.status === 'string' ? input.status.trim() || 'pending' : (input.status ?? 'pending');
+  const status = normalizeDeployStatus(input.status, 'pending');
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(`
@@ -153,7 +160,7 @@ export function updateDeployment(
       : (existing.deploymentId ?? null);
   const status =
     patch.status !== undefined
-      ? (typeof patch.status === 'string' ? patch.status.trim() || existing.status : existing.status)
+      ? normalizeDeployStatus(patch.status, existing.status)
       : existing.status;
   const statusMessage =
     patch.statusMessage !== undefined

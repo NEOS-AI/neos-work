@@ -121,8 +121,21 @@ export function createShellTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const command = input.command as string;
-        const timeoutMs = Math.min((input.timeout as number) ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
+        const command =
+          typeof input.command === 'string' ? input.command.trim() : String(input.command ?? '').trim();
+        if (!command) {
+          return { success: false, output: null, error: 'command is required' };
+        }
+        const timeoutRaw =
+          typeof input.timeout === 'number'
+            ? input.timeout
+            : typeof input.timeout === 'string' && String(input.timeout).trim()
+              ? Number(input.timeout)
+              : DEFAULT_TIMEOUT_MS;
+        const timeoutMs = Math.min(
+          Math.max(Number.isFinite(timeoutRaw) ? Math.floor(timeoutRaw) : DEFAULT_TIMEOUT_MS, 1),
+          MAX_TIMEOUT_MS,
+        );
 
         // Validate command against forbidden patterns
         const forbidden = isForbiddenCommand(command);
@@ -135,15 +148,20 @@ export function createShellTool(workspaceRoot: string): Tool {
         let cwdPath = absoluteRoot;
 
         if (input.cwd) {
-          const requestedCwd = resolve(absoluteRoot, input.cwd as string);
+          const cwdRel =
+            typeof input.cwd === 'string' ? input.cwd.trim() : String(input.cwd ?? '').trim();
+          if (!cwdRel) {
+            return { success: false, output: null, error: 'cwd is required when provided' };
+          }
+          const requestedCwd = resolve(absoluteRoot, cwdRel);
           let realCwd: string;
           try {
             realCwd = realpathSync(requestedCwd);
           } catch {
-            return { success: false, output: null, error: `cwd does not exist: ${input.cwd}` };
+            return { success: false, output: null, error: `cwd does not exist: ${cwdRel}` };
           }
           if (!realCwd.startsWith(absoluteRoot + '/') && realCwd !== absoluteRoot) {
-            return { success: false, output: null, error: `cwd is outside the workspace: ${input.cwd}` };
+            return { success: false, output: null, error: `cwd is outside the workspace: ${cwdRel}` };
           }
           cwdPath = realCwd;
         }

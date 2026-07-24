@@ -167,4 +167,27 @@ describe('routine runs', () => {
     // blank error stored as NULL → mapped to undefined on the row model
     expect(getRoutineRun(r.id, failed2.id)?.error).toBeUndefined();
   });
+
+  it('completeRoutineRun normalizes status case', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'R-case',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+    });
+    const run = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(run.id, '  FAILED  ' as never, '  boom  ');
+    const found = getRoutineRun(r.id, run.id);
+    expect(found?.status).toBe('failed');
+    expect(found?.error).toBe('boom');
+    // non-failed normalizes to completed
+    const run2 = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(run2.id, '  COMPLETED  ' as never);
+    expect(getRoutineRun(r.id, run2.id)?.status).toBe('completed');
+  });
 });

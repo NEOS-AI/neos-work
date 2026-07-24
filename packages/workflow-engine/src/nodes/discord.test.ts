@@ -135,4 +135,15 @@ describe('DiscordMessageNode', () => {
     expect(result.ok).toBe(true);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ content: body });
   });
+
+  it('accepts case-insensitive Discord webhook host prefix', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new DiscordMessageNode();
+    const url = 'HTTPS://Discord.com/api/webhooks/123/token';
+    const result = await node.execute(makeCtx({ DISCORD_WEBHOOK_URL: url }, { text: 'hi' }));
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe(url);
+  });
 });

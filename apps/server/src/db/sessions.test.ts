@@ -79,12 +79,20 @@ describe('sessions CRUD', () => {
     const s = createSession({
       workspaceId: 'default',
       title: '_cov_old',
-      provider: 'openai',
+      provider: '  OpenAI  ',
       model: 'gpt-4o',
-      thinkingMode: 'high',
+      thinkingMode: '  HIGH  ',
     });
     expect(s.provider).toBe('openai');
     expect(s.thinking_mode).toBe('high');
+    // unknown thinking mode falls back to none
+    const s2 = createSession({
+      workspaceId: 'default',
+      title: '_cov_old',
+      thinkingMode: 'ultra',
+    });
+    expect(s2.thinking_mode).toBe('none');
+    deleteSession(s2.id);
     updateSessionTitle(s.id, '_cov_new');
     expect(getSession(s.id)?.title).toBe('_cov_new');
     const before = getSession(s.id)!.updated_at;
@@ -137,8 +145,15 @@ describe('sessions CRUD', () => {
 
 describe('workspaces CRUD', () => {
   it('creates, updates, lists, and protects default', () => {
-    const ws = createWorkspace({ name: WS_NAME, path: '/tmp/cov', type: 'local' });
+    const ws = createWorkspace({ name: WS_NAME, path: '/tmp/cov', type: '  Local  ' });
+    expect(ws.type).toBe('local');
     expect(getWorkspace(ws.id)?.name).toBe(WS_NAME);
+    const remote = createWorkspace({ name: `${WS_NAME}-r`, type: '  REMOTE  ' });
+    expect(remote.type).toBe('remote');
+    deleteWorkspace(remote.id);
+    const unknown = createWorkspace({ name: `${WS_NAME}-u`, type: 'cloud' });
+    expect(unknown.type).toBe('local');
+    deleteWorkspace(unknown.id);
     expect(listWorkspaces().some((w) => w.id === ws.id)).toBe(true);
 
     const updated = updateWorkspace(ws.id, { name: WS_NAME, path: '/tmp/cov2' });

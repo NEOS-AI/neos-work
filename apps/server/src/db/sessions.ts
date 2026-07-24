@@ -26,6 +26,9 @@ export interface MessageRow {
   created_at: string;
 }
 
+const THINKING_MODES = new Set(['none', 'low', 'medium', 'high']);
+const WORKSPACE_TYPES = new Set(['local', 'remote']);
+
 // --- Sessions ---
 
 export function listSessions(workspaceId?: string): SessionRow[] {
@@ -62,14 +65,14 @@ export function createSession(params: {
     params.title !== undefined
       ? (typeof params.title === 'string' ? params.title.trim() || null : null)
       : null;
-  const provider =
-    typeof params.provider === 'string' ? params.provider.trim() || 'anthropic' : (params.provider ?? 'anthropic');
+  const providerRaw =
+    typeof params.provider === 'string' ? params.provider.trim().toLowerCase() : '';
+  const provider = providerRaw || 'anthropic';
   const model =
     typeof params.model === 'string' ? params.model.trim() || 'claude-sonnet-4-5-20250929' : (params.model ?? 'claude-sonnet-4-5-20250929');
-  const thinkingMode =
-    typeof params.thinkingMode === 'string'
-      ? params.thinkingMode.trim() || 'none'
-      : (params.thinkingMode ?? 'none');
+  const thinkingRaw =
+    typeof params.thinkingMode === 'string' ? params.thinkingMode.trim().toLowerCase() : '';
+  const thinkingMode = THINKING_MODES.has(thinkingRaw) ? thinkingRaw : 'none';
   const db = getDb();
   const id = nanoid(12);
   db.prepare(
@@ -173,8 +176,9 @@ export function createWorkspace(params: {
   if (!name) throw new Error('name is required');
   const pathVal =
     typeof params.path === 'string' ? params.path.trim() || null : (params.path ?? null);
-  const type =
-    typeof params.type === 'string' ? params.type.trim() || 'local' : (params.type ?? 'local');
+  const typeRaw =
+    typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
+  const type = WORKSPACE_TYPES.has(typeRaw) ? typeRaw : 'local';
   const db = getDb();
   const id = nanoid(12);
   db.prepare(

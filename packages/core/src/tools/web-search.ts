@@ -7,6 +7,17 @@ import type { Tool, ToolResult } from './base.js';
 
 const TAVILY_ENDPOINT = 'https://api.tavily.com/search';
 
+function clampMaxResults(raw: unknown, fallback = 5): number {
+  const n =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && raw.trim()
+        ? Number(raw)
+        : fallback;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(10, Math.max(1, Math.floor(n)));
+}
+
 export function createWebSearchTool(): Tool {
   return {
     name: 'web_search',
@@ -24,21 +35,28 @@ export function createWebSearchTool(): Tool {
       required: ['query'],
     },
     async execute(input): Promise<ToolResult> {
-      const apiKey = process.env['TAVILY_API_KEY'];
+      const apiKey =
+        typeof process.env['TAVILY_API_KEY'] === 'string'
+          ? process.env['TAVILY_API_KEY'].trim()
+          : '';
       if (!apiKey) {
         return { success: false, output: null, error: 'TAVILY_API_KEY is not set' };
       }
 
       try {
-        const query = input.query as string;
-        const maxResults = Math.min((input.maxResults as number) ?? 5, 10);
+        const query =
+          typeof input.query === 'string' ? input.query.trim() : String(input.query ?? '').trim();
+        if (!query) {
+          return { success: false, output: null, error: 'query is required' };
+        }
+        const maxResults = clampMaxResults(input.maxResults, 5);
 
         const response = await fetch(TAVILY_ENDPOINT, {
           method: 'POST',
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.2.0',
+            'User-Agent': 'neos-work/0.3.76',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });

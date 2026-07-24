@@ -87,4 +87,42 @@ describe('createWebSearchTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/ECONNRESET/);
   });
+
+  it('rejects blank query and whitespace-only API key', async () => {
+    process.env['TAVILY_API_KEY'] = '  ';
+    const missingKey = await createWebSearchTool().execute({ query: 'q' });
+    expect(missingKey.success).toBe(false);
+    expect(missingKey.error).toMatch(/TAVILY_API_KEY/);
+
+    process.env['TAVILY_API_KEY'] = 'k';
+    const blank = await createWebSearchTool().execute({ query: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/query/i);
+  });
+
+  it('floors and clamps maxResults (string/zero/negative)', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ results: [] }), { status: 200 }),
+    ) as typeof fetch;
+
+    await createWebSearchTool().execute({ query: '  hello  ', maxResults: '3.9' as never });
+    let body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(body.query).toBe('hello');
+    expect(body.max_results).toBe(3);
+
+    await createWebSearchTool().execute({ query: 'q', maxResults: 0 });
+    body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1] as RequestInit).body as string,
+    );
+    expect(body.max_results).toBe(1);
+
+    await createWebSearchTool().execute({ query: 'q', maxResults: -5 });
+    body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[2][1] as RequestInit).body as string,
+    );
+    expect(body.max_results).toBe(1);
+  });
 });

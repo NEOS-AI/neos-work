@@ -19,8 +19,8 @@ export class DiscordMessageNode implements ExecutableNode {
       return { ok: false, output: null, error: 'DISCORD_WEBHOOK_URL not set', durationMs: 0 };
     }
 
-    // SSRF protection: only allow discord.com webhook URLs
-    if (!webhookUrl.startsWith(DISCORD_WEBHOOK_PREFIX)) {
+    // SSRF protection: only allow discord.com webhook URLs (case-insensitive host/path prefix)
+    if (!webhookUrl.toLowerCase().startsWith(DISCORD_WEBHOOK_PREFIX)) {
       return {
         ok: false,
         output: null,

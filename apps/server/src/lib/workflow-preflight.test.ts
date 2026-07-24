@@ -448,6 +448,25 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'missing_discord_webhook')).toBe(false);
   });
 
+  it('accepts case-insensitive Discord webhook prefix', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'discord_message', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      { DISCORD_WEBHOOK_URL: 'HTTPS://Discord.com/api/webhooks/1/token' },
+    );
+    expect(r.issues.some((i) => i.code === 'invalid_discord_webhook')).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_discord_webhook')).toBe(false);
+  });
+
   it('treats whitespace-only agent API keys as missing', () => {
     const r = assessWorkflowPreflight(
       {

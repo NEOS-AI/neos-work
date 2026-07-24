@@ -149,4 +149,27 @@ describe('deployments CRUD', () => {
     const kept = updateDeployment(row.id, { status: '   ' as never });
     expect(kept?.status).toBe('success');
   });
+
+  it('normalizes status case and rejects unknown status values', () => {
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-status`,
+      status: '  SUCCESS  ' as never,
+    });
+    expect(row.status).toBe('success');
+
+    const unknown = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-status-bad`,
+      status: 'queued' as never,
+    });
+    expect(unknown.status).toBe('pending');
+
+    const updated = updateDeployment(row.id, { status: '  FAILED  ' as never });
+    expect(updated?.status).toBe('failed');
+
+    // unknown patch status keeps previous
+    const kept = updateDeployment(row.id, { status: 'running' as never });
+    expect(kept?.status).toBe('failed');
+  });
 });

@@ -108,4 +108,22 @@ describe('createShellTool', () => {
     expect(result.success).toBe(true);
     expect((result.output as { stdout: string }).stdout).toContain('clamped');
   });
+
+  it('rejects blank command and blank cwd when provided', async () => {
+    const tool = createShellTool(root);
+    const blank = await tool.execute({ command: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/command is required/i);
+
+    const blankCwd = await tool.execute({ command: 'echo hi', cwd: '   ' });
+    expect(blankCwd.success).toBe(false);
+    expect(blankCwd.error).toMatch(/cwd/i);
+  });
+
+  it('trims command before execution', async () => {
+    const tool = createShellTool(root);
+    const result = await tool.execute({ command: '  echo trimmed  ' });
+    expect(result.success).toBe(true);
+    expect((result.output as { stdout: string }).stdout).toContain('trimmed');
+  });
 });

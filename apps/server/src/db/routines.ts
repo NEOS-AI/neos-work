@@ -204,6 +204,8 @@ export function createRoutineRun(input: { routineId: string; runId?: string }): 
 export function completeRoutineRun(id: string, status: 'completed' | 'failed', error?: string): void {
   const trimmed = typeof id === 'string' ? id.trim() : '';
   if (!trimmed) return;
+  const statusRaw = typeof status === 'string' ? status.trim().toLowerCase() : '';
+  const normalized: 'completed' | 'failed' = statusRaw === 'failed' ? 'failed' : 'completed';
   const errorVal =
     typeof error === 'string' ? error.trim() || null : (error ?? null);
   const db = getDb();
@@ -211,7 +213,7 @@ export function completeRoutineRun(id: string, status: 'completed' | 'failed', e
     UPDATE routine_run
     SET status = ?, completed_at = datetime('now'), error = ?
     WHERE id = ?
-  `).run(status, errorVal, trimmed);
+  `).run(normalized, errorVal, trimmed);
 }
 
 export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {
