@@ -91,6 +91,27 @@ describe('plugin-store listPlugins edge cases', () => {
     expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
   });
 
+  it('trims id/name/description/version; falls back blank id to dir name', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: '  ',
+        name: '  Pretty Name  ',
+        description: '  desc  ',
+        version: '  1.2.3  ',
+      }),
+      'utf8',
+    );
+    const list = await listPlugins();
+    const p = list.find((x) => x.id === DIR_NAME);
+    expect(p).toBeDefined();
+    expect(p?.name).toBe('Pretty Name');
+    expect(p?.description).toBe('desc');
+    expect(p?.version).toBe('1.2.3');
+  });
+
   it('attaches skillContent when SKILL.md is present', async () => {
     await fs.mkdir(DIR, { recursive: true });
     await fs.writeFile(path.join(DIR, 'SKILL.md'), '# Skill body for coverage\n', 'utf8');

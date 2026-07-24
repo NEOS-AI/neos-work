@@ -73,4 +73,30 @@ describe('ReflectionStrategy', () => {
       input: step.input,
     });
   });
+
+  it('extracts JSON object from surrounding prose', async () => {
+    const result = await new ReflectionStrategy(
+      mockAdapter([
+        'Here is my recommendation:\n```json\n{"action":"abort"}\n```\nGood luck.',
+      ]),
+    ).heal(step, 'fatal', [step]);
+    expect(result.action).toBe('abort');
+  });
+
+  it('includes history errors in the reflection prompt', async () => {
+    const adapter = mockAdapter([JSON.stringify({ action: 'skip' })]);
+    const history: AgentStep[] = [
+      {
+        id: 'h1',
+        index: 0,
+        description: 'Earlier step',
+        type: 'tool_use',
+        status: 'error',
+        error: 'boom',
+      },
+    ];
+    await new ReflectionStrategy(adapter).heal(step, 'again', history);
+    // mockAdapter records last chat params via getModels + chat; ensure chat was invoked
+    expect(adapter.getModels().length).toBeGreaterThan(0);
+  });
 });

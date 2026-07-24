@@ -159,5 +159,12 @@ describe('routine runs', () => {
     const failed = createRoutineRun({ routineId: r.id });
     completeRoutineRun(failed.id, 'failed', 'boom');
     expect(getRoutineRun(r.id, failed.id)?.error).toBe('boom');
+
+    const failed2 = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(`  ${failed2.id}  `, 'failed', '  padded error  ');
+    expect(getRoutineRun(r.id, failed2.id)?.error).toBe('padded error');
+    completeRoutineRun(failed2.id, 'failed', '   ');
+    // blank error stored as NULL → mapped to undefined on the row model
+    expect(getRoutineRun(r.id, failed2.id)?.error).toBeUndefined();
   });
 });

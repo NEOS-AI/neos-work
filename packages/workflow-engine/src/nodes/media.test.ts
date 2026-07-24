@@ -157,6 +157,60 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/No prompt/);
   });
 
+  it('rejects image prompts over 4000 chars and audio text over 4096', async () => {
+    const longPrompt = 'p'.repeat(4001);
+    const img = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: longPrompt } }),
+    );
+    expect(img.ok).toBe(false);
+    expect(img.error).toMatch(/4000/);
+
+    const longText = 't'.repeat(4097);
+    const audio = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: longText } }),
+    );
+    expect(audio.ok).toBe(false);
+    expect(audio.error).toMatch(/4096/);
+  });
+
+  it('trims/lowercases size quality voice model options', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'x.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: {
+          mediaType: 'image',
+          prompt: 'cat',
+          size: '  1024x1024  ',
+          quality: '  HD  ',
+        },
+      }),
+    );
+    const imgBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(imgBody.size).toBe('1024x1024');
+    expect(imgBody.quality).toBe('hd');
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'a.mp3' } }),
+    });
+    await MediaNode.execute(
+      ctx({
+        config: {
+          mediaType: 'audio',
+          text: 'hi',
+          voice: '  NOVA  ',
+          model: '  TTS-1-HD  ',
+        },
+      }),
+    );
+    const audioBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(audioBody.voice).toBe('nova');
+    expect(audioBody.model).toBe('tts-1-hd');
+  });
+
   it('falls back invalid size, quality, voice, and tts model to defaults', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'x.png' } }),

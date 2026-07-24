@@ -215,4 +215,42 @@ describe('media routes', () => {
     const blankDel = await media.request('/file/%20', { method: 'DELETE' });
     expect(blankDel.status).toBe(400);
   });
+
+  it('POST /image rejects prompt over 4000 chars', async () => {
+    setSetting('OPENAI_API_KEY', 'sk-long');
+    const res = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'p'.repeat(4001) }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/too long/i);
+  });
+
+  it('POST /generate rejects invalid surface and audio without text', async () => {
+    const badSurface = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'video', prompt: 'x' }),
+    });
+    expect(badSurface.status).toBe(400);
+    expect(((await badSurface.json()) as { error: string }).error).toMatch(/surface/i);
+
+    setSetting('OPENAI_API_KEY', 'sk-audio');
+    const noText = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'audio', text: '   ' }),
+    });
+    expect(noText.status).toBe(400);
+    expect(((await noText.json()) as { error: string }).error).toMatch(/text/i);
+  });
+
+  it('GET/DELETE file 404 for missing safe filename', async () => {
+    const get = await media.request('/file/no_such_file_xyz.png');
+    expect(get.status).toBe(404);
+    const del = await media.request('/file/no_such_file_xyz.png', { method: 'DELETE' });
+    expect(del.status).toBe(404);
+  });
 });

@@ -208,6 +208,42 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'missing_openai_key')).toBe(true);
   });
 
+  it('trims/lowercases agent provider so padded OpenAI and CLI match', () => {
+    const missing = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_coding', config: { llmProvider: '  OpenAI  ' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(missing.ok).toBe(false);
+    expect(missing.issues.some((i) => i.code === 'missing_openai_key')).toBe(true);
+
+    const cli = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_coding', config: { provider: '  CLI-Claude  ' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(cli.issues.some((i) => i.code === 'missing_openai_key')).toBe(false);
+    expect(cli.issues.some((i) => i.code === 'missing_anthropic_key')).toBe(false);
+  });
+
   it('requires Cloudflare credentials for cloudflare deploy', () => {
     const r = assessWorkflowPreflight(
       {

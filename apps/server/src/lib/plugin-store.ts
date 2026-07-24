@@ -46,6 +46,24 @@ export async function listPlugins(): Promise<PluginManifest[]> {
         const raw = await fs.readFile(manifestPath, 'utf-8');
         const manifest = JSON.parse(raw) as PluginManifest;
         if (manifest.schemaVersion !== 'od-plugin/v1') continue;
+        // Normalize identity fields (dir name fallback when id blank)
+        const id =
+          typeof manifest.id === 'string' && manifest.id.trim()
+            ? manifest.id.trim()
+            : entry.name.trim();
+        if (!id) continue;
+        manifest.id = id;
+        if (typeof manifest.name === 'string') {
+          manifest.name = manifest.name.trim() || id;
+        } else {
+          manifest.name = id;
+        }
+        if (typeof manifest.description === 'string') {
+          manifest.description = manifest.description.trim() || undefined;
+        }
+        if (typeof manifest.version === 'string') {
+          manifest.version = manifest.version.trim() || '0.0.0';
+        }
         // Optionally load SKILL.md content
         const skillPath = path.join(dir, 'SKILL.md');
         try {

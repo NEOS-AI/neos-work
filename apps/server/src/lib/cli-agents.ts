@@ -141,11 +141,13 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
       try {
         const raw = fs.readFileSync(path.join(tokenDir, file), 'utf-8');
         const token = JSON.parse(raw) as { serverId: string; accessToken: string; expiresAt?: string };
-        if (!token.serverId || !token.accessToken) continue;
+        const serverId = typeof token.serverId === 'string' ? token.serverId.trim() : '';
+        const accessToken = typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
+        if (!serverId || !accessToken) continue;
         // Skip expired tokens
         if (token.expiresAt && new Date(token.expiresAt) <= new Date()) continue;
-        const key = `NEOS_MCP_TOKEN_${token.serverId.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
-        envVars[key] = token.accessToken;
+        const key = `NEOS_MCP_TOKEN_${serverId.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
+        envVars[key] = accessToken;
       } catch {
         // Ignore malformed files
       }
@@ -167,10 +169,14 @@ export function buildNeosCliEnv(opts: {
   authToken?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {};
-  if (opts.serverUrl) env.NEOS_SERVER_URL = opts.serverUrl;
-  if (opts.authToken) env.NEOS_AUTH_TOKEN = opts.authToken;
-  if (opts.workflowId) env.NEOS_WORKFLOW_ID = opts.workflowId;
-  if (opts.runId) env.NEOS_RUN_ID = opts.runId;
+  const serverUrl = typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() : '';
+  const authToken = typeof opts.authToken === 'string' ? opts.authToken.trim() : '';
+  const workflowId = typeof opts.workflowId === 'string' ? opts.workflowId.trim() : '';
+  const runId = typeof opts.runId === 'string' ? opts.runId.trim() : '';
+  if (serverUrl) env.NEOS_SERVER_URL = serverUrl;
+  if (authToken) env.NEOS_AUTH_TOKEN = authToken;
+  if (workflowId) env.NEOS_WORKFLOW_ID = workflowId;
+  if (runId) env.NEOS_RUN_ID = runId;
   return env;
 }
 

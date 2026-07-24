@@ -111,7 +111,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
 
     // AND gate: fail if ANY upstream node failed (all inputs must succeed)
     if (node.type === 'gate_and') {
-      const anyFailed = incomingEdges.some((e) => failedNodes.has(e.source));
+      const anyFailed = incomingEdges.some((e) => failedNodes.has(e.source.trim()));
       if (anyFailed) {
         onEvent({ type: 'node.failed', nodeId: node.id, error: 'AND gate: one or more upstream nodes failed' });
         failedNodes.add(node.id);
@@ -121,7 +121,9 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
 
     // OR gate (legacy): fail only if ALL upstream nodes failed
     if (node.type === 'gate_or') {
-      const allFailed = incomingEdges.length > 0 && incomingEdges.every((e) => failedNodes.has(e.source));
+      const allFailed =
+        incomingEdges.length > 0
+        && incomingEdges.every((e) => failedNodes.has(e.source.trim()));
       if (allFailed) {
         onEvent({ type: 'node.failed', nodeId: node.id, error: 'OR gate: all upstream nodes failed' });
         failedNodes.add(node.id);
@@ -170,7 +172,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     // or_gate: Promise.race — run all predecessor branches concurrently, take first winner
     if (node.type === 'or_gate') {
       // Find all direct predecessor nodes (branches competing)
-      const predecessorIds = incomingEdges.map((e) => e.source);
+      const predecessorIds = incomingEdges.map((e) => e.source.trim());
       const pendingPredecessors = predecessorIds.filter((id) => !nodeOutputs.has(id) && !failedNodes.has(id));
 
       // If all predecessors already resolved (sequential execution path), pick first successful
@@ -270,7 +272,8 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     // Skip non-gate nodes whose direct upstream all failed
     if (!['gate_and', 'gate_or', 'trigger'].includes(node.type)) {
       const allUpstreamFailed =
-        incomingEdges.length > 0 && incomingEdges.every((e) => failedNodes.has(e.source));
+        incomingEdges.length > 0
+        && incomingEdges.every((e) => failedNodes.has(e.source.trim()));
       if (allUpstreamFailed) {
         onEvent({ type: 'node.failed', nodeId: node.id, error: 'Skipped: all upstream nodes failed' });
         failedNodes.add(node.id);

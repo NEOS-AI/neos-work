@@ -9,6 +9,9 @@ const IMAGE_SIZES = new Set(['1024x1024', '1792x1024', '1024x1792']);
 const IMAGE_QUALITIES = new Set(['standard', 'hd']);
 const TTS_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
 const TTS_MODELS = new Set(['tts-1', 'tts-1-hd']);
+/** Align with apps/server media routes (prompt ≤ 4000, TTS text ≤ 4096). */
+const IMAGE_PROMPT_MAX = 4000;
+const AUDIO_TEXT_MAX = 4096;
 
 function resolvePrompt(config: Record<string, unknown> | undefined, inputs: Record<string, unknown>): string {
   const raw = config?.['prompt'] ?? inputs['prompt'] ?? '';
@@ -42,10 +45,19 @@ export const MediaNode: ExecutableNode = {
           durationMs: Date.now() - start,
         };
       }
+      if (prompt.length > IMAGE_PROMPT_MAX) {
+        return {
+          ok: false,
+          output: null,
+          error: `Image prompt exceeds ${IMAGE_PROMPT_MAX} characters`,
+          durationMs: Date.now() - start,
+        };
+      }
 
-      const rawSize = typeof config?.size === 'string' ? config.size : '1024x1024';
+      const rawSize = typeof config?.size === 'string' ? config.size.trim() : '1024x1024';
       const size = IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024';
-      const rawQuality = typeof config?.quality === 'string' ? config.quality : 'standard';
+      const rawQuality =
+        typeof config?.quality === 'string' ? config.quality.trim().toLowerCase() : 'standard';
       const quality = IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard';
 
       try {
@@ -93,10 +105,20 @@ export const MediaNode: ExecutableNode = {
           durationMs: Date.now() - start,
         };
       }
+      if (text.length > AUDIO_TEXT_MAX) {
+        return {
+          ok: false,
+          output: null,
+          error: `Audio text exceeds ${AUDIO_TEXT_MAX} characters`,
+          durationMs: Date.now() - start,
+        };
+      }
 
-      const rawVoice = typeof config?.voice === 'string' ? config.voice : 'alloy';
+      const rawVoice =
+        typeof config?.voice === 'string' ? config.voice.trim().toLowerCase() : 'alloy';
       const voice = TTS_VOICES.has(rawVoice) ? rawVoice : 'alloy';
-      const rawModel = typeof config?.model === 'string' ? config.model : 'tts-1';
+      const rawModel =
+        typeof config?.model === 'string' ? config.model.trim().toLowerCase() : 'tts-1';
       const model = TTS_MODELS.has(rawModel) ? rawModel : 'tts-1';
 
       try {

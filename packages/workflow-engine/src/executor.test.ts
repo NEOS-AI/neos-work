@@ -280,6 +280,43 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-blank-edges' });
   });
 
+  it('matches padded edge endpoints when detecting upstream failures', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-pad-fail-edges',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'b1',
+            type: 'block',
+            label: 'B1',
+            position: { x: 1, y: 0 },
+            config: {}, // missing blockId → fail
+          },
+          { id: 'and', type: 'gate_and', label: 'AND', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'b1' },
+          // padded source/target still wire and fail correctly
+          { id: 'e2', source: '  b1  ', target: '  and  ' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const b1Failed = events.find(
+      (e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'b1',
+    );
+    const andFailed = events.find(
+      (e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'and',
+    ) as { error: string } | undefined;
+    expect(b1Failed).toBeDefined();
+    expect(andFailed).toBeDefined();
+    expect(andFailed!.error).toMatch(/AND gate/i);
+  });
+
   it('skips downstream nodes when all upstream failed', async () => {
     const events: WorkflowSSEEvent[] = [];
     await executeWorkflow({

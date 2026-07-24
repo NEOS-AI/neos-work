@@ -122,6 +122,9 @@ describe('deployments CRUD', () => {
     expect(() =>
       createDeployment({ provider: '  ', projectName: `${MARKER}-x`, status: 'pending' }),
     ).toThrow(/provider/i);
+    expect(() =>
+      createDeployment({ provider: 'aws', projectName: `${MARKER}-aws`, status: 'pending' }),
+    ).toThrow(/provider/i);
 
     const row = createDeployment({
       provider: '  CloudFlare  ',

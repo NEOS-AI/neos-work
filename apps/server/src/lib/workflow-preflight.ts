@@ -140,7 +140,12 @@ export function assessWorkflowPreflight(
     }
 
     if (node.type === 'agent_finance' || node.type === 'agent_coding') {
-      const provider = (config.provider ?? config.llmProvider ?? secrets.llmProvider ?? 'anthropic') as string;
+      // Align with AgentNode: trim + lower-case so " OpenAI " / " CLI-Claude " match
+      const rawProvider = config.provider ?? config.llmProvider ?? secrets.llmProvider ?? 'anthropic';
+      const provider =
+        typeof rawProvider === 'string'
+          ? rawProvider.trim().toLowerCase() || 'anthropic'
+          : 'anthropic';
       if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
         // CLI path — runtime detect; soft warning only
         continue;

@@ -307,6 +307,30 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     expect(buildNeosCliEnv({})).toEqual({});
   });
 
+  it('trims env values and drops whitespace-only fields', () => {
+    expect(
+      buildNeosCliEnv({
+        serverUrl: '  http://127.0.0.1:9  ',
+        authToken: '  tok  ',
+        workflowId: '  wf  ',
+        runId: '  run  ',
+      }),
+    ).toEqual({
+      NEOS_SERVER_URL: 'http://127.0.0.1:9',
+      NEOS_AUTH_TOKEN: 'tok',
+      NEOS_WORKFLOW_ID: 'wf',
+      NEOS_RUN_ID: 'run',
+    });
+    expect(
+      buildNeosCliEnv({
+        serverUrl: '   ',
+        authToken: '   ',
+        workflowId: '   ',
+        runId: '   ',
+      }),
+    ).toEqual({});
+  });
+
   it('creates workspace under ~/.config/neos-work/workspaces', () => {
     const runId = `_cov_ws_${process.pid}`;
     const dir = ensureCliWorkspace(runId);

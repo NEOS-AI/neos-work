@@ -63,6 +63,33 @@ describe('plugins routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('upgrade rejects invalid JSON body', async () => {
+    const res = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('upgrade 404s when skill directory missing', async () => {
+    const res = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ skillDirName: 'definitely-missing-skill-dir-xyz' }),
+    });
+    expect([400, 404]).toContain(res.status);
+  });
+
+  it('POST run rejects unknown plugin', async () => {
+    const res = await plugins.request('/no-such-plugin-xyz/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: {} }),
+    });
+    expect(res.status).toBe(404);
+  });
+
   it('upgrades skill dir to plugin and returns detail', async () => {
     await fs.mkdir(DIR, { recursive: true });
     await fs.writeFile(

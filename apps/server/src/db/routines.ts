@@ -204,12 +204,14 @@ export function createRoutineRun(input: { routineId: string; runId?: string }): 
 export function completeRoutineRun(id: string, status: 'completed' | 'failed', error?: string): void {
   const trimmed = typeof id === 'string' ? id.trim() : '';
   if (!trimmed) return;
+  const errorVal =
+    typeof error === 'string' ? error.trim() || null : (error ?? null);
   const db = getDb();
   db.prepare(`
     UPDATE routine_run
     SET status = ?, completed_at = datetime('now'), error = ?
     WHERE id = ?
-  `).run(status, error ?? null, trimmed);
+  `).run(status, errorVal, trimmed);
 }
 
 export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {

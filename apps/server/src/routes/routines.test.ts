@@ -236,6 +236,40 @@ describe('routines routes', () => {
     }
   });
 
+  it('POST /:id/run 404s for missing routine and blank id', async () => {
+    const missing = await routines.request('/no-such-routine/run', { method: 'POST' });
+    expect(missing.status).toBe(404);
+
+    const blank = await routines.request('/%20/run', { method: 'POST' });
+    expect(blank.status).toBe(404);
+  });
+
+  it('PUT rejects blank name after trim', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const routine = routinesDb.createRoutine({
+      name: 'Name Guard',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'UTC',
+      enabled: false,
+    });
+
+    const res = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/name/i);
+
+    await routines.request(`/${routine.id}`, { method: 'DELETE' });
+  });
+
   it('trims path ids and rejects invalid PUT JSON', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

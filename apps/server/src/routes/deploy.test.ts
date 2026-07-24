@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDeployment, deleteDeployment, listDeployments } from '../db/deployments.js';
 import { deleteSetting, setSetting } from '../db/settings.js';
 import deploy from './deploy.js';
@@ -198,5 +198,135 @@ describe('deploy routes', () => {
       body: JSON.stringify({ provider: 'aws' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('preflight reports missing cloudflare credentials', async () => {
+    const res = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'cloudflare' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      data?: { ready: boolean; checks?: Array<{ key: string; ok: boolean }> };
+    };
+    expect(body.data?.ready).toBe(false);
+    expect(body.data?.checks?.some((c) => c.key === 'CLOUDFLARE_API_TOKEN' && !c.ok)).toBe(true);
+    expect(body.data?.checks?.some((c) => c.key === 'CLOUDFLARE_ACCOUNT_ID' && !c.ok)).toBe(true);
+  });
+
+  it('POST deploy rejects missing provider and content too large', async () => {
+    const noProvider = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '<p>x</p>' }),
+    });
+    expect(noProvider.status).toBe(400);
+    expect(((await noProvider.json()) as { error: string }).error).toMatch(/provider and content/i);
+
+    const badProvider = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'aws', content: '<p>x</p>' }),
+    });
+    expect(badProvider.status).toBe(400);
+    expect(((await badProvider.json()) as { error: string }).error).toMatch(/vercel or cloudflare/i);
+
+    // 5MB+1 is intentional to hit the size guard without calling remote APIs
+    const huge = 'x'.repeat(5_000_001);
+    const tooBig = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'vercel', content: huge }),
+    });
+    expect(tooBig.status).toBe(400);
+    expect(((await tooBig.json()) as { error: string }).error).toMatch(/too large/i);
+  });
+
+  it('POST deploy rejects cloudflare without credentials', async () => {
+    const res = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'cloudflare',
+        content: '<html>hi</html>',
+        // project names must start with alnum (MARKER begins with `_`)
+        projectName: `cf${MARKER}-nocreds`.slice(0, 63),
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/Cloudflare/i);
+  });
+
+  it('POST /:id/refresh validates id, remote deploymentId, and credentials', async () => {
+    const blank = await deploy.request('/%20/refresh', { method: 'POST' });
+    expect(blank.status).toBe(404);
+
+    const missing = await deploy.request('/no-such-dep/refresh', { method: 'POST' });
+    expect(missing.status).toBe(404);
+
+    const noRemote = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-noref`,
+      status: 'pending',
+      // no deploymentId
+    });
+    const noId = await deploy.request(`/${noRemote.id}/refresh`, { method: 'POST' });
+    expect(noId.status).toBe(400);
+    expect(((await noId.json()) as { error: string }).error).toMatch(/remote deployment id/i);
+
+    const withRemote = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-ref`,
+      status: 'deploying',
+      deploymentId: 'dpl_test_1',
+    });
+    // no VERCEL token
+    const noTok = await deploy.request(`/${withRemote.id}/refresh`, { method: 'POST' });
+    expect(noTok.status).toBe(400);
+    expect(((await noTok.json()) as { error: string }).error).toMatch(/Vercel API token/i);
+
+    const cf = createDeployment({
+      provider: 'cloudflare',
+      projectName: `${MARKER}-cf-ref`,
+      status: 'deploying',
+      deploymentId: 'cf_dep_1',
+    });
+    const noCf = await deploy.request(`/${cf.id}/refresh`, { method: 'POST' });
+    expect(noCf.status).toBe(400);
+    expect(((await noCf.json()) as { error: string }).error).toMatch(/Cloudflare/i);
+  });
+
+  it('POST /:id/refresh updates status from mocked provider', async () => {
+    setSetting('VERCEL_API_TOKEN', 'tok-refresh');
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-ok-ref`,
+      status: 'deploying',
+      deploymentId: 'dpl_ok',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ readyState: 'READY', url: 'refreshed.vercel.app' }),
+      }),
+    );
+    try {
+      const res = await deploy.request(`/${row.id}/refresh`, { method: 'POST' });
+      expect(res.status).toBe(200);
+      const body = await res.json() as {
+        ok: boolean;
+        data: { status: string; url?: string };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.data.status).toBe('success');
+      expect(body.data.url).toMatch(/refreshed\.vercel\.app/);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
   });
 });

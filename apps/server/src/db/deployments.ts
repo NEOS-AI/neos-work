@@ -61,8 +61,9 @@ function rowToDeployment(row: DeploymentRow): Deployment {
 
 function normalizeDeployProvider(raw: unknown): string {
   const p = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Only vercel | cloudflare are supported (defense-in-depth for direct DB callers)
   if (p === 'cloudflare' || p === 'vercel') return p;
-  return p; // preserve other non-blank for history rows; callers validate at API layer
+  return '';
 }
 
 export function createDeployment(input: CreateDeploymentInput): Deployment {

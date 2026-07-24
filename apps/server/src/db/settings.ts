@@ -158,11 +158,11 @@ export function getExecutionSettings(runtime?: {
   }
 
   // Settings UI defaults → agent adapter selection (plan multi-LLM)
-  const defaultProvider = getSecretSetting('defaults.provider');
+  const defaultProvider = getSecretSetting('defaults.provider')?.trim().toLowerCase();
   if (defaultProvider && !result.llmProvider) {
     result.llmProvider = defaultProvider;
   }
-  const defaultModel = getSecretSetting('defaults.model');
+  const defaultModel = getSecretSetting('defaults.model')?.trim();
   if (defaultModel && !result.model) {
     result.model = defaultModel;
   }
