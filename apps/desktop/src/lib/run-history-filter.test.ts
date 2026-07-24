@@ -1,10 +1,22 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   filterRunsByStatus,
+  isRunStatusFilter,
   loadRunStatusFilter,
   RUN_STATUS_FILTERS,
   saveRunStatusFilter,
 } from './run-history-filter.js';
+
+describe('isRunStatusFilter', () => {
+  it('accepts only known chip values', () => {
+    for (const v of RUN_STATUS_FILTERS) {
+      expect(isRunStatusFilter(v)).toBe(true);
+    }
+    expect(isRunStatusFilter('pending')).toBe(false);
+    expect(isRunStatusFilter('')).toBe(false);
+    expect(isRunStatusFilter('COMPLETED')).toBe(false);
+  });
+});
 
 describe('filterRunsByStatus', () => {
   const runs = [
@@ -16,6 +28,10 @@ describe('filterRunsByStatus', () => {
 
   it('returns all when filter is all', () => {
     expect(filterRunsByStatus(runs, 'all')).toHaveLength(4);
+  });
+
+  it('returns all when filter is empty/falsy', () => {
+    expect(filterRunsByStatus(runs, '')).toEqual(runs);
   });
 
   it('filters by status', () => {
@@ -64,5 +80,25 @@ describe('run status filter prefs', () => {
   it('ignores invalid stored values', () => {
     localStorage.setItem('neos-run-history-status', 'pending');
     expect(loadRunStatusFilter()).toBe('all');
+  });
+
+  it('does not persist invalid filter values', () => {
+    // Cast to bypass type guard at call site — runtime must reject
+    saveRunStatusFilter('pending' as never);
+    expect(localStorage.getItem('neos-run-history-status')).toBeNull();
+  });
+
+  it('swallows localStorage errors (private mode / quota)', () => {
+    const getSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(loadRunStatusFilter()).toBe('all');
+    getSpy.mockRestore();
+
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(() => saveRunStatusFilter('failed')).not.toThrow();
+    setSpy.mockRestore();
   });
 });

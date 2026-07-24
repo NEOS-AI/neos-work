@@ -111,6 +111,14 @@ describe('sessions CRUD', () => {
     expect(msgs.map((m) => m.content)).toEqual(['hello', 'hi']);
   });
 
+  it('rejects blank sessionId or role on addMessage', () => {
+    const s = createSession({ workspaceId: 'default', title: '_cov_msg' });
+    expect(() => addMessage({ sessionId: '   ', role: 'user', content: 'x' })).toThrow(
+      /sessionId/i,
+    );
+    expect(() => addMessage({ sessionId: s.id, role: '  ', content: 'x' })).toThrow(/role/i);
+  });
+
   it('trims session id and workspaceId; blank id is not-found', () => {
     const s = createSession({ workspaceId: 'default', title: '_cov_sess' });
     expect(getSession(`  ${s.id}  `)?.id).toBe(s.id);

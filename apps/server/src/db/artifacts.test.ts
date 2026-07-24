@@ -75,6 +75,29 @@ describe('artifacts CRUD', () => {
       }),
     ).toThrow(/workflowId/i);
   });
+
+  it('rejects blank name or contentType on create', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: '  ',
+        contentType: 'text/html',
+      }),
+    ).toThrow(/workflowId, name, and contentType/i);
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'x.html',
+        contentType: '   ',
+      }),
+    ).toThrow(/workflowId, name, and contentType/i);
+  });
 });
 
 describe('updateArtifact PATCH semantics', () => {

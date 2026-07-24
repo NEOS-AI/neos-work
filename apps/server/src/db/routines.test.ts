@@ -78,6 +78,28 @@ describe('routines CRUD', () => {
     expect(r.timezone).toBe('UTC');
   });
 
+  it('rejects blank name, workflowId, or schedule on create', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createRoutine({ name: '  ', workflowId: wf.id, schedule: '0 9 * * *' }),
+    ).toThrow(/name, workflowId, and schedule/i);
+    expect(() =>
+      createRoutine({ name: 'Daily', workflowId: '   ', schedule: '0 9 * * *' }),
+    ).toThrow(/name, workflowId, and schedule/i);
+    expect(() =>
+      createRoutine({ name: 'Daily', workflowId: wf.id, schedule: '  ' }),
+    ).toThrow(/name, workflowId, and schedule/i);
+  });
+
+  it('rejects blank routineId on createRoutineRun', () => {
+    expect(() => createRoutineRun({ routineId: '   ' })).toThrow(/routineId/i);
+  });
+
   it('trims ids; blank get/update/delete/run lookup short-circuit', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,
