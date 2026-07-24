@@ -215,4 +215,21 @@ describe('DeployNode', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toMatch(/^http:\/\/localhost:3001\/api\/deploy/);
     vi.unstubAllGlobals();
   });
+
+  it('stringifies non-string content and reports unknown URL when data.url missing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await DeployNode.execute(
+      ctx({
+        inputs: { content: 12345 as unknown as string },
+        config: { provider: 'vercel', projectName: 'neos' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(String(result.output)).toContain('unknown URL');
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.content).toBe('12345');
+  });
 });

@@ -331,6 +331,17 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     ).toEqual({});
   });
 
+  it('only injects http(s) NEOS_SERVER_URL (strips trailing slash)', () => {
+    expect(buildNeosCliEnv({ serverUrl: 'https://api.example/v1/' })).toEqual({
+      NEOS_SERVER_URL: 'https://api.example/v1',
+    });
+    expect(buildNeosCliEnv({ serverUrl: 'file:///etc/passwd' })).toEqual({});
+    expect(buildNeosCliEnv({ serverUrl: 'javascript:alert(1)' })).toEqual({});
+    expect(buildNeosCliEnv({ serverUrl: 'not-a-url', authToken: 't' })).toEqual({
+      NEOS_AUTH_TOKEN: 't',
+    });
+  });
+
   it('creates workspace under ~/.config/neos-work/workspaces', () => {
     const runId = `_cov_ws_${process.pid}`;
     const dir = ensureCliWorkspace(runId);

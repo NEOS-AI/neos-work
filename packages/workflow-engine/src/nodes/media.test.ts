@@ -81,6 +81,20 @@ describe('MediaNode', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
   });
 
+  it('falls back to default SERVER_URL when non-http', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'img.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image', prompt: 'a cat' },
+        settings: { SERVER_URL: 'file:///tmp', SERVER_TOKEN: 'tok' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+  });
+
   it('posts image request and returns filename', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'img.png', revisedPrompt: 'better' } }),
@@ -349,5 +363,56 @@ describe('MediaNode', () => {
       }),
     );
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).prompt).toBe('42');
+  });
+
+  it('uses generic image/audio errors when API omits error string', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      json: async () => ({ ok: false }),
+    }));
+    const image = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'x' } }),
+    );
+    expect(image.ok).toBe(false);
+    expect(image.error).toBe('Image generation failed');
+
+    const audio = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'x' } }),
+    );
+    expect(audio.ok).toBe(false);
+    expect(audio.error).toBe('Audio generation failed');
+  });
+
+  it('falls back non-http SERVER_URL and stringifies non-Error throws', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'ok.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image', prompt: 'x' },
+        settings: { SERVER_URL: 'javascript:alert(1)', SERVER_TOKEN: 't' },
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/^http:\/\/localhost:3001\/api\/media\/image/);
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue('boom'));
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'x' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Image generation failed');
+  });
+
+  it('defaults blank mediaType to image and omits revised prompt when absent', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'plain.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: '   ', prompt: 'p' } }),
+    );
+    expect(result.ok).toBe(true);
+    expect(String(result.output)).toBe('Image generated: plain.png');
+    expect(String(result.output)).not.toContain('Revised prompt');
   });
 });

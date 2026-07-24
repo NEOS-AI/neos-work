@@ -127,6 +127,16 @@ describe('estimateNextCronRun', () => {
     expect(estimateNextCronRun('')).toBeNull();
     expect(estimateNextCronRun('   ')).toBeNull();
   });
+
+  it('supports stepped ranges and returns null for non-string expression', () => {
+    // minutes 0-30 step 10 → 0,10,20,30
+    const from = new Date('2026-01-01T10:05:00.000Z');
+    const next = estimateNextCronRun('0-30/10 * * * *', { from, timezone: 'UTC' });
+    expect(next!.toISOString()).toBe('2026-01-01T10:10:00.000Z');
+
+    expect(estimateNextCronRun(null as unknown as string)).toBeNull();
+    expect(estimateNextCronRun(undefined as unknown as string)).toBeNull();
+  });
 });
 
 

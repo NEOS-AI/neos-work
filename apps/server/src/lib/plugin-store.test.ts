@@ -77,6 +77,28 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     const list = await listPlugins();
     expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
   });
+
+  it('listPlugins skips hidden skill directories', async () => {
+    const hiddenName = `.hidden_plugin_${process.pid}`;
+    const hiddenDir = path.join(SKILLS_DIR, hiddenName);
+    try {
+      await fs.mkdir(hiddenDir, { recursive: true });
+      await fs.writeFile(
+        path.join(hiddenDir, 'open-design.json'),
+        JSON.stringify({
+          schemaVersion: 'od-plugin/v1',
+          id: hiddenName,
+          name: 'Hidden',
+          version: '0.0.1',
+        }),
+        'utf8',
+      );
+      const list = await listPlugins();
+      expect(list.some((p) => p.id === hiddenName || p.dir === hiddenDir)).toBe(false);
+    } finally {
+      await fs.rm(hiddenDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 });
 
 describe('plugin-store listPlugins edge cases', () => {

@@ -124,5 +124,21 @@ describe('createWebSearchTool', () => {
       ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[2][1] as RequestInit).body as string,
     );
     expect(body.max_results).toBe(1);
+
+    await createWebSearchTool().execute({ query: 'q', maxResults: Number.NaN });
+    body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[3][1] as RequestInit).body as string,
+    );
+    expect(body.max_results).toBe(5);
+
+    await createWebSearchTool().execute({
+      query: 99 as unknown as string,
+      maxResults: 'not-a-number' as never,
+    });
+    body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[4][1] as RequestInit).body as string,
+    );
+    expect(body.query).toBe('99');
+    expect(body.max_results).toBe(5);
   });
 });

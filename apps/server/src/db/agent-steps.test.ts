@@ -117,4 +117,17 @@ describe('agent_step CRUD', () => {
     deleteAgentSteps(session.id);
     expect(listAgentSteps(session.id)).toEqual([]);
   });
+
+  it('trims getAgentStep ids and maps whitespace-only error to null', () => {
+    const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
+    sessionId = session.id;
+    const step = createAgentStep({
+      sessionId: session.id,
+      stepIndex: 0,
+      type: 'reasoning',
+    });
+    expect(getAgentStep(`  ${step.id}  `)?.id).toBe(step.id);
+    expect(updateAgentStep(step.id, { error: '   ' })).toBe(true);
+    expect(getAgentStep(step.id)?.error).toBeNull();
+  });
 });

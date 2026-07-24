@@ -234,11 +234,32 @@ describe('McpClient', () => {
     await expect(c.listTools()).resolves.toEqual([]);
   });
 
+  it('listTools tolerates missing tools array', async () => {
+    listToolsMock.mockResolvedValue({});
+    const c = new McpClient();
+    await expect(c.listTools()).resolves.toEqual([]);
+  });
+
   it('callTool joins empty content as empty string', async () => {
     callToolMock.mockResolvedValue({ isError: false, content: [] });
     const c = new McpClient();
     await expect(c.callTool('noop', {})).resolves.toEqual({
       success: true,
+      output: '',
+    });
+  });
+
+  it('callTool tolerates missing or non-array content', async () => {
+    callToolMock.mockResolvedValue({ isError: false });
+    const c = new McpClient();
+    await expect(c.callTool('noop', {})).resolves.toEqual({
+      success: true,
+      output: '',
+    });
+
+    callToolMock.mockResolvedValue({ isError: true, content: 'raw' });
+    await expect(c.callTool('noop', {})).resolves.toEqual({
+      success: false,
       output: '',
     });
   });

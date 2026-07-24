@@ -63,6 +63,8 @@ export async function listDesignSystems(): Promise<DesignSystem[]> {
 
   const results: DesignSystem[] = [];
   for (const entry of entries) {
+    // Skip hidden / system directories (e.g. .DS_Store folders, .git)
+    if (!entry || entry.startsWith('.')) continue;
     const dirPath = path.join(DESIGN_SYSTEMS_DIR, entry);
     const dirStat = await statOrNull(dirPath);
     if (!dirStat?.isDirectory()) continue;

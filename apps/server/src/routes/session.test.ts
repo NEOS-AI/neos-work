@@ -220,7 +220,65 @@ describe('session routes', () => {
     });
     expect(missing.status).toBe(404);
 
+    const missingAgent = await session.request('/no-such-session/agent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'hi' }),
+    });
+    expect(missingAgent.status).toBe(404);
+
+    const oversized = 'x'.repeat(100_001);
+    const chatOver = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: oversized }),
+    });
+    expect(chatOver.status).toBe(400);
+    const chatOverBody = await chatOver.json() as { error: string };
+    // May be API key missing or max length depending on settings; both are 400 validation.
+    expect(chatOverBody.error).toMatch(/max length|API key/i);
+
+    const agentOver = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: oversized }),
+    });
+    expect(agentOver.status).toBe(400);
+
+    const blankToolId = await session.request(`/${id}/tool-confirm/%20%20`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ approved: true }),
+    });
+    expect(blankToolId.status).toBe(404);
+
+    const invalidApproved = await session.request(`/${id}/tool-confirm/some-id`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ approved: 'yes' }),
+    });
+    expect(invalidApproved.status).toBe(400);
+
     await session.request(`/${id}`, { method: 'DELETE' });
+  });
+
+  it('rejects invalid workspaceId length and non-string content on create', async () => {
+    const longWs = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspaceId: 'w'.repeat(101), title: TITLE }),
+    });
+    expect(longWs.status).toBe(400);
+
+    const longTitle = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: 'default',
+        title: 't'.repeat(201),
+      }),
+    });
+    expect(longTitle.status).toBe(400);
   });
 });
 

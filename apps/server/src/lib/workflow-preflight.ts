@@ -32,7 +32,13 @@ export function assessWorkflowPreflight(
   const issues: PreflightIssue[] = [];
   const nodes = workflow.nodes ?? [];
   const edges = workflow.edges ?? [];
-  const nodeIds = new Set(nodes.map((n) => n.id));
+  // Accept raw + trimmed ids so padded edge endpoints still resolve (matches desktop validation)
+  const nodeIds = new Set<string>();
+  for (const n of nodes) {
+    if (typeof n.id === 'string' && n.id) nodeIds.add(n.id);
+    const trimmed = typeof n.id === 'string' ? n.id.trim() : '';
+    if (trimmed) nodeIds.add(trimmed);
+  }
 
   if (!nodes.some((n) => n.type === 'trigger')) {
     issues.push({ code: 'no_trigger', severity: 'error', message: 'Workflow has no trigger node.' });
@@ -44,7 +50,7 @@ export function assessWorkflowPreflight(
   for (const edge of edges) {
     const source = typeof edge.source === 'string' ? edge.source.trim() : '';
     const target = typeof edge.target === 'string' ? edge.target.trim() : '';
-    if (!source || !target || !nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+    if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) {
       // Also treat blank endpoints as dangling (executor skips them, but graph is invalid)
       issues.push({
         code: 'dangling_edge',

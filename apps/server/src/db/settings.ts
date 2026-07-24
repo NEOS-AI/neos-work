@@ -168,8 +168,11 @@ export function getExecutionSettings(runtime?: {
   }
 
   if (runtime?.serverUrl) {
-    const url = runtime.serverUrl.trim();
-    if (url) result.SERVER_URL = url;
+    // Only inject http(s) callback URLs (matches node safeServerUrl defense-in-depth)
+    const url = typeof runtime.serverUrl === 'string' ? runtime.serverUrl.trim().replace(/\/+$/, '') : '';
+    if (url && isSafeHttpBaseUrl(url)) {
+      result.SERVER_URL = url;
+    }
   }
   if (runtime?.authToken) {
     const token = runtime.authToken.trim();

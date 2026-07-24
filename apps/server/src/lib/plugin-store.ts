@@ -40,6 +40,8 @@ export async function listPlugins(): Promise<PluginManifest[]> {
     const plugins: PluginManifest[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      // Skip hidden skill directories
+      if (!entry.name || entry.name.startsWith('.')) continue;
       const dir = path.join(SKILLS_DIR, entry.name);
       const manifestPath = path.join(dir, 'open-design.json');
       try {

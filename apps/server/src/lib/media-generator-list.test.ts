@@ -99,4 +99,28 @@ describe('listMediaFiles', () => {
     await fs.rm(path.join(MEDIA_DIR, `${PREFIX}subdir`), { recursive: true, force: true }).catch(() => {});
     await fs.unlink(path.join(MEDIA_DIR, `${PREFIX}has space.png`)).catch(() => {});
   });
+
+  it('maps jpeg/webp/gif/wav mime types and url-encodes filenames', async () => {
+    await write(`${PREFIX}p.jpeg`, 'j');
+    await write(`${PREFIX}p.webp`, 'w');
+    await write(`${PREFIX}p.gif`, 'g');
+    await write(`${PREFIX}a.wav`, 'a');
+    await write(`${PREFIX}a.flac`, 'f');
+
+    const files = await listMediaFiles(500);
+    const ours = Object.fromEntries(
+      files.filter((f) => f.filename.startsWith(PREFIX)).map((f) => [f.filename, f]),
+    );
+
+    expect(ours[`${PREFIX}p.jpeg`]?.kind).toBe('image');
+    expect(ours[`${PREFIX}p.jpeg`]?.mimeType).toBe('image/jpeg');
+    expect(ours[`${PREFIX}p.webp`]?.mimeType).toBe('image/webp');
+    expect(ours[`${PREFIX}p.gif`]?.mimeType).toBe('image/gif');
+    expect(ours[`${PREFIX}a.wav`]?.kind).toBe('audio');
+    expect(ours[`${PREFIX}a.wav`]?.mimeType).toBe('audio/wav');
+    // flac is audio kind but falls through to default mime
+    expect(ours[`${PREFIX}a.flac`]?.kind).toBe('audio');
+    expect(ours[`${PREFIX}a.flac`]?.mimeType).toBe('application/octet-stream');
+    expect(ours[`${PREFIX}p.jpeg`]?.urlPath).toContain(encodeURIComponent(`${PREFIX}p.jpeg`));
+  });
 });

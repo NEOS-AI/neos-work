@@ -64,5 +64,14 @@ describe('ToolRegistry', () => {
     const fail = await reg.execute('boom', {});
     expect(fail.success).toBe(false);
     expect(fail.error).toBe('kaboom');
+
+    reg.register(
+      makeTool('throw-string', async () => {
+        throw 'raw-string';
+      }),
+    );
+    const nonErr = await reg.execute('throw-string', null as unknown as Record<string, unknown>);
+    expect(nonErr.success).toBe(false);
+    expect(nonErr.error).toBe('Tool execution failed');
   });
 });

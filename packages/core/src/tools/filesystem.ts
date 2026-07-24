@@ -30,6 +30,10 @@ function safePath(workspaceRoot: string, userPath: string): string {
   if (!trimmed) {
     throw new Error('Path is required');
   }
+  // Reject null bytes and CR/LF that can confuse path resolution
+  if (/[\0\r\n]/.test(trimmed)) {
+    throw new Error('Path contains invalid control characters');
+  }
   const absoluteRoot = realpathSync(resolve(workspaceRoot));
   const resolved = resolve(absoluteRoot, trimmed);
   const rel = relative(absoluteRoot, resolved);

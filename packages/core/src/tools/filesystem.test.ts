@@ -51,6 +51,10 @@ describe('filesystem tools', () => {
     expect(blank.success).toBe(false);
     expect(blank.error).toMatch(/Path is required/i);
 
+    const control = await read.execute({ path: `safe${'\0'}evil.txt` });
+    expect(control.success).toBe(false);
+    expect(control.error).toMatch(/control characters/i);
+
     const escape = await read.execute({ path: '../outside.txt' });
     expect(escape.success).toBe(false);
     expect(escape.error).toMatch(/outside the workspace/);
@@ -207,5 +211,84 @@ describe('filesystem tools', () => {
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
+  });
+
+  it('rejects blank search pattern and whitespace-only directory filter', async () => {
+    const search = createSearchFilesTool(root);
+    const blank = await search.execute({ pattern: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/pattern is required/i);
+
+    const blankDir = await search.execute({ pattern: 'x', directory: '   ' });
+    expect(blankDir.success).toBe(false);
+    expect(blankDir.error).toMatch(/directory is required/i);
+  });
+
+  it('blocks .git and .ssh protected write/move paths', async () => {
+    await mkdir(join(root, '.git'), { recursive: true });
+    await mkdir(join(root, '.ssh'), { recursive: true });
+    const write = createWriteFileTool(root);
+    const git = await write.execute({ path: '.git/config', content: 'x' });
+    expect(git.success).toBe(false);
+    expect(git.error).toMatch(/protected path/);
+
+    const ssh = await write.execute({ path: '.ssh/id_rsa', content: 'x' });
+    expect(ssh.success).toBe(false);
+    expect(ssh.error).toMatch(/protected path/);
+
+    await writeFile(join(root, 'ok.txt'), 'data');
+    const move = createMoveFileTool(root);
+    const toGit = await move.execute({ source: 'ok.txt', destination: '.git/config' });
+    expect(toGit.success).toBe(false);
+    expect(toGit.error).toMatch(/protected path/);
+  });
+
+  it('requires source and destination for move_file', async () => {
+    const move = createMoveFileTool(root);
+    const missing = await move.execute({ source: '', destination: 'x' });
+    expect(missing.success).toBe(false);
+    expect(missing.error).toMatch(/source and destination/i);
+
+    const blank = await move.execute({ source: 'a', destination: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/source and destination/i);
+  });
+
+  it('coerces non-string write content and list defaults to workspace root', async () => {
+    const write = createWriteFileTool(root);
+    const written = await write.execute({
+      path: 'num.txt',
+      content: 123 as unknown as string,
+    });
+    expect(written.success).toBe(true);
+
+    const read = createReadFileTool(root);
+    expect((await read.execute({ path: 'num.txt' })).output).toBe('123');
+
+    await writeFile(join(root, 'root-only.txt'), 'r');
+    const list = createListDirectoryTool(root);
+    const result = await list.execute({});
+    expect(result.success).toBe(true);
+    const names = (result.output as Array<{ name: string }>).map((e) => e.name);
+    expect(names).toContain('root-only.txt');
+  });
+
+  it('search_files content mode respects subdirectory filter', async () => {
+    await mkdir(join(root, 'nested'), { recursive: true });
+    await writeFile(join(root, 'nested', 'hit.ts'), 'const secret = 1;\n');
+    await writeFile(join(root, 'miss.ts'), 'const secret = 2;\n');
+
+    const search = createSearchFilesTool(root);
+    const result = await search.execute({
+      pattern: 'secret',
+      type: 'content',
+      directory: 'nested',
+    });
+    expect(result.success).toBe(true);
+    const matches = (result.output as { matches: Array<{ file: string }> }).matches;
+    expect(matches.some((m) => m.file.includes('hit.ts'))).toBe(true);
+    expect(matches.every((m) => !m.file.endsWith('miss.ts') || m.file.includes('nested'))).toBe(
+      true,
+    );
   });
 });

@@ -110,6 +110,19 @@ describe('design-system-store scan edge cases', () => {
     expect(list.some((d) => d.name === EXTRA)).toBe(false);
   });
 
+  it('skips hidden directories even with DESIGN.md', async () => {
+    const hidden = `.hidden_ds_${process.pid}`;
+    const hiddenDir = path.join(DESIGN_SYSTEMS_DIR, hidden);
+    try {
+      await fs.mkdir(hiddenDir, { recursive: true });
+      await fs.writeFile(path.join(hiddenDir, 'DESIGN.md'), '# Hidden\n', 'utf8');
+      const list = await listDesignSystems();
+      expect(list.some((d) => d.name === hidden)).toBe(false);
+    } finally {
+      await fs.rm(hiddenDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it('flags tokens and components when present', async () => {
     const created = await createDesignSystem(EXTRA, 'extra');
     expect(created).not.toBeNull();
@@ -124,5 +137,47 @@ describe('design-system-store scan edge cases', () => {
   it('returns null when create name already exists', async () => {
     await createDesignSystem(EXTRA, 'once');
     expect(await createDesignSystem(EXTRA, 'twice')).toBeNull();
+  });
+
+  it('treats whitespace-only manifest description as undefined', async () => {
+    await ensureDesignSystemsDir();
+    const dir = path.join(DESIGN_SYSTEMS_DIR, EXTRA);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), '# Brand\n', 'utf8');
+    await fs.writeFile(
+      path.join(dir, 'manifest.json'),
+      JSON.stringify({ name: EXTRA, description: '   \t  ' }),
+      'utf8',
+    );
+
+    const list = await listDesignSystems();
+    const hit = list.find((d) => d.name === EXTRA);
+    expect(hit).toBeTruthy();
+    expect(hit!.description).toBeUndefined();
+    expect(hit!.hasManifest).toBe(true);
+  });
+
+  it('ignores invalid manifest JSON and skips non-directory entries', async () => {
+    await ensureDesignSystemsDir();
+    const dir = path.join(DESIGN_SYSTEMS_DIR, EXTRA);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), '# ok\n', 'utf8');
+    await fs.writeFile(path.join(dir, 'manifest.json'), '{not-json', 'utf8');
+    // file sibling should be skipped by list
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, `${EXTRA}.txt`), 'nope', 'utf8');
+
+    const hit = (await listDesignSystems()).find((d) => d.name === EXTRA);
+    expect(hit).toBeTruthy();
+    expect(hit!.description).toBeUndefined();
+    expect(hit!.hasManifest).toBe(true);
+
+    await fs.unlink(path.join(DESIGN_SYSTEMS_DIR, `${EXTRA}.txt`)).catch(() => {});
+  });
+
+  it('createDesignSystem drops whitespace-only description (no manifest)', async () => {
+    const created = await createDesignSystem(EXTRA, '   ');
+    expect(created).not.toBeNull();
+    expect(created!.description).toBeUndefined();
+    expect(created!.hasManifest).toBe(false);
   });
 });

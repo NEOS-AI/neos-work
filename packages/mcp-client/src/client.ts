@@ -76,7 +76,8 @@ export class McpClient {
 
   async listTools(): Promise<McpToolDefinition[]> {
     const result = await this.client.listTools();
-    return result.tools
+    const tools = Array.isArray(result.tools) ? result.tools : [];
+    return tools
       .map((t) => ({
         name: typeof t.name === 'string' ? t.name.trim() : '',
         description:
@@ -94,10 +95,15 @@ export class McpClient {
     if (!toolName) throw new Error('Tool name is required');
     const result = await this.client.callTool({ name: toolName, arguments: input ?? {} });
 
-    // Normalize content to string
-    const contentArr = result.content as Array<{ type: string; text?: string; data?: unknown }>;
+    // Normalize content to string (tolerate missing / non-array content)
+    const contentArr = Array.isArray(result.content)
+      ? (result.content as Array<{ type: string; text?: string; data?: unknown }>)
+      : [];
     const output = contentArr
-      .map((c) => (c.type === 'text' ? c.text : JSON.stringify(c.data ?? c)))
+      .map((c) => {
+        if (!c || typeof c !== 'object') return String(c ?? '');
+        return c.type === 'text' ? (c.text ?? '') : JSON.stringify(c.data ?? c);
+      })
       .join('\n');
 
     return { success: !result.isError, output };

@@ -16,6 +16,30 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.filter((i) => i.severity === 'error')).toEqual([]);
   });
 
+  it('accepts edge endpoints with surrounding whitespace', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: base.nodes,
+        edges: [{ id: 'e1', source: '  t  ', target: '  o  ' }],
+      },
+      {},
+    );
+    expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('flags blank edge endpoints as dangling', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: base.nodes,
+        edges: [{ id: 'e1', source: '   ', target: 'o' }],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+
   it('errors when web_search lacks Tavily key', () => {
     const r = assessWorkflowPreflight(
       {

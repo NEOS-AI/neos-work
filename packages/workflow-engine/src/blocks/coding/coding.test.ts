@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { getNativeExecutor } from '../registry.js';
-import { registerCodingBlocks } from './index.js';
+import { isAllowedTestCommand, registerCodingBlocks } from './index.js';
 import type { BlockExecutionContext } from '../types.js';
 
 function ctx(params: Record<string, unknown>, extras: Partial<BlockExecutionContext> = {}): BlockExecutionContext {
@@ -149,6 +149,15 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/unsafe|Invalid/i);
     });
 
+    it('rejects control characters in path', async () => {
+      const nullByte = await read().execute(ctx({ path: `safe${'\0'}evil.txt` }));
+      expect(nullByte.ok).toBe(false);
+      expect(nullByte.error).toMatch(/unsafe|Invalid/i);
+
+      const newline = await write().execute(ctx({ path: `safe${'\n'}evil.txt`, content: 'x' }));
+      expect(newline.ok).toBe(false);
+    });
+
     it('rejects empty path for file_write', async () => {
       const result = await write().execute(ctx({ path: '', content: 'x' }));
       expect(result.ok).toBe(false);
@@ -247,13 +256,31 @@ describe('coding blocks', () => {
       expect(result.error ?? '').not.toMatch(/not in allowed list/i);
     });
 
-    it('allows go and cargo prefixes for structured failures', async () => {
-      for (const command of ['go version', 'cargo --version']) {
-        const result = await runner().execute(ctx({ command }));
-        if (result.error) {
-          expect(result.error).not.toMatch(/not in allowed list/);
-        }
-      }
+    it('requires go/cargo test subcommand (rejects go version / cargo build)', async () => {
+      expect(isAllowedTestCommand(['go', 'version'])).toBe(false);
+      expect(isAllowedTestCommand(['cargo', 'build'])).toBe(false);
+      expect(isAllowedTestCommand(['go', 'test'])).toBe(true);
+      expect(isAllowedTestCommand(['cargo', 'test'])).toBe(true);
+      expect(isAllowedTestCommand(['GO', 'TEST', './...'])).toBe(true);
+      expect(isAllowedTestCommand(['/usr/local/bin/cargo', 'Test'])).toBe(true);
+
+      const goVersion = await runner().execute(ctx({ command: 'go version' }));
+      expect(goVersion.ok).toBe(false);
+      expect(goVersion.error).toMatch(/not in allowed list/i);
+
+      const cargoBuild = await runner().execute(ctx({ command: 'cargo build' }));
+      expect(cargoBuild.ok).toBe(false);
+      expect(cargoBuild.error).toMatch(/not in allowed list/i);
+
+      // go test may fail if go missing — must not be allowlist rejection
+      const goTest = await runner().execute(ctx({ command: 'go test -c' }));
+      expect(goTest.error ?? '').not.toMatch(/not in allowed list/i);
+    });
+
+    it('rejects control characters in command', async () => {
+      const result = await runner().execute(ctx({ command: `pnpm${'\0'}test` }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/control characters/i);
     });
   });
 
@@ -264,6 +291,12 @@ describe('coding blocks', () => {
       const result = await git().execute(ctx({ repoPath: '/var/empty' }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/home directory/);
+    });
+
+    it('rejects control characters in repoPath', async () => {
+      const result = await git().execute(ctx({ repoPath: `/tmp${'\n'}evil` }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/control characters/i);
     });
 
     it('treats whitespace-only repoPath as cwd', async () => {
@@ -294,6 +327,14 @@ describe('coding blocks', () => {
       const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: '/var/empty' }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/home directory/);
+    });
+
+    it('rejects control characters in cwd', async () => {
+      const result = await runner().execute(
+        ctx({ command: 'pnpm --version', cwd: `/tmp${'\0'}evil` }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/control characters/i);
     });
 
     it('treats whitespace-only cwd as process.cwd', async () => {

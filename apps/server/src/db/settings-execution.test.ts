@@ -121,6 +121,18 @@ describe('getExecutionSettings', () => {
     expect(blank.AUTH_TOKEN).toBeUndefined();
   });
 
+  it('rejects non-http runtime serverUrl and strips trailing slashes', () => {
+    expect(
+      getExecutionSettings({ serverUrl: 'file:///etc/passwd' }).SERVER_URL,
+    ).toBeUndefined();
+    expect(
+      getExecutionSettings({ serverUrl: 'javascript:alert(1)' }).SERVER_URL,
+    ).toBeUndefined();
+    expect(
+      getExecutionSettings({ serverUrl: 'http://127.0.0.1:9/' }).SERVER_URL,
+    ).toBe('http://127.0.0.1:9');
+  });
+
   it('merges secrets with runtime without dropping keys', () => {
     setSetting('OPENAI_API_KEY', 'sk-merge');
     const s = getExecutionSettings({

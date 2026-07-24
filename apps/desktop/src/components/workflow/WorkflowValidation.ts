@@ -51,13 +51,28 @@ interface DraftEdge {
   target: string;
 }
 
+/** Trim edge/node endpoint for matching (aligns with graph topologicalSort). */
+function endpoint(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function hasCycle(nodes: Array<{ id: string }>, edges: Array<{ source: string; target: string }>): boolean {
   const visiting = new Set<string>();
   const visited = new Set<string>();
   const outgoing = new Map<string, string[]>();
 
-  for (const node of nodes) outgoing.set(node.id, []);
-  for (const edge of edges) outgoing.get(edge.source)?.push(edge.target);
+  for (const node of nodes) {
+    const id = endpoint(node.id);
+    if (!id || outgoing.has(id)) continue;
+    outgoing.set(id, []);
+  }
+  for (const edge of edges) {
+    const source = endpoint(edge.source);
+    const target = endpoint(edge.target);
+    // Skip dangling / blank endpoints so they do not invent phantom edges
+    if (!source || !target || !outgoing.has(source) || !outgoing.has(target)) continue;
+    outgoing.get(source)!.push(target);
+  }
 
   const visit = (nodeId: string): boolean => {
     if (visiting.has(nodeId)) return true;
@@ -71,7 +86,7 @@ function hasCycle(nodes: Array<{ id: string }>, edges: Array<{ source: string; t
     return false;
   };
 
-  return nodes.some((node) => visit(node.id));
+  return [...outgoing.keys()].some((id) => visit(id));
 }
 
 function isBlank(value: unknown): boolean {
@@ -79,6 +94,18 @@ function isBlank(value: unknown): boolean {
   // Treat whitespace-only strings as blank for required block params
   if (typeof value === 'string' && value.trim().length === 0) return true;
   return false;
+}
+
+/** True when edge targets the node (trimmed id compare). */
+function edgeTargetsNode(edge: { target: string }, nodeId: string): boolean {
+  const nid = endpoint(nodeId);
+  return !!nid && endpoint(edge.target) === nid;
+}
+
+/** True when edge starts at the node (trimmed id compare). */
+function edgeSourcesFromNode(edge: { source: string }, nodeId: string): boolean {
+  const nid = endpoint(nodeId);
+  return !!nid && endpoint(edge.source) === nid;
 }
 
 export function validateWorkflowDraft(input: {
@@ -168,7 +195,7 @@ export function validateWorkflowDraft(input: {
         }
       }
       // Blocks typically need upstream context when the graph has more than one node
-      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       if (!hasIncoming && input.nodes.length > 1) {
         issues.push({
           code: 'block_no_upstream',
@@ -214,7 +241,7 @@ export function validateWorkflowDraft(input: {
         });
       }
       // Agents typically need upstream context when the graph has more than one node
-      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       if (!hasIncoming && input.nodes.length > 1) {
         issues.push({
           code: 'agent_no_upstream',
@@ -239,7 +266,7 @@ export function validateWorkflowDraft(input: {
 
     if (node.type === 'web_search') {
       const hasQuery = typeof config.query === 'string' && config.query.trim().length > 0;
-      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       if (!hasQuery && !hasIncoming) {
         issues.push({
           code: 'missing_search_query',
@@ -273,7 +300,7 @@ export function validateWorkflowDraft(input: {
           message: 'Slack node requires a channel.',
         });
       }
-      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       const hasTemplate =
         (typeof config.textTemplate === 'string' && config.textTemplate.trim().length > 0)
         || (typeof config.content === 'string' && config.content.trim().length > 0)
@@ -299,7 +326,7 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'discord_message') {
-      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       // NodeConfigPanel stores template as textTemplate (also accept content/text)
       const hasStatic =
         (typeof config.textTemplate === 'string' && config.textTemplate.trim().length > 0)
@@ -345,7 +372,7 @@ export function validateWorkflowDraft(input: {
           message: 'Media type must be image or audio.',
         });
       }
-      const hasIncoming = input.edges.some((edge) => edge.target === node.id);
+      const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       const isAudio = mediaType === 'audio';
       // Image uses `prompt`; TTS audio uses `text` (NodeConfigPanel)
       const promptBody = typeof config.prompt === 'string' ? config.prompt.trim() : '';
@@ -453,7 +480,7 @@ export function validateWorkflowDraft(input: {
       }
       const hasContent =
         (typeof config.content === 'string' && config.content.trim().length > 0)
-        || input.edges.some((edge) => edge.target === node.id);
+        || input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       if (!hasContent) {
         issues.push({
           code: 'missing_deploy_content',
@@ -467,7 +494,7 @@ export function validateWorkflowDraft(input: {
     // Parallel / gate structural checks (plan Task 11)
     // Support both palette aliases: or_gate + gate_or, gate_and
     if (node.type === 'or_gate' || node.type === 'gate_or') {
-      const incoming = input.edges.filter((edge) => edge.target === node.id).length;
+      const incoming = input.edges.filter((edge) => edgeTargetsNode(edge, node.id)).length;
       if (incoming < 2) {
         issues.push({
           code: 'or_gate_underconnected',
@@ -479,7 +506,7 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'gate_and') {
-      const incoming = input.edges.filter((edge) => edge.target === node.id).length;
+      const incoming = input.edges.filter((edge) => edgeTargetsNode(edge, node.id)).length;
       if (incoming < 2) {
         issues.push({
           code: 'gate_and_underconnected',
@@ -491,7 +518,7 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'parallel_start') {
-      const outgoing = input.edges.filter((edge) => edge.source === node.id).length;
+      const outgoing = input.edges.filter((edge) => edgeSourcesFromNode(edge, node.id)).length;
       if (outgoing < 2) {
         issues.push({
           code: 'parallel_start_underconnected',
@@ -503,7 +530,7 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'parallel_end') {
-      const incoming = input.edges.filter((edge) => edge.target === node.id).length;
+      const incoming = input.edges.filter((edge) => edgeTargetsNode(edge, node.id)).length;
       if (incoming < 2) {
         issues.push({
           code: 'parallel_end_underconnected',
@@ -517,9 +544,9 @@ export function validateWorkflowDraft(input: {
 
   const pairCounts = new Map<string, string[]>();
   for (const edge of input.edges) {
-    const srcRaw = typeof edge.source === 'string' ? edge.source : '';
-    const tgtRaw = typeof edge.target === 'string' ? edge.target : '';
-    if (srcRaw.trim() && srcRaw.trim() === tgtRaw.trim()) {
+    const source = endpoint(edge.source);
+    const target = endpoint(edge.target);
+    if (source && source === target) {
       issues.push({
         code: 'self_loop',
         severity: 'error',
@@ -527,8 +554,6 @@ export function validateWorkflowDraft(input: {
         message: 'Edge cannot connect a node to itself.',
       });
     }
-    const source = typeof edge.source === 'string' ? edge.source.trim() : '';
-    const target = typeof edge.target === 'string' ? edge.target.trim() : '';
     if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) {
       // Blank endpoints and missing nodes are both dangling (executor skips blank endpoints)
       issues.push({
@@ -639,7 +664,7 @@ export function validateWorkflowDraft(input: {
   // Isolated nodes (not connected to any edge) — skip single-node graphs
   if (input.nodes.length > 1) {
     for (const node of input.nodes) {
-      const connected = input.edges.some((e) => e.source === node.id || e.target === node.id);
+      const connected = input.edges.some((e) => edgeSourcesFromNode(e, node.id) || edgeTargetsNode(e, node.id));
       if (!connected) {
         issues.push({
           code: 'isolated_node',
@@ -654,7 +679,7 @@ export function validateWorkflowDraft(input: {
   // Output with no upstream when other nodes exist
   for (const node of input.nodes) {
     if (node.type !== 'output') continue;
-    const incoming = input.edges.some((e) => e.target === node.id);
+    const incoming = input.edges.some((e) => edgeTargetsNode(e, node.id));
     if (!incoming && input.nodes.length > 1) {
       issues.push({
         code: 'output_no_upstream',
@@ -668,7 +693,7 @@ export function validateWorkflowDraft(input: {
   // Trigger with no downstream when other nodes exist
   for (const node of input.nodes) {
     if (node.type !== 'trigger') continue;
-    const outgoing = input.edges.some((e) => e.source === node.id);
+    const outgoing = input.edges.some((e) => edgeSourcesFromNode(e, node.id));
     if (!outgoing && input.nodes.length > 1) {
       issues.push({
         code: 'trigger_no_downstream',

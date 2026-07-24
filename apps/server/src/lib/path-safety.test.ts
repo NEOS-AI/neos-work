@@ -26,5 +26,12 @@ describe('validateWorkspacePath', () => {
     const home = homedir();
     expect(validateWorkspacePath(home + '\0evil')).toBe(false);
     expect(validateWorkspacePath(home + '\n/evil')).toBe(false);
+    expect(validateWorkspacePath(home + '\r/evil')).toBe(false);
+  });
+
+  it('rejects non-string inputs', () => {
+    expect(validateWorkspacePath(null as unknown as string)).toBe(false);
+    expect(validateWorkspacePath(undefined as unknown as string)).toBe(false);
+    expect(validateWorkspacePath(42 as unknown as string)).toBe(false);
   });
 });

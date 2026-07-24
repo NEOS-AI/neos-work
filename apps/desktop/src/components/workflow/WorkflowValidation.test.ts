@@ -1576,6 +1576,43 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
     });
     expect(issues.some((i) => i.code === 'agent_no_upstream' && i.nodeId === 'a')).toBe(true);
   });
+
+  it('detects cycles when edge endpoints have surrounding whitespace', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 'a', type: 'trigger', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: '  a  ', target: '  b  ' },
+        { id: 'e2', source: ' b ', target: 'a' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'cycle')).toBe(true);
+  });
+
+  it('counts padded edge endpoints for gate underconnected checks', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'a', type: 'agent_coding', label: 'A', config: { harnessId: 'h1' } },
+        { id: 'b', type: 'agent_coding', label: 'B', config: { harnessId: 'h1' } },
+        { id: 'and', type: 'gate_and', label: 'AND', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 't', target: 'b' },
+        { id: 'e3', source: '  a  ', target: '  and  ' },
+        { id: 'e4', source: 'b', target: 'and' },
+        { id: 'e5', source: 'and', target: 'o' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'gate_and_underconnected')).toBe(false);
+    expect(issues.some((i) => i.code === 'dangling_edge')).toBe(false);
+  });
 });
 
 

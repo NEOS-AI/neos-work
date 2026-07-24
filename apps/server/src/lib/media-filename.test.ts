@@ -21,6 +21,14 @@ describe('media filename safety', () => {
     expect(isSafeMediaFilename('.')).toBe(false);
     expect(isSafeMediaFilename('..')).toBe(false);
   });
+
+  it('rejects non-string and spaced filenames', () => {
+    expect(isSafeMediaFilename(null as unknown as string)).toBe(false);
+    expect(isSafeMediaFilename(undefined as unknown as string)).toBe(false);
+    expect(isSafeMediaFilename(42 as unknown as string)).toBe(false);
+    expect(isSafeMediaFilename('has space.png')).toBe(false);
+    expect(isSafeMediaFilename('ok_file-1.WEBP')).toBe(true);
+  });
 });
 
 describe('media file delete on disk', () => {

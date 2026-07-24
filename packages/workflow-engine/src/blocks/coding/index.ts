@@ -17,7 +17,12 @@ import { registerNativeBlock } from '../registry.js';
 import type { BlockExecutionContext, BlockResult } from '../types.js';
 
 const WORKSPACES_DIR = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
-const ALLOWED_TEST_PREFIXES = ['npm', 'pnpm', 'yarn', 'pytest', 'go', 'cargo'];
+/** Simple binaries: any args. go/cargo require `test` as first argument (plan Task 12). */
+const ALLOWED_TEST_BINARIES = new Set(['npm', 'pnpm', 'yarn', 'pytest']);
+const ALLOWED_TEST_WITH_SUBCMD = new Map<string, string>([
+  ['go', 'test'],
+  ['cargo', 'test'],
+]);
 const CODE_EVAL_TIMEOUT_MS = 5000;
 /** Prevent pathological payloads (plan Task 12 coding blocks). */
 const CODE_EVAL_MAX_CHARS = 100_000;
@@ -26,9 +31,15 @@ const FILE_WRITE_MAX_CHARS = 2 * 1024 * 1024;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Reject null bytes / CR / LF that confuse path APIs and spawn. */
+function hasUnsafeControlChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
+}
+
 function safePath(inputPath: string, baseDir?: string): string | null {
   const trimmed = typeof inputPath === 'string' ? inputPath.trim() : '';
   if (!trimmed) return null;
+  if (hasUnsafeControlChars(trimmed)) return null;
   // Reject absolute paths or traversal attempts
   if (path.isAbsolute(trimmed)) return null;
   const base = baseDir ?? WORKSPACES_DIR;
@@ -37,6 +48,22 @@ function safePath(inputPath: string, baseDir?: string): string | null {
     return null;
   }
   return resolved;
+}
+
+/**
+ * test_runner allow-list (plan Task 12):
+ * npm | pnpm | yarn | pytest  — any args
+ * go test | cargo test        — first arg must be `test` (case-insensitive)
+ */
+export function isAllowedTestCommand(parts: string[]): boolean {
+  if (parts.length === 0) return false;
+  const binBase = (parts[0] ?? '').split(/[/\\]/).pop()?.toLowerCase() ?? '';
+  if (!binBase) return false;
+  if (ALLOWED_TEST_BINARIES.has(binBase)) return true;
+  const requiredSub = ALLOWED_TEST_WITH_SUBCMD.get(binBase);
+  if (!requiredSub) return false;
+  const sub = (parts[1] ?? '').toLowerCase();
+  return sub === requiredSub;
 }
 
 function runSpawn(
@@ -226,6 +253,14 @@ async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult
 async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
   const rawRepo = ctx.params['repoPath'] != null ? String(ctx.params['repoPath']).trim() : '';
+  if (rawRepo && hasUnsafeControlChars(rawRepo)) {
+    return {
+      ok: false,
+      output: null,
+      error: 'Repo path contains invalid control characters',
+      durationMs: Date.now() - start,
+    };
+  }
   const repoPath = rawRepo || process.cwd();
 
   // Validate repo path is not going outside reasonable bounds
@@ -253,10 +288,26 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
   const start = Date.now();
   const command = String(ctx.params['command'] ?? '');
   const rawCwd = ctx.params['cwd'] != null ? String(ctx.params['cwd']).trim() : '';
+  if (rawCwd && hasUnsafeControlChars(rawCwd)) {
+    return {
+      ok: false,
+      output: null,
+      error: 'Working directory contains invalid control characters',
+      durationMs: Date.now() - start,
+    };
+  }
   const cwd = rawCwd || process.cwd();
 
   if (!command.trim()) {
     return { ok: false, output: null, error: 'No command provided', durationMs: Date.now() - start };
+  }
+  if (hasUnsafeControlChars(command)) {
+    return {
+      ok: false,
+      output: null,
+      error: 'Command contains invalid control characters',
+      durationMs: Date.now() - start,
+    };
   }
 
   // Absolute cwd must stay under home (or be process.cwd for CI checkouts)
@@ -276,14 +327,13 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
   const parts = command.trim().split(/\s+/).filter(Boolean);
   const bin = parts[0] ?? '';
   const args = parts.slice(1);
-  // Case-insensitive allowlist on basename (NPM, /usr/bin/NPM)
-  const binBase = bin.split(/[/\\]/).pop()?.toLowerCase() ?? '';
-  const allowed = ALLOWED_TEST_PREFIXES.some((prefix) => binBase === prefix);
-  if (!allowed) {
+  // Case-insensitive allowlist; go/cargo require `test` subcommand
+  if (!isAllowedTestCommand(parts)) {
     return {
       ok: false,
       output: null,
-      error: `Command '${bin}' not in allowed list: ${ALLOWED_TEST_PREFIXES.join(', ')}`,
+      error:
+        `Command '${bin}' not in allowed list: npm, pnpm, yarn, pytest, go test, cargo test`,
       durationMs: Date.now() - start,
     };
   }
@@ -358,7 +408,7 @@ export function registerCodingBlocks(): void {
 
   registerNativeBlock(
     { blockId: 'test_runner', execute: executeTestRunner },
-    codingMeta('test_runner', 'Test Runner', 'Run allowlisted test commands (npm/pnpm/yarn/pytest/go/cargo)', [
+    codingMeta('test_runner', 'Test Runner', 'Run allowlisted test commands (npm/pnpm/yarn/pytest/go test/cargo test)', [
       { key: 'command', label: 'Command', type: 'string', description: 'e.g. pnpm test' },
       { key: 'cwd', label: 'Working directory', type: 'string' },
     ]),

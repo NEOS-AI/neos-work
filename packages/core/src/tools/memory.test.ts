@@ -128,4 +128,26 @@ describe('memory tools', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('remove fail');
   });
+
+  it('coerces non-string key/content and clamps string/NaN recall limits', async () => {
+    const cb = mockCallbacks();
+    const remember = createRememberTool(cb);
+    const saved = await remember.execute({
+      key: 42 as unknown as string,
+      content: true as unknown as string,
+      tags: 'not-an-array' as unknown as string[],
+    });
+    expect(saved.success).toBe(true);
+    expect(cb.save).toHaveBeenCalledWith('42', 'true', undefined);
+
+    const recall = createRecallTool(cb);
+    await recall.execute({ query: 'q', limit: '3' as unknown as number });
+    expect(cb.search).toHaveBeenCalledWith('q', undefined, 3);
+
+    await recall.execute({ query: 'q', limit: Number.NaN });
+    expect(cb.search).toHaveBeenCalledWith('q', undefined, 5);
+
+    await recall.execute({ query: 'q', limit: 0 });
+    expect(cb.search).toHaveBeenCalledWith('q', undefined, 1);
+  });
 });

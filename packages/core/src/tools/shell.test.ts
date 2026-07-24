@@ -126,4 +126,33 @@ describe('createShellTool', () => {
     expect(result.success).toBe(true);
     expect((result.output as { stdout: string }).stdout).toContain('trimmed');
   });
+
+  it('parses string timeouts and falls back for non-finite values', async () => {
+    const tool = createShellTool(root);
+    const fromString = await tool.execute({ command: 'echo ok', timeout: '2000' as unknown as number });
+    expect(fromString.success).toBe(true);
+
+    const nan = await tool.execute({ command: 'echo ok', timeout: Number.NaN });
+    expect(nan.success).toBe(true);
+
+    const zero = await tool.execute({ command: 'echo ok', timeout: 0 });
+    // clamped to at least 1ms; still completes
+    expect(zero.output).toBeTruthy();
+  });
+
+  it('blocks dd-to-root, iptables, and killall Finder patterns', async () => {
+    const tool = createShellTool(root);
+    for (const command of [
+      'dd if=/dev/zero of=/dev/sda',
+      'iptables -F',
+      'killall Finder',
+      'parted /dev/sda',
+      'ifconfig eth0 down',
+      'ip addr add 1.2.3.4/24 dev eth0',
+    ]) {
+      const result = await tool.execute({ command });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/forbidden pattern/i);
+    }
+  });
 });
