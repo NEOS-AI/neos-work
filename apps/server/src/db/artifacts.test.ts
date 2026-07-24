@@ -67,6 +67,13 @@ describe('artifacts CRUD', () => {
     expect(listArtifacts('   ')).toEqual([]);
     expect(listArtifactsByRun('   ')).toEqual([]);
     expect(deleteArtifact('   ')).toBe(false);
+    expect(() =>
+      createArtifact({
+        workflowId: '   ',
+        name: 'x',
+        contentType: 'text/html',
+      }),
+    ).toThrow(/workflowId/i);
   });
 });
 

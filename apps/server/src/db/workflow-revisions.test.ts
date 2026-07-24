@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from './schema.js';
-import { createRevision, listRevisions } from './workflow-revisions.js';
+import {
+  createRevision,
+  deleteRevision,
+  getRevision,
+  listRevisions,
+  updateRevisionLabel,
+} from './workflow-revisions.js';
 import * as workflows from './workflows.js';
 
 const WF_NAME = `_cov_rev_${process.pid}`;
@@ -160,3 +166,30 @@ describe('createRevision GC', () => {
   });
 });
 
+
+describe('revision id trim hygiene', () => {
+  it('list/get/update/delete short-circuit on blank ids and trim padded ids', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const rev = createRevision(wf.id, JSON.stringify({ nodes: [], edges: [] }), 'label');
+    expect(rev).not.toBeNull();
+
+    expect(listRevisions('   ')).toEqual([]);
+    expect(listRevisions(`  ${wf.id}  `).some((r) => r.id === rev!.id)).toBe(true);
+
+    expect(getRevision('   ')).toBeUndefined();
+    expect(getRevision(`  ${rev!.id}  `)?.id).toBe(rev!.id);
+
+    expect(updateRevisionLabel('   ', 'x')).toBe(false);
+    expect(updateRevisionLabel(`  ${rev!.id}  `, 'renamed')).toBe(true);
+    expect(getRevision(rev!.id)?.label).toBe('renamed');
+
+    expect(deleteRevision('   ')).toBe(false);
+    expect(deleteRevision(`  ${rev!.id}  `)).toBe(true);
+    expect(getRevision(rev!.id)).toBeUndefined();
+  });
+});

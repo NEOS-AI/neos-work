@@ -17,6 +17,24 @@ afterEach(() => {
 });
 
 describe('memory CRUD', () => {
+  it('trims workspace/key and rejects blanks', () => {
+    expect(getMemory('   ', 'k')).toBeUndefined();
+    expect(getMemory(WS, '   ')).toBeUndefined();
+    expect(listMemories('   ')).toEqual([]);
+    expect(deleteMemory('   ', 'k')).toBe(false);
+    expect(() =>
+      createMemory({ workspaceId: '  ', key: KEYS[0]!, content: 'x' }),
+    ).toThrow(/workspaceId and key/i);
+
+    createMemory({
+      workspaceId: `  ${WS}  `,
+      key: `  ${KEYS[0]!}  `,
+      content: 'padded',
+    });
+    expect(getMemory(WS, KEYS[0]!)?.content).toBe('padded');
+    expect(deleteMemory(`  ${WS}  `, `  ${KEYS[0]!}  `)).toBe(true);
+  });
+
   it('upserts by workspace+key and lists', () => {
     const m1 = createMemory({
       workspaceId: WS,

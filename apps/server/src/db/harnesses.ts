@@ -49,20 +49,31 @@ export function getCustomHarness(id: string): AgentHarness | undefined {
 }
 
 export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): AgentHarness {
+  const id = typeof input.id === 'string' ? input.id.trim() : '';
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const systemPrompt =
+    typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '';
+  if (!id || !name || !systemPrompt) {
+    throw new Error('id, name, and systemPrompt are required');
+  }
+  const domain =
+    typeof input.domain === 'string' ? input.domain.trim() || 'general' : (input.domain ?? 'general');
+  const description =
+    typeof input.description === 'string' ? input.description.trim() : (input.description ?? '');
   const db = getDb();
   db.prepare(
     `INSERT INTO custom_harness (id, name, domain, description, system_prompt, allowed_tools_json, constraints_json)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    input.id,
-    input.name,
-    input.domain,
-    input.description,
-    input.systemPrompt,
-    JSON.stringify(input.allowedTools),
+    id,
+    name,
+    domain,
+    description,
+    systemPrompt,
+    JSON.stringify(input.allowedTools ?? []),
     JSON.stringify(input.constraints ?? {}),
   );
-  return getCustomHarness(input.id)!;
+  return getCustomHarness(id)!;
 }
 
 export function updateCustomHarness(id: string, input: Partial<AgentHarness>): AgentHarness | undefined {

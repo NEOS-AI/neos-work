@@ -19,8 +19,8 @@ import { getStockPrice, getStockChart } from './kis-api.js';
 import type { KisConfig } from './kis-api.js';
 
 function getKisConfig(settings: Record<string, string>): KisConfig {
-  const appKey = settings['KIS_APP_KEY'];
-  const appSecret = settings['KIS_APP_SECRET'];
+  const appKey = String(settings['KIS_APP_KEY'] ?? '').trim();
+  const appSecret = String(settings['KIS_APP_SECRET'] ?? '').trim();
   if (!appKey || !appSecret) {
     throw new Error('KIS_APP_KEY and KIS_APP_SECRET are required');
   }
@@ -30,6 +30,20 @@ function getKisConfig(settings: Record<string, string>): KisConfig {
 function timer(): () => number {
   const start = Date.now();
   return () => Date.now() - start;
+}
+
+/** Prefer params over inputs; trim whitespace-only to empty. */
+function resolveSymbol(ctx: BlockExecutionContext): string {
+  const raw = ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '';
+  return String(raw).trim();
+}
+
+/** Clamp integer period/lookback into a safe range (plan Task 12 finance). */
+function clampPeriod(raw: unknown, fallback: number, min = 1, max = 500): number {
+  const n = Number(raw);
+  // Non-finite or below min → use fallback (invalid UI input)
+  if (!Number.isFinite(n) || n < min) return fallback;
+  return Math.min(max, Math.floor(n));
 }
 
 // ── 1. price_lookup ────────────────────────────────────────────────────────
@@ -53,7 +67,7 @@ registerNativeBlock({
     const elapsed = timer();
     try {
       const config = getKisConfig(ctx.settings);
-      const symbol = String(ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '');
+      const symbol = resolveSymbol(ctx);
       if (!symbol) throw new Error('symbol is required');
 
       const price = await getStockPrice(config, symbol);
@@ -89,9 +103,11 @@ registerNativeBlock({
     const elapsed = timer();
     try {
       const config = getKisConfig(ctx.settings);
-      const symbol = String(ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '');
-      const period = Number(ctx.params['period'] ?? 20);
-      const maType = String(ctx.params['type'] ?? 'SMA').toUpperCase();
+      const symbol = resolveSymbol(ctx);
+      if (!symbol) throw new Error('symbol is required');
+      const period = clampPeriod(ctx.params['period'] ?? 20, 20, 1, 500);
+      const maTypeRaw = String(ctx.params['type'] ?? 'SMA').trim().toUpperCase();
+      const maType = maTypeRaw === 'EMA' ? 'EMA' : 'SMA';
       const count = Math.max(period + 5, 60);
 
       const bars = await getStockChart(config, symbol, 'D', count);
@@ -145,8 +161,9 @@ registerNativeBlock({
     const elapsed = timer();
     try {
       const config = getKisConfig(ctx.settings);
-      const symbol = String(ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '');
-      const period = Number(ctx.params['period'] ?? 14);
+      const symbol = resolveSymbol(ctx);
+      if (!symbol) throw new Error('symbol is required');
+      const period = clampPeriod(ctx.params['period'] ?? 14, 14, 1, 500);
       const count = Math.max(period * 3, 60);
 
       const bars = await getStockChart(config, symbol, 'D', count);
@@ -198,10 +215,11 @@ registerNativeBlock({
     const elapsed = timer();
     try {
       const config = getKisConfig(ctx.settings);
-      const symbol = String(ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '');
-      const fastPeriod = Number(ctx.params['fastPeriod'] ?? 12);
-      const slowPeriod = Number(ctx.params['slowPeriod'] ?? 26);
-      const signalPeriod = Number(ctx.params['signalPeriod'] ?? 9);
+      const symbol = resolveSymbol(ctx);
+      if (!symbol) throw new Error('symbol is required');
+      const fastPeriod = clampPeriod(ctx.params['fastPeriod'] ?? 12, 12, 1, 200);
+      const slowPeriod = clampPeriod(ctx.params['slowPeriod'] ?? 26, 26, 1, 200);
+      const signalPeriod = clampPeriod(ctx.params['signalPeriod'] ?? 9, 9, 1, 200);
 
       const bars = await getStockChart(config, symbol, 'D', 120);
       const closes = bars.map((b) => b.close).reverse();
@@ -256,7 +274,7 @@ registerNativeBlock({
       const config = getKisConfig(ctx.settings);
       const rawSymbols = ctx.params['symbols'] ?? ctx.inputs['symbols'];
       const symbols: string[] = Array.isArray(rawSymbols)
-        ? rawSymbols.map(String)
+        ? rawSymbols.map((s) => String(s).trim()).filter(Boolean)
         : String(rawSymbols ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
       if (symbols.length === 0) throw new Error('symbols is required');
@@ -306,8 +324,8 @@ registerNativeBlock({
     const elapsed = timer();
     try {
       const config = getKisConfig(ctx.settings);
-      const symbol = String(ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '');
-      const lookback = Number(ctx.params['lookback'] ?? 60);
+      const symbol = resolveSymbol(ctx);
+      const lookback = clampPeriod(ctx.params['lookback'] ?? 60, 60, 5, 500);
       if (!symbol) throw new Error('symbol is required');
 
       const bars = await getStockChart(config, symbol, 'D', lookback + 5);

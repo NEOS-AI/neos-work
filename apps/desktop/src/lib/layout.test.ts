@@ -43,6 +43,19 @@ describe('autoLayout', () => {
   it('handles empty input', () => {
     expect(autoLayout([], [])).toEqual([]);
   });
+
+  it('ignores dangling edges and unknown direction falls back to TB', () => {
+    const nodes = [n('a'), n('b')];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e-missing', source: 'a', target: 'ghost' },
+      { id: 'e-blank', source: '', target: 'b' },
+    ];
+    const laid = autoLayout(nodes, edges, 'ZZ' as 'TB');
+    expect(laid).toHaveLength(2);
+    const byId = Object.fromEntries(laid.map((node) => [node.id, node]));
+    expect(byId.a!.position.y).toBeLessThan(byId.b!.position.y);
+  });
 });
 
 describe('autoLayout fan-out', () => {

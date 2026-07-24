@@ -52,6 +52,29 @@ describe('sessions CRUD', () => {
     expect(listSessions().some((x) => x.id === s.id)).toBe(true);
   });
 
+  it('trims session/workspace ids and rejects blank creates', () => {
+    expect(getSession('   ')).toBeUndefined();
+    expect(listMessages('   ')).toEqual([]);
+    expect(getWorkspace('   ')).toBeUndefined();
+    expect(deleteWorkspace('   ')).toBe(false);
+    expect(() => createSession({ workspaceId: '   ' })).toThrow(/workspaceId/i);
+    expect(() => createWorkspace({ name: '   ' })).toThrow(/name/i);
+
+    const s = createSession({ workspaceId: '  default  ', title: '  _cov_sess  ' });
+    expect(s.workspace_id).toBe('default');
+    expect(s.title).toBe('_cov_sess');
+    expect(getSession(`  ${s.id}  `)?.id).toBe(s.id);
+    updateSessionTitle(`  ${s.id}  `, '  _cov_new  ');
+    expect(getSession(s.id)?.title).toBe('_cov_new');
+    touchSession(`  ${s.id}  `);
+    expect(listMessages(`  ${s.id}  `)).toEqual([]);
+    const m = addMessage({ sessionId: `  ${s.id}  `, role: '  user  ', content: 'hi' });
+    expect(m.session_id).toBe(s.id);
+    expect(m.role).toBe('user');
+    expect(listMessages(s.id).some((x) => x.id === m.id)).toBe(true);
+    deleteSession(s.id);
+  });
+
   it('updates title, touches, and deletes session', () => {
     const s = createSession({
       workspaceId: 'default',
@@ -86,6 +109,18 @@ describe('sessions CRUD', () => {
     expect(JSON.parse(m2.metadata!)).toEqual({ tokens: 3 });
     const msgs = listMessages(s.id);
     expect(msgs.map((m) => m.content)).toEqual(['hello', 'hi']);
+  });
+
+  it('trims session id and workspaceId; blank id is not-found', () => {
+    const s = createSession({ workspaceId: 'default', title: '_cov_sess' });
+    expect(getSession(`  ${s.id}  `)?.id).toBe(s.id);
+    expect(getSession('   ')).toBeUndefined();
+    expect(listSessions('  default  ').some((x) => x.id === s.id)).toBe(true);
+    // blank workspaceId treated as all workspaces
+    expect(listSessions('   ').some((x) => x.id === s.id)).toBe(true);
+    expect(deleteSession('   ')).toBe(false);
+    expect(deleteSession(`  ${s.id}  `)).toBe(true);
+    expect(getSession(s.id)).toBeUndefined();
   });
 });
 

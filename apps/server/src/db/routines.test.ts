@@ -77,6 +77,34 @@ describe('routines CRUD', () => {
     });
     expect(r.timezone).toBe('UTC');
   });
+
+  it('trims ids; blank get/update/delete/run lookup short-circuit', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'Trim Me',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+    });
+    expect(getRoutine(`  ${r.id}  `)?.name).toBe('Trim Me');
+    expect(getRoutine('   ')).toBeNull();
+    expect(updateRoutine('  ', { enabled: false })).toBeNull();
+    expect(updateRoutine(`  ${r.id}  `, { enabled: false })?.enabled).toBe(false);
+    expect(deleteRoutine('   ')).toBe(false);
+
+    const run = createRoutineRun({ routineId: r.id });
+    expect(listRoutineRuns('   ')).toEqual([]);
+    expect(listRoutineRuns(`  ${r.id}  `).some((x) => x.id === run.id)).toBe(true);
+    expect(getRoutineRun('  ', run.id)).toBeNull();
+    expect(getRoutineRun(r.id, '   ')).toBeNull();
+    expect(getRoutineRun(`  ${r.id}  `, `  ${run.id}  `)?.id).toBe(run.id);
+
+    expect(deleteRoutine(`  ${r.id}  `)).toBe(true);
+  });
 });
 
 describe('routine runs', () => {

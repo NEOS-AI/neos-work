@@ -132,6 +132,17 @@ describe('price_lookup', () => {
     expect(getStockPrice).not.toHaveBeenCalled();
   });
 
+  it('fails when symbol is whitespace-only and trims padded symbols', async () => {
+    const blank = await exec().execute(ctx({ symbol: '   ' }));
+    expect(blank.ok).toBe(false);
+    expect(blank.error).toMatch(/symbol is required/);
+
+    getStockPrice.mockResolvedValue(price({ symbol: '005930' }));
+    const padded = await exec().execute(ctx({ symbol: '  005930  ' }));
+    expect(padded.ok).toBe(true);
+    expect(getStockPrice).toHaveBeenCalledWith(expect.anything(), '005930');
+  });
+
   it('fails when KIS credentials are missing', async () => {
     const result = await exec().execute(
       ctx({ symbol: '005930' }, { settings: {} }),
@@ -171,6 +182,16 @@ describe('moving_average', () => {
     expect(typeof out.current).toBe('number');
     expect(out.series.length).toBeGreaterThan(0);
     expect(out.series.length).toBeLessThanOrEqual(20);
+  });
+
+  it('clamps invalid period and unknown MA type to SMA defaults', async () => {
+    const result = await exec().execute(
+      ctx({ symbol: '005930', period: -5, type: 'WMA' }),
+    );
+    expect(result.ok).toBe(true);
+    const out = result.output as { type: string; period: number };
+    expect(out.type).toBe('SMA');
+    expect(out.period).toBe(20);
   });
 
   it('computes EMA when type is EMA', async () => {

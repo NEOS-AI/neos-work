@@ -26,6 +26,8 @@ describe('custom harnesses CRUD', () => {
     });
     expect(h.isBuiltIn).toBe(false);
     expect(getCustomHarness(ID)?.allowedTools).toEqual(['read', 'write']);
+    expect(getCustomHarness(`  ${ID}  `)?.id).toBe(ID);
+    expect(getCustomHarness('   ')).toBeUndefined();
     expect(listCustomHarnesses().some((x) => x.id === ID)).toBe(true);
 
     const updated = updateCustomHarness(ID, {
@@ -62,6 +64,25 @@ describe('custom harnesses CRUD', () => {
     } finally {
       deleteCustomHarness(id);
     }
+  });
+
+  it('trims ids on get/update/delete; blank id is not-found', () => {
+    createCustomHarness({
+      id: ID,
+      name: 'Trim Harness',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'p',
+      allowedTools: [],
+    });
+    expect(getCustomHarness(`  ${ID}  `)?.name).toBe('Trim Harness');
+    expect(getCustomHarness('   ')).toBeUndefined();
+    expect(updateCustomHarness('  ', { name: 'x' })).toBeUndefined();
+    const updated = updateCustomHarness(`  ${ID}  `, { name: 'Trimmed Name' });
+    expect(updated?.name).toBe('Trimmed Name');
+    expect(deleteCustomHarness('   ')).toBe(false);
+    expect(deleteCustomHarness(`  ${ID}  `)).toBe(true);
+    expect(getCustomHarness(ID)).toBeUndefined();
   });
 });
 

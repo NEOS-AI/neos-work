@@ -53,19 +53,29 @@ export function createSession(params: {
   model?: string;
   thinkingMode?: string;
 }): SessionRow {
+  const workspaceId =
+    typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
+  if (!workspaceId) {
+    throw new Error('workspaceId is required');
+  }
+  const title =
+    params.title !== undefined
+      ? (typeof params.title === 'string' ? params.title.trim() || null : null)
+      : null;
+  const provider =
+    typeof params.provider === 'string' ? params.provider.trim() || 'anthropic' : (params.provider ?? 'anthropic');
+  const model =
+    typeof params.model === 'string' ? params.model.trim() || 'claude-sonnet-4-5-20250929' : (params.model ?? 'claude-sonnet-4-5-20250929');
+  const thinkingMode =
+    typeof params.thinkingMode === 'string'
+      ? params.thinkingMode.trim() || 'none'
+      : (params.thinkingMode ?? 'none');
   const db = getDb();
   const id = nanoid(12);
   db.prepare(
     `INSERT INTO session (id, workspace_id, title, provider, model, thinking_mode)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    params.workspaceId,
-    params.title ?? null,
-    params.provider ?? 'anthropic',
-    params.model ?? 'claude-sonnet-4-5-20250929',
-    params.thinkingMode ?? 'none',
-  );
+  ).run(id, workspaceId, title, provider, model, thinkingMode);
   return getSession(id)!;
 }
 
@@ -78,25 +88,32 @@ export function deleteSession(id: string): boolean {
 }
 
 export function updateSessionTitle(id: string, title: string): void {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return;
   const db = getDb();
+  const name = typeof title === 'string' ? title.trim() : '';
   db.prepare("UPDATE session SET title = ?, updated_at = datetime('now') WHERE id = ?").run(
-    title,
-    id,
+    name || null,
+    trimmed,
   );
 }
 
 export function touchSession(id: string): void {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return;
   const db = getDb();
-  db.prepare("UPDATE session SET updated_at = datetime('now') WHERE id = ?").run(id);
+  db.prepare("UPDATE session SET updated_at = datetime('now') WHERE id = ?").run(trimmed);
 }
 
 // --- Messages ---
 
 export function listMessages(sessionId: string): MessageRow[] {
+  const trimmed = typeof sessionId === 'string' ? sessionId.trim() : '';
+  if (!trimmed) return [];
   const db = getDb();
   return db
     .prepare('SELECT * FROM message WHERE session_id = ? ORDER BY created_at ASC')
-    .all(sessionId) as MessageRow[];
+    .all(trimmed) as MessageRow[];
 }
 
 export function addMessage(params: {
@@ -105,12 +122,17 @@ export function addMessage(params: {
   content: string;
   metadata?: Record<string, unknown>;
 }): MessageRow {
+  const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
+  if (!sessionId) throw new Error('sessionId is required');
+  const role = typeof params.role === 'string' ? params.role.trim() : '';
+  if (!role) throw new Error('role is required');
+  const content = typeof params.content === 'string' ? params.content : '';
   const db = getDb();
   const id = nanoid(12);
   db.prepare(
     `INSERT INTO message (id, session_id, role, content, metadata)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, params.sessionId, params.role, params.content, JSON.stringify(params.metadata ?? null));
+  ).run(id, sessionId, role, content, JSON.stringify(params.metadata ?? null));
   return db.prepare('SELECT * FROM message WHERE id = ?').get(id) as MessageRow;
 }
 
@@ -131,8 +153,10 @@ export function listWorkspaces(): WorkspaceRow[] {
 }
 
 export function getWorkspace(id: string): WorkspaceRow | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  return db.prepare('SELECT * FROM workspace WHERE id = ?').get(id) as WorkspaceRow | undefined;
+  return db.prepare('SELECT * FROM workspace WHERE id = ?').get(trimmed) as WorkspaceRow | undefined;
 }
 
 export function createWorkspace(params: {
@@ -140,11 +164,17 @@ export function createWorkspace(params: {
   path?: string;
   type?: string;
 }): WorkspaceRow {
+  const name = typeof params.name === 'string' ? params.name.trim() : '';
+  if (!name) throw new Error('name is required');
+  const pathVal =
+    typeof params.path === 'string' ? params.path.trim() || null : (params.path ?? null);
+  const type =
+    typeof params.type === 'string' ? params.type.trim() || 'local' : (params.type ?? 'local');
   const db = getDb();
   const id = nanoid(12);
   db.prepare(
     `INSERT INTO workspace (id, name, path, type) VALUES (?, ?, ?, ?)`,
-  ).run(id, params.name, params.path ?? null, params.type ?? 'local');
+  ).run(id, name, pathVal, type);
   return getWorkspace(id)!;
 }
 
@@ -152,18 +182,30 @@ export function updateWorkspace(
   id: string,
   params: { name?: string; path?: string },
 ): WorkspaceRow | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const ws = getWorkspace(id);
+  const ws = getWorkspace(trimmed);
   if (!ws) return undefined;
+  const name =
+    params.name !== undefined
+      ? (typeof params.name === 'string' ? params.name.trim() : '')
+      : ws.name;
+  if (!name) return undefined;
+  const pathVal =
+    params.path !== undefined
+      ? (typeof params.path === 'string' ? params.path.trim() || null : params.path)
+      : ws.path;
   db.prepare(
     `UPDATE workspace SET name = ?, path = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).run(params.name ?? ws.name, params.path ?? ws.path, id);
-  return getWorkspace(id);
+  ).run(name, pathVal, trimmed);
+  return getWorkspace(trimmed);
 }
 
 export function deleteWorkspace(id: string): boolean {
-  if (id === 'default') return false; // Protect the default workspace
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed || trimmed === 'default') return false; // Protect the default workspace
   const db = getDb();
-  const result = db.prepare('DELETE FROM workspace WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM workspace WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }

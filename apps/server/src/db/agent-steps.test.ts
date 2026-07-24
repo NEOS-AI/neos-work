@@ -25,6 +25,15 @@ afterEach(() => {
 });
 
 describe('agent_step CRUD', () => {
+  it('trims ids and rejects blank session lookups', () => {
+    expect(getAgentStep('   ')).toBeUndefined();
+    expect(listAgentSteps('   ')).toEqual([]);
+    expect(updateAgentStep('   ', { status: 'completed' })).toBe(false);
+    expect(() =>
+      createAgentStep({ sessionId: '  ', stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId/i);
+  });
+
   it('creates, lists ordered, updates status/data/error, deletes', () => {
     const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
     sessionId = session.id;

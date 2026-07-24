@@ -26,32 +26,40 @@ export function createAgentStep(params: {
   type: AgentStepType;
   data?: unknown;
 }): AgentStepRow {
+  const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
+  if (!sessionId) throw new Error('sessionId is required');
   const db = getDb();
   const id = crypto.randomUUID();
   const dataStr = params.data !== undefined ? JSON.stringify(params.data) : null;
   db.prepare(
     `INSERT INTO agent_step (id, session_id, step_index, type, status, data)
      VALUES (?, ?, ?, ?, 'pending', ?)`,
-  ).run(id, params.sessionId, params.stepIndex, params.type, dataStr);
+  ).run(id, sessionId, params.stepIndex, params.type, dataStr);
   return getAgentStep(id)!;
 }
 
 export function getAgentStep(id: string): AgentStepRow | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  return db.prepare('SELECT * FROM agent_step WHERE id = ?').get(id) as AgentStepRow | undefined;
+  return db.prepare('SELECT * FROM agent_step WHERE id = ?').get(trimmed) as AgentStepRow | undefined;
 }
 
 export function listAgentSteps(sessionId: string): AgentStepRow[] {
+  const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
+  if (!sid) return [];
   const db = getDb();
   return db
     .prepare('SELECT * FROM agent_step WHERE session_id = ? ORDER BY step_index ASC')
-    .all(sessionId) as AgentStepRow[];
+    .all(sid) as AgentStepRow[];
 }
 
 export function updateAgentStep(
   id: string,
   updates: { status?: AgentStepStatus; data?: unknown; error?: string },
 ): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
   const fields: string[] = ["updated_at = datetime('now')"];
   const values: unknown[] = [];
@@ -69,7 +77,7 @@ export function updateAgentStep(
     values.push(updates.error);
   }
 
-  values.push(id);
+  values.push(trimmed);
   const result = db
     .prepare(`UPDATE agent_step SET ${fields.join(', ')} WHERE id = ?`)
     .run(...values);
@@ -77,6 +85,8 @@ export function updateAgentStep(
 }
 
 export function deleteAgentSteps(sessionId: string): void {
+  const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
+  if (!sid) return;
   const db = getDb();
-  db.prepare('DELETE FROM agent_step WHERE session_id = ?').run(sessionId);
+  db.prepare('DELETE FROM agent_step WHERE session_id = ?').run(sid);
 }

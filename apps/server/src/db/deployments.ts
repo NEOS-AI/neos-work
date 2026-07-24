@@ -60,6 +60,25 @@ function rowToDeployment(row: DeploymentRow): Deployment {
 }
 
 export function createDeployment(input: CreateDeploymentInput): Deployment {
+  const provider = typeof input.provider === 'string' ? input.provider.trim() : '';
+  if (!provider) throw new Error('provider is required');
+  const workflowId =
+    typeof input.workflowId === 'string' ? input.workflowId.trim() || null : (input.workflowId ?? null);
+  const runId =
+    typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
+  const projectName =
+    typeof input.projectName === 'string'
+      ? input.projectName.trim() || null
+      : (input.projectName ?? null);
+  const url = typeof input.url === 'string' ? input.url.trim() || null : (input.url ?? null);
+  const deploymentId =
+    typeof input.deploymentId === 'string'
+      ? input.deploymentId.trim() || null
+      : (input.deploymentId ?? null);
+  const statusMessage =
+    typeof input.statusMessage === 'string'
+      ? input.statusMessage.trim() || null
+      : (input.statusMessage ?? null);
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(`
@@ -68,14 +87,14 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
-    input.workflowId ?? null,
-    input.runId ?? null,
-    input.provider,
-    input.projectName ?? null,
-    input.url ?? null,
-    input.deploymentId ?? null,
+    workflowId,
+    runId,
+    provider,
+    projectName,
+    url,
+    deploymentId,
     input.status,
-    input.statusMessage ?? null,
+    statusMessage,
   );
   return getDeployment(id)!;
 }

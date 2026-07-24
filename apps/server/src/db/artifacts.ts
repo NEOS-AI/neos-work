@@ -56,12 +56,24 @@ function rowToArtifact(row: ArtifactRow): Artifact {
 }
 
 export function createArtifact(input: CreateArtifactInput): Artifact {
+  const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const contentType = typeof input.contentType === 'string' ? input.contentType.trim() : '';
+  if (!workflowId || !name || !contentType) {
+    throw new Error('workflowId, name, and contentType are required');
+  }
+  const runId =
+    typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
+  const nodeId =
+    typeof input.nodeId === 'string' ? input.nodeId.trim() || null : (input.nodeId ?? null);
+  const filePath =
+    typeof input.filePath === 'string' ? input.filePath.trim() || null : (input.filePath ?? null);
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(`
     INSERT INTO artifacts (id, workflow_id, run_id, name, content_type, content, file_path, node_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, input.workflowId, input.runId ?? null, input.name, input.contentType, input.content ?? null, input.filePath ?? null, input.nodeId ?? null);
+  `).run(id, workflowId, runId, name, contentType, input.content ?? null, filePath, nodeId);
   return getArtifact(id)!;
 }
 
@@ -115,7 +127,11 @@ export function updateArtifact(
   const existing = getArtifact(trimmed);
   if (!existing) return undefined;
   const db = getDb();
-  const name = input.name !== undefined ? input.name : existing.name;
+  const name =
+    input.name !== undefined
+      ? (typeof input.name === 'string' ? input.name.trim() : '')
+      : existing.name;
+  if (!name) return undefined;
   const content = input.content !== undefined ? input.content : (existing.content ?? null);
   db.prepare(
     `UPDATE artifacts SET name = ?, content = ?, updated_at = datetime('now') WHERE id = ?`,

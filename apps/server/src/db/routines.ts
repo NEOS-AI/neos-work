@@ -99,18 +99,25 @@ export function createRoutine(input: {
   enabled?: boolean;
   inputs?: Record<string, unknown>;
 }): Routine {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
+  const schedule = typeof input.schedule === 'string' ? input.schedule.trim() : '';
+  if (!name || !workflowId || !schedule) {
+    throw new Error('name, workflowId, and schedule are required');
+  }
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const timezone = input.timezone?.trim() || 'UTC';
+  const timezone =
+    typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : (input.timezone || 'UTC');
   db.prepare(`
     INSERT INTO routine (id, name, workflow_id, schedule, timezone, enabled, inputs_json, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
-    input.name,
-    input.workflowId,
-    input.schedule,
+    name,
+    workflowId,
+    schedule,
     timezone,
     input.enabled !== false ? 1 : 0,
     JSON.stringify(input.inputs ?? {}),
@@ -130,15 +137,30 @@ export function updateRoutine(
   const existing = getRoutine(trimmed);
   if (!existing) return null;
 
+  const name =
+    input.name !== undefined
+      ? (typeof input.name === 'string' ? input.name.trim() : '')
+      : existing.name;
+  if (!name) return null;
+  const schedule =
+    input.schedule !== undefined
+      ? (typeof input.schedule === 'string' ? input.schedule.trim() : '')
+      : existing.schedule;
+  if (!schedule) return null;
+  const timezone =
+    input.timezone !== undefined
+      ? (typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : 'UTC')
+      : existing.timezone;
+
   const now = new Date().toISOString();
   db.prepare(`
     UPDATE routine
     SET name = ?, schedule = ?, timezone = ?, enabled = ?, inputs_json = ?, updated_at = ?
     WHERE id = ?
   `).run(
-    input.name ?? existing.name,
-    input.schedule ?? existing.schedule,
-    input.timezone ?? existing.timezone,
+    name,
+    schedule,
+    timezone,
     input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
     JSON.stringify(input.inputs ?? existing.inputs),
     now,
@@ -156,39 +178,48 @@ export function deleteRoutine(id: string): boolean {
 }
 
 export function setLastRunAt(id: string): void {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return;
   const db = getDb();
-  db.prepare("UPDATE routine SET last_run_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(id);
+  db.prepare("UPDATE routine SET last_run_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(trimmed);
 }
 
 // Routine run records
 export function createRoutineRun(input: { routineId: string; runId?: string }): RoutineRun {
+  const routineId = typeof input.routineId === 'string' ? input.routineId.trim() : '';
+  if (!routineId) throw new Error('routineId is required');
+  const runId =
+    typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO routine_run (id, routine_id, run_id, status, started_at)
     VALUES (?, ?, ?, 'running', ?)
-  `).run(id, input.routineId, input.runId ?? null, now);
+  `).run(id, routineId, runId, now);
   const row = db.prepare('SELECT * FROM routine_run WHERE id = ?').get(id) as RoutineRunRow;
   return rowToRun(row);
 }
 
 export function completeRoutineRun(id: string, status: 'completed' | 'failed', error?: string): void {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return;
   const db = getDb();
   db.prepare(`
     UPDATE routine_run
     SET status = ?, completed_at = datetime('now'), error = ?
     WHERE id = ?
-  `).run(status, error ?? null, id);
+  `).run(status, error ?? null, trimmed);
 }
 
 export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {
   const rid = typeof routineId === 'string' ? routineId.trim() : '';
   if (!rid) return [];
+  const capped = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const db = getDb();
   const rows = db.prepare(
     'SELECT * FROM routine_run WHERE routine_id = ? ORDER BY started_at DESC LIMIT ?',
-  ).all(rid, limit) as RoutineRunRow[];
+  ).all(rid, capped) as RoutineRunRow[];
   return rows.map(rowToRun);
 }
 

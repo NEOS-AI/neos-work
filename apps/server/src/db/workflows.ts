@@ -208,10 +208,12 @@ export function getRun(runId: string): WorkflowRun | undefined {
 export function listRuns(workflowId: string, limit = 20, offset = 0): WorkflowRun[] {
   const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
   if (!trimmed) return [];
+  const cappedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const cappedOffset = Math.max(Number(offset) || 0, 0);
   const db = getDb();
   const rows = db
     .prepare('SELECT * FROM workflow_run WHERE workflow_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?')
-    .all(trimmed, limit, offset) as WorkflowRunRow[];
+    .all(trimmed, cappedLimit, cappedOffset) as WorkflowRunRow[];
   return rows.map(rowToRun);
 }
 
@@ -228,35 +230,43 @@ export function deleteRun(runId: string): boolean {
  * Returns number of deleted rows.
  */
 export function deleteRuns(workflowId: string, status?: string): number {
+  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!trimmed) return 0;
+  const statusFilter =
+    typeof status === 'string' ? status.trim() || undefined : status;
   const db = getDb();
-  if (status) {
+  if (statusFilter) {
     const result = db
       .prepare('DELETE FROM workflow_run WHERE workflow_id = ? AND status = ?')
-      .run(workflowId, status);
+      .run(trimmed, statusFilter);
     return result.changes;
   }
-  const result = db.prepare('DELETE FROM workflow_run WHERE workflow_id = ?').run(workflowId);
+  const result = db.prepare('DELETE FROM workflow_run WHERE workflow_id = ?').run(trimmed);
   return result.changes;
 }
 
 // ── Webhook ────────────────────────────────────────────────
 
 export function getOrCreateWebhookSecret(workflowId: string): string {
+  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!trimmed) throw new Error('Workflow not found');
   const db = getDb();
-  const row = db.prepare('SELECT webhook_secret FROM workflow WHERE id = ?').get(workflowId) as { webhook_secret: string | null } | undefined;
+  const row = db.prepare('SELECT webhook_secret FROM workflow WHERE id = ?').get(trimmed) as { webhook_secret: string | null } | undefined;
   if (!row) throw new Error('Workflow not found');
 
   if (row.webhook_secret) return row.webhook_secret;
 
   const secret = randomBytes(32).toString('hex');
-  db.prepare("UPDATE workflow SET webhook_secret = ?, updated_at = datetime('now') WHERE id = ?").run(secret, workflowId);
+  db.prepare("UPDATE workflow SET webhook_secret = ?, updated_at = datetime('now') WHERE id = ?").run(secret, trimmed);
   return secret;
 }
 
 export function regenerateWebhookSecret(workflowId: string): string {
+  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!trimmed) throw new Error('Workflow not found');
   const db = getDb();
   const secret = randomBytes(32).toString('hex');
-  const result = db.prepare("UPDATE workflow SET webhook_secret = ?, updated_at = datetime('now') WHERE id = ?").run(secret, workflowId);
+  const result = db.prepare("UPDATE workflow SET webhook_secret = ?, updated_at = datetime('now') WHERE id = ?").run(secret, trimmed);
   if (result.changes === 0) throw new Error('Workflow not found');
   return secret;
 }

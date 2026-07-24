@@ -89,6 +89,10 @@ export function createRevision(
   snapshot: string,
   label?: string,
 ): WorkflowRevision | null {
+  const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!wfId || typeof snapshot !== 'string') return null;
+  const labelVal =
+    typeof label === 'string' ? label.trim() || null : (label ?? null);
   const db = getDb();
 
   // Skip identical consecutive snapshots
@@ -96,7 +100,7 @@ export function createRevision(
     .prepare(
       'SELECT id, workflow_id, snapshot, label, created_at FROM workflow_revisions WHERE workflow_id = ? ORDER BY created_at DESC LIMIT 1',
     )
-    .get(workflowId) as RevisionRow | undefined;
+    .get(wfId) as RevisionRow | undefined;
   if (latest && latest.snapshot === snapshot) {
     return null;
   }
@@ -105,14 +109,14 @@ export function createRevision(
 
   db.prepare(
     'INSERT INTO workflow_revisions (id, workflow_id, snapshot, label) VALUES (?, ?, ?, ?)',
-  ).run(id, workflowId, snapshot, label ?? null);
+  ).run(id, wfId, snapshot, labelVal);
 
   // GC: keep only the latest MAX_REVISIONS revisions
   const toDelete = db
     .prepare(
       `SELECT id FROM workflow_revisions WHERE workflow_id = ? ORDER BY created_at DESC LIMIT -1 OFFSET ${MAX_REVISIONS}`,
     )
-    .all(workflowId) as Array<{ id: string }>;
+    .all(wfId) as Array<{ id: string }>;
 
   for (const old of toDelete) {
     db.prepare('DELETE FROM workflow_revisions WHERE id = ?').run(old.id);
@@ -124,8 +128,10 @@ export function createRevision(
 export function updateRevisionLabel(revisionId: string, label: string): boolean {
   const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
   if (!trimmed) return false;
+  const labelVal = typeof label === 'string' ? label.trim() : '';
+  if (!labelVal) return false;
   const db = getDb();
-  const result = db.prepare('UPDATE workflow_revisions SET label = ? WHERE id = ?').run(label, trimmed);
+  const result = db.prepare('UPDATE workflow_revisions SET label = ? WHERE id = ?').run(labelVal, trimmed);
   return result.changes > 0;
 }
 

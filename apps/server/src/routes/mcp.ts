@@ -66,7 +66,9 @@ function listMcpServers(): McpServerRow[] {
 }
 
 function getMcpServer(id: string): McpServerRow | undefined {
-  return getDb().prepare('SELECT * FROM mcp_server WHERE id = ?').get(id) as McpServerRow | undefined;
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
+  return getDb().prepare('SELECT * FROM mcp_server WHERE id = ?').get(trimmed) as McpServerRow | undefined;
 }
 
 function createMcpServer(params: {
@@ -87,14 +89,18 @@ function createMcpServer(params: {
 }
 
 function toggleMcpServer(id: string, enabled: boolean): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const result = getDb()
     .prepare('UPDATE mcp_server SET enabled = ? WHERE id = ?')
-    .run(enabled ? 1 : 0, id);
+    .run(enabled ? 1 : 0, trimmed);
   return result.changes > 0;
 }
 
 function deleteMcpServer(id: string): boolean {
-  const result = getDb().prepare('DELETE FROM mcp_server WHERE id = ?').run(id);
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
+  const result = getDb().prepare('DELETE FROM mcp_server WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 

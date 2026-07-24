@@ -18,13 +18,21 @@ afterEach(() => {
 describe('deployments CRUD', () => {
   it('creates, lists, updates status, deletes', () => {
     const row = createDeployment({
-      provider: 'vercel',
-      projectName: `${MARKER}-proj`,
+      provider: '  vercel  ',
+      projectName: `  ${MARKER}-proj  `,
       status: 'deploying',
-      deploymentId: 'dpl_test',
+      deploymentId: '  dpl_test  ',
+      workflowId: '  wf-trim  ',
     });
     expect(row.id).toBeTruthy();
     expect(row.status).toBe('deploying');
+    expect(row.provider).toBe('vercel');
+    expect(row.projectName).toBe(`${MARKER}-proj`);
+    expect(row.deploymentId).toBe('dpl_test');
+    expect(row.workflowId).toBe('wf-trim');
+    expect(getDeployment(`  ${row.id}  `)?.id).toBe(row.id);
+    expect(getDeployment('   ')).toBeUndefined();
+    expect(listDeployments({ workflowId: '  wf-trim  ' }).some((d) => d.id === row.id)).toBe(true);
 
     const listed = listDeployments({ limit: 50 });
     expect(listed.some((d) => d.id === row.id)).toBe(true);
@@ -85,5 +93,28 @@ describe('deployments CRUD', () => {
     expect(failed?.status).toBe('failed');
     expect(failed?.statusMessage).toBe('timeout');
     expect(deleteDeployment('no-such-id')).toBe(false);
+  });
+
+  it('trims ids/workflowId and clamps list limit; blank id is not-found', () => {
+    const wfId = crypto.randomUUID();
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-trim`,
+      status: 'success',
+      workflowId: wfId,
+    });
+
+    expect(getDeployment(`  ${row.id}  `)?.id).toBe(row.id);
+    expect(getDeployment('   ')).toBeUndefined();
+    expect(updateDeployment('  ', { status: 'failed' })).toBeUndefined();
+    expect(deleteDeployment('   ')).toBe(false);
+
+    const filtered = listDeployments({ workflowId: `  ${wfId}  `, limit: 10 });
+    expect(filtered.some((d) => d.id === row.id)).toBe(true);
+    expect(listDeployments({ workflowId: '   ' }).length).toBeGreaterThanOrEqual(1);
+
+    // clamp: 0/NaN → 100 default path via Number||100; huge → 500 max
+    expect(listDeployments({ limit: 0 }).length).toBeLessThanOrEqual(500);
+    expect(listDeployments({ limit: 9999 }).length).toBeLessThanOrEqual(500);
   });
 });
