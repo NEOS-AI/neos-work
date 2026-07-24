@@ -61,6 +61,17 @@ describe('harness registry', () => {
     expect(reg?.allowedTools).toEqual(['read', 'write']);
     expect(resolveHarness('  pad-register-id  ')?.id).toBe('pad-register-id');
     expect(listHarnesses('  GENERAL  ').some((h) => h.id === 'pad-register-id')).toBe(true);
+
+    // blank systemPrompt after trim is a no-op
+    registerHarness({
+      id: 'blank-prompt-harness',
+      name: 'No Prompt',
+      domain: 'general',
+      description: '',
+      systemPrompt: '   ',
+      allowedTools: ['read'],
+    });
+    expect(resolveHarness('blank-prompt-harness')).toBeUndefined();
   });
 
   it('registers custom harnesses', () => {

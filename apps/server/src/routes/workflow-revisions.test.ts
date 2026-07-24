@@ -88,6 +88,50 @@ describe('workflow-revisions routes', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('restore rejects invalid snapshot JSON and missing nodes/edges', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [{ id: 't', type: 'trigger', label: 'Start', config: {} }],
+      edges: [],
+    });
+
+    const badJson = revDb.createRevision(wf.id, '{not-json', 'bad-json');
+    const badJsonRes = await workflowRevisions.request(`/${wf.id}/${badJson.id}/restore`, {
+      method: 'POST',
+    });
+    expect(badJsonRes.status).toBe(400);
+    expect(((await badJsonRes.json()) as { error: string }).error).toMatch(/Invalid snapshot/i);
+
+    const missingGraph = revDb.createRevision(
+      wf.id,
+      JSON.stringify({ name: 'no-graph' }),
+      'no-nodes',
+    );
+    const missingRes = await workflowRevisions.request(`/${wf.id}/${missingGraph.id}/restore`, {
+      method: 'POST',
+    });
+    expect(missingRes.status).toBe(400);
+    expect(((await missingRes.json()) as { error: string }).error).toMatch(/nodes\/edges|missing/i);
+
+    // mismatch workflowId on revision → 404
+    const other = workflows.createWorkflow({
+      name: `${WF_NAME}-other`,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const rev = revDb.createRevision(
+      other.id,
+      JSON.stringify({ nodes: [], edges: [] }),
+      'wrong-wf',
+    );
+    const mismatch = await workflowRevisions.request(`/${wf.id}/${rev.id}/restore`, {
+      method: 'POST',
+    });
+    expect(mismatch.status).toBe(404);
+  });
+
   it('returns 404 for blank ids and 400 for invalid patch JSON', async () => {
     const blankList = await workflowRevisions.request('/%20');
     expect(blankList.status).toBe(404);

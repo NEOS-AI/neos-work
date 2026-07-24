@@ -55,6 +55,60 @@ describe('artifacts routes', () => {
     expect(body.error).toMatch(/Invalid JSON/i);
   });
 
+  it('404s blank path ids and rejects non-string content on PATCH', async () => {
+    const blankGet = await artifacts.request('/%20');
+    expect(blankGet.status).toBe(404);
+    const blankDel = await artifacts.request('/%20', { method: 'DELETE' });
+    expect(blankDel.status).toBe(404);
+    const blankPreview = await artifacts.request('/%20/preview');
+    expect(blankPreview.status).toBe(404);
+
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const create = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'patch-me.html',
+        contentType: 'text/html',
+        content: '<html>x</html>',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string } };
+
+    const nonString = await artifacts.request(`/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 123 }),
+    });
+    expect(nonString.status).toBe(400);
+    expect(((await nonString.json()) as { error: string }).error).toMatch(/content must be a string/i);
+
+    const emptyPatch = await artifacts.request(`/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(emptyPatch.status).toBe(400);
+    expect(((await emptyPatch.json()) as { error: string }).error).toMatch(/name and\/or content/i);
+
+    const putMissing = await artifacts.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(putMissing.status).toBe(400);
+    expect(((await putMissing.json()) as { error: string }).error).toMatch(/content string required/i);
+
+    await artifacts.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('CRUD, preview, patch, refresh reload/rerun', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

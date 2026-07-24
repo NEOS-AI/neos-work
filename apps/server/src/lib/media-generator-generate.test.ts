@@ -69,6 +69,12 @@ describe('generateImage', () => {
     await expect(generateImage({ prompt: 'x', apiKey: '   ' })).rejects.toThrow(/apiKey/i);
   });
 
+  it('rejects image prompts over 4000 characters', async () => {
+    await expect(
+      generateImage({ prompt: 'p'.repeat(4001), apiKey: 'sk' }),
+    ).rejects.toThrow(/prompt too long/i);
+  });
+
   it('clamps invalid size/quality and rejects blank prompt', async () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png' }],
@@ -117,6 +123,12 @@ describe('generateAudio', () => {
     const st = await fs.stat(result.filePath);
     expect(st.size).toBe(2);
     expect(path.basename(result.filePath)).toMatch(/^audio_.*\.mp3$/);
+  });
+
+  it('rejects audio text over 4096 characters', async () => {
+    await expect(
+      generateAudio({ text: 't'.repeat(4097), apiKey: 'sk' }),
+    ).rejects.toThrow(/text too long/i);
   });
 
   it('clamps invalid voice/model and rejects blank text', async () => {

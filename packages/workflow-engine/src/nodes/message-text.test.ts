@@ -37,6 +37,7 @@ describe('resolveMessageText', () => {
   it('falls back to content then text config keys', () => {
     expect(resolveMessageText({ content: 'from content' }, {})).toBe('from content');
     expect(resolveMessageText({ text: 'from text' }, {})).toBe('from text');
+    expect(resolveMessageText({ content: '  padded content  ' }, {})).toBe('padded content');
   });
 
   it('treats whitespace-only templates as missing and tries next config key', () => {

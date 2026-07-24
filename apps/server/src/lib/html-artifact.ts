@@ -37,9 +37,10 @@ export function createFirstHtmlArtifact(options: {
   const runId = typeof options.runId === 'string' ? options.runId.trim() : '';
   if (!workflowId || !runId) return undefined;
 
-  for (const [nodeId, result] of Object.entries(options.nodeResults)) {
+  for (const [nodeId, result] of Object.entries(options.nodeResults ?? {})) {
     const r = result as { output?: unknown; status?: string };
-    if (r.status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
+    const status = typeof r.status === 'string' ? r.status.trim().toLowerCase() : '';
+    if (status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
     const nid = typeof nodeId === 'string' ? nodeId.trim() : String(nodeId);
     if (!nid) continue;
     const artifact = options.create({

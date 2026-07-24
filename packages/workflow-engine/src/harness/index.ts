@@ -23,13 +23,9 @@ export function resolveHarness(id: string): AgentHarness | undefined {
 }
 
 export function listHarnesses(domain?: string): AgentHarness[] {
-  const domainRaw = typeof domain === 'string' ? domain.trim().toLowerCase() || undefined : undefined;
+  // Trim + lower-case filter; blank → list all (including custom domains)
   const domainFilter =
-    domainRaw && (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
-      ? domainRaw
-      : domainRaw
-        ? domainRaw // keep unknown filters as exact match after lower-case
-        : undefined;
+    typeof domain === 'string' ? domain.trim().toLowerCase() || undefined : undefined;
   const all = [...registry.values()];
   return domainFilter ? all.filter((h) => h.domain === domainFilter) : all;
 }
@@ -47,7 +43,9 @@ export function registerHarness(harness: AgentHarness): void {
   const description =
     typeof harness.description === 'string' ? harness.description.trim() : harness.description;
   const systemPrompt =
-    typeof harness.systemPrompt === 'string' ? harness.systemPrompt.trim() : harness.systemPrompt;
+    typeof harness.systemPrompt === 'string' ? harness.systemPrompt.trim() : '';
+  // Blank system prompts are not useful for agent runs (align with harness routes)
+  if (!systemPrompt) return;
   const allowedTools = Array.isArray(harness.allowedTools)
     ? harness.allowedTools.map((t) => String(t).trim()).filter(Boolean)
     : [];

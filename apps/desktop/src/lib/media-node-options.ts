@@ -12,7 +12,8 @@ export type MediaImageQuality = (typeof MEDIA_IMAGE_QUALITIES)[number];
 
 export function isMediaImageSize(value: unknown): value is MediaImageSize {
   if (typeof value !== 'string') return false;
-  const v = value.trim();
+  // Normalize case so "1024X1024" matches panel/server allow-lists
+  const v = value.trim().toLowerCase();
   return (MEDIA_IMAGE_SIZES as readonly string[]).includes(v);
 }
 

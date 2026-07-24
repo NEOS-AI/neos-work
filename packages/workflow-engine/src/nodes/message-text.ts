@@ -15,7 +15,10 @@ function pickConfigMessage(config: Record<string, unknown> | undefined): string 
   if (!config) return '';
   for (const key of MESSAGE_CONFIG_KEYS) {
     const v = config[key];
-    if (typeof v === 'string' && v.trim().length > 0) return v;
+    if (typeof v === 'string') {
+      const trimmed = v.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
   }
   return '';
 }

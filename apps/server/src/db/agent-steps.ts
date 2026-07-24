@@ -20,6 +20,9 @@ export interface AgentStepRow {
   updated_at: string;
 }
 
+const STEP_TYPES = new Set<AgentStepType>(['plan', 'tool_use', 'tool_result', 'reasoning', 'error']);
+const STEP_STATUSES = new Set<AgentStepStatus>(['pending', 'running', 'completed', 'error']);
+
 export function createAgentStep(params: {
   sessionId: string;
   stepIndex: number;
@@ -28,13 +31,21 @@ export function createAgentStep(params: {
 }): AgentStepRow {
   const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
   if (!sessionId) throw new Error('sessionId is required');
+  const typeRaw = typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
+  if (!STEP_TYPES.has(typeRaw as AgentStepType)) {
+    throw new Error('type must be plan|tool_use|tool_result|reasoning|error');
+  }
+  const stepIndex = Number(params.stepIndex);
+  if (!Number.isFinite(stepIndex) || stepIndex < 0) {
+    throw new Error('stepIndex must be a non-negative number');
+  }
   const db = getDb();
   const id = crypto.randomUUID();
   const dataStr = params.data !== undefined ? JSON.stringify(params.data) : null;
   db.prepare(
     `INSERT INTO agent_step (id, session_id, step_index, type, status, data)
      VALUES (?, ?, ?, ?, 'pending', ?)`,
-  ).run(id, sessionId, params.stepIndex, params.type, dataStr);
+  ).run(id, sessionId, Math.floor(stepIndex), typeRaw, dataStr);
   return getAgentStep(id)!;
 }
 
@@ -65,8 +76,9 @@ export function updateAgentStep(
   const values: unknown[] = [];
 
   if (updates.status !== undefined) {
-    const status = typeof updates.status === 'string' ? updates.status.trim() : '';
-    if (!status) return false;
+    const status =
+      typeof updates.status === 'string' ? updates.status.trim().toLowerCase() : '';
+    if (!status || !STEP_STATUSES.has(status as AgentStepStatus)) return false;
     fields.push('status = ?');
     values.push(status);
   }

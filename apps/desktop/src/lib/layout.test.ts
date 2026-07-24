@@ -50,10 +50,21 @@ describe('autoLayout', () => {
       { id: 'e1', source: 'a', target: 'b' },
       { id: 'e-missing', source: 'a', target: 'ghost' },
       { id: 'e-blank', source: '', target: 'b' },
+      { id: 'e-ws', source: '  ', target: 'b' },
     ];
     const laid = autoLayout(nodes, edges, 'ZZ' as 'TB');
     expect(laid).toHaveLength(2);
     const byId = Object.fromEntries(laid.map((node) => [node.id, node]));
+    expect(byId.a!.position.y).toBeLessThan(byId.b!.position.y);
+  });
+
+  it('skips nodes with blank/whitespace ids', () => {
+    const nodes = [n('a'), { id: '  ', position: { x: 0, y: 0 }, data: {}, type: 'default' as const }, n('b')];
+    const edges: Edge[] = [{ id: 'e1', source: 'a', target: 'b' }];
+    const laid = autoLayout(nodes, edges, 'TB');
+    // blank id node still returned in output array but without layout pos (no crash)
+    expect(laid).toHaveLength(3);
+    const byId = Object.fromEntries(laid.filter((x) => x.id.trim()).map((node) => [node.id, node]));
     expect(byId.a!.position.y).toBeLessThan(byId.b!.position.y);
   });
 });

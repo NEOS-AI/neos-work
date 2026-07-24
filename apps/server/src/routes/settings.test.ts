@@ -90,6 +90,14 @@ describe('settings routes', () => {
     });
     expect(blank.status).toBe(400);
 
+    const missingProv = await settings.request('/verify-key', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'sk-test' }),
+    });
+    expect(missingProv.status).toBe(400);
+    expect(((await missingProv.json()) as { error: string }).error).toMatch(/Missing provider or key/i);
+
     const unknown = await settings.request('/verify-key', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -98,5 +106,75 @@ describe('settings routes', () => {
     expect(unknown.status).toBe(400);
     const body = await unknown.json() as { error: string };
     expect(body.error).toMatch(/Unknown provider/i);
+  });
+
+  it('GET / lists settings with sensitive keys masked', async () => {
+    await settings.request(`/${KEY}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'plain-value' }),
+    });
+    await settings.request(`/${SENSITIVE}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'sk-ant-super-secret-key' }),
+    });
+
+    const res = await settings.request('/');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; data: Record<string, string> };
+    expect(body.ok).toBe(true);
+    expect(body.data[KEY]).toBe('plain-value');
+    expect(body.data[SENSITIVE]).toBeDefined();
+    expect(body.data[SENSITIVE]).not.toBe('sk-ant-super-secret-key');
+    expect(body.data[SENSITIVE]).toMatch(/\.\.\.|^\*{4}/);
+  });
+
+  it('PUT rejects missing value and oversized payload; DELETE missing is 404', async () => {
+    const missingValue = await settings.request(`/${KEY}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(missingValue.status).toBe(400);
+    expect(((await missingValue.json()) as { error: string }).error).toMatch(/value/i);
+
+    const nonString = await settings.request(`/${KEY}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 123 }),
+    });
+    expect(nonString.status).toBe(400);
+    expect(((await nonString.json()) as { error: string }).error).toMatch(/too large|invalid type/i);
+
+    // 1MB + 1 exceeds limit
+    const tooBig = await settings.request(`/${KEY}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'x'.repeat(1_000_001) }),
+    });
+    expect(tooBig.status).toBe(400);
+    expect(((await tooBig.json()) as { error: string }).error).toMatch(/too large/i);
+
+    const blankKey = await settings.request('/%20', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'x' }),
+    });
+    expect(blankKey.status).toBe(400);
+
+    const delMissing = await settings.request('/no.such.setting.key.xyz', { method: 'DELETE' });
+    expect(delMissing.status).toBe(404);
+
+    // short sensitive values mask as ****
+    await settings.request(`/${SENSITIVE}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'short' }),
+    });
+    const getShort = await settings.request(`/${SENSITIVE}`);
+    expect(getShort.status).toBe(200);
+    const shortBody = await getShort.json() as { data: { value: string } };
+    expect(shortBody.data.value).toBe('****');
   });
 });

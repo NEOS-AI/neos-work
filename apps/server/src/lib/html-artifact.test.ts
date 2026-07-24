@@ -49,6 +49,18 @@ describe('createFirstHtmlArtifact', () => {
     expect(id).toBeUndefined();
   });
 
+  it('treats padded COMPLETED status as completed', () => {
+    const id = createFirstHtmlArtifact({
+      workflowId: 'wf',
+      runId: 'run',
+      nodeResults: {
+        a: { status: '  COMPLETED  ', output: '<div>ok</div>' },
+      },
+      create: () => ({ id: 'art-a' }),
+    });
+    expect(id).toBe('art-a');
+  });
+
   it('returns undefined when workflowId/runId blank after trim', () => {
     const id = createFirstHtmlArtifact({
       workflowId: '  ',

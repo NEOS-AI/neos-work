@@ -34,6 +34,27 @@ describe('agent_step CRUD', () => {
     ).toThrow(/sessionId/i);
   });
 
+  it('rejects invalid type/stepIndex and normalizes type case', () => {
+    const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
+    sessionId = session.id;
+    expect(() =>
+      createAgentStep({ sessionId: session.id, stepIndex: 0, type: 'nope' as never }),
+    ).toThrow(/type must be/i);
+    expect(() =>
+      createAgentStep({ sessionId: session.id, stepIndex: -1, type: 'plan' }),
+    ).toThrow(/stepIndex/i);
+    const s = createAgentStep({
+      sessionId: `  ${session.id}  `,
+      stepIndex: 2.9,
+      type: '  PLAN  ' as never,
+    });
+    expect(s.type).toBe('plan');
+    expect(s.step_index).toBe(2);
+    expect(updateAgentStep(s.id, { status: '  COMPLETED  ' as never })).toBe(true);
+    expect(getAgentStep(s.id)?.status).toBe('completed');
+    expect(updateAgentStep(s.id, { status: 'pendingish' as never })).toBe(false);
+  });
+
   it('creates, lists ordered, updates status/data/error, deletes', () => {
     const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
     sessionId = session.id;

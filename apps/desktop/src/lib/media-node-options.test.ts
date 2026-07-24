@@ -29,6 +29,7 @@ describe('media-node-options', () => {
     }
     expect(isMediaImageSize('512x512')).toBe(false);
     expect(isMediaImageSize('  1024x1024  ')).toBe(true);
+    expect(isMediaImageSize('1024X1024')).toBe(true);
     expect(isMediaImageSize(1024)).toBe(false);
     expect(isMediaImageSize(null)).toBe(false);
     expect(isMediaImageSize(undefined)).toBe(false);

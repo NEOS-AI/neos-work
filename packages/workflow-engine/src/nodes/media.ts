@@ -54,7 +54,8 @@ export const MediaNode: ExecutableNode = {
         };
       }
 
-      const rawSize = typeof config?.size === 'string' ? config.size.trim() : '1024x1024';
+      const rawSize =
+        typeof config?.size === 'string' ? config.size.trim().toLowerCase() : '1024x1024';
       const size = IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024';
       const rawQuality =
         typeof config?.quality === 'string' ? config.quality.trim().toLowerCase() : 'standard';

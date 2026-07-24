@@ -52,27 +52,33 @@ describe('block registry', () => {
 
   it('registerBlockMeta and id/domain trim hygiene', () => {
     const meta: WorkflowBlock = {
-      id: 'prompt_meta_only',
-      name: 'Prompt Only',
-      domain: 'general',
-      category: 'test',
-      description: 'meta without native executor',
+      id: '  prompt_meta_only  ',
+      name: '  Prompt Only  ',
+      domain: '  GENERAL  ' as never,
+      category: '  test  ',
+      description: '  meta without native executor  ',
       isBuiltIn: true,
       implementationType: 'prompt',
       paramDefs: [],
       inputDescription: '',
       outputDescription: '',
-      promptTemplate: 'Hello',
+      promptTemplate: '  Hello  ',
     };
     registerBlockMeta(meta);
 
-    expect(resolveBlock('  prompt_meta_only  ')?.name).toBe('Prompt Only');
+    const got = resolveBlock('  prompt_meta_only  ');
+    expect(got?.id).toBe('prompt_meta_only');
+    expect(got?.name).toBe('Prompt Only');
+    expect(got?.domain).toBe('general');
+    expect(got?.category).toBe('test');
+    expect(got?.description).toBe('meta without native executor');
+    expect(got?.promptTemplate).toBe('Hello');
     expect(resolveBlock('   ')).toBeUndefined();
     expect(getNativeExecutor('  test_block_coverage  ')).toBeDefined();
     expect(getNativeExecutor('   ')).toBeUndefined();
 
-    // domain filter trims; blank domain → all blocks
-    expect(listBlocks('  general  ').some((b) => b.id === 'prompt_meta_only')).toBe(true);
+    // domain filter trims + lower-cases; blank domain → all blocks
+    expect(listBlocks('  GENERAL  ').some((b) => b.id === 'prompt_meta_only')).toBe(true);
     const all = listBlocks('   ');
     expect(all.some((b) => b.id === 'prompt_meta_only')).toBe(true);
     expect(all.length).toBeGreaterThanOrEqual(listBlocks('general').length);

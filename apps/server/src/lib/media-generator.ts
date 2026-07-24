@@ -89,20 +89,28 @@ export const IMAGE_QUALITIES = new Set(['standard', 'hd']);
 export const TTS_VOICES = new Set(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
 export const TTS_MODELS = new Set(['tts-1', 'tts-1-hd']);
 
+const IMAGE_PROMPT_MAX = 4000;
+const AUDIO_TEXT_MAX = 4096;
+
 export async function generateImage(options: {
   prompt: string;
   size?: '1024x1024' | '1792x1024' | '1024x1792';
   quality?: 'standard' | 'hd';
   apiKey: string;
 }): Promise<GenerateImageResult> {
-  const prompt = options.prompt.trim();
+  const prompt = typeof options.prompt === 'string' ? options.prompt.trim() : '';
   if (!prompt) throw new Error('prompt is required');
-  const rawSize = options.size ?? '1024x1024';
+  if (prompt.length > IMAGE_PROMPT_MAX) {
+    throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
+  }
+  const rawSize =
+    typeof options.size === 'string' ? options.size.trim() : '1024x1024';
   const size = (IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024') as
     '1024x1024' | '1792x1024' | '1024x1792';
-  const rawQuality = options.quality ?? 'standard';
+  const rawQuality =
+    typeof options.quality === 'string' ? options.quality.trim().toLowerCase() : 'standard';
   const quality = (IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard') as 'standard' | 'hd';
-  const apiKey = options.apiKey.trim();
+  const apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
   if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
 
@@ -140,14 +148,19 @@ export async function generateAudio(options: {
   model?: 'tts-1' | 'tts-1-hd';
   apiKey: string;
 }): Promise<GenerateAudioResult> {
-  const text = options.text.trim();
+  const text = typeof options.text === 'string' ? options.text.trim() : '';
   if (!text) throw new Error('text is required');
-  const rawVoice = options.voice ?? 'alloy';
+  if (text.length > AUDIO_TEXT_MAX) {
+    throw new Error(`text too long (max ${AUDIO_TEXT_MAX})`);
+  }
+  const rawVoice =
+    typeof options.voice === 'string' ? options.voice.trim().toLowerCase() : 'alloy';
   const voice = (TTS_VOICES.has(rawVoice) ? rawVoice : 'alloy') as
     'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
-  const rawModel = options.model ?? 'tts-1';
+  const rawModel =
+    typeof options.model === 'string' ? options.model.trim().toLowerCase() : 'tts-1';
   const model = (TTS_MODELS.has(rawModel) ? rawModel : 'tts-1') as 'tts-1' | 'tts-1-hd';
-  const apiKey = options.apiKey.trim();
+  const apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
   if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
 

@@ -12,13 +12,37 @@ const metaRegistry = new Map<string, WorkflowBlock>();
  * Register a native block executor. Optionally pass metadata for the block.
  * Called with a single executor object (blockId + execute) or with both meta + executor.
  */
+function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
+  const d = typeof raw === 'string' ? raw.trim().toLowerCase() || 'general' : 'general';
+  return (['finance', 'coding', 'general'] as const).includes(d as never)
+    ? (d as WorkflowBlock['domain'])
+    : 'general';
+}
+
+function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
+  return {
+    ...meta,
+    id,
+    name: typeof meta.name === 'string' ? meta.name.trim() || id : id,
+    domain: normalizeDomain(meta.domain),
+    category: typeof meta.category === 'string' ? meta.category.trim() || 'custom' : (meta.category ?? 'custom'),
+    description: typeof meta.description === 'string' ? meta.description.trim() : meta.description,
+    promptTemplate:
+      typeof meta.promptTemplate === 'string'
+        ? meta.promptTemplate.trim() || undefined
+        : meta.promptTemplate,
+    skillId:
+      typeof meta.skillId === 'string' ? meta.skillId.trim() || undefined : meta.skillId,
+  };
+}
+
 export function registerNativeBlock(executor: NativeBlockExecutor, meta?: WorkflowBlock): void {
   const blockId = typeof executor.blockId === 'string' ? executor.blockId.trim() : '';
   if (!blockId) return;
   builtInRegistry.set(blockId, { ...executor, blockId });
   if (meta) {
     const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
-    if (metaId) metaRegistry.set(metaId, { ...meta, id: metaId });
+    if (metaId) metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
   }
 }
 
@@ -26,7 +50,7 @@ export function registerNativeBlock(executor: NativeBlockExecutor, meta?: Workfl
 export function registerBlockMeta(meta: WorkflowBlock): void {
   const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
   if (!metaId) return;
-  metaRegistry.set(metaId, { ...meta, id: metaId });
+  metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
 }
 
 export function resolveBlock(id: string): WorkflowBlock | undefined {
@@ -42,7 +66,8 @@ export function getNativeExecutor(id: string): NativeBlockExecutor | undefined {
 }
 
 export function listBlocks(domain?: string): WorkflowBlock[] {
-  const domainFilter = typeof domain === 'string' ? domain.trim() || undefined : undefined;
+  const domainRaw = typeof domain === 'string' ? domain.trim().toLowerCase() || undefined : undefined;
   const all = [...metaRegistry.values()];
-  return domainFilter ? all.filter((b) => b.domain === domainFilter) : all;
+  if (!domainRaw) return all;
+  return all.filter((b) => b.domain === domainRaw);
 }

@@ -63,4 +63,28 @@ describe('createWebSearchTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/429/);
   });
+
+  it('defaults maxResults to 5 and tolerates missing results array', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({}), { status: 200 }),
+    ) as typeof fetch;
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ results: [] });
+    const body = JSON.parse(
+      ((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(body.max_results).toBe(5);
+  });
+
+  it('surfaces network failures as tool errors', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('ECONNRESET');
+    }) as typeof fetch;
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/ECONNRESET/);
+  });
 });

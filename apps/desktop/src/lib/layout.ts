@@ -23,7 +23,9 @@ export function autoLayout<T extends Record<string, unknown>>(
 
   const nodeIds = new Set<string>();
   for (const node of nodes) {
-    if (!node?.id) continue;
+    const id = typeof node?.id === 'string' ? node.id.trim() : '';
+    if (!id) continue;
+    // Prefer original id for layout map (React Flow ids are not re-trimmed in output)
     nodeIds.add(node.id);
     g.setNode(node.id, {
       width: node.measured?.width ?? DEFAULT_NODE_WIDTH,
@@ -32,10 +34,15 @@ export function autoLayout<T extends Record<string, unknown>>(
   }
 
   for (const edge of edges) {
-    if (!edge?.source || !edge?.target) continue;
+    const source = typeof edge?.source === 'string' ? edge.source.trim() : '';
+    const target = typeof edge?.target === 'string' ? edge.target.trim() : '';
+    if (!source || !target) continue;
     // Skip dangling edges so dagre does not throw on missing nodes
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue;
-    g.setEdge(edge.source, edge.target);
+    // Match both trimmed and raw ids (callers usually use consistent ids)
+    const srcId = nodeIds.has(edge.source) ? edge.source : nodeIds.has(source) ? source : '';
+    const tgtId = nodeIds.has(edge.target) ? edge.target : nodeIds.has(target) ? target : '';
+    if (!srcId || !tgtId) continue;
+    g.setEdge(srcId, tgtId);
   }
 
   dagre.layout(g);
