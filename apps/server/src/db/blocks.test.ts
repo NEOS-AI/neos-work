@@ -100,4 +100,38 @@ describe('custom blocks CRUD', () => {
     expect(got?.promptTemplate).toBeUndefined();
     expect(got?.skillId).toBe('skill-1');
   });
+
+  it('update trims prompt/skill/io fields; blank domain list returns all; blank id ops no-op', () => {
+    createCustomBlock(sampleBlock(IDS[0]!));
+
+    const updated = updateCustomBlock(`  ${IDS[0]!}  `, {
+      promptTemplate: '  Hello {{x}}  ',
+      skillId: '  skill-2  ',
+      inputDescription: '  in  ',
+      outputDescription: '  out  ',
+      category: '  ', // blank → custom
+      domain: '  research  ' as never, // unknown → general
+    });
+    expect(updated?.promptTemplate).toBe('Hello {{x}}');
+    expect(updated?.skillId).toBe('skill-2');
+    expect(updated?.inputDescription).toBe('in');
+    expect(updated?.outputDescription).toBe('out');
+    expect(updated?.category).toBe('custom');
+    expect(updated?.domain).toBe('general');
+
+    // blank prompt/skill clear to undefined
+    const cleared = updateCustomBlock(IDS[0]!, {
+      promptTemplate: '   ',
+      skillId: '  ',
+    });
+    expect(cleared?.promptTemplate).toBeUndefined();
+    expect(cleared?.skillId).toBeUndefined();
+
+    expect(updateCustomBlock('   ', { name: 'x' })).toBeNull();
+    expect(deleteCustomBlock('   ')).toBe(false);
+
+    // blank domain filter → all blocks
+    const all = listCustomBlocks('   ');
+    expect(all.some((b) => b.id === IDS[0])).toBe(true);
+  });
 });

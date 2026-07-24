@@ -63,6 +63,31 @@ function injectPlan(orch: AgentOrchestrator, steps: AgentStep[]) {
   };
 }
 
+describe('AgentOrchestrator options', () => {
+  it('clamps maxIterations and defaults invalid values; trims model', () => {
+    const adapter = mockAdapter(['[]']);
+    const reg = new ToolRegistry();
+
+    const def = new AgentOrchestrator(adapter, reg, { maxIterations: Number.NaN });
+    expect((def as unknown as { maxIterations: number }).maxIterations).toBe(10);
+
+    const neg = new AgentOrchestrator(adapter, reg, { maxIterations: -3 });
+    expect((neg as unknown as { maxIterations: number }).maxIterations).toBe(10);
+
+    const high = new AgentOrchestrator(adapter, reg, { maxIterations: 999 });
+    expect((high as unknown as { maxIterations: number }).maxIterations).toBe(200);
+
+    const zero = new AgentOrchestrator(adapter, reg, { maxIterations: 0 });
+    expect((zero as unknown as { maxIterations: number }).maxIterations).toBe(0);
+
+    const model = new AgentOrchestrator(adapter, reg, { model: '  custom-model  ' });
+    expect((model as unknown as { model: string }).model).toBe('custom-model');
+
+    const blankModel = new AgentOrchestrator(adapter, reg, { model: '   ' });
+    expect((blankModel as unknown as { model: string }).model).toBe('mock-model');
+  });
+});
+
 describe('AgentOrchestrator', () => {
   it('cancels before planning when signal already aborted', async () => {
     const registry = new ToolRegistry();

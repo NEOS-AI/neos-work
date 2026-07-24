@@ -55,6 +55,25 @@ describe('agent_step CRUD', () => {
     expect(updateAgentStep(s.id, { status: 'pendingish' as never })).toBe(false);
   });
 
+  it('accepts all step types and ignores blank session delete', () => {
+    const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
+    sessionId = session.id;
+    const types = ['plan', 'tool_use', 'tool_result', 'reasoning', 'error'] as const;
+    for (let i = 0; i < types.length; i++) {
+      const s = createAgentStep({
+        sessionId: session.id,
+        stepIndex: i,
+        type: types[i]!,
+      });
+      expect(s.type).toBe(types[i]);
+    }
+    expect(listAgentSteps(session.id)).toHaveLength(5);
+    deleteAgentSteps('   '); // no-op
+    expect(listAgentSteps(session.id)).toHaveLength(5);
+    deleteAgentSteps(session.id);
+    expect(listAgentSteps(session.id)).toEqual([]);
+  });
+
   it('creates, lists ordered, updates status/data/error, deletes', () => {
     const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
     sessionId = session.id;

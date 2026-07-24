@@ -66,6 +66,28 @@ describe('McpClient', () => {
     ).rejects.toThrow(/requires a URL/);
   });
 
+  it('rejects non-http MCP URLs', async () => {
+    const c = new McpClient();
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'H',
+        transport: 'http',
+        url: 'file:///etc/passwd',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/http\(s\)/i);
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'H',
+        transport: 'http',
+        url: 'not a url',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid URL/i);
+  });
+
   it('connects via stdio and marks connected', async () => {
     const c = new McpClient();
     await c.connect({
@@ -105,6 +127,21 @@ describe('McpClient', () => {
     expect(tools).toEqual([
       { name: 't1', description: 'D', inputSchema: { type: 'object' } },
       { name: 't2', description: undefined, inputSchema: {} },
+    ]);
+  });
+
+  it('listTools trims names and drops blank tool names', async () => {
+    listToolsMock.mockResolvedValue({
+      tools: [
+        { name: '  keep  ', description: '  desc  ', inputSchema: { type: 'object' } },
+        { name: '   ', description: 'blank', inputSchema: {} },
+        { name: '', inputSchema: {} },
+      ],
+    });
+    const c = new McpClient();
+    const tools = await c.listTools();
+    expect(tools).toEqual([
+      { name: 'keep', description: 'desc', inputSchema: { type: 'object' } },
     ]);
   });
 

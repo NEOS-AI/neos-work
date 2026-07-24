@@ -83,4 +83,20 @@ describe('listMediaFiles', () => {
     expect(neg.length).toBeGreaterThanOrEqual(0);
     expect(neg.length).toBeLessThanOrEqual(500);
   });
+
+  it('skips unsafe filenames and non-file entries', async () => {
+    await write(`${PREFIX}safe.png`, 'ok');
+    // space in name is rejected by the allow-list regex
+    await write(`${PREFIX}has space.png`, 'nope');
+    await fs.mkdir(path.join(MEDIA_DIR, `${PREFIX}subdir`), { recursive: true });
+
+    const files = await listMediaFiles(500);
+    const ours = files.filter((f) => f.filename.startsWith(PREFIX));
+    expect(ours.some((f) => f.filename === `${PREFIX}safe.png`)).toBe(true);
+    expect(ours.some((f) => f.filename.includes(' '))).toBe(false);
+    expect(ours.some((f) => f.filename === `${PREFIX}subdir`)).toBe(false);
+
+    await fs.rm(path.join(MEDIA_DIR, `${PREFIX}subdir`), { recursive: true, force: true }).catch(() => {});
+    await fs.unlink(path.join(MEDIA_DIR, `${PREFIX}has space.png`)).catch(() => {});
+  });
 });

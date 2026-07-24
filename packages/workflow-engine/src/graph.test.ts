@@ -97,4 +97,19 @@ describe('topologicalSort', () => {
     ];
     expect(topologicalSort(single, []).map((n) => n.id)).toEqual(['only']);
   });
+
+  it('skips blank and duplicate node ids; trims padded ids', () => {
+    const nodes: WorkflowNode[] = [
+      { id: '  a  ', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: '   ', type: 'output', label: 'blank', position: { x: 1, y: 0 }, config: {} },
+      { id: 'a', type: 'output', label: 'dup', position: { x: 2, y: 0 }, config: {} },
+      { id: 'b', type: 'output', label: 'B', position: { x: 3, y: 0 }, config: {} },
+    ];
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: '  a  ', target: '  b  ' },
+      { id: 'e-blank', source: '  ', target: 'b' },
+    ];
+    const order = topologicalSort(nodes, edges).map((n) => n.id);
+    expect(order).toEqual(['a', 'b']);
+  });
 });
