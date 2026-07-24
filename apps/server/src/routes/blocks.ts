@@ -43,6 +43,12 @@ blocks.post('/', async (c) => {
     return c.json({ ok: false, error: 'promptTemplate is required for prompt blocks' }, 400);
   }
 
+  const domainRaw =
+    typeof body.domain === 'string' ? body.domain.trim().toLowerCase() : 'general';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as WorkflowBlock['domain'])
+    : 'general';
+
   const block = createCustomBlock({
     ...body,
     id,
@@ -52,7 +58,7 @@ blocks.post('/', async (c) => {
     inputDescription: body.inputDescription ?? '',
     outputDescription: body.outputDescription ?? '',
     category: (typeof body.category === 'string' ? body.category.trim() : '') || 'custom',
-    domain: (typeof body.domain === 'string' ? body.domain.trim() : '') || 'general',
+    domain,
     description: typeof body.description === 'string' ? body.description.trim() : (body.description ?? ''),
   });
 
@@ -95,7 +101,10 @@ blocks.put('/:id', async (c) => {
     patch.name = name;
   }
   if (typeof body.domain === 'string') {
-    patch.domain = body.domain.trim() || 'general';
+    const domainRaw = body.domain.trim().toLowerCase() || 'general';
+    patch.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+      ? (domainRaw as WorkflowBlock['domain'])
+      : 'general';
   }
   if (typeof body.category === 'string') {
     patch.category = body.category.trim() || 'custom';

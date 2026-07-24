@@ -154,19 +154,21 @@ media.post('/generate', async (c) => {
     model?: 'tts-1' | 'tts-1-hd';
   }>().catch(() => null);
 
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+
   const surface =
-    typeof body?.surface === 'string' ? body.surface.trim().toLowerCase() : '';
+    typeof body.surface === 'string' ? body.surface.trim().toLowerCase() : '';
   if (surface !== 'image' && surface !== 'audio') {
     return c.json({ ok: false, error: 'surface must be image or audio' }, 400);
   }
-  // Rebind for typed branches below
-  body!.surface = surface as 'image' | 'audio';
 
   const apiKey = getSecretSetting('OPENAI_API_KEY');
   if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
 
   try {
-    if (body.surface === 'image') {
+    if (surface === 'image') {
       const rawPrompt = body.prompt ?? body.text;
       const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
       if (!prompt) {

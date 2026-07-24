@@ -96,7 +96,8 @@ describe('Deployments page', () => {
 
     await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
     expect(screen.getByText('pages-site')).toBeInTheDocument();
-    expect(screen.getByText('Deploy Flow')).toBeInTheDocument();
+    // workflow name appears in the table link and the workflow filter <option>
+    expect(screen.getAllByText('Deploy Flow').length).toBeGreaterThan(0);
     expect(screen.getByText('2/2')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'failed' }));
@@ -104,22 +105,25 @@ describe('Deployments page', () => {
     expect(screen.queryByText('my-app')).not.toBeInTheDocument();
     expect(screen.getByText('1/2')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'all' }));
+    // status "all" is the first chip; provider "all" is the second
+    await user.click(screen.getAllByRole('button', { name: 'all' })[0]!);
     await user.click(screen.getByRole('button', { name: 'vercel' }));
     expect(screen.getByText('my-app')).toBeInTheDocument();
     expect(screen.queryByText('pages-site')).not.toBeInTheDocument();
   });
 
   it('search and Escape clear', async () => {
-    const user = userEvent.setup();
     listDeployments.mockResolvedValue({ ok: true, data: deployments });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
     renderPage();
     await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText('Search project, URL, provider…'), 'pages');
-    expect(screen.getByText('pages-site')).toBeInTheDocument();
-    expect(screen.queryByText('my-app')).not.toBeInTheDocument();
+    const search = screen.getByPlaceholderText('Search project, URL, provider…');
+    fireEvent.change(search, { target: { value: 'pages-site' } });
+    await waitFor(() => {
+      expect(screen.getByText('pages-site')).toBeInTheDocument();
+      expect(screen.queryByText('my-app')).not.toBeInTheDocument();
+    });
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await waitFor(() => {

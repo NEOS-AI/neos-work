@@ -178,21 +178,35 @@ describe('Sessions page', () => {
   });
 
   it('sends a chat message and streams assistant text', async () => {
-    const user = userEvent.setup();
     listSessions.mockResolvedValue({ ok: true, data: sessions });
-    listMessages.mockResolvedValue({ ok: true, data: [] });
-    chat.mockImplementation(async function* () {
-      yield { type: 'text', content: 'Hi ' };
-      yield { type: 'text', content: 'there' };
-    });
+    // Keep initial history load from racing over the optimistic send
+    let resolveMessages: ((value: unknown) => void) | undefined;
+    listMessages.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveMessages = resolve;
+        }),
+    );
+
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'text', content: 'Hi there' };
+      })(),
+    );
+
     render(<Sessions />);
 
     await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(listMessages).toHaveBeenCalledWith('s1'));
+
+    // Finish history load with empty history before sending
+    resolveMessages?.({ ok: true, data: [] });
     await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
 
-    const input = screen.getByPlaceholderText('placeholder');
-    await user.type(input, 'What is up?');
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'What is up?' } });
+    expect(input.value).toBe('What is up?');
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {

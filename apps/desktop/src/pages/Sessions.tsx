@@ -391,17 +391,24 @@ function ChatArea({
   // Load existing messages
   useEffect(() => {
     if (!client) return;
+    let cancelled = false;
     client.listMessages(session.id).then((res) => {
+      if (cancelled) return;
       if (res.ok && res.data) {
-        setMessages(
-          (res.data as MessageData[]).map((m) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-          })),
+        const mapped = (res.data as MessageData[]).map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+        }));
+        // Do not clobber optimistic/temp messages if user already sent while load was in flight
+        setMessages((prev) =>
+          prev.some((m) => String(m.id).startsWith('temp-')) ? prev : mapped,
         );
       }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [client, session.id]);
 
   const handleSend = async () => {
