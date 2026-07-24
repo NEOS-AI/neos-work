@@ -253,6 +253,33 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(events.some((e) => e.type === 'run.completed')).toBe(false);
   });
 
+  it('ignores blank-endpoint edges when wiring inputs', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-blank-edges',
+      triggerInputs: { x: 1 },
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'output', type: 'output', label: 'Output', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e-bad-src', source: '  ', target: 'output' },
+          { id: 'e-ok', source: 'trigger', target: 'output' },
+          { id: 'e-bad-tgt', source: 'trigger', target: '  ' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    const out = events.find(
+      (e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'output',
+    ) as { output?: unknown } | undefined;
+    // Output node should still complete; blank edges do not poison inputs
+    expect(out).toBeDefined();
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-blank-edges' });
+  });
+
   it('skips downstream nodes when all upstream failed', async () => {
     const events: WorkflowSSEEvent[] = [];
     await executeWorkflow({
@@ -346,5 +373,88 @@ describe('executeWorkflow graph failure and skip paths', () => {
       (e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'and',
     ) as { error: string } | undefined;
     expect(andFailed?.error).toMatch(/AND gate/);
+  });
+
+  it('legacy gate_or fails when all upstream failed', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-gate-or-all-fail',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'b1',
+            type: 'block',
+            label: 'B1',
+            position: { x: 1, y: 0 },
+            config: {}, // missing blockId
+          },
+          {
+            id: 'b2',
+            type: 'block',
+            label: 'B2',
+            position: { x: 1, y: 1 },
+            config: {},
+          },
+          { id: 'or', type: 'gate_or', label: 'OR', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'b1' },
+          { id: 'e2', source: 'trigger', target: 'b2' },
+          { id: 'e3', source: 'b1', target: 'or' },
+          { id: 'e4', source: 'b2', target: 'or' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const orFailed = events.find(
+      (e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'or',
+    ) as { error: string } | undefined;
+    expect(orFailed?.error).toMatch(/OR gate: all upstream/);
+  });
+
+  it('or_gate fails when all concurrent branches failed', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-or-gate-branches-fail',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'ps', type: 'parallel_start', label: 'PS', position: { x: 1, y: 0 }, config: {} },
+          {
+            id: 'b1',
+            type: 'block',
+            label: 'B1',
+            position: { x: 2, y: 0 },
+            config: {},
+          },
+          {
+            id: 'b2',
+            type: 'block',
+            label: 'B2',
+            position: { x: 2, y: 1 },
+            config: {},
+          },
+          { id: 'or', type: 'or_gate', label: 'OR', position: { x: 3, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'ps' },
+          { id: 'e2', source: 'ps', target: 'b1' },
+          { id: 'e3', source: 'ps', target: 'b2' },
+          { id: 'e4', source: 'b1', target: 'or' },
+          { id: 'e5', source: 'b2', target: 'or' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const orFailed = events.find(
+      (e) => e.type === 'node.failed' && (e as { nodeId: string }).nodeId === 'or',
+    ) as { error: string } | undefined;
+    // Sequential topo path: "all upstream"; concurrent race path: "all branches"
+    expect(orFailed?.error).toMatch(/OR gate: all (upstream|branches)/);
   });
 });

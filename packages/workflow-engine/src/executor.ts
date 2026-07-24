@@ -93,12 +93,19 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   for (const node of sorted) {
     if (signal?.aborted) break;
 
-    // Collect inputs from upstream nodes via edges (exclude failed sources)
-    const incomingEdges = workflow.edges.filter((e) => e.target === node.id);
+    // Collect inputs from upstream nodes via edges (exclude failed / blank endpoints)
+    const incomingEdges = workflow.edges.filter(
+      (e) =>
+        typeof e.target === 'string'
+        && e.target.trim() === node.id
+        && typeof e.source === 'string'
+        && e.source.trim().length > 0,
+    );
     const inputs: Record<string, unknown> = {};
     for (const edge of incomingEdges) {
-      if (!failedNodes.has(edge.source)) {
-        inputs[edge.source] = nodeOutputs.get(edge.source);
+      const source = edge.source.trim();
+      if (!failedNodes.has(source)) {
+        inputs[source] = nodeOutputs.get(source);
       }
     }
 
@@ -199,9 +206,16 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
           ? AbortSignal.any([signal, branchSignal])
           : branchSignal;
         const branchInputs: Record<string, unknown> = {};
-        for (const edge of workflow.edges.filter((e) => e.target === branchNode.id)) {
-          if (!failedNodes.has(edge.source)) {
-            branchInputs[edge.source] = nodeOutputs.get(edge.source);
+        for (const edge of workflow.edges.filter(
+          (e) =>
+            typeof e.target === 'string'
+            && e.target.trim() === branchNode.id
+            && typeof e.source === 'string'
+            && e.source.trim().length > 0,
+        )) {
+          const source = edge.source.trim();
+          if (!failedNodes.has(source)) {
+            branchInputs[source] = nodeOutputs.get(source);
           }
         }
         const branchCtx: NodeContext = {

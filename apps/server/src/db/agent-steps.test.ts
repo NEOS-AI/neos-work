@@ -68,6 +68,12 @@ describe('agent_step CRUD', () => {
 
     expect(updateAgentStep('missing-id', { status: 'completed' })).toBe(false);
 
+    // blank status rejected; error trim
+    expect(updateAgentStep(s0.id, { status: '   ' as never })).toBe(false);
+    expect(getAgentStep(s0.id)?.status).toBe('completed');
+    expect(updateAgentStep(s1.id, { error: '  boom2  ' })).toBe(true);
+    expect(getAgentStep(s1.id)?.error).toBe('boom2');
+
     deleteAgentSteps(session.id);
     expect(listAgentSteps(session.id)).toEqual([]);
   });

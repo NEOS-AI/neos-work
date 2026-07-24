@@ -124,8 +124,10 @@ export async function getDesignSystemContent(id: string): Promise<string | null>
 export async function updateDesignSystemContent(id: string, content: string): Promise<boolean> {
   const ds = await getDesignSystem(id);
   if (!ds) return false;
+  // Coerce to string so non-string callers cannot write "[object Object]"
+  const body = typeof content === 'string' ? content : String(content ?? '');
   try {
-    await fs.writeFile(path.join(ds.path, 'DESIGN.md'), content, 'utf8');
+    await fs.writeFile(path.join(ds.path, 'DESIGN.md'), body, 'utf8');
     return true;
   } catch {
     return false;

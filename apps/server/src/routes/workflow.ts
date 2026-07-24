@@ -11,7 +11,7 @@
 
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import unzipper from 'unzipper';
 import { Readable } from 'node:stream';
 import type { WorkflowSSEEvent } from '@neos-work/shared';
@@ -245,7 +245,7 @@ workflow.get('/:id/export.zip', async (c) => {
     artifactCount: artifacts.length,
   }, null, 2);
 
-  const archive = archiver('zip', { zlib: { level: 6 } });
+  const archive = new ZipArchive({ zlib: { level: 6 } });
   archive.append(manifest, { name: 'workflow.json' });
   archive.append(
     `# ${wf.name}\n\n${wf.description ?? ''}\n\nExported from NEOS Work with ${runs.length} recent run(s) and ${artifacts.length} artifact(s).\n`,

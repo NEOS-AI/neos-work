@@ -126,6 +126,19 @@ describe('addOrUpdateSchedule / removeSchedule', () => {
     );
   });
 
+  it('ignores blank routine ids and trims schedule expression', () => {
+    addOrUpdateSchedule('   ', '0 9 * * *', true, 'UTC');
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    removeSchedule('   ');
+    addOrUpdateSchedule('  r1  ', '  0 9 * * *  ', true, 'UTC');
+    expect(mocks.validate).toHaveBeenCalledWith('0 9 * * *');
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      '0 9 * * *',
+      expect.any(Function),
+      { timezone: 'UTC' },
+    );
+  });
+
   it('does not schedule invalid cron', () => {
     mocks.validate.mockReturnValue(false);
     addOrUpdateSchedule('r-invalid', 'not-cron', true, 'UTC');
@@ -184,6 +197,11 @@ describe('initScheduler', () => {
 });
 
 describe('runRoutine', () => {
+  it('returns null for blank routine id', async () => {
+    await expect(runRoutine('   ')).resolves.toBeNull();
+    expect(mocks.getRoutine).not.toHaveBeenCalled();
+  });
+
   it('returns null when routine missing', async () => {
     mocks.getRoutine.mockReturnValue(null);
     await expect(runRoutine('missing')).resolves.toBeNull();

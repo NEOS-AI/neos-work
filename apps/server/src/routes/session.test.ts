@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { listSessions, deleteSession } from '../db/sessions.js';
-import { session, workspace } from './session.js';
+import { models, session, workspace } from './session.js';
 
 const TITLE = `_cov_sess_route_${process.pid}`;
 
@@ -80,6 +80,36 @@ describe('session routes', () => {
       body: JSON.stringify({ workspaceId: 'default', model: 'not-a-real-model-xyz' }),
     });
     expect(badModel.status).toBe(400);
+  });
+
+  it('rejects invalid thinkingMode and accepts valid ones', async () => {
+    const bad = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: 'default',
+        title: TITLE,
+        thinkingMode: 'ultra',
+      }),
+    });
+    expect(bad.status).toBe(400);
+    const badBody = await bad.json() as { error: string };
+    expect(badBody.error).toMatch(/thinkingMode/i);
+
+    const create = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: 'default',
+        title: TITLE,
+        thinkingMode: '  high  ',
+        provider: 'anthropic',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; thinking_mode?: string } };
+    expect(created.data.thinking_mode).toBe('high');
+    await session.request(`/${created.data.id}`, { method: 'DELETE' });
   });
 
   it('trims workspaceId/title and rejects blank title when provided', async () => {
@@ -239,5 +269,91 @@ describe('workspace routes', () => {
       body: JSON.stringify({ name: 'Bad Path', path: '/tmp/outside-home' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('updates workspace name/path via PUT and validates body', async () => {
+    const { homedir } = await import('node:os');
+    const { join } = await import('node:path');
+    const homePath = join(homedir(), 'neos-cov-ws-put');
+    const create = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Cov Put WS', path: homePath }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string } };
+    const id = created.data.id;
+
+    const badJson = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const blankName = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(blankName.status).toBe(400);
+
+    const badPath = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: '/tmp/outside' }),
+    });
+    expect(badPath.status).toBe(400);
+
+    const newPath = join(homedir(), 'neos-cov-ws-put-2');
+    const put = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '  Renamed WS  ', path: `  ${newPath}  ` }),
+    });
+    expect(put.status).toBe(200);
+    const updated = await put.json() as { data: { name: string; path?: string } };
+    expect(updated.data.name).toBe('Renamed WS');
+    expect(updated.data.path).toBe(newPath);
+
+    const missing = await workspace.request('/no-such-ws', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(missing.status).toBe(404);
+
+    const blankId = await workspace.request('/%20', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(blankId.status).toBe(404);
+
+    await workspace.request(`/${id}`, { method: 'DELETE' });
+  });
+});
+
+describe('models route', () => {
+  it('lists registry models (empty without keys; populated when key set)', async () => {
+    const empty = await models.request('/');
+    expect(empty.status).toBe(200);
+    const emptyBody = await empty.json() as { ok: boolean; data: unknown[] };
+    expect(emptyBody.ok).toBe(true);
+    expect(Array.isArray(emptyBody.data)).toBe(true);
+
+    // Seed a dummy anthropic key so registry registers the adapter
+    const { setSetting, deleteSetting } = await import('../db/settings.js');
+    setSetting('apiKey.anthropic', 'sk-test-models-route');
+    try {
+      const res = await models.request('/');
+      expect(res.status).toBe(200);
+      const body = await res.json() as { ok: boolean; data: Array<{ id: string }> };
+      expect(body.ok).toBe(true);
+      expect(body.data.length).toBeGreaterThan(0);
+      expect(body.data.every((m) => typeof m.id === 'string' && m.id.length > 0)).toBe(true);
+    } finally {
+      deleteSetting('apiKey.anthropic');
+    }
   });
 });

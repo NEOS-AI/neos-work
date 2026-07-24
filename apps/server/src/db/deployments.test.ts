@@ -117,4 +117,33 @@ describe('deployments CRUD', () => {
     expect(listDeployments({ limit: 0 }).length).toBeLessThanOrEqual(500);
     expect(listDeployments({ limit: 9999 }).length).toBeLessThanOrEqual(500);
   });
+
+  it('updateDeployment trims url/status/message; blank provider rejected on create', () => {
+    expect(() =>
+      createDeployment({ provider: '  ', projectName: `${MARKER}-x`, status: 'pending' }),
+    ).toThrow(/provider/i);
+
+    const row = createDeployment({
+      provider: '  CloudFlare  ',
+      projectName: `${MARKER}-upd`,
+      status: '  pending  ' as never,
+    });
+    expect(row.provider).toBe('cloudflare');
+    expect(row.status).toBe('pending');
+
+    const updated = updateDeployment(`  ${row.id}  `, {
+      url: '  https://x.pages.dev  ',
+      deploymentId: '  dep_1  ',
+      status: '  success  ' as never,
+      statusMessage: '  READY  ',
+    });
+    expect(updated?.url).toBe('https://x.pages.dev');
+    expect(updated?.deploymentId).toBe('dep_1');
+    expect(updated?.status).toBe('success');
+    expect(updated?.statusMessage).toBe('READY');
+
+    // blank status keeps previous
+    const kept = updateDeployment(row.id, { status: '   ' as never });
+    expect(kept?.status).toBe('success');
+  });
 });

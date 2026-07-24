@@ -65,16 +65,20 @@ export function updateAgentStep(
   const values: unknown[] = [];
 
   if (updates.status !== undefined) {
+    const status = typeof updates.status === 'string' ? updates.status.trim() : '';
+    if (!status) return false;
     fields.push('status = ?');
-    values.push(updates.status);
+    values.push(status);
   }
   if (updates.data !== undefined) {
     fields.push('data = ?');
     values.push(JSON.stringify(updates.data));
   }
   if (updates.error !== undefined) {
+    const error =
+      typeof updates.error === 'string' ? updates.error.trim() || null : updates.error;
     fields.push('error = ?');
-    values.push(updates.error);
+    values.push(error);
   }
 
   values.push(trimmed);

@@ -111,6 +111,19 @@ describe('AgentNode CLI provider', () => {
     const prompt = cliSpawn.mock.calls[0][1] as string;
     expect(prompt).toContain('ship v0.3.11');
   });
+
+  it('trims/lowercases padded CLI provider ids', async () => {
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'ok', exitCode: 0 });
+    const node = new AgentNode('agent_coding', { provider: '  CLI-Claude  ' });
+    const result = await node.execute(ctx({ cliSpawn }));
+    expect(result.ok).toBe(true);
+    expect(cliSpawn).toHaveBeenCalledWith(
+      'cli-claude',
+      expect.any(String),
+      expect.any(Function),
+      undefined,
+    );
+  });
 });
 
 describe('AgentNode LLM model selection', () => {

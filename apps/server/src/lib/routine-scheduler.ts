@@ -22,37 +22,42 @@ import * as artifactDb from '../db/artifacts.js';
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
 
 function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'): void {
+  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  if (!id) return;
+  const cronExpr = typeof schedule === 'string' ? schedule.trim() : '';
   // Validate cron expression
-  if (!cron.validate(schedule)) {
-    console.warn(`[Scheduler] Invalid cron expression for routine ${routineId}: ${schedule}`);
+  if (!cronExpr || !cron.validate(cronExpr)) {
+    console.warn(`[Scheduler] Invalid cron expression for routine ${id}: ${schedule}`);
     return;
   }
 
   // IANA timezone → node-cron applies local wall-clock rules including DST
-  const tz = timezone.trim() || 'UTC';
-  const task = cron.schedule(schedule, async () => {
-    await runRoutine(routineId);
+  const tz = typeof timezone === 'string' ? timezone.trim() || 'UTC' : 'UTC';
+  const task = cron.schedule(cronExpr, async () => {
+    await runRoutine(id);
   }, {
     timezone: tz,
   });
 
-  scheduledTasks.set(routineId, task);
+  scheduledTasks.set(id, task);
   task.start();
-  console.log(`[Scheduler] Scheduled routine ${routineId} with cron: ${schedule} (${tz})`);
+  console.log(`[Scheduler] Scheduled routine ${id} with cron: ${cronExpr} (${tz})`);
 }
 
 export async function runRoutine(routineId: string): Promise<string | null> {
-  const routine = getRoutine(routineId);
+  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  if (!id) return null;
+  const routine = getRoutine(id);
   if (!routine || !routine.enabled) return null;
 
   const wf = workflowDb.getWorkflow(routine.workflowId);
   if (!wf) {
-    console.error(`[Scheduler] Workflow ${routine.workflowId} not found for routine ${routineId}`);
+    console.error(`[Scheduler] Workflow ${routine.workflowId} not found for routine ${id}`);
     return null;
   }
 
-  const runRecord = createRoutineRun({ routineId });
-  setLastRunAt(routineId);
+  const runRecord = createRoutineRun({ routineId: id });
+  setLastRunAt(id);
 
   const runId = crypto.randomUUID();
   const startedAt = new Date().toISOString();
@@ -120,7 +125,7 @@ export async function runRoutine(routineId: string): Promise<string | null> {
     });
 
     completeRoutineRun(runRecord.id, 'completed');
-    console.log(`[Scheduler] Routine ${routineId} completed, runId: ${runId}`);
+    console.log(`[Scheduler] Routine ${id} completed, runId: ${runId}`);
     return runId;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Execution error';
@@ -135,7 +140,7 @@ export async function runRoutine(routineId: string): Promise<string | null> {
       error: errorMsg,
     });
     completeRoutineRun(runRecord.id, 'failed', errorMsg);
-    console.error(`[Scheduler] Routine ${routineId} failed: ${errorMsg}`);
+    console.error(`[Scheduler] Routine ${id} failed: ${errorMsg}`);
     return null;
   }
 }
@@ -156,23 +161,27 @@ export function addOrUpdateSchedule(
   enabled: boolean,
   timezone = 'UTC',
 ): void {
+  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  if (!id) return;
   // Remove existing task
-  const existing = scheduledTasks.get(routineId);
+  const existing = scheduledTasks.get(id);
   if (existing) {
     existing.stop();
-    scheduledTasks.delete(routineId);
+    scheduledTasks.delete(id);
   }
 
   if (enabled) {
-    scheduleRoutine(routineId, schedule, timezone);
+    scheduleRoutine(id, schedule, timezone);
   }
 }
 
 export function removeSchedule(routineId: string): void {
-  const task = scheduledTasks.get(routineId);
+  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  if (!id) return;
+  const task = scheduledTasks.get(id);
   if (task) {
     task.stop();
-    scheduledTasks.delete(routineId);
-    console.log(`[Scheduler] Removed schedule for routine ${routineId}`);
+    scheduledTasks.delete(id);
+    console.log(`[Scheduler] Removed schedule for routine ${id}`);
   }
 }

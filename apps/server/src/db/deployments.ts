@@ -59,8 +59,14 @@ function rowToDeployment(row: DeploymentRow): Deployment {
   };
 }
 
+function normalizeDeployProvider(raw: unknown): string {
+  const p = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (p === 'cloudflare' || p === 'vercel') return p;
+  return p; // preserve other non-blank for history rows; callers validate at API layer
+}
+
 export function createDeployment(input: CreateDeploymentInput): Deployment {
-  const provider = typeof input.provider === 'string' ? input.provider.trim() : '';
+  const provider = normalizeDeployProvider(input.provider);
   if (!provider) throw new Error('provider is required');
   const workflowId =
     typeof input.workflowId === 'string' ? input.workflowId.trim() || null : (input.workflowId ?? null);
@@ -79,6 +85,8 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
     typeof input.statusMessage === 'string'
       ? input.statusMessage.trim() || null
       : (input.statusMessage ?? null);
+  const status =
+    typeof input.status === 'string' ? input.status.trim() || 'pending' : (input.status ?? 'pending');
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(`
@@ -93,7 +101,7 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
     projectName,
     url,
     deploymentId,
-    input.status,
+    status,
     statusMessage,
   );
   return getDeployment(id)!;
@@ -134,6 +142,23 @@ export function updateDeployment(
   const existing = getDeployment(trimmed);
   if (!existing) return undefined;
 
+  const url =
+    patch.url !== undefined
+      ? (typeof patch.url === 'string' ? patch.url.trim() || null : null)
+      : (existing.url ?? null);
+  const deploymentId =
+    patch.deploymentId !== undefined
+      ? (typeof patch.deploymentId === 'string' ? patch.deploymentId.trim() || null : null)
+      : (existing.deploymentId ?? null);
+  const status =
+    patch.status !== undefined
+      ? (typeof patch.status === 'string' ? patch.status.trim() || existing.status : existing.status)
+      : existing.status;
+  const statusMessage =
+    patch.statusMessage !== undefined
+      ? (typeof patch.statusMessage === 'string' ? patch.statusMessage.trim() || null : null)
+      : (existing.statusMessage ?? null);
+
   db.prepare(`
     UPDATE deployments SET
       url = ?,
@@ -143,10 +168,10 @@ export function updateDeployment(
       updated_at = datetime('now')
     WHERE id = ?
   `).run(
-    patch.url ?? existing.url ?? null,
-    patch.deploymentId ?? existing.deploymentId ?? null,
-    patch.status ?? existing.status,
-    patch.statusMessage ?? existing.statusMessage ?? null,
+    url,
+    deploymentId,
+    status,
+    statusMessage,
     trimmed,
   );
   return getDeployment(trimmed);

@@ -205,4 +205,36 @@ describe('workflow runs CRUD', () => {
 
     expect(workflows.updateWorkflow('   ', { name: 'x' })).toBeUndefined();
   });
+
+  it('createWorkflow rejects blank name and normalizes domain', () => {
+    expect(() =>
+      workflows.createWorkflow({
+        name: '   ',
+        domain: 'general',
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow(/name is required/i);
+
+    const wf = workflows.createWorkflow({
+      name: `  ${NAME}_domain  `,
+      description: '  d  ',
+      domain: '  CODING  ',
+      nodes: [],
+      edges: [],
+    });
+    expect(wf.name).toBe(`${NAME}_domain`);
+    expect(wf.description).toBe('d');
+    expect(wf.domain).toBe('coding');
+
+    const gen = workflows.createWorkflow({
+      name: `${NAME}_unk`,
+      domain: 'marketing' as never,
+      nodes: [],
+      edges: [],
+    });
+    expect(gen.domain).toBe('general');
+    workflows.deleteWorkflow(wf.id);
+    workflows.deleteWorkflow(gen.id);
+  });
 });
