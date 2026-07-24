@@ -43,6 +43,12 @@ describe('agent_step CRUD', () => {
     expect(() =>
       createAgentStep({ sessionId: session.id, stepIndex: -1, type: 'plan' }),
     ).toThrow(/stepIndex/i);
+    expect(() =>
+      createAgentStep({ sessionId: 'bad\nid', stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId is invalid/i);
+    expect(() =>
+      createAgentStep({ sessionId: session.id, stepIndex: 10_001, type: 'plan' }),
+    ).toThrow(/stepIndex/i);
     const s = createAgentStep({
       sessionId: `  ${session.id}  `,
       stepIndex: 2.9,

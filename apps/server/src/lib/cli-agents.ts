@@ -225,24 +225,42 @@ function hasUnsafeControlChars(value: string): boolean {
 }
 
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
+/** Cap CLI agent prompt size (system + inputs already bounded upstream). */
+export const CLI_PROMPT_MAX_CHARS = 400_000;
+
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
   const cliId = opts.cliId;
-  const prompt = typeof opts.prompt === 'string' ? opts.prompt.trim() : '';
+  let prompt = typeof opts.prompt === 'string' ? opts.prompt.trim() : '';
   if (!prompt) {
     return Promise.reject(new Error('prompt is required'));
   }
   if (hasUnsafeControlChars(prompt)) {
     return Promise.reject(new Error('prompt contains invalid control characters'));
   }
+  if (prompt.length > CLI_PROMPT_MAX_CHARS) {
+    prompt = prompt.slice(0, CLI_PROMPT_MAX_CHARS) + '\n…[prompt truncated]';
+  }
   const signal = opts.signal;
   const onChunk = opts.onChunk;
-  const workflowId =
+  let workflowId =
     typeof opts.workflowId === 'string' ? opts.workflowId.trim() || undefined : opts.workflowId;
-  const runId = typeof opts.runId === 'string' ? opts.runId.trim() || undefined : opts.runId;
-  const serverUrl =
+  if (workflowId && (workflowId.length > 100 || hasUnsafeControlChars(workflowId))) {
+    workflowId = undefined;
+  }
+  let runId = typeof opts.runId === 'string' ? opts.runId.trim() || undefined : opts.runId;
+  if (runId && (runId.length > 100 || hasUnsafeControlChars(runId))) {
+    runId = undefined;
+  }
+  let serverUrl =
     typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() || undefined : opts.serverUrl;
-  const authToken =
+  if (serverUrl && (serverUrl.length > 2_048 || hasUnsafeControlChars(serverUrl))) {
+    serverUrl = undefined;
+  }
+  let authToken =
     typeof opts.authToken === 'string' ? opts.authToken.trim() || undefined : opts.authToken;
+  if (authToken && (authToken.length > 8_192 || hasUnsafeControlChars(authToken))) {
+    authToken = undefined;
+  }
 
   // Resolve optional path override from settings (lazy import avoids circular deps in tests)
   let binOverride: string | undefined;

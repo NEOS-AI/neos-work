@@ -38,6 +38,22 @@ describe('workflow routes CRUD', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects create with control-char or overlong name', async () => {
+    const ctrl = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `bad${'\n'}name`, domain: 'general', ...minimalGraph }),
+    });
+    expect(ctrl.status).toBe(400);
+
+    const long = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201), domain: 'general', ...minimalGraph }),
+    });
+    expect(long.status).toBe(400);
+  });
+
   it('rejects create with invalid JSON body', async () => {
     const res = await workflow.request('/', {
       method: 'POST',

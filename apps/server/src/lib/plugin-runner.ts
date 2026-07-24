@@ -45,12 +45,22 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
     for (const stage of stages) {
       if (signal?.aborted) break;
 
-      const stageId = typeof stage.id === 'string' ? stage.id.trim() : String(stage.id ?? '').trim();
-      if (!stageId) continue; // skip malformed stages
-      const stageName =
+      let stageId = typeof stage.id === 'string' ? stage.id.trim() : String(stage.id ?? '').trim();
+      // Skip malformed / unsafe stage ids
+      if (!stageId || stageId.length > 100 || /[\0\r\n]/.test(stageId)) continue;
+      let stageName =
         typeof stage.name === 'string' ? stage.name.trim() || stageId : (stage.name ?? stageId);
-      const outputKeyRaw =
+      if (typeof stageName !== 'string') stageName = stageId;
+      if (/[\0\r\n]/.test(stageName)) stageName = stageId;
+      if (stageName.length > 200) stageName = stageName.slice(0, 200);
+      let outputKeyRaw =
         typeof stage.outputKey === 'string' ? stage.outputKey.trim() : stage.outputKey;
+      if (
+        typeof outputKeyRaw === 'string'
+        && (outputKeyRaw.length > 100 || /[\0\r\n]/.test(outputKeyRaw))
+      ) {
+        outputKeyRaw = stageId;
+      }
       const outputKey = (outputKeyRaw || stageId) as string;
       const normalizedStage = { ...stage, id: stageId, name: stageName, outputKey };
 
@@ -78,7 +88,8 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
 
     onEvent({ type: 'pipeline.completed', runId, outputs: stageOutputs });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Pipeline error';
+    let msg = err instanceof Error ? err.message : 'Pipeline error';
+    if (msg.length > 4_000) msg = msg.slice(0, 4_000);
     onEvent({ type: 'pipeline.failed', runId, error: msg });
   }
 
@@ -88,7 +99,9 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
 export function resumeRun(runId: string, stageId: string, response: Record<string, unknown>): boolean {
   const rid = typeof runId === 'string' ? runId.trim() : '';
   const sid = typeof stageId === 'string' ? stageId.trim() : '';
-  if (!rid || !sid) return false;
+  if (!rid || !sid || rid.length > 100 || sid.length > 100 || /[\0\r\n]/.test(rid) || /[\0\r\n]/.test(sid)) {
+    return false;
+  }
   const pending = pendingRuns.get(rid);
   if (!pending || pending.stageId !== sid) return false;
   pending.resolve(response ?? {});

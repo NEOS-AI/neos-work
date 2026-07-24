@@ -63,7 +63,7 @@ workflow.post('/', async (c) => {
   }
 
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!name || name.length > 200) {
+  if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
   const description =
@@ -73,15 +73,22 @@ workflow.post('/', async (c) => {
     ? (domainRaw as 'finance' | 'coding' | 'general')
     : 'general';
 
-  const wf = db.createWorkflow({
-    name,
-    description,
-    domain,
-    nodes: (body.nodes as never) ?? [],
-    edges: (body.edges as never) ?? [],
-  });
-
-  return c.json({ ok: true, data: wf }, 201);
+  try {
+    const wf = db.createWorkflow({
+      name,
+      description,
+      domain,
+      nodes: (body.nodes as never) ?? [],
+      edges: (body.edges as never) ?? [],
+    });
+    return c.json({ ok: true, data: wf }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create workflow';
+    if (/name|graph|control|max/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
+    throw err;
+  }
 });
 
 workflow.put('/:id', async (c) => {
@@ -102,7 +109,7 @@ workflow.put('/:id', async (c) => {
     body.name !== undefined
       ? (typeof body.name === 'string' ? body.name.trim() : '')
       : undefined;
-  if (name !== undefined && (!name || name.length > 200)) {
+  if (name !== undefined && (!name || name.length > 200 || /[\0\r\n]/.test(name))) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
   const description =
@@ -438,6 +445,10 @@ workflow.post('/import.zip', async (c) => {
   }
 
   const rawJson = (await manifestFile.buffer()).toString('utf-8');
+  // Cap workflow.json size (align with graph JSON bound)
+  if (rawJson.length > 5 * 1024 * 1024) {
+    return c.json({ ok: false, error: 'workflow.json exceeds max size' }, 400);
+  }
   let manifest: { version?: string; workflow?: Record<string, unknown> };
   try {
     manifest = JSON.parse(rawJson);
@@ -449,35 +460,58 @@ workflow.post('/import.zip', async (c) => {
   }
 
   const wf = manifest.workflow;
-  const rawName = typeof wf.name === 'string' && wf.name.length > 0 ? wf.name.slice(0, 200) : 'Imported Workflow';
+  let rawName =
+    typeof wf.name === 'string' && wf.name.trim().length > 0
+      ? wf.name.trim().slice(0, 200)
+      : 'Imported Workflow';
+  // Drop control chars from imported names (createWorkflow would reject them)
+  if (/[\0\r\n]/.test(rawName)) {
+    rawName = rawName.replace(/[\0\r\n]/g, ' ').trim() || 'Imported Workflow';
+  }
   const existing = db.listWorkflows().find((w) => w.name === rawName);
   const finalName = existing ? `Copy of ${rawName}` : rawName;
 
-  const created = db.createWorkflow({
-    name: finalName,
-    description: typeof wf.description === 'string' ? wf.description : undefined,
-    domain: (['finance', 'coding', 'general'] as const).includes(wf.domain as never)
-      ? (wf.domain as 'finance' | 'coding' | 'general')
-      : 'general',
-    nodes: (wf.nodes as never) ?? [],
-    edges: (wf.edges as never) ?? [],
-  });
+  let created;
+  try {
+    created = db.createWorkflow({
+      name: finalName,
+      description: typeof wf.description === 'string' ? wf.description : undefined,
+      domain: (['finance', 'coding', 'general'] as const).includes(wf.domain as never)
+        ? (wf.domain as 'finance' | 'coding' | 'general')
+        : 'general',
+      nodes: (wf.nodes as never) ?? [],
+      edges: (wf.edges as never) ?? [],
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to import workflow';
+    return c.json({ ok: false, error: msg }, 400);
+  }
 
-  // Optional: restore artifact HTML files if present
-  const artFiles = dir.files.filter((f) => {
-    const p = f.path.replace(/\\/g, '/');
-    return p.startsWith('artifacts/') && /\.(html?|md|txt)$/i.test(p) && !p.endsWith('.meta.json');
-  });
+  // Optional: restore artifact HTML files if present (cap count / path / size)
+  const ZIP_ARTIFACT_MAX = 50;
+  const ZIP_ARTIFACT_CONTENT_MAX = 2 * 1024 * 1024;
+  const artFiles = dir.files
+    .filter((f) => {
+      const p = f.path.replace(/\\/g, '/');
+      if (p.length > 500 || /[\0]/.test(p)) return false;
+      return p.startsWith('artifacts/') && /\.(html?|md|txt)$/i.test(p) && !p.endsWith('.meta.json');
+    })
+    .slice(0, ZIP_ARTIFACT_MAX);
   for (const f of artFiles) {
     const content = (await f.buffer()).toString('utf-8');
+    if (content.length > ZIP_ARTIFACT_CONTENT_MAX) continue;
     const name = f.path.replace(/\\/g, '/').split('/').pop() ?? 'artifact';
     const contentType = /\.html?$/i.test(name) ? 'text/html' : /\.md$/i.test(name) ? 'text/markdown' : 'text/plain';
-    artifactDb.createArtifact({
-      workflowId: created.id,
-      name,
-      contentType,
-      content,
-    });
+    try {
+      artifactDb.createArtifact({
+        workflowId: created.id,
+        name,
+        contentType,
+        content,
+      });
+    } catch {
+      // Skip invalid artifact entries rather than failing the whole import
+    }
   }
 
   // Optional: restore design systems from design-systems/<name>/DESIGN.md (plan Tasks 1 / 10)

@@ -33,8 +33,15 @@ designSystems.post('/', async (c) => {
   return c.json({ ok: true, data: ds }, 201);
 });
 
-designSystems.get('/:id', async (c) => {
+function paramDesignId(c: { req: { param: (k: string) => string } }): string {
   const id = c.req.param('id').trim();
+  // Design system ids are short hashes / safe names
+  if (!id || id.length > 64 || /[\0\r\n/\\]/.test(id)) return '';
+  return id;
+}
+
+designSystems.get('/:id', async (c) => {
+  const id = paramDesignId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const ds = await store.getDesignSystem(id);
   if (!ds) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -42,7 +49,7 @@ designSystems.get('/:id', async (c) => {
 });
 
 designSystems.delete('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramDesignId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const deleted = await store.deleteDesignSystem(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -50,7 +57,7 @@ designSystems.delete('/:id', async (c) => {
 });
 
 designSystems.get('/:id/content', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramDesignId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const content = await store.getDesignSystemContent(id);
   if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -58,7 +65,7 @@ designSystems.get('/:id/content', async (c) => {
 });
 
 designSystems.put('/:id/content', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramDesignId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ content: string }>().catch(() => null);
   if (!body || typeof body.content !== 'string') {

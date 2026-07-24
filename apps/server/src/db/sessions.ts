@@ -155,6 +155,10 @@ export function addMessage(params: {
   }
   // Preserve intentional whitespace in chat content; only coerce non-strings
   const content = typeof params.content === 'string' ? params.content : String(params.content ?? '');
+  // Null bytes break DB storage and LLM request JSON
+  if (/\0/.test(content)) {
+    throw new Error('content contains invalid control characters');
+  }
   if (content.length > MESSAGE_CONTENT_MAX_CHARS) {
     throw new Error(`content exceeds max size (${MESSAGE_CONTENT_MAX_CHARS} characters)`);
   }

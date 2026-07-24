@@ -47,7 +47,11 @@ function upsertSkill(params: {
   if (description && description.length > 4_000) {
     description = description.slice(0, 4_000);
   }
-  const source = typeof params.source === 'string' ? params.source.trim() : String(params.source ?? '');
+  let source = typeof params.source === 'string' ? params.source.trim() : String(params.source ?? '');
+  if (/[\0\r\n]/.test(source) || source.length > 200) {
+    throw new Error('invalid skill source');
+  }
+  if (!source) source = 'local';
   const pathVal = typeof params.path === 'string' ? params.path.trim() : String(params.path ?? '');
   if (pathVal && /[\0\r\n]/.test(pathVal)) {
     throw new Error('invalid skill path');

@@ -93,6 +93,12 @@ describe('generateImage', () => {
     ).rejects.toThrow(/prompt too long/i);
   });
 
+  it('rejects image prompts with control characters', async () => {
+    await expect(
+      generateImage({ prompt: `line1${'\n'}line2`, apiKey: 'sk' }),
+    ).rejects.toThrow(/control characters/i);
+  });
+
   it('clamps invalid size/quality and rejects blank prompt', async () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png' }],

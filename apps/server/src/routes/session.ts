@@ -60,7 +60,9 @@ const pendingConfirmations = new Map<
 
 session.post('/:id/tool-confirm/:toolUseId', async (c) => {
   const toolUseId = paramId(c, 'toolUseId');
-  if (!toolUseId) return c.json({ ok: false, error: 'No pending confirmation' }, 404);
+  if (!toolUseId || toolUseId.length > 200 || /[\0\r\n]/.test(toolUseId)) {
+    return c.json({ ok: false, error: 'No pending confirmation' }, 404);
+  }
   const body = await c.req.json<{ approved: boolean }>().catch(() => null);
   if (!body || typeof body.approved !== 'boolean') {
     return c.json({ ok: false, error: 'Missing or invalid "approved" field' }, 400);
@@ -261,6 +263,10 @@ session.post('/:id/chat', async (c) => {
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   if (!content) {
     return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
+  }
+  // Null bytes break SQLite/logging and LLM payloads
+  if (/\0/.test(content)) {
+    return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
   }
   if (content.length > MAX_CONTENT_LENGTH) {
     return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);
@@ -544,6 +550,9 @@ session.post('/:id/agent', async (c) => {
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   if (!content) {
     return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
+  }
+  if (/\0/.test(content)) {
+    return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
   }
   if (content.length > MAX_CONTENT_LENGTH) {
     return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);

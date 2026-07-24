@@ -52,6 +52,9 @@ memory.post('/', async (c) => {
   if (!name || !type || !content) {
     return c.json({ ok: false, error: 'name, type, and content are required' }, 400);
   }
+  if (/[\0\r\n]/.test(name) || name.length > 200) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
   try {
     const item = createMemory({
       name,
@@ -84,7 +87,9 @@ memory.put('/:id', async (c) => {
   const patch: UpdateMemoryInput = {};
   if (body.name !== undefined) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name) return c.json({ ok: false, error: 'name cannot be empty' }, 400);
+    if (!name || /[\0\r\n]/.test(name) || name.length > 200) {
+      return c.json({ ok: false, error: 'name cannot be empty' }, 400);
+    }
     patch.name = name;
   }
   if (body.content !== undefined) {

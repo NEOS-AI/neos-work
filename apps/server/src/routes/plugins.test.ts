@@ -46,6 +46,20 @@ describe('plugins routes', () => {
     });
     expect(missingStage.status).toBe(400);
 
+    const badStage = await plugins.request('/p1/run/r1/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId: 'bad\nstage', response: {} }),
+    });
+    expect(badStage.status).toBe(400);
+
+    const longStage = await plugins.request('/p1/run/r1/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId: 's'.repeat(101), response: {} }),
+    });
+    expect(longStage.status).toBe(400);
+
     const unknown = await plugins.request('/no-such-plugin-xyz/run/r1/resume', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -61,6 +75,40 @@ describe('plugins routes', () => {
     });
     expect(noRun.status).toBe(404);
     expect(((await noRun.json()) as { error: string }).error).toMatch(/not found|stage mismatch/i);
+
+    // Overlong runId path segment
+    const longRun = await plugins.request(`/${DIR_NAME}/run/${'r'.repeat(101)}/resume`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId: 'confirm', response: {} }),
+    });
+    expect(longRun.status).toBe(404);
+  });
+
+  it('resume rejects oversized HITL response payload', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'SKILL.md'),
+      '---\nname: Cov Resume Plugin\n---\n\n# Cov\n',
+      'utf8',
+    );
+    const up = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ skillDirName: DIR_NAME, name: 'Cov Resume Plugin' }),
+    });
+    expect(up.status).toBe(201);
+
+    const tooBig = await plugins.request(`/${DIR_NAME}/run/r1/resume`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        stageId: 'confirm',
+        response: { blob: 'x'.repeat(210_000) },
+      }),
+    });
+    expect(tooBig.status).toBe(400);
+    expect(((await tooBig.json()) as { error: string }).error).toMatch(/too large/i);
   });
 
   it('rejects upgrade without skillId/skillDirName', async () => {

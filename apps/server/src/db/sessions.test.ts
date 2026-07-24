@@ -172,6 +172,13 @@ describe('sessions CRUD', () => {
     );
   });
 
+  it('rejects null-byte message content', () => {
+    const s = createSession({ workspaceId: 'default', title: '_cov_null_msg' });
+    expect(() =>
+      addMessage({ sessionId: s.id, role: 'user', content: `hi${'\0'}there` }),
+    ).toThrow(/control characters/i);
+  });
+
   it('trims session id and workspaceId; blank id is not-found', () => {
     const s = createSession({ workspaceId: 'default', title: '_cov_sess' });
     expect(getSession(`  ${s.id}  `)?.id).toBe(s.id);

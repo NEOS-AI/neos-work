@@ -71,6 +71,11 @@ describe('spawnCliAgent hygiene', () => {
     ).rejects.toThrow(/control characters/i);
   });
 
+  it('exports CLI_PROMPT_MAX_CHARS for prompt size bounds', async () => {
+    const { CLI_PROMPT_MAX_CHARS } = await import('./cli-agents.js');
+    expect(CLI_PROMPT_MAX_CHARS).toBeGreaterThan(100_000);
+  });
+
   it('rejects missing cwd', async () => {
     await expect(
       spawnCliAgent({

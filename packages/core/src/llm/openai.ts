@@ -29,7 +29,7 @@ export class OpenAIAdapter implements LLMProviderAdapter {
       typeof options.baseUrl === 'string' ? options.baseUrl.trim() : '';
     // Only accept http(s) custom base URLs; invalid/non-http falls back to provider default
     let base = '';
-    if (baseRaw) {
+    if (baseRaw && baseRaw.length <= 2_048 && !/[\0\r\n]/.test(baseRaw)) {
       try {
         const u = new URL(baseRaw);
         if (u.protocol === 'http:' || u.protocol === 'https:') {

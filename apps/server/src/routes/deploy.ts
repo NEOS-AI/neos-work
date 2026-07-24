@@ -198,9 +198,15 @@ deploy.post('/', async (c) => {
     }, 400);
   }
 
-  const workflowId =
+  let workflowId =
     typeof body.workflowId === 'string' ? body.workflowId.trim() || undefined : undefined;
-  const runId = typeof body.runId === 'string' ? body.runId.trim() || undefined : undefined;
+  if (workflowId && (workflowId.length > 100 || /[\0\r\n]/.test(workflowId))) {
+    return c.json({ ok: false, error: 'Invalid workflowId' }, 400);
+  }
+  let runId = typeof body.runId === 'string' ? body.runId.trim() || undefined : undefined;
+  if (runId && (runId.length > 100 || /[\0\r\n]/.test(runId))) {
+    return c.json({ ok: false, error: 'Invalid runId' }, 400);
+  }
 
   const record = createDeployment({
     workflowId,

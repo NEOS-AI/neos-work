@@ -31,6 +31,12 @@ describe('design-systems routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 404 for overlong or path-like design system ids', async () => {
+    expect((await designSystems.request(`/${'a'.repeat(65)}`)).status).toBe(404);
+    expect((await designSystems.request('/foo/bar')).status).toBe(404);
+    expect((await designSystems.request(`/${encodeURIComponent('bad\nid')}`)).status).toBe(404);
+  });
+
   it('rejects invalid name charset and invalid JSON', async () => {
     const badName = await designSystems.request('/', {
       method: 'POST',

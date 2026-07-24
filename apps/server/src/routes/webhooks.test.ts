@@ -50,6 +50,14 @@ describe('webhook routes', () => {
     expect(trigger.status).toBe(404);
   });
 
+  it('returns 404 for overlong or control-char workflowId', async () => {
+    const longId = 'w'.repeat(101);
+    expect((await webhooks.request(`/${longId}/secret`)).status).toBe(404);
+    // encode null byte in path segment
+    const ctrl = await webhooks.request(`/${encodeURIComponent('ab\0c')}/secret`);
+    expect(ctrl.status).toBe(404);
+  });
+
   it('GET secret creates and returns secret + rateLimit', async () => {
     const wf = makeWf();
     const res = await webhooks.request(`/${wf.id}/secret`);

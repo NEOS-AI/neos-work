@@ -46,7 +46,8 @@ function normalizeAllowedTools(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   return raw
     .map((t) => (typeof t === 'string' ? t.trim() : String(t ?? '').trim()))
-    .filter(Boolean);
+    .filter((t) => t.length > 0 && t.length <= 100 && !/[\0\r\n]/.test(t))
+    .slice(0, 100);
 }
 
 harness.get('/', (c) => {

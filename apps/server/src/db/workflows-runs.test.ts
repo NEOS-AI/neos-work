@@ -222,6 +222,16 @@ describe('workflow runs CRUD', () => {
     workflows.updateWorkflow(wf.id, { designSystemId: '  ds-1  ' });
     expect(workflows.getWorkflow(wf.id)?.designSystemId).toBe('ds-1');
 
+    // Invalid designSystemId leaves row unchanged
+    expect(
+      workflows.updateWorkflow(wf.id, { designSystemId: 'bad\nid' }),
+    ).toBeUndefined();
+    expect(workflows.getWorkflow(wf.id)?.designSystemId).toBe('ds-1');
+    expect(
+      workflows.updateWorkflow(wf.id, { designSystemId: 'x'.repeat(65) }),
+    ).toBeUndefined();
+    expect(workflows.getWorkflow(wf.id)?.designSystemId).toBe('ds-1');
+
     // blank name after trim keeps existing name
     const sameName = workflows.updateWorkflow(wf.id, { name: '   ' });
     expect(sameName?.name).toBe(NAME);

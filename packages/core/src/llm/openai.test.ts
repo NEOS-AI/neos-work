@@ -33,6 +33,24 @@ describe('OpenAIAdapter', () => {
     await expect(adapter.validateApiKey('   ')).resolves.toBe(false);
   });
 
+  it('falls back for overlong or control-char baseUrl', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: null,
+      json: async () => ({ choices: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const overlong = new OpenAIAdapter({
+      provider: 'openai',
+      apiKey: 'sk',
+      baseUrl: `https://example.test/${'a'.repeat(3_000)}`,
+    });
+    // Should use default OpenAI host, not the pathological base
+    await overlong.validateApiKey('sk').catch(() => false);
+    const calledUrl = String(fetchMock.mock.calls[0]?.[0] ?? '');
+    expect(calledUrl).toMatch(/api\.openai\.com/);
+  });
+
   it('falls back to default baseUrl for non-http custom URLs', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);

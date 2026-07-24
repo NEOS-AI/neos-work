@@ -42,12 +42,16 @@ export function createAgentStep(params: {
 }): AgentStepRow {
   const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
   if (!sessionId) throw new Error('sessionId is required');
+  if (sessionId.length > 100 || /[\0\r\n]/.test(sessionId)) {
+    throw new Error('sessionId is invalid');
+  }
   const typeRaw = typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
   if (!STEP_TYPES.has(typeRaw as AgentStepType)) {
     throw new Error('type must be plan|tool_use|tool_result|reasoning|error');
   }
   const stepIndex = Number(params.stepIndex);
-  if (!Number.isFinite(stepIndex) || stepIndex < 0) {
+  // Cap step index (runaway agent loop defense)
+  if (!Number.isFinite(stepIndex) || stepIndex < 0 || stepIndex > 10_000) {
     throw new Error('stepIndex must be a non-negative number');
   }
   const db = getDb();

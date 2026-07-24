@@ -44,6 +44,7 @@ export class AgentOrchestrator {
 
   async *run(goal: string, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
     let goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
+    if (/\0/.test(goalText)) goalText = goalText.replace(/\0/g, '');
     if (goalText.length > AgentOrchestrator.GOAL_MAX_CHARS) {
       goalText =
         goalText.slice(0, AgentOrchestrator.GOAL_MAX_CHARS) +
@@ -200,7 +201,9 @@ export class AgentOrchestrator {
       yield { type: 'done', task };
     } catch (err) {
       task.status = 'failed';
-      yield { type: 'error', error: err instanceof Error ? err.message : String(err) };
+      let msg = err instanceof Error ? err.message : String(err);
+      if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+      yield { type: 'error', error: msg };
     }
   }
 
@@ -209,6 +212,8 @@ export class AgentOrchestrator {
     _history: Message[],
     signal?: AbortSignal,
   ): Promise<unknown> {
+    const TOOL_CALLS_MAX = 20;
+    const TOOL_RESULT_MAX = 64_000;
     // If the step has a known tool, execute it directly
     if (step.toolName && step.input) {
       const result = await this.toolRegistry.execute(step.toolName, step.input);
@@ -218,10 +223,11 @@ export class AgentOrchestrator {
 
     // Otherwise, use LLM with available tools to figure out what to do
     const toolDefs = this.toolRegistry.toDefinitions();
+    const stepDesc = String(step.description ?? '').slice(0, 2_000);
     const messages: Message[] = [
       {
         role: 'user',
-        content: `Execute this step: ${step.description}`,
+        content: `Execute this step: ${stepDesc}`,
       },
     ];
 
@@ -237,11 +243,21 @@ export class AgentOrchestrator {
     })) {
       if (chunk.type === 'text' && chunk.content) {
         fullText += chunk.content;
+        if (fullText.length > 256_000) {
+          fullText = fullText.slice(0, 256_000);
+          break;
+        }
       } else if (chunk.type === 'tool_use' && chunk.toolName) {
+        if (toolCalls.length >= TOOL_CALLS_MAX) continue;
+        let name = String(chunk.toolName).trim();
+        if (!name || name.length > 200 || /[\0\r\n]/.test(name)) continue;
         toolCalls.push({
-          name: chunk.toolName,
+          name,
           id: chunk.toolUseId ?? crypto.randomUUID(),
-          input: chunk.toolInput ?? {},
+          input:
+            chunk.toolInput && typeof chunk.toolInput === 'object' && !Array.isArray(chunk.toolInput)
+              ? chunk.toolInput
+              : {},
         });
       }
     }
@@ -251,12 +267,16 @@ export class AgentOrchestrator {
       const results: MessageContent[] = [];
       for (const call of toolCalls) {
         const result = await this.toolRegistry.execute(call.name, call.input);
+        let content = result.success
+          ? (typeof result.output === 'string' ? result.output : JSON.stringify(result.output))
+          : `Error: ${result.error}`;
+        if (content.length > TOOL_RESULT_MAX) {
+          content = content.slice(0, TOOL_RESULT_MAX) + '…[truncated]';
+        }
         results.push({
           type: 'tool_result',
           toolUseId: call.id,
-          content: result.success
-            ? (typeof result.output === 'string' ? result.output : JSON.stringify(result.output))
-            : `Error: ${result.error}`,
+          content,
         });
       }
       step.input = { toolCalls, results };

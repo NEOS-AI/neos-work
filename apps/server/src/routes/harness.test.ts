@@ -217,6 +217,24 @@ describe('harness routes', () => {
     await harness.request(`/${created.data.id}`, { method: 'DELETE' });
   });
 
+  it('filters control-char and overlong allowedTools', async () => {
+    const create = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `Cov Harness Tools ${process.pid}`,
+        domain: 'general',
+        description: 'd',
+        systemPrompt: 'You are helpful.',
+        allowedTools: ['read', `bad${'\n'}tool`, 'x'.repeat(120), 'write'],
+      }),
+    });
+    expect(create.status).toBe(201);
+    const body = await create.json() as { data: { id: string; allowedTools: string[] } };
+    expect(body.data.allowedTools).toEqual(['read', 'write']);
+    await harness.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
+
   it('clamps constraints.maxSteps and trims allowedTools', async () => {
     const create = await harness.request('/', {
       method: 'POST',

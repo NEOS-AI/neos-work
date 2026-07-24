@@ -100,6 +100,9 @@ export async function generateImage(options: {
 }): Promise<GenerateImageResult> {
   const prompt = typeof options.prompt === 'string' ? options.prompt.trim() : '';
   if (!prompt) throw new Error('prompt is required');
+  if (/[\0\r\n]/.test(prompt)) {
+    throw new Error('prompt contains invalid control characters');
+  }
   if (prompt.length > IMAGE_PROMPT_MAX) {
     throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
   }
@@ -173,6 +176,9 @@ export async function generateAudio(options: {
 }): Promise<GenerateAudioResult> {
   const text = typeof options.text === 'string' ? options.text.trim() : '';
   if (!text) throw new Error('text is required');
+  if (/\0/.test(text)) {
+    throw new Error('text contains invalid control characters');
+  }
   if (text.length > AUDIO_TEXT_MAX) {
     throw new Error(`text too long (max ${AUDIO_TEXT_MAX})`);
   }
