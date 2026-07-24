@@ -39,10 +39,12 @@ export function listCustomHarnesses(): AgentHarness[] {
 }
 
 export function getCustomHarness(id: string): AgentHarness | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
   const row = db
     .prepare('SELECT * FROM custom_harness WHERE id = ?')
-    .get(id) as HarnessRow | undefined;
+    .get(trimmed) as HarnessRow | undefined;
   return row ? rowToHarness(row) : undefined;
 }
 
@@ -64,10 +66,12 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
 }
 
 export function updateCustomHarness(id: string, input: Partial<AgentHarness>): AgentHarness | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
   const existing = db
     .prepare('SELECT * FROM custom_harness WHERE id = ?')
-    .get(id) as HarnessRow | undefined;
+    .get(trimmed) as HarnessRow | undefined;
   if (!existing) return undefined;
 
   const name = input.name ?? existing.name;
@@ -85,13 +89,15 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
     `UPDATE custom_harness SET name = ?, domain = ?, description = ?, system_prompt = ?,
      allowed_tools_json = ?, constraints_json = ?, updated_at = datetime('now')
      WHERE id = ?`,
-  ).run(name, domain, description, systemPrompt, allowedTools, constraints, id);
+  ).run(name, domain, description, systemPrompt, allowedTools, constraints, trimmed);
 
-  return getCustomHarness(id);
+  return getCustomHarness(trimmed);
 }
 
 export function deleteCustomHarness(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM custom_harness WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM custom_harness WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }

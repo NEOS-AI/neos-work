@@ -40,9 +40,11 @@ describe('custom blocks CRUD', () => {
 
     createCustomBlock(sampleBlock(IDS[1]!, 'coding'));
     expect(listCustomBlocks().some((b) => b.id === IDS[0])).toBe(true);
-    expect(listCustomBlocks('coding').every((b) => b.domain === 'coding')).toBe(true);
+    expect(listCustomBlocks('  coding  ').every((b) => b.domain === 'coding')).toBe(true);
     expect(listCustomBlocks('coding').some((b) => b.id === IDS[1])).toBe(true);
     expect(listCustomBlocks('finance').some((b) => b.id === IDS[0])).toBe(false);
+    expect(getCustomBlock(`  ${IDS[0]}  `)?.id).toBe(IDS[0]);
+    expect(getCustomBlock('   ')).toBeNull();
 
     const updated = updateCustomBlock(IDS[0]!, {
       name: 'Renamed',

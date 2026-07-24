@@ -40,15 +40,18 @@ function rowToBlock(row: BlockRow): WorkflowBlock {
 
 export function listCustomBlocks(domain?: string): WorkflowBlock[] {
   const db = getDb();
-  const rows = domain
-    ? db.prepare('SELECT * FROM custom_block WHERE domain = ? ORDER BY name').all(domain) as BlockRow[]
+  const domainFilter = typeof domain === 'string' ? domain.trim() || undefined : undefined;
+  const rows = domainFilter
+    ? db.prepare('SELECT * FROM custom_block WHERE domain = ? ORDER BY name').all(domainFilter) as BlockRow[]
     : db.prepare('SELECT * FROM custom_block ORDER BY name').all() as BlockRow[];
   return rows.map(rowToBlock);
 }
 
 export function getCustomBlock(id: string): WorkflowBlock | null {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return null;
   const db = getDb();
-  const row = db.prepare('SELECT * FROM custom_block WHERE id = ?').get(id) as BlockRow | undefined;
+  const row = db.prepare('SELECT * FROM custom_block WHERE id = ?').get(trimmed) as BlockRow | undefined;
   return row ? rowToBlock(row) : null;
 }
 
@@ -77,14 +80,16 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
 }
 
 export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock, 'id' | 'isBuiltIn'>>): WorkflowBlock | null {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return null;
   const db = getDb();
-  const existing = getCustomBlock(id);
+  const existing = getCustomBlock(trimmed);
   if (!existing) return null;
 
   const updated: Omit<WorkflowBlock, 'isBuiltIn'> = {
     ...existing,
     ...patch,
-    id,
+    id: trimmed,
   };
 
   db.prepare(`
@@ -105,14 +110,16 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     updated.outputDescription,
     updated.promptTemplate ?? null,
     updated.skillId ?? null,
-    id,
+    trimmed,
   );
 
   return { ...updated, isBuiltIn: false };
 }
 
 export function deleteCustomBlock(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM custom_block WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM custom_block WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }

@@ -129,8 +129,10 @@ export function getWorkflowSecrets(): Record<string, string> {
  * Exported for unit tests.
  */
 export function isSafeHttpBaseUrl(url: string): boolean {
+  const trimmed = typeof url === 'string' ? url.trim() : '';
+  if (!trimmed) return false;
   try {
-    const u = new URL(url);
+    const u = new URL(trimmed);
     return u.protocol === 'http:' || u.protocol === 'https:';
   } catch {
     return false;

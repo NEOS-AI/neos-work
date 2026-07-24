@@ -81,18 +81,22 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
 }
 
 export function getDeployment(id: string): Deployment | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(id) as DeploymentRow | undefined;
+  const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(trimmed) as DeploymentRow | undefined;
   return row ? rowToDeployment(row) : undefined;
 }
 
 export function listDeployments(opts?: { workflowId?: string; limit?: number }): Deployment[] {
   const db = getDb();
-  const limit = opts?.limit ?? 100;
-  if (opts?.workflowId) {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 100, 1), 500);
+  const workflowId =
+    typeof opts?.workflowId === 'string' ? opts.workflowId.trim() || undefined : undefined;
+  if (workflowId) {
     const rows = db.prepare(
       'SELECT * FROM deployments WHERE workflow_id = ? ORDER BY created_at DESC LIMIT ?',
-    ).all(opts.workflowId, limit) as DeploymentRow[];
+    ).all(workflowId, limit) as DeploymentRow[];
     return rows.map(rowToDeployment);
   }
   const rows = db.prepare(
@@ -105,8 +109,10 @@ export function updateDeployment(
   id: string,
   patch: Partial<Pick<CreateDeploymentInput, 'url' | 'deploymentId' | 'status' | 'statusMessage'>>,
 ): Deployment | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const existing = getDeployment(id);
+  const existing = getDeployment(trimmed);
   if (!existing) return undefined;
 
   db.prepare(`
@@ -122,13 +128,15 @@ export function updateDeployment(
     patch.deploymentId ?? existing.deploymentId ?? null,
     patch.status ?? existing.status,
     patch.statusMessage ?? existing.statusMessage ?? null,
-    id,
+    trimmed,
   );
-  return getDeployment(id);
+  return getDeployment(trimmed);
 }
 
 export function deleteDeployment(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM deployments WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM deployments WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }

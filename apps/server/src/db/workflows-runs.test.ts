@@ -87,6 +87,9 @@ describe('workflow runs CRUD', () => {
     expect(updated?.nodes).toHaveLength(2);
     expect(workflows.listWorkflows().some((w) => w.id === wf.id)).toBe(true);
     expect(workflows.updateWorkflow('missing', { name: 'x' })).toBeUndefined();
+    expect(workflows.getWorkflow(`  ${wf.id}  `)?.id).toBe(wf.id);
+    expect(workflows.getWorkflow('   ')).toBeUndefined();
+    expect(workflows.deleteWorkflow('   ')).toBe(false);
     expect(workflows.deleteWorkflow(wf.id)).toBe(true);
     expect(workflows.getWorkflow(wf.id)).toBeUndefined();
   });

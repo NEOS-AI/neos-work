@@ -61,6 +61,13 @@ describe('artifacts CRUD', () => {
   it('lists empty for unknown workflow', () => {
     expect(listArtifacts('no-such-workflow')).toEqual([]);
   });
+
+  it('trims ids and returns empty/undefined for blank ids', () => {
+    expect(getArtifact('   ')).toBeUndefined();
+    expect(listArtifacts('   ')).toEqual([]);
+    expect(listArtifactsByRun('   ')).toEqual([]);
+    expect(deleteArtifact('   ')).toBe(false);
+  });
 });
 
 describe('updateArtifact PATCH semantics', () => {

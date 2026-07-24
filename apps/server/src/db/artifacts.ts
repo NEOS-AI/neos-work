@@ -66,33 +66,43 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
 }
 
 export function getArtifact(id: string): Artifact | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const row = db.prepare('SELECT * FROM artifacts WHERE id = ?').get(id) as ArtifactRow | undefined;
+  const row = db.prepare('SELECT * FROM artifacts WHERE id = ?').get(trimmed) as ArtifactRow | undefined;
   return row ? rowToArtifact(row) : undefined;
 }
 
 export function listArtifacts(workflowId: string): Artifact[] {
+  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!trimmed) return [];
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM artifacts WHERE workflow_id = ? ORDER BY created_at DESC').all(workflowId) as ArtifactRow[];
+  const rows = db.prepare('SELECT * FROM artifacts WHERE workflow_id = ? ORDER BY created_at DESC').all(trimmed) as ArtifactRow[];
   return rows.map(rowToArtifact);
 }
 
 export function listArtifactsByRun(runId: string): Artifact[] {
+  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  if (!trimmed) return [];
   const db = getDb();
-  const rows = db.prepare('SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at DESC').all(runId) as ArtifactRow[];
+  const rows = db.prepare('SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at DESC').all(trimmed) as ArtifactRow[];
   return rows.map(rowToArtifact);
 }
 
 export function deleteArtifact(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM artifacts WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM artifacts WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 
 export function updateArtifactContent(id: string, content: string): Artifact | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  db.prepare(`UPDATE artifacts SET content = ?, updated_at = datetime('now') WHERE id = ?`).run(content, id);
-  return getArtifact(id);
+  db.prepare(`UPDATE artifacts SET content = ?, updated_at = datetime('now') WHERE id = ?`).run(content, trimmed);
+  return getArtifact(trimmed);
 }
 
 /** Plan Task 4 — PATCH name and/or content. */
@@ -100,13 +110,15 @@ export function updateArtifact(
   id: string,
   input: { name?: string; content?: string },
 ): Artifact | undefined {
-  const existing = getArtifact(id);
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
+  const existing = getArtifact(trimmed);
   if (!existing) return undefined;
   const db = getDb();
   const name = input.name !== undefined ? input.name : existing.name;
   const content = input.content !== undefined ? input.content : (existing.content ?? null);
   db.prepare(
     `UPDATE artifacts SET name = ?, content = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).run(name, content, id);
-  return getArtifact(id);
+  ).run(name, content, trimmed);
+  return getArtifact(trimmed);
 }

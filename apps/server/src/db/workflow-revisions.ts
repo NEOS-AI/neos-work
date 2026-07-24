@@ -50,13 +50,15 @@ function rowToRevision(row: RevisionRow): WorkflowRevision {
 const MAX_REVISIONS = 50;
 
 export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snapshot'>[] {
+  const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!wfId) return [];
   const db = getDb();
   // Include snapshot only to derive node/edge counts for History panel (not returned to client as raw blob).
   const rows = db
     .prepare(
       'SELECT id, workflow_id, snapshot, label, created_at FROM workflow_revisions WHERE workflow_id = ? ORDER BY created_at DESC',
     )
-    .all(workflowId) as RevisionRow[];
+    .all(wfId) as RevisionRow[];
   return rows.map((row) => {
     const counts = parseSnapshotCounts(row.snapshot);
     return {
@@ -71,8 +73,10 @@ export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snaps
 }
 
 export function getRevision(revisionId: string): WorkflowRevision | undefined {
+  const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const row = db.prepare('SELECT * FROM workflow_revisions WHERE id = ?').get(revisionId) as RevisionRow | undefined;
+  const row = db.prepare('SELECT * FROM workflow_revisions WHERE id = ?').get(trimmed) as RevisionRow | undefined;
   return row ? rowToRevision(row) : undefined;
 }
 
@@ -118,13 +122,17 @@ export function createRevision(
 }
 
 export function updateRevisionLabel(revisionId: string, label: string): boolean {
+  const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('UPDATE workflow_revisions SET label = ? WHERE id = ?').run(label, revisionId);
+  const result = db.prepare('UPDATE workflow_revisions SET label = ? WHERE id = ?').run(label, trimmed);
   return result.changes > 0;
 }
 
 export function deleteRevision(revisionId: string): boolean {
+  const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM workflow_revisions WHERE id = ?').run(revisionId);
+  const result = db.prepare('DELETE FROM workflow_revisions WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }

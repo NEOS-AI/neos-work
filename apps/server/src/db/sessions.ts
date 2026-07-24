@@ -30,17 +30,20 @@ export interface MessageRow {
 
 export function listSessions(workspaceId?: string): SessionRow[] {
   const db = getDb();
-  if (workspaceId) {
+  const ws = typeof workspaceId === 'string' ? workspaceId.trim() || undefined : undefined;
+  if (ws) {
     return db
       .prepare('SELECT * FROM session WHERE workspace_id = ? ORDER BY updated_at DESC')
-      .all(workspaceId) as SessionRow[];
+      .all(ws) as SessionRow[];
   }
   return db.prepare('SELECT * FROM session ORDER BY updated_at DESC').all() as SessionRow[];
 }
 
 export function getSession(id: string): SessionRow | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  return db.prepare('SELECT * FROM session WHERE id = ?').get(id) as SessionRow | undefined;
+  return db.prepare('SELECT * FROM session WHERE id = ?').get(trimmed) as SessionRow | undefined;
 }
 
 export function createSession(params: {
@@ -67,8 +70,10 @@ export function createSession(params: {
 }
 
 export function deleteSession(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM session WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM session WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 

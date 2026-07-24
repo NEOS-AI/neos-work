@@ -87,4 +87,38 @@ describe('mcp-oauth-store', () => {
     const loaded = await loadToken(`  ${TEST_ID}  `);
     expect(loaded?.accessToken).toBe('secret-token-xyz');
   });
+
+  it('loadToken normalizes legacy disk tokens and drops blank access', async () => {
+    const tokenDir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
+    await fs.mkdir(tokenDir, { recursive: true });
+    const file = path.join(tokenDir, `${TEST_ID}.json`);
+
+    // Legacy file with padded tokens
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        serverId: TEST_ID,
+        accessToken: '  legacy-access-token  ',
+        refreshToken: '  refresh-pad  ',
+        scope: '  read write  ',
+        tokenType: '  Bearer  ',
+      }),
+      'utf8',
+    );
+    const loaded = await loadToken(TEST_ID);
+    expect(loaded?.accessToken).toBe('legacy-access-token');
+    expect(loaded?.refreshToken).toBe('refresh-pad');
+    expect(loaded?.scope).toBe('read write');
+    expect(loaded?.tokenType).toBe('Bearer');
+
+    // Whitespace-only accessToken on disk → treat as missing
+    await fs.writeFile(
+      file,
+      JSON.stringify({ serverId: TEST_ID, accessToken: '   ' }),
+      'utf8',
+    );
+    expect(await loadToken(TEST_ID)).toBeNull();
+    const status = await getTokenStatus(TEST_ID);
+    expect(status.connected).toBe(false);
+  });
 });

@@ -71,8 +71,10 @@ export function listWorkflows(): Workflow[] {
 }
 
 export function getWorkflow(id: string): Workflow | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const row = db.prepare('SELECT * FROM workflow WHERE id = ?').get(id) as WorkflowRow | undefined;
+  const row = db.prepare('SELECT * FROM workflow WHERE id = ?').get(trimmed) as WorkflowRow | undefined;
   return row ? rowToWorkflow(row) : undefined;
 }
 
@@ -114,8 +116,10 @@ export function updateWorkflow(
     edges?: WorkflowEdge[];
   },
 ): Workflow | undefined {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
-  const existing = db.prepare('SELECT * FROM workflow WHERE id = ?').get(id) as WorkflowRow | undefined;
+  const existing = db.prepare('SELECT * FROM workflow WHERE id = ?').get(trimmed) as WorkflowRow | undefined;
   if (!existing) return undefined;
 
   const name =
@@ -133,14 +137,16 @@ export function updateWorkflow(
   db.prepare(
     `UPDATE workflow SET name = ?, description = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
      WHERE id = ?`,
-  ).run(name, description, designSystemId, nodes, edges, id);
+  ).run(name, description, designSystemId, nodes, edges, trimmed);
 
-  return getWorkflow(id);
+  return getWorkflow(trimmed);
 }
 
 export function deleteWorkflow(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM workflow WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM workflow WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 
@@ -190,24 +196,30 @@ export function saveRun(run: WorkflowRun): void {
 }
 
 export function getRun(runId: string): WorkflowRun | undefined {
+  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  if (!trimmed) return undefined;
   const db = getDb();
   const row = db
     .prepare('SELECT * FROM workflow_run WHERE id = ?')
-    .get(runId) as WorkflowRunRow | undefined;
+    .get(trimmed) as WorkflowRunRow | undefined;
   return row ? rowToRun(row) : undefined;
 }
 
 export function listRuns(workflowId: string, limit = 20, offset = 0): WorkflowRun[] {
+  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  if (!trimmed) return [];
   const db = getDb();
   const rows = db
     .prepare('SELECT * FROM workflow_run WHERE workflow_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?')
-    .all(workflowId, limit, offset) as WorkflowRunRow[];
+    .all(trimmed, limit, offset) as WorkflowRunRow[];
   return rows.map(rowToRun);
 }
 
 export function deleteRun(runId: string): boolean {
+  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM workflow_run WHERE id = ?').run(runId);
+  const result = db.prepare('DELETE FROM workflow_run WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 

@@ -84,8 +84,10 @@ export function listRoutines(): Routine[] {
 }
 
 export function getRoutine(id: string): Routine | null {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return null;
   const db = getDb();
-  const row = db.prepare('SELECT * FROM routine WHERE id = ?').get(id) as RoutineRow | undefined;
+  const row = db.prepare('SELECT * FROM routine WHERE id = ?').get(trimmed) as RoutineRow | undefined;
   return row ? rowToRoutine(row) : null;
 }
 
@@ -122,8 +124,10 @@ export function updateRoutine(
   id: string,
   input: Partial<{ name: string; schedule: string; timezone: string; enabled: boolean; inputs: Record<string, unknown> }>,
 ): Routine | null {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return null;
   const db = getDb();
-  const existing = getRoutine(id);
+  const existing = getRoutine(trimmed);
   if (!existing) return null;
 
   const now = new Date().toISOString();
@@ -138,14 +142,16 @@ export function updateRoutine(
     input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
     JSON.stringify(input.inputs ?? existing.inputs),
     now,
-    id,
+    trimmed,
   );
-  return getRoutine(id);
+  return getRoutine(trimmed);
 }
 
 export function deleteRoutine(id: string): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM routine WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM routine WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 
@@ -177,20 +183,25 @@ export function completeRoutineRun(id: string, status: 'completed' | 'failed', e
 }
 
 export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {
+  const rid = typeof routineId === 'string' ? routineId.trim() : '';
+  if (!rid) return [];
   const db = getDb();
   const rows = db.prepare(
     'SELECT * FROM routine_run WHERE routine_id = ? ORDER BY started_at DESC LIMIT ?',
-  ).all(routineId, limit) as RoutineRunRow[];
+  ).all(rid, limit) as RoutineRunRow[];
   return rows.map(rowToRun);
 }
 
 export function getRoutineRun(routineId: string, runId: string): RoutineRun | null {
+  const rid = typeof routineId === 'string' ? routineId.trim() : '';
+  const run = typeof runId === 'string' ? runId.trim() : '';
+  if (!rid || !run) return null;
   const db = getDb();
   // `runId` may be the routine_run primary key or the linked workflow_run id
   const row = db.prepare(
     `SELECT * FROM routine_run
      WHERE routine_id = ? AND (id = ? OR run_id = ?)
      LIMIT 1`,
-  ).get(routineId, runId, runId) as RoutineRunRow | undefined;
+  ).get(rid, run, run) as RoutineRunRow | undefined;
   return row ? rowToRun(row) : null;
 }

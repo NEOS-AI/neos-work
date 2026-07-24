@@ -189,10 +189,12 @@ describe('getExecutionSettings', () => {
 describe('isSafeHttpBaseUrl', () => {
   it('accepts http and https only', () => {
     expect(isSafeHttpBaseUrl('https://api.openai.com/v1')).toBe(true);
+    expect(isSafeHttpBaseUrl('  https://api.openai.com/v1  ')).toBe(true);
     expect(isSafeHttpBaseUrl('http://127.0.0.1:11434')).toBe(true);
     expect(isSafeHttpBaseUrl('file:///tmp')).toBe(false);
     expect(isSafeHttpBaseUrl('ftp://x')).toBe(false);
     expect(isSafeHttpBaseUrl('')).toBe(false);
+    expect(isSafeHttpBaseUrl('   ')).toBe(false);
   });
 
   it('rejects javascript and data schemes and malformed strings', () => {

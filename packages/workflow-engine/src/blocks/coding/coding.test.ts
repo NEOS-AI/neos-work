@@ -163,12 +163,34 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/max length/i);
     });
 
+    it('rejects directory path and oversized files on file_read', async () => {
+      const dirRel = `${testRel}/subdir`;
+      await fs.mkdir(path.join(workspaces, dirRel), { recursive: true });
+      const dirResult = await read().execute(ctx({ path: dirRel }));
+      expect(dirResult.ok).toBe(false);
+      expect(dirResult.error).toMatch(/not a file/i);
+
+      // Write a >2MiB file directly (bypass file_write max) to exercise file_read size guard
+      const bigRel = `${testRel}/big.bin`;
+      const bigAbs = path.join(workspaces, bigRel);
+      await fs.mkdir(path.dirname(bigAbs), { recursive: true });
+      const fh = await fs.open(bigAbs, 'w');
+      try {
+        await fh.write(Buffer.alloc(2 * 1024 * 1024 + 1, 0x61));
+      } finally {
+        await fh.close();
+      }
+      const bigResult = await read().execute(ctx({ path: bigRel }));
+      expect(bigResult.ok).toBe(false);
+      expect(bigResult.error).toMatch(/max size/i);
+    });
+
     it('writes then reads a relative workspace file', async () => {
       const writeResult = await write().execute(ctx({ path: testFile, content: 'coverage-payload' }));
       expect(writeResult.ok).toBe(true);
       expect(writeResult.output).toBe(true);
 
-      const readResult = await read().execute(ctx({ path: testFile }));
+      const readResult = await read().execute(ctx({ path: `  ${testFile}  ` }));
       expect(readResult.ok).toBe(true);
       expect(readResult.output).toBe('coverage-payload');
     });
