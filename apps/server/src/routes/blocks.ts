@@ -83,7 +83,10 @@ blocks.get('/:id', (c) => {
 blocks.put('/:id', async (c) => {
   const id = c.req.param('id').trim();
   if (!id) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
-  const body = await c.req.json<Partial<WorkflowBlock>>();
+  const body = await c.req.json<Partial<WorkflowBlock>>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const patch: Partial<WorkflowBlock> = { ...body };
   if (body.name !== undefined) {

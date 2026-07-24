@@ -34,24 +34,32 @@ designSystems.post('/', async (c) => {
 });
 
 designSystems.get('/:id', async (c) => {
-  const ds = await store.getDesignSystem(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const ds = await store.getDesignSystem(id);
   if (!ds) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: ds });
 });
 
 designSystems.delete('/:id', async (c) => {
-  const deleted = await store.deleteDesignSystem(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const deleted = await store.deleteDesignSystem(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
 });
 
 designSystems.get('/:id/content', async (c) => {
-  const content = await store.getDesignSystemContent(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const content = await store.getDesignSystemContent(id);
   if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: { content } });
 });
 
 designSystems.put('/:id/content', async (c) => {
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ content: string }>().catch(() => null);
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
@@ -60,7 +68,7 @@ designSystems.put('/:id/content', async (c) => {
   if (!body.content.trim()) {
     return c.json({ ok: false, error: 'content cannot be empty' }, 400);
   }
-  const updated = await store.updateDesignSystemContent(c.req.param('id'), body.content);
+  const updated = await store.updateDesignSystemContent(id, body.content);
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
 });

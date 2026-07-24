@@ -30,12 +30,18 @@ import { getDb } from '../db/schema.js';
 
 const session = new Hono();
 
+function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
+  return c.req.param(key).trim();
+}
+
+
 // --- Server-side active chat tracking for cancel support ---
 
 const activeChats = new Map<string, AbortController>();
 
 session.post('/:id/cancel', (c) => {
-  const sessionId = c.req.param('id');
+  const sessionId = paramId(c);
+  if (!sessionId) return c.json({ ok: false, error: 'No active chat for session' }, 404);
   const controller = activeChats.get(sessionId);
   if (!controller) return c.json({ ok: false, error: 'No active chat for session' }, 404);
   controller.abort();
@@ -53,8 +59,12 @@ const pendingConfirmations = new Map<
 >();
 
 session.post('/:id/tool-confirm/:toolUseId', async (c) => {
-  const { toolUseId } = c.req.param();
-  const body = await c.req.json<{ approved: boolean }>();
+  const toolUseId = paramId(c, 'toolUseId');
+  if (!toolUseId) return c.json({ ok: false, error: 'No pending confirmation' }, 404);
+  const body = await c.req.json<{ approved: boolean }>().catch(() => null);
+  if (!body || typeof body.approved !== 'boolean') {
+    return c.json({ ok: false, error: 'Missing or invalid "approved" field' }, 400);
+  }
   const pending = pendingConfirmations.get(toolUseId);
   if (!pending) {
     return c.json({ ok: false, error: 'No pending confirmation' }, 404);
@@ -185,13 +195,17 @@ session.post('/', async (c) => {
 });
 
 session.get('/:id', (c) => {
-  const s = db.getSession(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Session not found' }, 404);
+  const s = db.getSession(id);
   if (!s) return c.json({ ok: false, error: 'Session not found' }, 404);
   return c.json({ ok: true, data: s });
 });
 
 session.delete('/:id', (c) => {
-  const deleted = db.deleteSession(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Session not found' }, 404);
+  const deleted = db.deleteSession(id);
   if (!deleted) return c.json({ ok: false, error: 'Session not found' }, 404);
   return c.json({ ok: true });
 });
@@ -199,7 +213,8 @@ session.delete('/:id', (c) => {
 // --- Messages ---
 
 session.get('/:id/messages', (c) => {
-  const sessionId = c.req.param('id');
+  const sessionId = paramId(c);
+  if (!sessionId) return c.json({ ok: false, error: 'Session not found' }, 404);
   const s = db.getSession(sessionId);
   if (!s) return c.json({ ok: false, error: 'Session not found' }, 404);
   const messages = db.listMessages(sessionId);
@@ -209,7 +224,8 @@ session.get('/:id/messages', (c) => {
 // --- Chat (SSE streaming) ---
 
 session.post('/:id/chat', async (c) => {
-  const sessionId = c.req.param('id');
+  const sessionId = paramId(c);
+  if (!sessionId) return c.json({ ok: false, error: 'Session not found' }, 404);
   const s = db.getSession(sessionId);
   if (!s) return c.json({ ok: false, error: 'Session not found' }, 404);
 
@@ -489,7 +505,8 @@ session.post('/:id/chat', async (c) => {
 // --- Agent execution (SSE streaming) ---
 
 session.post('/:id/agent', async (c) => {
-  const sessionId = c.req.param('id');
+  const sessionId = paramId(c);
+  if (!sessionId) return c.json({ ok: false, error: 'Session not found' }, 404);
   const s = db.getSession(sessionId);
   if (!s) return c.json({ ok: false, error: 'Session not found' }, 404);
 
@@ -710,8 +727,12 @@ workspace.post('/', async (c) => {
 });
 
 workspace.put('/:id', async (c) => {
-  const id = c.req.param('id');
-  const body = await c.req.json<{ name?: string; path?: string }>();
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Workspace not found' }, 404);
+  const body = await c.req.json<{ name?: string; path?: string }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
   const name =
     body.name !== undefined
       ? (typeof body.name === 'string' ? body.name.trim() : '')
@@ -732,7 +753,8 @@ workspace.put('/:id', async (c) => {
 });
 
 workspace.delete('/:id', (c) => {
-  const id = c.req.param('id');
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Workspace not found' }, 404);
   if (id === 'default') {
     return c.json({ ok: false, error: 'Cannot delete default workspace' }, 400);
   }

@@ -95,6 +95,21 @@ describe('session routes', () => {
     expect(create.status).toBe(201);
     const created = await create.json() as { data: { id: string; title: string | null; workspaceId?: string } };
     expect(created.data.title).toBe(TITLE);
+
+    const badConfirm = await session.request(`/${created.data.id}/tool-confirm/nope`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badConfirm.status).toBe(400);
+
+    const missingConfirm = await session.request(`/${created.data.id}/tool-confirm/nope`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ approved: true }),
+    });
+    expect(missingConfirm.status).toBe(404);
+
     await session.request(`/${created.data.id}`, { method: 'DELETE' });
   });
 });

@@ -32,6 +32,10 @@ import { assessWorkflowPreflight } from '../lib/workflow-preflight.js';
 
 const workflow = new Hono();
 
+function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
+  return c.req.param(key).trim();
+}
+
 // ── CRUD ──────────────────────────────────────────────────
 
 workflow.get('/', (c) => {
@@ -39,7 +43,9 @@ workflow.get('/', (c) => {
 });
 
 workflow.get('/:id', (c) => {
-  const wf = db.getWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: wf });
 });
@@ -59,11 +65,15 @@ workflow.post('/', async (c) => {
   }
   const description =
     typeof body.description === 'string' ? body.description.trim() || undefined : body.description;
+  const domainRaw = typeof body.domain === 'string' ? body.domain.trim().toLowerCase() : 'general';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as 'finance' | 'coding' | 'general')
+    : 'general';
 
   const wf = db.createWorkflow({
     name,
     description,
-    domain: body.domain ?? 'general',
+    domain,
     nodes: (body.nodes as never) ?? [],
     edges: (body.edges as never) ?? [],
   });
@@ -72,14 +82,18 @@ workflow.post('/', async (c) => {
 });
 
 workflow.put('/:id', async (c) => {
-  const id = c.req.param('id');
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{
     name?: string;
     description?: string;
     designSystemId?: string;
     nodes?: unknown[];
     edges?: unknown[];
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const name =
     body.name !== undefined
@@ -92,6 +106,10 @@ workflow.put('/:id', async (c) => {
     body.description !== undefined && typeof body.description === 'string'
       ? body.description.trim()
       : body.description;
+  const designSystemId =
+    body.designSystemId !== undefined
+      ? (typeof body.designSystemId === 'string' ? body.designSystemId.trim() : body.designSystemId)
+      : undefined;
 
   // Auto-snapshot before update (Task 16: version history)
   const current = db.getWorkflow(id);
@@ -109,7 +127,7 @@ workflow.put('/:id', async (c) => {
   const updated = db.updateWorkflow(id, {
     name,
     description,
-    designSystemId: body.designSystemId,
+    designSystemId,
     nodes: body.nodes as never,
     edges: body.edges as never,
   });
@@ -119,7 +137,9 @@ workflow.put('/:id', async (c) => {
 });
 
 workflow.delete('/:id', (c) => {
-  const deleted = db.deleteWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const deleted = db.deleteWorkflow(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
 });
@@ -143,16 +163,22 @@ workflow.post('/import', async (c) => {
   }
 
   const wf = body.workflow;
-  const rawName = typeof wf.name === 'string' && wf.name.length > 0 ? wf.name.slice(0, 200) : 'Imported Workflow';
+  const trimmedName =
+    typeof wf.name === 'string' ? wf.name.trim().slice(0, 200) : '';
+  const rawName = trimmedName.length > 0 ? trimmedName : 'Imported Workflow';
   const existing = db.listWorkflows().find((w) => w.name === rawName);
   const finalName = existing ? `${rawName} (imported)` : rawName;
+  const description =
+    typeof wf.description === 'string' ? wf.description.trim() || undefined : undefined;
+  const domainRaw = typeof wf.domain === 'string' ? wf.domain.trim().toLowerCase() : '';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as 'finance' | 'coding' | 'general')
+    : 'general';
 
   const created = db.createWorkflow({
     name: finalName,
-    description: typeof wf.description === 'string' ? wf.description : undefined,
-    domain: (['finance', 'coding', 'general'] as const).includes(wf.domain as never)
-      ? (wf.domain as 'finance' | 'coding' | 'general')
-      : 'general',
+    description,
+    domain,
     nodes: (wf.nodes as never) ?? [],
     edges: (wf.edges as never) ?? [],
   });
@@ -161,13 +187,17 @@ workflow.post('/import', async (c) => {
 });
 
 workflow.post('/:id/duplicate', (c) => {
-  const copy = db.duplicateWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const copy = db.duplicateWorkflow(id);
   if (!copy) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: copy }, 201);
 });
 
 workflow.get('/:id/export', (c) => {
-  const wf = db.getWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
   const safeName = wf.name.replace(/[^a-z0-9_-]/gi, '_');
   c.header('Content-Disposition', `attachment; filename="${safeName}.neos.json"`);
@@ -185,7 +215,9 @@ workflow.get('/:id/export', (c) => {
 });
 
 workflow.get('/:id/export.zip', async (c) => {
-  const wf = db.getWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
   const safeName = wf.name.replace(/[^a-z0-9_-]/gi, '_');
 
@@ -490,17 +522,22 @@ workflow.post('/import/claude-design', async (c) => {
 // ── Runs ──────────────────────────────────────────────────
 
 workflow.get('/:id/runs', (c) => {
-  const limit = Math.min(Number(c.req.query('limit') ?? '20'), 100);
-  const offset = Number(c.req.query('offset') ?? '0');
-  const runs = db.listRuns(c.req.param('id'), limit, offset);
+  const id = paramId(c);
+  if (!id) return c.json({ ok: true, data: [] });
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '20') || 20, 1), 100);
+  const offset = Math.max(Number(c.req.query('offset') ?? '0') || 0, 0);
+  const runs = db.listRuns(id, limit, offset);
   return c.json({ ok: true, data: runs });
 });
 
 /** Clear runs for a workflow. Optional ?status=completed|failed|cancelled|running */
 workflow.delete('/:id/runs', (c) => {
-  const wf = db.getWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
-  const status = c.req.query('status') || undefined;
+  const statusRaw = (c.req.query('status') ?? '').trim();
+  const status = statusRaw || undefined;
   const allowed = new Set(['completed', 'failed', 'cancelled', 'running']);
   if (status && !allowed.has(status)) {
     return c.json({ ok: false, error: 'Invalid status filter' }, 400);
@@ -510,18 +547,24 @@ workflow.delete('/:id/runs', (c) => {
 });
 
 workflow.delete('/:id/runs/:runId', (c) => {
-  const run = db.getRun(c.req.param('runId'));
+  const id = paramId(c);
+  const runId = paramId(c, 'runId');
+  if (!id || !runId) return c.json({ ok: false, error: 'Not found' }, 404);
+  const run = db.getRun(runId);
   if (!run) return c.json({ ok: false, error: 'Not found' }, 404);
-  if (run.workflowId !== c.req.param('id')) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (run.workflowId !== id) return c.json({ ok: false, error: 'Not found' }, 404);
   db.deleteRun(run.id);
   return c.json({ ok: true });
 });
 
 workflow.get('/:id/runs/:runId', (c) => {
-  const run = db.getRun(c.req.param('runId'));
+  const id = paramId(c);
+  const runId = paramId(c, 'runId');
+  if (!id || !runId) return c.json({ ok: false, error: 'Not found' }, 404);
+  const run = db.getRun(runId);
   if (!run) return c.json({ ok: false, error: 'Not found' }, 404);
   // Ensure the run belongs to the requested workflow
-  if (run.workflowId !== c.req.param('id')) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (run.workflowId !== id) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: run });
 });
 
@@ -530,7 +573,9 @@ workflow.get('/:id/runs/:runId', (c) => {
  * Does not start a run.
  */
 workflow.post('/:id/preflight', async (c) => {
-  const wf = db.getWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
   const secrets = getExecutionSettings({
     serverUrl: getRuntimeServerUrl(),
@@ -548,7 +593,9 @@ workflow.post('/:id/preflight', async (c) => {
 
 /** SSE stream: POST /api/workflow/:id/run */
 workflow.post('/:id/run', async (c) => {
-  const wf = db.getWorkflow(c.req.param('id'));
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
 
   // Parse optional trigger inputs from request body

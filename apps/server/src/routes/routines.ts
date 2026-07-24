@@ -39,7 +39,9 @@ routines.get('/', (c) => {
 });
 
 routines.get('/:id', (c) => {
-  const routine = db.getRoutine(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const routine = db.getRoutine(id);
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: withNextRun(routine) });
 });
@@ -91,14 +93,18 @@ routines.post('/', async (c) => {
 });
 
 routines.put('/:id', async (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{
     name?: string;
     schedule?: string;
     timezone?: string;
     enabled?: boolean;
     inputs?: Record<string, unknown>;
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const name =
     body.name !== undefined
@@ -135,7 +141,8 @@ routines.put('/:id', async (c) => {
 });
 
 routines.delete('/:id', (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const deleted = db.deleteRoutine(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
   removeSchedule(id);
@@ -143,7 +150,8 @@ routines.delete('/:id', (c) => {
 });
 
 routines.post('/:id/run', async (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const routine = db.getRoutine(id);
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
 
@@ -155,10 +163,11 @@ routines.post('/:id/run', async (c) => {
 });
 
 routines.get('/:id/runs', (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const routine = db.getRoutine(id);
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
-  const limit = Math.min(Number(c.req.query('limit') ?? '20'), 100);
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '20') || 20, 1), 100);
   const runs = db.listRoutineRuns(id, limit);
   return c.json({ ok: true, data: runs });
 });
@@ -168,8 +177,11 @@ routines.get('/:id/runs', (c) => {
  * Body optional: { name?: string, description?: string }
  */
 routines.post('/:id/runs/:runId/crystallize', async (c) => {
-  const routineId = c.req.param('id');
-  const runParam = c.req.param('runId');
+  const routineId = c.req.param('id').trim();
+  const runParam = c.req.param('runId').trim();
+  if (!routineId || !runParam) {
+    return c.json({ ok: false, error: !routineId ? 'Routine not found' : 'Routine run not found' }, 404);
+  }
   const routine = db.getRoutine(routineId);
   if (!routine) return c.json({ ok: false, error: 'Routine not found' }, 404);
 

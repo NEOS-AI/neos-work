@@ -69,6 +69,44 @@ describe('workflow routes CRUD', () => {
     expect(putBlank.status).toBe(400);
   });
 
+  it('normalizes domain on create and trims import name/description', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${WF_NAME}_domain`,
+        domain: '  CODING  ',
+        ...minimalGraph,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; domain: string } };
+    expect(created.data.domain).toBe('coding');
+    await workflow.request(`/${created.data.id}`, { method: 'DELETE' });
+
+    const imp = await workflow.request('/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        version: '1',
+        workflow: {
+          name: `  ${WF_NAME}_import  `,
+          description: '  from import  ',
+          domain: '  Finance  ',
+          ...minimalGraph,
+        },
+      }),
+    });
+    expect(imp.status).toBe(201);
+    const imported = await imp.json() as {
+      data: { id: string; name: string; description?: string; domain: string };
+    };
+    expect(imported.data.name).toBe(`${WF_NAME}_import`);
+    expect(imported.data.description).toBe('from import');
+    expect(imported.data.domain).toBe('finance');
+    await workflow.request(`/${imported.data.id}`, { method: 'DELETE' });
+  });
+
   it('creates, lists, gets, updates, duplicates, deletes', async () => {
     const create = await workflow.request('/', {
       method: 'POST',

@@ -40,6 +40,13 @@ describe('mcp routes', () => {
     const id = created.data.id;
     expect(created.data.enabled).toBe(true);
 
+    const toggleBadJson = await mcp.request(`/${id}/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(toggleBadJson.status).toBe(400);
+
     const toggle = await mcp.request(`/${id}/toggle`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

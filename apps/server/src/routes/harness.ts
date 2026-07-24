@@ -61,7 +61,8 @@ harness.get('/', (c) => {
 });
 
 harness.get('/:id', (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const builtin = resolveHarness(id);
   if (builtin) return c.json({ ok: true, data: builtin });
 
@@ -113,7 +114,8 @@ harness.post('/', async (c) => {
 });
 
 harness.put('/:id', async (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
 
   // Block editing of built-in harnesses
   if (resolveHarness(id)?.isBuiltIn) {
@@ -127,7 +129,10 @@ harness.put('/:id', async (c) => {
     systemPrompt: string;
     allowedTools: string[];
     constraints: object;
-  }>>();
+  }>>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const patch: Record<string, unknown> = { ...body };
   if (body.name !== undefined) {
@@ -168,7 +173,8 @@ harness.put('/:id', async (c) => {
 });
 
 harness.delete('/:id', (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
 
   if (resolveHarness(id)?.isBuiltIn) {
     return c.json({ ok: false, error: 'Cannot delete built-in harness' }, 403);

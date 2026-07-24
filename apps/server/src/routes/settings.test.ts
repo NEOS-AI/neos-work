@@ -52,6 +52,15 @@ describe('settings routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PUT invalid JSON returns 400', async () => {
+    const res = await settings.request(`/${KEY}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('PUT blank sensitive value deletes the setting', async () => {
     const put = await settings.request(`/${SENSITIVE}`, {
       method: 'PUT',

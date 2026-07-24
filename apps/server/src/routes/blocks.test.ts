@@ -109,5 +109,12 @@ describe('blocks routes', () => {
       body: JSON.stringify({ name: '   ' }),
     });
     expect(putBlank.status).toBe(400);
+
+    const putBadJson = await blocks.request(`/${ID}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(putBadJson.status).toBe(400);
   });
 });

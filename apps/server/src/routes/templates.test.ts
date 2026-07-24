@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { TEMPLATES } from './templates.js';
+import templates, { TEMPLATES } from './templates.js';
+
+describe('templates routes', () => {
+  it('lists all templates and filters by trimmed domain', async () => {
+    const all = await templates.request('/');
+    expect(all.status).toBe(200);
+    const allBody = await all.json() as { data: Array<{ domain: string }> };
+    expect(allBody.data.length).toBe(TEMPLATES.length);
+
+    const filtered = await templates.request('/?domain=%20coding%20');
+    expect(filtered.status).toBe(200);
+    const body = await filtered.json() as { data: Array<{ domain: string }> };
+    expect(body.data.length).toBeGreaterThan(0);
+    expect(body.data.every((t) => t.domain === 'coding')).toBe(true);
+
+    const caseInsensitive = await templates.request('/?domain=%20CODING%20');
+    expect(caseInsensitive.status).toBe(200);
+    const caseBody = await caseInsensitive.json() as { data: Array<{ domain: string }> };
+    expect(caseBody.data.every((t) => t.domain === 'coding')).toBe(true);
+
+    const blankDomain = await templates.request('/?domain=%20%20');
+    expect(blankDomain.status).toBe(200);
+    const blankBody = await blankDomain.json() as { data: unknown[] };
+    expect(blankBody.data.length).toBe(TEMPLATES.length);
+  });
+});
 
 describe('workflow TEMPLATES', () => {
   it('includes finance, coding, and general domains', () => {

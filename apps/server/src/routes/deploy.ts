@@ -189,9 +189,13 @@ deploy.post('/', async (c) => {
     }, 400);
   }
 
+  const workflowId =
+    typeof body.workflowId === 'string' ? body.workflowId.trim() || undefined : undefined;
+  const runId = typeof body.runId === 'string' ? body.runId.trim() || undefined : undefined;
+
   const record = createDeployment({
-    workflowId: body.workflowId,
-    runId: body.runId,
+    workflowId,
+    runId,
     provider: body.provider,
     projectName,
     status: 'deploying',

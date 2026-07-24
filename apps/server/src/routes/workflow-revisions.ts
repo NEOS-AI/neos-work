@@ -14,15 +14,29 @@ import type { WorkflowEdge, WorkflowNode } from '@neos-work/shared';
 
 const workflowRevisions = new Hono();
 
+function paramIds(c: { req: { param: (k: string) => string } }): {
+  workflowId: string;
+  id: string;
+} {
+  return {
+    workflowId: c.req.param('workflowId').trim(),
+    id: c.req.param('id').trim(),
+  };
+}
+
 workflowRevisions.get('/:workflowId', (c) => {
-  const wf = workflowDb.getWorkflow(c.req.param('workflowId'));
+  const workflowId = c.req.param('workflowId').trim();
+  if (!workflowId) return c.json({ ok: false, error: 'Not found' }, 404);
+  const wf = workflowDb.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: db.listRevisions(c.req.param('workflowId')) });
+  return c.json({ ok: true, data: db.listRevisions(workflowId) });
 });
 
 workflowRevisions.get('/:workflowId/:id', (c) => {
-  const rev = db.getRevision(c.req.param('id'));
-  if (!rev || rev.workflowId !== c.req.param('workflowId')) {
+  const { workflowId, id } = paramIds(c);
+  if (!workflowId || !id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const rev = db.getRevision(id);
+  if (!rev || rev.workflowId !== workflowId) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
   return c.json({ ok: true, data: rev });
@@ -33,8 +47,9 @@ workflowRevisions.get('/:workflowId/:id', (c) => {
  * Snapshots current state first (unless identical) so restore is reversible.
  */
 workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
-  const workflowId = c.req.param('workflowId');
-  const rev = db.getRevision(c.req.param('id'));
+  const { workflowId, id } = paramIds(c);
+  if (!workflowId || !id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const rev = db.getRevision(id);
   if (!rev || rev.workflowId !== workflowId) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
@@ -94,25 +109,29 @@ workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
 });
 
 workflowRevisions.patch('/:workflowId/:id', async (c) => {
-  const rev = db.getRevision(c.req.param('id'));
-  if (!rev || rev.workflowId !== c.req.param('workflowId')) {
+  const { workflowId, id } = paramIds(c);
+  if (!workflowId || !id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const rev = db.getRevision(id);
+  if (!rev || rev.workflowId !== workflowId) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
-  const body = await c.req.json<{ label?: string }>();
-  const label = typeof body.label === 'string' ? body.label.trim() : '';
+  const body = await c.req.json<{ label?: string }>().catch(() => null);
+  const label = typeof body?.label === 'string' ? body.label.trim() : '';
   if (!label || label.length > 200) {
     return c.json({ ok: false, error: 'Invalid label' }, 400);
   }
-  db.updateRevisionLabel(c.req.param('id'), label);
-  return c.json({ ok: true, data: db.getRevision(c.req.param('id')) });
+  db.updateRevisionLabel(id, label);
+  return c.json({ ok: true, data: db.getRevision(id) });
 });
 
 workflowRevisions.delete('/:workflowId/:id', (c) => {
-  const rev = db.getRevision(c.req.param('id'));
-  if (!rev || rev.workflowId !== c.req.param('workflowId')) {
+  const { workflowId, id } = paramIds(c);
+  if (!workflowId || !id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const rev = db.getRevision(id);
+  if (!rev || rev.workflowId !== workflowId) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
-  db.deleteRevision(c.req.param('id'));
+  db.deleteRevision(id);
   return c.json({ ok: true });
 });
 

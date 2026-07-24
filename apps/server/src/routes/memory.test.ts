@@ -60,6 +60,13 @@ describe('memory routes', () => {
     });
     expect(putBlank.status).toBe(400);
 
+    const putBadJson = await memory.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(putBadJson.status).toBe(400);
+
     await memory.request(`/${created.data.id}`, { method: 'DELETE' });
   });
 

@@ -115,9 +115,9 @@ media.post('/audio', async (c) => {
 
 // Serve a saved media file by filename (path traversal safe)
 media.get('/file/:filename', (c) => {
-  const filename = c.req.param('filename');
+  const filename = c.req.param('filename').trim();
   // Reject any path traversal
-  if (!/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
+  if (!filename || !/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
   const filePath = path.join(MEDIA_DIR, filename);
@@ -222,8 +222,8 @@ media.post('/generate', async (c) => {
 
 /** Delete a generated media file */
 media.delete('/file/:filename', (c) => {
-  const filename = c.req.param('filename');
-  if (!/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
+  const filename = c.req.param('filename').trim();
+  if (!filename || !/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
   const filePath = path.join(MEDIA_DIR, filename);

@@ -80,6 +80,27 @@ describe('harness routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('PUT invalid JSON returns 400', async () => {
+    const create = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        systemPrompt: 'prompt',
+        allowedTools: [],
+      }),
+    });
+    expect([200, 201]).toContain(create.status);
+    const created = await create.json() as { data: { id: string } };
+    const bad = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(bad.status).toBe(400);
+    await harness.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('clamps constraints.maxSteps and trims allowedTools', async () => {
     const create = await harness.request('/', {
       method: 'POST',

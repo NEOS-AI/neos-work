@@ -26,7 +26,8 @@ settings.get('/', (c) => {
 
 // GET /api/settings/:key — single setting (sensitive values masked)
 settings.get('/:key', (c) => {
-  const key = c.req.param('key');
+  const key = c.req.param('key').trim();
+  if (!key) return c.json({ ok: false, error: 'Setting not found' }, 404);
   const value = settingsDb.getSetting(key);
   if (value === undefined) {
     return c.json({ ok: false, error: 'Setting not found' }, 404);
@@ -36,15 +37,15 @@ settings.get('/:key', (c) => {
 
 // PUT /api/settings/:key — create or update setting
 settings.put('/:key', async (c) => {
-  const key = c.req.param('key');
+  const key = c.req.param('key').trim();
 
   // Validate key format (alphanumeric, dots, hyphens, underscores; max 100 chars)
   if (!key || key.length > 100 || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
     return c.json({ ok: false, error: 'Invalid setting key' }, 400);
   }
 
-  const body = await c.req.json<{ value: string }>();
-  if (body.value === undefined) {
+  const body = await c.req.json<{ value: string }>().catch(() => null);
+  if (!body || body.value === undefined) {
     return c.json({ ok: false, error: 'Missing "value" in body' }, 400);
   }
 
@@ -65,7 +66,8 @@ settings.put('/:key', async (c) => {
 
 // DELETE /api/settings/:key — delete setting
 settings.delete('/:key', (c) => {
-  const key = c.req.param('key');
+  const key = c.req.param('key').trim();
+  if (!key) return c.json({ ok: false, error: 'Setting not found' }, 404);
   const deleted = settingsDb.deleteSetting(key);
   if (!deleted) return c.json({ ok: false, error: 'Setting not found' }, 404);
   return c.json({ ok: true });

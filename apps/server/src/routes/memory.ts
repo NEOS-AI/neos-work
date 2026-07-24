@@ -59,13 +59,20 @@ memory.post('/', async (c) => {
 });
 
 memory.get('/:id', (c) => {
-  const item = getMemory(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const item = getMemory(id);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: item });
 });
 
 memory.put('/:id', async (c) => {
-  const body = await c.req.json<UpdateMemoryInput>();
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json<UpdateMemoryInput>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
   const patch: UpdateMemoryInput = {};
   if (body.name !== undefined) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -84,19 +91,23 @@ memory.put('/:id', async (c) => {
   }
   if (body.enabled !== undefined) patch.enabled = body.enabled;
 
-  const item = updateMemory(c.req.param('id'), patch);
+  const item = updateMemory(id, patch);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: item });
 });
 
 memory.delete('/:id', (c) => {
-  const ok = deleteMemory(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const ok = deleteMemory(id);
   if (!ok) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
 });
 
 memory.put('/:id/toggle', (c) => {
-  const item = toggleMemory(c.req.param('id'));
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const item = toggleMemory(id);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: item });
 });

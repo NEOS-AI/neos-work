@@ -168,9 +168,10 @@ mcp.post('/', async (c) => {
 
 // POST /api/mcp-servers/:id/toggle
 mcp.post('/:id/toggle', async (c) => {
-  const id = c.req.param('id');
-  const body = await c.req.json<{ enabled: boolean }>();
-  if (typeof body.enabled !== 'boolean') {
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'MCP server not found' }, 404);
+  const body = await c.req.json<{ enabled: boolean }>().catch(() => null);
+  if (!body || typeof body.enabled !== 'boolean') {
     return c.json({ ok: false, error: 'Missing or invalid "enabled" field' }, 400);
   }
   const updated = toggleMcpServer(id, body.enabled);
@@ -180,7 +181,8 @@ mcp.post('/:id/toggle', async (c) => {
 
 // DELETE /api/mcp-servers/:id
 mcp.delete('/:id', (c) => {
-  const id = c.req.param('id');
+  const id = c.req.param('id').trim();
+  if (!id) return c.json({ ok: false, error: 'MCP server not found' }, 404);
   const deleted = deleteMcpServer(id);
   if (!deleted) return c.json({ ok: false, error: 'MCP server not found' }, 404);
   return c.json({ ok: true });

@@ -43,6 +43,19 @@ describe('deploy routes', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('list trims workflowId query filter', async () => {
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-wf`,
+      status: 'success',
+      workflowId: 'wf-trim-test',
+    });
+    const res = await deploy.request('/?workflowId=%20wf-trim-test%20');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data: Array<{ id: string }> };
+    expect(body.data.some((d) => d.id === row.id)).toBe(true);
+  });
+
   it('preflight reports missing vercel token', async () => {
     const res = await deploy.request('/preflight', {
       method: 'POST',
