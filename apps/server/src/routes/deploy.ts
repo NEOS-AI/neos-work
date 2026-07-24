@@ -166,7 +166,10 @@ deploy.post('/', async (c) => {
     projectName?: string;
     workflowId?: string;
     runId?: string;
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   if (!body.provider || !content) {

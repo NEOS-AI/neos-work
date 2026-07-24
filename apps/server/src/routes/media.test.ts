@@ -91,6 +91,22 @@ describe('media routes', () => {
     expect(body.error).toMatch(/OpenAI|key|configured/i);
   });
 
+  it('POST /image and /audio reject invalid JSON body', async () => {
+    const img = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(img.status).toBe(400);
+
+    const audio = await media.request('/audio', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(audio.status).toBe(400);
+  });
+
   it('POST /image rejects whitespace-only prompt and whitespace API key', async () => {
     setSetting('OPENAI_API_KEY', '   ');
     const blankPrompt = await media.request('/image', {
@@ -154,5 +170,23 @@ describe('media routes', () => {
     // Should fail on API key, not surface validation
     expect(body.error).toMatch(/OpenAI|key|configured/i);
     expect(body.error).not.toMatch(/surface/i);
+  });
+
+  it('POST /generate rejects invalid JSON body', async () => {
+    const res = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json{',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/Invalid JSON/i);
+  });
+
+  it('file get/delete reject blank or whitespace-only filenames after trim', async () => {
+    const blankGet = await media.request('/file/%20%20%20');
+    expect(blankGet.status).toBe(400);
+    const blankDel = await media.request('/file/%20', { method: 'DELETE' });
+    expect(blankDel.status).toBe(400);
   });
 });

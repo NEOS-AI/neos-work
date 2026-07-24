@@ -79,7 +79,10 @@ harness.post('/', async (c) => {
     systemPrompt: string;
     allowedTools: string[];
     constraints?: { maxSteps?: number; maxTokens?: number; timeoutMs?: number };
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const systemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
@@ -94,8 +97,11 @@ harness.post('/', async (c) => {
 
   const description =
     typeof body.description === 'string' ? body.description.trim() : (body.description ?? '');
-  const domain =
-    typeof body.domain === 'string' ? body.domain.trim() || 'general' : (body.domain ?? 'general');
+  const domainRaw =
+    typeof body.domain === 'string' ? body.domain.trim().toLowerCase() || 'general' : 'general';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? domainRaw
+    : 'general';
 
   const newHarness = db.createCustomHarness({
     id: nanoid(12),
@@ -149,7 +155,10 @@ harness.put('/:id', async (c) => {
     patch.description = body.description.trim();
   }
   if (typeof body.domain === 'string') {
-    patch.domain = body.domain.trim() || 'general';
+    const domainRaw = body.domain.trim().toLowerCase() || 'general';
+    patch.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+      ? domainRaw
+      : 'general';
   }
   if (body.allowedTools !== undefined) {
     if (!Array.isArray(body.allowedTools)) {

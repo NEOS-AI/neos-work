@@ -42,7 +42,10 @@ memory.get('/export', (c) => {
 });
 
 memory.post('/', async (c) => {
-  const body = await c.req.json<CreateMemoryInput>();
+  const body = await c.req.json<CreateMemoryInput>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   const type = parseMemoryType(body.type);

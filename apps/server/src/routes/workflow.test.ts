@@ -38,6 +38,15 @@ describe('workflow routes CRUD', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects create with invalid JSON body', async () => {
+    const res = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('trims name/description and rejects whitespace-only name', async () => {
     const blank = await workflow.request('/', {
       method: 'POST',

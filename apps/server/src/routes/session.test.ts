@@ -22,6 +22,13 @@ describe('session routes', () => {
   });
 
   it('creates, gets, lists messages, deletes', async () => {
+    const badJson = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
     const bad = await session.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

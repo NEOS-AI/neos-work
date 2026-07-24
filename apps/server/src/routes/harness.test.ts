@@ -20,6 +20,13 @@ describe('harness routes', () => {
   });
 
   it('creates, gets, deletes custom harness; rejects incomplete body', async () => {
+    const badJson = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
     const bad = await harness.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

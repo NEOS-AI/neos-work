@@ -97,4 +97,19 @@ describe('design-systems routes', () => {
     const res = await designSystems.request('/no-such-ds/content');
     expect(res.status).toBe(404);
   });
+
+  it('returns 404 for blank path ids after trim', async () => {
+    const get = await designSystems.request('/%20%20');
+    expect(get.status).toBe(404);
+    const del = await designSystems.request('/%20', { method: 'DELETE' });
+    expect(del.status).toBe(404);
+    const content = await designSystems.request('/%20/content');
+    expect(content.status).toBe(404);
+    const put = await designSystems.request('/%20/content', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '# x' }),
+    });
+    expect(put.status).toBe(404);
+  });
 });

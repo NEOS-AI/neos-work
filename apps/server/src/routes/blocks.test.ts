@@ -40,6 +40,13 @@ describe('blocks routes', () => {
   });
 
   it('POST trims id/name and rejects invalid id or blank name', async () => {
+    const badJson = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
     const blank = await blocks.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -116,5 +123,44 @@ describe('blocks routes', () => {
       body: 'not-json',
     });
     expect(putBadJson.status).toBe(400);
+  });
+
+  it('normalizes unknown domain to general on create and put', async () => {
+    const domId = `${ID}_dom`;
+    const create = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: domId,
+        name: 'Domain Clamp',
+        implementationType: 'prompt',
+        promptTemplate: 'hi',
+        domain: '  MARKETING  ',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; domain: string } };
+    expect(created.data.domain).toBe('general');
+
+    const put = await blocks.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ domain: '  Finance  ' }),
+    });
+    expect(put.status).toBe(200);
+    const updated = await put.json() as { data: { domain: string } };
+    expect(updated.data.domain).toBe('finance');
+
+    const putUnknown = await blocks.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ domain: 'not-a-domain' }),
+    });
+    expect(putUnknown.status).toBe(200);
+    const again = await putUnknown.json() as { data: { domain: string } };
+    expect(again.data.domain).toBe('general');
+
+    await blocks.request(`/${created.data.id}`, { method: 'DELETE' });
+    try { deleteCustomBlock(domId); } catch { /* ignore */ }
   });
 });

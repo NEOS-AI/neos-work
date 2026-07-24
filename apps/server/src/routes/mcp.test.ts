@@ -77,6 +77,15 @@ describe('mcp routes', () => {
     expect(create.status).toBe(201);
   });
 
+  it('rejects create with invalid JSON body', async () => {
+    const res = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('trims name/command/url and rejects whitespace or non-http url', async () => {
     const blankName = await mcp.request('/', {
       method: 'POST',

@@ -143,7 +143,7 @@ async function loadBrowserTools(
 // --- Session CRUD ---
 
 session.get('/', (c) => {
-  const workspaceId = c.req.query('workspaceId');
+  const workspaceId = (c.req.query('workspaceId') ?? '').trim() || undefined;
   const sessions = db.listSessions(workspaceId);
   return c.json({ ok: true, data: sessions });
 });
@@ -155,7 +155,10 @@ session.post('/', async (c) => {
     provider?: string;
     model?: string;
     thinkingMode?: string;
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   // Input validation
   const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
@@ -234,7 +237,10 @@ session.post('/:id/chat', async (c) => {
     return c.json({ ok: false, error: 'No API key configured. Please set API keys in Settings.' }, 400);
   }
 
-  const body = await c.req.json<{ content: string }>();
+  const body = await c.req.json<{ content: string }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   // Input validation
   const MAX_CONTENT_LENGTH = 100_000; // 100KB
@@ -515,7 +521,10 @@ session.post('/:id/agent', async (c) => {
     return c.json({ ok: false, error: 'No API key configured. Please set API keys in Settings.' }, 400);
   }
 
-  const body = await c.req.json<{ content: string }>();
+  const body = await c.req.json<{ content: string }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const MAX_CONTENT_LENGTH = 100_000;
   const content = typeof body.content === 'string' ? body.content.trim() : '';
@@ -702,7 +711,10 @@ workspace.get('/', (c) => {
 });
 
 workspace.post('/', async (c) => {
-  const body = await c.req.json<{ name: string; path?: string; type?: string }>();
+  const body = await c.req.json<{ name: string; path?: string; type?: string }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name || name.length > 200) {
     return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);

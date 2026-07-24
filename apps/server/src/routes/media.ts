@@ -44,7 +44,10 @@ media.post('/image', async (c) => {
     prompt: string;
     size?: '1024x1024' | '1792x1024' | '1024x1792';
     quality?: 'standard' | 'hd';
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) {
@@ -83,7 +86,10 @@ media.post('/audio', async (c) => {
     text: string;
     voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
     model?: 'tts-1' | 'tts-1-hd';
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) {

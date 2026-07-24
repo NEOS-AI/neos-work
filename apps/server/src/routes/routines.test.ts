@@ -31,6 +31,15 @@ describe('routines routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects create with invalid JSON body', async () => {
+    const res = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('rejects whitespace-only name and trims fields on create', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,
@@ -180,5 +189,49 @@ describe('routines routes', () => {
       const body = await ok.json() as { data?: { name?: string; path?: string } };
       expect(body.data?.name || body.data?.path).toBeTruthy();
     }
+  });
+
+  it('trims path ids and rejects invalid PUT JSON', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const routine = routinesDb.createRoutine({
+      name: 'Path Hygiene',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'UTC',
+      enabled: false,
+    });
+
+    // whitespace-only path id → 404
+    const blankGet = await routines.request('/%20%20');
+    expect(blankGet.status).toBe(404);
+
+    const blankPut = await routines.request('/%20', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(blankPut.status).toBe(404);
+
+    const badJson = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+    const body = await badJson.json() as { error: string };
+    expect(body.error).toMatch(/Invalid JSON/i);
+
+    // limit clamped to 1–100 (no throw on nonsense)
+    const runs = await routines.request(`/${routine.id}/runs?limit=0`);
+    expect(runs.status).toBe(200);
+    const huge = await routines.request(`/${routine.id}/runs?limit=999`);
+    expect(huge.status).toBe(200);
+
+    await routines.request(`/${routine.id}`, { method: 'DELETE' });
   });
 });

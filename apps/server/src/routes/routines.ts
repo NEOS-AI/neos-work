@@ -54,7 +54,10 @@ routines.post('/', async (c) => {
     timezone?: string;
     enabled?: boolean;
     inputs?: Record<string, unknown>;
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const workflowId = typeof body.workflowId === 'string' ? body.workflowId.trim() : '';

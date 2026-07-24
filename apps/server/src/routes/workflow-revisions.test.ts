@@ -87,4 +87,41 @@ describe('workflow-revisions routes', () => {
     const missing = await workflowRevisions.request(`/${wf.id}/${rev.id}`);
     expect(missing.status).toBe(404);
   });
+
+  it('returns 404 for blank ids and 400 for invalid patch JSON', async () => {
+    const blankList = await workflowRevisions.request('/%20');
+    expect(blankList.status).toBe(404);
+
+    const blankGet = await workflowRevisions.request('/%20/%20');
+    expect(blankGet.status).toBe(404);
+
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [{ id: 't', type: 'trigger', label: 'Start', config: {} }],
+      edges: [],
+    });
+    const rev = revDb.createRevision(
+      wf.id,
+      JSON.stringify({
+        name: WF_NAME,
+        nodes: [{ id: 't', type: 'trigger', label: 'Start', config: {} }],
+        edges: [],
+      }),
+      'json-hygiene',
+    );
+
+    const badJson = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    // invalid JSON → body null → empty label → 400 Invalid label
+    expect(badJson.status).toBe(400);
+
+    const blankIdsRestore = await workflowRevisions.request(`/%20/${rev.id}/restore`, {
+      method: 'POST',
+    });
+    expect(blankIdsRestore.status).toBe(404);
+  });
 });

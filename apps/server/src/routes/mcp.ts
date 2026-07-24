@@ -126,7 +126,10 @@ mcp.post('/', async (c) => {
       command?: string;
       args?: string[];
       url?: string;
-    }>();
+    }>().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+    }
 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name || name.length > 200) {

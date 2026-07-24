@@ -16,8 +16,8 @@ const blocks = new Hono();
 
 // GET /api/blocks
 blocks.get('/', (c) => {
-  const domainRaw = c.req.query('domain');
-  const domain = domainRaw?.trim() || undefined;
+  const domainRaw = (c.req.query('domain') ?? '').trim().toLowerCase();
+  const domain = domainRaw || undefined;
   const builtIn = listBlocks(domain);
   const custom = listCustomBlocks(domain);
   return c.json({ ok: true, data: [...builtIn, ...custom] });
@@ -25,7 +25,10 @@ blocks.get('/', (c) => {
 
 // POST /api/blocks
 blocks.post('/', async (c) => {
-  const body = await c.req.json<Omit<WorkflowBlock, 'isBuiltIn'>>();
+  const body = await c.req.json<Omit<WorkflowBlock, 'isBuiltIn'>>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
   const id = typeof body.id === 'string' ? body.id.trim() : '';
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!id || !name) {

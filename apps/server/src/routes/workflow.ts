@@ -57,7 +57,10 @@ workflow.post('/', async (c) => {
     domain?: string;
     nodes?: unknown[];
     edges?: unknown[];
-  }>();
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
 
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   if (!name || name.length > 200) {

@@ -105,6 +105,15 @@ describe('deploy routes', () => {
     expect(tokenCheck?.ok).toBe(false);
   });
 
+  it('POST deploy rejects invalid JSON body', async () => {
+    const res = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('POST deploy rejects whitespace-only content', async () => {
     setSetting('VERCEL_API_TOKEN', 'tok-test');
     const res = await deploy.request('/', {

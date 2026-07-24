@@ -20,6 +20,15 @@ describe('memory routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects create with invalid JSON body', async () => {
+    const res = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('trims fields, normalizes type, rejects blank/invalid', async () => {
     const blank = await memory.request('/', {
       method: 'POST',
