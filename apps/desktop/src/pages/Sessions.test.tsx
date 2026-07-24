@@ -217,4 +217,80 @@ describe('Sessions page', () => {
       expect(screen.getByText('Hi there')).toBeInTheDocument();
     });
   });
+
+  it('does not clobber optimistic messages when listMessages resolves late', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    let resolveMessages: ((value: unknown) => void) | undefined;
+    listMessages.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveMessages = resolve;
+        }),
+    );
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'text', content: 'streamed' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(listMessages).toHaveBeenCalledWith('s1'));
+
+    // Send while history is still loading
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'Optimistic hi' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(chat).toHaveBeenCalled();
+      expect(screen.getByText('Optimistic hi')).toBeInTheDocument();
+    });
+
+    // Late history must not wipe temp-* messages
+    resolveMessages?.({
+      ok: true,
+      data: [
+        {
+          id: 'old-1',
+          session_id: 's1',
+          role: 'user',
+          content: 'old history',
+          metadata: null,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Optimistic hi')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('old history')).not.toBeInTheDocument();
+  });
+
+  it('sends via agent mode when Agent toggle is on', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    runAgent.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'text', content: 'agent reply' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Agent/i }));
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'Do the thing' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(runAgent).toHaveBeenCalledWith('s1', 'Do the thing', expect.any(AbortSignal));
+      expect(chat).not.toHaveBeenCalled();
+    });
+  });
 });
