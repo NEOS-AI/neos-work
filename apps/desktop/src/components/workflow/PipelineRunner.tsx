@@ -54,10 +54,15 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
     // Trim plugin run inputs so resume/stage context stays clean (plan Task 5/6)
     const trimmedInputs: Record<string, string> = {};
     for (const [key, value] of Object.entries(inputs)) {
-      trimmedInputs[key] = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+      const k = typeof key === 'string' ? key.trim() : '';
+      if (!k) continue;
+      trimmedInputs[k] = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
     }
 
-    const { stop, runIdPromise } = client.runPlugin(plugin.id, trimmedInputs, (event: unknown) => {
+    const pluginId = typeof plugin.id === 'string' ? plugin.id.trim() : '';
+    if (!pluginId) return;
+
+    const { stop, runIdPromise } = client.runPlugin(pluginId, trimmedInputs, (event: unknown) => {
       const e = event as Record<string, unknown>;
       setRun((prev) => {
         if (!prev) return prev;

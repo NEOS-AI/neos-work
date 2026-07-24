@@ -77,20 +77,34 @@ export function getMemory(id: string): MemoryItem | null {
   return listMemories().find((m) => m.id === trimmed) ?? null;
 }
 
+const MEMORY_TYPES = new Set(['user', 'session', 'skill', 'reference']);
+
+function normalizeMemoryType(raw: unknown, fallback: MemoryType = 'user'): MemoryType {
+  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return MEMORY_TYPES.has(t) ? (t as MemoryType) : fallback;
+}
+
 export function createMemory(input: CreateMemoryInput): MemoryItem {
   ensureDir();
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name) {
+    throw new Error('name is required');
+  }
+  const content =
+    typeof input.content === 'string' ? input.content.trim() : String(input.content ?? '');
+  const type = normalizeMemoryType(input.type);
   const id = randomUUID();
   const now = new Date().toISOString();
-  const slug = slugify(input.name) || id.slice(0, 8);
-  const fileName = `${input.type}_${slug}.md`;
+  const slug = slugify(name) || id.slice(0, 8);
+  const fileName = `${type}_${slug}.md`;
   const filePath = join(MEMORY_DIR, fileName);
 
   const item: MemoryItem = {
     id,
-    name: input.name,
-    type: input.type,
+    name,
+    type,
     enabled: input.enabled ?? true,
-    content: input.content,
+    content,
     filePath,
     createdAt: now,
     updatedAt: now,
@@ -103,11 +117,26 @@ export function updateMemory(id: string, input: UpdateMemoryInput): MemoryItem |
   const existing = getMemory(id);
   if (!existing) return null;
 
+  const name =
+    input.name !== undefined
+      ? (typeof input.name === 'string' ? input.name.trim() : '')
+      : existing.name;
+  if (!name) return null;
+
+  const content =
+    input.content !== undefined
+      ? (typeof input.content === 'string' ? input.content.trim() : String(input.content ?? ''))
+      : existing.content;
+  const type =
+    input.type !== undefined
+      ? normalizeMemoryType(input.type, existing.type)
+      : existing.type;
+
   const updated: MemoryItem = {
     ...existing,
-    name: input.name ?? existing.name,
-    type: input.type ?? existing.type,
-    content: input.content ?? existing.content,
+    name,
+    type,
+    content,
     enabled: input.enabled ?? existing.enabled,
     updatedAt: new Date().toISOString(),
   };

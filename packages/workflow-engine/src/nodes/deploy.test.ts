@@ -181,4 +181,19 @@ describe('DeployNode', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.provider).toBe('cloudflare');
   });
+
+  it('trims/lowercases provider so padded cloudflare still works', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://cf.pages.dev' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await DeployNode.execute(
+      ctx({
+        config: { provider: '  CloudFlare  ', projectName: 'site', content: '<p/>' },
+        inputs: {},
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.provider).toBe('cloudflare');
+  });
 });

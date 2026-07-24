@@ -135,6 +135,41 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     id: trimmed,
   };
 
+  // Normalize string fields the same way as create (defense-in-depth for direct DB callers)
+  if (patch.name !== undefined) {
+    const name = typeof patch.name === 'string' ? patch.name.trim() : '';
+    if (!name) return null;
+    updated.name = name;
+  }
+  if (patch.domain !== undefined) {
+    const domainRaw =
+      typeof patch.domain === 'string' ? patch.domain.trim().toLowerCase() || 'general' : 'general';
+    updated.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+      ? (domainRaw as WorkflowBlock['domain'])
+      : 'general';
+  }
+  if (typeof patch.category === 'string') {
+    updated.category = patch.category.trim() || 'custom';
+  }
+  if (typeof patch.description === 'string') {
+    updated.description = patch.description.trim();
+  }
+  if (typeof patch.promptTemplate === 'string') {
+    updated.promptTemplate = patch.promptTemplate.trim() || undefined;
+  }
+  if (typeof patch.skillId === 'string') {
+    updated.skillId = patch.skillId.trim() || undefined;
+  }
+  if (typeof patch.inputDescription === 'string') {
+    updated.inputDescription = patch.inputDescription.trim();
+  }
+  if (typeof patch.outputDescription === 'string') {
+    updated.outputDescription = patch.outputDescription.trim();
+  }
+  if (patch.paramDefs !== undefined) {
+    updated.paramDefs = Array.isArray(patch.paramDefs) ? patch.paramDefs : existing.paramDefs;
+  }
+
   db.prepare(`
     UPDATE custom_block SET
       name = ?, domain = ?, category = ?, description = ?, implementation_type = ?,
@@ -148,7 +183,7 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     updated.category,
     updated.description,
     updated.implementationType,
-    JSON.stringify(updated.paramDefs),
+    JSON.stringify(updated.paramDefs ?? []),
     updated.inputDescription,
     updated.outputDescription,
     updated.promptTemplate ?? null,

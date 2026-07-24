@@ -84,5 +84,56 @@ describe('custom harnesses CRUD', () => {
     expect(deleteCustomHarness(`  ${ID}  `)).toBe(true);
     expect(getCustomHarness(ID)).toBeUndefined();
   });
+
+  it('trims fields on create/update; rejects invalid id and blank required fields', () => {
+    expect(() =>
+      createCustomHarness({
+        id: 'bad id!',
+        name: 'x',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/alphanumeric/i);
+
+    const h = createCustomHarness({
+      id: `  ${ID}  `,
+      name: '  Name  ',
+      domain: '  CODING  ' as never,
+      description: '  desc  ',
+      systemPrompt: '  prompt  ',
+      allowedTools: ['  read  ', '  ', 'write'],
+    });
+    expect(h.id).toBe(ID);
+    expect(h.name).toBe('Name');
+    expect(h.domain).toBe('coding');
+    expect(h.description).toBe('desc');
+    expect(h.systemPrompt).toBe('prompt');
+    expect(h.allowedTools).toEqual(['read', 'write']);
+
+    const updated = updateCustomHarness(ID, {
+      name: '  Renamed  ',
+      domain: '  Finance  ' as never,
+      description: '  d2  ',
+      systemPrompt: '  p2  ',
+      allowedTools: ['  a  ', '', 'b'],
+    });
+    expect(updated?.name).toBe('Renamed');
+    expect(updated?.domain).toBe('finance');
+    expect(updated?.description).toBe('d2');
+    expect(updated?.systemPrompt).toBe('p2');
+    expect(updated?.allowedTools).toEqual(['a', 'b']);
+
+    // blank name/systemPrompt leave row unchanged
+    expect(updateCustomHarness(ID, { name: '   ' })).toBeUndefined();
+    expect(updateCustomHarness(ID, { systemPrompt: '   ' })).toBeUndefined();
+    expect(getCustomHarness(ID)?.name).toBe('Renamed');
+    expect(getCustomHarness(ID)?.systemPrompt).toBe('p2');
+
+    // unknown domain → general
+    const gen = updateCustomHarness(ID, { domain: 'marketing' as never });
+    expect(gen?.domain).toBe('general');
+  });
 });
 

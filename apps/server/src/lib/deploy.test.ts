@@ -37,6 +37,50 @@ describe('deploy helpers', () => {
     ).rejects.toThrow(/ECONNREFUSED/);
   });
 
+  it('rejects blank projectName/content/apiToken for deployToVercel', async () => {
+    await expect(
+      deployToVercel({ projectName: '  ', content: '<p/>', apiToken: 'tok' }),
+    ).rejects.toThrow(/projectName/i);
+    await expect(
+      deployToVercel({ projectName: 'x', content: '   ', apiToken: 'tok' }),
+    ).rejects.toThrow(/content/i);
+    await expect(
+      deployToVercel({ projectName: 'x', content: '<p/>', apiToken: '  ' }),
+    ).rejects.toThrow(/apiToken/i);
+  });
+
+  it('rejects blank ids/tokens for deployment status helpers', async () => {
+    await expect(getVercelDeploymentStatus('  ', 'tok')).rejects.toThrow(/deploymentId/i);
+    await expect(getVercelDeploymentStatus('dpl_1', '  ')).rejects.toThrow(/apiToken/i);
+    await expect(
+      getCloudflareDeploymentStatus({
+        accountId: '  ',
+        projectName: 'p',
+        deploymentId: 'd',
+        apiToken: 't',
+      }),
+    ).rejects.toThrow(/accountId/i);
+    await expect(
+      getCloudflareDeploymentStatus({
+        accountId: 'a',
+        projectName: '  ',
+        deploymentId: 'd',
+        apiToken: 't',
+      }),
+    ).rejects.toThrow(/projectName/i);
+  });
+
+  it('trims and encodes vercel deployment id in status URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ readyState: 'READY', url: 'demo.vercel.app' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await getVercelDeploymentStatus('  dpl_1  ', '  tok  ');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/deployments/dpl_1');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
+  });
+
   it('surfaces network failures for getVercelDeploymentStatus', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     await expect(getVercelDeploymentStatus('dpl_1', 'tok')).rejects.toThrow(/offline/);

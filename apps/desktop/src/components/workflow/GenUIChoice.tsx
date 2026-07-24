@@ -28,10 +28,13 @@ export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
       )}
       <div className="grid grid-cols-2 gap-2">
         {options.map((opt, i) => {
-          const label = typeof opt.label === 'string' ? opt.label : String(opt.label ?? '');
+          const label =
+            (typeof opt.label === 'string' ? opt.label.trim() : String(opt.label ?? '').trim())
+            || (typeof opt.value === 'string' ? opt.value.trim() : '');
           const valueRaw = opt.value ?? opt.label;
           const value =
             typeof valueRaw === 'string' ? valueRaw.trim() : String(valueRaw ?? '').trim();
+          if (!value && !label) return null;
           return (
             <button
               key={i}
@@ -46,15 +49,15 @@ export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
                 backgroundColor: 'var(--bg-secondary)',
               }}
             >
-              {opt.previewUrl && (
+              {opt.previewUrl && typeof opt.previewUrl === 'string' && opt.previewUrl.trim() && (
                 <img
-                  src={opt.previewUrl}
-                  alt={label}
+                  src={opt.previewUrl.trim()}
+                  alt={label || value}
                   className="w-full h-24 object-cover rounded mb-2"
                 />
               )}
               <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                {label}
+                {label || value}
               </span>
             </button>
           );

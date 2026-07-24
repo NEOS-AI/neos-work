@@ -115,12 +115,18 @@ async function executeStage(
   // Trim first so whitespace-only Anthropic does not block OpenAI fallback
   const anthropicKey = String(settings['ANTHROPIC_API_KEY'] ?? '').trim();
   const openaiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
+  // Trim stage name for user-facing placeholders
+  const stageName = typeof stage.name === 'string' ? stage.name.trim() || stage.id : stage.id;
+
   if (!anthropicKey && !openaiKey) {
-    return `[Stage ${stage.name}: No LLM API key configured]`;
+    return `[Stage ${stageName}: No LLM API key configured]`;
   }
 
-  // Interpolate {{key}} placeholders in prompt
-  let prompt = stage.prompt ?? `Perform the ${stage.name} step.`;
+  // Interpolate {{key}} placeholders in prompt (trim so whitespace-only falls back)
+  let prompt =
+    typeof stage.prompt === 'string' && stage.prompt.trim()
+      ? stage.prompt.trim()
+      : `Perform the ${stageName} step.`;
   for (const [key, val] of Object.entries(previousOutputs)) {
     prompt = prompt.replaceAll(`{{${key}}}`, val);
   }
@@ -146,13 +152,13 @@ async function executeStage(
         signal,
       });
       if (!res.ok) {
-        return `[Stage ${stage.name}: Anthropic API error ${res.status}]`;
+        return `[Stage ${stageName}: Anthropic API error ${res.status}]`;
       }
       const data = await res.json() as { content?: { text: string }[] };
       return data.content?.[0]?.text ?? '';
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'LLM request failed';
-      return `[Stage ${stage.name}: ${msg}]`;
+      return `[Stage ${stageName}: ${msg}]`;
     }
   }
 
@@ -172,12 +178,12 @@ async function executeStage(
       signal,
     });
     if (!res.ok) {
-      return `[Stage ${stage.name}: OpenAI API error ${res.status}]`;
+      return `[Stage ${stageName}: OpenAI API error ${res.status}]`;
     }
     const data = await res.json() as { choices?: { message: { content: string } }[] };
     return data.choices?.[0]?.message.content ?? '';
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'LLM request failed';
-    return `[Stage ${stage.name}: ${msg}]`;
+    return `[Stage ${stageName}: ${msg}]`;
   }
 }

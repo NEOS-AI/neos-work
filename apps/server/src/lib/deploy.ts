@@ -30,10 +30,14 @@ export async function getVercelDeploymentStatus(
   deploymentId: string,
   apiToken: string,
 ): Promise<RemoteDeployStatusResult> {
+  const id = typeof deploymentId === 'string' ? deploymentId.trim() : '';
+  const token = typeof apiToken === 'string' ? apiToken.trim() : '';
+  if (!id) throw new Error('deploymentId is required');
+  if (!token) throw new Error('apiToken is required');
   let res: Response;
   try {
-    res = await fetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(deploymentId)}`, {
-      headers: { Authorization: `Bearer ${apiToken.trim()}` },
+    res = await fetch(`https://api.vercel.com/v13/deployments/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
   } catch (err) {
     throw networkError(err, 'Vercel status network error');
@@ -69,12 +73,19 @@ export async function getCloudflareDeploymentStatus(options: {
   deploymentId: string;
   apiToken: string;
 }): Promise<RemoteDeployStatusResult> {
-  const { accountId, projectName, deploymentId, apiToken } = options;
+  const accountId = typeof options.accountId === 'string' ? options.accountId.trim() : '';
+  const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
+  const deploymentId = typeof options.deploymentId === 'string' ? options.deploymentId.trim() : '';
+  const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
+  if (!accountId) throw new Error('accountId is required');
+  if (!projectName) throw new Error('projectName is required');
+  if (!deploymentId) throw new Error('deploymentId is required');
+  if (!apiToken) throw new Error('apiToken is required');
   let res: Response;
   try {
     res = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${encodeURIComponent(projectName)}/deployments/${encodeURIComponent(deploymentId)}`,
-      { headers: { Authorization: `Bearer ${apiToken.trim()}` } },
+      `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages/projects/${encodeURIComponent(projectName)}/deployments/${encodeURIComponent(deploymentId)}`,
+      { headers: { Authorization: `Bearer ${apiToken}` } },
     );
   } catch (err) {
     throw networkError(err, 'Cloudflare status network error');
@@ -105,7 +116,12 @@ export async function deployToVercel(options: {
   content: string;
   apiToken: string;
 }): Promise<DeployResult> {
-  const { projectName, content, apiToken } = options;
+  const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
+  const content = typeof options.content === 'string' ? options.content : String(options.content ?? '');
+  const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
+  if (!projectName) throw new Error('projectName is required');
+  if (!content.trim()) throw new Error('content is required');
+  if (!apiToken) throw new Error('apiToken is required');
 
   // Use Vercel's deployments API to create a file-based deployment
   const deployBody = {
@@ -126,7 +142,7 @@ export async function deployToVercel(options: {
     res = await fetch('https://api.vercel.com/v13/deployments', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiToken.trim()}`,
+        Authorization: `Bearer ${apiToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(deployBody),
@@ -155,18 +171,28 @@ export async function deployToCloudflare(options: {
   accountId: string;
   apiToken: string;
 }): Promise<DeployResult> {
-  const { projectName, content, accountId, apiToken } = options;
+  const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
+  const content = typeof options.content === 'string' ? options.content : String(options.content ?? '');
+  const accountId = typeof options.accountId === 'string' ? options.accountId.trim() : '';
+  const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
+  if (!projectName) throw new Error('projectName is required');
+  if (!content.trim()) throw new Error('content is required');
+  if (!accountId) throw new Error('accountId is required');
+  if (!apiToken) throw new Error('apiToken is required');
 
   // First ensure project exists
   try {
-    await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiToken.trim()}`,
-        'Content-Type': 'application/json',
+    await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages/projects`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: projectName, production_branch: 'main' }),
       },
-      body: JSON.stringify({ name: projectName, production_branch: 'main' }),
-    });
+    );
   } catch {
     // Ignore create-project network errors; deploy may still succeed if project exists
   }
@@ -183,10 +209,10 @@ export async function deployToCloudflare(options: {
   let deployRes: Response;
   try {
     deployRes = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}/deployments`,
+      `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages/projects/${encodeURIComponent(projectName)}/deployments`,
       {
         method: 'POST',
-        headers: { Authorization: `Bearer ${apiToken.trim()}` },
+        headers: { Authorization: `Bearer ${apiToken}` },
         body: formData,
       },
     );

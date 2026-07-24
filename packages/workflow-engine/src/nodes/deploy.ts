@@ -13,9 +13,8 @@ export const DeployNode: ExecutableNode = {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
     const { config, settings, inputs } = ctx;
-    const rawProvider = (config?.provider as string) ?? 'vercel';
-    const provider =
-      rawProvider === 'cloudflare' || rawProvider === 'vercel' ? rawProvider : 'vercel';
+    const rawProvider = String(config?.provider ?? 'vercel').trim().toLowerCase();
+    const provider = rawProvider === 'cloudflare' ? 'cloudflare' : 'vercel';
     const serverUrl = String(settings['SERVER_URL'] ?? 'http://localhost:3001').trim()
       || 'http://localhost:3001';
     const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();

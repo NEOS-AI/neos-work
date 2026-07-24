@@ -24,8 +24,10 @@ export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
     // Trim submitted values so GenUI resume payloads stay clean (plan Task 6)
     const trimmed: Record<string, string> = {};
     for (const field of fields) {
-      const raw = values[field.key] ?? '';
-      trimmed[field.key] = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+      const key = typeof field.key === 'string' ? field.key.trim() : '';
+      if (!key) continue;
+      const raw = values[field.key] ?? values[key] ?? '';
+      trimmed[key] = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
     }
     onSubmit(trimmed);
   };

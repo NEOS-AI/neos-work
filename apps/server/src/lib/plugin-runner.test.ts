@@ -85,6 +85,35 @@ describe('plugin-runner', () => {
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
 
+  it('falls back when stage prompt is blank/whitespace', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'blank-prompt',
+      name: 'Blank Prompt',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: '  Plan Stage  ',
+          kind: 'plan',
+          prompt: '   ',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const completed = events.find((e) => e.type === 'stage.completed');
+    // Still completes with no-key placeholder; stage name is trimmed in message
+    expect(String(completed?.output ?? '')).toMatch(/No LLM API key/i);
+    expect(String(completed?.output ?? '')).toMatch(/Plan Stage/);
+  });
+
   it('treats whitespace-only API keys as missing', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',

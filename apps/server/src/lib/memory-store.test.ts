@@ -92,6 +92,33 @@ describe('memory-store', () => {
     }
   });
 
+  it('trims name/content on create/update and rejects blank name', () => {
+    expect(() =>
+      createMemory({ name: '   ', type: 'user', content: 'x' }),
+    ).toThrow(/name is required/i);
+
+    const m = createMemory({
+      name: `  ${NAME}_trim  `,
+      type: 'USER' as never,
+      content: '  hello  ',
+    });
+    expect(m.name).toBe(`${NAME}_trim`);
+    expect(m.type).toBe('user');
+    expect(m.content).toBe('hello');
+
+    const updated = updateMemory(m.id, {
+      name: `  ${NAME}_trim2  `,
+      content: '  world  ',
+      type: 'SESSION' as never,
+    });
+    expect(updated?.name).toBe(`${NAME}_trim2`);
+    expect(updated?.content).toBe('world');
+    expect(updated?.type).toBe('session');
+    expect(updateMemory(m.id, { name: '   ' })).toBeNull();
+    expect(getMemory(m.id)?.name).toBe(`${NAME}_trim2`);
+    deleteMemory(m.id);
+  });
+
   it('updateMemory can rename and change type', () => {
     const m = createMemory({
       name: `${NAME}_rename`,

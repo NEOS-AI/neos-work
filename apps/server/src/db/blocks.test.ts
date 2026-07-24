@@ -71,13 +71,19 @@ describe('custom blocks CRUD', () => {
     expect(getCustomBlock('   ')).toBeNull();
 
     const updated = updateCustomBlock(IDS[0]!, {
-      name: 'Renamed',
-      description: 'updated',
+      name: '  Renamed  ',
+      description: '  updated  ',
+      domain: '  Finance  ' as never,
+      category: '  cat  ',
       paramDefs: [{ key: 'q', type: 'string', label: 'Q' }],
     });
     expect(updated?.name).toBe('Renamed');
+    expect(updated?.domain).toBe('finance');
+    expect(updated?.category).toBe('cat');
     expect(getCustomBlock(IDS[0]!)?.description).toBe('updated');
     expect(updateCustomBlock('missing', { name: 'x' })).toBeNull();
+    expect(updateCustomBlock(IDS[0]!, { name: '   ' })).toBeNull();
+    expect(getCustomBlock(IDS[0]!)?.name).toBe('Renamed'); // blank name rejected, prior value kept
 
     expect(deleteCustomBlock(IDS[0]!)).toBe(true);
     expect(getCustomBlock(IDS[0]!)).toBeNull();

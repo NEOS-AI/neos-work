@@ -48,6 +48,14 @@ export function getCustomHarness(id: string): AgentHarness | undefined {
   return row ? rowToHarness(row) : undefined;
 }
 
+function normalizeHarnessDomain(raw: unknown, fallback: AgentHarness['domain'] = 'general'): AgentHarness['domain'] {
+  const domainRaw =
+    typeof raw === 'string' ? raw.trim().toLowerCase() || fallback : fallback;
+  return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as AgentHarness['domain'])
+    : 'general';
+}
+
 export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): AgentHarness {
   const id = typeof input.id === 'string' ? input.id.trim() : '';
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -56,10 +64,15 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   if (!id || !name || !systemPrompt) {
     throw new Error('id, name, and systemPrompt are required');
   }
-  const domain =
-    typeof input.domain === 'string' ? input.domain.trim() || 'general' : (input.domain ?? 'general');
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    throw new Error('id must be alphanumeric (- and _ allowed)');
+  }
+  const domain = normalizeHarnessDomain(input.domain);
   const description =
     typeof input.description === 'string' ? input.description.trim() : (input.description ?? '');
+  const allowedTools = (input.allowedTools ?? [])
+    .map((t) => String(t).trim())
+    .filter(Boolean);
   const db = getDb();
   db.prepare(
     `INSERT INTO custom_harness (id, name, domain, description, system_prompt, allowed_tools_json, constraints_json)
@@ -70,7 +83,7 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
     domain,
     description,
     systemPrompt,
-    JSON.stringify(input.allowedTools ?? []),
+    JSON.stringify(allowedTools),
     JSON.stringify(input.constraints ?? {}),
   );
   return getCustomHarness(id)!;
@@ -85,12 +98,29 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
     .get(trimmed) as HarnessRow | undefined;
   if (!existing) return undefined;
 
-  const name = input.name ?? existing.name;
-  const domain = input.domain ?? existing.domain;
-  const description = input.description ?? existing.description;
-  const systemPrompt = input.systemPrompt ?? existing.system_prompt;
+  const name =
+    input.name !== undefined
+      ? (typeof input.name === 'string' ? input.name.trim() : '')
+      : existing.name;
+  // Blank name after trim is invalid — leave row unchanged
+  if (!name) return undefined;
+  const systemPrompt =
+    input.systemPrompt !== undefined
+      ? (typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '')
+      : existing.system_prompt;
+  if (!systemPrompt) return undefined;
+  const domain =
+    input.domain !== undefined
+      ? normalizeHarnessDomain(input.domain, existing.domain as AgentHarness['domain'])
+      : existing.domain;
+  const description =
+    input.description !== undefined
+      ? (typeof input.description === 'string' ? input.description.trim() : '')
+      : existing.description;
   const allowedTools = input.allowedTools !== undefined
-    ? JSON.stringify(input.allowedTools)
+    ? JSON.stringify(
+      input.allowedTools.map((t) => String(t).trim()).filter(Boolean),
+    )
     : existing.allowed_tools_json;
   const constraints = input.constraints !== undefined
     ? JSON.stringify(input.constraints)
