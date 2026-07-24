@@ -54,7 +54,7 @@ export class ReflectionStrategy implements HealingStrategy {
 목표: ${step.description}
 ${step.toolName ? `툴: ${step.toolName}` : ''}
 ${step.input ? `입력: ${JSON.stringify(step.input)}` : ''}
-에러: ${error}
+에러: ${typeof error === 'string' ? error.trim().slice(0, 2000) : String(error ?? '').slice(0, 2000)}
 
 완료된 이전 steps:
 ${historyStr || '(없음)'}
@@ -89,15 +89,24 @@ ${historyStr || '(없음)'}
         revisedInput?: Record<string, unknown>;
       };
 
-      const action = (parsed.action === 'retry' || parsed.action === 'abort')
-        ? parsed.action
-        : 'skip';
+      const actionRaw =
+        typeof parsed.action === 'string' ? parsed.action.trim().toLowerCase() : '';
+      const action: HealingResult['action'] =
+        actionRaw === 'retry' || actionRaw === 'abort' ? actionRaw : 'skip';
 
       const result: HealingResult = { action };
       if (action === 'retry') {
+        const desc =
+          typeof parsed.revisedDescription === 'string'
+            ? parsed.revisedDescription.trim()
+            : '';
+        const tool =
+          typeof parsed.revisedToolName === 'string'
+            ? parsed.revisedToolName.trim()
+            : '';
         result.revisedStep = {
-          description: parsed.revisedDescription ?? step.description,
-          toolName: parsed.revisedToolName ?? step.toolName,
+          description: desc || step.description,
+          toolName: tool || step.toolName,
           input: parsed.revisedInput ?? step.input,
         };
       }

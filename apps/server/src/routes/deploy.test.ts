@@ -329,4 +329,17 @@ describe('deploy routes', () => {
       vi.restoreAllMocks();
     }
   });
+
+  it('preflight accepts case-insensitive provider', async () => {
+    const res = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: '  CloudFlare  ' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data?: { provider?: string }; provider?: string; ready?: boolean };
+    // response shape may nest under data
+    const text = JSON.stringify(body);
+    expect(text.toLowerCase()).toContain('cloudflare');
+  });
 });

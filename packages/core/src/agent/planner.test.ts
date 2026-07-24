@@ -83,4 +83,32 @@ describe('Planner', () => {
     const second = steps.find((s) => s.toolName === 'read_file' || s.description.includes('object'));
     expect(second).toBeTruthy();
   });
+
+  it('returns fallback step for blank goal without calling LLM', async () => {
+    let called = 0;
+    const adapter = mockAdapter(['should-not-run']);
+    const original = adapter.chat.bind(adapter);
+    adapter.chat = async function* (params) {
+      called += 1;
+      yield* original(params);
+    };
+    const steps = await new Planner(adapter).plan('   ');
+    expect(called).toBe(0);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].description).toBe('Execute the goal directly');
+  });
+
+  it('trims step descriptions and toolNames from JSON', async () => {
+    const adapter = mockAdapter([
+      JSON.stringify([
+        { description: '  List files  ', toolName: '  list_directory  ' },
+        { description: '  ', toolName: 'x' },
+      ]),
+    ]);
+    const steps = await new Planner(adapter).plan('  Inspect  ', '  ctx  ');
+    expect(steps[0].description).toBe('List files');
+    expect(steps[0].toolName).toBe('list_directory');
+    // blank description falls back
+    expect(steps[1].description).toBe('Execute the goal directly');
+  });
 });

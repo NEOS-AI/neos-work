@@ -19,6 +19,8 @@ describe('crypto helpers', () => {
     expect(isSensitiveKey('theme')).toBe(false);
     expect(isSensitiveKey('OPENAI_BASE_URL')).toBe(false);
     expect(isSensitiveKey('apiKeyNotPrefix')).toBe(false);
+    expect(isSensitiveKey('  ANTHROPIC_API_KEY  ')).toBe(true);
+    expect(isSensitiveKey('   ')).toBe(false);
   });
 
   it('detects encrypted payload shape', () => {
@@ -27,6 +29,7 @@ describe('crypto helpers', () => {
     expect(isEncrypted('plaintext')).toBe(false);
     expect(isEncrypted('aa:bb:cc')).toBe(false);
     expect(isEncrypted('')).toBe(false);
+    expect(isEncrypted('   ')).toBe(false);
   });
 
   it('round-trips encrypt/decrypt', () => {

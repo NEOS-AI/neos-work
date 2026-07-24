@@ -99,4 +99,19 @@ describe('ReflectionStrategy', () => {
     // mockAdapter records last chat params via getModels + chat; ensure chat was invoked
     expect(adapter.getModels().length).toBeGreaterThan(0);
   });
+
+  it('normalizes action case and trims revised fields', async () => {
+    const adapter = mockAdapter([
+      JSON.stringify({
+        action: '  RETRY  ',
+        revisedDescription: '  Use list  ',
+        revisedToolName: '  list_directory  ',
+        revisedInput: { path: '.' },
+      }),
+    ]);
+    const result = await new ReflectionStrategy(adapter).heal(step, '  err  ', []);
+    expect(result.action).toBe('retry');
+    expect(result.revisedStep?.description).toBe('Use list');
+    expect(result.revisedStep?.toolName).toBe('list_directory');
+  });
 });

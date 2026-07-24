@@ -36,9 +36,25 @@ export class Planner {
     context: string = '',
     signal?: AbortSignal,
   ): Promise<AgentStep[]> {
-    const userContent = context
-      ? `Goal: ${goal}\n\nContext:\n${context}`
-      : `Goal: ${goal}`;
+    const goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
+    const contextText =
+      typeof context === 'string' ? context.trim() : String(context ?? '').trim();
+
+    if (!goalText) {
+      return [
+        {
+          id: crypto.randomUUID(),
+          index: 0,
+          description: 'Execute the goal directly',
+          type: 'plan' as const,
+          status: 'pending' as const,
+        },
+      ];
+    }
+
+    const userContent = contextText
+      ? `Goal: ${goalText}\n\nContext:\n${contextText}`
+      : `Goal: ${goalText}`;
 
     const messages: Message[] = [
       { role: 'system', content: PLANNER_SYSTEM_PROMPT },
@@ -72,7 +88,8 @@ export class Planner {
     // Extract JSON array from the response (handle potential markdown code blocks)
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      return [{ description: raw.trim() || 'Execute the goal directly' }];
+      const fallback = raw.trim() || 'Execute the goal directly';
+      return [{ description: fallback }];
     }
 
     try {
@@ -83,10 +100,19 @@ export class Planner {
         .filter((item): item is Record<string, unknown> =>
           typeof item === 'object' && item !== null,
         )
-        .map((item) => ({
-          description: typeof item['description'] === 'string' ? item['description'] : String(item),
-          toolName: typeof item['toolName'] === 'string' ? item['toolName'] : undefined,
-        }));
+        .map((item) => {
+          const descriptionRaw =
+            typeof item['description'] === 'string'
+              ? item['description'].trim()
+              : String(item ?? '').trim();
+          const toolRaw =
+            typeof item['toolName'] === 'string' ? item['toolName'].trim() : '';
+          return {
+            description: descriptionRaw || 'Execute the goal directly',
+            toolName: toolRaw || undefined,
+          };
+        })
+        .filter((s) => s.description.length > 0);
     } catch {
       return [{ description: 'Execute the goal directly' }];
     }

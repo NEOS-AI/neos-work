@@ -36,4 +36,16 @@ describe('escapeHtml', () => {
     expect(escapeHtml('')).toBe('');
     expect(escapeHtml('a&b<c>d"e\'f')).toBe('a&amp;b&lt;c&gt;d&quot;e&#39;f');
   });
+
+  it('coerces non-string values for escapeHtml', () => {
+    expect(escapeHtml(null as never)).toBe('');
+    expect(escapeHtml(undefined as never)).toBe('');
+    expect(escapeHtml(42 as never)).toBe('42');
+  });
+
+  it('trims safeError context labels', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    safeError('x', '  ctx  ');
+    expect(String(spy.mock.calls[0]?.[0])).toContain('ctx');
+  });
 });

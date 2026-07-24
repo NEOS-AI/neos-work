@@ -31,7 +31,9 @@ const deploy = new Hono();
  */
 deploy.post('/preflight', async (c) => {
   const body = await c.req.json<{ provider?: 'vercel' | 'cloudflare'; projectName?: string }>().catch(() => ({} as { provider?: string }));
-  const provider = body.provider ?? 'vercel';
+  const providerRaw =
+    typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : '';
+  const provider = (providerRaw || 'vercel') as 'vercel' | 'cloudflare';
   if (provider !== 'vercel' && provider !== 'cloudflare') {
     return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
   }
@@ -172,12 +174,15 @@ deploy.post('/', async (c) => {
   }
 
   const content = typeof body.content === 'string' ? body.content.trim() : '';
-  if (!body.provider || !content) {
+  const providerRaw =
+    typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : '';
+  if (!providerRaw || !content) {
     return c.json({ ok: false, error: 'provider and content are required' }, 400);
   }
-  if (!['vercel', 'cloudflare'].includes(body.provider)) {
+  if (providerRaw !== 'vercel' && providerRaw !== 'cloudflare') {
     return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
   }
+  const provider = providerRaw as 'vercel' | 'cloudflare';
   if (content.length > 5_000_000) {
     return c.json({ ok: false, error: 'content too large' }, 400);
   }
@@ -199,13 +204,13 @@ deploy.post('/', async (c) => {
   const record = createDeployment({
     workflowId,
     runId,
-    provider: body.provider,
+    provider: provider,
     projectName,
     status: 'deploying',
   });
 
   try {
-    if (body.provider === 'vercel') {
+    if (provider === 'vercel') {
       const apiToken = getSecretSetting('VERCEL_API_TOKEN');
       if (!apiToken) {
         updateDeployment(record.id, { status: 'failed', statusMessage: 'Vercel API token not configured' });

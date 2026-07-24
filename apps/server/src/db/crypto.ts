@@ -29,12 +29,16 @@ const SENSITIVE_PREFIXES = [
 ];
 
 export function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_PREFIXES.some((prefix) => key.startsWith(prefix));
+  const k = typeof key === 'string' ? key.trim() : '';
+  if (!k) return false;
+  return SENSITIVE_PREFIXES.some((prefix) => k.startsWith(prefix));
 }
 
 /** Check whether a value looks like our encrypted format (hex:hex:hex). */
 export function isEncrypted(value: string): boolean {
-  return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/.test(value);
+  const v = typeof value === 'string' ? value.trim() : '';
+  if (!v) return false;
+  return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/.test(v);
 }
 
 export function encrypt(plaintext: string): string {
