@@ -56,6 +56,27 @@ describe('deploy routes', () => {
     expect(body.data.some((d) => d.id === row.id)).toBe(true);
   });
 
+  it('list drops unsafe workflowId query filter (lists unfiltered)', async () => {
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-unsafe-wf`,
+      status: 'success',
+      workflowId: 'wf-safe-only',
+    });
+    // Control-char / overlong filters are ignored rather than 400
+    for (const q of [
+      `/?workflowId=${encodeURIComponent('bad\nid')}`,
+      `/?workflowId=${'w'.repeat(101)}`,
+    ]) {
+      const res = await deploy.request(q);
+      expect(res.status).toBe(200);
+      const body = await res.json() as { ok: boolean; data: Array<{ id: string }> };
+      expect(body.ok).toBe(true);
+      // Unfiltered list should still include our row
+      expect(body.data.some((d) => d.id === row.id)).toBe(true);
+    }
+  });
+
   it('list trims and clamps limit query', async () => {
     for (let i = 0; i < 3; i++) {
       createDeployment({

@@ -281,6 +281,15 @@ describe('AnthropicAdapter', () => {
     await expect(adapter.validateApiKey('   ')).resolves.toBe(false);
   });
 
+  it('validateApiKey rejects control-char or overlong keys without calling API', async () => {
+    createMock.mockClear();
+    const adapter = new AnthropicAdapter('sk');
+    await expect(adapter.validateApiKey(`sk${'\n'}bad`)).resolves.toBe(false);
+    await expect(adapter.validateApiKey(`sk${'\0'}bad`)).resolves.toBe(false);
+    await expect(adapter.validateApiKey('k'.repeat(8_193))).resolves.toBe(false);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
   it('rejects blank/whitespace api keys in constructor', () => {
     expect(() => new AnthropicAdapter('   ')).toThrow(/ANTHROPIC_API_KEY/i);
     expect(() => new AnthropicAdapter('')).toThrow(/ANTHROPIC_API_KEY/i);

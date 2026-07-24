@@ -33,7 +33,12 @@ export const MediaNode: ExecutableNode = {
     // Normalize case/whitespace so "Image" / " AUDIO " work like the panel options
     const mediaType = String(config?.mediaType ?? 'image').trim().toLowerCase() || 'image';
     const serverUrl = safeServerUrl(settings['SERVER_URL']);
-    const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
+    const rawServerToken = String(settings['SERVER_TOKEN'] ?? '');
+    // Drop tokens that would break Authorization headers (check before trim)
+    let serverToken =
+      /[\0\r\n]/.test(rawServerToken) || rawServerToken.trim().length > 8_192
+        ? ''
+        : rawServerToken.trim();
 
     if (mediaType === 'image') {
       const prompt = resolvePrompt(config, inputs);

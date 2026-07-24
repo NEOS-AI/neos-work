@@ -70,6 +70,22 @@ describe('blocks routes', () => {
     expect([404, 405, 200]).toContain(res.status);
   });
 
+  it('GET/PUT/DELETE reject control-char, overlong, or non-alphanumeric path ids', async () => {
+    expect((await blocks.request(`/${encodeURIComponent('bad\nid')}`)).status).toBe(404);
+    expect((await blocks.request('/has.dot.id')).status).toBe(404);
+    expect((await blocks.request(`/${'b'.repeat(201)}`)).status).toBe(404);
+
+    const put = await blocks.request('/has space', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(put.status).toBe(404);
+
+    const del = await blocks.request(`/${encodeURIComponent('x\0y')}`, { method: 'DELETE' });
+    expect(del.status).toBe(404);
+  });
+
   it('POST trims id/name and rejects invalid id or blank name', async () => {
     const badJson = await blocks.request('/', {
       method: 'POST',

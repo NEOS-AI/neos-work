@@ -159,7 +159,11 @@ async function loadBrowserTools(
 // --- Session CRUD ---
 
 session.get('/', (c) => {
-  const workspaceId = (c.req.query('workspaceId') ?? '').trim() || undefined;
+  const workspaceIdRaw = (c.req.query('workspaceId') ?? '').trim();
+  // Drop unsafe filter (list all when invalid)
+  const workspaceId = workspaceIdRaw
+    ? safeRouteId(workspaceIdRaw) || undefined
+    : undefined;
   const sessions = db.listSessions(workspaceId);
   return c.json({ ok: true, data: sessions });
 });
@@ -177,8 +181,9 @@ session.post('/', async (c) => {
   }
 
   // Input validation
-  const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
-  if (!workspaceId || workspaceId.length > 100) {
+  const workspaceIdRaw = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
+  const workspaceId = safeRouteId(workspaceIdRaw);
+  if (!workspaceId) {
     return c.json({ ok: false, error: 'Invalid or missing workspaceId' }, 400);
   }
   const provider =

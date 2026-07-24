@@ -16,6 +16,18 @@ function maskValue(key: string, value: string): string {
 
 const settings = new Hono();
 
+/** Settings key path param: alphanumeric / . _ - ; max 100; no control chars. */
+function paramSettingKey(c: { req: { param: (k: string) => string } }): string {
+  const raw = typeof c.req.param('key') === 'string' ? c.req.param('key') : '';
+  // Check control chars before trim (trim strips leading/trailing \r\n)
+  if (!raw || /[\0\r\n]/.test(raw)) return '';
+  const key = raw.trim();
+  if (!key || key.length > 100 || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+    return '';
+  }
+  return key;
+}
+
 // GET /api/settings — all settings (sensitive values masked)
 settings.get('/', (c) => {
   const all = settingsDb.getAllSettings();
@@ -28,7 +40,7 @@ settings.get('/', (c) => {
 
 // GET /api/settings/:key — single setting (sensitive values masked)
 settings.get('/:key', (c) => {
-  const key = c.req.param('key').trim();
+  const key = paramSettingKey(c);
   if (!key) return c.json({ ok: false, error: 'Setting not found' }, 404);
   const value = settingsDb.getSetting(key);
   if (value === undefined) {
@@ -39,10 +51,10 @@ settings.get('/:key', (c) => {
 
 // PUT /api/settings/:key — create or update setting
 settings.put('/:key', async (c) => {
-  const key = c.req.param('key').trim();
+  const key = paramSettingKey(c);
 
   // Validate key format (alphanumeric, dots, hyphens, underscores; max 100 chars)
-  if (!key || key.length > 100 || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+  if (!key) {
     return c.json({ ok: false, error: 'Invalid setting key' }, 400);
   }
 
@@ -76,7 +88,7 @@ settings.put('/:key', async (c) => {
 
 // DELETE /api/settings/:key — delete setting
 settings.delete('/:key', (c) => {
-  const key = c.req.param('key').trim();
+  const key = paramSettingKey(c);
   if (!key) return c.json({ ok: false, error: 'Setting not found' }, 404);
   const deleted = settingsDb.deleteSetting(key);
   if (!deleted) return c.json({ ok: false, error: 'Setting not found' }, 404);

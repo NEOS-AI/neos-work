@@ -23,10 +23,36 @@ const scheduledTasks = new Map<string, cron.ScheduledTask>();
 /** In-memory lock: prevent overlapping runs of the same routine (plan Task 2). */
 const runningRoutines = new Set<string>();
 
+/** Align with routines routes: id ≤ 100, schedule ≤ 200, timezone ≤ 100. */
+const ROUTINE_ID_MAX = 100;
+const CRON_EXPR_MAX = 200;
+const TIMEZONE_MAX = 100;
+
+function sanitizeRoutineId(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > ROUTINE_ID_MAX) return '';
+  return id;
+}
+
+function sanitizeCronExpr(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const expr = raw.trim();
+  if (!expr || expr.length > CRON_EXPR_MAX) return '';
+  return expr;
+}
+
+function sanitizeTimezone(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'UTC';
+  const tz = raw.trim() || 'UTC';
+  if (tz.length > TIMEZONE_MAX) return 'UTC';
+  return tz;
+}
+
 function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'): void {
-  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  const id = sanitizeRoutineId(routineId);
   if (!id) return;
-  const cronExpr = typeof schedule === 'string' ? schedule.trim() : '';
+  const cronExpr = sanitizeCronExpr(schedule);
   // Validate cron expression
   if (!cronExpr || !cron.validate(cronExpr)) {
     console.warn(`[Scheduler] Invalid cron expression for routine ${id}: ${schedule}`);
@@ -34,7 +60,7 @@ function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'):
   }
 
   // IANA timezone → node-cron applies local wall-clock rules including DST
-  const tz = typeof timezone === 'string' ? timezone.trim() || 'UTC' : 'UTC';
+  const tz = sanitizeTimezone(timezone);
   const task = cron.schedule(cronExpr, async () => {
     await runRoutine(id);
   }, {
@@ -48,12 +74,12 @@ function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'):
 
 /** Test helper — whether a routine is currently locked as running. */
 export function isRoutineRunning(routineId: string): boolean {
-  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  const id = sanitizeRoutineId(routineId);
   return id ? runningRoutines.has(id) : false;
 }
 
 export async function runRoutine(routineId: string): Promise<string | null> {
-  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  const id = sanitizeRoutineId(routineId);
   if (!id) return null;
   // Skip overlapping schedule/manual triggers for the same routine
   if (runningRoutines.has(id)) {
@@ -177,7 +203,7 @@ export function addOrUpdateSchedule(
   enabled: boolean,
   timezone = 'UTC',
 ): void {
-  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  const id = sanitizeRoutineId(routineId);
   if (!id) return;
   // Remove existing task
   const existing = scheduledTasks.get(id);
@@ -192,7 +218,7 @@ export function addOrUpdateSchedule(
 }
 
 export function removeSchedule(routineId: string): void {
-  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  const id = sanitizeRoutineId(routineId);
   if (!id) return;
   const task = scheduledTasks.get(id);
   if (task) {

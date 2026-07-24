@@ -44,6 +44,16 @@ describe('DeployNode', () => {
     expect(result.error).toMatch(/content too large/i);
   });
 
+  it('rejects content with null bytes', async () => {
+    const result = await DeployNode.execute(
+      ctx({
+        config: { provider: 'vercel', projectName: 'ok-name', content: 'hi\0there' },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/control characters/i);
+  });
+
   it('posts deploy payload with workflow metadata', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { url: 'https://demo.vercel.app', deploymentId: 'd1' } }),

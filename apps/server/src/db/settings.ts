@@ -145,6 +145,7 @@ export function getWorkflowSecrets(): Record<string, string> {
 export function isSafeHttpBaseUrl(url: string): boolean {
   const trimmed = typeof url === 'string' ? url.trim() : '';
   if (!trimmed) return false;
+  if (trimmed.length > 2_048 || /[\0\r\n]/.test(trimmed)) return false;
   try {
     const u = new URL(trimmed);
     return u.protocol === 'http:' || u.protocol === 'https:';
@@ -200,7 +201,7 @@ export function getExecutionSettings(runtime?: {
 
 export function deleteSetting(key: string): boolean {
   const k = typeof key === 'string' ? key.trim() : '';
-  if (!k) return false;
+  if (!k || /[\0\r\n]/.test(k) || k.length > 200) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM setting WHERE key = ?').run(k);
   return result.changes > 0;

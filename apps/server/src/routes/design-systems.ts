@@ -10,6 +10,7 @@
 
 import { Hono } from 'hono';
 import * as store from '../lib/design-system-store.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const designSystems = new Hono();
 
@@ -34,9 +35,9 @@ designSystems.post('/', async (c) => {
 });
 
 function paramDesignId(c: { req: { param: (k: string) => string } }): string {
-  const id = c.req.param('id').trim();
-  // Design system ids are short hashes / safe names
-  if (!id || id.length > 64 || /[\0\r\n/\\]/.test(id)) return '';
+  // Design system ids are short hashes / safe names (stricter than UUID bound)
+  const id = safeRouteId(c.req.param('id'), 64);
+  if (!id || /[/\\]/.test(id)) return '';
   return id;
 }
 

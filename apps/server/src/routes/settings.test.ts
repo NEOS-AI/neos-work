@@ -51,6 +51,29 @@ describe('settings routes', () => {
       body: JSON.stringify({ value: 'x' }),
     });
     expect(res.status).toBe(400);
+
+    // GET/DELETE use same key hygiene (control-char mid-key / overlong → 404)
+    // Leading %0a alone is trimmed away by paramSettingKey — use mid-string control char
+    const ctrlKey = encodeURIComponent('bad\nkey');
+    expect((await settings.request(`/${ctrlKey}`)).status).toBe(404);
+    expect((await settings.request(`/${'k'.repeat(101)}`)).status).toBe(404);
+    expect(
+      (await settings.request(`/${ctrlKey}`, { method: 'DELETE' })).status,
+    ).toBe(404);
+
+    // PUT with control-char / overlong keys → 400
+    const putCtrl = await settings.request(`/${ctrlKey}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'x' }),
+    });
+    expect(putCtrl.status).toBe(400);
+    const putLong = await settings.request(`/${'k'.repeat(101)}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'x' }),
+    });
+    expect(putLong.status).toBe(400);
   });
 
   it('PUT invalid JSON returns 400', async () => {

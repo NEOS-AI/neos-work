@@ -16,8 +16,12 @@ export const ROUTE_ID_MAX_CHARS = 100;
  * Returns empty string when invalid (callers map to 404).
  */
 export function safeRouteId(raw: unknown, max = ROUTE_ID_MAX_CHARS): string {
-  const id = typeof raw === 'string' ? raw.trim() : '';
-  if (!id || id.length > max || /[\0\r\n]/.test(id)) return '';
+  if (typeof raw !== 'string') return '';
+  // Reject control chars before trim — trim() would strip leading/trailing \r\n
+  // and silently accept e.g. "\nevil" as "evil".
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
   return id;
 }
 

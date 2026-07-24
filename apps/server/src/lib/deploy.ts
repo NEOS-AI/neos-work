@@ -25,13 +25,40 @@ function networkError(err: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+/** Cap deploy API tokens / account / deployment ids (header / path hygiene). */
+const DEPLOY_TOKEN_MAX = 8_192;
+const DEPLOY_ID_MAX = 200;
+const DEPLOY_ACCOUNT_MAX = 100;
+
+function sanitizeDeployToken(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const t = raw.trim();
+  if (!t || t.length > DEPLOY_TOKEN_MAX) return '';
+  return t;
+}
+
+function sanitizeDeployId(raw: unknown, max = DEPLOY_ID_MAX): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
+/** Cloudflare/Vercel project names: short, no control chars. */
+function sanitizeProjectName(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const name = raw.trim();
+  if (!name || name.length > 63) return '';
+  return name;
+}
+
 /**
  * Normalize deployment host/URL to http(s) only.
  * Bare hosts become https://host; file:/javascript: rejected.
  */
 export function safeDeployHostUrl(raw: unknown): string | undefined {
   const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s) return undefined;
+  if (!s || s.length > 2_048 || /[\0\r\n]/.test(s)) return undefined;
   try {
     const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s) ? s : `https://${s}`;
     const u = new URL(withScheme);
@@ -47,8 +74,8 @@ export async function getVercelDeploymentStatus(
   deploymentId: string,
   apiToken: string,
 ): Promise<RemoteDeployStatusResult> {
-  const id = typeof deploymentId === 'string' ? deploymentId.trim() : '';
-  const token = typeof apiToken === 'string' ? apiToken.trim() : '';
+  const id = sanitizeDeployId(deploymentId);
+  const token = sanitizeDeployToken(apiToken);
   if (!id) throw new Error('deploymentId is required');
   if (!token) throw new Error('apiToken is required');
   let res: Response;
@@ -90,10 +117,10 @@ export async function getCloudflareDeploymentStatus(options: {
   deploymentId: string;
   apiToken: string;
 }): Promise<RemoteDeployStatusResult> {
-  const accountId = typeof options.accountId === 'string' ? options.accountId.trim() : '';
-  const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
-  const deploymentId = typeof options.deploymentId === 'string' ? options.deploymentId.trim() : '';
-  const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
+  const accountId = sanitizeDeployId(options.accountId, DEPLOY_ACCOUNT_MAX);
+  const projectName = sanitizeProjectName(options.projectName);
+  const deploymentId = sanitizeDeployId(options.deploymentId);
+  const apiToken = sanitizeDeployToken(options.apiToken);
   if (!accountId) throw new Error('accountId is required');
   if (!projectName) throw new Error('projectName is required');
   if (!deploymentId) throw new Error('deploymentId is required');
@@ -134,6 +161,9 @@ export const DEPLOY_CONTENT_MAX_CHARS = 2 * 1024 * 1024;
 function normalizeDeployContent(raw: unknown): string {
   const content = typeof raw === 'string' ? raw : String(raw ?? '');
   if (!content.trim()) throw new Error('content is required');
+  if (/[\0]/.test(content)) {
+    throw new Error('content contains invalid control characters');
+  }
   if (content.length > DEPLOY_CONTENT_MAX_CHARS) {
     throw new Error(`content exceeds max size (${DEPLOY_CONTENT_MAX_CHARS} characters)`);
   }
@@ -145,9 +175,9 @@ export async function deployToVercel(options: {
   content: string;
   apiToken: string;
 }): Promise<DeployResult> {
-  const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
+  const projectName = sanitizeProjectName(options.projectName);
   const content = normalizeDeployContent(options.content);
-  const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
+  const apiToken = sanitizeDeployToken(options.apiToken);
   if (!projectName) throw new Error('projectName is required');
   if (!apiToken) throw new Error('apiToken is required');
 
@@ -202,10 +232,10 @@ export async function deployToCloudflare(options: {
   accountId: string;
   apiToken: string;
 }): Promise<DeployResult> {
-  const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
+  const projectName = sanitizeProjectName(options.projectName);
   const content = normalizeDeployContent(options.content);
-  const accountId = typeof options.accountId === 'string' ? options.accountId.trim() : '';
-  const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
+  const accountId = sanitizeDeployId(options.accountId, DEPLOY_ACCOUNT_MAX);
+  const apiToken = sanitizeDeployToken(options.apiToken);
   if (!projectName) throw new Error('projectName is required');
   if (!accountId) throw new Error('accountId is required');
   if (!apiToken) throw new Error('apiToken is required');

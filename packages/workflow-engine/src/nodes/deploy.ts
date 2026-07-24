@@ -17,13 +17,26 @@ export const DeployNode: ExecutableNode = {
     const rawProvider = String(config?.provider ?? 'vercel').trim().toLowerCase();
     const provider = rawProvider === 'cloudflare' ? 'cloudflare' : 'vercel';
     const serverUrl = safeServerUrl(settings['SERVER_URL']);
-    const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
+    const rawServerToken = String(settings['SERVER_TOKEN'] ?? '');
+    // Drop tokens that would break Authorization headers (check before trim)
+    let serverToken =
+      /[\0\r\n]/.test(rawServerToken) || rawServerToken.trim().length > 8_192
+        ? ''
+        : rawServerToken.trim();
 
     const DEPLOY_CONTENT_MAX = 2 * 1024 * 1024;
     const rawContent = inputs['content'] ?? config?.content ?? '';
     const content = typeof rawContent === 'string' ? rawContent.trim() : String(rawContent).trim();
     if (!content) {
       return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
+    }
+    if (/[\0]/.test(content)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'content contains invalid control characters',
+        durationMs: Date.now() - start,
+      };
     }
     if (content.length > DEPLOY_CONTENT_MAX) {
       return {

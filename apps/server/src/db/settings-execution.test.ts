@@ -215,4 +215,9 @@ describe('isSafeHttpBaseUrl', () => {
     expect(isSafeHttpBaseUrl('not a url')).toBe(false);
     expect(isSafeHttpBaseUrl('https://')).toBe(false);
   });
+
+  it('rejects control-char and overlong base urls', () => {
+    expect(isSafeHttpBaseUrl('https://api.openai.com/\npath')).toBe(false);
+    expect(isSafeHttpBaseUrl('https://' + 'a'.repeat(2_100) + '.test')).toBe(false);
+  });
 });

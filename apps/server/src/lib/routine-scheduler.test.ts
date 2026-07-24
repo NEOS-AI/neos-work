@@ -145,6 +145,24 @@ describe('addOrUpdateSchedule / removeSchedule', () => {
     expect(mocks.schedule).not.toHaveBeenCalled();
   });
 
+  it('rejects control-char / overlong id, schedule, and falls back timezone', () => {
+    addOrUpdateSchedule('r\nid', '0 9 * * *', true, 'UTC');
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    addOrUpdateSchedule('r1', '0 9\n* * *', true, 'UTC');
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    addOrUpdateSchedule('r1', 'x'.repeat(201), true, 'UTC');
+    expect(mocks.schedule).not.toHaveBeenCalled();
+    addOrUpdateSchedule('x'.repeat(101), '0 9 * * *', true, 'UTC');
+    expect(mocks.schedule).not.toHaveBeenCalled();
+
+    addOrUpdateSchedule('r1', '0 9 * * *', true, 'Asia/\nSeoul');
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      '0 9 * * *',
+      expect.any(Function),
+      { timezone: 'UTC' },
+    );
+  });
+
   it('stops previous task when updating schedule', () => {
     const first = makeTask();
     const second = makeTask();

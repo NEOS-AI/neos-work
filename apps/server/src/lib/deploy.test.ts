@@ -37,6 +37,11 @@ describe('safeDeployHostUrl', () => {
     expect(safeDeployHostUrl('')).toBeUndefined();
     expect(safeDeployHostUrl('   ')).toBeUndefined();
   });
+
+  it('rejects control-char and overlong host urls', () => {
+    expect(safeDeployHostUrl('https://x.test/\npath')).toBeUndefined();
+    expect(safeDeployHostUrl('https://' + 'a'.repeat(2_100) + '.test')).toBeUndefined();
+  });
 });
 
 describe('deploy helpers', () => {
@@ -62,6 +67,21 @@ describe('deploy helpers', () => {
     await expect(
       deployToVercel({ projectName: 'x', content: '<p/>', apiToken: '  ' }),
     ).rejects.toThrow(/apiToken/i);
+  });
+
+  it('rejects control-char content and apiToken for deployToVercel', async () => {
+    await expect(
+      deployToVercel({ projectName: 'x', content: 'hi\0', apiToken: 'tok' }),
+    ).rejects.toThrow(/control characters/i);
+    await expect(
+      deployToVercel({ projectName: 'x', content: '<p/>', apiToken: 'tok\nbad' }),
+    ).rejects.toThrow(/apiToken/i);
+  });
+
+  it('rejects control-char deploymentId for status poll', async () => {
+    await expect(
+      getVercelDeploymentStatus('d\nid', 'tok'),
+    ).rejects.toThrow(/deploymentId/i);
   });
 
   it('rejects oversized deploy content', async () => {

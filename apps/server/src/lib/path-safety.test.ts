@@ -13,6 +13,9 @@ describe('safeRouteId', () => {
     expect(safeRouteId('   ')).toBe('');
     expect(safeRouteId('a\nb')).toBe('');
     expect(safeRouteId('a\0b')).toBe('');
+    // Leading/trailing control chars must not be silently stripped by trim
+    expect(safeRouteId('\nevil')).toBe('');
+    expect(safeRouteId('evil\r')).toBe('');
     expect(safeRouteId('x'.repeat(ROUTE_ID_MAX_CHARS + 1))).toBe('');
     expect(safeRouteId(null)).toBe('');
     expect(safeRouteId(42)).toBe('');

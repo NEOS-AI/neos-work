@@ -127,6 +127,16 @@ describe('OpenAIAdapter', () => {
     await expect(adapter.validateApiKey('bad')).resolves.toBe(false);
   });
 
+  it('validateApiKey rejects control-char or overlong keys without calling fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    await expect(adapter.validateApiKey(`sk${'\n'}bad`)).resolves.toBe(false);
+    await expect(adapter.validateApiKey(`sk${'\0'}bad`)).resolves.toBe(false);
+    await expect(adapter.validateApiKey('k'.repeat(8_193))).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('chat yields error when fetch throws', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
     const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });

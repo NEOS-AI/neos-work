@@ -160,6 +160,17 @@ describe('session routes', () => {
     const trimmed = await session.request('/?workspaceId=%20default%20');
     expect(trimmed.status).toBe(200);
 
+    // Unsafe query filter is dropped (list all) rather than 400
+    const controlWs = await session.request(`/?workspaceId=${encodeURIComponent('bad\nid')}`);
+    expect(controlWs.status).toBe(200);
+    const controlBody = await controlWs.json() as { ok: boolean; data: unknown[] };
+    expect(controlBody.ok).toBe(true);
+    expect(Array.isArray(controlBody.data)).toBe(true);
+
+    const overlongWs = await session.request(`/?workspaceId=${'w'.repeat(101)}`);
+    expect(overlongWs.status).toBe(200);
+    expect(((await overlongWs.json()) as { ok: boolean }).ok).toBe(true);
+
     const blankGet = await session.request('/%20');
     expect(blankGet.status).toBe(404);
     const blankMsgs = await session.request('/%20/messages');
@@ -269,6 +280,14 @@ describe('session routes', () => {
       body: JSON.stringify({ workspaceId: 'w'.repeat(101), title: TITLE }),
     });
     expect(longWs.status).toBe(400);
+
+    const controlWs = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspaceId: `bad${'\n'}id`, title: TITLE }),
+    });
+    expect(controlWs.status).toBe(400);
+    expect(((await controlWs.json()) as { error: string }).error).toMatch(/workspaceId/i);
 
     const longTitle = await session.request('/', {
       method: 'POST',

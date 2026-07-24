@@ -84,16 +84,19 @@ export const ARTIFACT_FILE_PATH_MAX = 1_000;
 /** Optional association ids: invalid → null (do not fail create). */
 function normalizeIdField(raw: unknown, max = ARTIFACT_ID_FIELD_MAX): string | null {
   if (typeof raw !== 'string') return null;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (hasUnsafeNameChars(raw)) return null;
   const s = raw.trim();
-  if (!s || s.length > max || hasUnsafeNameChars(s)) return null;
+  if (!s || s.length > max) return null;
   return s;
 }
 
 /** Lookup/path ids: invalid → empty (no-op / not found). */
 function normalizeLookupId(raw: unknown, max = ARTIFACT_ID_FIELD_MAX): string {
   if (typeof raw !== 'string') return '';
+  if (hasUnsafeNameChars(raw)) return '';
   const s = raw.trim();
-  if (!s || s.length > max || hasUnsafeNameChars(s)) return '';
+  if (!s || s.length > max) return '';
   return s;
 }
 

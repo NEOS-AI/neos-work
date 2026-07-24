@@ -17,6 +17,7 @@ import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 import * as artifactDb from '../db/artifacts.js';
 import { getDesignSystemContent } from '../lib/design-system-store.js';
 import { webhookRateLimiter } from '../lib/rate-limit.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const webhooks = new Hono();
 
@@ -29,10 +30,7 @@ function getRateLimitStatus(workflowId: string) {
 }
 
 function paramWorkflowId(c: { req: { param: (k: string) => string } }): string {
-  const id = c.req.param('workflowId').trim();
-  // Workflow UUID/id practical bound
-  if (!id || id.length > 100 || /[\0\r\n]/.test(id)) return '';
-  return id;
+  return safeRouteId(c.req.param('workflowId'));
 }
 
 // GET webhook secret

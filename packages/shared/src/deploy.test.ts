@@ -18,5 +18,7 @@ describe('isValidDeployProjectName', () => {
     expect(isValidDeployProjectName('has space')).toBe(false);
     expect(isValidDeployProjectName('dot.name')).toBe(false);
     expect(isValidDeployProjectName('A' + 'b'.repeat(63))).toBe(false);
+    expect(isValidDeployProjectName('bad\nname')).toBe(false);
+    expect(isValidDeployProjectName('bad\0name')).toBe(false);
   });
 });

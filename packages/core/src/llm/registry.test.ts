@@ -65,4 +65,17 @@ describe('ProviderRegistry', () => {
     expect(reg.get('  google  ')?.name).toBe('Mock');
     expect(reg.getAllModels()).toHaveLength(1);
   });
+
+  it('rejects control-char and overlong provider/model ids', () => {
+    const reg = new ProviderRegistry();
+    reg.register(mockAdapter([''], { id: 'bad\nid' as never, models: [modelA] }));
+    expect(reg.getAll()).toHaveLength(0);
+    reg.register(mockAdapter([''], { id: 'x'.repeat(51) as never, models: [modelA] }));
+    expect(reg.getAll()).toHaveLength(0);
+
+    reg.register(mockAdapter([''], { id: 'openai', models: [modelB] }));
+    expect(reg.findModel('b\n-1')).toBeUndefined();
+    expect(reg.findModel('x'.repeat(201))).toBeUndefined();
+    expect(reg.get('open\nai')).toBeUndefined();
+  });
 });
