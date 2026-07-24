@@ -306,7 +306,9 @@ session.post('/:id/chat', async (c) => {
     let content: string | MessageContent[];
     if (m.metadata && m.metadata !== 'null') {
       try {
-        content = JSON.parse(m.content);
+        const parsed = JSON.parse(m.content) as unknown;
+        // Only accept structured content arrays; objects/primitives → raw text
+        content = Array.isArray(parsed) ? (parsed as MessageContent[]) : m.content;
       } catch {
         console.error(`Failed to parse structured message ${m.id}, falling back to text`);
         content = m.content;

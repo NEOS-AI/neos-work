@@ -14,18 +14,27 @@ import type { WorkflowEdge, WorkflowNode } from '@neos-work/shared';
 
 const workflowRevisions = new Hono();
 
+/** Cap path params (plan Task 16 route hygiene). */
+const ID_MAX = 100;
+
+function safeId(raw: string): string {
+  const id = typeof raw === 'string' ? raw.trim() : '';
+  if (!id || id.length > ID_MAX || /[\0\r\n]/.test(id)) return '';
+  return id;
+}
+
 function paramIds(c: { req: { param: (k: string) => string } }): {
   workflowId: string;
   id: string;
 } {
   return {
-    workflowId: c.req.param('workflowId').trim(),
-    id: c.req.param('id').trim(),
+    workflowId: safeId(c.req.param('workflowId')),
+    id: safeId(c.req.param('id')),
   };
 }
 
 workflowRevisions.get('/:workflowId', (c) => {
-  const workflowId = c.req.param('workflowId').trim();
+  const workflowId = safeId(c.req.param('workflowId'));
   if (!workflowId) return c.json({ ok: false, error: 'Not found' }, 404);
   const wf = workflowDb.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -64,6 +73,10 @@ workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
     description?: string;
     designSystemId?: string | null;
   };
+  // Bound snapshot size before parse (align with REVISION_SNAPSHOT_MAX_CHARS)
+  if (typeof rev.snapshot !== 'string' || rev.snapshot.length > db.REVISION_SNAPSHOT_MAX_CHARS) {
+    return c.json({ ok: false, error: 'Snapshot too large or invalid' }, 400);
+  }
   try {
     snap = JSON.parse(rev.snapshot) as typeof snap;
   } catch {
@@ -72,6 +85,10 @@ workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
 
   if (!Array.isArray(snap.nodes) || !Array.isArray(snap.edges)) {
     return c.json({ ok: false, error: 'Snapshot missing nodes/edges' }, 400);
+  }
+  // Cap graph size on restore (align with workflows graph caps)
+  if (snap.nodes.length > 2_000 || snap.edges.length > 10_000) {
+    return c.json({ ok: false, error: 'Snapshot graph exceeds size limits' }, 400);
   }
 
   // Snapshot current state before overwrite (dedup may skip if identical)
@@ -117,7 +134,7 @@ workflowRevisions.patch('/:workflowId/:id', async (c) => {
   }
   const body = await c.req.json<{ label?: string }>().catch(() => null);
   const label = typeof body?.label === 'string' ? body.label.trim() : '';
-  if (!label || label.length > 200) {
+  if (!label || label.length > 200 || /[\0\r\n]/.test(label)) {
     return c.json({ ok: false, error: 'Invalid label' }, 400);
   }
   db.updateRevisionLabel(id, label);

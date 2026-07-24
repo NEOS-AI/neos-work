@@ -90,10 +90,16 @@ function capOptionalString(raw: unknown, max: number): string | null {
 export function createDeployment(input: CreateDeploymentInput): Deployment {
   const provider = normalizeDeployProvider(input.provider);
   if (!provider) throw new Error('provider is required');
-  const workflowId =
+  let workflowId =
     typeof input.workflowId === 'string' ? input.workflowId.trim() || null : (input.workflowId ?? null);
-  const runId =
+  if (workflowId && (workflowId.length > 100 || /[\0\r\n]/.test(workflowId))) {
+    workflowId = null;
+  }
+  let runId =
     typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
+  if (runId && (runId.length > 100 || /[\0\r\n]/.test(runId))) {
+    runId = null;
+  }
   let projectName =
     typeof input.projectName === 'string'
       ? input.projectName.trim() || null

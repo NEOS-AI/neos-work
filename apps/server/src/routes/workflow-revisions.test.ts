@@ -176,6 +176,32 @@ describe('workflow-revisions routes', () => {
     expect(longLabel.status).toBe(400);
     expect(((await longLabel.json()) as { error: string }).error).toMatch(/label/i);
 
+    const ctrlLabel = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: 'bad\nlabel' }),
+    });
+    expect(ctrlLabel.status).toBe(400);
+
+    // Oversize node count on restore
+    const hugeNodes = Array.from({ length: 2_001 }, (_, i) => ({
+      id: `n${i}`,
+      type: 'trigger',
+      label: 'T',
+      config: {},
+    }));
+    const huge = revDb.createRevision(
+      wf.id,
+      JSON.stringify({ nodes: hugeNodes, edges: [] }),
+      'huge-graph',
+    );
+    const hugeRes = await workflowRevisions.request(`/${wf.id}/${huge.id}/restore`, {
+      method: 'POST',
+    });
+    expect(hugeRes.status).toBe(400);
+    expect(((await hugeRes.json()) as { error: string }).error).toMatch(/size limits|graph/i);
+
+
     // mismatch delete / get
     const other = workflows.createWorkflow({
       name: `${WF_NAME}-other2`,

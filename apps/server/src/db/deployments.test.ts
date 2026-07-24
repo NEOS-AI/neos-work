@@ -50,6 +50,18 @@ describe('deployments CRUD', () => {
     expect(getDeployment(row.id)).toBeUndefined();
   });
 
+  it('drops control-char or overlong workflowId/runId on create', () => {
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-ids`,
+      status: 'pending',
+      workflowId: 'bad\nid',
+      runId: 'r'.repeat(150),
+    });
+    expect(row.workflowId).toBeUndefined();
+    expect(row.runId).toBeUndefined();
+  });
+
   it('caps projectName, deploymentId, and statusMessage lengths', () => {
     const row = createDeployment({
       provider: 'vercel',

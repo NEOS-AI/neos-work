@@ -15,7 +15,7 @@ export class AnthropicAdapter implements LLMProviderAdapter {
 
   constructor(apiKey: string) {
     const key = typeof apiKey === 'string' ? apiKey.trim() : '';
-    if (!key) {
+    if (!key || key.length > 8_192 || /[\0\r\n]/.test(key)) {
       throw new Error('ANTHROPIC_API_KEY is required');
     }
     this.client = new Anthropic({ apiKey: key });

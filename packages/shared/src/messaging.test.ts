@@ -29,5 +29,17 @@ describe('isDiscordWebhookUrl', () => {
     expect(isDiscordWebhookUrl('https://discord.com/api/channels/1')).toBe(false);
     expect(isDiscordWebhookUrl('https://discord.com/API/WEBHOOKS/1/abc')).toBe(true); // path case-insensitive
     expect(isDiscordWebhookUrl('not a url')).toBe(false);
+    expect(isDiscordWebhookUrl(`https://discord.com/api/webhooks/1/${'a'.repeat(3_000)}`)).toBe(
+      false,
+    );
+    expect(isDiscordWebhookUrl('https://discord.com/api/webhooks/1/abc\n')).toBe(false);
+  });
+
+  it('rejects control-char and overlong webhook URLs', () => {
+    expect(isDiscordWebhookUrl('https://discord.com/api/webhooks/1/ab\nc')).toBe(false);
+    expect(
+      isDiscordWebhookUrl(`https://discord.com/api/webhooks/1/${'a'.repeat(3_000)}`),
+    ).toBe(false);
   });
 });
+

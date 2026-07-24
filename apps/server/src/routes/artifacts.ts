@@ -15,9 +15,16 @@ import * as db from '../db/artifacts.js';
 
 const artifacts = new Hono();
 
+/** Cap path/query ids (UUID / nanoid practical bound). */
+function safeId(raw: string, max = 100): string {
+  const id = typeof raw === 'string' ? raw.trim() : '';
+  if (!id || id.length > max || /[\0\r\n]/.test(id)) return '';
+  return id;
+}
+
 artifacts.get('/', (c) => {
-  const workflowId = (c.req.query('workflowId') ?? '').trim();
-  const runId = (c.req.query('runId') ?? '').trim();
+  const workflowId = safeId(c.req.query('workflowId') ?? '');
+  const runId = safeId(c.req.query('runId') ?? '');
 
   if (runId) {
     return c.json({ ok: true, data: db.listArtifactsByRun(runId) });
@@ -29,7 +36,7 @@ artifacts.get('/', (c) => {
 });
 
 artifacts.get('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -41,7 +48,7 @@ artifacts.get('/:id', (c) => {
  * Returns raw HTML (or text) for iframe / srcDoc consumers.
  */
 artifacts.get('/:id/preview', (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -72,7 +79,9 @@ artifacts.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const workflowId = typeof body.workflowId === 'string' ? body.workflowId.trim() : '';
+  const workflowId = safeId(
+    typeof body.workflowId === 'string' ? body.workflowId : '',
+  );
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const contentType = typeof body.contentType === 'string' ? body.contentType.trim() : '';
   if (!workflowId || !name || !contentType) {
@@ -111,7 +120,7 @@ artifacts.post('/', async (c) => {
 });
 
 artifacts.put('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ content: string }>().catch(() => null);
   if (!body || typeof body.content !== 'string') {
@@ -136,7 +145,7 @@ artifacts.put('/:id', async (c) => {
 
 /** Plan Task 4 — PATCH name and/or content */
 artifacts.patch('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ name?: string; content?: string }>().catch(() => null);
   if (!body || (body.name === undefined && body.content === undefined)) {
@@ -145,7 +154,7 @@ artifacts.patch('/:id', async (c) => {
   let name: string | undefined;
   if (body.name !== undefined) {
     name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name || name.length > 200) {
+    if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
       return c.json({ ok: false, error: 'Invalid name' }, 400);
     }
   }
@@ -174,7 +183,7 @@ artifacts.patch('/:id', async (c) => {
 });
 
 artifacts.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const deleted = db.deleteArtifact(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);

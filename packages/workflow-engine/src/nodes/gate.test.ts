@@ -29,6 +29,21 @@ describe('gate nodes', () => {
     expect(result.durationMs).toBe(0);
   });
 
+  it('TriggerNode caps input key count at 200', async () => {
+    const fat: Record<string, unknown> = {};
+    for (let i = 0; i < 250; i++) fat[`k${i}`] = i;
+    const result = await new TriggerNode().execute(makeCtx(fat));
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.output as object).length).toBe(200);
+  });
+
+  it('OutputNode truncates oversized merged JSON', async () => {
+    const fat = { blob: 'x'.repeat(1_100_000) };
+    const result = await new OutputNode().execute(makeCtx({ a: fat }));
+    expect(result.ok).toBe(true);
+    expect(result.output).toMatchObject({ truncated: true });
+  });
+
   it('OutputNode merges object inputs', async () => {
     const node = new OutputNode();
     const result = await node.execute(makeCtx({ left: { a: 1 }, right: { b: 2 } }));
@@ -117,4 +132,20 @@ describe('gate nodes', () => {
     expect(new ParallelEndNode().type).toBe('parallel_end');
     expect(new ORGateNode().type).toBe('or_gate');
   });
+
+  it('TriggerNode caps input keys and OutputNode truncates oversized merges', async () => {
+    const many: Record<string, unknown> = {};
+    for (let i = 0; i < 250; i++) many[`k${i}`] = i;
+    const trigger = await new TriggerNode().execute(makeCtx(many));
+    expect(trigger.ok).toBe(true);
+    expect(Object.keys(trigger.output as object).length).toBe(200);
+
+    // Unique keys so Object.assign does not collapse to one short payload field
+    const fat: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i++) fat[`b${i}`] = { [`p${i}`]: 'x'.repeat(20_000) };
+    const out = await new OutputNode().execute(makeCtx(fat));
+    expect(out.ok).toBe(true);
+    expect(out.output).toMatchObject({ truncated: true });
+  });
 });
+

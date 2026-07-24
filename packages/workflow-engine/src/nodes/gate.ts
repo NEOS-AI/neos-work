@@ -11,11 +11,39 @@
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 
+/** Cap gate merge output JSON so runaway fan-in cannot bloat node_results. */
+const GATE_OUTPUT_MAX_CHARS = 1_048_576;
+
+function mergeInputs(inputs: Record<string, unknown> | undefined): unknown {
+  const values = Object.values(inputs ?? {}).slice(0, 200);
+  const merged = Object.assign(
+    {},
+    ...values.map((v) => (typeof v === 'object' && v !== null && !Array.isArray(v) ? v : { value: v })),
+  );
+  try {
+    const json = JSON.stringify(merged);
+    if (json.length > GATE_OUTPUT_MAX_CHARS) {
+      return { truncated: true, preview: json.slice(0, 256) };
+    }
+  } catch {
+    return { truncated: true, preview: '[unserializable]' };
+  }
+  return merged;
+}
+
 export class TriggerNode implements ExecutableNode {
   type = 'trigger' as const;
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
-    return { ok: true, output: ctx.inputs, durationMs: 0 };
+    // Cap trigger payload keys (runtime parameterisation hygiene)
+    const inputs = ctx.inputs ?? {};
+    const keys = Object.keys(inputs);
+    if (keys.length > 200) {
+      const capped: Record<string, unknown> = {};
+      for (const k of keys.slice(0, 200)) capped[k] = inputs[k];
+      return { ok: true, output: capped, durationMs: 0 };
+    }
+    return { ok: true, output: inputs, durationMs: 0 };
   }
 }
 
@@ -23,12 +51,7 @@ export class OutputNode implements ExecutableNode {
   type = 'output' as const;
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
-    const values = Object.values(ctx.inputs);
-    const merged = Object.assign(
-      {},
-      ...values.map((v) => (typeof v === 'object' && v !== null ? v : { value: v })),
-    );
-    return { ok: true, output: merged, durationMs: 0 };
+    return { ok: true, output: mergeInputs(ctx.inputs as Record<string, unknown>), durationMs: 0 };
   }
 }
 
@@ -46,11 +69,11 @@ export class AndGateNode implements ExecutableNode {
         durationMs: Date.now() - start,
       };
     }
-    const merged = Object.assign(
-      {},
-      ...values.map((v) => (typeof v === 'object' && v !== null ? v : { value: v })),
-    );
-    return { ok: true, output: merged, durationMs: Date.now() - start };
+    return {
+      ok: true,
+      output: mergeInputs(ctx.inputs as Record<string, unknown>),
+      durationMs: Date.now() - start,
+    };
   }
 }
 
@@ -98,11 +121,11 @@ export class ParallelEndNode implements ExecutableNode {
         durationMs: Date.now() - start,
       };
     }
-    const merged = Object.assign(
-      {},
-      ...values.map((v) => (typeof v === 'object' && v !== null ? v : { value: v })),
-    );
-    return { ok: true, output: merged, durationMs: Date.now() - start };
+    return {
+      ok: true,
+      output: mergeInputs(ctx.inputs as Record<string, unknown>),
+      durationMs: Date.now() - start,
+    };
   }
 }
 

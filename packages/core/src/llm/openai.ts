@@ -24,7 +24,11 @@ export class OpenAIAdapter implements LLMProviderAdapter {
   }) {
     this.id = options.provider;
     this.name = options.provider === 'openai' ? 'OpenAI' : 'Ollama';
-    this.apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
+    let apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
+    if (apiKey && (apiKey.length > 8_192 || /[\0\r\n]/.test(apiKey))) {
+      apiKey = '';
+    }
+    this.apiKey = apiKey;
     const baseRaw =
       typeof options.baseUrl === 'string' ? options.baseUrl.trim() : '';
     // Only accept http(s) custom base URLs; invalid/non-http falls back to provider default

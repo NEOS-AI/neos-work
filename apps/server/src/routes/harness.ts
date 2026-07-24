@@ -63,7 +63,10 @@ harness.get('/', (c) => {
 
 harness.get('/:id', (c) => {
   const id = c.req.param('id').trim();
-  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  // Reject control-char / overlong ids early
+  if (!id || id.length > 100 || /[\0\r\n]/.test(id)) {
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
   const builtin = resolveHarness(id);
   if (builtin) return c.json({ ok: true, data: builtin });
 
