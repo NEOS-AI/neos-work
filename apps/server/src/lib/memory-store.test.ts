@@ -1,3 +1,6 @@
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createMemory,
@@ -98,6 +101,22 @@ describe('memory-store', () => {
     expect(updateMemory('  ', { content: 'nope' })).toBeNull();
     expect(deleteMemory('  ')).toBe(false);
     deleteMemory(created.id);
+  });
+
+  it('skips hidden .md files in listMemories', () => {
+    const dir = join(homedir(), '.config', 'neos-work', 'memory');
+    const hidden = join(dir, `.hidden_${process.pid}.md`);
+    try {
+      writeFileSync(
+        hidden,
+        `---\nid: hidden-${process.pid}\nname: Hidden\ntype: user\nenabled: true\ncreatedAt: 2020-01-01T00:00:00.000Z\nupdatedAt: 2020-01-01T00:00:00.000Z\n---\n\nsecret\n`,
+        'utf-8',
+      );
+      const listed = listMemories();
+      expect(listed.some((m) => m.id === `hidden-${process.pid}`)).toBe(false);
+    } finally {
+      if (existsSync(hidden)) unlinkSync(hidden);
+    }
   });
 
   it('creates memories of each type and lists them', () => {

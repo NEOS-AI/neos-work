@@ -64,7 +64,8 @@ function writeFile(item: MemoryItem): void {
 
 export function listMemories(): MemoryItem[] {
   ensureDir();
-  const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md'));
+  // Skip hidden .md files (e.g. .draft.md) — match skill discovery hygiene
+  const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md') && !f.startsWith('.'));
   return files
     .map((f) => parseFile(join(MEMORY_DIR, f)))
     .filter((item): item is MemoryItem => item !== null)

@@ -109,6 +109,17 @@ describe('createShellTool', () => {
     expect((result.output as { stdout: string }).stdout).toContain('clamped');
   });
 
+  it('rejects control characters in command and cwd', async () => {
+    const tool = createShellTool(root);
+    const cmd = await tool.execute({ command: `echo${'\0'}hi` });
+    expect(cmd.success).toBe(false);
+    expect(cmd.error).toMatch(/control characters/i);
+
+    const cwd = await tool.execute({ command: 'echo hi', cwd: `sub${'\n'}dir` });
+    expect(cwd.success).toBe(false);
+    expect(cwd.error).toMatch(/control characters/i);
+  });
+
   it('rejects blank command and blank cwd when provided', async () => {
     const tool = createShellTool(root);
     const blank = await tool.execute({ command: '   ' });

@@ -9,14 +9,67 @@ import os from 'node:os';
 
 const SKILLS_DIR = path.join(os.homedir(), '.config', 'neos-work', 'skills');
 
+export type PipelineStageKind =
+  | 'discovery'
+  | 'plan'
+  | 'execute'
+  | 'critique'
+  | 'form'
+  | 'choice';
+
+const PIPELINE_STAGE_KINDS = new Set<string>([
+  'discovery',
+  'plan',
+  'execute',
+  'critique',
+  'form',
+  'choice',
+]);
+
 export interface PipelineStage {
   id: string;
   name: string;
-  kind: 'discovery' | 'plan' | 'execute' | 'critique' | 'form' | 'choice';
+  kind: PipelineStageKind;
   prompt?: string;
   outputKey?: string;
   humanInLoop?: boolean;
   schema?: unknown;
+}
+
+/** Normalize pipeline stage kind (unknown → execute). */
+export function normalizePipelineStageKind(raw: unknown): PipelineStageKind {
+  const k = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return PIPELINE_STAGE_KINDS.has(k) ? (k as PipelineStageKind) : 'execute';
+}
+
+function normalizePipelineStages(raw: unknown): PipelineStage[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const stages: PipelineStage[] = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object') continue;
+    const stage = s as Partial<PipelineStage>;
+    const id = typeof stage.id === 'string' ? stage.id.trim() : '';
+    if (!id) continue;
+    const name =
+      typeof stage.name === 'string' ? stage.name.trim() || id : id;
+    const kind = normalizePipelineStageKind(stage.kind);
+    const outputKey =
+      typeof stage.outputKey === 'string'
+        ? stage.outputKey.trim() || undefined
+        : undefined;
+    const prompt =
+      typeof stage.prompt === 'string' ? stage.prompt.trim() || undefined : undefined;
+    stages.push({
+      id,
+      name,
+      kind,
+      prompt,
+      outputKey,
+      humanInLoop: Boolean(stage.humanInLoop),
+      schema: stage.schema,
+    });
+  }
+  return stages.length > 0 ? stages : undefined;
 }
 
 export interface PluginManifest {
@@ -65,6 +118,12 @@ export async function listPlugins(): Promise<PluginManifest[]> {
         }
         if (typeof manifest.version === 'string') {
           manifest.version = manifest.version.trim() || '0.0.0';
+        }
+        // Normalize pipeline stages (kind allow-list, trim ids/names)
+        if (manifest.pipeline !== undefined) {
+          const stages = normalizePipelineStages(manifest.pipeline);
+          if (stages) manifest.pipeline = stages;
+          else delete manifest.pipeline;
         }
         // Optionally load SKILL.md content
         const skillPath = path.join(dir, 'SKILL.md');

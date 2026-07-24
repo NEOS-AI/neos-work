@@ -213,6 +213,25 @@ describe('loadMcpTokenEnvVars', () => {
     const env = loadMcpTokenEnvVars();
     expect(env.NEOS_MCP_TOKEN_EXPIRED_SRV).toBeUndefined();
   });
+
+  it('skips hidden .json token files', () => {
+    const hidden = path.join(tokenDir, `.hidden_${process.pid}.json`);
+    try {
+      fs.mkdirSync(tokenDir, { recursive: true });
+      fs.writeFileSync(
+        hidden,
+        JSON.stringify({
+          serverId: 'hidden-srv',
+          accessToken: 'secret',
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      );
+      const env = loadMcpTokenEnvVars();
+      expect(env.NEOS_MCP_TOKEN_HIDDEN_SRV).toBeUndefined();
+    } finally {
+      try { fs.unlinkSync(hidden); } catch { /* ignore */ }
+    }
+  });
 });
 
 describe('spawnCliAgent', () => {

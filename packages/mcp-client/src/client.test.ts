@@ -263,4 +263,31 @@ describe('McpClient', () => {
       output: '',
     });
   });
+
+  it('listTools defaults missing inputSchema; callTool maps mixed content items', async () => {
+    listToolsMock.mockResolvedValue({
+      tools: [
+        { name: 'bare' },
+        { name: 'with-null-schema', inputSchema: null },
+      ],
+    });
+    const c = new McpClient();
+    const tools = await c.listTools();
+    expect(tools[0]?.inputSchema).toEqual({ type: 'object', properties: {} });
+    expect(tools[1]?.inputSchema).toEqual({ type: 'object', properties: {} });
+
+    callToolMock.mockResolvedValue({
+      isError: false,
+      content: [
+        { type: 'text', text: 'line1' },
+        { type: 'resource', data: { uri: 'x' } },
+        null,
+        'str-item',
+      ],
+    });
+    const result = await c.callTool('mixed', null as unknown as Record<string, unknown>);
+    expect(result.success).toBe(true);
+    expect(String(result.output)).toContain('line1');
+    expect(String(result.output)).toContain('uri');
+  });
 });

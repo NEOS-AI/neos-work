@@ -226,6 +226,79 @@ describe('plugin-runner empty pipeline', () => {
     expect(events.some((e) => e.type === 'pipeline.started')).toBe(true);
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
+
+  it('skips blank stage ids and trims stage name/outputKey', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'skip-blank',
+      name: 'Skip Blank',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: '   ',
+          name: 'Ignored',
+          kind: 'plan',
+          prompt: 'should not run',
+          outputKey: 'ignored',
+        },
+        {
+          id: '  plan  ',
+          name: '  Plan Stage  ',
+          kind: 'plan',
+          prompt: 'Plan {{goal}}',
+          outputKey: '  planOut  ',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'ship' },
+      settings: {},
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+
+    const started = events.filter((e) => e.type === 'stage.started');
+    expect(started).toHaveLength(1);
+    expect(started[0]?.stageId).toBe('plan');
+    expect(started[0]?.stageName).toBe('Plan Stage');
+
+    const completed = events.find((e) => e.type === 'pipeline.completed') as
+      | { outputs?: Record<string, string> }
+      | undefined;
+    expect(completed?.outputs).toHaveProperty('planOut');
+    expect(completed?.outputs).not.toHaveProperty('ignored');
+  });
+
+  it('defaults missing stage name/outputKey to stage id', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'defaults',
+      name: 'Defaults',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'only',
+          kind: 'plan',
+          prompt: 'x',
+        } as PluginManifest['pipeline'] extends (infer S)[] | undefined ? S : never,
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const started = events.find((e) => e.type === 'stage.started');
+    expect(started?.stageId).toBe('only');
+    expect(started?.stageName).toBe('only');
+    const completed = events.find((e) => e.type === 'pipeline.completed') as
+      | { outputs?: Record<string, string> }
+      | undefined;
+    expect(completed?.outputs).toHaveProperty('only');
+  });
 });
 
 describe('plugin-runner resume / abort / LLM paths', () => {

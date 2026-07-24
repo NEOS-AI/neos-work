@@ -126,6 +126,10 @@ export function createShellTool(workspaceRoot: string): Tool {
         if (!command) {
           return { success: false, output: null, error: 'command is required' };
         }
+        // Reject null bytes / CR / LF that confuse shell and path APIs
+        if (/[\0\r\n]/.test(command)) {
+          return { success: false, output: null, error: 'command contains invalid control characters' };
+        }
         const timeoutRaw =
           typeof input.timeout === 'number'
             ? input.timeout
@@ -152,6 +156,9 @@ export function createShellTool(workspaceRoot: string): Tool {
             typeof input.cwd === 'string' ? input.cwd.trim() : String(input.cwd ?? '').trim();
           if (!cwdRel) {
             return { success: false, output: null, error: 'cwd is required when provided' };
+          }
+          if (/[\0\r\n]/.test(cwdRel)) {
+            return { success: false, output: null, error: 'cwd contains invalid control characters' };
           }
           const requestedCwd = resolve(absoluteRoot, cwdRel);
           let realCwd: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BrowserManager } from './manager.js';
-import { createBrowserTools } from './tools.js';
+import { createBrowserTools, isSafeBrowserUrl } from './tools.js';
 
 function makeManager(page: Record<string, unknown>): BrowserManager {
   return {
@@ -145,5 +145,71 @@ describe('createBrowserTools', () => {
     await expect(tools.find((t) => t.name === 'browser_click')!.execute({ selector: '#x' })).rejects.toThrow(
       /timeout/,
     );
+  });
+
+  it('isSafeBrowserUrl accepts only http(s)', () => {
+    expect(isSafeBrowserUrl('https://example.com')).toBe('https://example.com');
+    expect(isSafeBrowserUrl('  http://example.com/path  ')).toBe('http://example.com/path');
+    expect(isSafeBrowserUrl('file:///etc/passwd')).toBeNull();
+    expect(isSafeBrowserUrl('javascript:alert(1)')).toBeNull();
+    expect(isSafeBrowserUrl('data:text/html,hi')).toBeNull();
+    expect(isSafeBrowserUrl('')).toBeNull();
+    expect(isSafeBrowserUrl('   ')).toBeNull();
+    expect(isSafeBrowserUrl('not-a-url')).toBeNull();
+  });
+
+  it('browser_navigate rejects non-http URLs without calling page.goto', async () => {
+    const page = { goto: vi.fn(async () => {}) };
+    const tools = createBrowserTools(makeManager(page));
+    const nav = tools.find((t) => t.name === 'browser_navigate')!;
+    for (const url of ['file:///tmp/x', 'javascript:alert(1)', 'ftp://x', '', '  ']) {
+      const result = await nav.execute({ url });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/http\(s\)/i);
+    }
+    expect(page.goto).not.toHaveBeenCalled();
+  });
+
+  it('browser_click/fill reject blank selectors; trim padded selectors', async () => {
+    const page = {
+      click: vi.fn(async () => {}),
+      fill: vi.fn(async () => {}),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const click = tools.find((t) => t.name === 'browser_click')!;
+    const fill = tools.find((t) => t.name === 'browser_fill')!;
+
+    expect((await click.execute({ selector: '   ' })).success).toBe(false);
+    expect((await fill.execute({ selector: '', value: 'x' })).success).toBe(false);
+
+    await click.execute({ selector: '  #btn  ' });
+    await fill.execute({ selector: '  #name  ', value: 'Ada' });
+    expect(page.click).toHaveBeenCalledWith('#btn', { timeout: 10_000 });
+    expect(page.fill).toHaveBeenCalledWith('#name', 'Ada', { timeout: 10_000 });
+  });
+
+  it('browser_extract_text/links treat whitespace-only selector as whole page', async () => {
+    const page = {
+      locator: vi.fn(() => ({ innerText: vi.fn(async () => 'partial') })),
+      evaluate: vi.fn(async () => 'full'),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const extract = tools.find((t) => t.name === 'browser_extract_text')!;
+    const links = tools.find((t) => t.name === 'browser_extract_links')!;
+
+    await extract.execute({ selector: '   ' });
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(page.locator).not.toHaveBeenCalled();
+
+    const linkPage = {
+      evaluate: vi.fn(async (_fn: unknown, sel: string | null) => {
+        expect(sel).toBeNull();
+        return [];
+      }),
+    };
+    const tools2 = createBrowserTools(makeManager(linkPage));
+    await tools2.find((t) => t.name === 'browser_extract_links')!.execute({ selector: '  ' });
+    expect(linkPage.evaluate).toHaveBeenCalled();
+    void links;
   });
 });

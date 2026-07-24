@@ -224,4 +224,99 @@ describe('artifacts routes', () => {
     const missing = await artifacts.request(`/${id}`);
     expect(missing.status).toBe(404);
   });
+
+  it('serves text/plain preview and rejects overlong names', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+
+    const longName = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'n'.repeat(201),
+        contentType: 'text/plain',
+        content: 'x',
+      }),
+    });
+    expect(longName.status).toBe(400);
+
+    const create = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'notes.txt',
+        contentType: 'text/plain',
+        content: 'hello plain',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string } };
+
+    const preview = await artifacts.request(`/${created.data.id}/preview`);
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get('content-type')).toMatch(/text\/plain/);
+    expect(await preview.text()).toBe('hello plain');
+
+    // empty content allowed; blank contentType rejected
+    const emptyOk = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'empty.html',
+        contentType: 'text/html',
+        content: '',
+      }),
+    });
+    expect(emptyOk.status).toBe(201);
+
+    const noType = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'no-type',
+        contentType: '   ',
+      }),
+    });
+    expect(noType.status).toBe(400);
+
+    // patch whitespace content rejected; refresh defaults unknown mode to reload
+    const patchWs = await artifacts.request(`/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '  \n  ' }),
+    });
+    expect(patchWs.status).toBe(400);
+
+    const refresh = await artifacts.request(`/${created.data.id}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: '  UNKNOWN  ' }),
+    });
+    expect(refresh.status).toBe(200);
+    const refreshBody = await refresh.json() as { meta: { mode: string } };
+    expect(refreshBody.meta.mode).toBe('reload');
+
+    // missing artifact ops
+    expect((await artifacts.request('/no-such-id')).status).toBe(404);
+    expect((await artifacts.request('/no-such-id', { method: 'DELETE' })).status).toBe(404);
+    expect(
+      (
+        await artifacts.request('/no-such-id/refresh', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        })
+      ).status,
+    ).toBe(404);
+
+    await artifacts.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
 });

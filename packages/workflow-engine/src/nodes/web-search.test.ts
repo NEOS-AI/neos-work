@@ -61,10 +61,28 @@ describe('WebSearchNode', () => {
   });
 
   it('surfaces non-ok HTTP status', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 429 }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'rate limited',
+    }));
     const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'x' }));
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/429/);
+    expect(result.error).toMatch(/rate limited/);
+  });
+
+  it('sends User-Agent and tolerates missing results array', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'x' }));
+    expect(result.ok).toBe(true);
+    expect(result.output).toEqual([]);
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers['User-Agent']).toMatch(/^neos-work\//);
   });
 
   it('uses config.query and config.maxResults for the Tavily request', async () => {

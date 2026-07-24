@@ -67,6 +67,14 @@ describe('autoLayout', () => {
     const byId = Object.fromEntries(laid.filter((x) => x.id.trim()).map((node) => [node.id, node]));
     expect(byId.a!.position.y).toBeLessThan(byId.b!.position.y);
   });
+
+  it('matches edges whose endpoints are padded relative to node ids', () => {
+    const nodes = [n('a'), n('b')];
+    const edges: Edge[] = [{ id: 'e1', source: '  a  ', target: '  b  ' }];
+    const laid = autoLayout(nodes, edges, 'TB');
+    const byId = Object.fromEntries(laid.map((node) => [node.id, node]));
+    expect(byId.a!.position.y).toBeLessThan(byId.b!.position.y);
+  });
 });
 
 describe('autoLayout fan-out', () => {

@@ -174,5 +174,35 @@ describe('updateArtifact PATCH semantics', () => {
     expect(a.contentType).toBe('text/html');
     deleteArtifact(a.id);
   });
+
+  it('trims runId/nodeId/filePath and lists by run', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const runId = crypto.randomUUID();
+    const a = createArtifact({
+      workflowId: `  ${wf.id}  `,
+      runId: `  ${runId}  `,
+      name: '  by-run.html  ',
+      contentType: 'text/html',
+      content: '<p>x</p>',
+      nodeId: '  n1  ',
+      filePath: '  /tmp/x  ',
+    });
+    expect(a.runId).toBe(runId);
+    expect(a.nodeId).toBe('n1');
+    expect(a.filePath).toBe('/tmp/x');
+    expect(a.name).toBe('by-run.html');
+    expect(listArtifactsByRun(`  ${runId}  `).some((x) => x.id === a.id)).toBe(true);
+    expect(listArtifactsByRun('   ')).toEqual([]);
+    expect(listArtifacts('   ')).toEqual([]);
+    expect(updateArtifactContent('   ', 'x')).toBeUndefined();
+    expect(updateArtifact('   ', { name: 'y' })).toBeUndefined();
+    expect(deleteArtifact('   ')).toBe(false);
+    deleteArtifact(a.id);
+  });
 });
 

@@ -32,24 +32,32 @@ export class WebSearchNode implements ExecutableNode {
     try {
       const res = await fetch('https://api.tavily.com/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'neos-work/0.3.85',
+        },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
       });
 
       if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        const detail = body.trim().slice(0, 500);
         return {
           ok: false,
           output: null,
-          error: `Tavily API error: ${res.status}`,
+          error: detail
+            ? `Tavily API error: ${res.status}: ${detail}`
+            : `Tavily API error: ${res.status}`,
           durationMs: Date.now() - start,
         };
       }
 
-      const data = await res.json() as { results: TavilyResult[] };
+      const data = await res.json() as { results?: TavilyResult[] };
+      const results = Array.isArray(data.results) ? data.results : [];
       return {
         ok: true,
-        output: data.results,
+        output: results,
         durationMs: Date.now() - start,
       };
     } catch (err) {

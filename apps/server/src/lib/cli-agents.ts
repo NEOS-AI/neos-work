@@ -137,7 +137,8 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
   try {
     const files = fs.readdirSync(tokenDir);
     for (const file of files) {
-      if (!file.endsWith('.json')) continue;
+      // Skip non-json and hidden files (e.g. .backup.json)
+      if (!file.endsWith('.json') || file.startsWith('.')) continue;
       try {
         const raw = fs.readFileSync(path.join(tokenDir, file), 'utf-8');
         const token = JSON.parse(raw) as { serverId: string; accessToken: string; expiresAt?: string };

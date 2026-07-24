@@ -21,12 +21,16 @@ export function autoLayout<T extends Record<string, unknown>>(
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: dir, ranksep: 80, nodesep: 50 });
 
+  // Map trimmed id → original React Flow id (layout positions stay on original ids)
   const nodeIds = new Set<string>();
+  const byTrimmed = new Map<string, string>();
   for (const node of nodes) {
     const id = typeof node?.id === 'string' ? node.id.trim() : '';
     if (!id) continue;
     // Prefer original id for layout map (React Flow ids are not re-trimmed in output)
     nodeIds.add(node.id);
+    nodeIds.add(id);
+    if (!byTrimmed.has(id)) byTrimmed.set(id, node.id);
     g.setNode(node.id, {
       width: node.measured?.width ?? DEFAULT_NODE_WIDTH,
       height: node.measured?.height ?? DEFAULT_NODE_HEIGHT,
@@ -38,10 +42,14 @@ export function autoLayout<T extends Record<string, unknown>>(
     const target = typeof edge?.target === 'string' ? edge.target.trim() : '';
     if (!source || !target) continue;
     // Skip dangling edges so dagre does not throw on missing nodes
-    // Match both trimmed and raw ids (callers usually use consistent ids)
-    const srcId = nodeIds.has(edge.source) ? edge.source : nodeIds.has(source) ? source : '';
-    const tgtId = nodeIds.has(edge.target) ? edge.target : nodeIds.has(target) ? target : '';
-    if (!srcId || !tgtId) continue;
+    // Match raw edge endpoints, then trimmed → original node id
+    const srcId = nodeIds.has(edge.source)
+      ? edge.source
+      : (byTrimmed.get(source) ?? (nodeIds.has(source) ? source : ''));
+    const tgtId = nodeIds.has(edge.target)
+      ? edge.target
+      : (byTrimmed.get(target) ?? (nodeIds.has(target) ? target : ''));
+    if (!srcId || !tgtId || !g.hasNode(srcId) || !g.hasNode(tgtId)) continue;
     g.setEdge(srcId, tgtId);
   }
 

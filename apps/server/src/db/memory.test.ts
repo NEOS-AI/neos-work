@@ -76,4 +76,25 @@ describe('memory CRUD', () => {
     expect(getMemory(WS, KEYS[0]!)).toBeUndefined();
     expect(deleteMemory(WS, KEYS[0]!)).toBe(false);
   });
+
+  it('clamps list/search limits and coerces non-string content', () => {
+    createMemory({
+      workspaceId: WS,
+      key: KEYS[0]!,
+      content: 42 as unknown as string,
+    });
+    expect(getMemory(WS, KEYS[0]!)?.content).toBe('42');
+
+    expect(searchMemory('   ', 'q')).toEqual([]);
+    expect(listMemories(WS, 0).length).toBeLessThanOrEqual(1);
+    expect(listMemories(WS, 999).length).toBeLessThanOrEqual(100);
+    expect(searchMemory(WS, KEYS[0]!, undefined, Number.NaN).some((m) => m.key === KEYS[0])).toBe(
+      true,
+    );
+
+    createMemory({ workspaceId: WS, key: KEYS[1]!, content: 'tagged', tags: ['ok'] });
+    expect(searchMemory(WS, 'tagged', ['ok']).some((m) => m.key === KEYS[1])).toBe(true);
+    // whitespace-only tag filters become empty → no matches
+    expect(searchMemory(WS, 'tagged', ['  '])).toEqual([]);
+  });
 });

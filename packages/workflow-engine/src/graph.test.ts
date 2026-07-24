@@ -112,4 +112,18 @@ describe('topologicalSort', () => {
     const order = topologicalSort(nodes, edges).map((n) => n.id);
     expect(order).toEqual(['a', 'b']);
   });
+
+  it('skips edges with blank endpoints after trim without throwing', () => {
+    const nodes: WorkflowNode[] = [
+      { id: 'a', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: 'b', type: 'output', label: 'B', position: { x: 1, y: 0 }, config: {} },
+    ];
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: 'a', target: 'b' },
+      { id: 'e2', source: '', target: 'b' },
+      { id: 'e3', source: 'a', target: '   ' },
+      { id: 'e4', source: null as unknown as string, target: 'b' },
+    ];
+    expect(topologicalSort(nodes, edges).map((n) => n.id)).toEqual(['a', 'b']);
+  });
 });

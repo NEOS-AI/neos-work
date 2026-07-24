@@ -68,4 +68,28 @@ describe('buildMcpTools', () => {
     const tools = await buildMcpTools(makeClient());
     expect(tools).toEqual([]);
   });
+
+  it('filters blank tool names and trims whitespace-only descriptions', async () => {
+    const listTools = vi.fn(async () => [
+      { name: '  keep  ', description: '  ', inputSchema: { type: 'object' } },
+      { name: '   ', description: 'drop', inputSchema: {} },
+      { name: '', inputSchema: {} },
+    ]);
+    const tools = await buildMcpTools(makeClient({ listTools } as never));
+    expect(tools).toHaveLength(1);
+    expect(tools[0]!.name).toBe('keep');
+    expect(tools[0]!.description).toBe('MCP tool: keep');
+    expect(tools[0]!.inputSchema).toEqual({ type: 'object' });
+  });
+
+  it('defaults missing inputSchema and tolerates null execute input', async () => {
+    const callTool = vi.fn(async () => ({ success: true, output: 'ok' }));
+    const tool = mcpToolToTool(makeClient({ callTool } as never), {
+      name: '  t  ',
+      inputSchema: undefined as unknown as Record<string, unknown>,
+    });
+    expect(tool.inputSchema).toEqual({ type: 'object', properties: {} });
+    await tool.execute(null as unknown as Record<string, unknown>);
+    expect(callTool).toHaveBeenCalledWith('t', {});
+  });
 });

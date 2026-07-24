@@ -134,4 +134,33 @@ describe('custom blocks CRUD', () => {
     const all = listCustomBlocks('   ');
     expect(all.some((b) => b.id === IDS[0])).toBe(true);
   });
+
+  it('defaults paramDefs and category; ignores non-array paramDefs on update', () => {
+    const created = createCustomBlock({
+      id: IDS[0]!,
+      name: 'Defaults',
+      domain: 'general',
+      category: '',
+      description: 'd',
+      implementationType: 'prompt',
+      paramDefs: undefined as never,
+      inputDescription: '',
+      outputDescription: '',
+    });
+    expect(created.category).toBe('custom');
+    expect(created.paramDefs).toEqual([]);
+    expect(getCustomBlock(IDS[0]!)?.paramDefs).toEqual([]);
+
+    const kept = updateCustomBlock(IDS[0]!, {
+      paramDefs: 'not-array' as never,
+      name: 'Still Defaults',
+    });
+    expect(kept?.name).toBe('Still Defaults');
+    expect(kept?.paramDefs).toEqual([]);
+
+    const replaced = updateCustomBlock(IDS[0]!, {
+      paramDefs: [{ key: 'n', type: 'string', label: 'N' }],
+    });
+    expect(replaced?.paramDefs).toEqual([{ key: 'n', type: 'string', label: 'N' }]);
+  });
 });

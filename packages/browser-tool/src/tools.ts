@@ -3,6 +3,25 @@ import type { Tool } from '@neos-work/core';
 import type { BrowserManager } from './manager.js';
 
 /**
+ * Only http(s) navigation — blocks file:/javascript:/data: style SSRF vectors.
+ */
+export function isSafeBrowserUrl(raw: unknown): string | null {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function trimSelector(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+}
+
+/**
  * BrowserManager 인스턴스를 받아 6개 브라우저 Tool을 반환한다.
  * Tool 인터페이스: { name, description, inputSchema, execute(input) }
  */
@@ -19,7 +38,14 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         required: ['url'],
       },
       async execute(input) {
-        const { url } = input as { url: string };
+        const url = isSafeBrowserUrl((input as { url?: unknown }).url);
+        if (!url) {
+          return {
+            success: false,
+            output: null,
+            error: 'URL must be a valid http(s) URL',
+          };
+        }
         const page = manager.getPage();
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
         return { success: true, output: { title: await page.title(), url: page.url() } };
@@ -36,7 +62,10 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         required: ['selector'],
       },
       async execute(input) {
-        const { selector } = input as { selector: string };
+        const selector = trimSelector((input as { selector?: unknown }).selector);
+        if (!selector) {
+          return { success: false, output: null, error: 'selector is required' };
+        }
         const page = manager.getPage();
         await page.click(selector, { timeout: 10_000 });
         return { success: true, output: { success: true } };
@@ -54,7 +83,12 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         required: ['selector', 'value'],
       },
       async execute(input) {
-        const { selector, value } = input as { selector: string; value: string };
+        const selector = trimSelector((input as { selector?: unknown }).selector);
+        if (!selector) {
+          return { success: false, output: null, error: 'selector is required' };
+        }
+        const valueRaw = (input as { value?: unknown }).value;
+        const value = typeof valueRaw === 'string' ? valueRaw : String(valueRaw ?? '');
         const page = manager.getPage();
         await page.fill(selector, value, { timeout: 10_000 });
         return { success: true, output: { success: true } };
@@ -75,7 +109,7 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
       async execute(input) {
         const { fullPage = false } = input as { fullPage?: boolean };
         const page = manager.getPage();
-        const buffer = await page.screenshot({ fullPage });
+        const buffer = await page.screenshot({ fullPage: Boolean(fullPage) });
         return { success: true, output: { screenshot: buffer.toString('base64') } };
       },
     },
@@ -92,7 +126,7 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         },
       },
       async execute(input) {
-        const { selector } = input as { selector?: string };
+        const selector = trimSelector((input as { selector?: unknown }).selector);
         const page = manager.getPage();
         const text = selector
           ? await page.locator(selector).innerText({ timeout: 10_000 })
@@ -113,7 +147,7 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         },
       },
       async execute(input) {
-        const { selector } = input as { selector?: string };
+        const selector = trimSelector((input as { selector?: unknown }).selector);
         const page = manager.getPage();
         const links = await page.evaluate((sel: string | null) => {
           const container: Element | Document = sel
@@ -123,7 +157,7 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
             text: (a as HTMLAnchorElement).innerText.trim(),
             href: (a as HTMLAnchorElement).href,
           }));
-        }, selector ?? null);
+        }, selector || null);
         return { success: true, output: { links } };
       },
     },

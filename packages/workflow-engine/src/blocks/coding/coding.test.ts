@@ -257,6 +257,12 @@ describe('coding blocks', () => {
     });
 
     it('requires go/cargo test subcommand (rejects go version / cargo build)', async () => {
+      expect(isAllowedTestCommand([])).toBe(false);
+      expect(isAllowedTestCommand(['go'])).toBe(false);
+      expect(isAllowedTestCommand(['cargo'])).toBe(false);
+      expect(isAllowedTestCommand(['python', 'test'])).toBe(false);
+      expect(isAllowedTestCommand(['pytest', '-q'])).toBe(true);
+      expect(isAllowedTestCommand(['yarn', 'test'])).toBe(true);
       expect(isAllowedTestCommand(['go', 'version'])).toBe(false);
       expect(isAllowedTestCommand(['cargo', 'build'])).toBe(false);
       expect(isAllowedTestCommand(['go', 'test'])).toBe(true);

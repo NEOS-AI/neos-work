@@ -2,7 +2,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { upgradeSkillToPlugin, getPlugin, listPlugins } from './plugin-store.js';
+import {
+  upgradeSkillToPlugin,
+  getPlugin,
+  listPlugins,
+  normalizePipelineStageKind,
+} from './plugin-store.js';
 
 const SKILLS_DIR = path.join(os.homedir(), '.config', 'neos-work', 'skills');
 const DIR_NAME = `_cov_skill_${process.pid}`;
@@ -166,5 +171,17 @@ describe('plugin-store listPlugins edge cases', () => {
     } finally {
       await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
     }
+  });
+});
+
+describe('normalizePipelineStageKind', () => {
+  it('accepts known kinds case-insensitively and falls back to execute', () => {
+    expect(normalizePipelineStageKind('plan')).toBe('plan');
+    expect(normalizePipelineStageKind('  DISCOVERY  ')).toBe('discovery');
+    expect(normalizePipelineStageKind('form')).toBe('form');
+    expect(normalizePipelineStageKind('choice')).toBe('choice');
+    expect(normalizePipelineStageKind('unknown')).toBe('execute');
+    expect(normalizePipelineStageKind('')).toBe('execute');
+    expect(normalizePipelineStageKind(null)).toBe('execute');
   });
 });

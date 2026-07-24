@@ -40,7 +40,8 @@ async function runNode(
   nodeOutputs: Map<string, unknown>,
   failedNodes: Set<string>,
 ): Promise<boolean> {
-  onEvent({ type: 'node.started', nodeId: node.id, nodeType: node.type });
+  const nodeId = typeof node.id === 'string' ? node.id.trim() : String(node.id ?? '');
+  onEvent({ type: 'node.started', nodeId, nodeType: node.type });
   const nodeImpl = resolveNode(node.type, node.config as Record<string, unknown> | undefined);
   const result = await nodeImpl.execute(ctx);
 
@@ -49,14 +50,14 @@ async function runNode(
   if (serialized.length > MAX_OUTPUT_BYTES) {
     output = { truncated: true, preview: serialized.slice(0, 256) };
   }
-  nodeOutputs.set(node.id, output);
+  nodeOutputs.set(nodeId, output);
 
   if (result.ok) {
-    onEvent({ type: 'node.completed', nodeId: node.id, output, durationMs: result.durationMs });
+    onEvent({ type: 'node.completed', nodeId, output, durationMs: result.durationMs });
     return true;
   } else {
-    failedNodes.add(node.id);
-    onEvent({ type: 'node.failed', nodeId: node.id, error: result.error ?? 'Unknown error' });
+    failedNodes.add(nodeId);
+    onEvent({ type: 'node.failed', nodeId, error: result.error ?? 'Unknown error' });
     return false;
   }
 }
@@ -93,11 +94,15 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   for (const node of sorted) {
     if (signal?.aborted) break;
 
+    // topologicalSort normalizes ids; still trim for defense-in-depth
+    const nodeId = typeof node.id === 'string' ? node.id.trim() : String(node.id ?? '');
+    if (!nodeId) continue;
+
     // Collect inputs from upstream nodes via edges (exclude failed / blank endpoints)
     const incomingEdges = workflow.edges.filter(
       (e) =>
         typeof e.target === 'string'
-        && e.target.trim() === node.id
+        && e.target.trim() === nodeId
         && typeof e.source === 'string'
         && e.source.trim().length > 0,
     );
@@ -105,7 +110,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     for (const edge of incomingEdges) {
       const source = edge.source.trim();
       if (!failedNodes.has(source)) {
-        inputs[source] = nodeOutputs.get(source);
+        inputs[source] = nodeOutputs.get(source) ?? nodeOutputs.get(edge.source);
       }
     }
 
@@ -113,8 +118,8 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     if (node.type === 'gate_and') {
       const anyFailed = incomingEdges.some((e) => failedNodes.has(e.source.trim()));
       if (anyFailed) {
-        onEvent({ type: 'node.failed', nodeId: node.id, error: 'AND gate: one or more upstream nodes failed' });
-        failedNodes.add(node.id);
+        onEvent({ type: 'node.failed', nodeId: nodeId, error: 'AND gate: one or more upstream nodes failed' });
+        failedNodes.add(nodeId);
         continue;
       }
     }
@@ -125,8 +130,8 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         incomingEdges.length > 0
         && incomingEdges.every((e) => failedNodes.has(e.source.trim()));
       if (allFailed) {
-        onEvent({ type: 'node.failed', nodeId: node.id, error: 'OR gate: all upstream nodes failed' });
-        failedNodes.add(node.id);
+        onEvent({ type: 'node.failed', nodeId: nodeId, error: 'OR gate: all upstream nodes failed' });
+        failedNodes.add(nodeId);
         continue;
       }
       // Keep only the first successful input
@@ -144,7 +149,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       const ctx: NodeContext = {
         workflowId: workflow.id,
         runId,
-        nodeId: node.id,
+        nodeId,
         inputs,
         settings,
         config: node.config as Record<string, unknown> | undefined,
@@ -159,7 +164,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       const ctx: NodeContext = {
         workflowId: workflow.id,
         runId,
-        nodeId: node.id,
+        nodeId,
         inputs,
         settings,
         config: node.config as Record<string, unknown> | undefined,
@@ -179,8 +184,8 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       if (pendingPredecessors.length === 0) {
         const allFailed = predecessorIds.every((id) => failedNodes.has(id));
         if (allFailed) {
-          onEvent({ type: 'node.failed', nodeId: node.id, error: 'OR gate: all upstream nodes failed' });
-          failedNodes.add(node.id);
+          onEvent({ type: 'node.failed', nodeId: nodeId, error: 'OR gate: all upstream nodes failed' });
+          failedNodes.add(nodeId);
           continue;
         }
         const firstSuccessId = predecessorIds.find((id) => !failedNodes.has(id));
@@ -188,7 +193,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         const ctx: NodeContext = {
           workflowId: workflow.id,
           runId,
-          nodeId: node.id,
+          nodeId,
           inputs: winnerInput,
           settings,
           config: node.config as Record<string, unknown> | undefined,
@@ -199,10 +204,15 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       }
 
       // Run pending branches concurrently and race
-      const branchNodes = sorted.filter((n) => pendingPredecessors.includes(n.id));
+      const branchNodes = sorted.filter((n) => {
+        const id = typeof n.id === 'string' ? n.id.trim() : n.id;
+        return pendingPredecessors.includes(id);
+      });
       const abortControllers = branchNodes.map(() => new AbortController());
 
       const branchPromises = branchNodes.map(async (branchNode, i) => {
+        const branchId =
+          typeof branchNode.id === 'string' ? branchNode.id.trim() : String(branchNode.id ?? '');
         const branchSignal = abortControllers[i].signal;
         const combined = signal
           ? AbortSignal.any([signal, branchSignal])
@@ -211,7 +221,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         for (const edge of workflow.edges.filter(
           (e) =>
             typeof e.target === 'string'
-            && e.target.trim() === branchNode.id
+            && e.target.trim() === branchId
             && typeof e.source === 'string'
             && e.source.trim().length > 0,
         )) {
@@ -223,14 +233,14 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         const branchCtx: NodeContext = {
           workflowId: workflow.id,
           runId,
-          nodeId: branchNode.id,
+          nodeId: branchId,
           inputs: branchInputs,
           settings,
           config: branchNode.config as Record<string, unknown> | undefined,
           signal: combined,
         };
         const ok = await runNode(branchNode, branchCtx, onEvent, nodeOutputs, failedNodes);
-        return { nodeId: branchNode.id, ok };
+        return { nodeId: branchId, ok };
       });
 
       const results = await Promise.allSettled(
@@ -250,8 +260,8 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         .find((r) => r?.ok);
 
       if (!winner) {
-        onEvent({ type: 'node.failed', nodeId: node.id, error: 'OR gate: all branches failed' });
-        failedNodes.add(node.id);
+        onEvent({ type: 'node.failed', nodeId: nodeId, error: 'OR gate: all branches failed' });
+        failedNodes.add(nodeId);
         continue;
       }
 
@@ -259,7 +269,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       const ctx: NodeContext = {
         workflowId: workflow.id,
         runId,
-        nodeId: node.id,
+        nodeId,
         inputs: winnerInput,
         settings,
         config: node.config as Record<string, unknown> | undefined,
@@ -275,8 +285,8 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         incomingEdges.length > 0
         && incomingEdges.every((e) => failedNodes.has(e.source.trim()));
       if (allUpstreamFailed) {
-        onEvent({ type: 'node.failed', nodeId: node.id, error: 'Skipped: all upstream nodes failed' });
-        failedNodes.add(node.id);
+        onEvent({ type: 'node.failed', nodeId: nodeId, error: 'Skipped: all upstream nodes failed' });
+        failedNodes.add(nodeId);
         continue;
       }
     }
@@ -287,19 +297,19 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     const ctx: NodeContext = {
       workflowId: workflow.id,
       runId,
-      nodeId: node.id,
+      nodeId,
       inputs: effectiveInputs,
       settings,
       config: node.config as Record<string, unknown> | undefined,
       signal,
       onProgress: (chunk, accumulated) => {
-        onEvent({ type: 'node.progress', nodeId: node.id, chunk, accumulated });
+        onEvent({ type: 'node.progress', nodeId, chunk, accumulated });
       },
       cliSpawn: options.cliSpawn,
       designSystemContent: options.designSystemContent,
     };
 
-    onEvent({ type: 'node.started', nodeId: node.id, nodeType: node.type });
+    onEvent({ type: 'node.started', nodeId, nodeType: node.type });
     const result = await nodeImpl.execute(ctx);
 
     // Truncate large outputs before storing (security/storage limit)
@@ -309,13 +319,13 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       output = { truncated: true, preview: serialized.slice(0, 256) };
     }
 
-    nodeOutputs.set(node.id, output);
+    nodeOutputs.set(nodeId, output);
 
     if (result.ok) {
-      onEvent({ type: 'node.completed', nodeId: node.id, output, durationMs: result.durationMs });
+      onEvent({ type: 'node.completed', nodeId, output, durationMs: result.durationMs });
     } else {
-      failedNodes.add(node.id);
-      onEvent({ type: 'node.failed', nodeId: node.id, error: result.error ?? 'Unknown error' });
+      failedNodes.add(nodeId);
+      onEvent({ type: 'node.failed', nodeId, error: result.error ?? 'Unknown error' });
     }
   }
 
