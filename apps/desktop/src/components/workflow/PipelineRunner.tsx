@@ -51,7 +51,13 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
     const newRun: RunState = { runId: null, stages: [], waiting: null, completed: false, failed: null };
     setRun(newRun);
 
-    const { stop, runIdPromise } = client.runPlugin(plugin.id, inputs, (event: unknown) => {
+    // Trim plugin run inputs so resume/stage context stays clean (plan Task 5/6)
+    const trimmedInputs: Record<string, string> = {};
+    for (const [key, value] of Object.entries(inputs)) {
+      trimmedInputs[key] = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+    }
+
+    const { stop, runIdPromise } = client.runPlugin(plugin.id, trimmedInputs, (event: unknown) => {
       const e = event as Record<string, unknown>;
       setRun((prev) => {
         if (!prev) return prev;

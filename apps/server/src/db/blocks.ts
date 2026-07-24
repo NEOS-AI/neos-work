@@ -56,6 +56,36 @@ export function getCustomBlock(id: string): WorkflowBlock | null {
 }
 
 export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): WorkflowBlock {
+  const id = typeof block.id === 'string' ? block.id.trim() : '';
+  const name = typeof block.name === 'string' ? block.name.trim() : '';
+  if (!id || !name) {
+    throw new Error('id and name are required');
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    throw new Error('id must be alphanumeric (- and _ allowed)');
+  }
+  const domainRaw =
+    typeof block.domain === 'string' ? block.domain.trim().toLowerCase() || 'general' : 'general';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as WorkflowBlock['domain'])
+    : 'general';
+  const category =
+    (typeof block.category === 'string' ? block.category.trim() : '') || 'custom';
+  const description =
+    typeof block.description === 'string' ? block.description.trim() : (block.description ?? '');
+  const promptTemplate =
+    typeof block.promptTemplate === 'string' ? block.promptTemplate.trim() || undefined : block.promptTemplate;
+  const skillId =
+    typeof block.skillId === 'string' ? block.skillId.trim() || undefined : block.skillId;
+  const inputDescription =
+    typeof block.inputDescription === 'string'
+      ? block.inputDescription.trim()
+      : (block.inputDescription ?? '');
+  const outputDescription =
+    typeof block.outputDescription === 'string'
+      ? block.outputDescription.trim()
+      : (block.outputDescription ?? '');
+
   const db = getDb();
   db.prepare(`
     INSERT INTO custom_block (
@@ -64,19 +94,32 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
       prompt_template, skill_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    block.id,
-    block.name,
-    block.domain,
-    block.category,
-    block.description,
+    id,
+    name,
+    domain,
+    category,
+    description,
     block.implementationType,
-    JSON.stringify(block.paramDefs),
-    block.inputDescription,
-    block.outputDescription,
-    block.promptTemplate ?? null,
-    block.skillId ?? null,
+    JSON.stringify(block.paramDefs ?? []),
+    inputDescription,
+    outputDescription,
+    promptTemplate ?? null,
+    skillId ?? null,
   );
-  return { ...block, isBuiltIn: false };
+  return {
+    ...block,
+    id,
+    name,
+    domain,
+    category,
+    description,
+    promptTemplate,
+    skillId,
+    inputDescription,
+    outputDescription,
+    paramDefs: block.paramDefs ?? [],
+    isBuiltIn: false,
+  };
 }
 
 export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock, 'id' | 'isBuiltIn'>>): WorkflowBlock | null {

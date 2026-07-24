@@ -24,6 +24,35 @@ describe('workflow runs CRUD', () => {
         startedAt: new Date().toISOString(),
       }),
     ).toThrow(/non-blank/i);
+    expect(() =>
+      workflows.saveRun({
+        id: 'run-x',
+        workflowId: '   ',
+        status: 'running',
+        nodeResults: {},
+        startedAt: new Date().toISOString(),
+      }),
+    ).toThrow(/non-blank/i);
+  });
+
+  it('defaults missing nodeResults to empty object and trims ids', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const runId = crypto.randomUUID();
+    workflows.saveRun({
+      id: `  ${runId}  `,
+      workflowId: `  ${wf.id}  `,
+      status: 'running',
+      // nodeResults intentionally omitted
+      startedAt: new Date().toISOString(),
+    } as never);
+    const stored = workflows.getRun(runId);
+    expect(stored?.workflowId).toBe(wf.id);
+    expect(stored?.nodeResults).toEqual({});
   });
 
   it('saves, lists, filters delete by status, truncates huge nodeResults', () => {

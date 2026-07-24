@@ -64,6 +64,24 @@ describe('estimateNextCronRun', () => {
         timezone: 'Not/A_Real_Zone',
       }),
     ).toBeNull();
+    expect(
+      estimateNextCronRun('0 * * * *', {
+        from: new Date('2026-01-01T00:00:00.000Z'),
+        timezone: '   ',
+      }),
+    ).not.toBeNull(); // blank after trim → UTC default
+  });
+
+  it('honors a real non-UTC timezone for daily schedule', () => {
+    // 2026-01-01 00:30 UTC is still 2025-12-31 evening in America/Los_Angeles (UTC-8)
+    // Daily 09:00 America/Los_Angeles next fire should be 2026-01-01 17:00 UTC
+    const from = new Date('2026-01-01T00:30:00.000Z');
+    const next = estimateNextCronRun('0 9 * * *', {
+      from,
+      timezone: 'America/Los_Angeles',
+    });
+    expect(next).not.toBeNull();
+    expect(next!.toISOString()).toBe('2026-01-01T17:00:00.000Z');
   });
 
   it('matches weekday-restricted schedules', () => {

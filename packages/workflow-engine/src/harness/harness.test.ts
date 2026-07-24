@@ -33,6 +33,7 @@ describe('harness registry', () => {
     expect(resolveHarness(`  ${first.id}  `)?.id).toBe(first.id);
     expect(resolveHarness('   ')).toBeUndefined();
     expect(listHarnesses('  coding  ').every((h) => h.domain === 'coding')).toBe(true);
+    expect(listHarnesses('   ').length).toBe(listHarnesses().length);
     registerHarness({
       id: '   ',
       name: 'No',
@@ -42,6 +43,18 @@ describe('harness registry', () => {
       allowedTools: [],
     });
     expect(resolveHarness('')).toBeUndefined();
+
+    // register stores trimmed id
+    registerHarness({
+      id: '  pad-register-id  ',
+      name: 'Padded',
+      domain: 'general',
+      description: '',
+      systemPrompt: 'prompt',
+      allowedTools: [],
+    });
+    expect(resolveHarness('pad-register-id')?.name).toBe('Padded');
+    expect(resolveHarness('  pad-register-id  ')?.id).toBe('pad-register-id');
   });
 
   it('registers custom harnesses', () => {

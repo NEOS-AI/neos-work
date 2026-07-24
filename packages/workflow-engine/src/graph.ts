@@ -14,23 +14,34 @@ export function topologicalSort(
   const nodeMap = new Map<string, WorkflowNode>();
 
   for (const node of nodes) {
-    inDegree.set(node.id, 0);
-    adj.set(node.id, []);
-    nodeMap.set(node.id, node);
+    const id = typeof node?.id === 'string' ? node.id.trim() : '';
+    if (!id || nodeMap.has(id)) continue;
+    inDegree.set(id, 0);
+    adj.set(id, []);
+    nodeMap.set(id, node.id === id ? node : { ...node, id });
   }
 
   for (const edge of edges) {
-    adj.get(edge.source)?.push(edge.target);
-    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
+    const source = typeof edge?.source === 'string' ? edge.source.trim() : '';
+    const target = typeof edge?.target === 'string' ? edge.target.trim() : '';
+    // Skip dangling edges so missing endpoints do not corrupt degree counts
+    if (!source || !target || !nodeMap.has(source) || !nodeMap.has(target)) continue;
+    // Self-loops increase in-degree and surface as cycle detection below
+    adj.get(source)!.push(target);
+    inDegree.set(target, (inDegree.get(target) ?? 0) + 1);
   }
 
-  const queue: WorkflowNode[] = nodes.filter((n) => inDegree.get(n.id) === 0);
+  const queue: WorkflowNode[] = [...nodeMap.values()].filter((n) => {
+    const id = typeof n.id === 'string' ? n.id.trim() : n.id;
+    return (inDegree.get(id) ?? 0) === 0;
+  });
   const sorted: WorkflowNode[] = [];
 
   while (queue.length > 0) {
     const node = queue.shift()!;
     sorted.push(node);
-    for (const neighborId of adj.get(node.id) ?? []) {
+    const nid = typeof node.id === 'string' ? node.id.trim() : node.id;
+    for (const neighborId of adj.get(nid) ?? []) {
       const newDeg = (inDegree.get(neighborId) ?? 1) - 1;
       inDegree.set(neighborId, newDeg);
       if (newDeg === 0) {
@@ -40,7 +51,7 @@ export function topologicalSort(
     }
   }
 
-  if (sorted.length !== nodes.length) {
+  if (sorted.length !== nodeMap.size) {
     throw new Error('Workflow contains a cycle');
   }
 

@@ -32,6 +32,30 @@ function sampleBlock(id: string, domain: 'general' | 'coding' = 'general') {
 }
 
 describe('custom blocks CRUD', () => {
+  it('trims fields on create and rejects blank/invalid id', () => {
+    expect(() =>
+      createCustomBlock({ ...sampleBlock('bad id!'), id: 'bad id!' }),
+    ).toThrow(/alphanumeric/i);
+    expect(() =>
+      createCustomBlock({ ...sampleBlock(IDS[0]!), id: '  ', name: 'x' }),
+    ).toThrow(/id and name/i);
+
+    const created = createCustomBlock({
+      ...sampleBlock(IDS[0]!),
+      id: `  ${IDS[0]!}  `,
+      name: '  Trimmed  ',
+      domain: '  CODING  ' as never,
+      category: '  test  ',
+      description: '  desc  ',
+    });
+    expect(created.id).toBe(IDS[0]);
+    expect(created.name).toBe('Trimmed');
+    expect(created.domain).toBe('coding');
+    expect(created.category).toBe('test');
+    expect(created.description).toBe('desc');
+    deleteCustomBlock(IDS[0]!);
+  });
+
   it('creates, gets, lists by domain, updates, deletes', () => {
     const created = createCustomBlock(sampleBlock(IDS[0]!));
     expect(created.isBuiltIn).toBe(false);

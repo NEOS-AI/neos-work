@@ -27,6 +27,25 @@ describe('topologicalSort', () => {
     expect(() => topologicalSort(nodes, edges)).toThrow('Workflow contains a cycle');
   });
 
+  it('ignores dangling edges and still sorts reachable graph', () => {
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: 'trigger', target: 'block' },
+      { id: 'e2', source: 'block', target: 'output' },
+      { id: 'ghost', source: 'trigger', target: 'missing' },
+      { id: 'blank', source: '', target: 'block' },
+    ];
+    expect(topologicalSort(nodes, edges).map((n) => n.id)).toEqual([
+      'trigger',
+      'block',
+      'output',
+    ]);
+  });
+
+  it('throws on self-loop cycle', () => {
+    const edges: WorkflowEdge[] = [{ id: 'e1', source: 'block', target: 'block' }];
+    expect(() => topologicalSort(nodes, edges)).toThrow('Workflow contains a cycle');
+  });
+
   it('handles diamond DAG (fan-out / fan-in)', () => {
     const diamondNodes: WorkflowNode[] = [
       { id: 'a', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
@@ -59,5 +78,23 @@ describe('topologicalSort', () => {
     ];
     const order = topologicalSort(isolated, []).map((n) => n.id);
     expect(order.sort()).toEqual(['x', 'y']);
+  });
+
+  it('ignores dangling edges to missing targets (does not throw)', () => {
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: 'trigger', target: 'ghost' },
+      { id: 'e2', source: 'trigger', target: 'block' },
+      { id: 'e3', source: 'block', target: 'output' },
+    ];
+    // ghost is not a node — Kahn still orders the real DAG
+    const order = topologicalSort(nodes, edges).map((n) => n.id);
+    expect(order).toEqual(['trigger', 'block', 'output']);
+  });
+
+  it('orders a single self-contained node with no outgoing edges', () => {
+    const single: WorkflowNode[] = [
+      { id: 'only', type: 'trigger', label: 'Only', position: { x: 0, y: 0 }, config: {} },
+    ];
+    expect(topologicalSort(single, []).map((n) => n.id)).toEqual(['only']);
   });
 });

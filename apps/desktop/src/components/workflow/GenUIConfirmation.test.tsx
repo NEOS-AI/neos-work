@@ -38,4 +38,20 @@ describe('GenUIConfirmation', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }));
     expect(onConfirm).toHaveBeenCalledWith(true);
   });
+
+  it('trims prompt and custom labels; blank labels fall back to defaults', () => {
+    render(
+      <GenUIConfirmation
+        schema={{
+          prompt: '  Proceed?  ',
+          confirmLabel: '  Yes  ',
+          cancelLabel: '   ',
+        }}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.getByText('Proceed?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
 });

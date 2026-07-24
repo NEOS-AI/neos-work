@@ -7,11 +7,18 @@ interface GenUIConfirmationProps {
  * Generative UI confirmation surface (plan Task 6 / OD §12).
  */
 export function GenUIConfirmation({ schema, onConfirm }: GenUIConfirmationProps) {
+  const prompt =
+    typeof schema?.prompt === 'string' ? schema.prompt.trim() : '';
+  const confirmLabel =
+    (typeof schema?.confirmLabel === 'string' && schema.confirmLabel.trim()) || 'Continue';
+  const cancelLabel =
+    (typeof schema?.cancelLabel === 'string' && schema.cancelLabel.trim()) || 'Cancel';
+
   return (
     <div className="space-y-3">
-      {schema?.prompt && (
+      {prompt && (
         <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
-          {schema.prompt}
+          {prompt}
         </p>
       )}
       <div className="flex gap-2">
@@ -21,7 +28,7 @@ export function GenUIConfirmation({ schema, onConfirm }: GenUIConfirmationProps)
           style={{ backgroundColor: '#10b981' }}
           onClick={() => onConfirm(true)}
         >
-          {schema?.confirmLabel ?? 'Continue'}
+          {confirmLabel}
         </button>
         <button
           type="button"
@@ -33,7 +40,7 @@ export function GenUIConfirmation({ schema, onConfirm }: GenUIConfirmationProps)
           }}
           onClick={() => onConfirm(false)}
         >
-          {schema?.cancelLabel ?? 'Cancel'}
+          {cancelLabel}
         </button>
       </div>
     </div>
