@@ -35,6 +35,15 @@ describe('GoogleAdapter', () => {
     expect(adapter.getModels().length).toBeGreaterThan(0);
   });
 
+  it('rejects blank, control-char, or overlong API keys', () => {
+    expect(() => new GoogleAdapter('')).toThrow(/GOOGLE_API_KEY is required/i);
+    expect(() => new GoogleAdapter('   ')).toThrow(/GOOGLE_API_KEY is required/i);
+    expect(() => new GoogleAdapter(`sk${'\n'}bad`)).toThrow(/GOOGLE_API_KEY is required/i);
+    expect(() => new GoogleAdapter(`sk${'\0'}bad`)).toThrow(/GOOGLE_API_KEY is required/i);
+    expect(() => new GoogleAdapter('k'.repeat(8_193))).toThrow(/GOOGLE_API_KEY is required/i);
+    expect(() => new GoogleAdapter('  sk-ok  ')).not.toThrow();
+  });
+
   it('chat streams text, thinking, tool_use, and done', async () => {
     generateContentStream.mockResolvedValue(
       streamOf([

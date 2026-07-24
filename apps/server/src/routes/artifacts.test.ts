@@ -25,6 +25,52 @@ describe('artifacts routes', () => {
     expect(blank.status).toBe(400);
   });
 
+  it('returns 404 for control-char or overlong artifact ids', async () => {
+    const ctrl = await artifacts.request('/%0aevil');
+    expect(ctrl.status).toBe(404);
+    const refresh = await artifacts.request('/%0aevil/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(refresh.status).toBe(404);
+    const overlong = await artifacts.request(`/${'x'.repeat(101)}`);
+    expect(overlong.status).toBe(404);
+  });
+
+  it('rejects invalid runId/nodeId on create', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const badRun = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'x.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+        runId: 'bad\nid',
+      }),
+    });
+    expect(badRun.status).toBe(400);
+    const badNode = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'x.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+        nodeId: 'n'.repeat(201),
+      }),
+    });
+    expect(badNode.status).toBe(400);
+  });
+
   it('rejects whitespace-only content on create', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

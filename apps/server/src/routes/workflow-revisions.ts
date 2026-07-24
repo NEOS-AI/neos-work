@@ -11,16 +11,13 @@ import { Hono } from 'hono';
 import * as db from '../db/workflow-revisions.js';
 import * as workflowDb from '../db/workflows.js';
 import type { WorkflowEdge, WorkflowNode } from '@neos-work/shared';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const workflowRevisions = new Hono();
 
 /** Cap path params (plan Task 16 route hygiene). */
-const ID_MAX = 100;
-
 function safeId(raw: string): string {
-  const id = typeof raw === 'string' ? raw.trim() : '';
-  if (!id || id.length > ID_MAX || /[\0\r\n]/.test(id)) return '';
-  return id;
+  return safeRouteId(raw);
 }
 
 function paramIds(c: { req: { param: (k: string) => string } }): {

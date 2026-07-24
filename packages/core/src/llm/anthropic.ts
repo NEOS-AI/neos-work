@@ -151,7 +151,7 @@ export class AnthropicAdapter implements LLMProviderAdapter {
 
   async validateApiKey(apiKey: string): Promise<boolean> {
     const key = typeof apiKey === 'string' ? apiKey.trim() : '';
-    if (!key) return false;
+    if (!key || key.length > 8_192 || /[\0\r\n]/.test(key)) return false;
     try {
       const client = new Anthropic({ apiKey: key });
       await client.messages.create({

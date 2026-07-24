@@ -19,6 +19,15 @@ describe('templates routes', () => {
     const caseBody = await caseInsensitive.json() as { data: Array<{ domain: string }> };
     expect(caseBody.data.every((t) => t.domain === 'coding')).toBe(true);
 
+    for (const domain of ['finance', 'general'] as const) {
+      const res = await templates.request(`/?domain=${domain}`);
+      expect(res.status).toBe(200);
+      const d = await res.json() as { data: Array<{ domain: string }> };
+      expect(d.data.length).toBeGreaterThan(0);
+      expect(d.data.every((t) => t.domain === domain)).toBe(true);
+      expect(d.data.length).toBe(TEMPLATES.filter((t) => t.domain === domain).length);
+    }
+
     const blankDomain = await templates.request('/?domain=%20%20');
     expect(blankDomain.status).toBe(200);
     const blankBody = await blankDomain.json() as { data: unknown[] };

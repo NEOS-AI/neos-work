@@ -21,8 +21,13 @@ import * as workflowDb from '../db/workflows.js';
 import { getDb } from '../db/schema.js';
 import { addOrUpdateSchedule, removeSchedule, runRoutine } from '../lib/routine-scheduler.js';
 import { estimateNextCronRun } from '../lib/cron-next.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const routines = new Hono();
+
+function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
+  return safeRouteId(c.req.param(key));
+}
 
 function withNextRun<T extends { schedule: string; timezone: string; enabled: boolean }>(
   routine: T,
@@ -40,7 +45,7 @@ routines.get('/', (c) => {
 });
 
 routines.get('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const routine = db.getRoutine(id);
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -112,7 +117,7 @@ routines.post('/', async (c) => {
 });
 
 routines.put('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{
     name?: string;
@@ -169,7 +174,7 @@ routines.put('/:id', async (c) => {
 });
 
 routines.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const deleted = db.deleteRoutine(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -178,7 +183,7 @@ routines.delete('/:id', (c) => {
 });
 
 routines.post('/:id/run', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const routine = db.getRoutine(id);
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -191,7 +196,7 @@ routines.post('/:id/run', async (c) => {
 });
 
 routines.get('/:id/runs', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const routine = db.getRoutine(id);
   if (!routine) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -205,8 +210,8 @@ routines.get('/:id/runs', (c) => {
  * Body optional: { name?: string, description?: string }
  */
 routines.post('/:id/runs/:runId/crystallize', async (c) => {
-  const routineId = c.req.param('id').trim();
-  const runParam = c.req.param('runId').trim();
+  const routineId = paramId(c);
+  const runParam = paramId(c, 'runId');
   if (!routineId || !runParam) {
     return c.json({ ok: false, error: !routineId ? 'Routine not found' : 'Routine run not found' }, 404);
   }

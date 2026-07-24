@@ -235,6 +235,24 @@ describe('harness routes', () => {
     await harness.request(`/${body.data.id}`, { method: 'DELETE' });
   });
 
+  it('returns 404 for control-char or overlong harness ids', async () => {
+    const control = await harness.request(`/${encodeURIComponent('bad\nid')}`);
+    expect(control.status).toBe(404);
+
+    const overlong = await harness.request(`/${'h'.repeat(101)}`);
+    expect(overlong.status).toBe(404);
+
+    const put = await harness.request(`/${encodeURIComponent('x\0y')}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n' }),
+    });
+    expect(put.status).toBe(404);
+
+    const del = await harness.request(`/${'z'.repeat(101)}`, { method: 'DELETE' });
+    expect(del.status).toBe(404);
+  });
+
   it('clamps constraints.maxSteps and trims allowedTools', async () => {
     const create = await harness.request('/', {
       method: 'POST',

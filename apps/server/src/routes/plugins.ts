@@ -14,8 +14,13 @@ import type { PluginSSEEvent } from '../lib/plugin-runner.js';
 import { getExecutionSettings } from '../db/settings.js';
 import { getDb } from '../db/schema.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const plugins = new Hono();
+
+function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
+  return safeRouteId(c.req.param(key));
+}
 
 plugins.get('/', async (c) => {
   const list = await listPlugins();
@@ -87,7 +92,7 @@ plugins.post('/upgrade-from-skill', async (c) => {
 });
 
 plugins.get('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const plugin = await getPlugin(id);
   if (!plugin) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -96,7 +101,7 @@ plugins.get('/:id', async (c) => {
 });
 
 plugins.post('/:id/run', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const plugin = await getPlugin(id);
   if (!plugin) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -137,7 +142,7 @@ plugins.post('/:id/run', async (c) => {
 });
 
 plugins.post('/:id/run/:runId/resume', async (c) => {
-  const pluginId = c.req.param('id').trim();
+  const pluginId = paramId(c);
   if (!pluginId) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<{ stageId: string; response: Record<string, unknown> }>().catch(
     () => null,
@@ -149,8 +154,8 @@ plugins.post('/:id/run/:runId/resume', async (c) => {
   if (!stageId || stageId.length > 100 || /[\0\r\n]/.test(stageId)) {
     return c.json({ ok: false, error: 'stageId required' }, 400);
   }
-  const runId = c.req.param('runId').trim();
-  if (!runId || runId.length > 100 || /[\0\r\n]/.test(runId)) {
+  const runId = paramId(c, 'runId');
+  if (!runId) {
     return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
   }
   // Ensure plugin still exists before resuming (id is part of the public path)

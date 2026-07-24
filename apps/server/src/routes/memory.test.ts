@@ -20,6 +20,13 @@ describe('memory routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 404 for control-char or overlong path ids', async () => {
+    const ctrl = await memory.request('/%0aevil', { method: 'GET' });
+    expect(ctrl.status).toBe(404);
+    const overlong = await memory.request(`/${'x'.repeat(101)}`, { method: 'GET' });
+    expect(overlong.status).toBe(404);
+  });
+
   it('rejects create with invalid JSON body', async () => {
     const res = await memory.request('/', {
       method: 'POST',

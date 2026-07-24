@@ -29,11 +29,12 @@ import {
 } from '../lib/design-system-store.js';
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 import { assessWorkflowPreflight } from '../lib/workflow-preflight.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const workflow = new Hono();
 
 function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
-  return c.req.param(key).trim();
+  return safeRouteId(c.req.param(key));
 }
 
 // ── CRUD ──────────────────────────────────────────────────

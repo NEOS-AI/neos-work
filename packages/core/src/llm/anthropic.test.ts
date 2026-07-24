@@ -35,6 +35,16 @@ describe('AnthropicAdapter', () => {
     expect(adapter.getModels().length).toBeGreaterThan(0);
   });
 
+  it('rejects blank, control-char, or overlong API keys', () => {
+    expect(() => new AnthropicAdapter('')).toThrow(/ANTHROPIC_API_KEY is required/i);
+    expect(() => new AnthropicAdapter('   ')).toThrow(/ANTHROPIC_API_KEY is required/i);
+    expect(() => new AnthropicAdapter(`sk${'\n'}bad`)).toThrow(/ANTHROPIC_API_KEY is required/i);
+    expect(() => new AnthropicAdapter(`sk${'\0'}bad`)).toThrow(/ANTHROPIC_API_KEY is required/i);
+    expect(() => new AnthropicAdapter('k'.repeat(8_193))).toThrow(/ANTHROPIC_API_KEY is required/i);
+    // valid key still constructs
+    expect(() => new AnthropicAdapter('  sk-ok  ')).not.toThrow();
+  });
+
   it('chat streams text, thinking, tool_use, and done', async () => {
     streamMock.mockReturnValue(
       events([

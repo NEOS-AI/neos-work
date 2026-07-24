@@ -3,7 +3,8 @@ import { deleteSetting } from '../db/settings.js';
 import { settings } from './settings.js';
 
 const KEY = `cov.settings.${process.pid}`;
-const SENSITIVE = 'apiKey.anthropic';
+/** Unique sensitive key so parallel suite runs do not race on shared secrets. */
+const SENSITIVE = `apiKey.cov_${process.pid}`;
 
 afterEach(() => {
   try { deleteSetting(KEY); } catch { /* ignore */ }

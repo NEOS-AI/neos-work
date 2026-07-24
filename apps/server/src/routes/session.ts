@@ -25,13 +25,15 @@ import * as agentStepsDb from '../db/agent-steps.js';
 import * as memoryDb from '../db/memory.js';
 import * as settingsDb from '../db/settings.js';
 import { safeError } from '../lib/errors.js';
-import { validateWorkspacePath } from '../lib/path-safety.js';
+import { safeRouteId, validateWorkspacePath } from '../lib/path-safety.js';
 import { getDb } from '../db/schema.js';
 
 const session = new Hono();
 
 function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
-  return c.req.param(key).trim();
+  // toolUseId may be slightly longer than UUID ids
+  const max = key === 'toolUseId' ? 200 : 100;
+  return safeRouteId(c.req.param(key), max);
 }
 
 
@@ -60,7 +62,7 @@ const pendingConfirmations = new Map<
 
 session.post('/:id/tool-confirm/:toolUseId', async (c) => {
   const toolUseId = paramId(c, 'toolUseId');
-  if (!toolUseId || toolUseId.length > 200 || /[\0\r\n]/.test(toolUseId)) {
+  if (!toolUseId) {
     return c.json({ ok: false, error: 'No pending confirmation' }, 404);
   }
   const body = await c.req.json<{ approved: boolean }>().catch(() => null);

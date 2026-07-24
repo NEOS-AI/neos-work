@@ -16,6 +16,24 @@ export class SlackMessageNode implements ExecutableNode {
     if (!token) {
       return { ok: false, output: null, error: 'SLACK_BOT_TOKEN not set', durationMs: 0 };
     }
+    // Reject control chars / pathological token lengths before calling Slack API
+    const TOKEN_MAX = 8_192;
+    if (/[\0\r\n]/.test(token)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'SLACK_BOT_TOKEN contains invalid control characters',
+        durationMs: 0,
+      };
+    }
+    if (token.length > TOKEN_MAX) {
+      return {
+        ok: false,
+        output: null,
+        error: `SLACK_BOT_TOKEN exceeds max length (${TOKEN_MAX})`,
+        durationMs: 0,
+      };
+    }
 
     const channel = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '').trim();
     const text = resolveMessageText(ctx.config, ctx.inputs);

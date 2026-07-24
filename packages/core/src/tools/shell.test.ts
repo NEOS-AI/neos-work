@@ -39,6 +39,17 @@ describe('createShellTool', () => {
     expect(result.error).toMatch(/outside the workspace|does not exist/);
   });
 
+  it('rejects overlong or control-char cwd', async () => {
+    const tool = createShellTool(root);
+    const overlong = await tool.execute({ command: 'pwd', cwd: 'x'.repeat(5_000) });
+    expect(overlong.success).toBe(false);
+    expect(overlong.error).toMatch(/max length/i);
+
+    const ctrl = await tool.execute({ command: 'pwd', cwd: 'sub\npath' });
+    expect(ctrl.success).toBe(false);
+    expect(ctrl.error).toMatch(/control characters/i);
+  });
+
   it('accepts relative cwd inside workspace', async () => {
     await mkdir(join(root, 'sub'), { recursive: true });
     const tool = createShellTool(root);

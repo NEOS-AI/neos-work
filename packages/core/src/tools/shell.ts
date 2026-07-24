@@ -14,6 +14,8 @@ const MAX_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 512_000; // 512 KB
 /** Cap shell command string (runaway agent defense). */
 export const MAX_COMMAND_CHARS = 10_000;
+/** Cap relative cwd path length. */
+export const MAX_CWD_CHARS = 4_096;
 
 /** Patterns that are never allowed, regardless of context. */
 const FORBIDDEN_PATTERNS: RegExp[] = [
@@ -160,6 +162,13 @@ export function createShellTool(workspaceRoot: string): Tool {
           }
           if (/[\0\r\n]/.test(cwdRel)) {
             return { success: false, output: null, error: 'cwd contains invalid control characters' };
+          }
+          if (cwdRel.length > MAX_CWD_CHARS) {
+            return {
+              success: false,
+              output: null,
+              error: `cwd exceeds max length (${MAX_CWD_CHARS} characters)`,
+            };
           }
           const requestedCwd = resolve(absoluteRoot, cwdRel);
           let realCwd: string;

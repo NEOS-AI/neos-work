@@ -3,6 +3,9 @@ import { getDb } from './schema.js';
 import * as workflows from './workflows.js';
 import {
   ARTIFACT_CONTENT_MAX_CHARS,
+  ARTIFACT_FILE_PATH_MAX,
+  ARTIFACT_ID_FIELD_MAX,
+  ARTIFACT_NODE_ID_MAX,
   createArtifact,
   deleteArtifact,
   getArtifact,
@@ -339,6 +342,124 @@ describe('updateArtifact PATCH semantics', () => {
     expect(updateArtifact(art.id, { name: `bad${'\0'}x` })).toBeUndefined();
     expect(getArtifact(art.id)?.name).toBe('ok.html');
     deleteArtifact(art.id);
+  });
+
+  it('rejects null-byte content on create and update', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'nul.html',
+        contentType: 'text/html',
+        content: `hello${'\0'}world`,
+      }),
+    ).toThrow(/control characters/i);
+
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'ok.html',
+      contentType: 'text/html',
+      content: '<p>ok</p>',
+    });
+    expect(() => updateArtifactContent(art.id, `x${'\0'}y`)).toThrow(/control characters/i);
+    expect(() => updateArtifact(art.id, { content: `x${'\0'}y` })).toThrow(/control characters/i);
+    expect(getArtifact(art.id)?.content).toBe('<p>ok</p>');
+    deleteArtifact(art.id);
+  });
+
+  it('rejects overlong workflowId and invalid filePath; drops bad optional ids', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+
+    expect(() =>
+      createArtifact({
+        workflowId: 'w'.repeat(ARTIFACT_ID_FIELD_MAX + 1),
+        name: 'x.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+      }),
+    ).toThrow(/workflowId exceeds max length/i);
+
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'path.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+        filePath: `bad${'\n'}path`,
+      }),
+    ).toThrow(/filePath is invalid/i);
+
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'path2.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+        filePath: 'p'.repeat(ARTIFACT_FILE_PATH_MAX + 1),
+      }),
+    ).toThrow(/filePath is invalid/i);
+
+    // Invalid optional ids → null (create still succeeds)
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'ids.html',
+      contentType: 'text/html',
+      content: '<p>x</p>',
+      runId: `r${'\0'}bad`,
+      nodeId: 'n'.repeat(ARTIFACT_NODE_ID_MAX + 1),
+    });
+    expect(art.runId).toBeUndefined();
+    expect(art.nodeId).toBeUndefined();
+
+    // overlong runId / control-char nodeId also dropped
+    const art2 = createArtifact({
+      workflowId: wf.id,
+      name: 'ids2.html',
+      contentType: 'text/html',
+      content: '<p>x</p>',
+      runId: 'r'.repeat(ARTIFACT_ID_FIELD_MAX + 1),
+      nodeId: `n${'\n'}ode`,
+    });
+    expect(art2.runId).toBeUndefined();
+    expect(art2.nodeId).toBeUndefined();
+
+    // nodeId may be up to ARTIFACT_NODE_ID_MAX (graph id bound)
+    const longNode = 'n'.repeat(ARTIFACT_NODE_ID_MAX);
+    const kept = createArtifact({
+      workflowId: wf.id,
+      name: 'node-ok.html',
+      contentType: 'text/html',
+      content: '<p>x</p>',
+      nodeId: longNode,
+      runId: 'r'.repeat(ARTIFACT_ID_FIELD_MAX),
+    });
+    expect(kept.nodeId).toBe(longNode);
+    expect(kept.runId).toBe('r'.repeat(ARTIFACT_ID_FIELD_MAX));
+    deleteArtifact(art.id);
+    deleteArtifact(art2.id);
+    deleteArtifact(kept.id);
+  });
+
+  it('lookup helpers reject unsafe or overlong ids', () => {
+    expect(listArtifacts(`wf${'\n'}id`)).toEqual([]);
+    expect(listArtifacts('w'.repeat(ARTIFACT_ID_FIELD_MAX + 1))).toEqual([]);
+    expect(listArtifactsByRun(`run${'\0'}id`)).toEqual([]);
+    expect(listArtifactsByRun('r'.repeat(ARTIFACT_ID_FIELD_MAX + 1))).toEqual([]);
+    expect(getArtifact(`id${'\n'}x`)).toBeUndefined();
+    expect(getArtifact('i'.repeat(ARTIFACT_ID_FIELD_MAX + 1))).toBeUndefined();
+    expect(deleteArtifact(`id${'\0'}x`)).toBe(false);
+    expect(updateArtifactContent('i'.repeat(ARTIFACT_ID_FIELD_MAX + 1), 'x')).toBeUndefined();
+    expect(updateArtifact(`id${'\r'}x`, { name: 'y' })).toBeUndefined();
   });
 });
 

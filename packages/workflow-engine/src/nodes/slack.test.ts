@@ -52,6 +52,22 @@ describe('SlackMessageNode', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
+  it('rejects control-char or overlong bot token', async () => {
+    const ctrl = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-\n-bad' }, { channel: '#general' }, { text: 'hi' }),
+    );
+    expect(ctrl.ok).toBe(false);
+    expect(ctrl.error).toMatch(/control characters/i);
+    expect(postMessage).not.toHaveBeenCalled();
+
+    const long = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'x'.repeat(9_000) }, { channel: '#general' }, { text: 'hi' }),
+    );
+    expect(long.ok).toBe(false);
+    expect(long.error).toMatch(/max length/i);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   it('requires channel', async () => {
     const result = await node.execute(ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, {}, { text: 'hi' }));
     expect(result.ok).toBe(false);

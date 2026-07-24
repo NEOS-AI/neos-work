@@ -74,6 +74,23 @@ describe('ReflectionStrategy', () => {
     });
   });
 
+  it('drops unsafe revised tool names and caps revised description', async () => {
+    const result = await new ReflectionStrategy(
+      mockAdapter([
+        JSON.stringify({
+          action: 'retry',
+          revisedDescription: 'd'.repeat(3_000),
+          revisedToolName: 'bad\ntool',
+          revisedInput: { path: '.' },
+        }),
+      ]),
+    ).heal(step, 'e', []);
+    expect(result.action).toBe('retry');
+    expect(result.revisedStep?.description?.length).toBe(2_000);
+    expect(result.revisedStep?.toolName).toBe(step.toolName);
+    expect(result.revisedStep?.input).toEqual({ path: '.' });
+  });
+
   it('extracts JSON object from surrounding prose', async () => {
     const result = await new ReflectionStrategy(
       mockAdapter([

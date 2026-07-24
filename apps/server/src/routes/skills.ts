@@ -8,8 +8,13 @@ import { discoverSkills } from '@neos-work/core';
 import { safeError } from '../lib/errors.js';
 import { getDb } from '../db/schema.js';
 import * as db from '../db/sessions.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const skills = new Hono();
+
+function paramId(c: { req: { param: (k: string) => string } }): string {
+  return safeRouteId(c.req.param('id'));
+}
 
 interface SkillRow {
   id: string;
@@ -154,7 +159,7 @@ skills.post('/scan', async (c) => {
 
 // POST /api/skills/:id/toggle — enable or disable a skill
 skills.post('/:id/toggle', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
   const body = await c.req.json<{ enabled: boolean }>().catch(() => null);
   if (!body || typeof body.enabled !== 'boolean') {
@@ -167,7 +172,7 @@ skills.post('/:id/toggle', async (c) => {
 
 // DELETE /api/skills/:id — remove a skill from the registry
 skills.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
   const deleted = deleteSkillById(id);
   if (!deleted) return c.json({ ok: false, error: 'Skill not found' }, 404);

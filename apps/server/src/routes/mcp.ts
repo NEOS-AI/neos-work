@@ -15,6 +15,7 @@ import {
   getTokenStatus,
   type McpOAuthToken,
 } from '../lib/mcp-oauth-store.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 // ── In-memory state for pending OAuth flows ──────────────────────────────────
 interface PendingFlow {
@@ -246,7 +247,7 @@ mcp.post('/', async (c) => {
 
 // POST /api/mcp-servers/:id/toggle
 mcp.post('/:id/toggle', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeRouteId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'MCP server not found' }, 404);
   const body = await c.req.json<{ enabled: boolean }>().catch(() => null);
   if (!body || typeof body.enabled !== 'boolean') {
@@ -259,7 +260,7 @@ mcp.post('/:id/toggle', async (c) => {
 
 // DELETE /api/mcp-servers/:id
 mcp.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeRouteId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'MCP server not found' }, 404);
   const deleted = deleteMcpServer(id);
   if (!deleted) return c.json({ ok: false, error: 'MCP server not found' }, 404);
@@ -472,7 +473,7 @@ mcp.get('/oauth/callback', async (c) => {
  * Returns connection status for a given MCP server.
  */
 mcp.get('/oauth/:serverId/status', async (c) => {
-  const serverId = c.req.param('serverId').trim();
+  const serverId = safeRouteId(c.req.param('serverId'));
   if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   const status = await getTokenStatus(serverId);
   return c.json({ ok: true, data: status });
@@ -484,7 +485,7 @@ mcp.get('/oauth/:serverId/status', async (c) => {
  * Body: { tokenEndpoint, clientId }
  */
 mcp.post('/oauth/:serverId/refresh', async (c) => {
-  const serverId = c.req.param('serverId').trim();
+  const serverId = safeRouteId(c.req.param('serverId'));
   if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   try {
     const body = await c.req.json<{ tokenEndpoint: string; clientId: string }>().catch(() => null);
@@ -556,7 +557,7 @@ mcp.post('/oauth/:serverId/refresh', async (c) => {
  * Revoke and delete stored token for the given MCP server.
  */
 mcp.delete('/oauth/:serverId', async (c) => {
-  const serverId = c.req.param('serverId').trim();
+  const serverId = safeRouteId(c.req.param('serverId'));
   if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   await deleteToken(serverId);
   return c.json({ ok: true });

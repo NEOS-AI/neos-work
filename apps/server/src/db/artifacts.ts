@@ -10,6 +10,9 @@ export const ARTIFACT_CONTENT_MAX_CHARS = 2 * 1024 * 1024;
 function normalizeContent(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
   const content = typeof raw === 'string' ? raw : String(raw);
+  if (/\0/.test(content)) {
+    throw new Error('content contains invalid control characters');
+  }
   if (content.length > ARTIFACT_CONTENT_MAX_CHARS) {
     throw new Error(`content exceeds max size (${ARTIFACT_CONTENT_MAX_CHARS} characters)`);
   }
@@ -71,6 +74,29 @@ function hasUnsafeNameChars(value: string): boolean {
   return /[\0\r\n]/.test(value);
 }
 
+/** Cap id-like fields (workflowId / runId / artifact id — UUID/nanoid practical bound). */
+export const ARTIFACT_ID_FIELD_MAX = 100;
+/** Cap nodeId (align with GRAPH_ID_MAX_CHARS). */
+export const ARTIFACT_NODE_ID_MAX = 200;
+/** Cap stored file_path length. */
+export const ARTIFACT_FILE_PATH_MAX = 1_000;
+
+/** Optional association ids: invalid → null (do not fail create). */
+function normalizeIdField(raw: unknown, max = ARTIFACT_ID_FIELD_MAX): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s || s.length > max || hasUnsafeNameChars(s)) return null;
+  return s;
+}
+
+/** Lookup/path ids: invalid → empty (no-op / not found). */
+function normalizeLookupId(raw: unknown, max = ARTIFACT_ID_FIELD_MAX): string {
+  if (typeof raw !== 'string') return '';
+  const s = raw.trim();
+  if (!s || s.length > max || hasUnsafeNameChars(s)) return '';
+  return s;
+}
+
 export function createArtifact(input: CreateArtifactInput): Artifact {
   const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -83,6 +109,9 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
   if (hasUnsafeNameChars(name) || hasUnsafeNameChars(workflowId)) {
     throw new Error('name/workflowId contains invalid control characters');
   }
+  if (workflowId.length > ARTIFACT_ID_FIELD_MAX) {
+    throw new Error(`workflowId exceeds max length (${ARTIFACT_ID_FIELD_MAX})`);
+  }
   if (name.length > 500) {
     throw new Error('name exceeds max length (500)');
   }
@@ -94,12 +123,13 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
   if (!mimeBase || !mimeBase.includes('/') || mimeBase.startsWith('/') || mimeBase.endsWith('/')) {
     throw new Error('contentType is invalid');
   }
-  const runId =
-    typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
-  const nodeId =
-    typeof input.nodeId === 'string' ? input.nodeId.trim() || null : (input.nodeId ?? null);
+  const runId = normalizeIdField(input.runId);
+  const nodeId = normalizeIdField(input.nodeId, ARTIFACT_NODE_ID_MAX);
   const filePath =
-    typeof input.filePath === 'string' ? input.filePath.trim() || null : (input.filePath ?? null);
+    typeof input.filePath === 'string' ? input.filePath.trim() || null : null;
+  if (filePath && (hasUnsafeNameChars(filePath) || filePath.length > ARTIFACT_FILE_PATH_MAX)) {
+    throw new Error('filePath is invalid');
+  }
   const content = normalizeContent(input.content);
   const db = getDb();
   const id = crypto.randomUUID();
@@ -111,7 +141,7 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
 }
 
 export function getArtifact(id: string): Artifact | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = normalizeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const row = db.prepare('SELECT * FROM artifacts WHERE id = ?').get(trimmed) as ArtifactRow | undefined;
@@ -119,7 +149,7 @@ export function getArtifact(id: string): Artifact | undefined {
 }
 
 export function listArtifacts(workflowId: string): Artifact[] {
-  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const trimmed = normalizeLookupId(workflowId);
   if (!trimmed) return [];
   const db = getDb();
   const rows = db.prepare('SELECT * FROM artifacts WHERE workflow_id = ? ORDER BY created_at DESC').all(trimmed) as ArtifactRow[];
@@ -127,7 +157,7 @@ export function listArtifacts(workflowId: string): Artifact[] {
 }
 
 export function listArtifactsByRun(runId: string): Artifact[] {
-  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  const trimmed = normalizeLookupId(runId);
   if (!trimmed) return [];
   const db = getDb();
   const rows = db.prepare('SELECT * FROM artifacts WHERE run_id = ? ORDER BY created_at DESC').all(trimmed) as ArtifactRow[];
@@ -135,7 +165,7 @@ export function listArtifactsByRun(runId: string): Artifact[] {
 }
 
 export function deleteArtifact(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = normalizeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM artifacts WHERE id = ?').run(trimmed);
@@ -143,7 +173,7 @@ export function deleteArtifact(id: string): boolean {
 }
 
 export function updateArtifactContent(id: string, content: string): Artifact | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = normalizeLookupId(id);
   if (!trimmed) return undefined;
   const body = normalizeContent(content);
   const db = getDb();
@@ -156,7 +186,7 @@ export function updateArtifact(
   id: string,
   input: { name?: string; content?: string },
 ): Artifact | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = normalizeLookupId(id);
   if (!trimmed) return undefined;
   const existing = getArtifact(trimmed);
   if (!existing) return undefined;

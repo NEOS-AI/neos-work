@@ -12,8 +12,13 @@ import { nanoid } from 'nanoid';
 import { listHarnesses, resolveHarness } from '@neos-work/workflow-engine';
 import * as db from '../db/harnesses.js';
 import { registerHarness } from '@neos-work/workflow-engine';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const harness = new Hono();
+
+function paramHarnessId(c: { req: { param: (k: string) => string } }): string {
+  return safeRouteId(c.req.param('id'));
+}
 
 /** Clamp harness constraints to agent editor bounds (maxSteps 1–200). */
 function normalizeConstraints(
@@ -62,9 +67,8 @@ harness.get('/', (c) => {
 });
 
 harness.get('/:id', (c) => {
-  const id = c.req.param('id').trim();
-  // Reject control-char / overlong ids early
-  if (!id || id.length > 100 || /[\0\r\n]/.test(id)) {
+  const id = paramHarnessId(c);
+  if (!id) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
   const builtin = resolveHarness(id);
@@ -132,7 +136,7 @@ harness.post('/', async (c) => {
 });
 
 harness.put('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramHarnessId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
 
   // Block editing of built-in harnesses
@@ -197,7 +201,7 @@ harness.put('/:id', async (c) => {
 });
 
 harness.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramHarnessId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
 
   if (resolveHarness(id)?.isBuiltIn) {

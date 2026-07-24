@@ -33,6 +33,29 @@ describe('OpenAIAdapter', () => {
     await expect(adapter.validateApiKey('   ')).resolves.toBe(false);
   });
 
+  it('clears control-char or overlong constructor apiKey (no Authorization header)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (const badKey of [`sk${'\n'}bad`, `sk${'\0'}bad`, 'k'.repeat(8_193)]) {
+      fetchMock.mockClear();
+      const adapter = new OpenAIAdapter({
+        provider: 'openai',
+        apiKey: badKey,
+        baseUrl: 'https://example.test/v1',
+      });
+      for await (const _ of adapter.chat({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: 'hi' }],
+      })) {
+        /* drain */
+      }
+      const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined;
+      expect(headers?.Authorization).toBeUndefined();
+      expect(headers?.['Content-Type']).toBe('application/json');
+    }
+  });
+
   it('falls back for overlong or control-char baseUrl', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

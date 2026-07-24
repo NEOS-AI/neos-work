@@ -1,7 +1,28 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { validateWorkspacePath } from './path-safety.js';
+import { ROUTE_ID_MAX_CHARS, safeRouteId, validateWorkspacePath } from './path-safety.js';
+
+describe('safeRouteId', () => {
+  it('trims and accepts normal ids', () => {
+    expect(safeRouteId('  abc-123  ')).toBe('abc-123');
+  });
+
+  it('rejects blank, control-char, and overlong ids', () => {
+    expect(safeRouteId('')).toBe('');
+    expect(safeRouteId('   ')).toBe('');
+    expect(safeRouteId('a\nb')).toBe('');
+    expect(safeRouteId('a\0b')).toBe('');
+    expect(safeRouteId('x'.repeat(ROUTE_ID_MAX_CHARS + 1))).toBe('');
+    expect(safeRouteId(null)).toBe('');
+    expect(safeRouteId(42)).toBe('');
+  });
+
+  it('respects custom max length', () => {
+    expect(safeRouteId('abcdef', 5)).toBe('');
+    expect(safeRouteId('abcde', 5)).toBe('abcde');
+  });
+});
 
 describe('validateWorkspacePath', () => {
   it('accepts home and paths under home', () => {

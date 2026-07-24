@@ -8,6 +8,19 @@ import { homedir } from 'node:os';
 /** Cap workspace path length (path API hygiene). */
 export const WORKSPACE_PATH_MAX_CHARS = 4_096;
 
+/** Practical bound for UUID / nanoid route path params. */
+export const ROUTE_ID_MAX_CHARS = 100;
+
+/**
+ * Sanitize a route/query id: trim, reject blank, control chars, and overlong values.
+ * Returns empty string when invalid (callers map to 404).
+ */
+export function safeRouteId(raw: unknown, max = ROUTE_ID_MAX_CHARS): string {
+  const id = typeof raw === 'string' ? raw.trim() : '';
+  if (!id || id.length > max || /[\0\r\n]/.test(id)) return '';
+  return id;
+}
+
 /** Validate that a workspace path is within the user's home directory. */
 export function validateWorkspacePath(path: string): boolean {
   if (!path || typeof path !== 'string') return false;

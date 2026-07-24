@@ -22,8 +22,13 @@ import {
   listDeployments,
   updateDeployment,
 } from '../db/deployments.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const deploy = new Hono();
+
+function paramId(c: { req: { param: (k: string) => string } }): string {
+  return safeRouteId(c.req.param('id'));
+}
 
 /**
  * Preflight: check whether deploy credentials/config look ready for a provider.
@@ -85,7 +90,9 @@ deploy.post('/preflight', async (c) => {
 });
 
 deploy.get('/', (c) => {
-  const workflowId = (c.req.query('workflowId') ?? '').trim() || undefined;
+  const workflowIdRaw = (c.req.query('workflowId') ?? '').trim();
+  // Drop unsafe query filter (list all when invalid rather than 400)
+  const workflowId = workflowIdRaw ? safeRouteId(workflowIdRaw) || undefined : undefined;
   const limitRaw = (c.req.query('limit') ?? '').trim();
   const limit = limitRaw ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500) : 100;
   const rows = listDeployments({ workflowId, limit });
@@ -93,7 +100,7 @@ deploy.get('/', (c) => {
 });
 
 deploy.get('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const row = getDeployment(id);
   if (!row) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -104,7 +111,7 @@ deploy.get('/:id', (c) => {
  * Poll remote provider for deployment status and update local history row.
  */
 deploy.post('/:id/refresh', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const row = getDeployment(id);
   if (!row) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -154,7 +161,7 @@ deploy.post('/:id/refresh', async (c) => {
 });
 
 deploy.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const ok = deleteDeployment(id);
   if (!ok) return c.json({ ok: false, error: 'Not found' }, 404);

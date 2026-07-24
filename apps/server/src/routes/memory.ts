@@ -20,10 +20,15 @@ import {
   toggleMemory,
   exportMemories,
 } from '../lib/memory-store.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const memory = new Hono();
 
 const MEMORY_TYPES = new Set<MemoryType>(['user', 'session', 'skill', 'reference']);
+
+function paramId(c: { req: { param: (k: string) => string } }): string {
+  return safeRouteId(c.req.param('id'));
+}
 
 function parseMemoryType(raw: unknown): MemoryType | undefined {
   if (typeof raw !== 'string') return undefined;
@@ -70,7 +75,7 @@ memory.post('/', async (c) => {
 });
 
 memory.get('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const item = getMemory(id);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -78,7 +83,7 @@ memory.get('/:id', (c) => {
 });
 
 memory.put('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const body = await c.req.json<UpdateMemoryInput>().catch(() => null);
   if (!body || typeof body !== 'object') {
@@ -110,7 +115,7 @@ memory.put('/:id', async (c) => {
 });
 
 memory.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const ok = deleteMemory(id);
   if (!ok) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -118,7 +123,7 @@ memory.delete('/:id', (c) => {
 });
 
 memory.put('/:id/toggle', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const item = toggleMemory(id);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);

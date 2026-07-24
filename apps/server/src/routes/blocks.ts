@@ -11,8 +11,16 @@ import { Hono } from 'hono';
 import { listBlocks, getNativeExecutor, registerNativeBlock } from '@neos-work/workflow-engine';
 import { listCustomBlocks, getCustomBlock, createCustomBlock, updateCustomBlock, deleteCustomBlock } from '../db/blocks.js';
 import type { WorkflowBlock } from '@neos-work/shared';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const blocks = new Hono();
+
+/** Block ids: alphanumeric + _- (also reject control-char / overlong). */
+function paramBlockId(c: { req: { param: (k: string) => string } }): string {
+  const id = safeRouteId(c.req.param('id'), 200);
+  if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) return '';
+  return id;
+}
 
 // GET /api/blocks
 blocks.get('/', (c) => {
@@ -88,7 +96,7 @@ blocks.post('/', async (c) => {
 
 // GET /api/blocks/:id
 blocks.get('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramBlockId(c);
   if (!id) return c.json({ ok: false, error: 'Block not found' }, 404);
   const builtInMeta = listBlocks().find((b) => b.id === id);
   if (builtInMeta) return c.json({ ok: true, data: builtInMeta });
@@ -100,7 +108,7 @@ blocks.get('/:id', (c) => {
 
 // PUT /api/blocks/:id
 blocks.put('/:id', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramBlockId(c);
   if (!id) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
   const body = await c.req.json<Partial<WorkflowBlock>>().catch(() => null);
   if (!body || typeof body !== 'object') {
@@ -142,7 +150,7 @@ blocks.put('/:id', async (c) => {
 
 // DELETE /api/blocks/:id
 blocks.delete('/:id', (c) => {
-  const id = c.req.param('id').trim();
+  const id = paramBlockId(c);
   if (!id) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);
   const deleted = deleteCustomBlock(id);
   if (!deleted) return c.json({ ok: false, error: 'Block not found or is built-in' }, 404);

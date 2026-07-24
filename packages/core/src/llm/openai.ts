@@ -59,7 +59,7 @@ export class OpenAIAdapter implements LLMProviderAdapter {
   async validateApiKey(apiKey: string): Promise<boolean> {
     if (this.id === 'ollama') return true; // Ollama runs locally, no key needed
     const key = typeof apiKey === 'string' ? apiKey.trim() : '';
-    if (!key) return false;
+    if (!key || key.length > 8_192 || /[\0\r\n]/.test(key)) return false;
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
         headers: { Authorization: `Bearer ${key}` },

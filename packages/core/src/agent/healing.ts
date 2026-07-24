@@ -105,18 +105,41 @@ ${historyStr || '(없음)'}
 
       const result: HealingResult = { action };
       if (action === 'retry') {
-        const desc =
+        let desc =
           typeof parsed.revisedDescription === 'string'
             ? parsed.revisedDescription.trim()
             : '';
-        const tool =
+        // Cap revised description (align with orchestrator step text bounds)
+        if (desc.length > 2_000) desc = desc.slice(0, 2_000);
+        let tool =
           typeof parsed.revisedToolName === 'string'
             ? parsed.revisedToolName.trim()
             : '';
+        // Drop unsafe / overlong tool names → fall back to original
+        if (tool && (tool.length > 100 || /[\0\r\n]/.test(tool))) {
+          tool = '';
+        }
+        let input: Record<string, unknown> | undefined =
+          parsed.revisedInput &&
+          typeof parsed.revisedInput === 'object' &&
+          !Array.isArray(parsed.revisedInput)
+            ? parsed.revisedInput
+            : undefined;
+        // Cap revised input payload size
+        if (input) {
+          try {
+            const serialized = JSON.stringify(input);
+            if (serialized.length > 16_000) {
+              input = { _truncated: true, note: 'revisedInput exceeded 16k' };
+            }
+          } catch {
+            input = undefined;
+          }
+        }
         result.revisedStep = {
           description: desc || step.description,
           toolName: tool || step.toolName,
-          input: parsed.revisedInput ?? step.input,
+          input: input ?? step.input,
         };
       }
       return result;

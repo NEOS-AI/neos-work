@@ -12,14 +12,13 @@
 
 import { Hono } from 'hono';
 import * as db from '../db/artifacts.js';
+import { safeRouteId } from '../lib/path-safety.js';
 
 const artifacts = new Hono();
 
 /** Cap path/query ids (UUID / nanoid practical bound). */
 function safeId(raw: string, max = 100): string {
-  const id = typeof raw === 'string' ? raw.trim() : '';
-  if (!id || id.length > max || /[\0\r\n]/.test(id)) return '';
-  return id;
+  return safeRouteId(raw, max);
 }
 
 artifacts.get('/', (c) => {
@@ -100,19 +99,32 @@ artifacts.post('/', async (c) => {
   }
 
   try {
+    const runIdRaw =
+      typeof body.runId === 'string' ? body.runId.trim() : '';
+    const runId = runIdRaw ? safeId(runIdRaw) || undefined : undefined;
+    if (runIdRaw && !runId) {
+      return c.json({ ok: false, error: 'Invalid runId' }, 400);
+    }
+    const nodeIdRaw =
+      typeof body.nodeId === 'string' ? body.nodeId.trim() : '';
+    // node ids may be slightly longer graph labels; reuse same hygiene
+    const nodeId = nodeIdRaw ? safeId(nodeIdRaw, 200) || undefined : undefined;
+    if (nodeIdRaw && !nodeId) {
+      return c.json({ ok: false, error: 'Invalid nodeId' }, 400);
+    }
     const artifact = db.createArtifact({
       workflowId,
-      runId: typeof body.runId === 'string' ? body.runId.trim() || undefined : body.runId,
+      runId,
       name,
       contentType,
       content: body.content,
-      nodeId: typeof body.nodeId === 'string' ? body.nodeId.trim() || undefined : body.nodeId,
+      nodeId,
     });
     return c.json({ ok: true, data: artifact }, 201);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to create artifact';
     // Size / validation errors from db layer → 400
-    if (/max size|required/i.test(msg)) {
+    if (/max size|max length|required|invalid|control characters/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
     return c.json({ ok: false, error: msg }, 500);
@@ -136,7 +148,7 @@ artifacts.put('/:id', async (c) => {
     return c.json({ ok: true, data: updated });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to update artifact';
-    if (/max size/i.test(msg)) {
+    if (/max size|control characters/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
     return c.json({ ok: false, error: msg }, 500);
@@ -175,7 +187,7 @@ artifacts.patch('/:id', async (c) => {
     return c.json({ ok: true, data: updated });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to update artifact';
-    if (/max size/i.test(msg)) {
+    if (/max size|control characters/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
     return c.json({ ok: false, error: msg }, 500);
@@ -197,7 +209,7 @@ artifacts.delete('/:id', (c) => {
  * - rerun: instruct client/server to re-run the parent workflow (returns workflowId)
  */
 artifacts.post('/:id/refresh', async (c) => {
-  const id = c.req.param('id').trim();
+  const id = safeId(c.req.param('id'));
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
