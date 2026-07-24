@@ -65,6 +65,14 @@ describe('AgentNode CLI provider', () => {
     expect(result.error).toMatch(/exited with code 2/);
   });
 
+  it('truncates oversized CLI failure errors at 4000 chars', async () => {
+    const cliSpawn = vi.fn().mockRejectedValue(new Error('E'.repeat(5_000)));
+    const node = new AgentNode('agent_coding', { provider: 'cli-claude' });
+    const result = await node.execute(ctx({ cliSpawn }));
+    expect(result.ok).toBe(false);
+    expect(String(result.error).length).toBe(4_000);
+  });
+
   it('forwards progress chunks from CLI spawn', async () => {
     const onProgress = vi.fn();
     const cliSpawn = vi.fn().mockImplementation(async (_id, _prompt, onChunk) => {

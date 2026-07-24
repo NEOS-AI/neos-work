@@ -283,6 +283,12 @@ describe('mcp routes', () => {
     );
     expect(longState.status).toBe(400);
     expect(await longState.text()).toMatch(/Invalid state/i);
+
+    const nullCode = await mcp.request(
+      `/oauth/callback?code=${encodeURIComponent('ab\0c')}&state=ok`,
+    );
+    expect(nullCode.status).toBe(400);
+    expect(await nullCode.text()).toMatch(/Invalid authorization code/i);
   });
 
   it('oauth/start trims fields and rejects non-http endpoints', async () => {

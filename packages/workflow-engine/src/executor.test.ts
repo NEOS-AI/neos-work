@@ -668,4 +668,37 @@ describe('executeWorkflow graph failure and skip paths', () => {
       }),
     ).rejects.toThrow(/Unknown node type/i);
   });
+
+  it('caps node.progress chunk and accumulated payloads', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-progress-cap',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'agent',
+            type: 'agent_coding',
+            label: 'A',
+            position: { x: 1, y: 0 },
+            config: { provider: 'cli-claude' },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'agent' }],
+      }),
+      settings: {},
+      cliSpawn: async (_id, _prompt, onChunk) => {
+        onChunk?.('C'.repeat(40_000), 'A'.repeat(300_000));
+        return { output: 'done', exitCode: 0 };
+      },
+      onEvent: (event) => events.push(event),
+    });
+
+    const progress = events.find((e) => e.type === 'node.progress') as
+      | { chunk: string; accumulated: string }
+      | undefined;
+    expect(progress).toBeDefined();
+    expect(progress!.chunk.length).toBe(32_000);
+    expect(progress!.accumulated.length).toBe(256_000);
+  });
 });

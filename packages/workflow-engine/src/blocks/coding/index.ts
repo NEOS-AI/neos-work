@@ -328,7 +328,7 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
     return {
       ok: false,
       output: null,
-      error: 'Command exceeds max length (10000 characters)',
+      error: 'Command exceeds max length (10000)',
       durationMs: Date.now() - start,
     };
   }
