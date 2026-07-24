@@ -162,6 +162,16 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
  * Build NEOS_* context env vars for CLI child processes (plan Task 3).
  * Exported for unit tests.
  */
+/** http(s) only — keeps file:/javascript: out of child env. */
+function isHttpServerUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function buildNeosCliEnv(opts: {
   workflowId?: string;
   runId?: string;
@@ -169,7 +179,10 @@ export function buildNeosCliEnv(opts: {
   authToken?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {};
-  const serverUrl = typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() : '';
+  const serverUrlRaw = typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() : '';
+  // Only forward http(s) URLs to children (block file:/javascript: etc.)
+  const serverUrl =
+    serverUrlRaw && isHttpServerUrl(serverUrlRaw) ? serverUrlRaw.replace(/\/+$/, '') : '';
   const authToken = typeof opts.authToken === 'string' ? opts.authToken.trim() : '';
   const workflowId = typeof opts.workflowId === 'string' ? opts.workflowId.trim() : '';
   const runId = typeof opts.runId === 'string' ? opts.runId.trim() : '';

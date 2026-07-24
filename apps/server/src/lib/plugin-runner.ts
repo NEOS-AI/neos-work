@@ -45,21 +45,30 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
     for (const stage of stages) {
       if (signal?.aborted) break;
 
-      onEvent({ type: 'stage.started', stageId: stage.id, stageName: stage.name });
+      const stageId = typeof stage.id === 'string' ? stage.id.trim() : String(stage.id ?? '').trim();
+      if (!stageId) continue; // skip malformed stages
+      const stageName =
+        typeof stage.name === 'string' ? stage.name.trim() || stageId : (stage.name ?? stageId);
+      const outputKeyRaw =
+        typeof stage.outputKey === 'string' ? stage.outputKey.trim() : stage.outputKey;
+      const outputKey = (outputKeyRaw || stageId) as string;
+      const normalizedStage = { ...stage, id: stageId, name: stageName, outputKey };
+
+      onEvent({ type: 'stage.started', stageId, stageName });
 
       if (stage.humanInLoop) {
         // Pause and wait for resume
-        const response = await waitForResume(runId, stage, onEvent, signal);
+        const response = await waitForResume(runId, normalizedStage, onEvent, signal);
         const output = JSON.stringify(response);
-        stageOutputs[stage.outputKey ?? stage.id] = output;
-        onEvent({ type: 'stage.completed', stageId: stage.id, output });
+        stageOutputs[outputKey] = output;
+        onEvent({ type: 'stage.completed', stageId, output });
       } else {
         // Execute stage via LLM
-        const output = await executeStage(stage, context, stageOutputs, settings, signal);
-        stageOutputs[stage.outputKey ?? stage.id] = output;
-        if (stage.outputKey) context[stage.outputKey] = output;
-        onEvent({ type: 'stage.output', stageId: stage.id, output });
-        onEvent({ type: 'stage.completed', stageId: stage.id, output });
+        const output = await executeStage(normalizedStage, context, stageOutputs, settings, signal);
+        stageOutputs[outputKey] = output;
+        context[outputKey] = output;
+        onEvent({ type: 'stage.output', stageId, output });
+        onEvent({ type: 'stage.completed', stageId, output });
       }
     }
 

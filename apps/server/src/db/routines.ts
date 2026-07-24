@@ -1,3 +1,4 @@
+import { isValidTimeZone } from '../lib/cron-next.js';
 /**
  * Routine CRUD operations.
  */
@@ -108,8 +109,9 @@ export function createRoutine(input: {
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const timezone =
+  const timezoneRaw =
     typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : (input.timezone || 'UTC');
+  const timezone = isValidTimeZone(timezoneRaw) ? timezoneRaw : 'UTC';
   db.prepare(`
     INSERT INTO routine (id, name, workflow_id, schedule, timezone, enabled, inputs_json, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -149,7 +151,11 @@ export function updateRoutine(
   if (!schedule) return null;
   const timezone =
     input.timezone !== undefined
-      ? (typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : 'UTC')
+      ? (() => {
+          const raw =
+            typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : 'UTC';
+          return isValidTimeZone(raw) ? raw : 'UTC';
+        })()
       : existing.timezone;
 
   const now = new Date().toISOString();

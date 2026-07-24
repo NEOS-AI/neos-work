@@ -84,7 +84,7 @@ export function estimateNextCronRun(
   return null;
 }
 
-function isValidTimeZone(timeZone: string): boolean {
+export function isValidTimeZone(timeZone: string): boolean {
   try {
     Intl.DateTimeFormat(undefined, { timeZone });
     return true;

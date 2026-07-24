@@ -50,9 +50,10 @@ describe('verifyWebhookSignature', () => {
     expect(verifyWebhookSignature('test-webhook-secret', emptyBody, `sha256=${sig}`)).toBe(true);
   });
 
-  it('rejects wrong prefix casing or missing sha256=', () => {
+  it('accepts case-insensitive sha256 prefix; rejects missing equals form', () => {
     const sig = createHmac('sha256', secret).update(body).digest('hex');
-    expect(verifyWebhookSignature(secret, body, `SHA256=${sig}`)).toBe(false);
+    expect(verifyWebhookSignature(secret, body, `SHA256=${sig}`)).toBe(true);
+    expect(verifyWebhookSignature(secret, body, `Sha256=${sig}`)).toBe(true);
     expect(verifyWebhookSignature(secret, body, `sha256:${sig}`)).toBe(false);
   });
 

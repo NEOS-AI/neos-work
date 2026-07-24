@@ -190,4 +190,24 @@ describe('routine runs', () => {
     completeRoutineRun(run2.id, '  COMPLETED  ' as never);
     expect(getRoutineRun(r.id, run2.id)?.status).toBe('completed');
   });
+
+  it('falls back invalid timezone to UTC on create/update', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'tz-bad',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'Not/AZone',
+    });
+    expect(r.timezone).toBe('UTC');
+    const updated = updateRoutine(r.id, { timezone: 'Also/Invalid' });
+    expect(updated?.timezone).toBe('UTC');
+    const ok = updateRoutine(r.id, { timezone: '  Asia/Seoul  ' });
+    expect(ok?.timezone).toBe('Asia/Seoul');
+  });
 });

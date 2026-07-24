@@ -307,7 +307,7 @@ export function verifyWebhookSignature(secret: string, body: string, signatureHe
     const header = signatureHeader.trim();
     const eq = header.indexOf('=');
     if (eq <= 0) return false;
-    const algo = header.slice(0, eq).trim();
+    const algo = header.slice(0, eq).trim().toLowerCase();
     const sig = header.slice(eq + 1).trim();
     if (algo !== 'sha256' || !sig) return false;
     const expected = createHmac('sha256', key).update(body).digest('hex');

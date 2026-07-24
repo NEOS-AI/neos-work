@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateNextCronRun } from './cron-next.js';
+import { estimateNextCronRun, isValidTimeZone } from './cron-next.js';
 
 describe('estimateNextCronRun', () => {
   it('returns null for invalid expressions', () => {
@@ -126,5 +126,15 @@ describe('estimateNextCronRun', () => {
   it('returns null for blank expressions', () => {
     expect(estimateNextCronRun('')).toBeNull();
     expect(estimateNextCronRun('   ')).toBeNull();
+  });
+});
+
+
+describe('isValidTimeZone', () => {
+  it('accepts IANA zones and rejects garbage', () => {
+    expect(isValidTimeZone('UTC')).toBe(true);
+    expect(isValidTimeZone('Asia/Seoul')).toBe(true);
+    expect(isValidTimeZone('Not/AZone')).toBe(false);
+    expect(isValidTimeZone('')).toBe(false);
   });
 });
