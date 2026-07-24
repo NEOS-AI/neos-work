@@ -78,6 +78,14 @@ export function getWorkflow(id: string): Workflow | undefined {
   return row ? rowToWorkflow(row) : undefined;
 }
 
+function normalizeWorkflowDomain(raw: unknown): Workflow['domain'] {
+  const domainRaw =
+    typeof raw === 'string' ? raw.trim().toLowerCase() || 'general' : 'general';
+  return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as Workflow['domain'])
+    : 'general';
+}
+
 export function createWorkflow(input: {
   name: string;
   description?: string;
@@ -85,13 +93,19 @@ export function createWorkflow(input: {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }): Workflow {
-  const db = getDb();
-  const id = crypto.randomUUID();
-  const name = input.name.trim();
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name) {
+    throw new Error('name is required');
+  }
   const description =
     input.description !== undefined
-      ? (input.description.trim() || null)
+      ? (typeof input.description === 'string' ? input.description.trim() || null : null)
       : null;
+  const domain = normalizeWorkflowDomain(input.domain);
+  const nodes = Array.isArray(input.nodes) ? input.nodes : [];
+  const edges = Array.isArray(input.edges) ? input.edges : [];
+  const db = getDb();
+  const id = crypto.randomUUID();
   db.prepare(
     `INSERT INTO workflow (id, name, description, domain, nodes_json, edges_json)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -99,9 +113,9 @@ export function createWorkflow(input: {
     id,
     name,
     description,
-    input.domain,
-    JSON.stringify(input.nodes),
-    JSON.stringify(input.edges),
+    domain,
+    JSON.stringify(nodes),
+    JSON.stringify(edges),
   );
   return getWorkflow(id)!;
 }

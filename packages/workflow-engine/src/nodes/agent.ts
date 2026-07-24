@@ -9,7 +9,7 @@ import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveHarness } from '../harness/index.js';
 
 function buildAdapter(settings: Record<string, string>) {
-  const provider = settings['llmProvider'] ?? 'anthropic';
+  const provider = String(settings['llmProvider'] ?? 'anthropic').trim().toLowerCase() || 'anthropic';
 
   if (provider === 'openai') {
     const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
@@ -128,7 +128,9 @@ export class AgentNode implements ExecutableNode {
       .filter(Boolean);
 
     // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig)
-    const provider = (this.nodeConfig?.['provider'] ?? this.nodeConfig?.['llmProvider']) as string | undefined;
+    const rawProvider = this.nodeConfig?.['provider'] ?? this.nodeConfig?.['llmProvider'];
+    const provider =
+      typeof rawProvider === 'string' ? rawProvider.trim().toLowerCase() : '';
     if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
       if (!ctx.cliSpawn) {
         return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };
@@ -152,9 +154,9 @@ export class AgentNode implements ExecutableNode {
 
     try {
       // Prefer node-level llmProvider (NodeConfigPanel), then execution settings
-      const nodeProvider = (this.nodeConfig?.['llmProvider'] ?? this.nodeConfig?.['provider']) as
-        | string
-        | undefined;
+      const nodeProviderRaw = this.nodeConfig?.['llmProvider'] ?? this.nodeConfig?.['provider'];
+      const nodeProvider =
+        typeof nodeProviderRaw === 'string' ? nodeProviderRaw.trim().toLowerCase() : '';
       const adapterSettings =
         nodeProvider && !nodeProvider.startsWith('cli-')
           ? { ...ctx.settings, llmProvider: nodeProvider }
