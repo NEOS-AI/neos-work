@@ -513,4 +513,23 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(events.some((e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'output')).toBe(true);
     expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
   });
+
+  it('emits trimmed nodeIds for padded node ids and wires padded edges', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-pad-ids',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: '  trigger  ', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: '  output  ', type: 'output', label: 'Output', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: '  trigger  ', target: '  output  ' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    const completed = events.filter((e) => e.type === 'node.completed') as Array<{ nodeId: string }>;
+    expect(completed.map((e) => e.nodeId).sort()).toEqual(['output', 'trigger']);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-pad-ids' });
+  });
 });

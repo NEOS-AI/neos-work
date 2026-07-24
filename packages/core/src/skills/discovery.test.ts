@@ -68,6 +68,32 @@ x
     expect(local.map((s) => s.manifest.name)).toEqual(['ok']);
   });
 
+  it('skips hidden markdown files in skill directories', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, '.hidden.md'),
+      `---
+name: hidden
+description: hidden skill
+---
+Should skip
+`,
+    );
+    await writeFile(
+      join(dir, 'visible.md'),
+      `---
+name: visible
+description: visible skill
+---
+Body
+`,
+    );
+    const skills = await discoverSkills(workspace);
+    const local = skills.filter((s) => s.source === 'local');
+    expect(local.map((s) => s.manifest.name)).toEqual(['visible']);
+  });
+
   it('treats blank workspacePath as omitted (no local scan)', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });
@@ -90,6 +116,22 @@ x
 `,
     );
     const skills = await discoverSkills('   ');
+    expect(skills.filter((s) => s.source === 'local')).toEqual([]);
+  });
+
+  it('rejects workspacePath containing control characters', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'demo.md'),
+      `---
+name: demo
+description: Demo
+---
+x
+`,
+    );
+    const skills = await discoverSkills(`${workspace}\0evil`);
     expect(skills.filter((s) => s.source === 'local')).toEqual([]);
   });
 });

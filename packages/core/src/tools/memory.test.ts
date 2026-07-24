@@ -61,6 +61,28 @@ describe('memory tools', () => {
     expect(cb.save).toHaveBeenCalledWith('pref2', 'value', ['a', 'b']);
   });
 
+  it('remember/forget reject control characters in key; filters bad tags', async () => {
+    const cb = mockCallbacks();
+    const remember = createRememberTool(cb);
+    const forget = createForgetTool(cb);
+
+    const badKey = await remember.execute({ key: `bad${'\0'}key`, content: 'x' });
+    expect(badKey.success).toBe(false);
+    expect(badKey.error).toMatch(/control characters/i);
+
+    const badForget = await forget.execute({ key: `x${'\n'}y` });
+    expect(badForget.success).toBe(false);
+    expect(badForget.error).toMatch(/control characters/i);
+
+    const tags = await remember.execute({
+      key: 'ok',
+      content: 'v',
+      tags: ['good', `bad${'\0'}`, '  '],
+    });
+    expect(tags.success).toBe(true);
+    expect(cb.save).toHaveBeenCalledWith('ok', 'v', ['good']);
+  });
+
   it('remember maps callback errors', async () => {
     const tool = createRememberTool(
       mockCallbacks({ save: async () => { throw new Error('db down'); } }),

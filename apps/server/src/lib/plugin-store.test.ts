@@ -157,6 +157,23 @@ describe('plugin-store listPlugins edge cases', () => {
     expect(plugin?.dir).toContain(DIR_NAME);
   });
 
+  it('omits whitespace-only SKILL.md content', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), '  \n\t  \n', 'utf8');
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'Blank Skill',
+        version: '0.1.0',
+      }),
+      'utf8',
+    );
+    const plugin = await getPlugin(DIR_NAME);
+    expect(plugin?.skillContent).toBeUndefined();
+  });
+
   it('sanitizes skillDirName when upgrading', async () => {
     const weird = `_cov_skill_weird_${process.pid}`;
     // only alnum/_/- allowed after sanitize; use a clean dir
@@ -183,5 +200,76 @@ describe('normalizePipelineStageKind', () => {
     expect(normalizePipelineStageKind('unknown')).toBe('execute');
     expect(normalizePipelineStageKind('')).toBe('execute');
     expect(normalizePipelineStageKind(null)).toBe('execute');
+  });
+});
+
+describe('listPlugins pipeline normalization', () => {
+  it('drops blank stage ids, normalizes kinds, and trims stage fields', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'Pipe',
+        version: '1.0.0',
+        pipeline: [
+          { id: '   ', name: 'skip', kind: 'plan' },
+          null,
+          'not-an-object',
+          {
+            id: '  s1  ',
+            name: '  Stage One  ',
+            kind: '  CRITIQUE  ',
+            prompt: '  do work  ',
+            outputKey: '  out1  ',
+            humanInLoop: 1,
+          },
+          {
+            id: 's2',
+            kind: 'weird',
+            prompt: '   ',
+            outputKey: '  ',
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const p = (await listPlugins()).find((x) => x.id === DIR_NAME);
+    expect(p).toBeDefined();
+    expect(p!.pipeline).toHaveLength(2);
+    expect(p!.pipeline![0]).toMatchObject({
+      id: 's1',
+      name: 'Stage One',
+      kind: 'critique',
+      prompt: 'do work',
+      outputKey: 'out1',
+      humanInLoop: true,
+    });
+    expect(p!.pipeline![1]).toMatchObject({
+      id: 's2',
+      name: 's2',
+      kind: 'execute',
+    });
+    expect(p!.pipeline![1]!.prompt).toBeUndefined();
+    expect(p!.pipeline![1]!.outputKey).toBeUndefined();
+  });
+
+  it('omits pipeline when all stages are invalid or array missing', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'NoPipe',
+        version: '1.0.0',
+        pipeline: [{ id: '  ' }, null],
+      }),
+      'utf8',
+    );
+    const p = (await listPlugins()).find((x) => x.id === DIR_NAME);
+    expect(p?.pipeline).toBeUndefined();
   });
 });

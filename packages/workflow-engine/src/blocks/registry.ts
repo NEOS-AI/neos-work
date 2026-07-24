@@ -19,6 +19,18 @@ function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
     : 'general';
 }
 
+const IMPLEMENTATION_TYPES = new Set(['native', 'prompt', 'skill']);
+
+/** Normalize implementationType (unknown → native). */
+export function normalizeImplementationType(
+  raw: unknown,
+): WorkflowBlock['implementationType'] {
+  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return IMPLEMENTATION_TYPES.has(t)
+    ? (t as WorkflowBlock['implementationType'])
+    : 'native';
+}
+
 function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
   return {
     ...meta,
@@ -27,6 +39,7 @@ function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
     domain: normalizeDomain(meta.domain),
     category: typeof meta.category === 'string' ? meta.category.trim() || 'custom' : (meta.category ?? 'custom'),
     description: typeof meta.description === 'string' ? meta.description.trim() : meta.description,
+    implementationType: normalizeImplementationType(meta.implementationType),
     promptTemplate:
       typeof meta.promptTemplate === 'string'
         ? meta.promptTemplate.trim() || undefined

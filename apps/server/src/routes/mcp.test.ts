@@ -138,6 +138,61 @@ describe('mcp routes', () => {
     expect(created.data.url).toBe('https://example.com/mcp');
   });
 
+  it('rejects invalid transport, overlong name, missing http url, and toggle type errors', async () => {
+    const badTransport = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME, transport: 'websocket', command: 'x' }),
+    });
+    expect(badTransport.status).toBe(400);
+    expect(((await badTransport.json()) as { error: string }).error).toMatch(/transport/i);
+
+    const longName = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201), transport: 'stdio', command: 'npx' }),
+    });
+    expect(longName.status).toBe(400);
+
+    const missingUrl = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME, transport: 'http' }),
+    });
+    expect(missingUrl.status).toBe(400);
+    expect(((await missingUrl.json()) as { error: string }).error).toMatch(/url/i);
+
+    const create = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        transport: 'stdio',
+        command: 'npx',
+        args: ['  -y  ', '', '  pkg  ', 42 as unknown as string],
+      }),
+    });
+    expect(create.status).toBe(201);
+    const created = await create.json() as { data: { id: string; args: string[] | null } };
+    expect(created.data.args).toEqual(['-y', 'pkg', '42']);
+
+    const badEnabled = await mcp.request(`/${created.data.id}/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: 'yes' }),
+    });
+    expect(badEnabled.status).toBe(400);
+
+    const missingToggle = await mcp.request('/no-such-mcp/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(missingToggle.status).toBe(404);
+
+    await mcp.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('oauth refresh validates http endpoint and trims fields', async () => {
     const missing = await mcp.request('/oauth/s1/refresh', {
       method: 'POST',

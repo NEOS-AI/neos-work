@@ -35,14 +35,38 @@ interface WorkflowRunRow {
   error: string | null;
 }
 
+function safeParseJsonArray<T>(raw: string, fallback: T[] = []): T[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeParseJsonObject<T extends Record<string, unknown>>(
+  raw: string,
+  fallback: T,
+): T {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as T;
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function rowToWorkflow(row: WorkflowRow): Workflow {
   return {
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
     domain: row.domain as Workflow['domain'],
-    nodes: JSON.parse(row.nodes_json) as WorkflowNode[],
-    edges: JSON.parse(row.edges_json) as WorkflowEdge[],
+    nodes: safeParseJsonArray<WorkflowNode>(row.nodes_json),
+    edges: safeParseJsonArray<WorkflowEdge>(row.edges_json),
     webhookSecret: row.webhook_secret ?? undefined,
     designSystemId: row.design_system_id ?? undefined,
     createdAt: row.created_at,
@@ -55,7 +79,10 @@ function rowToRun(row: WorkflowRunRow): WorkflowRun {
     id: row.id,
     workflowId: row.workflow_id,
     status: row.status as WorkflowRun['status'],
-    nodeResults: JSON.parse(row.node_results_json) as Record<string, NodeRunResult>,
+    nodeResults: safeParseJsonObject<Record<string, NodeRunResult>>(
+      row.node_results_json,
+      {},
+    ),
     startedAt: row.started_at,
     completedAt: row.completed_at ?? undefined,
     error: row.error ?? undefined,
@@ -137,16 +164,26 @@ export function updateWorkflow(
   if (!existing) return undefined;
 
   const name =
-    input.name !== undefined ? input.name.trim() || existing.name : existing.name;
+    input.name !== undefined
+      ? (typeof input.name === 'string' ? input.name.trim() || existing.name : existing.name)
+      : existing.name;
   const description =
     input.description !== undefined
-      ? (input.description.trim() || null)
+      ? (typeof input.description === 'string' ? input.description.trim() || null : null)
       : existing.description;
   const designSystemId = input.designSystemId !== undefined
-    ? ((input.designSystemId ?? '').trim() || null)
+    ? (typeof input.designSystemId === 'string'
+        ? input.designSystemId.trim() || null
+        : (input.designSystemId ?? '').toString().trim() || null)
     : existing.design_system_id;
-  const nodes = input.nodes !== undefined ? JSON.stringify(input.nodes) : existing.nodes_json;
-  const edges = input.edges !== undefined ? JSON.stringify(input.edges) : existing.edges_json;
+  const nodes =
+    input.nodes !== undefined
+      ? JSON.stringify(Array.isArray(input.nodes) ? input.nodes : [])
+      : existing.nodes_json;
+  const edges =
+    input.edges !== undefined
+      ? JSON.stringify(Array.isArray(input.edges) ? input.edges : [])
+      : existing.edges_json;
 
   db.prepare(
     `UPDATE workflow SET name = ?, description = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')

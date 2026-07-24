@@ -51,7 +51,8 @@ export async function discoverSkills(workspacePath?: string): Promise<Skill[]> {
   // Local workspace skills (blank/whitespace path treated as omitted)
   const ws =
     typeof workspacePath === 'string' ? workspacePath.trim() : '';
-  if (ws) {
+  // Reject control chars that confuse path APIs
+  if (ws && !/[\0\r\n]/.test(ws)) {
     const localDir = resolve(ws, '.neos-work', 'skills');
     const localSkills = await scanDirectory(localDir, 'local');
     skills.push(...localSkills);

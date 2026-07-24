@@ -50,10 +50,14 @@ export class DiscordMessageNode implements ExecutableNode {
       });
 
       if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        const detail = body.trim().slice(0, 500);
         return {
           ok: false,
           output: null,
-          error: `Discord webhook error: ${res.status}`,
+          error: detail
+            ? `Discord webhook error: ${res.status}: ${detail}`
+            : `Discord webhook error: ${res.status}`,
           durationMs: Date.now() - start,
         };
       }

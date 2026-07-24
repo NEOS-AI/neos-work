@@ -3,6 +3,7 @@ import {
   getRuntimeAuthToken,
   getRuntimePort,
   getRuntimeServerUrl,
+  normalizeListenPort,
   setRuntimeContext,
 } from './runtime-context.js';
 
@@ -12,6 +13,20 @@ describe('runtime-context', () => {
     expect(getRuntimeAuthToken()).toBe('secret-token');
     expect(getRuntimePort()).toBe(57286);
     expect(getRuntimeServerUrl()).toBe('http://127.0.0.1:57286');
+  });
+
+  it('trims auth token and clamps invalid ports', () => {
+    setRuntimeContext({ authToken: '  tok  ', port: 8080 });
+    expect(getRuntimeAuthToken()).toBe('tok');
+    expect(normalizeListenPort(0)).toBe(3000);
+    expect(normalizeListenPort(70000)).toBe(3000);
+    expect(normalizeListenPort(NaN)).toBe(3000);
+    expect(normalizeListenPort(443)).toBe(443);
+    expect(normalizeListenPort('  9000  ')).toBe(9000);
+
+    setRuntimeContext({ authToken: 'x', port: 99999 });
+    // Invalid port falls back to previous valid port
+    expect(getRuntimePort()).toBe(8080);
   });
 });
 

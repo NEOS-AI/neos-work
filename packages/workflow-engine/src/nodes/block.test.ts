@@ -157,7 +157,8 @@ describe('BlockNode', () => {
     expect(result.error).toMatch(/Native executor not found/i);
   });
 
-  it('rejects unknown implementationType', async () => {
+  it('falls back unknown implementationType to native at registration', async () => {
+    // registry.normalizeImplementationType: unknown → native
     registerBlockMeta({
       id: 'cov_unknown_impl',
       name: 'Unknown Impl',
@@ -172,7 +173,32 @@ describe('BlockNode', () => {
     });
     const result = await node.execute(ctx({ blockId: 'cov_unknown_impl' }));
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/Unknown implementationType/i);
+    // Meta-only native path (no executor registered)
+    expect(result.error).toMatch(/Native executor not found/i);
+  });
+
+  it('treats case-insensitive implementationType as native', async () => {
+    registerNativeBlock(
+      {
+        blockId: 'cov_native_case',
+        execute: async () => ({ ok: true, output: 'cased', durationMs: 0 }),
+      },
+      {
+        id: 'cov_native_case',
+        name: 'Cased Native',
+        domain: 'general',
+        category: 'test',
+        description: 'test',
+        isBuiltIn: true,
+        implementationType: 'NATIVE' as never,
+        paramDefs: [],
+        inputDescription: '',
+        outputDescription: '',
+      },
+    );
+    const result = await node.execute(ctx({ blockId: 'cov_native_case' }));
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('cased');
   });
 
   it('coerces non-string blockId via String()', async () => {

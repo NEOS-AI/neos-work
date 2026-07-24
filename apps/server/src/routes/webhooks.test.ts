@@ -101,6 +101,22 @@ describe('webhook routes', () => {
     expect(json.error).toMatch(/signature/i);
   });
 
+  it('POST trigger rejects oversized Content-Length with 413', async () => {
+    const wf = makeWf();
+    const res = await webhooks.request(`/${wf.id}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': String(2 * 1024 * 1024),
+        'x-neos-signature': 'sha256=00',
+      },
+      body: '{}',
+    });
+    expect(res.status).toBe(413);
+    const json = await res.json() as { error: string };
+    expect(json.error).toMatch(/too large/i);
+  });
+
   it('POST trigger returns 429 when rate limited', async () => {
     const wf = makeWf();
     // Exhaust limiter for this workflowId (default 60/min)

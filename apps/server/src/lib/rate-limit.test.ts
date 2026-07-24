@@ -60,6 +60,21 @@ describe('FixedWindowRateLimiter', () => {
     expect(limiter.check('k', now)).toBe(true);
     expect(limiter.status('  k  ', now).remaining).toBe(1);
   });
+
+  it('GCs expired keys when map grows large', () => {
+    const big = new FixedWindowRateLimiter(1, 100);
+    const t0 = 1_000_000;
+    for (let i = 0; i < 300; i++) {
+      expect(big.check(`k${i}`, t0)).toBe(true);
+    }
+    // After window expires, a new check should free stale entries
+    const t1 = t0 + 200;
+    expect(big.check('fresh', t1)).toBe(true);
+    // Fresh key starts a new window with full remaining-1 after one use
+    expect(big.status('fresh', t1).remaining).toBe(0);
+    // Old key after GC should look unused again
+    expect(big.status('k0', t1).remaining).toBe(1);
+  });
 });
 
 describe('FixedWindowRateLimiter status after partial use', () => {

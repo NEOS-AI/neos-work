@@ -84,19 +84,30 @@ webhooks.post('/:workflowId', async (c) => {
 
   const secret = db.getOrCreateWebhookSecret(workflowId);
 
-  // Read raw body for HMAC verification
+  // Read raw body for HMAC verification (cap size to avoid memory abuse)
+  const MAX_WEBHOOK_BODY_BYTES = 1_048_576; // 1 MiB
+  const contentLengthHeader = c.req.header('content-length');
+  if (contentLengthHeader) {
+    const cl = Number(contentLengthHeader);
+    if (Number.isFinite(cl) && cl > MAX_WEBHOOK_BODY_BYTES) {
+      return c.json({ ok: false, error: 'Request body too large' }, 413);
+    }
+  }
   const rawBody = await c.req.text();
+  if (rawBody.length > MAX_WEBHOOK_BODY_BYTES) {
+    return c.json({ ok: false, error: 'Request body too large' }, 413);
+  }
   const sigHeader = c.req.header('x-neos-signature') ?? '';
 
   if (!db.verifyWebhookSignature(secret, rawBody, sigHeader)) {
     return c.json({ ok: false, error: 'Invalid signature' }, 401);
   }
 
-  // Parse body as JSON inputs
+  // Parse body as JSON inputs (objects only; arrays/primitives → empty)
   let triggerInputs: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(rawBody);
-    if (parsed && typeof parsed === 'object') {
+    const parsed = JSON.parse(rawBody) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       triggerInputs = parsed as Record<string, unknown>;
     }
   } catch {

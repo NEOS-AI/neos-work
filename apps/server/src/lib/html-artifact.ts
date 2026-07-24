@@ -16,6 +16,9 @@ export function isHtmlArtifactOutput(output: unknown): output is string {
   );
 }
 
+/** Cap auto-saved HTML artifacts (2 MiB) to avoid DB bloat from runaway agent output. */
+export const HTML_ARTIFACT_MAX_CHARS = 2 * 1024 * 1024;
+
 /**
  * Scan nodeResults map and create the first HTML artifact.
  * Returns artifact id or undefined.
@@ -43,12 +46,15 @@ export function createFirstHtmlArtifact(options: {
     if (status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
     const nid = typeof nodeId === 'string' ? nodeId.trim() : String(nodeId);
     if (!nid) continue;
+    const content = r.output.trim();
+    // Skip pathological oversized HTML rather than failing the whole run
+    if (content.length > HTML_ARTIFACT_MAX_CHARS) continue;
     const artifact = options.create({
       workflowId,
       runId,
       name: `Output (${nid})`,
       contentType: 'text/html',
-      content: r.output.trim(),
+      content,
       nodeId: nid,
     });
     return artifact.id;

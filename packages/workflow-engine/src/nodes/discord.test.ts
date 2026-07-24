@@ -55,13 +55,37 @@ describe('DiscordMessageNode', () => {
   });
 
   it('surfaces non-ok HTTP status', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => '  internal boom  ',
+    }));
     const node = new DiscordMessageNode();
     const result = await node.execute(
       makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, { text: 'x' }),
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/500/);
+    expect(result.error).toMatch(/internal boom/);
+  });
+
+  it('truncates long Discord error bodies to 500 chars', async () => {
+    const long = 'z'.repeat(800);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => long,
+      }),
+    );
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, { text: 'x' }),
+    );
+    expect(result.ok).toBe(false);
+    // "Discord webhook error: 429: " + 500 body chars
+    expect(result.error).toMatch(/^Discord webhook error: 429: z{500}$/);
   });
 
   it('uses textTemplate with interpolation for webhook content', async () => {

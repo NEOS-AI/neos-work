@@ -184,4 +184,28 @@ describe('memory routes', () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/name, type, and content/i);
   });
+
+  it('accepts all memory types and 404s delete for missing ids', async () => {
+    for (const type of ['user', 'session', 'skill', 'reference'] as const) {
+      const create = await memory.request('/', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_${type}`,
+          type,
+          content: `${type} body`,
+        }),
+      });
+      expect(create.status).toBe(201);
+      const body = await create.json() as { data: { id: string; type: string } };
+      expect(body.data.type).toBe(type);
+      const got = await memory.request(`/${body.data.id}`);
+      const gotBody = await got.json() as { data: { type: string } };
+      expect(gotBody.data.type).toBe(type);
+      await memory.request(`/${body.data.id}`, { method: 'DELETE' });
+    }
+
+    const missingDel = await memory.request('/no-such-memory', { method: 'DELETE' });
+    expect(missingDel.status).toBe(404);
+  });
 });

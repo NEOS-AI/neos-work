@@ -130,4 +130,38 @@ describe('design-systems routes', () => {
     });
     expect(put.status).toBe(404);
   });
+
+  it('returns 409 on duplicate name and rejects non-string content', async () => {
+    const first = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME }),
+    });
+    expect(first.status).toBe(201);
+    const id = ((await first.json()) as { data: { id: string } }).data.id;
+
+    const dup = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME }),
+    });
+    expect(dup.status).toBe(409);
+
+    const nonString = await designSystems.request(`/${id}/content`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 123 }),
+    });
+    expect(nonString.status).toBe(400);
+    expect(((await nonString.json()) as { error: string }).error).toMatch(/content string/i);
+
+    const badJson = await designSystems.request(`/${id}/content`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    await designSystems.request(`/${id}`, { method: 'DELETE' });
+  });
 });

@@ -13,8 +13,15 @@ export interface MemoryCallbacks {
 
 function normalizeTags(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const tags = raw.map((t) => String(t).trim()).filter(Boolean);
+  const tags = raw
+    .map((t) => String(t).trim())
+    .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t));
   return tags.length > 0 ? tags : undefined;
+}
+
+/** Reject null bytes / CR / LF in memory keys (path/storage safety). */
+function hasUnsafeKeyChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
 }
 
 function clampLimit(raw: unknown, fallback = 5): number {
@@ -53,6 +60,9 @@ export function createRememberTool(callbacks: MemoryCallbacks): Tool {
 
         if (!key || key.length > 200) {
           return { success: false, output: null, error: 'Key must be between 1 and 200 characters' };
+        }
+        if (hasUnsafeKeyChars(key)) {
+          return { success: false, output: null, error: 'Key contains invalid control characters' };
         }
         if (!content || content.length > 10_000) {
           return { success: false, output: null, error: 'Content must be between 1 and 10,000 characters' };
@@ -116,6 +126,9 @@ export function createForgetTool(callbacks: MemoryCallbacks): Tool {
           typeof input.key === 'string' ? input.key.trim() : String(input.key ?? '').trim();
         if (!key) {
           return { success: false, output: null, error: 'key is required' };
+        }
+        if (hasUnsafeKeyChars(key)) {
+          return { success: false, output: null, error: 'Key contains invalid control characters' };
         }
         await callbacks.remove(key);
         return { success: true, output: { removed: key } };

@@ -22,11 +22,20 @@ export class FixedWindowRateLimiter {
     return typeof key === 'string' ? key.trim() : '';
   }
 
+  /** Drop expired windows to bound memory growth under many distinct keys. */
+  private gc(now: number): void {
+    if (this.map.size < 256) return;
+    for (const [key, entry] of this.map) {
+      if (now > entry.resetAt) this.map.delete(key);
+    }
+  }
+
   /** Returns true if the request is allowed and consumes one unit. */
   check(key: string, now = Date.now()): boolean {
     const k = this.normalizeKey(key);
     // Blank keys are rejected (do not share a global bucket)
     if (!k) return false;
+    this.gc(now);
     const entry = this.map.get(k);
     if (!entry || now > entry.resetAt) {
       this.map.set(k, { count: 1, resetAt: now + this.windowMs });

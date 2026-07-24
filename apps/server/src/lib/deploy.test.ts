@@ -5,6 +5,7 @@ import {
   getCloudflareDeploymentStatus,
   getVercelDeploymentStatus,
   isValidDeployProjectName,
+  safeDeployHostUrl,
 } from './deploy.js';
 
 describe('isValidDeployProjectName', () => {
@@ -22,6 +23,18 @@ describe('isValidDeployProjectName', () => {
     expect(isValidDeployProjectName('has space')).toBe(false);
     expect(isValidDeployProjectName('dot.name')).toBe(false);
     expect(isValidDeployProjectName('A' + 'b'.repeat(63))).toBe(false);
+  });
+});
+
+describe('safeDeployHostUrl', () => {
+  it('accepts bare hosts and http(s) URLs; rejects other schemes', () => {
+    expect(safeDeployHostUrl('demo.vercel.app')).toBe('https://demo.vercel.app');
+    expect(safeDeployHostUrl('  https://x.test/  ')).toBe('https://x.test');
+    expect(safeDeployHostUrl('http://x.test')).toBe('http://x.test');
+    expect(safeDeployHostUrl('file:///etc/passwd')).toBeUndefined();
+    expect(safeDeployHostUrl('javascript:alert(1)')).toBeUndefined();
+    expect(safeDeployHostUrl('')).toBeUndefined();
+    expect(safeDeployHostUrl('   ')).toBeUndefined();
   });
 });
 

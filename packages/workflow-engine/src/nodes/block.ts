@@ -3,7 +3,11 @@
  */
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
-import { resolveBlock, getNativeExecutor } from '../blocks/registry.js';
+import {
+  resolveBlock,
+  getNativeExecutor,
+  normalizeImplementationType,
+} from '../blocks/registry.js';
 
 // Input length limit for prompt injection protection
 const MAX_INPUT_LENGTH = 4096;
@@ -39,7 +43,10 @@ export class BlockNode implements ExecutableNode {
       params[key] = typeof v === 'string' ? v.trim() : v;
     }
 
-    if (block.implementationType === 'native') {
+    // implementationType is case-insensitive (Native / PROMPT / skill)
+    const implType = normalizeImplementationType(block.implementationType);
+
+    if (implType === 'native') {
       const executor = getNativeExecutor(blockId);
       if (!executor) {
         return {
@@ -65,7 +72,7 @@ export class BlockNode implements ExecutableNode {
       };
     }
 
-    if (block.implementationType === 'prompt') {
+    if (implType === 'prompt') {
       const template =
         typeof block.promptTemplate === 'string' ? block.promptTemplate.trim() : '';
       if (!template) {
@@ -91,7 +98,7 @@ export class BlockNode implements ExecutableNode {
       return agentNode.execute({ ...ctx, inputs: {} });
     }
 
-    if (block.implementationType === 'skill') {
+    if (implType === 'skill') {
       const skillId =
         typeof block.skillId === 'string' ? block.skillId.trim() : String(block.skillId ?? '').trim();
       if (!skillId) {

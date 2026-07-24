@@ -121,4 +121,44 @@ describe('WebSearchNode', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/offline/);
   });
+
+  it('truncates long non-ok response bodies and handles empty bodies', async () => {
+    const longBody = 'e'.repeat(800);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => longBody,
+    }));
+    const withBody = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'x' }));
+    expect(withBody.ok).toBe(false);
+    expect(withBody.error).toMatch(/500/);
+    expect(withBody.error!.length).toBeLessThan(longBody.length + 40);
+    expect(withBody.error).not.toContain('e'.repeat(600));
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => '   ',
+    }));
+    const emptyBody = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'x' }));
+    expect(emptyBody.error).toBe('Tavily API error: 503');
+  });
+
+  it('stringifies non-Error network failures', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue('boom'));
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'x' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Web search failed');
+  });
+
+  it('trims padded API key before calling Tavily', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await node.execute(ctx({ TAVILY_API_KEY: '  tvly-key  ' }, { query: 'q' }));
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.api_key).toBe('tvly-key');
+  });
 });

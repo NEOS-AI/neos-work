@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createFirstHtmlArtifact, isHtmlArtifactOutput } from './html-artifact.js';
+import {
+  createFirstHtmlArtifact,
+  HTML_ARTIFACT_MAX_CHARS,
+  isHtmlArtifactOutput,
+} from './html-artifact.js';
 
 describe('isHtmlArtifactOutput', () => {
   it('accepts doctype and html roots', () => {
@@ -101,5 +105,25 @@ describe('createFirstHtmlArtifact', () => {
       content: '<div>hi</div>',
       nodeId: 'agent1',
     });
+  });
+
+  it('skips oversized HTML and picks the next completed node', () => {
+    const huge = `<div>${'x'.repeat(HTML_ARTIFACT_MAX_CHARS)}</div>`;
+    expect(huge.length).toBeGreaterThan(HTML_ARTIFACT_MAX_CHARS);
+    const created: string[] = [];
+    const id = createFirstHtmlArtifact({
+      workflowId: 'wf',
+      runId: 'run',
+      nodeResults: {
+        big: { status: 'completed', output: huge },
+        ok: { status: 'completed', output: '<html>small</html>' },
+      },
+      create: (input) => {
+        created.push(input.nodeId);
+        return { id: `art-${input.nodeId}` };
+      },
+    });
+    expect(id).toBe('art-ok');
+    expect(created).toEqual(['ok']);
   });
 });

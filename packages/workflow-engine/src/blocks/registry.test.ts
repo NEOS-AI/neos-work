@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getNativeExecutor,
   listBlocks,
+  normalizeImplementationType,
   registerBlockMeta,
   registerNativeBlock,
   resolveBlock,
@@ -9,6 +10,15 @@ import {
 import type { WorkflowBlock } from '@neos-work/shared';
 
 describe('block registry', () => {
+  it('normalizeImplementationType allow-list', () => {
+    expect(normalizeImplementationType('native')).toBe('native');
+    expect(normalizeImplementationType('  PROMPT  ')).toBe('prompt');
+    expect(normalizeImplementationType('Skill')).toBe('skill');
+    expect(normalizeImplementationType('wasm')).toBe('native');
+    expect(normalizeImplementationType('')).toBe('native');
+    expect(normalizeImplementationType(null)).toBe('native');
+  });
+
   it('registers and resolves native executor', async () => {
     registerNativeBlock({
       blockId: 'test_block_coverage',

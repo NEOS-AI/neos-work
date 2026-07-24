@@ -25,6 +25,23 @@ function networkError(err: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+/**
+ * Normalize deployment host/URL to http(s) only.
+ * Bare hosts become https://host; file:/javascript: rejected.
+ */
+export function safeDeployHostUrl(raw: unknown): string | undefined {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return undefined;
+  try {
+    const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s) ? s : `https://${s}`;
+    const u = new URL(withScheme);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
+    return withScheme.replace(/\/+$/, '');
+  } catch {
+    return undefined;
+  }
+}
+
 /** Poll Vercel deployment status by deployment id. */
 export async function getVercelDeploymentStatus(
   deploymentId: string,
@@ -60,7 +77,7 @@ export async function getVercelDeploymentStatus(
   const host = data.url ?? data.alias?.[0];
   return {
     status,
-    url: host ? (host.startsWith('http') ? host : `https://${host}`) : undefined,
+    url: safeDeployHostUrl(host),
     statusMessage: data.readyState,
     readyState: data.readyState,
   };
@@ -105,7 +122,7 @@ export async function getCloudflareDeploymentStatus(options: {
 
   return {
     status,
-    url: data.result?.url,
+    url: safeDeployHostUrl(data.result?.url),
     statusMessage: data.result?.latest_stage?.status,
     readyState: data.result?.latest_stage?.status,
   };

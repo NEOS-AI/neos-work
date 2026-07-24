@@ -125,10 +125,12 @@ export async function listPlugins(): Promise<PluginManifest[]> {
           if (stages) manifest.pipeline = stages;
           else delete manifest.pipeline;
         }
-        // Optionally load SKILL.md content
+        // Optionally load SKILL.md content (whitespace-only → omit)
         const skillPath = path.join(dir, 'SKILL.md');
         try {
-          manifest.skillContent = await fs.readFile(skillPath, 'utf-8');
+          const skillBody = await fs.readFile(skillPath, 'utf-8');
+          const trimmedSkill = skillBody.trim();
+          if (trimmedSkill) manifest.skillContent = skillBody;
         } catch {
           // No SKILL.md — ok
         }

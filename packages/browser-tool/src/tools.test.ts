@@ -129,7 +129,7 @@ describe('createBrowserTools', () => {
     expect(result.output).toEqual({ links: [] });
   });
 
-  it('propagates page errors from navigate and click', async () => {
+  it('returns ToolResult errors for page failures instead of throwing', async () => {
     const page = {
       goto: vi.fn(async () => {
         throw new Error('net::ERR');
@@ -139,12 +139,13 @@ describe('createBrowserTools', () => {
       }),
     };
     const tools = createBrowserTools(makeManager(page));
-    await expect(tools.find((t) => t.name === 'browser_navigate')!.execute({ url: 'https://x' })).rejects.toThrow(
-      /net::ERR/,
-    );
-    await expect(tools.find((t) => t.name === 'browser_click')!.execute({ selector: '#x' })).rejects.toThrow(
-      /timeout/,
-    );
+    const nav = await tools.find((t) => t.name === 'browser_navigate')!.execute({ url: 'https://x' });
+    expect(nav.success).toBe(false);
+    expect(nav.error).toMatch(/net::ERR/);
+
+    const click = await tools.find((t) => t.name === 'browser_click')!.execute({ selector: '#x' });
+    expect(click.success).toBe(false);
+    expect(click.error).toMatch(/timeout/);
   });
 
   it('isSafeBrowserUrl accepts only http(s)', () => {
@@ -211,5 +212,30 @@ describe('createBrowserTools', () => {
     await tools2.find((t) => t.name === 'browser_extract_links')!.execute({ selector: '  ' });
     expect(linkPage.evaluate).toHaveBeenCalled();
     void links;
+  });
+
+  it('browser_fill coerces non-string values and browser_navigate trims url', async () => {
+    const page = {
+      fill: vi.fn(async () => {}),
+      goto: vi.fn(async () => {}),
+      title: vi.fn(async () => 'T'),
+      url: vi.fn(() => 'https://example.com'),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const fill = tools.find((t) => t.name === 'browser_fill')!;
+    const nav = tools.find((t) => t.name === 'browser_navigate')!;
+
+    await fill.execute({ selector: '#n', value: 42 as unknown as string });
+    expect(page.fill).toHaveBeenCalledWith('#n', '42', { timeout: 10_000 });
+
+    await fill.execute({ selector: '#n', value: null as unknown as string });
+    expect(page.fill).toHaveBeenCalledWith('#n', '', { timeout: 10_000 });
+
+    const result = await nav.execute({ url: '  https://example.com/path  ' });
+    expect(result.success).toBe(true);
+    expect(page.goto).toHaveBeenCalledWith('https://example.com/path', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
+    });
   });
 });

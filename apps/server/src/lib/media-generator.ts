@@ -126,16 +126,31 @@ export async function generateImage(options: {
   const item = response.data?.[0];
   if (!item?.url) throw new Error('No image URL returned');
 
-  // Download the image and save locally
+  // Download the image and save locally (http(s) only — defense against non-http redirects)
+  const imageUrl = typeof item.url === 'string' ? item.url.trim() : '';
+  try {
+    const u = new URL(imageUrl);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      throw new Error('Image URL must be http(s)');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('http(s)')) throw err;
+    throw new Error('Invalid image URL returned');
+  }
   await ensureMediaDir();
-  const imgRes = await fetch(item.url);
+  const imgRes = await fetch(imageUrl);
   if (!imgRes.ok) throw new Error('Failed to download image');
   const buf = Buffer.from(await imgRes.arrayBuffer());
+  // Cap downloaded image size (plan Task 7 — 16 MB max)
+  const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+  if (buf.length > MAX_IMAGE_BYTES) {
+    throw new Error(`Image exceeds max size (${MAX_IMAGE_BYTES} bytes)`);
+  }
   const filename = `img_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.png`;
   const filePath = path.join(MEDIA_DIR, filename);
   await fs.writeFile(filePath, buf);
 
-  return { filePath, url: item.url, revisedPrompt: item.revised_prompt };
+  return { filePath, url: imageUrl, revisedPrompt: item.revised_prompt };
 }
 
 export interface GenerateAudioResult {

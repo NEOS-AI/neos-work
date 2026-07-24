@@ -47,7 +47,6 @@ function runCommand(
   command: string,
   cwd: string,
   timeoutMs: number,
-  signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn('sh', ['-c', command], {
@@ -58,17 +57,14 @@ function runCommand(
 
     let stdout = '';
     let stderr = '';
-    let killed = false;
 
     const timer = setTimeout(() => {
-      killed = true;
-      child.kill('SIGTERM');
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore
+      }
     }, timeoutMs);
-
-    signal?.addEventListener('abort', () => {
-      killed = true;
-      child.kill('SIGTERM');
-    });
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (stdout.length < MAX_OUTPUT_BYTES) {
@@ -84,11 +80,7 @@ function runCommand(
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (killed) {
-        resolve({ stdout, stderr, exitCode: code ?? -1 });
-      } else {
-        resolve({ stdout, stderr, exitCode: code ?? -1 });
-      }
+      resolve({ stdout, stderr, exitCode: code ?? -1 });
     });
 
     child.on('error', (err) => {
@@ -188,7 +180,11 @@ export function createShellTool(workspaceRoot: string): Tool {
           },
         };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return {
+          success: false,
+          output: null,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
     },
   };

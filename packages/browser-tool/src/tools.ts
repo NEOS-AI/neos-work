@@ -1,5 +1,5 @@
 // packages/browser-tool/src/tools.ts
-import type { Tool } from '@neos-work/core';
+import type { Tool, ToolResult } from '@neos-work/core';
 import type { BrowserManager } from './manager.js';
 
 /**
@@ -21,6 +21,14 @@ function trimSelector(raw: unknown): string {
   return typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
 }
 
+function toolFailure(err: unknown, fallback: string): ToolResult {
+  return {
+    success: false,
+    output: null,
+    error: err instanceof Error ? err.message : fallback,
+  };
+}
+
 /**
  * BrowserManager 인스턴스를 받아 6개 브라우저 Tool을 반환한다.
  * Tool 인터페이스: { name, description, inputSchema, execute(input) }
@@ -38,17 +46,21 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         required: ['url'],
       },
       async execute(input) {
-        const url = isSafeBrowserUrl((input as { url?: unknown }).url);
-        if (!url) {
-          return {
-            success: false,
-            output: null,
-            error: 'URL must be a valid http(s) URL',
-          };
+        try {
+          const url = isSafeBrowserUrl((input as { url?: unknown }).url);
+          if (!url) {
+            return {
+              success: false,
+              output: null,
+              error: 'URL must be a valid http(s) URL',
+            };
+          }
+          const page = manager.getPage();
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+          return { success: true, output: { title: await page.title(), url: page.url() } };
+        } catch (err) {
+          return toolFailure(err, 'browser_navigate failed');
         }
-        const page = manager.getPage();
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-        return { success: true, output: { title: await page.title(), url: page.url() } };
       },
     },
     {
@@ -62,13 +74,17 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         required: ['selector'],
       },
       async execute(input) {
-        const selector = trimSelector((input as { selector?: unknown }).selector);
-        if (!selector) {
-          return { success: false, output: null, error: 'selector is required' };
+        try {
+          const selector = trimSelector((input as { selector?: unknown }).selector);
+          if (!selector) {
+            return { success: false, output: null, error: 'selector is required' };
+          }
+          const page = manager.getPage();
+          await page.click(selector, { timeout: 10_000 });
+          return { success: true, output: { success: true } };
+        } catch (err) {
+          return toolFailure(err, 'browser_click failed');
         }
-        const page = manager.getPage();
-        await page.click(selector, { timeout: 10_000 });
-        return { success: true, output: { success: true } };
       },
     },
     {
@@ -83,15 +99,19 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         required: ['selector', 'value'],
       },
       async execute(input) {
-        const selector = trimSelector((input as { selector?: unknown }).selector);
-        if (!selector) {
-          return { success: false, output: null, error: 'selector is required' };
+        try {
+          const selector = trimSelector((input as { selector?: unknown }).selector);
+          if (!selector) {
+            return { success: false, output: null, error: 'selector is required' };
+          }
+          const valueRaw = (input as { value?: unknown }).value;
+          const value = typeof valueRaw === 'string' ? valueRaw : String(valueRaw ?? '');
+          const page = manager.getPage();
+          await page.fill(selector, value, { timeout: 10_000 });
+          return { success: true, output: { success: true } };
+        } catch (err) {
+          return toolFailure(err, 'browser_fill failed');
         }
-        const valueRaw = (input as { value?: unknown }).value;
-        const value = typeof valueRaw === 'string' ? valueRaw : String(valueRaw ?? '');
-        const page = manager.getPage();
-        await page.fill(selector, value, { timeout: 10_000 });
-        return { success: true, output: { success: true } };
       },
     },
     {
@@ -107,10 +127,14 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         },
       },
       async execute(input) {
-        const { fullPage = false } = input as { fullPage?: boolean };
-        const page = manager.getPage();
-        const buffer = await page.screenshot({ fullPage: Boolean(fullPage) });
-        return { success: true, output: { screenshot: buffer.toString('base64') } };
+        try {
+          const { fullPage = false } = input as { fullPage?: boolean };
+          const page = manager.getPage();
+          const buffer = await page.screenshot({ fullPage: Boolean(fullPage) });
+          return { success: true, output: { screenshot: buffer.toString('base64') } };
+        } catch (err) {
+          return toolFailure(err, 'browser_screenshot failed');
+        }
       },
     },
     {
@@ -126,12 +150,16 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         },
       },
       async execute(input) {
-        const selector = trimSelector((input as { selector?: unknown }).selector);
-        const page = manager.getPage();
-        const text = selector
-          ? await page.locator(selector).innerText({ timeout: 10_000 })
-          : await page.evaluate(() => document.body.innerText);
-        return { success: true, output: { text } };
+        try {
+          const selector = trimSelector((input as { selector?: unknown }).selector);
+          const page = manager.getPage();
+          const text = selector
+            ? await page.locator(selector).innerText({ timeout: 10_000 })
+            : await page.evaluate(() => document.body.innerText);
+          return { success: true, output: { text } };
+        } catch (err) {
+          return toolFailure(err, 'browser_extract_text failed');
+        }
       },
     },
     {
@@ -147,18 +175,22 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         },
       },
       async execute(input) {
-        const selector = trimSelector((input as { selector?: unknown }).selector);
-        const page = manager.getPage();
-        const links = await page.evaluate((sel: string | null) => {
-          const container: Element | Document = sel
-            ? (document.querySelector(sel) ?? document)
-            : document;
-          return Array.from(container.querySelectorAll('a[href]')).map((a) => ({
-            text: (a as HTMLAnchorElement).innerText.trim(),
-            href: (a as HTMLAnchorElement).href,
-          }));
-        }, selector || null);
-        return { success: true, output: { links } };
+        try {
+          const selector = trimSelector((input as { selector?: unknown }).selector);
+          const page = manager.getPage();
+          const links = await page.evaluate((sel: string | null) => {
+            const container: Element | Document = sel
+              ? (document.querySelector(sel) ?? document)
+              : document;
+            return Array.from(container.querySelectorAll('a[href]')).map((a) => ({
+              text: (a as HTMLAnchorElement).innerText.trim(),
+              href: (a as HTMLAnchorElement).href,
+            }));
+          }, selector || null);
+          return { success: true, output: { links } };
+        } catch (err) {
+          return toolFailure(err, 'browser_extract_links failed');
+        }
       },
     },
   ];

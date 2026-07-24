@@ -167,5 +167,27 @@ describe('workflow-revisions routes', () => {
       method: 'POST',
     });
     expect(blankIdsRestore.status).toBe(404);
+
+    const longLabel = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: 'L'.repeat(201) }),
+    });
+    expect(longLabel.status).toBe(400);
+    expect(((await longLabel.json()) as { error: string }).error).toMatch(/label/i);
+
+    // mismatch delete / get
+    const other = workflows.createWorkflow({
+      name: `${WF_NAME}-other2`,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const mismatchDel = await workflowRevisions.request(`/${other.id}/${rev.id}`, {
+      method: 'DELETE',
+    });
+    expect(mismatchDel.status).toBe(404);
+    const mismatchGet = await workflowRevisions.request(`/${other.id}/${rev.id}`);
+    expect(mismatchGet.status).toBe(404);
   });
 });
