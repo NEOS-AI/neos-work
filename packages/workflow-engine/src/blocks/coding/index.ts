@@ -164,14 +164,20 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
       language === 'ts' ? `// TypeScript run as JS (no transpile)\n${code}` : code,
     );
     const result = script.runInNewContext(sandbox, { timeout: CODE_EVAL_TIMEOUT_MS });
-    const output = sandbox['__output'] as string || (result !== undefined ? String(result) : '(no output)');
+    let output =
+      (sandbox['__output'] as string) || (result !== undefined ? String(result) : '(no output)');
+    if (output.length > SPAWN_OUTPUT_MAX_CHARS) {
+      output = output.slice(0, SPAWN_OUTPUT_MAX_CHARS) + '\n…[truncated]';
+    }
 
     return { ok: true, output, durationMs: Date.now() - start };
   } catch (err) {
+    let msg = err instanceof Error ? err.message : String(err);
+    if (msg.length > 4_000) msg = msg.slice(0, 4_000);
     return {
       ok: false,
       output: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: msg,
       durationMs: Date.now() - start,
     };
   }
@@ -317,6 +323,15 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
       durationMs: Date.now() - start,
     };
   }
+  // Align with core shell command length bound
+  if (command.length > 10_000) {
+    return {
+      ok: false,
+      output: null,
+      error: 'Command exceeds max length (10000 characters)',
+      durationMs: Date.now() - start,
+    };
+  }
 
   // Absolute cwd must stay under home (or be process.cwd for CI checkouts)
   if (
@@ -332,7 +347,7 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
     };
   }
 
-  const parts = command.trim().split(/\s+/).filter(Boolean);
+  const parts = command.trim().split(/\s+/).filter(Boolean).slice(0, 50);
   const bin = parts[0] ?? '';
   const args = parts.slice(1);
   // Case-insensitive allowlist; go/cargo require `test` subcommand

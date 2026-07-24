@@ -271,6 +271,18 @@ describe('mcp routes', () => {
     const html = await err.text();
     expect(html).toContain('&lt;script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
+
+    const longCode = await mcp.request(
+      `/oauth/callback?code=${'a'.repeat(5_000)}&state=ok`,
+    );
+    expect(longCode.status).toBe(400);
+    expect(await longCode.text()).toMatch(/Invalid authorization code/i);
+
+    const longState = await mcp.request(
+      `/oauth/callback?code=abc&state=${'s'.repeat(600)}`,
+    );
+    expect(longState.status).toBe(400);
+    expect(await longState.text()).toMatch(/Invalid state/i);
   });
 
   it('oauth/start trims fields and rejects non-http endpoints', async () => {

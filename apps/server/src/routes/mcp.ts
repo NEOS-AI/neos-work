@@ -347,9 +347,20 @@ mcp.post('/oauth/start', async (c) => {
  * Exchanges it for tokens and stores them.
  */
 mcp.get('/oauth/callback', async (c) => {
-  const code = (c.req.query('code') ?? '').trim();
-  const state = (c.req.query('state') ?? '').trim();
-  const error = (c.req.query('error') ?? '').trim();
+  const OAUTH_CODE_MAX = 4_096;
+  const OAUTH_STATE_MAX = 512;
+  const OAUTH_ERROR_MAX = 500;
+  let code = (c.req.query('code') ?? '').trim();
+  let state = (c.req.query('state') ?? '').trim();
+  let error = (c.req.query('error') ?? '').trim();
+  if (error.length > OAUTH_ERROR_MAX) error = error.slice(0, OAUTH_ERROR_MAX);
+  // Reject pathological OAuth params (query-string DoS / store abuse)
+  if (code.length > OAUTH_CODE_MAX || /[\0\r\n]/.test(code)) {
+    return c.html('<html><body><h2>Invalid authorization code</h2></body></html>', 400);
+  }
+  if (state.length > OAUTH_STATE_MAX || /[\0\r\n]/.test(state)) {
+    return c.html('<html><body><h2>Invalid state</h2></body></html>', 400);
+  }
 
   if (error) {
     return c.html(

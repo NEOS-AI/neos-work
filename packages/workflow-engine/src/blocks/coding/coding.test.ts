@@ -80,6 +80,29 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/boom/);
     });
 
+    it('truncates oversized JS console output and long error messages', async () => {
+      // SPAWN_OUTPUT_MAX_CHARS = 512 KiB — force huge console payload
+      const huge = await exec().execute(
+        ctx({
+          code: 'console.log("x".repeat(600000))',
+          language: 'js',
+        }),
+      );
+      expect(huge.ok).toBe(true);
+      const out = String(huge.output);
+      expect(out).toContain('…[truncated]');
+      expect(out.length).toBeLessThanOrEqual(512 * 1024 + 30);
+
+      const longErr = await exec().execute(
+        ctx({
+          code: 'throw new Error("E".repeat(5000))',
+          language: 'js',
+        }),
+      );
+      expect(longErr.ok).toBe(false);
+      expect(String(longErr.error).length).toBeLessThanOrEqual(4_000);
+    });
+
     it('treats ts language like js (no transpile)', async () => {
       const result = await exec().execute(ctx({ code: '2 * 5', language: 'ts' }));
       expect(result.ok).toBe(true);
@@ -243,6 +266,14 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/No command/);
     });
 
+    it('rejects commands over 10000 characters', async () => {
+      const result = await runner().execute(
+        ctx({ command: `pnpm ${'a'.repeat(10_000)}` }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/max length \(10000\)/i);
+    });
+
     it('rejects non-allowlisted binary', async () => {
       const result = await runner().execute(ctx({ command: 'rm -rf /' }));
       expect(result.ok).toBe(false);
@@ -303,6 +334,12 @@ describe('coding blocks', () => {
       const result = await runner().execute(ctx({ command: `pnpm${'\0'}test` }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/control characters/i);
+    });
+
+    it('rejects overlong commands', async () => {
+      const result = await runner().execute(ctx({ command: `pnpm ${'x'.repeat(10_001)}` }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/max length/i);
     });
   });
 

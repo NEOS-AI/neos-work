@@ -259,10 +259,12 @@ export class AgentNode implements ExecutableNode {
 
       return { ok: true, output: lastText, durationMs: Date.now() - start };
     } catch (err) {
+      let msg = err instanceof Error ? err.message : String(err);
+      if (msg.length > 4_000) msg = msg.slice(0, 4_000);
       return {
         ok: false,
         output: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: msg,
         durationMs: Date.now() - start,
       };
     }

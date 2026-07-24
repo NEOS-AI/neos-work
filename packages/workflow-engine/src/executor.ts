@@ -19,6 +19,9 @@ import { DeployNode } from './nodes/deploy.js';
 const MAX_OUTPUT_BYTES = 1_048_576;
 /** Cap node.failed error strings in SSE / run logs. */
 const MAX_NODE_ERROR_CHARS = 4_000;
+/** Cap node.progress SSE payloads (streaming agent text). */
+const MAX_PROGRESS_CHUNK_CHARS = 32_000;
+const MAX_PROGRESS_ACCUMULATED_CHARS = 256_000;
 
 export interface ExecutorOptions {
   workflow: Workflow;
@@ -313,7 +316,13 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       config: node.config as Record<string, unknown> | undefined,
       signal,
       onProgress: (chunk, accumulated) => {
-        onEvent({ type: 'node.progress', nodeId, chunk, accumulated });
+        let c = typeof chunk === 'string' ? chunk : String(chunk ?? '');
+        let a = typeof accumulated === 'string' ? accumulated : String(accumulated ?? '');
+        if (c.length > MAX_PROGRESS_CHUNK_CHARS) c = c.slice(0, MAX_PROGRESS_CHUNK_CHARS);
+        if (a.length > MAX_PROGRESS_ACCUMULATED_CHARS) {
+          a = a.slice(0, MAX_PROGRESS_ACCUMULATED_CHARS);
+        }
+        onEvent({ type: 'node.progress', nodeId, chunk: c, accumulated: a });
       },
       cliSpawn: options.cliSpawn,
       designSystemContent: options.designSystemContent,

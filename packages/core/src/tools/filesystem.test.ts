@@ -55,6 +55,10 @@ describe('filesystem tools', () => {
     expect(control.success).toBe(false);
     expect(control.error).toMatch(/control characters/i);
 
+    const overlong = await read.execute({ path: 'a'.repeat(5_000) });
+    expect(overlong.success).toBe(false);
+    expect(overlong.error).toMatch(/max length/i);
+
     const escape = await read.execute({ path: '../outside.txt' });
     expect(escape.success).toBe(false);
     expect(escape.error).toMatch(/outside the workspace/);

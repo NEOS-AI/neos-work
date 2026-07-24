@@ -15,6 +15,8 @@ const MAX_WRITE_SIZE = 1_048_576; // 1MB
 const MAX_READ_SIZE = 1_048_576; // 1MB
 /** Cap list_directory entries returned. */
 const MAX_LIST_ENTRIES = 1_000;
+/** Cap relative path length accepted by FS tools. */
+const MAX_PATH_CHARS = 4_096;
 
 const PROTECTED_PATTERNS = [
   /^\.env($|\.)/,     // .env, .env.local, .env.production, etc.
@@ -37,6 +39,9 @@ function safePath(workspaceRoot: string, userPath: string): string {
   // Reject null bytes and CR/LF that can confuse path resolution
   if (/[\0\r\n]/.test(trimmed)) {
     throw new Error('Path contains invalid control characters');
+  }
+  if (trimmed.length > MAX_PATH_CHARS) {
+    throw new Error(`Path exceeds max length (${MAX_PATH_CHARS})`);
   }
   const absoluteRoot = realpathSync(resolve(workspaceRoot));
   const resolved = resolve(absoluteRoot, trimmed);

@@ -137,6 +137,8 @@ export async function updateDesignSystemContent(id: string, content: string): Pr
   // Coerce to string so non-string callers cannot write "[object Object]"
   const body = typeof content === 'string' ? content : String(content ?? '');
   if (body.length > DESIGN_MD_MAX_CHARS) return false;
+  // Null bytes break text files / editors
+  if (/\0/.test(body)) return false;
   try {
     await fs.writeFile(path.join(ds.path, 'DESIGN.md'), body, 'utf8');
     return true;

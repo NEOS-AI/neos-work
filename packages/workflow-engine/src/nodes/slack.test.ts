@@ -67,6 +67,21 @@ describe('SlackMessageNode', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
+  it('rejects overlong channel and null-byte content', async () => {
+    const longCh = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: 'c'.repeat(250) }, { text: 'hi' }),
+    );
+    expect(longCh.ok).toBe(false);
+    expect(longCh.error).toMatch(/max length/i);
+
+    const nullText = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#general' }, { text: `hi${'\0'}there` }),
+    );
+    expect(nullText.ok).toBe(false);
+    expect(nullText.error).toMatch(/control characters/i);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   it('rejects whitespace-only channel', async () => {
     const result = await node.execute(
       ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '   ' }, { text: 'hi' }),

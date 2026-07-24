@@ -24,6 +24,13 @@ describe('createBrowserTools', () => {
     ]);
   });
 
+  it('isSafeBrowserUrl rejects overlong and control-char URLs', () => {
+    expect(isSafeBrowserUrl('https://example.com')).toBe('https://example.com');
+    expect(isSafeBrowserUrl(`https://example.com/${'a'.repeat(3_000)}`)).toBeNull();
+    expect(isSafeBrowserUrl('https://example.com/\npath')).toBeNull();
+    expect(isSafeBrowserUrl('file:///etc/passwd')).toBeNull();
+  });
+
   it('browser_navigate goes to url and returns title/url', async () => {
     const page = {
       goto: vi.fn(async () => {}),

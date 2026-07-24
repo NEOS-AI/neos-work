@@ -55,6 +55,13 @@ describe('blocks routes', () => {
     expect(blank.status).toBe(200);
     const all = await blank.json() as { data: Array<{ id: string }> };
     expect(all.data.some((b) => b.id === ID)).toBe(true);
+
+    // Unknown domain → return all (not empty filter)
+    const unknown = await blocks.request('/?domain=unknown-xyz');
+    expect(unknown.status).toBe(200);
+    const unkBody = await unknown.json() as { data: Array<{ id: string }> };
+    expect(unkBody.data.some((b) => b.id === ID)).toBe(true);
+    expect(unkBody.data.length).toBeGreaterThan(1);
   });
 
   it('GET missing custom block returns 404', async () => {

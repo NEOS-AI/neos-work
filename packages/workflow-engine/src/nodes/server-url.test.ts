@@ -27,4 +27,9 @@ describe('safeServerUrl', () => {
     expect(safeServerUrl(undefined)).toBe('http://localhost:3001');
     expect(safeServerUrl(123 as unknown as string)).toBe('http://localhost:3001');
   });
+
+  it('falls back for control-char or overlong URLs', () => {
+    expect(safeServerUrl(`http://x.example/\0path`)).toBe('http://localhost:3001');
+    expect(safeServerUrl(`http://x.example/${'a'.repeat(3_000)}`)).toBe('http://localhost:3001');
+  });
 });

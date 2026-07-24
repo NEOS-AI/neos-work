@@ -17,7 +17,11 @@ const blocks = new Hono();
 // GET /api/blocks
 blocks.get('/', (c) => {
   const domainRaw = (c.req.query('domain') ?? '').trim().toLowerCase();
-  const domain = domainRaw || undefined;
+  // Only known domains filter; unknown → list all (align with templates)
+  const domain =
+    domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general'
+      ? domainRaw
+      : undefined;
   const builtIn = listBlocks(domain);
   const custom = listCustomBlocks(domain);
   return c.json({ ok: true, data: [...builtIn, ...custom] });

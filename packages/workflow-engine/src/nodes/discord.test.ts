@@ -39,6 +39,18 @@ describe('DiscordMessageNode', () => {
     expect(result.error).toMatch(/Invalid Discord webhook URL/);
   });
 
+  it('rejects null-byte content', async () => {
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx(
+        { DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' },
+        { text: `hello${'\0'}world` },
+      ),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/control characters/i);
+  });
+
   it('posts to a valid discord webhook URL', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);

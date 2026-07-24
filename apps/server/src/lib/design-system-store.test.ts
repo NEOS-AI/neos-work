@@ -61,6 +61,12 @@ describe('design-system-store', () => {
     expect(await getDesignSystem(created!.id)).toBeNull();
   });
 
+  it('rejects null-byte DESIGN.md content', async () => {
+    const created = await createDesignSystem(NAME, 'Null body');
+    expect(created).not.toBeNull();
+    expect(await updateDesignSystemContent(created!.id, `ok${'\0'}bad`)).toBe(false);
+  });
+
   it('returns null for invalid names', async () => {
     expect(await createDesignSystem('../evil')).toBeNull();
     expect(await createDesignSystem('')).toBeNull();

@@ -2,12 +2,16 @@
 import type { Tool, ToolResult } from '@neos-work/core';
 import type { BrowserManager } from './manager.js';
 
+/** Cap browser navigation URLs (defense against pathological query strings). */
+const BROWSER_URL_MAX_CHARS = 2_048;
+
 /**
  * Only http(s) navigation — blocks file:/javascript:/data: style SSRF vectors.
  */
 export function isSafeBrowserUrl(raw: unknown): string | null {
   const s = typeof raw === 'string' ? raw.trim() : '';
   if (!s) return null;
+  if (s.length > BROWSER_URL_MAX_CHARS || /[\0\r\n]/.test(s)) return null;
   try {
     const u = new URL(s);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
