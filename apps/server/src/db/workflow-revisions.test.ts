@@ -32,6 +32,18 @@ describe('createRevision input hygiene', () => {
     expect(updateRevisionLabel('id', '   ')).toBe(false);
     expect(deleteRevision('   ')).toBe(false);
   });
+
+  it('returns null for oversized snapshots', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const huge = 'x'.repeat(5 * 1024 * 1024 + 1);
+    expect(createRevision(wf.id, huge)).toBeNull();
+    expect(listRevisions(wf.id)).toEqual([]);
+  });
 });
 
 describe('createRevision dedup', () => {

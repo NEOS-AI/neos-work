@@ -130,11 +130,27 @@ describe('MediaNode', () => {
 
   it('propagates API error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
       json: async () => ({ ok: false, error: 'quota exceeded' }),
     }));
     const result = await MediaNode.execute(ctx({ config: { mediaType: 'image', prompt: 'x' } }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('quota exceeded');
+  });
+
+  it('includes truncated HTTP error body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => '  bad gateway detail  ',
+      }),
+    );
+    const result = await MediaNode.execute(ctx({ config: { mediaType: 'image', prompt: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/502/);
+    expect(result.error).toContain('bad gateway detail');
   });
 
   it('uses upstream inputs.prompt when config prompt missing', async () => {

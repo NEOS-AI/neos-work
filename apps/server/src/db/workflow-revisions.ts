@@ -48,6 +48,8 @@ function rowToRevision(row: RevisionRow): WorkflowRevision {
 }
 
 const MAX_REVISIONS = 50;
+/** Cap snapshot JSON size (plan Task 16 — runaway graph defense). */
+export const REVISION_SNAPSHOT_MAX_CHARS = 5 * 1024 * 1024;
 
 export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snapshot'>[] {
   const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
@@ -91,6 +93,8 @@ export function createRevision(
 ): WorkflowRevision | null {
   const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
   if (!wfId || typeof snapshot !== 'string') return null;
+  // Reject oversized snapshots rather than bloating SQLite
+  if (snapshot.length > REVISION_SNAPSHOT_MAX_CHARS) return null;
   const labelVal =
     typeof label === 'string' ? label.trim() || null : (label ?? null);
   const db = getDb();

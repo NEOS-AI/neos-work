@@ -4,6 +4,18 @@
 
 import { getDb } from './schema.js';
 
+/** Cap stored artifact content (plan Task 4 — align with HTML auto-save). */
+export const ARTIFACT_CONTENT_MAX_CHARS = 2 * 1024 * 1024;
+
+function normalizeContent(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const content = typeof raw === 'string' ? raw : String(raw);
+  if (content.length > ARTIFACT_CONTENT_MAX_CHARS) {
+    throw new Error(`content exceeds max size (${ARTIFACT_CONTENT_MAX_CHARS} characters)`);
+  }
+  return content;
+}
+
 export interface ArtifactRow {
   id: string;
   workflow_id: string;
@@ -70,12 +82,13 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
     typeof input.nodeId === 'string' ? input.nodeId.trim() || null : (input.nodeId ?? null);
   const filePath =
     typeof input.filePath === 'string' ? input.filePath.trim() || null : (input.filePath ?? null);
+  const content = normalizeContent(input.content);
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(`
     INSERT INTO artifacts (id, workflow_id, run_id, name, content_type, content, file_path, node_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, workflowId, runId, name, contentType, input.content ?? null, filePath, nodeId);
+  `).run(id, workflowId, runId, name, contentType, content, filePath, nodeId);
   return getArtifact(id)!;
 }
 
@@ -114,8 +127,9 @@ export function deleteArtifact(id: string): boolean {
 export function updateArtifactContent(id: string, content: string): Artifact | undefined {
   const trimmed = typeof id === 'string' ? id.trim() : '';
   if (!trimmed) return undefined;
+  const body = normalizeContent(content);
   const db = getDb();
-  db.prepare(`UPDATE artifacts SET content = ?, updated_at = datetime('now') WHERE id = ?`).run(content, trimmed);
+  db.prepare(`UPDATE artifacts SET content = ?, updated_at = datetime('now') WHERE id = ?`).run(body, trimmed);
   return getArtifact(trimmed);
 }
 
@@ -134,7 +148,10 @@ export function updateArtifact(
       ? (typeof input.name === 'string' ? input.name.trim() : '')
       : existing.name;
   if (!name) return undefined;
-  const content = input.content !== undefined ? input.content : (existing.content ?? null);
+  const content =
+    input.content !== undefined
+      ? normalizeContent(input.content)
+      : (existing.content ?? null);
   db.prepare(
     `UPDATE artifacts SET name = ?, content = ?, updated_at = datetime('now') WHERE id = ?`,
   ).run(name, content, trimmed);

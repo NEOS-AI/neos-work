@@ -52,6 +52,16 @@ describe('sessions CRUD', () => {
     expect(listSessions().some((x) => x.id === s.id)).toBe(true);
   });
 
+  it('rejects workspace path control characters', () => {
+    expect(() =>
+      createWorkspace({ name: WS_NAME, path: '/tmp/\0evil' }),
+    ).toThrow(/control characters/i);
+    const ws = createWorkspace({ name: WS_NAME, path: '/tmp/ok' });
+    expect(updateWorkspace(ws.id, { path: '/tmp/\nbad' })).toBeUndefined();
+    expect(getWorkspace(ws.id)?.path).toBe('/tmp/ok');
+    deleteWorkspace(ws.id);
+  });
+
   it('trims session/workspace ids and rejects blank creates', () => {
     expect(getSession('   ')).toBeUndefined();
     expect(listMessages('   ')).toEqual([]);
@@ -165,5 +175,30 @@ describe('workspaces CRUD', () => {
     expect(deleteWorkspace('default')).toBe(false);
     expect(deleteWorkspace(ws.id)).toBe(true);
     expect(getWorkspace(ws.id)).toBeUndefined();
+  });
+
+  it('rejects path control characters on create; leaves row unchanged on bad update', () => {
+    expect(() =>
+      createWorkspace({ name: WS_NAME, path: `/tmp/cov${'\0'}evil` }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createWorkspace({ name: WS_NAME, path: `/tmp/cov${'\n'}x` }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createWorkspace({ name: WS_NAME, path: `/tmp/cov${'\r'}x` }),
+    ).toThrow(/control characters/i);
+
+    const ws = createWorkspace({ name: WS_NAME, path: '  /tmp/safe  ' });
+    expect(ws.path).toBe('/tmp/safe');
+
+    // invalid path update is a no-op (returns undefined, keeps prior path)
+    expect(updateWorkspace(ws.id, { path: `bad${'\n'}path` })).toBeUndefined();
+    expect(getWorkspace(ws.id)?.path).toBe('/tmp/safe');
+
+    // blank path clears to null
+    const cleared = updateWorkspace(ws.id, { path: '   ' });
+    expect(cleared?.path).toBeNull();
+
+    deleteWorkspace(ws.id);
   });
 });

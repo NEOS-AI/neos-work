@@ -74,6 +74,23 @@ describe('agent_step CRUD', () => {
     expect(listAgentSteps(session.id)).toEqual([]);
   });
 
+  it('truncates oversized step data payloads', () => {
+    const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
+    sessionId = session.id;
+    const huge = { blob: 'x'.repeat(600_000) };
+    const s = createAgentStep({
+      sessionId: session.id,
+      stepIndex: 0,
+      type: 'tool_result',
+      data: huge,
+    });
+    const parsed = JSON.parse(s.data!) as { truncated?: boolean; preview?: string };
+    expect(parsed.truncated).toBe(true);
+    expect(typeof parsed.preview).toBe('string');
+    expect(updateAgentStep(s.id, { data: huge })).toBe(true);
+    expect(JSON.parse(getAgentStep(s.id)!.data!).truncated).toBe(true);
+  });
+
   it('creates, lists ordered, updates status/data/error, deletes', () => {
     const session = createSession({ workspaceId: 'default', title: '_cov_agent_steps' });
     sessionId = session.id;

@@ -85,8 +85,10 @@ export function estimateNextCronRun(
 }
 
 export function isValidTimeZone(timeZone: string): boolean {
+  const tz = typeof timeZone === 'string' ? timeZone.trim() : '';
+  if (!tz) return false;
   try {
-    Intl.DateTimeFormat(undefined, { timeZone });
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
     return true;
   } catch {
     return false;

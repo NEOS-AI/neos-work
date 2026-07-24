@@ -22,6 +22,17 @@ export interface AgentStepRow {
 
 const STEP_TYPES = new Set<AgentStepType>(['plan', 'tool_use', 'tool_result', 'reasoning', 'error']);
 const STEP_STATUSES = new Set<AgentStepStatus>(['pending', 'running', 'completed', 'error']);
+/** Cap serialized step data (runaway tool output defense). */
+const AGENT_STEP_DATA_MAX_CHARS = 512 * 1024;
+
+function serializeStepData(data: unknown): string | null {
+  if (data === undefined) return null;
+  const dataStr = JSON.stringify(data);
+  if (dataStr.length > AGENT_STEP_DATA_MAX_CHARS) {
+    return JSON.stringify({ truncated: true, preview: dataStr.slice(0, 256) });
+  }
+  return dataStr;
+}
 
 export function createAgentStep(params: {
   sessionId: string;
@@ -41,7 +52,7 @@ export function createAgentStep(params: {
   }
   const db = getDb();
   const id = crypto.randomUUID();
-  const dataStr = params.data !== undefined ? JSON.stringify(params.data) : null;
+  const dataStr = serializeStepData(params.data);
   db.prepare(
     `INSERT INTO agent_step (id, session_id, step_index, type, status, data)
      VALUES (?, ?, ?, ?, 'pending', ?)`,
@@ -84,7 +95,7 @@ export function updateAgentStep(
   }
   if (updates.data !== undefined) {
     fields.push('data = ?');
-    values.push(JSON.stringify(updates.data));
+    values.push(serializeStepData(updates.data));
   }
   if (updates.error !== undefined) {
     const error =

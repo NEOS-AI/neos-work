@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEPLOY_CONTENT_MAX_CHARS,
   deployToCloudflare,
   deployToVercel,
   getCloudflareDeploymentStatus,
@@ -61,6 +62,21 @@ describe('deploy helpers', () => {
     await expect(
       deployToVercel({ projectName: 'x', content: '<p/>', apiToken: '  ' }),
     ).rejects.toThrow(/apiToken/i);
+  });
+
+  it('rejects oversized deploy content', async () => {
+    const huge = 'a'.repeat(2 * 1024 * 1024 + 1);
+    await expect(
+      deployToVercel({ projectName: 'x', content: huge, apiToken: 'tok' }),
+    ).rejects.toThrow(/max size/i);
+    await expect(
+      deployToCloudflare({
+        projectName: 'x',
+        content: huge,
+        accountId: 'a',
+        apiToken: 'tok',
+      }),
+    ).rejects.toThrow(/max size/i);
   });
 
   it('rejects blank ids/tokens for deployment status helpers', async () => {
@@ -312,6 +328,43 @@ describe('deploy helpers', () => {
         deployToVercel({ projectName: 'x', content: 'y', apiToken: 't' }),
       ).rejects.toThrow(/No deployment URL/);
     });
+
+    it('rejects oversized content and invalid deployment URLs', async () => {
+      await expect(
+        deployToVercel({
+          projectName: 'x',
+          content: 'x'.repeat(DEPLOY_CONTENT_MAX_CHARS + 1),
+          apiToken: 't',
+        }),
+      ).rejects.toThrow(/max size/i);
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ url: 'javascript:alert(1)', id: '  dpl_bad  ' }),
+        }),
+      );
+      await expect(
+        deployToVercel({ projectName: 'x', content: '<p/>', apiToken: 't' }),
+      ).rejects.toThrow(/Invalid deployment URL/i);
+
+      // full https URL from API is accepted as-is; deploymentId trimmed
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ url: 'https://full.vercel.app/', id: '  dpl_full  ' }),
+        }),
+      );
+      const ok = await deployToVercel({
+        projectName: 'x',
+        content: '<p/>',
+        apiToken: 't',
+      });
+      expect(ok.url).toBe('https://full.vercel.app');
+      expect(ok.deploymentId).toBe('dpl_full');
+    });
   });
 
   describe('deployToCloudflare', () => {
@@ -348,6 +401,14 @@ describe('deploy helpers', () => {
           apiToken: '  ',
         }),
       ).rejects.toThrow(/apiToken/i);
+      await expect(
+        deployToCloudflare({
+          projectName: 'p',
+          content: 'x'.repeat(DEPLOY_CONTENT_MAX_CHARS + 1),
+          accountId: 'acc',
+          apiToken: 'tok',
+        }),
+      ).rejects.toThrow(/max size/i);
     });
 
     it('creates deployment and returns url + deployment id', async () => {

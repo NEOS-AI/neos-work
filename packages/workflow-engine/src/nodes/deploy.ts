@@ -55,18 +55,41 @@ export const DeployNode: ExecutableNode = {
         signal: ctx.signal,
       });
 
-      const data = await res.json() as { ok: boolean; data?: { url: string; deploymentId?: string }; error?: string };
-      if (!data.ok) {
+      const httpFailed =
+        res.ok === false
+        || (typeof res.status === 'number' && res.status >= 400);
+      if (httpFailed) {
+        const body = await res.text().catch(() => '');
+        const detail = body.trim().slice(0, 500);
+        const status = typeof res.status === 'number' ? res.status : 0;
         return {
           ok: false,
           output: null,
-          error: data.error ?? 'Deploy failed',
+          error: detail
+            ? `Deploy failed: ${status}: ${detail}`
+            : `Deploy failed: ${status}`,
           durationMs: Date.now() - start,
         };
       }
+      const data = await res.json() as {
+        ok?: boolean;
+        data?: { url?: string; deploymentId?: string };
+        error?: string;
+      };
+      if (data.ok === false) {
+        return {
+          ok: false,
+          output: null,
+          error: typeof data.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : 'Deploy failed',
+          durationMs: Date.now() - start,
+        };
+      }
+      const url = typeof data.data?.url === 'string' ? data.data.url.trim() : '';
       return {
         ok: true,
-        output: `Deployed to ${provider}: ${data.data?.url ?? 'unknown URL'}`,
+        output: `Deployed to ${provider}: ${url || 'unknown URL'}`,
         durationMs: Date.now() - start,
       };
     } catch (err) {

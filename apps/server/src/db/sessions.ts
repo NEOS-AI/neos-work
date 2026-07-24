@@ -171,6 +171,21 @@ export function getWorkspace(id: string): WorkspaceRow | undefined {
   return db.prepare('SELECT * FROM workspace WHERE id = ?').get(trimmed) as WorkspaceRow | undefined;
 }
 
+/** Reject null bytes / CR / LF that confuse path APIs. */
+function hasUnsafePathChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
+}
+
+function normalizeWorkspacePath(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  const pathVal = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+  if (!pathVal) return null;
+  if (hasUnsafePathChars(pathVal)) {
+    throw new Error('path contains invalid control characters');
+  }
+  return pathVal;
+}
+
 export function createWorkspace(params: {
   name: string;
   path?: string;
@@ -178,8 +193,7 @@ export function createWorkspace(params: {
 }): WorkspaceRow {
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   if (!name) throw new Error('name is required');
-  const pathVal =
-    typeof params.path === 'string' ? params.path.trim() || null : (params.path ?? null);
+  const pathVal = normalizeWorkspacePath(params.path);
   const typeRaw =
     typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
   const type = WORKSPACE_TYPES.has(typeRaw) ? typeRaw : 'local';
@@ -205,10 +219,14 @@ export function updateWorkspace(
       ? (typeof params.name === 'string' ? params.name.trim() : '')
       : ws.name;
   if (!name) return undefined;
-  const pathVal =
-    params.path !== undefined
-      ? (typeof params.path === 'string' ? params.path.trim() || null : params.path)
-      : ws.path;
+  let pathVal = ws.path;
+  if (params.path !== undefined) {
+    try {
+      pathVal = normalizeWorkspacePath(params.path);
+    } catch {
+      return undefined; // invalid path leaves row unchanged
+    }
+  }
   db.prepare(
     `UPDATE workspace SET name = ?, path = ?, updated_at = datetime('now') WHERE id = ?`,
   ).run(name, pathVal, trimmed);

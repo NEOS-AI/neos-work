@@ -52,6 +52,15 @@ describe('FixedWindowRateLimiter', () => {
     expect(limiter.status('z', now).remaining).toBe(3);
   });
 
+  it('clamps invalid constructor limit/windowMs', () => {
+    const bad = new FixedWindowRateLimiter(0, -5);
+    expect(bad.status('a', 0).limit).toBe(60);
+    expect(bad.status('a', 0).windowMs).toBe(60_000);
+    const huge = new FixedWindowRateLimiter(999_999, 999_999_999);
+    expect(huge.status('a', 0).limit).toBe(10_000);
+    expect(huge.status('a', 0).windowMs).toBe(86_400_000);
+  });
+
   it('trims keys and rejects blank keys', () => {
     const now = 20_000;
     expect(limiter.check('  ', now)).toBe(false);

@@ -108,6 +108,28 @@ describe('routines CRUD', () => {
 
 
 
+  it('rejects invalid schedule arity/control chars on create/update', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createRoutine({ name: 'Bad', workflowId: wf.id, schedule: '0 9 * *' }),
+    ).toThrow(/cron/i);
+    expect(() =>
+      createRoutine({ name: 'Bad', workflowId: wf.id, schedule: '0 9 * * *\n' }),
+    ).toThrow(/cron/i);
+    const r = createRoutine({
+      name: 'Ok',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+    });
+    expect(updateRoutine(r.id, { schedule: '* * *' })).toBeNull();
+    expect(getRoutine(r.id)?.schedule).toBe('0 9 * * *');
+  });
+
   it('rejects blank name, workflowId, or schedule on create', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

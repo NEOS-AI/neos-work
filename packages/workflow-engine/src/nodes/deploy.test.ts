@@ -57,11 +57,27 @@ describe('DeployNode', () => {
 
   it('propagates deploy API failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
       json: async () => ({ ok: false, error: 'token missing' }),
     }));
     const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
     expect(result.ok).toBe(false);
     expect(result.error).toBe('token missing');
+  });
+
+  it('includes truncated HTTP error body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => '  service unavailable  ',
+      }),
+    );
+    const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/503/);
+    expect(result.error).toContain('service unavailable');
   });
 
   it('catches network errors instead of throwing', async () => {

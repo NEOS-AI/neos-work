@@ -4,6 +4,21 @@ import { isValidTimeZone } from '../lib/cron-next.js';
  */
 import { getDb } from './schema.js';
 
+/**
+ * Lightweight schedule validation: 5 whitespace-separated cron fields.
+ * Field-level tokens are checked by the estimator at schedule time; here we
+ * only reject blank / wrong arity / control-char expressions.
+ */
+function isValidSchedule(expression: string): boolean {
+  if (typeof expression !== 'string') return false;
+  // Reject control chars before trim (trim would strip CR/LF)
+  if (/[\0\r\n]/.test(expression)) return false;
+  const expr = expression.trim();
+  if (!expr) return false;
+  const parts = expr.split(/\s+/);
+  return parts.length === 5 && parts.every((p) => p.length > 0 && p.length <= 64);
+}
+
 export interface RoutineRow {
   id: string;
   name: string;
@@ -114,9 +129,14 @@ export function createRoutine(input: {
 }): Routine {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
-  const schedule = typeof input.schedule === 'string' ? input.schedule.trim() : '';
+  const scheduleRaw = typeof input.schedule === 'string' ? input.schedule : '';
+  const schedule = scheduleRaw.trim();
   if (!name || !workflowId || !schedule) {
     throw new Error('name, workflowId, and schedule are required');
+  }
+  // Validate raw (pre-trim) so control chars are not stripped before check
+  if (!isValidSchedule(scheduleRaw)) {
+    throw new Error('schedule must be a valid 5-field cron expression');
   }
   const db = getDb();
   const id = crypto.randomUUID();
@@ -160,9 +180,12 @@ export function updateRoutine(
       ? (typeof input.name === 'string' ? input.name.trim() : '')
       : existing.name;
   if (!name) return null;
+  if (input.schedule !== undefined) {
+    if (typeof input.schedule !== 'string' || !isValidSchedule(input.schedule)) return null;
+  }
   const schedule =
     input.schedule !== undefined
-      ? (typeof input.schedule === 'string' ? input.schedule.trim() : '')
+      ? input.schedule.trim()
       : existing.schedule;
   if (!schedule) return null;
   const timezone =

@@ -72,18 +72,40 @@ export const MediaNode: ExecutableNode = {
           signal: ctx.signal,
         });
 
-        const data = await res.json() as { ok: boolean; data?: { filename: string; revisedPrompt?: string }; error?: string };
-        if (!data.ok) {
+        const httpFailed =
+          res.ok === false
+          || (typeof res.status === 'number' && res.status >= 400);
+        if (httpFailed) {
+          const body = await res.text().catch(() => '');
+          const detail = body.trim().slice(0, 500);
+          const status = typeof res.status === 'number' ? res.status : 0;
           return {
             ok: false,
             output: null,
-            error: data.error ?? 'Image generation failed',
+            error: detail
+              ? `Image generation failed: ${status}: ${detail}`
+              : `Image generation failed: ${status}`,
             durationMs: Date.now() - start,
           };
         }
+        const data = await res.json() as { ok?: boolean; data?: { filename?: string; revisedPrompt?: string }; error?: string };
+        if (data.ok === false) {
+          return {
+            ok: false,
+            output: null,
+            error: typeof data.error === 'string' && data.error.trim()
+              ? data.error.trim()
+              : 'Image generation failed',
+            durationMs: Date.now() - start,
+          };
+        }
+        const filename =
+          typeof data.data?.filename === 'string' ? data.data.filename.trim() : '';
+        const revised =
+          typeof data.data?.revisedPrompt === 'string' ? data.data.revisedPrompt.trim() : '';
         return {
           ok: true,
-          output: `Image generated: ${data.data?.filename}\n${data.data?.revisedPrompt ? `Revised prompt: ${data.data.revisedPrompt}` : ''}`.trim(),
+          output: `Image generated: ${filename}${revised ? `\nRevised prompt: ${revised}` : ''}`.trim(),
           durationMs: Date.now() - start,
         };
       } catch (err) {
@@ -133,18 +155,38 @@ export const MediaNode: ExecutableNode = {
           signal: ctx.signal,
         });
 
-        const data = await res.json() as { ok: boolean; data?: { filename: string }; error?: string };
-        if (!data.ok) {
+        const httpFailed =
+          res.ok === false
+          || (typeof res.status === 'number' && res.status >= 400);
+        if (httpFailed) {
+          const body = await res.text().catch(() => '');
+          const detail = body.trim().slice(0, 500);
+          const status = typeof res.status === 'number' ? res.status : 0;
           return {
             ok: false,
             output: null,
-            error: data.error ?? 'Audio generation failed',
+            error: detail
+              ? `Audio generation failed: ${status}: ${detail}`
+              : `Audio generation failed: ${status}`,
             durationMs: Date.now() - start,
           };
         }
+        const data = await res.json() as { ok?: boolean; data?: { filename?: string }; error?: string };
+        if (data.ok === false) {
+          return {
+            ok: false,
+            output: null,
+            error: typeof data.error === 'string' && data.error.trim()
+              ? data.error.trim()
+              : 'Audio generation failed',
+            durationMs: Date.now() - start,
+          };
+        }
+        const filename =
+          typeof data.data?.filename === 'string' ? data.data.filename.trim() : '';
         return {
           ok: true,
-          output: `Audio generated: ${data.data?.filename}`,
+          output: `Audio generated: ${filename}`,
           durationMs: Date.now() - start,
         };
       } catch (err) {

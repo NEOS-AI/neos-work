@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from './schema.js';
 import * as workflows from './workflows.js';
 import {
+  ARTIFACT_CONTENT_MAX_CHARS,
   createArtifact,
   deleteArtifact,
   getArtifact,
@@ -60,6 +61,33 @@ describe('artifacts CRUD', () => {
 
   it('lists empty for unknown workflow', () => {
     expect(listArtifacts('no-such-workflow')).toEqual([]);
+  });
+
+  it('rejects oversized content on create/update', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const huge = 'x'.repeat(2 * 1024 * 1024 + 1);
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'big.html',
+        contentType: 'text/html',
+        content: huge,
+      }),
+    ).toThrow(/max size/i);
+
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'ok.html',
+      contentType: 'text/html',
+      content: '<p>ok</p>',
+    });
+    expect(() => updateArtifactContent(art.id, huge)).toThrow(/max size/i);
+    expect(() => updateArtifact(art.id, { content: huge })).toThrow(/max size/i);
   });
 
   it('trims ids and returns empty/undefined for blank ids', () => {
@@ -203,6 +231,54 @@ describe('updateArtifact PATCH semantics', () => {
     expect(updateArtifact('   ', { name: 'y' })).toBeUndefined();
     expect(deleteArtifact('   ')).toBe(false);
     deleteArtifact(a.id);
+  });
+
+  it('rejects content over ARTIFACT_CONTENT_MAX_CHARS on create and update', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const huge = 'x'.repeat(ARTIFACT_CONTENT_MAX_CHARS + 1);
+
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'big.html',
+        contentType: 'text/html',
+        content: huge,
+      }),
+    ).toThrow(/max size/i);
+
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'ok.html',
+      contentType: 'text/html',
+      content: '<p>ok</p>',
+    });
+    expect(() => updateArtifactContent(art.id, huge)).toThrow(/max size/i);
+    expect(() => updateArtifact(art.id, { content: huge })).toThrow(/max size/i);
+    // original content unchanged after rejected updates
+    expect(getArtifact(art.id)?.content).toBe('<p>ok</p>');
+
+    // omitted content → DB null → undefined on read; non-string coerced via String()
+    const empty = createArtifact({
+      workflowId: wf.id,
+      name: 'empty.html',
+      contentType: 'text/html',
+    });
+    expect(empty.content).toBeUndefined();
+    const coerced = createArtifact({
+      workflowId: wf.id,
+      name: 'num.html',
+      contentType: 'text/html',
+      content: 42 as never,
+    });
+    expect(coerced.content).toBe('42');
+    deleteArtifact(art.id);
+    deleteArtifact(empty.id);
+    deleteArtifact(coerced.id);
   });
 });
 

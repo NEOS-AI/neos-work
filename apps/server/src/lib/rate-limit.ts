@@ -12,11 +12,18 @@ export interface RateLimitStatus {
 
 export class FixedWindowRateLimiter {
   private map = new Map<string, { count: number; resetAt: number }>();
+  private readonly limit: number;
+  private readonly windowMs: number;
 
-  constructor(
-    private readonly limit: number,
-    private readonly windowMs: number,
-  ) {}
+  constructor(limit: number, windowMs: number) {
+    // Clamp pathological constructor args (defense for shared/misconfigured instances)
+    const lim = Number(limit);
+    this.limit =
+      Number.isFinite(lim) && lim >= 1 ? Math.min(10_000, Math.floor(lim)) : 60;
+    const win = Number(windowMs);
+    this.windowMs =
+      Number.isFinite(win) && win >= 1 ? Math.min(86_400_000, Math.floor(win)) : 60_000;
+  }
 
   private normalizeKey(key: string): string {
     return typeof key === 'string' ? key.trim() : '';

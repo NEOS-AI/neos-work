@@ -128,16 +128,27 @@ export async function getCloudflareDeploymentStatus(options: {
   };
 }
 
+/** Cap deploy payload size (plan Task 8 — runaway HTML defense). */
+export const DEPLOY_CONTENT_MAX_CHARS = 2 * 1024 * 1024;
+
+function normalizeDeployContent(raw: unknown): string {
+  const content = typeof raw === 'string' ? raw : String(raw ?? '');
+  if (!content.trim()) throw new Error('content is required');
+  if (content.length > DEPLOY_CONTENT_MAX_CHARS) {
+    throw new Error(`content exceeds max size (${DEPLOY_CONTENT_MAX_CHARS} characters)`);
+  }
+  return content;
+}
+
 export async function deployToVercel(options: {
   projectName: string;
   content: string;
   apiToken: string;
 }): Promise<DeployResult> {
   const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
-  const content = typeof options.content === 'string' ? options.content : String(options.content ?? '');
+  const content = normalizeDeployContent(options.content);
   const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
   if (!projectName) throw new Error('projectName is required');
-  if (!content.trim()) throw new Error('content is required');
   if (!apiToken) throw new Error('apiToken is required');
 
   // Use Vercel's deployments API to create a file-based deployment
@@ -176,9 +187,12 @@ export async function deployToVercel(options: {
   const data = await res.json() as { url?: string; id?: string };
   if (!data.url) throw new Error('No deployment URL returned');
 
+  const url = safeDeployHostUrl(data.url) ?? safeDeployHostUrl(`https://${data.url}`);
+  if (!url) throw new Error('Invalid deployment URL returned');
+
   return {
-    url: `https://${data.url}`,
-    deploymentId: data.id,
+    url,
+    deploymentId: typeof data.id === 'string' ? data.id.trim() || undefined : data.id,
   };
 }
 
@@ -189,11 +203,10 @@ export async function deployToCloudflare(options: {
   apiToken: string;
 }): Promise<DeployResult> {
   const projectName = typeof options.projectName === 'string' ? options.projectName.trim() : '';
-  const content = typeof options.content === 'string' ? options.content : String(options.content ?? '');
+  const content = normalizeDeployContent(options.content);
   const accountId = typeof options.accountId === 'string' ? options.accountId.trim() : '';
   const apiToken = typeof options.apiToken === 'string' ? options.apiToken.trim() : '';
   if (!projectName) throw new Error('projectName is required');
-  if (!content.trim()) throw new Error('content is required');
   if (!accountId) throw new Error('accountId is required');
   if (!apiToken) throw new Error('apiToken is required');
 
@@ -243,8 +256,11 @@ export async function deployToCloudflare(options: {
   }
 
   const data = await deployRes.json() as { result?: { url?: string; id?: string } };
-  const url = data.result?.url ?? `https://${projectName}.pages.dev`;
-  return { url, deploymentId: data.result?.id };
+  const rawUrl = data.result?.url ?? `https://${projectName}.pages.dev`;
+  const url = safeDeployHostUrl(rawUrl) ?? `https://${projectName}.pages.dev`;
+  const deploymentId =
+    typeof data.result?.id === 'string' ? data.result.id.trim() || undefined : data.result?.id;
+  return { url, deploymentId };
 }
 
 async function sha256Hex(text: string): Promise<string> {
