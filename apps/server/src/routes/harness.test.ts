@@ -45,6 +45,30 @@ describe('harness routes', () => {
     });
     expect(blank.status).toBe(400);
 
+    const controlName = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'bad\nname',
+        systemPrompt: 'You',
+        allowedTools: [],
+      }),
+    });
+    expect(controlName.status).toBe(400);
+    expect(((await controlName.json()) as { error: string }).error).toMatch(/Invalid name/i);
+
+    const longName = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'n'.repeat(201),
+        systemPrompt: 'You',
+        allowedTools: [],
+      }),
+    });
+    expect(longName.status).toBe(400);
+    expect(((await longName.json()) as { error: string }).error).toMatch(/Invalid name/i);
+
     const create = await harness.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

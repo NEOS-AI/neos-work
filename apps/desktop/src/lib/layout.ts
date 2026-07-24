@@ -8,6 +8,14 @@ import type { Node, Edge } from '@xyflow/react';
 
 const DEFAULT_NODE_WIDTH = 180;
 const DEFAULT_NODE_HEIGHT = 60;
+/** Align with workflow-engine graph caps (plan Task 15). */
+const LAYOUT_NODES_MAX = 2_000;
+const LAYOUT_EDGES_MAX = 10_000;
+const LAYOUT_ID_MAX = 200;
+
+function isSafeLayoutId(id: string): boolean {
+  return id.length > 0 && id.length <= LAYOUT_ID_MAX && !/[\0\r\n]/.test(id);
+}
 
 export function autoLayout<T extends Record<string, unknown>>(
   nodes: Node<T>[],
@@ -15,6 +23,9 @@ export function autoLayout<T extends Record<string, unknown>>(
   direction: 'TB' | 'LR' = 'TB',
 ): Node<T>[] {
   if (!nodes.length) return [];
+  // Cap graph size for layout (skip excess rather than freeze UI)
+  const nodeList = nodes.slice(0, LAYOUT_NODES_MAX);
+  const edgeList = edges.slice(0, LAYOUT_EDGES_MAX);
 
   const dir = direction === 'LR' ? 'LR' : 'TB';
   const g = new dagre.graphlib.Graph();
@@ -24,9 +35,9 @@ export function autoLayout<T extends Record<string, unknown>>(
   // Map trimmed id → original React Flow id (layout positions stay on original ids)
   const nodeIds = new Set<string>();
   const byTrimmed = new Map<string, string>();
-  for (const node of nodes) {
+  for (const node of nodeList) {
     const id = typeof node?.id === 'string' ? node.id.trim() : '';
-    if (!id) continue;
+    if (!isSafeLayoutId(id)) continue;
     // Prefer original id for layout map (React Flow ids are not re-trimmed in output)
     nodeIds.add(node.id);
     nodeIds.add(id);
@@ -37,10 +48,10 @@ export function autoLayout<T extends Record<string, unknown>>(
     });
   }
 
-  for (const edge of edges) {
+  for (const edge of edgeList) {
     const source = typeof edge?.source === 'string' ? edge.source.trim() : '';
     const target = typeof edge?.target === 'string' ? edge.target.trim() : '';
-    if (!source || !target) continue;
+    if (!isSafeLayoutId(source) || !isSafeLayoutId(target)) continue;
     // Skip dangling edges so dagre does not throw on missing nodes
     // Match raw edge endpoints, then trimmed → original node id
     const srcId = nodeIds.has(edge.source)
@@ -55,8 +66,9 @@ export function autoLayout<T extends Record<string, unknown>>(
 
   dagre.layout(g);
 
+  // Preserve full input list; only update positions for nodes included in the layout graph
   return nodes.map((node) => {
-    const pos = g.node(node.id);
+    const pos = g.hasNode(node.id) ? g.node(node.id) : undefined;
     if (!pos) {
       return node;
     }

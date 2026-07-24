@@ -116,6 +116,25 @@ describe('OpenAIAdapter', () => {
     expect(body.model).not.toContain('\n');
   });
 
+  it('caps conversation to 200 messages and truncates oversized content', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('down'));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    const messages = Array.from({ length: 220 }, (_, i) => ({
+      role: 'user' as const,
+      content: i === 0 ? 'C'.repeat(500_001) : `m${i}`,
+    }));
+    for await (const _ of adapter.chat({ model: 'gpt-4o', messages })) {
+      /* drain */
+    }
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}')) as {
+      messages: Array<{ content: string }>;
+    };
+    expect(body.messages).toHaveLength(200);
+    expect(body.messages[0]!.content).toContain('…[truncated]');
+    expect(body.messages[0]!.content.length).toBeLessThanOrEqual(500_000 + 20);
+  });
+
   it('chat yields error when response is not ok', async () => {
     vi.stubGlobal(
       'fetch',

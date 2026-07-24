@@ -152,7 +152,10 @@ export async function createDesignSystem(name: string, description?: string): Pr
   if (trimmedDescription && trimmedDescription.length > DESIGN_DESCRIPTION_MAX_CHARS) {
     trimmedDescription = trimmedDescription.slice(0, DESIGN_DESCRIPTION_MAX_CHARS);
   }
-  if (!trimmedName || !/^[a-zA-Z0-9_-]+$/.test(trimmedName)) return null;
+  // Max 64 chars for directory name (filesystem hygiene)
+  if (!trimmedName || trimmedName.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(trimmedName)) {
+    return null;
+  }
   await ensureDesignSystemsDir();
 
   const dirPath = path.join(DESIGN_SYSTEMS_DIR, trimmedName);

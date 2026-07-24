@@ -23,6 +23,12 @@ describe('templates routes', () => {
     expect(blankDomain.status).toBe(200);
     const blankBody = await blankDomain.json() as { data: unknown[] };
     expect(blankBody.data.length).toBe(TEMPLATES.length);
+
+    // Unknown domain does not empty the catalog
+    const unknown = await templates.request('/?domain=marketing');
+    expect(unknown.status).toBe(200);
+    const unknownBody = await unknown.json() as { data: unknown[] };
+    expect(unknownBody.data.length).toBe(TEMPLATES.length);
   });
 });
 

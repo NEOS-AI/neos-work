@@ -29,6 +29,11 @@ describe('media filename safety', () => {
     expect(isSafeMediaFilename('has space.png')).toBe(false);
     expect(isSafeMediaFilename('ok_file-1.WEBP')).toBe(true);
   });
+
+  it('rejects overlong filenames', () => {
+    expect(isSafeMediaFilename(`${'a'.repeat(201)}.png`)).toBe(false);
+    expect(isSafeMediaFilename(`${'a'.repeat(190)}.png`)).toBe(true);
+  });
 });
 
 describe('media file delete on disk', () => {

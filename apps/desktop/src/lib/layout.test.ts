@@ -44,6 +44,20 @@ describe('autoLayout', () => {
     expect(autoLayout([], [])).toEqual([]);
   });
 
+  it('skips control-char / blank node ids for layout graph', () => {
+    const nodes = [n('a'), n('b\nid'), n('c')];
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'c' },
+      { id: 'e2', source: 'b\nid', target: 'c' },
+    ];
+    const laid = autoLayout(nodes, edges, 'TB');
+    expect(laid.map((x) => x.id)).toEqual(['a', 'b\nid', 'c']);
+    const byId = Object.fromEntries(laid.map((node) => [node.id, node]));
+    // a → c should still layout; unsafe id node keeps original position
+    expect(byId.a!.position.y).toBeLessThan(byId.c!.position.y);
+    expect(byId['b\nid']!.position).toEqual({ x: 0, y: 0 });
+  });
+
   it('ignores dangling edges and unknown direction falls back to TB', () => {
     const nodes = [n('a'), n('b')];
     const edges: Edge[] = [

@@ -66,6 +66,42 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'too_many_nodes')).toBe(true);
   });
 
+  it('errors when graph exceeds max edges or has invalid node ids', () => {
+    const edges = Array.from({ length: 10_001 }, (_, i) => ({
+      id: `e${i}`,
+      source: 't',
+      target: 'o',
+    }));
+    const tooManyEdges = assessWorkflowPreflight({ nodes: base.nodes, edges }, {});
+    expect(tooManyEdges.ok).toBe(false);
+    expect(tooManyEdges.issues.some((i) => i.code === 'too_many_edges')).toBe(true);
+
+    const badId = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'bad\nid', type: 'output', config: {} },
+        ],
+        edges: [],
+      },
+      {},
+    );
+    expect(badId.ok).toBe(false);
+    expect(badId.issues.some((i) => i.code === 'invalid_node_id')).toBe(true);
+
+    const longId = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'x'.repeat(201), type: 'output', config: {} },
+        ],
+        edges: [],
+      },
+      {},
+    );
+    expect(longId.issues.some((i) => i.code === 'invalid_node_id')).toBe(true);
+  });
+
   it('errors when web_search lacks Tavily key', () => {
     const r = assessWorkflowPreflight(
       {

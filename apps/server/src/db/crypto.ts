@@ -41,8 +41,16 @@ export function isEncrypted(value: string): boolean {
   return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]*$/.test(v);
 }
 
+/** Cap encrypted secret size (settings API key / token hygiene). */
+export const ENCRYPT_PLAINTEXT_MAX_CHARS = 1 * 1024 * 1024;
+
 export function encrypt(plaintext: string): string {
   const text = typeof plaintext === 'string' ? plaintext : String(plaintext ?? '');
+  if (text.length > ENCRYPT_PLAINTEXT_MAX_CHARS) {
+    throw new Error(
+      `plaintext exceeds max size (${ENCRYPT_PLAINTEXT_MAX_CHARS} characters)`,
+    );
+  }
   const iv = randomBytes(12);
   const cipher = createCipheriv(ALGO, KEY, iv);
   const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);

@@ -92,6 +92,13 @@ export function getCustomBlock(id: string): WorkflowBlock | null {
 export const BLOCK_PROMPT_TEMPLATE_MAX_CHARS = 50_000;
 export const BLOCK_DESCRIPTION_MAX_CHARS = 2_000;
 
+/** Cap category / skill / IO description fields. */
+export const BLOCK_CATEGORY_MAX_CHARS = 100;
+export const BLOCK_SKILL_ID_MAX_CHARS = 200;
+export const BLOCK_IO_DESCRIPTION_MAX_CHARS = 2_000;
+export const BLOCK_PARAM_DEFS_MAX = 50;
+export const BLOCK_PARAM_DEFS_JSON_MAX_CHARS = 64 * 1024;
+
 export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): WorkflowBlock {
   const id = typeof block.id === 'string' ? block.id.trim() : '';
   const name = typeof block.name === 'string' ? block.name.trim() : '';
@@ -101,12 +108,18 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
   }
+  if (/[\0\r\n]/.test(name)) {
+    throw new Error('name contains invalid control characters');
+  }
   if (name.length > 200) {
     throw new Error('name exceeds max length (200)');
   }
   const domain = normalizeDomain(block.domain);
-  const category =
+  let category =
     (typeof block.category === 'string' ? block.category.trim() : '') || 'custom';
+  if (/[\0\r\n]/.test(category) || category.length > BLOCK_CATEGORY_MAX_CHARS) {
+    category = 'custom';
+  }
   let description =
     typeof block.description === 'string' ? block.description.trim() : (block.description ?? '');
   if (typeof description === 'string' && description.length > BLOCK_DESCRIPTION_MAX_CHARS) {
@@ -119,18 +132,32 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
       `promptTemplate exceeds max size (${BLOCK_PROMPT_TEMPLATE_MAX_CHARS} characters)`,
     );
   }
-  const skillId =
+  let skillId =
     typeof block.skillId === 'string' ? block.skillId.trim() || undefined : block.skillId;
-  const inputDescription =
+  if (skillId) {
+    if (/[\0\r\n]/.test(skillId) || skillId.length > BLOCK_SKILL_ID_MAX_CHARS) {
+      throw new Error('skillId is invalid');
+    }
+  }
+  let inputDescription =
     typeof block.inputDescription === 'string'
       ? block.inputDescription.trim()
       : (block.inputDescription ?? '');
-  const outputDescription =
+  if (inputDescription.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) {
+    inputDescription = inputDescription.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
+  }
+  let outputDescription =
     typeof block.outputDescription === 'string'
       ? block.outputDescription.trim()
       : (block.outputDescription ?? '');
+  if (outputDescription.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) {
+    outputDescription = outputDescription.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
+  }
   const implementationType = normalizeImplementationType(block.implementationType);
-  const paramDefs = Array.isArray(block.paramDefs) ? block.paramDefs : [];
+  let paramDefs = Array.isArray(block.paramDefs) ? block.paramDefs.slice(0, BLOCK_PARAM_DEFS_MAX) : [];
+  if (JSON.stringify(paramDefs).length > BLOCK_PARAM_DEFS_JSON_MAX_CHARS) {
+    paramDefs = [];
+  }
 
   const db = getDb();
   db.prepare(`
@@ -185,14 +212,16 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
   // Normalize string fields the same way as create (defense-in-depth for direct DB callers)
   if (patch.name !== undefined) {
     const name = typeof patch.name === 'string' ? patch.name.trim() : '';
-    if (!name || name.length > 200) return null;
+    if (!name || name.length > 200 || /[\0\r\n]/.test(name)) return null;
     updated.name = name;
   }
   if (patch.domain !== undefined) {
     updated.domain = normalizeDomain(patch.domain);
   }
   if (typeof patch.category === 'string') {
-    updated.category = patch.category.trim() || 'custom';
+    let cat = patch.category.trim() || 'custom';
+    if (/[\0\r\n]/.test(cat) || cat.length > BLOCK_CATEGORY_MAX_CHARS) cat = 'custom';
+    updated.category = cat;
   }
   if (typeof patch.description === 'string') {
     const d = patch.description.trim();
@@ -207,19 +236,27 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     updated.promptTemplate = pt;
   }
   if (typeof patch.skillId === 'string') {
-    updated.skillId = patch.skillId.trim() || undefined;
+    const sid = patch.skillId.trim() || undefined;
+    if (sid && (/[\0\r\n]/.test(sid) || sid.length > BLOCK_SKILL_ID_MAX_CHARS)) return null;
+    updated.skillId = sid;
   }
   if (typeof patch.inputDescription === 'string') {
-    updated.inputDescription = patch.inputDescription.trim();
+    let d = patch.inputDescription.trim();
+    if (d.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) d = d.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
+    updated.inputDescription = d;
   }
   if (typeof patch.outputDescription === 'string') {
-    updated.outputDescription = patch.outputDescription.trim();
+    let d = patch.outputDescription.trim();
+    if (d.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) d = d.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
+    updated.outputDescription = d;
   }
   if (patch.implementationType !== undefined) {
     updated.implementationType = normalizeImplementationType(patch.implementationType);
   }
   if (patch.paramDefs !== undefined) {
-    updated.paramDefs = Array.isArray(patch.paramDefs) ? patch.paramDefs : existing.paramDefs;
+    let defs = Array.isArray(patch.paramDefs) ? patch.paramDefs.slice(0, BLOCK_PARAM_DEFS_MAX) : existing.paramDefs;
+    if (JSON.stringify(defs).length > BLOCK_PARAM_DEFS_JSON_MAX_CHARS) defs = existing.paramDefs;
+    updated.paramDefs = defs;
   }
 
   db.prepare(`

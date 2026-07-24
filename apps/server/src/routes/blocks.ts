@@ -52,18 +52,24 @@ blocks.post('/', async (c) => {
     ? (domainRaw as WorkflowBlock['domain'])
     : 'general';
 
-  const block = createCustomBlock({
-    ...body,
-    id,
-    name,
-    promptTemplate,
-    paramDefs: body.paramDefs ?? [],
-    inputDescription: body.inputDescription ?? '',
-    outputDescription: body.outputDescription ?? '',
-    category: (typeof body.category === 'string' ? body.category.trim() : '') || 'custom',
-    domain,
-    description: typeof body.description === 'string' ? body.description.trim() : (body.description ?? ''),
-  });
+  let block: WorkflowBlock;
+  try {
+    block = createCustomBlock({
+      ...body,
+      id,
+      name,
+      promptTemplate,
+      paramDefs: body.paramDefs ?? [],
+      inputDescription: body.inputDescription ?? '',
+      outputDescription: body.outputDescription ?? '',
+      category: (typeof body.category === 'string' ? body.category.trim() : '') || 'custom',
+      domain,
+      description: typeof body.description === 'string' ? body.description.trim() : (body.description ?? ''),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create block';
+    return c.json({ ok: false, error: msg }, 400);
+  }
 
   // If native, register an executor shim that returns a stub (real execution needs server restart)
   if (block.implementationType === 'native' && !getNativeExecutor(block.id)) {

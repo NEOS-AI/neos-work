@@ -30,7 +30,8 @@ function normalizeConfig(config: KisConfig): KisConfig {
   };
 }
 
-function normalizeSymbol(symbol: string): string {
+/** Normalize stock symbol for KIS API (exported for finance blocks). */
+export function normalizeSymbol(symbol: string): string {
   const s = typeof symbol === 'string' ? symbol.trim() : '';
   // Reject control chars / path-like garbage in stock codes
   if (!s || /[\0\r\n]/.test(s)) return '';

@@ -152,6 +152,9 @@ harness.put('/:id', async (c) => {
   if (body.name !== undefined) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) return c.json({ ok: false, error: 'name is required' }, 400);
+    if (/[\0\r\n]/.test(name) || name.length > 200) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
     patch.name = name;
   }
   if (body.systemPrompt !== undefined) {

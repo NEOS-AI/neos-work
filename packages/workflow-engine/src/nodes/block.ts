@@ -14,6 +14,8 @@ const MAX_INPUT_LENGTH = 4096;
 const BLOCK_ID_MAX = 200;
 const PARAM_KEY_MAX = 100;
 const PARAM_KEYS_MAX = 100;
+/** Cap individual string param values (native block input hygiene). */
+const PARAM_VALUE_MAX = 10_000;
 
 export class BlockNode implements ExecutableNode {
   type = 'block' as const;
@@ -47,7 +49,13 @@ export class BlockNode implements ExecutableNode {
       if (Object.keys(params).length >= PARAM_KEYS_MAX) break;
       const key = typeof k === 'string' ? k.trim() : '';
       if (!key || /[\0\r\n]/.test(key) || key.length > PARAM_KEY_MAX) continue;
-      params[key] = typeof v === 'string' ? v.trim() : v;
+      if (typeof v === 'string') {
+        const trimmed = v.trim();
+        params[key] =
+          trimmed.length > PARAM_VALUE_MAX ? trimmed.slice(0, PARAM_VALUE_MAX) : trimmed;
+      } else {
+        params[key] = v;
+      }
     }
 
     // implementationType is case-insensitive (Native / PROMPT / skill)

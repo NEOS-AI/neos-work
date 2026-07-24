@@ -15,7 +15,7 @@ import { SMA, EMA, RSI, MACD } from 'technicalindicators';
 import type { WorkflowBlock } from '@neos-work/shared';
 import type { BlockExecutionContext, BlockResult } from '../types.js';
 import { registerNativeBlock } from '../registry.js';
-import { getStockPrice, getStockChart } from './kis-api.js';
+import { getStockPrice, getStockChart, normalizeSymbol } from './kis-api.js';
 import type { KisConfig } from './kis-api.js';
 
 function getKisConfig(settings: Record<string, string>): KisConfig {
@@ -32,10 +32,10 @@ function timer(): () => number {
   return () => Date.now() - start;
 }
 
-/** Prefer params over inputs; trim whitespace-only to empty. */
+/** Prefer params over inputs; apply KIS symbol charset hygiene. */
 function resolveSymbol(ctx: BlockExecutionContext): string {
   const raw = ctx.params['symbol'] ?? ctx.inputs['symbol'] ?? '';
-  return String(raw).trim();
+  return normalizeSymbol(String(raw));
 }
 
 /** Clamp integer period/lookback into a safe range (plan Task 12 finance). */
@@ -273,14 +273,18 @@ registerNativeBlock({
     try {
       const config = getKisConfig(ctx.settings);
       const rawSymbols = ctx.params['symbols'] ?? ctx.inputs['symbols'];
-      const symbols: string[] = Array.isArray(rawSymbols)
-        ? rawSymbols.map((s) => String(s).trim()).filter(Boolean)
-        : String(rawSymbols ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      const symbols: string[] = (
+        Array.isArray(rawSymbols)
+          ? rawSymbols.map((s) => normalizeSymbol(String(s)))
+          : String(rawSymbols ?? '').split(',').map((s) => normalizeSymbol(s))
+      ).filter(Boolean);
+      // Deduplicate while preserving order
+      const unique = [...new Set(symbols)];
 
-      if (symbols.length === 0) throw new Error('symbols is required');
-      if (symbols.length > 20) throw new Error('Maximum 20 symbols per portfolio summary');
+      if (unique.length === 0) throw new Error('symbols is required');
+      if (unique.length > 20) throw new Error('Maximum 20 symbols per portfolio summary');
 
-      const prices = await Promise.all(symbols.map((s) => getStockPrice(config, s)));
+      const prices = await Promise.all(unique.map((s) => getStockPrice(config, s)));
       const totalValue = prices.reduce((sum, p) => sum + p.currentPrice, 0);
 
       return {

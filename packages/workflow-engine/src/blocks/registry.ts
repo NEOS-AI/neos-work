@@ -49,32 +49,36 @@ function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
   };
 }
 
+function isSafeBlockId(id: string): boolean {
+  return id.length > 0 && id.length <= 200 && !/[\0\r\n]/.test(id);
+}
+
 export function registerNativeBlock(executor: NativeBlockExecutor, meta?: WorkflowBlock): void {
   const blockId = typeof executor.blockId === 'string' ? executor.blockId.trim() : '';
-  if (!blockId) return;
+  if (!isSafeBlockId(blockId)) return;
   builtInRegistry.set(blockId, { ...executor, blockId });
   if (meta) {
     const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
-    if (metaId) metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
+    if (isSafeBlockId(metaId)) metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
   }
 }
 
 /** Register block metadata without a native executor (prompt/skill blocks, tests). */
 export function registerBlockMeta(meta: WorkflowBlock): void {
   const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
-  if (!metaId) return;
+  if (!isSafeBlockId(metaId)) return;
   metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
 }
 
 export function resolveBlock(id: string): WorkflowBlock | undefined {
   const trimmed = typeof id === 'string' ? id.trim() : '';
-  if (!trimmed) return undefined;
+  if (!isSafeBlockId(trimmed)) return undefined;
   return metaRegistry.get(trimmed);
 }
 
 export function getNativeExecutor(id: string): NativeBlockExecutor | undefined {
   const trimmed = typeof id === 'string' ? id.trim() : '';
-  if (!trimmed) return undefined;
+  if (!isSafeBlockId(trimmed)) return undefined;
   return builtInRegistry.get(trimmed);
 }
 

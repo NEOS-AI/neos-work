@@ -78,8 +78,11 @@ artifacts.post('/', async (c) => {
   if (!workflowId || !name || !contentType) {
     return c.json({ ok: false, error: 'workflowId, name, contentType required' }, 400);
   }
-  if (name.length > 200) {
+  if (name.length > 200 || /[\0\r\n]/.test(name)) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  if (contentType.length > 200 || /[\0\r\n]/.test(contentType)) {
+    return c.json({ ok: false, error: 'Invalid contentType' }, 400);
   }
 
   // Allow empty content; reject pure-whitespace accidental paste

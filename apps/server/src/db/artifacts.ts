@@ -86,6 +86,14 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
   if (name.length > 500) {
     throw new Error('name exceeds max length (500)');
   }
+  // MIME type hygiene: no control chars; must look like type/subtype (optional params stripped)
+  if (hasUnsafeNameChars(contentType) || contentType.length > 200) {
+    throw new Error('contentType is invalid');
+  }
+  const mimeBase = contentType.split(';')[0]?.trim() ?? '';
+  if (!mimeBase || !mimeBase.includes('/') || mimeBase.startsWith('/') || mimeBase.endsWith('/')) {
+    throw new Error('contentType is invalid');
+  }
   const runId =
     typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
   const nodeId =

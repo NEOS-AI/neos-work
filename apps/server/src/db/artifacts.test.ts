@@ -104,6 +104,31 @@ describe('artifacts CRUD', () => {
     ).toThrow(/workflowId/i);
   });
 
+  it('rejects invalid contentType on create', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'x',
+        contentType: 'not-a-mime',
+        content: 'x',
+      }),
+    ).toThrow(/contentType is invalid/i);
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'x',
+        contentType: 'text/ht\nml',
+        content: 'x',
+      }),
+    ).toThrow(/contentType is invalid/i);
+  });
+
   it('rejects blank name or contentType on create', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

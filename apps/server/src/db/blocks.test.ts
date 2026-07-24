@@ -246,12 +246,27 @@ describe('custom blocks CRUD', () => {
       }),
     ).toThrow(/max length/i);
 
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock(IDS[1]!),
+        name: 'bad\nname',
+      }),
+    ).toThrow(/control characters/i);
+
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock(IDS[1]!),
+        skillId: 'bad\nskill',
+      }),
+    ).toThrow(/skillId is invalid/i);
+
     createCustomBlock(sampleBlock(IDS[1]!));
     expect(
       updateCustomBlock(IDS[1]!, {
         promptTemplate: 'p'.repeat(BLOCK_PROMPT_TEMPLATE_MAX_CHARS + 1),
       }),
     ).toBeNull();
+    expect(updateCustomBlock(IDS[1]!, { name: 'x\ny' })).toBeNull();
   });
 });
 

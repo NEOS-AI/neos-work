@@ -117,6 +117,18 @@ describe('media routes', () => {
     expect(body.error).toMatch(/OpenAI|key|configured/i);
   });
 
+  it('POST /image rejects prompt with control characters', async () => {
+    setSetting('OPENAI_API_KEY', SECRET);
+    const res = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'a cat\nwith newline' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/control characters/i);
+  });
+
   it('POST /image and /audio reject invalid JSON body', async () => {
     const img = await media.request('/image', {
       method: 'POST',

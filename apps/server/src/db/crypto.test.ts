@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { decrypt, encrypt, isEncrypted, isSensitiveKey } from './crypto.js';
+import {
+  decrypt,
+  encrypt,
+  ENCRYPT_PLAINTEXT_MAX_CHARS,
+  isEncrypted,
+  isSensitiveKey,
+} from './crypto.js';
 
 describe('crypto helpers', () => {
   it('detects sensitive keys', () => {
@@ -63,6 +69,10 @@ describe('crypto helpers', () => {
     expect(() => decrypt('not-encrypted')).toThrow(/Invalid encrypted/i);
     expect(() => decrypt('   ')).toThrow(/Invalid encrypted/i);
     expect(() => decrypt('')).toThrow(/Invalid encrypted/i);
+  });
+
+  it('rejects oversized plaintext on encrypt', () => {
+    expect(() => encrypt('x'.repeat(ENCRYPT_PLAINTEXT_MAX_CHARS + 1))).toThrow(/max size/i);
   });
 
   it('coerces non-string encrypt input to string', () => {

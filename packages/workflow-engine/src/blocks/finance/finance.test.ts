@@ -10,6 +10,13 @@ const getStockChart = vi.fn();
 vi.mock('./kis-api.js', () => ({
   getStockPrice: (...args: unknown[]) => getStockPrice(...args),
   getStockChart: (...args: unknown[]) => getStockChart(...args),
+  // Mirror production symbol hygiene used by finance blocks
+  normalizeSymbol: (symbol: string) => {
+    const s = typeof symbol === 'string' ? symbol.trim() : '';
+    if (!s || /[\0\r\n]/.test(s)) return '';
+    if (s.length > 16 || !/^[A-Za-z0-9._-]+$/.test(s)) return '';
+    return s;
+  },
 }));
 
 // Import after mock so registerNativeBlock uses mocked kis-api
@@ -328,6 +335,17 @@ describe('portfolio_summary', () => {
     const result = await exec().execute(ctx({ symbols: '  ,  ' }));
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/symbols is required/);
+  });
+
+  it('filters invalid symbols and deduplicates', async () => {
+    getStockPrice.mockResolvedValue(price({ symbol: '005930', currentPrice: 1, changePercent: 0 }));
+    const result = await exec().execute(
+      ctx({ symbols: '005930, ../etc, 005930, bad\ncode' }),
+    );
+    expect(result.ok).toBe(true);
+    expect((result.output as { count: number }).count).toBe(1);
+    expect(getStockPrice).toHaveBeenCalledTimes(1);
+    expect(getStockPrice).toHaveBeenCalledWith(expect.anything(), '005930');
   });
 
   it('rejects more than 20 symbols', async () => {

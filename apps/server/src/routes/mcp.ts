@@ -29,11 +29,22 @@ interface PendingFlow {
 }
 const pendingFlows = new Map<string, PendingFlow>(); // state → flow
 
-// Expire pending flows older than 10 minutes
+const PENDING_FLOWS_MAX = 256;
+
+// Expire pending flows older than 10 minutes; also bound map size
 function cleanExpiredFlows() {
   const threshold = Date.now() - 10 * 60 * 1000;
   for (const [k, v] of pendingFlows) {
     if (v.createdAt < threshold) pendingFlows.delete(k);
+  }
+  // Drop oldest if still over cap (DoS defense on oauth/start)
+  if (pendingFlows.size > PENDING_FLOWS_MAX) {
+    const sorted = [...pendingFlows.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt);
+    const excess = pendingFlows.size - PENDING_FLOWS_MAX;
+    for (let i = 0; i < excess; i++) {
+      const key = sorted[i]?.[0];
+      if (key) pendingFlows.delete(key);
+    }
   }
 }
 

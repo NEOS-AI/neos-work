@@ -197,7 +197,7 @@ session.post('/', async (c) => {
     body.title !== undefined
       ? (typeof body.title === 'string' ? body.title.trim() : '')
       : undefined;
-  if (title !== undefined && (!title || title.length > 200)) {
+  if (title !== undefined && (!title || title.length > 200 || /[\0\r\n]/.test(title))) {
     return c.json({ ok: false, error: 'Invalid title' }, 400);
   }
 

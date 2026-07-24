@@ -114,6 +114,28 @@ describe('AnthropicAdapter', () => {
     expect((params.max_tokens as number) > 128).toBe(true);
   });
 
+  it('falls back to catalog model and truncates oversized system/user content', async () => {
+    streamMock.mockReturnValue(events([]));
+    const adapter = new AnthropicAdapter('sk');
+    const catalogId = adapter.getModels()[0]?.id;
+
+    for await (const _ of adapter.chat({
+      model: 'bad\nmodel',
+      messages: [
+        { role: 'system', content: 'S'.repeat(100_001) },
+        { role: 'user', content: 'U'.repeat(500_001) },
+      ],
+    })) {
+      /* drain */
+    }
+    const params = streamMock.mock.calls[0] as [Record<string, unknown>];
+    expect(params[0].model).toBe(catalogId);
+    expect(String(params[0].system).length).toBe(100_000);
+    const msgs = params[0].messages as Array<{ content: string }>;
+    expect(msgs[0]!.content).toContain('…[truncated]');
+    expect(msgs[0]!.content.length).toBeLessThanOrEqual(500_000 + 20);
+  });
+
   it('clamps invalid maxTokens to default 4096 and caps huge values', async () => {
     streamMock.mockReturnValue(events([]));
     const adapter = new AnthropicAdapter('sk');

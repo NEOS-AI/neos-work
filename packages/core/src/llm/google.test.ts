@@ -112,6 +112,29 @@ describe('GoogleAdapter', () => {
     expect(contents[1]?.role).toBe('model');
   });
 
+  it('falls back to catalog model and truncates oversized system/user content', async () => {
+    generateContentStream.mockResolvedValue(streamOf([]));
+    const adapter = new GoogleAdapter('sk');
+    const catalogId = adapter.getModels()[0]?.id;
+
+    for await (const _ of adapter.chat({
+      model: 'x'.repeat(201),
+      messages: [
+        { role: 'system', content: 'S'.repeat(100_001) },
+        { role: 'user', content: 'U'.repeat(500_001) },
+      ],
+    })) {
+      /* drain */
+    }
+    const req = generateContentStream.mock.calls[0] as [Record<string, unknown>];
+    expect(req[0].model).toBe(catalogId);
+    const cfg = req[0].config as { systemInstruction?: string };
+    expect(String(cfg.systemInstruction).length).toBe(100_000);
+    const contents = req[0].contents as Array<{ parts: Array<{ text: string }> }>;
+    expect(contents[0]!.parts[0]!.text).toContain('…[truncated]');
+    expect(contents[0]!.parts[0]!.text.length).toBeLessThanOrEqual(500_000 + 20);
+  });
+
   it('clamps invalid maxTokens to default 4096 and caps huge values', async () => {
     generateContentStream.mockResolvedValue(streamOf([]));
     const adapter = new GoogleAdapter('sk');
