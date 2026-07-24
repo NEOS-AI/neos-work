@@ -45,6 +45,14 @@ export const MediaNode: ExecutableNode = {
           durationMs: Date.now() - start,
         };
       }
+      if (/[\0\r\n]/.test(prompt)) {
+        return {
+          ok: false,
+          output: null,
+          error: 'Image prompt contains invalid control characters',
+          durationMs: Date.now() - start,
+        };
+      }
       if (prompt.length > IMAGE_PROMPT_MAX) {
         return {
           ok: false,
@@ -125,6 +133,14 @@ export const MediaNode: ExecutableNode = {
           ok: false,
           output: null,
           error: 'No text provided for audio generation',
+          durationMs: Date.now() - start,
+        };
+      }
+      if (/[\0\r\n]/.test(text)) {
+        return {
+          ok: false,
+          output: null,
+          error: 'Audio text contains invalid control characters',
           durationMs: Date.now() - start,
         };
       }

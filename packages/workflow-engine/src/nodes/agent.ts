@@ -48,8 +48,10 @@ const MEMORY_CONTEXT_MAX_CHARS = 32_000;
 const DESIGN_CONTEXT_MAX_CHARS = 32_000;
 /** Cap node/harness system prompts before memory/design injection. */
 const SYSTEM_PROMPT_MAX_CHARS = 100_000;
-/** Cap serialized agent inputs passed to CLI spawn. */
+/** Cap serialized agent inputs passed to CLI spawn / orchestrator goal. */
 const CLI_INPUTS_MAX_CHARS = 256 * 1024;
+/** Cap streamed agent text accumulated during a single node run. */
+const AGENT_STREAM_TEXT_MAX_CHARS = 2 * 1024 * 1024;
 
 async function buildSystemPromptWithMemory(
   basePrompt: string,
@@ -222,22 +224,36 @@ export class AgentNode implements ExecutableNode {
         model,
       });
 
+      let inputsJson = JSON.stringify(ctx.inputs ?? {});
+      if (inputsJson.length > CLI_INPUTS_MAX_CHARS) {
+        inputsJson =
+          inputsJson.slice(0, CLI_INPUTS_MAX_CHARS) + '…[inputs truncated]';
+      }
       const goal = systemPrompt
-        ? `${systemPrompt}\n\n---\n${JSON.stringify(ctx.inputs)}`
-        : JSON.stringify(ctx.inputs);
+        ? `${systemPrompt}\n\n---\n${inputsJson}`
+        : inputsJson;
 
       let lastText = '';
       for await (const event of orchestrator.run(goal, ctx.signal)) {
         if (event.type === 'text') {
-          lastText += event.content;
-          ctx.onProgress?.(event.content, lastText);
+          const chunk = typeof event.content === 'string' ? event.content : String(event.content ?? '');
+          if (lastText.length < AGENT_STREAM_TEXT_MAX_CHARS) {
+            const room = AGENT_STREAM_TEXT_MAX_CHARS - lastText.length;
+            lastText += chunk.length > room ? chunk.slice(0, room) : chunk;
+          }
+          ctx.onProgress?.(chunk, lastText);
         }
         if (event.type === 'done') {
-          const result = lastText || JSON.stringify(event.task.steps.at(-1)?.output ?? null);
+          let result = lastText || JSON.stringify(event.task.steps.at(-1)?.output ?? null);
+          if (typeof result === 'string' && result.length > AGENT_STREAM_TEXT_MAX_CHARS) {
+            result = result.slice(0, AGENT_STREAM_TEXT_MAX_CHARS);
+          }
           return { ok: true, output: result, durationMs: Date.now() - start };
         }
         if (event.type === 'error') {
-          return { ok: false, output: null, error: event.error, durationMs: Date.now() - start };
+          let errMsg = typeof event.error === 'string' ? event.error : String(event.error ?? 'Agent error');
+          if (errMsg.length > 4_000) errMsg = errMsg.slice(0, 4_000);
+          return { ok: false, output: null, error: errMsg, durationMs: Date.now() - start };
         }
       }
 

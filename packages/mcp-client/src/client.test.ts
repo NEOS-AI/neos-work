@@ -54,6 +54,28 @@ describe('McpClient', () => {
     expect(c.connected).toBe(false);
   });
 
+  it('rejects control-char or overlong stdio commands', async () => {
+    const c = new McpClient();
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'S',
+        transport: 'stdio',
+        command: 'npx\nrm -rf /',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid command/i);
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'S',
+        transport: 'stdio',
+        command: 'c'.repeat(501),
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid command/i);
+  });
+
   it('rejects http without url', async () => {
     const c = new McpClient();
     await expect(

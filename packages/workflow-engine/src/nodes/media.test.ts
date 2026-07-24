@@ -25,10 +25,26 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/No prompt/);
   });
 
+  it('rejects image prompt with control characters', async () => {
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'a\nb' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/control characters/i);
+  });
+
   it('requires audio text', async () => {
     const result = await MediaNode.execute(ctx({ config: { mediaType: 'audio' } }));
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/No text/);
+  });
+
+  it('rejects audio text with control characters', async () => {
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hello\nworld' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/control characters/i);
   });
 
   it('rejects unknown media type', async () => {

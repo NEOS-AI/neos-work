@@ -45,15 +45,17 @@ export function createFirstHtmlArtifact(options: {
     const r = result as { output?: unknown; status?: string };
     const status = typeof r.status === 'string' ? r.status.trim().toLowerCase() : '';
     if (status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
-    const nid = typeof nodeId === 'string' ? nodeId.trim() : String(nodeId);
-    if (!nid) continue;
+    let nid = typeof nodeId === 'string' ? nodeId.trim() : String(nodeId);
+    if (!nid || /[\0\r\n]/.test(nid) || nid.length > 200) continue;
     const content = r.output.trim();
     // Skip pathological oversized HTML rather than failing the whole run
     if (content.length > HTML_ARTIFACT_MAX_CHARS) continue;
+    // Artifact name: keep short and free of control chars
+    const safeLabel = nid.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'node';
     const artifact = options.create({
       workflowId,
       runId,
-      name: `Output (${nid})`,
+      name: `Output (${safeLabel})`,
       contentType: 'text/html',
       content,
       nodeId: nid,

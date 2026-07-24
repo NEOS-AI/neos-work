@@ -80,10 +80,14 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   try {
     sorted = topologicalSort(workflow.nodes, workflow.edges);
   } catch (err) {
+    let error = err instanceof Error ? err.message : 'Graph sort failed';
+    if (error.length > MAX_NODE_ERROR_CHARS) {
+      error = error.slice(0, MAX_NODE_ERROR_CHARS);
+    }
     onEvent({
       type: 'run.failed',
       runId,
-      error: err instanceof Error ? err.message : 'Graph sort failed',
+      error,
     });
     return;
   }

@@ -28,7 +28,7 @@ export function getAllSettings(): Record<string, string> {
 
 export function getSetting(key: string): string | undefined {
   const k = typeof key === 'string' ? key.trim() : '';
-  if (!k) return undefined;
+  if (!k || /[\0\r\n]/.test(k) || k.length > 200) return undefined;
   const db = getDb();
   const row = db.prepare('SELECT value FROM setting WHERE key = ?').get(k) as
     | { value: string }

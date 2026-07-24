@@ -19,6 +19,8 @@ export class SlackMessageNode implements ExecutableNode {
 
     const channel = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '').trim();
     const text = resolveMessageText(ctx.config, ctx.inputs);
+    /** Slack channel / conversation id practical bound. */
+    const CHANNEL_MAX = 200;
 
     if (!channel) {
       return { ok: false, output: null, error: 'Slack channel not specified', durationMs: 0 };
@@ -32,9 +34,26 @@ export class SlackMessageNode implements ExecutableNode {
         durationMs: 0,
       };
     }
+    if (channel.length > CHANNEL_MAX) {
+      return {
+        ok: false,
+        output: null,
+        error: `Slack channel exceeds max length (${CHANNEL_MAX})`,
+        durationMs: 0,
+      };
+    }
 
     if (!text.trim()) {
       return { ok: false, output: null, error: 'Slack message text is empty', durationMs: 0 };
+    }
+    // Null bytes break chat.postMessage payloads
+    if (/[\0]/.test(text)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Slack content contains invalid control characters',
+        durationMs: 0,
+      };
     }
     if (text.length > SLACK_CONTENT_MAX_LENGTH) {
       return {

@@ -579,8 +579,30 @@ describe('executeWorkflow graph failure and skip paths', () => {
   });
 
   it('truncates oversized node.failed error strings at 4000 chars', async () => {
+    const { registerNativeBlock, registerBlockMeta } = await import('./blocks/registry.js');
+    registerNativeBlock({
+      blockId: 'long_err_block',
+      execute: async () => ({
+        ok: false,
+        output: null,
+        error: 'E'.repeat(5_000),
+        durationMs: 0,
+      }),
+    });
+    registerBlockMeta({
+      id: 'long_err_block',
+      name: 'Long Err',
+      domain: 'general',
+      category: 'test',
+      description: 'd',
+      isBuiltIn: true,
+      implementationType: 'native',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+
     const events: WorkflowSSEEvent[] = [];
-    const longId = 'B'.repeat(5_000);
     await executeWorkflow({
       runId: 'run-truncate-error',
       workflow: baseWorkflow({
@@ -588,10 +610,9 @@ describe('executeWorkflow graph failure and skip paths', () => {
           {
             id: 'block',
             type: 'block',
-            label: 'Missing',
+            label: 'LongErr',
             position: { x: 0, y: 0 },
-            // Block not found embeds blockId in the error message
-            config: { blockId: longId },
+            config: { blockId: 'long_err_block' },
           },
         ],
         edges: [],
@@ -606,7 +627,7 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(failed).toBeDefined();
     expect(failed!.nodeId).toBe('block');
     expect(failed!.error.length).toBe(4_000);
-    expect(failed!.error.startsWith('Block not found:')).toBe(true);
+    expect(failed!.error.startsWith('E')).toBe(true);
   });
 
   it('skips blank node ids and throws on unknown node types', async () => {

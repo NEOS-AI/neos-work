@@ -34,4 +34,9 @@ describe('validateWorkspacePath', () => {
     expect(validateWorkspacePath(undefined as unknown as string)).toBe(false);
     expect(validateWorkspacePath(42 as unknown as string)).toBe(false);
   });
+
+  it('rejects overlong paths', () => {
+    const home = homedir();
+    expect(validateWorkspacePath(home + '/x'.repeat(5_000))).toBe(false);
+  });
 });

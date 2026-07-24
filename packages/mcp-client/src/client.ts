@@ -29,7 +29,7 @@ export class McpClient {
   constructor() {
     this.client = new Client({
       name: 'neos-work',
-      version: '0.3.95',
+      version: '0.3.96',
     });
   }
 
@@ -38,7 +38,8 @@ export class McpClient {
   }
 
   async connect(config: McpServerConfig): Promise<void> {
-    const name = typeof config.name === 'string' ? config.name.trim() : 'unknown';
+    let name = typeof config.name === 'string' ? config.name.trim() : 'unknown';
+    if (!name || /[\0\r\n]/.test(name) || name.length > 200) name = 'unknown';
     const transportRaw =
       typeof config.transport === 'string' ? config.transport.trim().toLowerCase() : '';
     const transport = transportRaw === 'http' || transportRaw === 'stdio' ? transportRaw : '';
@@ -46,8 +47,14 @@ export class McpClient {
     if (transport === 'stdio') {
       const command = typeof config.command === 'string' ? config.command.trim() : '';
       if (!command) throw new Error(`MCP server "${name}" requires a command for stdio transport`);
+      if (/[\0\r\n]/.test(command) || command.length > 500) {
+        throw new Error(`MCP server "${name}" has an invalid command`);
+      }
       const args = Array.isArray(config.args)
-        ? config.args.map((a) => String(a).trim()).filter(Boolean)
+        ? config.args
+            .map((a) => String(a).trim())
+            .filter((a) => a.length > 0 && a.length <= 500 && !/[\0\r\n]/.test(a))
+            .slice(0, 50)
         : [];
       const transportImpl = new StdioClientTransport({
         command,
@@ -57,6 +64,9 @@ export class McpClient {
     } else if (transport === 'http') {
       const url = typeof config.url === 'string' ? config.url.trim() : '';
       if (!url) throw new Error(`MCP server "${name}" requires a URL for HTTP transport`);
+      if (url.length > 2_000) {
+        throw new Error(`MCP server "${name}" has an invalid URL`);
+      }
       let parsed: URL;
       try {
         parsed = new URL(url);
@@ -78,33 +88,49 @@ export class McpClient {
     const result = await this.client.listTools();
     const tools = Array.isArray(result.tools) ? result.tools : [];
     return tools
-      .map((t) => ({
-        name: typeof t.name === 'string' ? t.name.trim() : '',
-        description:
-          typeof t.description === 'string' ? t.description.trim() || undefined : t.description,
-        inputSchema: (t.inputSchema as Record<string, unknown>) ?? {
-          type: 'object',
-          properties: {},
-        },
-      }))
+      .slice(0, 200)
+      .map((t) => {
+        let name = typeof t.name === 'string' ? t.name.trim() : '';
+        if (!name || /[\0\r\n]/.test(name) || name.length > 200) name = '';
+        let description =
+          typeof t.description === 'string' ? t.description.trim() || undefined : t.description;
+        if (description && description.length > 2_000) {
+          description = description.slice(0, 2_000);
+        }
+        const inputSchema =
+          t.inputSchema && typeof t.inputSchema === 'object' && !Array.isArray(t.inputSchema)
+            ? (t.inputSchema as Record<string, unknown>)
+            : { type: 'object', properties: {} };
+        return { name, description, inputSchema };
+      })
       .filter((t) => t.name.length > 0);
   }
 
   async callTool(name: string, input: Record<string, unknown>): Promise<{ success: boolean; output: unknown }> {
     const toolName = typeof name === 'string' ? name.trim() : '';
     if (!toolName) throw new Error('Tool name is required');
-    const result = await this.client.callTool({ name: toolName, arguments: input ?? {} });
+    if (/[\0\r\n]/.test(toolName) || toolName.length > 200) {
+      throw new Error('Invalid tool name');
+    }
+    const args =
+      input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+    const result = await this.client.callTool({ name: toolName, arguments: args });
 
     // Normalize content to string (tolerate missing / non-array content)
     const contentArr = Array.isArray(result.content)
       ? (result.content as Array<{ type: string; text?: string; data?: unknown }>)
       : [];
-    const output = contentArr
+    let output = contentArr
       .map((c) => {
         if (!c || typeof c !== 'object') return String(c ?? '');
         return c.type === 'text' ? (c.text ?? '') : JSON.stringify(c.data ?? c);
       })
       .join('\n');
+    // Cap tool output so runaway MCP servers cannot bloat agent context
+    const OUTPUT_MAX = 512 * 1024;
+    if (output.length > OUTPUT_MAX) {
+      output = output.slice(0, OUTPUT_MAX) + '\n…[truncated]';
+    }
 
     return { success: !result.isError, output };
   }

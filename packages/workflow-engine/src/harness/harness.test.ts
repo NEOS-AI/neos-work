@@ -72,6 +72,28 @@ describe('harness registry', () => {
       allowedTools: ['read'],
     });
     expect(resolveHarness('blank-prompt-harness')).toBeUndefined();
+
+    // control-char id is rejected; bad tool names filtered
+    registerHarness({
+      id: 'bad\nid',
+      name: 'X',
+      domain: 'general',
+      description: '',
+      systemPrompt: 'p',
+      allowedTools: [],
+    });
+    expect(resolveHarness('bad\nid')).toBeUndefined();
+    registerHarness({
+      id: 'tool-filter-h',
+      name: 'TF',
+      domain: 'general',
+      description: 'd'.repeat(3_000),
+      systemPrompt: 'p',
+      allowedTools: ['ok', 'bad\nt', '', 'x'.repeat(101)],
+    });
+    const tf = resolveHarness('tool-filter-h');
+    expect(tf?.allowedTools).toEqual(['ok']);
+    expect(tf?.description?.length).toBe(2_000);
   });
 
   it('registers custom harnesses', () => {

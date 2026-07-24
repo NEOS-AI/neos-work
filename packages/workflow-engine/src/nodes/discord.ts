@@ -32,6 +32,15 @@ export class DiscordMessageNode implements ExecutableNode {
     if (!content.trim()) {
       return { ok: false, output: null, error: 'Discord message content is empty', durationMs: 0 };
     }
+    // Null bytes confuse Discord webhook JSON payloads / logging
+    if (/[\0]/.test(content)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Discord content contains invalid control characters',
+        durationMs: 0,
+      };
+    }
     if (content.length > DISCORD_CONTENT_MAX_LENGTH) {
       return {
         ok: false,
