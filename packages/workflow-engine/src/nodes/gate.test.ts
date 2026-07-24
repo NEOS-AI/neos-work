@@ -58,6 +58,16 @@ describe('gate nodes', () => {
     expect(result.output).toBe('A');
   });
 
+  it('OrGateNode and ORGateNode fail when no upstream inputs', async () => {
+    const legacy = await new OrGateNode().execute(makeCtx({}));
+    expect(legacy.ok).toBe(false);
+    expect(legacy.error).toMatch(/no upstream/i);
+
+    const modern = await new ORGateNode().execute(makeCtx({}));
+    expect(modern.ok).toBe(false);
+    expect(modern.error).toMatch(/no upstream/i);
+  });
+
   it('ParallelStartNode echoes inputs', async () => {
     const node = new ParallelStartNode();
     const inputs = { branch: 'start' };
@@ -78,16 +88,6 @@ describe('gate nodes', () => {
     const result = await node.execute(makeCtx({ fast: { winner: true }, slow: { winner: false } }));
     expect(result.ok).toBe(true);
     expect(result.output).toEqual({ winner: true });
-  });
-
-  it('OrGateNode and ORGateNode return undefined when no inputs', async () => {
-    const orLegacy = await new OrGateNode().execute(makeCtx({}));
-    expect(orLegacy.ok).toBe(true);
-    expect(orLegacy.output).toBeUndefined();
-
-    const orNew = await new ORGateNode().execute(makeCtx({}));
-    expect(orNew.ok).toBe(true);
-    expect(orNew.output).toBeUndefined();
   });
 
   it('ParallelEndNode wraps primitive branch outputs', async () => {

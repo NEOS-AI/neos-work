@@ -17,15 +17,25 @@ export function registerNativeBlock(executor: NativeBlockExecutor, meta?: Workfl
   if (meta) metaRegistry.set(meta.id, meta);
 }
 
+/** Register block metadata without a native executor (prompt/skill blocks, tests). */
+export function registerBlockMeta(meta: WorkflowBlock): void {
+  metaRegistry.set(meta.id, meta);
+}
+
 export function resolveBlock(id: string): WorkflowBlock | undefined {
-  return metaRegistry.get(id);
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
+  return metaRegistry.get(trimmed);
 }
 
 export function getNativeExecutor(id: string): NativeBlockExecutor | undefined {
-  return builtInRegistry.get(id);
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
+  return builtInRegistry.get(trimmed);
 }
 
 export function listBlocks(domain?: string): WorkflowBlock[] {
+  const domainFilter = typeof domain === 'string' ? domain.trim() || undefined : undefined;
   const all = [...metaRegistry.values()];
-  return domain ? all.filter((b) => b.domain === domain) : all;
+  return domainFilter ? all.filter((b) => b.domain === domainFilter) : all;
 }

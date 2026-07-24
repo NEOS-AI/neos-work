@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BlockNode } from './block.js';
-import { registerNativeBlock, resolveBlock } from '../blocks/registry.js';
+import { registerBlockMeta, registerNativeBlock, resolveBlock } from '../blocks/registry.js';
 import type { NodeContext } from '../types.js';
 import type { WorkflowBlock } from '@neos-work/shared';
 
@@ -59,6 +59,42 @@ describe('BlockNode', () => {
     const result = await node.execute(ctx({ blockId: 'does-not-exist-xyz' }));
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/Block not found/);
+  });
+
+  it('rejects prompt blocks without promptTemplate and skill blocks without skillId', async () => {
+    registerBlockMeta({
+      id: 'cov_prompt_empty',
+      name: 'Empty Prompt',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      promptTemplate: '   ',
+    });
+    const promptRes = await node.execute(ctx({ blockId: 'cov_prompt_empty' }));
+    expect(promptRes.ok).toBe(false);
+    expect(promptRes.error).toMatch(/promptTemplate/i);
+
+    registerBlockMeta({
+      id: 'cov_skill_empty',
+      name: 'Empty Skill',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'skill',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      skillId: '  ',
+    });
+    const skillRes = await node.execute(ctx({ blockId: 'cov_skill_empty' }));
+    expect(skillRes.ok).toBe(false);
+    expect(skillRes.error).toMatch(/skillId/i);
   });
 
   it('runs native executor when registered with metadata', async () => {

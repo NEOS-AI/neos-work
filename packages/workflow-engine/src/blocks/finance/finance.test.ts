@@ -192,6 +192,20 @@ describe('moving_average', () => {
     const out = result.output as { type: string; period: number };
     expect(out.type).toBe('SMA');
     expect(out.period).toBe(20);
+
+    // Above max (500) clamps to 500
+    const high = await exec().execute(
+      ctx({ symbol: '005930', period: 9999, type: 'SMA' }),
+    );
+    expect(high.ok).toBe(true);
+    expect((high.output as { period: number }).period).toBe(500);
+
+    // Non-finite → fallback 20
+    const nan = await exec().execute(
+      ctx({ symbol: '005930', period: Number.NaN }),
+    );
+    expect(nan.ok).toBe(true);
+    expect((nan.output as { period: number }).period).toBe(20);
   });
 
   it('computes EMA when type is EMA', async () => {

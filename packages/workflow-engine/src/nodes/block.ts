@@ -56,9 +56,19 @@ export class BlockNode implements ExecutableNode {
     }
 
     if (block.implementationType === 'prompt') {
+      const template =
+        typeof block.promptTemplate === 'string' ? block.promptTemplate.trim() : '';
+      if (!template) {
+        return {
+          ok: false,
+          output: null,
+          error: 'promptTemplate is required for prompt blocks',
+          durationMs: Date.now() - start,
+        };
+      }
       // Sanitize inputs length before injecting into prompt (prompt injection protection)
       const inputsStr = JSON.stringify(ctx.inputs).slice(0, MAX_INPUT_LENGTH);
-      const prompt = (block.promptTemplate ?? '')
+      const prompt = template
         .replace('{{params}}', JSON.stringify(params))
         .replace('{{inputs}}', inputsStr);
 
@@ -72,10 +82,20 @@ export class BlockNode implements ExecutableNode {
     }
 
     if (block.implementationType === 'skill') {
+      const skillId =
+        typeof block.skillId === 'string' ? block.skillId.trim() : String(block.skillId ?? '').trim();
+      if (!skillId) {
+        return {
+          ok: false,
+          output: null,
+          error: 'skillId is required for skill blocks',
+          durationMs: Date.now() - start,
+        };
+      }
       // Skill-based execution: pass skillId in config and let AgentNode handle it
       const { AgentNode } = await import('./agent.js');
       const agentNode = new AgentNode('agent_finance', {
-        systemPrompt: `Use skill: ${block.skillId ?? ''}\n\nInputs: ${JSON.stringify(ctx.inputs).slice(0, MAX_INPUT_LENGTH)}`,
+        systemPrompt: `Use skill: ${skillId}\n\nInputs: ${JSON.stringify(ctx.inputs).slice(0, MAX_INPUT_LENGTH)}`,
         maxSteps: 10,
       });
       return agentNode.execute({ ...ctx, inputs: {} });

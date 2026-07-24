@@ -66,6 +66,35 @@ describe('workflow runs CRUD', () => {
     expect(stored?.nodeResults).toEqual({ truncated: true });
   });
 
+  it('listRuns clamps limit/offset and deleteRuns trims blank/status', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    for (let i = 0; i < 5; i++) {
+      workflows.saveRun({
+        id: crypto.randomUUID(),
+        workflowId: wf.id,
+        status: i % 2 === 0 ? 'completed' : 'failed',
+        nodeResults: {},
+        startedAt: new Date(Date.now() - i * 1000).toISOString(),
+      });
+    }
+
+    expect(workflows.listRuns('   ')).toEqual([]);
+    expect(workflows.listRuns(wf.id, 0, -10).length).toBeGreaterThanOrEqual(1);
+    expect(workflows.listRuns(wf.id, 0, -10).length).toBeLessThanOrEqual(100);
+    expect(workflows.listRuns(wf.id, 2, 0).length).toBe(2);
+    expect(workflows.listRuns(wf.id, 999, 0).length).toBeLessThanOrEqual(5);
+
+    expect(workflows.deleteRuns('   ')).toBe(0);
+    expect(workflows.deleteRuns(`  ${wf.id}  `, '  failed  ')).toBeGreaterThanOrEqual(1);
+    expect(workflows.deleteRuns(`  ${wf.id}  `)).toBeGreaterThanOrEqual(1);
+    expect(workflows.listRuns(wf.id)).toEqual([]);
+  });
+
   it('updateWorkflow patches name/description and deleteWorkflow', () => {
     const wf = workflows.createWorkflow({
       name: NAME,

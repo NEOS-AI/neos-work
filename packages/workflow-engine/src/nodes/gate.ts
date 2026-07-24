@@ -51,7 +51,16 @@ export class OrGateNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const firstInput = Object.values(ctx.inputs)[0];
+    const values = Object.values(ctx.inputs ?? {});
+    if (values.length === 0) {
+      return {
+        ok: false,
+        output: null,
+        error: 'OR gate: no upstream inputs',
+        durationMs: Date.now() - start,
+      };
+    }
+    const firstInput = values[0];
     return { ok: true, output: firstInput, durationMs: Date.now() - start };
   }
 }
@@ -87,7 +96,16 @@ export class ORGateNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const firstInput = Object.values(ctx.inputs)[0];
+    const values = Object.values(ctx.inputs ?? {});
+    if (values.length === 0) {
+      return {
+        ok: false,
+        output: null,
+        error: 'OR gate: no upstream inputs',
+        durationMs: Date.now() - start,
+      };
+    }
+    const firstInput = values[0];
     return { ok: true, output: firstInput, durationMs: Date.now() - start };
   }
 }

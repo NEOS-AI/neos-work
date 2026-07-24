@@ -33,6 +33,24 @@ describe('kis-api', () => {
     await expect(getKisToken({ appKey: 'k', appSecret: 'unique-fail' })).rejects.toThrow(/401/);
   });
 
+  it('rejects blank credentials and network failures', async () => {
+    await expect(getKisToken({ appKey: '  ', appSecret: 'sec' })).rejects.toThrow(/required/i);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNRESET')));
+    await expect(getKisToken({ appKey: 'net-k', appSecret: 'net-s' })).rejects.toThrow(/network/i);
+  });
+
+  it('rejects blank symbol before network calls', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getStockPrice({ appKey: 'k', appSecret: 's' }, '   ')).rejects.toThrow(
+      /symbol is required/i,
+    );
+    await expect(getStockChart({ appKey: 'k', appSecret: 's' }, '')).rejects.toThrow(
+      /symbol is required/i,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('fetches stock price after token', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({

@@ -86,6 +86,21 @@ describe('mcp routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 404 for blank path ids on get/toggle/delete', async () => {
+    const get = await mcp.request('/%20%20');
+    expect(get.status).toBe(404);
+
+    const toggle = await mcp.request('/%20/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(toggle.status).toBe(404);
+
+    const del = await mcp.request('/%20', { method: 'DELETE' });
+    expect(del.status).toBe(404);
+  });
+
   it('trims name/command/url and rejects whitespace or non-http url', async () => {
     const blankName = await mcp.request('/', {
       method: 'POST',
