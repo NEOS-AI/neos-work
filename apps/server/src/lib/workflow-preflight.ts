@@ -47,6 +47,22 @@ export function assessWorkflowPreflight(
     issues.push({ code: 'no_output', severity: 'warning', message: 'Workflow has no output node.' });
   }
 
+  // Graph size bounds (align with workflow-engine topologicalSort caps)
+  if (nodes.length > 2_000) {
+    issues.push({
+      code: 'too_many_nodes',
+      severity: 'error',
+      message: 'Workflow exceeds max nodes (2000).',
+    });
+  }
+  if (edges.length > 10_000) {
+    issues.push({
+      code: 'too_many_edges',
+      severity: 'error',
+      message: 'Workflow exceeds max edges (10000).',
+    });
+  }
+
   // Blank / whitespace-only node ids are unusable at runtime
   for (const n of nodes) {
     const id = typeof n.id === 'string' ? n.id.trim() : '';
@@ -55,6 +71,15 @@ export function assessWorkflowPreflight(
         code: 'blank_node_id',
         severity: 'error',
         message: 'Workflow has a node with a blank id.',
+      });
+      break;
+    }
+    if (id.length > 200 || /[\0\r\n]/.test(id)) {
+      issues.push({
+        code: 'invalid_node_id',
+        severity: 'error',
+        nodeId: id.slice(0, 80),
+        message: 'Workflow has a node with an invalid id.',
       });
       break;
     }

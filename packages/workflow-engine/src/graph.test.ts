@@ -126,4 +126,35 @@ describe('topologicalSort', () => {
     ];
     expect(topologicalSort(nodes, edges).map((n) => n.id)).toEqual(['a', 'b']);
   });
+
+  it('rejects graphs that exceed max nodes/edges', async () => {
+    const { GRAPH_NODES_MAX, GRAPH_EDGES_MAX } = await import('./graph.js');
+    const tooManyNodes = Array.from({ length: GRAPH_NODES_MAX + 1 }, (_, i) => ({
+      id: `n${i}`,
+      type: 'trigger' as const,
+      label: 'n',
+      position: { x: 0, y: 0 },
+      config: {},
+    }));
+    expect(() => topologicalSort(tooManyNodes, [])).toThrow(/max nodes/i);
+    const two = [
+      { id: 'a', type: 'trigger' as const, label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: 'b', type: 'output' as const, label: 'B', position: { x: 1, y: 0 }, config: {} },
+    ];
+    const tooManyEdges = Array.from({ length: GRAPH_EDGES_MAX + 1 }, (_, i) => ({
+      id: `e${i}`,
+      source: 'a',
+      target: 'b',
+    }));
+    expect(() => topologicalSort(two, tooManyEdges)).toThrow(/max edges/i);
+  });
+
+  it('skips control-char and overlong node ids', () => {
+    const nodes: WorkflowNode[] = [
+      { id: 'ok', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: 'bad\nid', type: 'output', label: 'B', position: { x: 1, y: 0 }, config: {} },
+      { id: 'x'.repeat(201), type: 'output', label: 'C', position: { x: 2, y: 0 }, config: {} },
+    ];
+    expect(topologicalSort(nodes, []).map((n) => n.id)).toEqual(['ok']);
+  });
 });

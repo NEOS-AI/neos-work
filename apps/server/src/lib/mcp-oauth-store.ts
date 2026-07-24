@@ -22,12 +22,26 @@ async function ensureDir(): Promise<void> {
   await fs.mkdir(TOKEN_DIR, { recursive: true });
 }
 
+/** Cap OAuth token field sizes on disk (runaway secret defense). */
+const SERVER_ID_MAX_CHARS = 200;
+const ACCESS_TOKEN_MAX_CHARS = 16_384;
+const REFRESH_TOKEN_MAX_CHARS = 16_384;
+const SCOPE_MAX_CHARS = 1_000;
+const TOKEN_TYPE_MAX_CHARS = 64;
+
 function sanitizeServerId(serverId: string): string | null {
   const trimmed = typeof serverId === 'string' ? serverId.trim() : '';
-  if (!trimmed) return null;
+  if (!trimmed || trimmed.length > SERVER_ID_MAX_CHARS) return null;
   // Sanitize serverId to prevent path traversal
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
   return safe || null;
+}
+
+function capTokenField(raw: unknown, max: number): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  return s.length > max ? s.slice(0, max) : s;
 }
 
 function tokenPath(serverId: string): string | null {
@@ -40,20 +54,20 @@ export async function saveToken(token: McpOAuthToken): Promise<void> {
   const file = tokenPath(token.serverId);
   if (!file) throw new Error('Invalid serverId');
   await ensureDir();
-  const accessToken =
+  let accessToken =
     typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
   if (!accessToken) throw new Error('accessToken is required');
+  if (accessToken.length > ACCESS_TOKEN_MAX_CHARS) {
+    accessToken = accessToken.slice(0, ACCESS_TOKEN_MAX_CHARS);
+  }
   const payload: McpOAuthToken = {
-    ...token,
-    serverId: sanitizeServerId(token.serverId) ?? token.serverId.trim(),
+    serverId: sanitizeServerId(token.serverId) ?? token.serverId.trim().slice(0, SERVER_ID_MAX_CHARS),
     accessToken,
-    refreshToken:
-      typeof token.refreshToken === 'string'
-        ? token.refreshToken.trim() || undefined
-        : token.refreshToken,
-    scope: typeof token.scope === 'string' ? token.scope.trim() || undefined : token.scope,
-    tokenType:
-      typeof token.tokenType === 'string' ? token.tokenType.trim() || undefined : token.tokenType,
+    refreshToken: capTokenField(token.refreshToken, REFRESH_TOKEN_MAX_CHARS),
+    expiresAt:
+      typeof token.expiresAt === 'string' ? token.expiresAt.trim() || undefined : token.expiresAt,
+    scope: capTokenField(token.scope, SCOPE_MAX_CHARS),
+    tokenType: capTokenField(token.tokenType, TOKEN_TYPE_MAX_CHARS),
   };
   await fs.writeFile(file, JSON.stringify(payload, null, 2), 'utf-8');
 }

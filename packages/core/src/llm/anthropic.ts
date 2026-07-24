@@ -26,7 +26,12 @@ export class AnthropicAdapter implements LLMProviderAdapter {
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
-    const { model, messages, tools, thinkingMode = 'none', signal } = params;
+    const { tools, thinkingMode = 'none', signal } = params;
+    // Clamp model id (control chars / overlong → first known model)
+    let model = typeof params.model === 'string' ? params.model.trim() : '';
+    if (!model || /[\0\r\n]/.test(model) || model.length > 200) {
+      model = this.getModels()[0]?.id ?? 'claude-sonnet-4-5-20250929';
+    }
     // Clamp maxTokens (invalid → 4096; hard cap 128k)
     const rawMax = Number(params.maxTokens ?? 4096);
     const maxTokens =
@@ -35,12 +40,16 @@ export class AnthropicAdapter implements LLMProviderAdapter {
         : 4096;
 
     // Separate system messages from conversation
+    const messages = Array.isArray(params.messages) ? params.messages.slice(0, 200) : [];
     const systemMessages = messages.filter((m) => m.role === 'system');
     const conversationMessages = messages.filter((m) => m.role !== 'system');
+    const SYS_MAX = 100_000;
+    const MSG_MAX = 500_000;
 
-    const systemPrompt = systemMessages
+    let systemPrompt = systemMessages
       .map((m) => (typeof m.content === 'string' ? m.content : ''))
       .join('\n');
+    if (systemPrompt.length > SYS_MAX) systemPrompt = systemPrompt.slice(0, SYS_MAX);
 
     const budget = THINKING_BUDGET[thinkingMode];
     const useThinking = budget > 0;
@@ -50,10 +59,19 @@ export class AnthropicAdapter implements LLMProviderAdapter {
       model,
       max_tokens: useThinking ? budget + maxTokens : maxTokens,
       system: systemPrompt || undefined,
-      messages: conversationMessages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: typeof m.content === 'string' ? m.content : m.content as Anthropic.ContentBlockParam[],
-      })),
+      messages: conversationMessages.map((m) => {
+        let content: Anthropic.MessageCreateParams['messages'][number]['content'] =
+          typeof m.content === 'string'
+            ? m.content
+            : (m.content as Anthropic.ContentBlockParam[]);
+        if (typeof content === 'string' && content.length > MSG_MAX) {
+          content = content.slice(0, MSG_MAX) + '…[truncated]';
+        }
+        return {
+          role: m.role as 'user' | 'assistant',
+          content,
+        };
+      }),
       stream: true,
     };
 

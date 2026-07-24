@@ -48,4 +48,13 @@ describe('escapeHtml', () => {
     safeError('x', '  ctx  ');
     expect(String(spy.mock.calls[0]?.[0])).toContain('ctx');
   });
+
+  it('caps overlong safeError messages and escapeHtml input', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    safeError(new Error('e'.repeat(10_000)), 'c'.repeat(300));
+    const logged = String(spy.mock.calls[0]?.[1] ?? '');
+    expect(logged.length).toBeLessThanOrEqual(4_000);
+    const escaped = escapeHtml('x'.repeat(60_000));
+    expect(escaped.length).toBeLessThanOrEqual(50_000);
+  });
 });

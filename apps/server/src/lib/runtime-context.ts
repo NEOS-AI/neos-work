@@ -23,8 +23,16 @@ export function normalizeListenPort(raw: unknown, fallback = DEFAULT_PORT): numb
   return p;
 }
 
+/** Cap runtime auth token length (settings / env hygiene). */
+const AUTH_TOKEN_MAX_CHARS = 8_192;
+
 export function setRuntimeContext(ctx: { authToken: string; port: number }): void {
-  authToken = typeof ctx.authToken === 'string' ? ctx.authToken.trim() : String(ctx.authToken ?? '');
+  let token =
+    typeof ctx.authToken === 'string' ? ctx.authToken.trim() : String(ctx.authToken ?? '');
+  // Drop control chars that would break Authorization headers
+  if (/[\0\r\n]/.test(token)) token = '';
+  if (token.length > AUTH_TOKEN_MAX_CHARS) token = token.slice(0, AUTH_TOKEN_MAX_CHARS);
+  authToken = token;
   port = normalizeListenPort(ctx.port, port || DEFAULT_PORT);
 }
 

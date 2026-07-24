@@ -44,6 +44,20 @@ describe('memory tools', () => {
     expect(cb.save).not.toHaveBeenCalled();
   });
 
+  it('recall rejects control-char queries and filters bad tags', async () => {
+    const cb = mockCallbacks();
+    const tool = createRecallTool(cb);
+    const bad = await tool.execute({ query: 'a\nb' });
+    expect(bad.success).toBe(false);
+    expect(bad.error).toMatch(/control characters/i);
+
+    await tool.execute({
+      query: 'ok',
+      tags: ['good', 'bad\ntag', '', 'x'.repeat(101), 'also'],
+    });
+    expect(cb.search).toHaveBeenCalledWith('ok', ['good', 'also'], 5);
+  });
+
   it('remember saves and returns key', async () => {
     const cb = mockCallbacks();
     const tool = createRememberTool(cb);

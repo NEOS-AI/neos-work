@@ -30,6 +30,15 @@ describe('BlockNode', () => {
     expect(result.error).toMatch(/blockId is required/);
   });
 
+  it('rejects control-char or overlong blockId', async () => {
+    const ctrl = await node.execute(ctx({ blockId: 'bad\nid' }));
+    expect(ctrl.ok).toBe(false);
+    expect(ctrl.error).toMatch(/blockId is invalid/);
+    const long = await node.execute(ctx({ blockId: 'b'.repeat(201) }));
+    expect(long.ok).toBe(false);
+    expect(long.error).toMatch(/blockId is invalid/);
+  });
+
   it('trims blockId before resolve', async () => {
     const meta: WorkflowBlock = {
       id: 'cov_trim_block',

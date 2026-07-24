@@ -89,6 +89,9 @@ harness.post('/', async (c) => {
   if (!name || !systemPrompt) {
     return c.json({ ok: false, error: 'name and systemPrompt are required' }, 400);
   }
+  if (/[\0\r\n]/.test(name) || name.length > 200) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
 
   if (!Array.isArray(body.allowedTools)) {
     return c.json({ ok: false, error: 'allowedTools must be an array' }, 400);
@@ -103,20 +106,25 @@ harness.post('/', async (c) => {
     ? domainRaw
     : 'general';
 
-  const newHarness = db.createCustomHarness({
-    id: nanoid(12),
-    name,
-    domain: domain as never,
-    description,
-    systemPrompt,
-    allowedTools,
-    constraints: normalizeConstraints(body.constraints),
-  });
+  try {
+    const newHarness = db.createCustomHarness({
+      id: nanoid(12),
+      name,
+      domain: domain as never,
+      description,
+      systemPrompt,
+      allowedTools,
+      constraints: normalizeConstraints(body.constraints),
+    });
 
-  // Register in runtime harness registry
-  registerHarness(newHarness);
+    // Register in runtime harness registry
+    registerHarness(newHarness);
 
-  return c.json({ ok: true, data: newHarness }, 201);
+    return c.json({ ok: true, data: newHarness }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create harness';
+    return c.json({ ok: false, error: msg }, 400);
+  }
 });
 
 harness.put('/:id', async (c) => {

@@ -26,7 +26,12 @@ export class GoogleAdapter implements LLMProviderAdapter {
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
-    const { model, messages, tools, thinkingMode = 'none', signal } = params;
+    const { tools, thinkingMode = 'none', signal } = params;
+    // Clamp model id (control chars / overlong → first known model)
+    let model = typeof params.model === 'string' ? params.model.trim() : '';
+    if (!model || /[\0\r\n]/.test(model) || model.length > 200) {
+      model = this.getModels()[0]?.id ?? 'gemini-2.0-flash';
+    }
     // Clamp maxTokens (invalid → 4096; hard cap 128k)
     const rawMax = Number(params.maxTokens ?? 4096);
     const maxTokens =
@@ -35,17 +40,28 @@ export class GoogleAdapter implements LLMProviderAdapter {
         : 4096;
 
     // Convert messages to Gemini format
+    const messages = Array.isArray(params.messages) ? params.messages.slice(0, 200) : [];
     const systemMessages = messages.filter((m) => m.role === 'system');
     const conversationMessages = messages.filter((m) => m.role !== 'system');
+    const SYS_MAX = 100_000;
+    const MSG_MAX = 500_000;
 
-    const systemInstruction = systemMessages
+    let systemInstruction = systemMessages
       .map((m) => (typeof m.content === 'string' ? m.content : ''))
       .join('\n');
+    if (systemInstruction.length > SYS_MAX) {
+      systemInstruction = systemInstruction.slice(0, SYS_MAX);
+    }
 
-    const contents = conversationMessages.map((m) => ({
-      role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
-      parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
-    }));
+    const contents = conversationMessages.map((m) => {
+      let text =
+        typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      if (text.length > MSG_MAX) text = text.slice(0, MSG_MAX) + '…[truncated]';
+      return {
+        role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
+        parts: [{ text }],
+      };
+    });
 
     const useThinking = thinkingMode !== 'none';
     const thinkingBudget = THINKING_BUDGET[thinkingMode] || THINKING_BUDGET.high;

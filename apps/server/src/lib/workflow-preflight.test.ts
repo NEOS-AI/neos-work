@@ -55,6 +55,17 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'blank_node_id')).toBe(true);
   });
 
+  it('errors when graph exceeds max nodes', () => {
+    const nodes = Array.from({ length: 2_001 }, (_, i) => ({
+      id: `n${i}`,
+      type: i === 0 ? 'trigger' : i === 1 ? 'output' : 'block',
+      config: {},
+    }));
+    const r = assessWorkflowPreflight({ nodes, edges: [] }, {});
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'too_many_nodes')).toBe(true);
+  });
+
   it('errors when web_search lacks Tavily key', () => {
     const r = assessWorkflowPreflight(
       {

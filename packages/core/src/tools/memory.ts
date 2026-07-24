@@ -11,11 +11,16 @@ export interface MemoryCallbacks {
   remove(key: string): Promise<void>;
 }
 
+const TAGS_MAX = 50;
+const TAG_MAX_CHARS = 100;
+const RECALL_QUERY_MAX_CHARS = 2_000;
+
 function normalizeTags(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const tags = raw
     .map((t) => String(t).trim())
-    .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t));
+    .filter((t) => t.length > 0 && t.length <= TAG_MAX_CHARS && !/[\0\r\n]/.test(t))
+    .slice(0, TAGS_MAX);
   return tags.length > 0 ? tags : undefined;
 }
 
@@ -92,10 +97,16 @@ export function createRecallTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const query =
+        let query =
           typeof input.query === 'string' ? input.query.trim() : String(input.query ?? '').trim();
         if (!query) {
           return { success: false, output: null, error: 'query is required' };
+        }
+        if (/[\0\r\n]/.test(query)) {
+          return { success: false, output: null, error: 'query contains invalid control characters' };
+        }
+        if (query.length > RECALL_QUERY_MAX_CHARS) {
+          query = query.slice(0, RECALL_QUERY_MAX_CHARS);
         }
         const tags = normalizeTags(input.tags);
         const limit = clampLimit(input.limit, 5);

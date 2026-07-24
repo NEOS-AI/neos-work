@@ -68,7 +68,12 @@ export class OpenAIAdapter implements LLMProviderAdapter {
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
-    const { model, messages, tools, signal } = params;
+    const { tools, signal } = params;
+    // Clamp model id (control chars / overlong ids → first known model)
+    let model = typeof params.model === 'string' ? params.model.trim() : '';
+    if (!model || /[\0\r\n]/.test(model) || model.length > 200) {
+      model = this.getModels()[0]?.id ?? 'gpt-4o';
+    }
     // Clamp maxTokens (invalid → 4096; hard cap 128k for compatible providers)
     const rawMax = Number(params.maxTokens ?? 4096);
     const maxTokens =
@@ -83,11 +88,18 @@ export class OpenAIAdapter implements LLMProviderAdapter {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    // Build message array
-    const oaiMessages = messages.map((m) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-    }));
+    // Build message array (cap per-message content to bound request size)
+    const MSG_CONTENT_MAX = 500_000;
+    const oaiMessages = (Array.isArray(params.messages) ? params.messages : [])
+      .slice(0, 200)
+      .map((m) => {
+        let content =
+          typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+        if (content.length > MSG_CONTENT_MAX) {
+          content = content.slice(0, MSG_CONTENT_MAX) + '…[truncated]';
+        }
+        return { role: m.role, content };
+      });
 
     // Build request body
     const body: Record<string, unknown> = {

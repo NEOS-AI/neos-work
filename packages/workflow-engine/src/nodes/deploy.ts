@@ -19,10 +19,19 @@ export const DeployNode: ExecutableNode = {
     const serverUrl = safeServerUrl(settings['SERVER_URL']);
     const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
 
+    const DEPLOY_CONTENT_MAX = 2 * 1024 * 1024;
     const rawContent = inputs['content'] ?? config?.content ?? '';
     const content = typeof rawContent === 'string' ? rawContent.trim() : String(rawContent).trim();
     if (!content) {
       return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
+    }
+    if (content.length > DEPLOY_CONTENT_MAX) {
+      return {
+        ok: false,
+        output: null,
+        error: `content too large (max ${DEPLOY_CONTENT_MAX} characters)`,
+        durationMs: Date.now() - start,
+      };
     }
 
     const projectName = String(

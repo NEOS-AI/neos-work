@@ -101,6 +101,21 @@ describe('OpenAIAdapter', () => {
     ]);
   });
 
+  it('chat falls back to default model for control-char / overlong model ids', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('down'));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    for await (const _ of adapter.chat({
+      model: 'bad\nmodel',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      // drain
+    }
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}'));
+    expect(body.model).toBe(OPENAI_MODELS[0]?.id ?? 'gpt-4o');
+    expect(body.model).not.toContain('\n');
+  });
+
   it('chat yields error when response is not ok', async () => {
     vi.stubGlobal(
       'fetch',

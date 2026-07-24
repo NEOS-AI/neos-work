@@ -11,6 +11,9 @@ import {
 
 // Input length limit for prompt injection protection
 const MAX_INPUT_LENGTH = 4096;
+const BLOCK_ID_MAX = 200;
+const PARAM_KEY_MAX = 100;
+const PARAM_KEYS_MAX = 100;
 
 export class BlockNode implements ExecutableNode {
   type = 'block' as const;
@@ -25,21 +28,25 @@ export class BlockNode implements ExecutableNode {
     if (!blockId) {
       return { ok: false, output: null, error: 'blockId is required for block nodes', durationMs: 0 };
     }
+    if (/[\0\r\n]/.test(blockId) || blockId.length > BLOCK_ID_MAX) {
+      return { ok: false, output: null, error: 'blockId is invalid', durationMs: 0 };
+    }
 
     const block = resolveBlock(blockId);
     if (!block) {
       return { ok: false, output: null, error: `Block not found: ${blockId}`, durationMs: 0 };
     }
 
-    // Normalize params: drop blank keys; trim string values (prompt injection / hygiene)
+    // Normalize params: drop blank/control-char/overlong keys; trim string values
     const rawParams =
       ctx.config?.['params'] && typeof ctx.config['params'] === 'object' && !Array.isArray(ctx.config['params'])
         ? (ctx.config['params'] as Record<string, unknown>)
         : {};
     const params: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(rawParams)) {
+      if (Object.keys(params).length >= PARAM_KEYS_MAX) break;
       const key = typeof k === 'string' ? k.trim() : '';
-      if (!key) continue;
+      if (!key || /[\0\r\n]/.test(key) || key.length > PARAM_KEY_MAX) continue;
       params[key] = typeof v === 'string' ? v.trim() : v;
     }
 
@@ -99,13 +106,21 @@ export class BlockNode implements ExecutableNode {
     }
 
     if (implType === 'skill') {
-      const skillId =
+      let skillId =
         typeof block.skillId === 'string' ? block.skillId.trim() : String(block.skillId ?? '').trim();
       if (!skillId) {
         return {
           ok: false,
           output: null,
           error: 'skillId is required for skill blocks',
+          durationMs: Date.now() - start,
+        };
+      }
+      if (/[\0\r\n]/.test(skillId) || skillId.length > BLOCK_ID_MAX) {
+        return {
+          ok: false,
+          output: null,
+          error: 'skillId is invalid',
           durationMs: Date.now() - start,
         };
       }

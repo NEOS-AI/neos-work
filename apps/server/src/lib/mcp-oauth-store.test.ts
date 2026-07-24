@@ -77,6 +77,19 @@ describe('mcp-oauth-store', () => {
     expect((await getTokenStatus(TEST_ID)).connected).toBe(false);
   });
 
+  it('caps oversized access tokens on save', async () => {
+    await saveToken({
+      serverId: TEST_ID,
+      accessToken: 'A'.repeat(20_000),
+      refreshToken: 'R'.repeat(20_000),
+      scope: 'S'.repeat(2_000),
+    });
+    const loaded = await loadToken(TEST_ID);
+    expect(loaded?.accessToken.length).toBe(16_384);
+    expect(loaded?.refreshToken?.length).toBe(16_384);
+    expect(loaded?.scope?.length).toBe(1_000);
+  });
+
   it('returns null for missing token', async () => {
     expect(await loadToken('does-not-exist-xyz')).toBeNull();
     expect(await isTokenValid('does-not-exist-xyz')).toBe(false);

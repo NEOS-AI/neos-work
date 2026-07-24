@@ -28,6 +28,13 @@ describe('runtime-context', () => {
     // Invalid port falls back to previous valid port
     expect(getRuntimePort()).toBe(8080);
   });
+
+  it('drops control-char tokens and caps overlong auth tokens', () => {
+    setRuntimeContext({ authToken: 'good\nbad', port: 3001 });
+    expect(getRuntimeAuthToken()).toBe('');
+    setRuntimeContext({ authToken: 't'.repeat(10_000), port: 3001 });
+    expect(getRuntimeAuthToken().length).toBe(8_192);
+  });
 });
 
 describe('runtime-context updates', () => {
