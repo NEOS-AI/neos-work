@@ -11,6 +11,23 @@ export interface MemoryCallbacks {
   remove(key: string): Promise<void>;
 }
 
+function normalizeTags(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const tags = raw.map((t) => String(t).trim()).filter(Boolean);
+  return tags.length > 0 ? tags : undefined;
+}
+
+function clampLimit(raw: unknown, fallback = 5): number {
+  const n =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && raw.trim()
+        ? Number(raw)
+        : fallback;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(100, Math.max(1, Math.floor(n)));
+}
+
 export function createRememberTool(callbacks: MemoryCallbacks): Tool {
   return {
     name: 'remember',
@@ -26,9 +43,13 @@ export function createRememberTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const key = input.key as string;
-        const content = input.content as string;
-        const tags = input.tags as string[] | undefined;
+        const key =
+          typeof input.key === 'string' ? input.key.trim() : String(input.key ?? '').trim();
+        const content =
+          typeof input.content === 'string'
+            ? input.content.trim()
+            : String(input.content ?? '').trim();
+        const tags = normalizeTags(input.tags);
 
         if (!key || key.length > 200) {
           return { success: false, output: null, error: 'Key must be between 1 and 200 characters' };
@@ -61,9 +82,13 @@ export function createRecallTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const query = input.query as string;
-        const tags = input.tags as string[] | undefined;
-        const limit = (input.limit as number) ?? 5;
+        const query =
+          typeof input.query === 'string' ? input.query.trim() : String(input.query ?? '').trim();
+        if (!query) {
+          return { success: false, output: null, error: 'query is required' };
+        }
+        const tags = normalizeTags(input.tags);
+        const limit = clampLimit(input.limit, 5);
 
         const memories = await callbacks.search(query, tags, limit);
         return { success: true, output: { memories } };
@@ -87,8 +112,13 @@ export function createForgetTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        await callbacks.remove(input.key as string);
-        return { success: true, output: { removed: input.key } };
+        const key =
+          typeof input.key === 'string' ? input.key.trim() : String(input.key ?? '').trim();
+        if (!key) {
+          return { success: false, output: null, error: 'key is required' };
+        }
+        await callbacks.remove(key);
+        return { success: true, output: { removed: key } };
       } catch (err) {
         return { success: false, output: null, error: (err as Error).message };
       }

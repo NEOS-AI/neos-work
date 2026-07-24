@@ -26,13 +26,17 @@ function isProtectedPath(relativePath: string): boolean {
 
 /** Resolve a user-provided path within the workspace, preventing traversal and symlink escape. */
 function safePath(workspaceRoot: string, userPath: string): string {
+  const trimmed = typeof userPath === 'string' ? userPath.trim() : '';
+  if (!trimmed) {
+    throw new Error('Path is required');
+  }
   const absoluteRoot = realpathSync(resolve(workspaceRoot));
-  const resolved = resolve(absoluteRoot, userPath);
+  const resolved = resolve(absoluteRoot, trimmed);
   const rel = relative(absoluteRoot, resolved);
 
   // Logical path check (prevents .. traversal)
   if (rel.startsWith('..') || (!resolved.startsWith(absoluteRoot + '/') && resolved !== absoluteRoot)) {
-    throw new Error(`Path "${userPath}" is outside the workspace`);
+    throw new Error(`Path "${trimmed}" is outside the workspace`);
   }
 
   // Resolve symlinks and re-check real path
@@ -45,16 +49,16 @@ function safePath(workspaceRoot: string, userPath: string): string {
     try {
       const realParent = realpathSync(parentDir);
       if (!realParent.startsWith(absoluteRoot + '/') && realParent !== absoluteRoot) {
-        throw new Error(`Path "${userPath}" resolves outside the workspace via symlink`);
+        throw new Error(`Path "${trimmed}" resolves outside the workspace via symlink`);
       }
       return resolved;
     } catch {
-      throw new Error(`Parent directory for "${userPath}" does not exist`);
+      throw new Error(`Parent directory for "${trimmed}" does not exist`);
     }
   }
 
   if (!realPath.startsWith(absoluteRoot + '/') && realPath !== absoluteRoot) {
-    throw new Error(`Path "${userPath}" resolves outside the workspace via symlink`);
+    throw new Error(`Path "${trimmed}" resolves outside the workspace via symlink`);
   }
   return realPath;
 }
@@ -72,7 +76,8 @@ export function createReadFileTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const filePath = safePath(workspaceRoot, input.path as string);
+        const userPath = typeof input.path === 'string' ? input.path : String(input.path ?? '');
+        const filePath = safePath(workspaceRoot, userPath);
         const content = await readFile(filePath, 'utf-8');
         return { success: true, output: content };
       } catch (err) {
@@ -96,12 +101,13 @@ export function createWriteFileTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const content = input.content as string;
+        const content =
+          typeof input.content === 'string' ? input.content : String(input.content ?? '');
         if (content.length > MAX_WRITE_SIZE) {
           return { success: false, output: null, error: `Content exceeds max size (${MAX_WRITE_SIZE} bytes)` };
         }
 
-        const userPath = input.path as string;
+        const userPath = typeof input.path === 'string' ? input.path.trim() : String(input.path ?? '');
         const absoluteRoot = realpathSync(resolve(workspaceRoot));
         const filePath = safePath(workspaceRoot, userPath);
         const rel = relative(absoluteRoot, filePath);
@@ -130,7 +136,9 @@ export function createListDirectoryTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const dirPath = safePath(workspaceRoot, (input.path as string) || '.');
+        const rawPath =
+          typeof input.path === 'string' ? input.path.trim() || '.' : '.';
+        const dirPath = safePath(workspaceRoot, rawPath);
         const entries = await readdir(dirPath);
         const results = await Promise.all(
           entries
@@ -173,22 +181,35 @@ export function createSearchFilesTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const pattern = input.pattern as string;
-        const searchType = (input.type as string) ?? 'glob';
+        const pattern =
+          typeof input.pattern === 'string' ? input.pattern.trim() : String(input.pattern ?? '').trim();
+        if (!pattern) {
+          return { success: false, output: null, error: 'pattern is required' };
+        }
+        const searchTypeRaw =
+          typeof input.type === 'string' ? input.type.trim().toLowerCase() : 'glob';
+        const searchType = searchTypeRaw === 'content' ? 'content' : 'glob';
 
         const absoluteRoot = realpathSync(resolve(workspaceRoot));
         let searchRoot = absoluteRoot;
 
-        if (input.directory) {
-          const resolved = resolve(absoluteRoot, input.directory as string);
+        if (input.directory != null && input.directory !== '') {
+          const dir =
+            typeof input.directory === 'string'
+              ? input.directory.trim()
+              : String(input.directory);
+          if (!dir) {
+            return { success: false, output: null, error: 'directory is required when provided' };
+          }
+          const resolved = resolve(absoluteRoot, dir);
           let realDir: string;
           try {
             realDir = realpathSync(resolved);
           } catch {
-            return { success: false, output: null, error: `Directory does not exist: ${input.directory}` };
+            return { success: false, output: null, error: `Directory does not exist: ${dir}` };
           }
           if (!realDir.startsWith(absoluteRoot + '/') && realDir !== absoluteRoot) {
-            return { success: false, output: null, error: `Directory is outside the workspace: ${input.directory}` };
+            return { success: false, output: null, error: `Directory is outside the workspace: ${dir}` };
           }
           searchRoot = realDir;
         }
@@ -263,24 +284,34 @@ export function createMoveFileTool(workspaceRoot: string): Tool {
       try {
         const absoluteRoot = realpathSync(resolve(workspaceRoot));
 
-        const srcPath = safePath(workspaceRoot, input.source as string);
+        const source =
+          typeof input.source === 'string' ? input.source.trim() : String(input.source ?? '').trim();
+        const destination =
+          typeof input.destination === 'string'
+            ? input.destination.trim()
+            : String(input.destination ?? '').trim();
+        if (!source || !destination) {
+          return { success: false, output: null, error: 'source and destination are required' };
+        }
+
+        const srcPath = safePath(workspaceRoot, source);
         const srcRel = relative(absoluteRoot, srcPath);
         if (isProtectedPath(srcRel)) {
-          return { success: false, output: null, error: `Cannot move protected path: ${input.source}` };
+          return { success: false, output: null, error: `Cannot move protected path: ${source}` };
         }
 
         // Destination may not exist yet — validate parent
-        const destResolved = resolve(absoluteRoot, input.destination as string);
+        const destResolved = resolve(absoluteRoot, destination);
         const destRel = relative(absoluteRoot, destResolved);
         if (destRel.startsWith('..')) {
-          return { success: false, output: null, error: `Destination is outside the workspace: ${input.destination}` };
+          return { success: false, output: null, error: `Destination is outside the workspace: ${destination}` };
         }
         if (isProtectedPath(destRel)) {
-          return { success: false, output: null, error: `Cannot move to protected path: ${input.destination}` };
+          return { success: false, output: null, error: `Cannot move to protected path: ${destination}` };
         }
 
         await rename(srcPath, destResolved);
-        return { success: true, output: { moved: `${input.source} → ${input.destination}` } };
+        return { success: true, output: { moved: `${source} → ${destination}` } };
       } catch (err) {
         return { success: false, output: null, error: (err as Error).message };
       }

@@ -26,21 +26,34 @@ export class AgentOrchestrator {
     options: OrchestratorOptions = {},
   ) {
     this.planner = new Planner(adapter);
-    this.maxIterations = options.maxIterations ?? 10;
-    this.model = options.model ?? (adapter.getModels()[0]?.id ?? '');
+    const rawMax = Number(options.maxIterations ?? 10);
+    // Allow 0 (fail immediately after plan) through 200; invalid → default 10
+    this.maxIterations =
+      Number.isFinite(rawMax) && rawMax >= 0
+        ? Math.min(200, Math.floor(rawMax))
+        : 10;
+    const modelOpt = typeof options.model === 'string' ? options.model.trim() : '';
+    this.model = modelOpt || (adapter.getModels()[0]?.id ?? '');
     this.reflectionStrategy = new ReflectionStrategy(adapter);
   }
 
   async *run(goal: string, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
+    const goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
     const task: AgentTask = {
       id: crypto.randomUUID(),
-      goal,
+      goal: goalText,
       steps: [],
       status: 'running',
       createdAt: new Date(),
     };
 
     try {
+      if (!goalText) {
+        task.status = 'failed';
+        yield { type: 'error', error: 'Goal is required' };
+        return;
+      }
+
       // Phase 1: Plan
       if (signal?.aborted) {
         task.status = 'cancelled';
@@ -48,13 +61,13 @@ export class AgentOrchestrator {
         return;
       }
 
-      const steps = await this.planner.plan(goal, '', signal);
+      const steps = await this.planner.plan(goalText, '', signal);
       task.steps = steps;
       yield { type: 'plan', steps };
 
       if (steps.length === 0) {
         // No steps — fall back to direct LLM response
-        yield* this.directResponse(goal, signal);
+        yield* this.directResponse(goalText, signal);
         task.status = 'completed';
         task.completedAt = new Date();
         yield { type: 'done', task };
@@ -63,7 +76,7 @@ export class AgentOrchestrator {
 
       // Phase 2: Execute steps
       const conversationHistory: Message[] = [
-        { role: 'user', content: `Goal: ${goal}` },
+        { role: 'user', content: `Goal: ${goalText}` },
       ];
       let iteration = 0;
 
@@ -162,7 +175,7 @@ export class AgentOrchestrator {
 
       // Phase 3: Synthesize final response
       if (!signal?.aborted) {
-        yield* this.synthesizeResult(goal, task.steps, signal);
+        yield* this.synthesizeResult(goalText, task.steps, signal);
       }
 
       task.status = 'completed';

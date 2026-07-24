@@ -311,6 +311,58 @@ describe('workflow routes export/import/preflight/runs', () => {
     expect(del.status).toBe(404);
   });
 
+  it('POST /:id/run streams SSE for a minimal graph and persists the run', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: minimalGraph.nodes as never,
+      edges: minimalGraph.edges as never,
+    });
+
+    const blank = await workflow.request('/%20/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: { q: 1 } }),
+    });
+    expect(blank.status).toBe(404);
+
+    const missing = await workflow.request('/no-such-wf/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: {} }),
+    });
+    expect(missing.status).toBe(404);
+
+    const res = await workflow.request(`/${wf.id}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: { hello: 'world' } }),
+    });
+    // SSE stream — 200 with event-stream or plain stream body
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toMatch(/data:\s*\{/);
+    expect(text).toMatch(/run\.(started|completed)/);
+
+    const runs = workflows.listRuns(wf.id);
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+    expect(['completed', 'failed', 'cancelled', 'running']).toContain(runs[0]!.status);
+  });
+
+  it('POST /:id/run tolerates non-JSON body and missing workflow still 404', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: minimalGraph.nodes as never,
+      edges: minimalGraph.edges as never,
+    });
+    // No content-type / empty body — should still stream
+    const res = await workflow.request(`/${wf.id}/run`, { method: 'POST' });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toMatch(/data:/);
+  });
+
   it('export.zip returns a zip archive with workflow.json', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

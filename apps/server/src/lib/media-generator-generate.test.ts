@@ -156,4 +156,27 @@ describe('generateAudio', () => {
       }),
     );
   });
+
+  it('normalizes image size case', async () => {
+    generateMock.mockResolvedValue({
+      data: [{ url: 'https://cdn.example/img.png' }],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([9]).buffer,
+      }),
+    );
+    const result = await generateImage({
+      prompt: 'case',
+      // @ts-expect-error intentional case
+      size: '1024X1024',
+      apiKey: 'sk',
+    });
+    created.push(result.filePath);
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ size: '1024x1024' }),
+    );
+  });
 });

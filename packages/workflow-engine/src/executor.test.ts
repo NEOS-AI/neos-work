@@ -494,4 +494,23 @@ describe('executeWorkflow graph failure and skip paths', () => {
     // Sequential topo path: "all upstream"; concurrent race path: "all branches"
     expect(orFailed?.error).toMatch(/OR gate: all (upstream|branches)/);
   });
+
+  it('resolves case-insensitive / padded node types', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-type-case',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: '  TRIGGER  ' as 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+          { id: 'output', type: ' Output ' as 'output', label: 'Output', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'output' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    expect(events.some((e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'trigger')).toBe(true);
+    expect(events.some((e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'output')).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+  });
 });

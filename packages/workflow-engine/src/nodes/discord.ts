@@ -4,10 +4,9 @@
  * Only discord.com/api/webhooks/ URLs are allowed (SSRF protection).
  */
 
+import { isDiscordWebhookUrl } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { DISCORD_CONTENT_MAX_LENGTH, resolveMessageText } from './message-text.js';
-
-const DISCORD_WEBHOOK_PREFIX = 'https://discord.com/api/webhooks/';
 
 export class DiscordMessageNode implements ExecutableNode {
   type = 'discord_message' as const;
@@ -19,8 +18,8 @@ export class DiscordMessageNode implements ExecutableNode {
       return { ok: false, output: null, error: 'DISCORD_WEBHOOK_URL not set', durationMs: 0 };
     }
 
-    // SSRF protection: only allow discord.com webhook URLs (case-insensitive host/path prefix)
-    if (!webhookUrl.toLowerCase().startsWith(DISCORD_WEBHOOK_PREFIX)) {
+    // SSRF protection: https + discord.com/discordapp.com + /api/webhooks/
+    if (!isDiscordWebhookUrl(webhookUrl)) {
       return {
         ok: false,
         output: null,

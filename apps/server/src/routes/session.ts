@@ -175,7 +175,9 @@ session.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid model' }, 400);
   }
   const thinkingMode =
-    typeof body.thinkingMode === 'string' ? body.thinkingMode.trim() : body.thinkingMode;
+    typeof body.thinkingMode === 'string'
+      ? body.thinkingMode.trim().toLowerCase()
+      : body.thinkingMode;
   if (thinkingMode && !THINKING_MODES.includes(thinkingMode as ThinkingMode)) {
     return c.json({ ok: false, error: 'Invalid thinkingMode' }, 400);
   }

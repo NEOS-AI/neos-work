@@ -323,8 +323,10 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   onEvent({ type: 'run.completed', runId, duration: Date.now() - runStartMs });
 }
 
-function resolveNode(type: NodeType, nodeConfig?: Record<string, unknown>): ExecutableNode {
-  switch (type) {
+function resolveNode(type: NodeType | string, nodeConfig?: Record<string, unknown>): ExecutableNode {
+  const normalized =
+    typeof type === 'string' ? (type.trim().toLowerCase() as NodeType) : type;
+  switch (normalized) {
     case 'trigger':         return new TriggerNode();
     case 'agent_finance':   return new AgentNode('agent_finance', nodeConfig);
     case 'agent_coding':    return new AgentNode('agent_coding', nodeConfig);
@@ -340,6 +342,6 @@ function resolveNode(type: NodeType, nodeConfig?: Record<string, unknown>): Exec
     case 'output':          return new OutputNode();
     case 'media':           return MediaNode;
     case 'deploy':          return DeployNode;
-    default:                throw new Error(`Unknown node type: ${type}`);
+    default:                throw new Error(`Unknown node type: ${normalized}`);
   }
 }

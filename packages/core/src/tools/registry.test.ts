@@ -18,9 +18,16 @@ describe('ToolRegistry', () => {
     const reg = new ToolRegistry();
     const t = makeTool('echo');
     reg.register(t);
-    expect(reg.get('echo')).toBe(t);
+    expect(reg.get('echo')?.name).toBe('echo');
+    expect(reg.get('  echo  ')?.name).toBe('echo');
     expect(reg.get('missing')).toBeUndefined();
+    expect(reg.get('   ')).toBeUndefined();
     expect(reg.getAll()).toHaveLength(1);
+
+    reg.register(makeTool('  pad-name  '));
+    expect(reg.get('pad-name')?.name).toBe('pad-name');
+    reg.register(makeTool('   '));
+    expect(reg.getAll()).toHaveLength(2);
   });
 
   it('toDefinitions maps tool metadata', () => {
@@ -40,6 +47,9 @@ describe('ToolRegistry', () => {
     const result = await reg.execute('nope', {});
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Tool not found/);
+    const blank = await reg.execute('   ', {});
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/Tool name is required/i);
   });
 
   it('execute runs tool and catches thrown errors', async () => {

@@ -158,5 +158,21 @@ describe('updateArtifact PATCH semantics', () => {
   it('returns undefined for missing id', () => {
     expect(updateArtifact('missing-id', { name: 'x' })).toBeUndefined();
   });
+
+  it('normalizes contentType to lower-case', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const a = createArtifact({
+      workflowId: wf.id,
+      name: 'x',
+      contentType: '  TEXT/HTML  ',
+    });
+    expect(a.contentType).toBe('text/html');
+    deleteArtifact(a.id);
+  });
 });
 

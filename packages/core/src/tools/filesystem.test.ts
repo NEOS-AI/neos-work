@@ -43,6 +43,14 @@ describe('filesystem tools', () => {
     expect(got.success).toBe(true);
     expect(got.output).toBe('hello');
 
+    const padded = await write.execute({ path: '  pad.txt  ', content: 'p' });
+    expect(padded.success).toBe(true);
+    expect((await read.execute({ path: '  pad.txt  ' })).output).toBe('p');
+
+    const blank = await read.execute({ path: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/Path is required/i);
+
     const escape = await read.execute({ path: '../outside.txt' });
     expect(escape.success).toBe(false);
     expect(escape.error).toMatch(/outside the workspace/);

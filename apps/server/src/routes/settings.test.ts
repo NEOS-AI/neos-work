@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deleteSetting } from '../db/settings.js';
 import { settings } from './settings.js';
 
@@ -128,6 +128,29 @@ describe('settings routes', () => {
     expect(body.data[SENSITIVE]).toBeDefined();
     expect(body.data[SENSITIVE]).not.toBe('sk-ant-super-secret-key');
     expect(body.data[SENSITIVE]).toMatch(/\.\.\.|^\*{4}/);
+  });
+
+  it('verify-key returns valid:false when adapter rejects the key', async () => {
+    // Anthropic validateApiKey hits the network — stub fetch to fail closed as false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'unauthorized' }),
+    );
+    try {
+      const res = await settings.request('/verify-key', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'anthropic', key: 'sk-bad' }),
+      });
+      // Either structured valid:false (200) or validation failed (400) depending on adapter throw
+      expect([200, 400]).toContain(res.status);
+      if (res.status === 200) {
+        const body = await res.json() as { data: { valid: boolean } };
+        expect(body.data.valid).toBe(false);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('PUT rejects missing value and oversized payload; DELETE missing is 404', async () => {

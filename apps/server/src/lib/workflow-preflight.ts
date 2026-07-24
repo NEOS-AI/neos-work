@@ -3,7 +3,7 @@
  * Used by POST /api/workflow/:id/preflight before a run.
  */
 
-import { isValidDeployProjectName } from '@neos-work/shared';
+import { isDiscordWebhookUrl, isValidDeployProjectName } from '@neos-work/shared';
 
 export interface PreflightIssue {
   code: string;
@@ -16,8 +16,6 @@ export interface WorkflowLike {
   nodes: Array<{ id: string; type: string; label?: string; config?: Record<string, unknown> }>;
   edges: Array<{ id: string; source: string; target: string }>;
 }
-
-const DISCORD_WEBHOOK_PREFIX = 'https://discord.com/api/webhooks/';
 
 /** Treat missing or whitespace-only secret values as unset. */
 function secret(secrets: Record<string, string>, key: string): string {
@@ -86,13 +84,13 @@ export function assessWorkflowPreflight(
           nodeId: node.id,
           message: 'Discord node requires DISCORD_WEBHOOK_URL in settings.',
         });
-      } else if (!webhook.toLowerCase().startsWith(DISCORD_WEBHOOK_PREFIX)) {
-        // Align with DiscordMessageNode SSRF allow-list (case-insensitive)
+      } else if (!isDiscordWebhookUrl(webhook)) {
+        // Align with DiscordMessageNode SSRF allow-list (URL host/path)
         issues.push({
           code: 'invalid_discord_webhook',
           severity: 'error',
           nodeId: node.id,
-          message: 'Discord webhook URL must start with https://discord.com/api/webhooks/.',
+          message: 'Discord webhook URL must be an https://discord.com (or discordapp.com) /api/webhooks/ URL.',
         });
       }
     }

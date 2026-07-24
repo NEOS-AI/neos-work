@@ -52,6 +52,15 @@ describe('plugins routes', () => {
       body: JSON.stringify({ stageId: 's1', response: {} }),
     });
     expect(unknown.status).toBe(404);
+
+    // known-looking plugin id but no active run → stage mismatch / not found
+    const noRun = await plugins.request(`/${DIR_NAME}/run/no-such-run/resume`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stageId: 'confirm', response: {} }),
+    });
+    expect(noRun.status).toBe(404);
+    expect(((await noRun.json()) as { error: string }).error).toMatch(/not found|stage mismatch/i);
   });
 
   it('rejects upgrade without skillId/skillDirName', async () => {

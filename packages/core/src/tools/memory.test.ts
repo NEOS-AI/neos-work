@@ -51,6 +51,14 @@ describe('memory tools', () => {
     expect(result.success).toBe(true);
     expect(result.output).toEqual({ saved: 'pref' });
     expect(cb.save).toHaveBeenCalledWith('pref', 'dark', ['ui']);
+
+    const padded = await tool.execute({
+      key: '  pref2  ',
+      content: '  value  ',
+      tags: ['  a  ', '  ', 'b'],
+    });
+    expect(padded.success).toBe(true);
+    expect(cb.save).toHaveBeenCalledWith('pref2', 'value', ['a', 'b']);
   });
 
   it('remember maps callback errors', async () => {
@@ -77,6 +85,13 @@ describe('memory tools', () => {
     const result = await tool.execute({ query: 'q', tags: ['a', 'b'], limit: 12 });
     expect(result.success).toBe(true);
     expect(cb.search).toHaveBeenCalledWith('q', ['a', 'b'], 12);
+
+    const blank = await tool.execute({ query: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/query is required/i);
+
+    await tool.execute({ query: '  q  ', tags: ['  t  ', ''], limit: 999 });
+    expect(cb.search).toHaveBeenCalledWith('q', ['t'], 100);
   });
 
   it('recall maps callback errors', async () => {
@@ -95,6 +110,14 @@ describe('memory tools', () => {
     expect(result.success).toBe(true);
     expect(result.output).toEqual({ removed: 'old' });
     expect(cb.remove).toHaveBeenCalledWith('old');
+
+    const blank = await tool.execute({ key: '   ' });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/key is required/i);
+    expect(cb.remove).toHaveBeenCalledTimes(1);
+
+    await tool.execute({ key: '  padded  ' });
+    expect(cb.remove).toHaveBeenCalledWith('padded');
   });
 
   it('forget maps callback errors', async () => {

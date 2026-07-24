@@ -58,7 +58,9 @@ function rowToArtifact(row: ArtifactRow): Artifact {
 export function createArtifact(input: CreateArtifactInput): Artifact {
   const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
   const name = typeof input.name === 'string' ? input.name.trim() : '';
-  const contentType = typeof input.contentType === 'string' ? input.contentType.trim() : '';
+  // MIME types are case-insensitive; normalize to lower-case for consistent matching
+  const contentType =
+    typeof input.contentType === 'string' ? input.contentType.trim().toLowerCase() : '';
   if (!workflowId || !name || !contentType) {
     throw new Error('workflowId, name, and contentType are required');
   }

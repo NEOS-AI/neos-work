@@ -228,6 +228,161 @@ describe('plugin-runner empty pipeline', () => {
   });
 });
 
+describe('plugin-runner resume / abort / LLM paths', () => {
+  it('resumeRun returns false on stage mismatch', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'mismatch',
+      name: 'Mismatch',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'confirm',
+          name: 'Confirm',
+          kind: 'form',
+          humanInLoop: true,
+          outputKey: 'answer',
+        },
+      ],
+    };
+    let runId: string | null = null;
+    let resumedWrong = false;
+    const done = runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => {
+        if (e.type === 'pipeline.started') runId = e.runId;
+        if (e.type === 'stage.waiting' && runId) {
+          setTimeout(() => {
+            resumedWrong = resumeRun(runId!, 'wrong-stage', {});
+            // correct stage so the pipeline can finish
+            resumeRun(runId!, e.stageId, { ok: true });
+          }, 0);
+        }
+      },
+    });
+    await done;
+    expect(resumedWrong).toBe(false);
+  });
+
+  it('aborts human-in-loop wait when signal fires', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'abort-wait',
+      name: 'Abort Wait',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'confirm',
+          name: 'Confirm',
+          kind: 'form',
+          humanInLoop: true,
+          outputKey: 'answer',
+        },
+      ],
+    };
+    const controller = new AbortController();
+    const events: Array<{ type: string; error?: string }> = [];
+    const done = runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      signal: controller.signal,
+      onEvent: (e) => {
+        events.push(e as { type: string; error?: string });
+        if (e.type === 'stage.waiting') {
+          setTimeout(() => controller.abort(), 0);
+        }
+      },
+    });
+    await done;
+    expect(events.some((e) => e.type === 'pipeline.failed')).toBe(true);
+    const failed = events.find((e) => e.type === 'pipeline.failed');
+    expect(String(failed?.error ?? '')).toMatch(/Abort/i);
+  });
+
+  it('uses Anthropic success path and interpolates prompt placeholders', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'anthro-ok',
+      name: 'Anthro Ok',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          prompt: 'Plan for {{goal}} using {{prior}}',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ text: 'anthro-plan' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'launch', prior: 'notes' },
+      settings: { ANTHROPIC_API_KEY: 'sk-ant' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const completed = events.find((e) => e.type === 'stage.completed');
+    expect(String(completed?.output ?? '')).toBe('anthro-plan');
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}')) as {
+      messages: Array<{ content: string }>;
+    };
+    expect(body.messages[0]?.content).toContain('launch');
+    expect(body.messages[0]?.content).toContain('notes');
+    expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain('api.anthropic.com');
+  });
+
+  it('surfaces Anthropic and OpenAI HTTP error statuses', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'llm-http-err',
+      name: 'LLM HTTP',
+      version: '0.0.1',
+      pipeline: [
+        { id: 'plan', name: 'Plan', kind: 'plan', prompt: 'x', outputKey: 'plan' },
+      ],
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 529, json: async () => ({}) }),
+    );
+    const anthroEvents: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { ANTHROPIC_API_KEY: 'sk-ant' },
+      onEvent: (e) => anthroEvents.push(e as unknown as Record<string, unknown>),
+    });
+    expect(String(anthroEvents.find((e) => e.type === 'stage.completed')?.output ?? '')).toMatch(
+      /Anthropic API error 529/i,
+    );
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) }),
+    );
+    const oaiEvents: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { OPENAI_API_KEY: 'sk-oai' },
+      onEvent: (e) => oaiEvents.push(e as unknown as Record<string, unknown>),
+    });
+    expect(String(oaiEvents.find((e) => e.type === 'stage.completed')?.output ?? '')).toMatch(
+      /OpenAI API error 503/i,
+    );
+  });
+});
+
 describe('plugin-runner multi-stage human-in-loop', () => {
   it('waits twice for form then confirmation', async () => {
     const plugin: PluginManifest = {

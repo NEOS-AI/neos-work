@@ -85,13 +85,15 @@ describe('sessions CRUD', () => {
     });
     expect(s.provider).toBe('openai');
     expect(s.thinking_mode).toBe('high');
-    // unknown thinking mode falls back to none
+    // unknown thinking mode falls back to none; unknown provider → anthropic
     const s2 = createSession({
       workspaceId: 'default',
       title: '_cov_old',
       thinkingMode: 'ultra',
+      provider: 'azure',
     });
     expect(s2.thinking_mode).toBe('none');
+    expect(s2.provider).toBe('anthropic');
     deleteSession(s2.id);
     updateSessionTitle(s.id, '_cov_new');
     expect(getSession(s.id)?.title).toBe('_cov_new');

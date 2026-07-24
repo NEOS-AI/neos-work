@@ -56,14 +56,18 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.76',
+            'User-Agent': 'neos-work/0.3.77',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
 
         if (!response.ok) {
           const text = await response.text().catch(() => '');
-          return { success: false, output: null, error: `Tavily API returned ${response.status}: ${text}` };
+          return {
+            success: false,
+            output: null,
+            error: `Tavily API returned ${response.status}: ${text.slice(0, 500)}`,
+          };
         }
 
         const data = await response.json() as { results?: Array<{ title: string; url: string; content: string }> };

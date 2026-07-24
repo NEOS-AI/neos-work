@@ -74,6 +74,14 @@ describe('AgentOrchestrator', () => {
     expect((events[0] as { error: string }).error).toMatch(/Cancelled before planning/);
   });
 
+  it('rejects blank/whitespace goals before planning', async () => {
+    const registry = new ToolRegistry();
+    const orch = new AgentOrchestrator(mockAdapter(['[]']), registry);
+    const events = await collectEvents(orch.run('   '));
+    expect(events.map((e) => e.type)).toEqual(['error']);
+    expect((events[0] as { error: string }).error).toMatch(/Goal is required/i);
+  });
+
   it('plans, executes a tool step with input, synthesizes, and completes', async () => {
     const registry = new ToolRegistry();
     registry.register({

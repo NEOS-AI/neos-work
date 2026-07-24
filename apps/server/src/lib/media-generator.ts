@@ -104,7 +104,7 @@ export async function generateImage(options: {
     throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
   }
   const rawSize =
-    typeof options.size === 'string' ? options.size.trim() : '1024x1024';
+    typeof options.size === 'string' ? options.size.trim().toLowerCase() : '1024x1024';
   const size = (IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024') as
     '1024x1024' | '1792x1024' | '1024x1792';
   const rawQuality =

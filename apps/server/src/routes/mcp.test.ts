@@ -244,4 +244,23 @@ describe('mcp routes', () => {
     expect(body.data.authUrl).toContain('scope=read');
     expect(body.data.state).toBeTruthy();
   });
+
+  it('accepts case-insensitive transport and trims name/args', async () => {
+    const create = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `  ${NAME}  `,
+        transport: '  STDIO  ',
+        command: '  npx  ',
+        args: ['  -y  ', '  ', 'fake'],
+      }),
+    });
+    expect(create.status).toBe(201);
+    const body = await create.json() as { data: { name: string; transport: string; command: string; args: string[] } };
+    expect(body.data.name).toBe(NAME);
+    expect(body.data.transport).toBe('stdio');
+    expect(body.data.command).toBe('npx');
+    expect(body.data.args).toEqual(['-y', 'fake']);
+  });
 });

@@ -67,7 +67,11 @@ export function createSession(params: {
       : null;
   const providerRaw =
     typeof params.provider === 'string' ? params.provider.trim().toLowerCase() : '';
-  const provider = providerRaw || 'anthropic';
+  // Known chat providers; unknown/blank → anthropic default
+  const provider =
+    providerRaw === 'anthropic' || providerRaw === 'google' || providerRaw === 'openai'
+      ? providerRaw
+      : 'anthropic';
   const model =
     typeof params.model === 'string' ? params.model.trim() || 'claude-sonnet-4-5-20250929' : (params.model ?? 'claude-sonnet-4-5-20250929');
   const thinkingRaw =

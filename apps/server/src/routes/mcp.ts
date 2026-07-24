@@ -78,13 +78,27 @@ function createMcpServer(params: {
   args?: string[];
   url?: string;
 }): McpServerRow {
+  const name = typeof params.name === 'string' ? params.name.trim() : '';
+  if (!name) throw new Error('name is required');
+  const transportRaw =
+    typeof params.transport === 'string' ? params.transport.trim().toLowerCase() : '';
+  if (transportRaw !== 'stdio' && transportRaw !== 'http') {
+    throw new Error('transport must be "stdio" or "http"');
+  }
+  const command =
+    typeof params.command === 'string' ? params.command.trim() || null : (params.command ?? null);
+  const url =
+    typeof params.url === 'string' ? params.url.trim() || null : (params.url ?? null);
+  const args = Array.isArray(params.args)
+    ? params.args.map((a) => String(a).trim()).filter(Boolean)
+    : null;
+  const argsStr = args && args.length > 0 ? JSON.stringify(args) : null;
   const db = getDb();
   const id = crypto.randomUUID();
-  const argsStr = params.args ? JSON.stringify(params.args) : null;
   db.prepare(
     `INSERT INTO mcp_server (id, name, transport, command, args, url)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, params.name, params.transport, params.command ?? null, argsStr, params.url ?? null);
+  ).run(id, name, transportRaw, command, argsStr, url);
   return getMcpServer(id)!;
 }
 
@@ -141,9 +155,12 @@ mcp.post('/', async (c) => {
     if (!name || name.length > 200) {
       return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
     }
-    if (!['stdio', 'http'].includes(body.transport)) {
+    const transportRaw =
+      typeof body.transport === 'string' ? body.transport.trim().toLowerCase() : '';
+    if (transportRaw !== 'stdio' && transportRaw !== 'http') {
       return c.json({ ok: false, error: 'transport must be "stdio" or "http"' }, 400);
     }
+    const transport = transportRaw as 'stdio' | 'http';
     const command =
       typeof body.command === 'string' ? body.command.trim() : body.command;
     const url = typeof body.url === 'string' ? body.url.trim() : body.url;
@@ -152,19 +169,19 @@ mcp.post('/', async (c) => {
           .map((a) => (typeof a === 'string' ? a.trim() : String(a ?? '').trim()))
           .filter((a) => a.length > 0)
       : body.args;
-    if (body.transport === 'stdio' && !command) {
+    if (transport === 'stdio' && !command) {
       return c.json({ ok: false, error: 'command is required for stdio transport' }, 400);
     }
-    if (body.transport === 'http' && !url) {
+    if (transport === 'http' && !url) {
       return c.json({ ok: false, error: 'url is required for http transport' }, 400);
     }
-    if (body.transport === 'http' && url && !isSafeHttpBaseUrl(url)) {
+    if (transport === 'http' && url && !isSafeHttpBaseUrl(url)) {
       return c.json({ ok: false, error: 'url must be http(s)' }, 400);
     }
 
     const row = createMcpServer({
       name,
-      transport: body.transport,
+      transport,
       command,
       args,
       url,

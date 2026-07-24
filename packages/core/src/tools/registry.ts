@@ -10,11 +10,15 @@ export class ToolRegistry {
   private tools = new Map<string, Tool>();
 
   register(tool: Tool): void {
-    this.tools.set(tool.name, tool);
+    const name = typeof tool?.name === 'string' ? tool.name.trim() : '';
+    if (!name) return;
+    this.tools.set(name, { ...tool, name });
   }
 
   get(name: string): Tool | undefined {
-    return this.tools.get(name);
+    const n = typeof name === 'string' ? name.trim() : '';
+    if (!n) return undefined;
+    return this.tools.get(n);
   }
 
   getAll(): Tool[] {
@@ -32,12 +36,16 @@ export class ToolRegistry {
 
   /** Execute a tool by name. Returns an error result if the tool is not found. */
   async execute(name: string, input: Record<string, unknown>): Promise<ToolResult> {
-    const tool = this.tools.get(name);
+    const n = typeof name === 'string' ? name.trim() : '';
+    if (!n) {
+      return { success: false, output: null, error: 'Tool name is required' };
+    }
+    const tool = this.tools.get(n);
     if (!tool) {
-      return { success: false, output: null, error: `Tool not found: ${name}` };
+      return { success: false, output: null, error: `Tool not found: ${n}` };
     }
     try {
-      return await tool.execute(input);
+      return await tool.execute(input ?? {});
     } catch (err) {
       return {
         success: false,
