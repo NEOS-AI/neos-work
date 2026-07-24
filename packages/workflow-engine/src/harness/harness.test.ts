@@ -44,17 +44,23 @@ describe('harness registry', () => {
     });
     expect(resolveHarness('')).toBeUndefined();
 
-    // register stores trimmed id
+    // register stores trimmed id + field hygiene (use general so coding catalog tests stay pure)
     registerHarness({
       id: '  pad-register-id  ',
-      name: 'Padded',
-      domain: 'general',
-      description: '',
-      systemPrompt: 'prompt',
-      allowedTools: [],
+      name: '  Padded  ',
+      domain: '  GENERAL  ' as never,
+      description: '  desc  ',
+      systemPrompt: '  prompt  ',
+      allowedTools: ['  read  ', '  ', 'write'],
     });
-    expect(resolveHarness('pad-register-id')?.name).toBe('Padded');
+    const reg = resolveHarness('pad-register-id');
+    expect(reg?.name).toBe('Padded');
+    expect(reg?.domain).toBe('general');
+    expect(reg?.description).toBe('desc');
+    expect(reg?.systemPrompt).toBe('prompt');
+    expect(reg?.allowedTools).toEqual(['read', 'write']);
     expect(resolveHarness('  pad-register-id  ')?.id).toBe('pad-register-id');
+    expect(listHarnesses('  GENERAL  ').some((h) => h.id === 'pad-register-id')).toBe(true);
   });
 
   it('registers custom harnesses', () => {
@@ -74,25 +80,33 @@ describe('harness registry', () => {
 
 describe('built-in coding and finance harness catalogs', () => {
   it('includes expected coding harness ids with tools and constraints', () => {
+    const expectedIds = ['coding_reviewer', 'coding_test_writer', 'coding_refactor'] as const;
     const coding = listHarnesses('coding');
     const ids = coding.map((h) => h.id);
-    expect(ids).toEqual(expect.arrayContaining(['coding_reviewer', 'coding_test_writer', 'coding_refactor']));
-    for (const h of coding) {
-      expect(h.isBuiltIn).toBe(true);
-      expect(h.systemPrompt.length).toBeGreaterThan(20);
-      expect(h.allowedTools.length).toBeGreaterThan(0);
-      expect(h.constraints?.maxSteps).toBeGreaterThan(0);
+    expect(ids).toEqual(expect.arrayContaining([...expectedIds]));
+    // Only assert built-in catalog entries (registry may also hold custom coding harnesses
+    // registered by other test files in the same process).
+    for (const id of expectedIds) {
+      const h = coding.find((x) => x.id === id);
+      expect(h).toBeDefined();
+      expect(h!.isBuiltIn).toBe(true);
+      expect(h!.systemPrompt.length).toBeGreaterThan(20);
+      expect(h!.allowedTools.length).toBeGreaterThan(0);
+      expect(h!.constraints?.maxSteps).toBeGreaterThan(0);
     }
   });
 
   it('includes expected finance harness ids with output schemas', () => {
+    const expectedIds = ['finance_analyst', 'finance_risk'] as const;
     const finance = listHarnesses('finance');
     const ids = finance.map((h) => h.id);
-    expect(ids).toEqual(expect.arrayContaining(['finance_analyst', 'finance_risk']));
-    for (const h of finance) {
-      expect(h.domain).toBe('finance');
-      expect(h.outputSchema?.type).toBe('object');
-      expect(Array.isArray(h.outputSchema?.required)).toBe(true);
+    expect(ids).toEqual(expect.arrayContaining([...expectedIds]));
+    for (const id of expectedIds) {
+      const h = finance.find((x) => x.id === id);
+      expect(h).toBeDefined();
+      expect(h!.domain).toBe('finance');
+      expect(h!.outputSchema?.type).toBe('object');
+      expect(Array.isArray(h!.outputSchema?.required)).toBe(true);
     }
   });
 

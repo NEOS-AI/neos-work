@@ -183,12 +183,18 @@ export function duplicateWorkflow(id: string): Workflow | undefined {
 
 // ── Workflow Runs ──────────────────────────────────────────
 
+const RUN_STATUSES = new Set(['running', 'completed', 'failed', 'cancelled']);
+
 export function saveRun(run: WorkflowRun): void {
   const id = typeof run.id === 'string' ? run.id.trim() : '';
   const workflowId = typeof run.workflowId === 'string' ? run.workflowId.trim() : '';
   if (!id || !workflowId) {
     throw new Error('saveRun requires non-blank id and workflowId');
   }
+  const statusRaw = typeof run.status === 'string' ? run.status.trim().toLowerCase() : '';
+  const status = RUN_STATUSES.has(statusRaw) ? statusRaw : 'running';
+  const error =
+    typeof run.error === 'string' ? run.error.trim() || null : (run.error ?? null);
   const db = getDb();
   const nodeResultsStr = JSON.stringify(run.nodeResults ?? {});
   // Enforce 1MB limit on stored results
@@ -206,11 +212,11 @@ export function saveRun(run: WorkflowRun): void {
   ).run(
     id,
     workflowId,
-    run.status,
+    status,
     stored,
     run.startedAt,
     run.completedAt ?? null,
-    run.error ?? null,
+    error,
   );
 }
 
@@ -251,10 +257,13 @@ export function deleteRun(runId: string): boolean {
 export function deleteRuns(workflowId: string, status?: string): number {
   const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
   if (!trimmed) return 0;
-  const statusFilter =
-    typeof status === 'string' ? status.trim() || undefined : status;
+  const statusRaw =
+    typeof status === 'string' ? status.trim().toLowerCase() || undefined : undefined;
+  // Only known statuses filter; unknown → no-op delete (safer than matching nothing silently misleads)
+  const statusFilter = statusRaw && RUN_STATUSES.has(statusRaw) ? statusRaw : undefined;
   const db = getDb();
-  if (statusFilter) {
+  if (status) {
+    if (!statusFilter) return 0;
     const result = db
       .prepare('DELETE FROM workflow_run WHERE workflow_id = ? AND status = ?')
       .run(trimmed, statusFilter);

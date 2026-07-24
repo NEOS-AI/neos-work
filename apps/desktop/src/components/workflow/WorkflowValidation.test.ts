@@ -982,7 +982,7 @@ describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
     });
     expect(issues.some((i) => i.code === 'invalid_media_type' && i.severity === 'error')).toBe(true);
 
-    for (const mediaType of ['image', 'audio', '', undefined] as const) {
+    for (const mediaType of ['image', 'audio', '', undefined, '  Image  ', '  AUDIO  '] as const) {
       const ok = validateWorkflowDraft({
         nodes: [
           {
@@ -999,6 +999,36 @@ describe('validateWorkflowDraft config bounds (v0.3.41)', () => {
       });
       expect(ok.some((i) => i.code === 'invalid_media_type')).toBe(false);
     }
+  });
+
+  it('warns when media prompt/text exceeds route length caps', () => {
+    const longPrompt = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'image', prompt: 'p'.repeat(4001) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(longPrompt.some((i) => i.code === 'media_prompt_too_long')).toBe(true);
+
+    const longText = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'M',
+          config: { mediaType: 'audio', text: 't'.repeat(4097) },
+        },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(longText.some((i) => i.code === 'media_text_too_long')).toBe(true);
   });
 
   it('warns invalid_agent_max_steps when non-positive, non-integer, or above 200', () => {
@@ -1342,6 +1372,25 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
       blocks: [],
     });
     expect(issues.some((i) => i.code === 'missing_harness_id')).toBe(false);
+
+    const padded = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'CLI',
+          config: { provider: '  CLI-Claude  ' },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(padded.some((i) => i.code === 'missing_harness_id')).toBe(false);
   });
 
   it('also recognizes llmProvider for CLI harness skip', () => {

@@ -5,6 +5,7 @@ import {
   DESIGN_SYSTEMS_DIR,
   createDesignSystem,
   deleteDesignSystem,
+  ensureDesignSystemsDir,
   getDesignSystem,
   getDesignSystemContent,
   listDesignSystems,
@@ -26,6 +27,12 @@ afterEach(async () => {
 });
 
 describe('design-system-store', () => {
+  it('ensureDesignSystemsDir creates the scan root', async () => {
+    await ensureDesignSystemsDir();
+    const st = await fs.stat(DESIGN_SYSTEMS_DIR);
+    expect(st.isDirectory()).toBe(true);
+  });
+
   it('creates, lists, reads, updates, deletes a design system', async () => {
     const created = await createDesignSystem(NAME, 'Test brand');
     expect(created).not.toBeNull();

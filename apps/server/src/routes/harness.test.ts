@@ -138,6 +138,61 @@ describe('harness routes', () => {
     await harness.request(`/${created.data.id}`, { method: 'DELETE' });
   });
 
+  it('forbids PUT/DELETE on built-in harnesses', async () => {
+    const list = await harness.request('/');
+    const body = await list.json() as { data: Array<{ id: string; isBuiltIn?: boolean }> };
+    const builtin = body.data.find((h) => h.isBuiltIn);
+    expect(builtin).toBeTruthy();
+
+    const put = await harness.request(`/${builtin!.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'hacked' }),
+    });
+    expect(put.status).toBe(403);
+    expect(((await put.json()) as { error: string }).error).toMatch(/built-in/i);
+
+    const del = await harness.request(`/${builtin!.id}`, { method: 'DELETE' });
+    expect(del.status).toBe(403);
+    expect(((await del.json()) as { error: string }).error).toMatch(/built-in|Cannot delete/i);
+  });
+
+  it('rejects blank systemPrompt on PUT and missing allowedTools array on create', async () => {
+    const create = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        systemPrompt: 'prompt',
+        allowedTools: [],
+      }),
+    });
+    expect([200, 201]).toContain(create.status);
+    const created = await create.json() as { data: { id: string } };
+
+    const blankPrompt = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ systemPrompt: '   ' }),
+    });
+    expect(blankPrompt.status).toBe(400);
+    expect(((await blankPrompt.json()) as { error: string }).error).toMatch(/systemPrompt/i);
+
+    const notArray = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}_tools`,
+        systemPrompt: 'p',
+        allowedTools: 'read',
+      }),
+    });
+    expect(notArray.status).toBe(400);
+    expect(((await notArray.json()) as { error: string }).error).toMatch(/allowedTools/i);
+
+    await harness.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('clamps constraints.maxSteps and trims allowedTools', async () => {
     const create = await harness.request('/', {
       method: 'POST',

@@ -26,6 +26,24 @@ describe('design-systems routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects invalid name charset and invalid JSON', async () => {
+    const badName = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'has space!' }),
+    });
+    // Route may return 400 (validation) or 409 (create failed after sanitize) depending on path
+    expect([400, 409]).toContain(badName.status);
+    expect(((await badName.json()) as { error: string }).error).toMatch(/name|exist|required/i);
+
+    const badJson = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+  });
+
   it('trims name/description and rejects whitespace-only name', async () => {
     const blank = await designSystems.request('/', {
       method: 'POST',

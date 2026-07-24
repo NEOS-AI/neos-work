@@ -28,7 +28,7 @@ describe('media-node-options', () => {
       expect(isMediaImageSize(s)).toBe(true);
     }
     expect(isMediaImageSize('512x512')).toBe(false);
-    expect(isMediaImageSize('1024x1024 ')).toBe(false);
+    expect(isMediaImageSize('  1024x1024  ')).toBe(true);
     expect(isMediaImageSize(1024)).toBe(false);
     expect(isMediaImageSize(null)).toBe(false);
     expect(isMediaImageSize(undefined)).toBe(false);
@@ -39,7 +39,7 @@ describe('media-node-options', () => {
       expect(isMediaVoice(v)).toBe(true);
     }
     expect(isMediaVoice('robot')).toBe(false);
-    expect(isMediaVoice('Alloy')).toBe(false);
+    expect(isMediaVoice('  Alloy  ')).toBe(true);
     expect(isMediaVoice(0)).toBe(false);
   });
 
@@ -48,7 +48,7 @@ describe('media-node-options', () => {
       expect(isMediaImageQuality(q)).toBe(true);
     }
     expect(isMediaImageQuality('ultra')).toBe(false);
-    expect(isMediaImageQuality('HD')).toBe(false);
+    expect(isMediaImageQuality('  HD  ')).toBe(true);
     expect(isMediaImageQuality('')).toBe(false);
     expect(isMediaImageQuality(null)).toBe(false);
     expect(isMediaImageQuality(1)).toBe(false);
@@ -60,7 +60,7 @@ describe('media-node-options', () => {
     }
     expect(isMediaTtsModel('tts-2')).toBe(false);
     expect(isMediaTtsModel('whisper-1')).toBe(false);
-    expect(isMediaTtsModel('TTS-1')).toBe(false);
+    expect(isMediaTtsModel('  TTS-1  ')).toBe(true);
     expect(isMediaTtsModel('')).toBe(false);
     expect(isMediaTtsModel(null)).toBe(false);
     expect(isMediaTtsModel(undefined)).toBe(false);

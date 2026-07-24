@@ -35,6 +35,30 @@ describe('workflow runs CRUD', () => {
     ).toThrow(/non-blank/i);
   });
 
+  it('saveRun normalizes status/error and deleteRuns rejects unknown status', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const id = crypto.randomUUID();
+    workflows.saveRun({
+      id: `  ${id}  `,
+      workflowId: `  ${wf.id}  `,
+      status: '  COMPLETED  ' as never,
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      error: '  boom  ',
+    });
+    const got = workflows.getRun(id);
+    expect(got?.status).toBe('completed');
+    expect(got?.error).toBe('boom');
+
+    expect(workflows.deleteRuns(wf.id, 'pending')).toBe(0);
+    expect(workflows.deleteRuns(wf.id, '  COMPLETED  ')).toBe(1);
+  });
+
   it('defaults missing nodeResults to empty object and trims ids', () => {
     const wf = workflows.createWorkflow({
       name: NAME,

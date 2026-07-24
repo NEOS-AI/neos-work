@@ -51,6 +51,7 @@ describe('resolveMessageText', () => {
 
   it('falls back to inputs.text then JSON of inputs', () => {
     expect(resolveMessageText({}, { text: 'upstream' })).toBe('upstream');
+    expect(resolveMessageText({}, { text: '  padded  ' })).toBe('padded');
     expect(resolveMessageText({}, { a: 1 })).toBe('{"a":1}');
     expect(resolveMessageText(undefined, {})).toBe('');
   });

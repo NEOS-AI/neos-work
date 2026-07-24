@@ -35,7 +35,7 @@ export function resolveMessageText(
     return text;
   }
 
-  if (typeof inputs['text'] === 'string') return inputs['text'];
+  if (typeof inputs['text'] === 'string') return inputs['text'].trim();
   if (Object.keys(inputs).length === 0) return '';
   return JSON.stringify(inputs);
 }

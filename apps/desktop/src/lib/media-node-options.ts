@@ -11,15 +11,21 @@ export const MEDIA_IMAGE_QUALITIES = ['standard', 'hd'] as const;
 export type MediaImageQuality = (typeof MEDIA_IMAGE_QUALITIES)[number];
 
 export function isMediaImageSize(value: unknown): value is MediaImageSize {
-  return typeof value === 'string' && (MEDIA_IMAGE_SIZES as readonly string[]).includes(value);
+  if (typeof value !== 'string') return false;
+  const v = value.trim();
+  return (MEDIA_IMAGE_SIZES as readonly string[]).includes(v);
 }
 
 export function isMediaVoice(value: unknown): value is MediaVoice {
-  return typeof value === 'string' && (MEDIA_VOICES as readonly string[]).includes(value);
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase();
+  return (MEDIA_VOICES as readonly string[]).includes(v);
 }
 
 export function isMediaImageQuality(value: unknown): value is MediaImageQuality {
-  return typeof value === 'string' && (MEDIA_IMAGE_QUALITIES as readonly string[]).includes(value);
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase();
+  return (MEDIA_IMAGE_QUALITIES as readonly string[]).includes(v);
 }
 
 /** OpenAI TTS model options (server media-generator). */
@@ -27,7 +33,9 @@ export const MEDIA_TTS_MODELS = ['tts-1', 'tts-1-hd'] as const;
 export type MediaTtsModel = (typeof MEDIA_TTS_MODELS)[number];
 
 export function isMediaTtsModel(value: unknown): value is MediaTtsModel {
-  return typeof value === 'string' && (MEDIA_TTS_MODELS as readonly string[]).includes(value);
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase();
+  return (MEDIA_TTS_MODELS as readonly string[]).includes(v);
 }
 
 /** Re-export shared messaging limits (single source of truth). */

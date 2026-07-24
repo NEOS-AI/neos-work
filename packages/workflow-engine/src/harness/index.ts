@@ -23,7 +23,13 @@ export function resolveHarness(id: string): AgentHarness | undefined {
 }
 
 export function listHarnesses(domain?: string): AgentHarness[] {
-  const domainFilter = typeof domain === 'string' ? domain.trim() || undefined : undefined;
+  const domainRaw = typeof domain === 'string' ? domain.trim().toLowerCase() || undefined : undefined;
+  const domainFilter =
+    domainRaw && (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+      ? domainRaw
+      : domainRaw
+        ? domainRaw // keep unknown filters as exact match after lower-case
+        : undefined;
   const all = [...registry.values()];
   return domainFilter ? all.filter((h) => h.domain === domainFilter) : all;
 }
@@ -31,5 +37,29 @@ export function listHarnesses(domain?: string): AgentHarness[] {
 export function registerHarness(harness: AgentHarness): void {
   const id = typeof harness.id === 'string' ? harness.id.trim() : '';
   if (!id) return;
-  registry.set(id, { ...harness, id });
+  const name =
+    typeof harness.name === 'string' ? harness.name.trim() || id : id;
+  const domainRaw =
+    typeof harness.domain === 'string' ? harness.domain.trim().toLowerCase() : 'general';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as AgentHarness['domain'])
+    : 'general';
+  const description =
+    typeof harness.description === 'string' ? harness.description.trim() : harness.description;
+  const systemPrompt =
+    typeof harness.systemPrompt === 'string' ? harness.systemPrompt.trim() : harness.systemPrompt;
+  const allowedTools = Array.isArray(harness.allowedTools)
+    ? harness.allowedTools.map((t) => String(t).trim()).filter(Boolean)
+    : [];
+  registry.set(id, {
+    ...harness,
+    id,
+    name,
+    domain,
+    description,
+    systemPrompt,
+    allowedTools,
+    // Custom registrations are never built-in; preserve explicit true only if provided
+    isBuiltIn: harness.isBuiltIn === true,
+  });
 }

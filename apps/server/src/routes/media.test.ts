@@ -247,6 +247,27 @@ describe('media routes', () => {
     expect(((await noText.json()) as { error: string }).error).toMatch(/text/i);
   });
 
+  it('POST /audio and /generate reject text over 4096 chars', async () => {
+    setSetting('OPENAI_API_KEY', 'sk-long-audio');
+    const long = 't'.repeat(4097);
+
+    const audio = await media.request('/audio', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: long }),
+    });
+    expect(audio.status).toBe(400);
+    expect(((await audio.json()) as { error: string }).error).toMatch(/too long/i);
+
+    const gen = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'audio', text: long }),
+    });
+    expect(gen.status).toBe(400);
+    expect(((await gen.json()) as { error: string }).error).toMatch(/too long/i);
+  });
+
   it('GET/DELETE file 404 for missing safe filename', async () => {
     const get = await media.request('/file/no_such_file_xyz.png');
     expect(get.status).toBe(404);

@@ -176,7 +176,10 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'agent_finance' || node.type === 'agent_coding') {
-      const provider = (config.provider ?? config.llmProvider) as string | undefined;
+      // Align with AgentNode: trim + lower-case so " CLI-Claude " counts as CLI
+      const rawProvider = config.provider ?? config.llmProvider;
+      const provider =
+        typeof rawProvider === 'string' ? rawProvider.trim().toLowerCase() : '';
       const isCli =
         provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
       // CLI agents do not require a harness (plan Task 3)
@@ -320,7 +323,10 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'media') {
-      const mediaType = config.mediaType;
+      // Align with MediaNode: trim + lower-case so " Image " / " AUDIO " are valid
+      const mediaTypeRaw = config.mediaType;
+      const mediaType =
+        typeof mediaTypeRaw === 'string' ? mediaTypeRaw.trim().toLowerCase() : mediaTypeRaw;
       if (
         mediaType !== undefined
         && mediaType !== null
@@ -336,11 +342,11 @@ export function validateWorkflowDraft(input: {
         });
       }
       const hasIncoming = input.edges.some((edge) => edge.target === node.id);
-      const isAudio = config.mediaType === 'audio';
+      const isAudio = mediaType === 'audio';
       // Image uses `prompt`; TTS audio uses `text` (NodeConfigPanel)
-      const hasBody = isAudio
-        ? typeof config.text === 'string' && config.text.trim().length > 0
-        : typeof config.prompt === 'string' && config.prompt.trim().length > 0;
+      const promptBody = typeof config.prompt === 'string' ? config.prompt.trim() : '';
+      const textBody = typeof config.text === 'string' ? config.text.trim() : '';
+      const hasBody = isAudio ? textBody.length > 0 : promptBody.length > 0;
       if (!hasBody && !hasIncoming) {
         issues.push({
           code: 'missing_media_prompt',
@@ -349,6 +355,23 @@ export function validateWorkflowDraft(input: {
           message: isAudio
             ? 'Media audio node has no text or upstream input.'
             : 'Media node has no prompt or upstream input.',
+        });
+      }
+      // Align length caps with MediaNode / server routes
+      if (!isAudio && promptBody.length > 4000) {
+        issues.push({
+          code: 'media_prompt_too_long',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Media image prompt exceeds 4000 characters.',
+        });
+      }
+      if (isAudio && textBody.length > 4096) {
+        issues.push({
+          code: 'media_text_too_long',
+          severity: 'warning',
+          nodeId: node.id,
+          message: 'Media audio text exceeds 4096 characters.',
         });
       }
       // Image size / TTS voice must match NodeConfigPanel allow-lists when set
@@ -395,7 +418,9 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'deploy') {
-      const provider = config.provider;
+      // Align with DeployNode: trim + lower-case; blank falls through to missing_deploy_provider
+      const provider =
+        typeof config.provider === 'string' ? config.provider.trim().toLowerCase() : config.provider;
       if (provider !== 'vercel' && provider !== 'cloudflare') {
         issues.push({
           code: 'missing_deploy_provider',

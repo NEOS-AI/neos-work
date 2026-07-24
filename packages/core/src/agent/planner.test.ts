@@ -57,4 +57,30 @@ describe('Planner', () => {
     expect(captured).toContain('prior notes');
     expect(captured).toContain('Goal');
   });
+
+  it('falls back to default step when model returns empty content', async () => {
+    const adapter = mockAdapter(['   ']);
+    const steps = await new Planner(adapter).plan('Ship it');
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.description).toBe('Execute the goal directly');
+  });
+
+  it('skips non-object items and stringifies objects missing description', async () => {
+    // primitives/null dropped by object filter; missing description → String(item)
+    const adapter = mockAdapter([
+      JSON.stringify([
+        { description: 'Only object kept' },
+        'plain string step',
+        42,
+        null,
+        { toolName: 'read_file' },
+      ]),
+    ]);
+    const steps = await new Planner(adapter).plan('goal');
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+    expect(steps[0]!.description).toBe('Only object kept');
+    // second kept object has no description string → String(item)
+    const second = steps.find((s) => s.toolName === 'read_file' || s.description.includes('object'));
+    expect(second).toBeTruthy();
+  });
 });
