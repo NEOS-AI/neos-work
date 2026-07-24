@@ -25,8 +25,17 @@ export class FixedWindowRateLimiter {
       Number.isFinite(win) && win >= 1 ? Math.min(86_400_000, Math.floor(win)) : 60_000;
   }
 
+  /** Cap map key length so pathological keys cannot bloat memory. */
+  private static readonly KEY_MAX_CHARS = 200;
+
   private normalizeKey(key: string): string {
-    return typeof key === 'string' ? key.trim() : '';
+    const k = typeof key === 'string' ? key.trim() : '';
+    if (!k) return '';
+    // Reject control chars; truncate overlong keys
+    if (/[\0\r\n]/.test(k)) return '';
+    return k.length > FixedWindowRateLimiter.KEY_MAX_CHARS
+      ? k.slice(0, FixedWindowRateLimiter.KEY_MAX_CHARS)
+      : k;
   }
 
   /** Drop expired windows to bound memory growth under many distinct keys. */

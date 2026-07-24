@@ -166,4 +166,13 @@ describe('createShellTool', () => {
       expect(result.error).toMatch(/forbidden pattern/i);
     }
   });
+
+  it('rejects overlong commands', async () => {
+    const { MAX_COMMAND_CHARS } = await import('./shell.js');
+    const tool = createShellTool(root);
+    const result = await tool.execute({ command: 'x'.repeat(MAX_COMMAND_CHARS + 1) });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/max length/i);
+  });
 });
+

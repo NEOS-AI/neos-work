@@ -91,13 +91,12 @@ describe('WebSearchNode', () => {
       content: string;
       score: number;
     }>;
+    expect(out).toHaveLength(1); // non-http / missing url rows filtered out
     expect(out[0]!.title).toHaveLength(500);
     expect(out[0]!.title.startsWith('T')).toBe(true);
     expect(out[0]!.content).toHaveLength(2_000);
     expect(out[0]!.url).toBe('https://long.test/path');
     expect(out[0]!.score).toBe(0.5);
-    // non-string fields coerced to empty / score 0
-    expect(out[1]).toEqual({ title: '', url: '', content: '', score: 0 });
   });
 
   it('surfaces non-ok HTTP status', async () => {

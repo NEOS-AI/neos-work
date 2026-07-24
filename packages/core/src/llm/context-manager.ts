@@ -66,16 +66,23 @@ export class ContextManager {
     adapter: LLMProviderAdapter,
     signal?: AbortSignal,
   ): Promise<string> {
-    const transcript = messages
+    // Bound transcript so compression itself cannot bloat the LLM call
+    const TRANSCRIPT_MAX = 100_000;
+    const SUMMARY_MAX = 8_000;
+    let transcript = messages
       .map((m) => {
         const role = typeof m.role === 'string' ? m.role.trim() || 'unknown' : 'unknown';
-        const text =
+        let text =
           typeof m.content === 'string'
             ? m.content
             : JSON.stringify(m.content);
+        if (text.length > 4_000) text = text.slice(0, 4_000) + '…';
         return `${role}: ${text}`;
       })
       .join('\n');
+    if (transcript.length > TRANSCRIPT_MAX) {
+      transcript = transcript.slice(0, TRANSCRIPT_MAX) + '\n…[transcript truncated]';
+    }
 
     let summary = '';
     for await (const chunk of adapter.chat({
@@ -86,12 +93,15 @@ export class ContextManager {
           content: `다음 대화를 핵심 사실·결정 사항 위주로 간결하게 요약해줘:\n\n${transcript}`,
         },
       ],
+      maxTokens: 2_048,
       signal,
     })) {
       if (chunk.type === 'text' && chunk.content) {
         summary += chunk.content;
+        if (summary.length > SUMMARY_MAX) break;
       }
     }
-    return summary.trim();
+    const out = summary.trim();
+    return out.length > SUMMARY_MAX ? out.slice(0, SUMMARY_MAX) : out;
   }
 }

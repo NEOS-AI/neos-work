@@ -245,6 +245,11 @@ describe('routine runs', () => {
     completeRoutineRun(failed2.id, 'failed', '   ');
     // blank error stored as NULL → mapped to undefined on the row model
     expect(getRoutineRun(r.id, failed2.id)?.error).toBeUndefined();
+
+    // Error messages capped at 4_000 chars
+    const longErr = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(longErr.id, 'failed', 'E'.repeat(5_000));
+    expect(getRoutineRun(r.id, longErr.id)?.error).toHaveLength(4_000);
   });
 
   it('completeRoutineRun normalizes status case', () => {

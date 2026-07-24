@@ -92,4 +92,26 @@ describe('buildMcpTools', () => {
     await tool.execute(null as unknown as Record<string, unknown>);
     expect(callTool).toHaveBeenCalledWith('t', {});
   });
+
+  it('drops control-char / overlong names and caps description; limits tool count', async () => {
+    const { MCP_TOOL_DESCRIPTION_MAX_CHARS, MCP_TOOLS_MAX } = await import('./tool-bridge.js');
+    expect(mcpToolToTool(makeClient(), { name: 'bad\nname', inputSchema: {} }).name).toBe('');
+    expect(mcpToolToTool(makeClient(), { name: 'n'.repeat(201), inputSchema: {} }).name).toBe('');
+    const longDesc = mcpToolToTool(makeClient(), {
+      name: 'ok',
+      description: 'd'.repeat(MCP_TOOL_DESCRIPTION_MAX_CHARS + 50),
+      inputSchema: {},
+    });
+    expect(longDesc.description.length).toBe(MCP_TOOL_DESCRIPTION_MAX_CHARS);
+
+    const listTools = vi.fn(async () =>
+      Array.from({ length: MCP_TOOLS_MAX + 20 }, (_, i) => ({
+        name: `t${i}`,
+        inputSchema: {},
+      })),
+    );
+    const tools = await buildMcpTools(makeClient({ listTools } as never));
+    expect(tools).toHaveLength(MCP_TOOLS_MAX);
+  });
 });
+

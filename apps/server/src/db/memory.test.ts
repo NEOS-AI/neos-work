@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  MEMORY_DB_CONTENT_MAX_CHARS,
+  MEMORY_DB_KEY_MAX_CHARS,
   createMemory,
   deleteMemory,
   getMemory,
@@ -119,5 +121,20 @@ describe('memory CRUD', () => {
     // control-char-only tag filters → empty match set
     expect(searchMemory(WS, 'safe', ['bad\ntag'])).toEqual([]);
   });
+
+  it('rejects overlong keys and oversized content', () => {
+    expect(() =>
+      createMemory({ workspaceId: WS, key: 'k'.repeat(MEMORY_DB_KEY_MAX_CHARS + 1), content: 'x' }),
+    ).toThrow(/max length/i);
+    expect(() =>
+      createMemory({
+        workspaceId: WS,
+        key: KEYS[0]!,
+        content: 'c'.repeat(MEMORY_DB_CONTENT_MAX_CHARS + 1),
+      }),
+    ).toThrow(/max size/i);
+  });
 });
+
+
 

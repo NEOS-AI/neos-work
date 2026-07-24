@@ -331,7 +331,11 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       onEvent({ type: 'node.completed', nodeId, output, durationMs: result.durationMs });
     } else {
       failedNodes.add(nodeId);
-      onEvent({ type: 'node.failed', nodeId, error: result.error ?? 'Unknown error' });
+      let error = result.error ?? 'Unknown error';
+      if (error.length > MAX_NODE_ERROR_CHARS) {
+        error = error.slice(0, MAX_NODE_ERROR_CHARS);
+      }
+      onEvent({ type: 'node.failed', nodeId, error });
     }
   }
 

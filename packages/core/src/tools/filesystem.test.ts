@@ -98,6 +98,20 @@ describe('filesystem tools', () => {
     expect(names).not.toContain('.hidden');
   });
 
+  it('list_directory caps returned entries at 1000', async () => {
+    // Create more than MAX_LIST_ENTRIES non-hidden files
+    await Promise.all(
+      Array.from({ length: 1_050 }, (_, i) =>
+        writeFile(join(root, `f${String(i).padStart(4, '0')}.txt`), 'x'),
+      ),
+    );
+    const list = createListDirectoryTool(root);
+    const result = await list.execute({ path: '.' });
+    expect(result.success).toBe(true);
+    const entries = result.output as unknown[];
+    expect(entries).toHaveLength(1_000);
+  });
+
   it('search_files supports content mode and validates regex', async () => {
     await mkdir(join(root, 'src'), { recursive: true });
     await writeFile(join(root, 'src', 'a.ts'), 'export const answer = 42;\n');

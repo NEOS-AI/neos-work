@@ -108,7 +108,14 @@ webhooks.post('/:workflowId', async (c) => {
   try {
     const parsed = JSON.parse(rawBody) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      triggerInputs = parsed as Record<string, unknown>;
+      // Drop blank / control-char keys from trigger bag
+      const clean: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        const key = typeof k === 'string' ? k.trim() : '';
+        if (!key || /[\0\r\n]/.test(key) || key.length > 200) continue;
+        clean[key] = v;
+      }
+      triggerInputs = clean;
     }
   } catch {
     // non-JSON body — use empty inputs

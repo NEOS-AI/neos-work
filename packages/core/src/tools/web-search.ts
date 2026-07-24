@@ -70,7 +70,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.92',
+            'User-Agent': 'neos-work/0.3.93',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
@@ -88,13 +88,24 @@ export function createWebSearchTool(): Tool {
           results?: Array<{ title?: string; url?: string; content?: string }>;
         };
         const rawResults = Array.isArray(data.results) ? data.results : [];
-        const results = rawResults.map((r) => {
-          const title = typeof r.title === 'string' ? r.title.trim().slice(0, TITLE_MAX) : '';
-          const url = typeof r.url === 'string' ? r.url.trim() : '';
-          const snippet =
-            typeof r.content === 'string' ? r.content.trim().slice(0, SNIPPET_MAX) : '';
-          return { title, url, snippet };
-        });
+        const results = rawResults
+          .slice(0, maxResults)
+          .map((r) => {
+            const title = typeof r.title === 'string' ? r.title.trim().slice(0, TITLE_MAX) : '';
+            const url = typeof r.url === 'string' ? r.url.trim() : '';
+            // Only keep http(s) result URLs (drop javascript:/file: noise)
+            let safeUrl = '';
+            try {
+              const u = new URL(url);
+              if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
+            } catch {
+              safeUrl = '';
+            }
+            const snippet =
+              typeof r.content === 'string' ? r.content.trim().slice(0, SNIPPET_MAX) : '';
+            return { title, url: safeUrl, snippet };
+          })
+          .filter((r) => r.url.length > 0);
 
         return { success: true, output: { results } };
       } catch (err) {

@@ -20,6 +20,14 @@ function hasUnsafeKeyChars(value: string): boolean {
   return /[\0\r\n]/.test(value);
 }
 
+/** Cap SQLite memory body (align with file-store MEMORY_CONTENT_MAX_CHARS). */
+export const MEMORY_DB_CONTENT_MAX_CHARS = 1 * 1024 * 1024;
+/** Cap memory key length. */
+export const MEMORY_DB_KEY_MAX_CHARS = 200;
+/** Cap tags array length and serialized JSON. */
+export const MEMORY_DB_TAGS_MAX = 50;
+export const MEMORY_DB_TAGS_JSON_MAX_CHARS = 4_000;
+
 export function createMemory(params: {
   workspaceId: string;
   key: string;
@@ -32,15 +40,25 @@ export function createMemory(params: {
   if (hasUnsafeKeyChars(key) || hasUnsafeKeyChars(workspaceId)) {
     throw new Error('key/workspaceId contains invalid control characters');
   }
+  if (key.length > MEMORY_DB_KEY_MAX_CHARS) {
+    throw new Error(`key exceeds max length (${MEMORY_DB_KEY_MAX_CHARS})`);
+  }
   const content =
     typeof params.content === 'string' ? params.content.trim() : String(params.content ?? '');
-  const tagsStr = Array.isArray(params.tags)
-    ? JSON.stringify(
-        params.tags
-          .map((t) => String(t).trim())
-          .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t)),
-      )
-    : null;
+  if (content.length > MEMORY_DB_CONTENT_MAX_CHARS) {
+    throw new Error(
+      `content exceeds max size (${MEMORY_DB_CONTENT_MAX_CHARS} characters)`,
+    );
+  }
+  let tagsStr: string | null = null;
+  if (Array.isArray(params.tags)) {
+    const tags = params.tags
+      .map((t) => String(t).trim())
+      .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t))
+      .slice(0, MEMORY_DB_TAGS_MAX);
+    const json = JSON.stringify(tags);
+    tagsStr = json.length > MEMORY_DB_TAGS_JSON_MAX_CHARS ? JSON.stringify(tags.slice(0, 10)) : json;
+  }
   const db = getDb();
   const id = crypto.randomUUID();
   db.prepare(

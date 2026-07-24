@@ -578,6 +578,37 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(completed!.output.preview!.length).toBe(256);
   });
 
+  it('truncates oversized node.failed error strings at 4000 chars', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    const longId = 'B'.repeat(5_000);
+    await executeWorkflow({
+      runId: 'run-truncate-error',
+      workflow: baseWorkflow({
+        nodes: [
+          {
+            id: 'block',
+            type: 'block',
+            label: 'Missing',
+            position: { x: 0, y: 0 },
+            // Block not found embeds blockId in the error message
+            config: { blockId: longId },
+          },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const failed = events.find((e) => e.type === 'node.failed') as
+      | { error: string; nodeId: string }
+      | undefined;
+    expect(failed).toBeDefined();
+    expect(failed!.nodeId).toBe('block');
+    expect(failed!.error.length).toBe(4_000);
+    expect(failed!.error.startsWith('Block not found:')).toBe(true);
+  });
+
   it('skips blank node ids and throws on unknown node types', async () => {
     const events: WorkflowSSEEvent[] = [];
     await executeWorkflow({

@@ -36,6 +36,26 @@ describe('workflow runs CRUD', () => {
     ).toThrow(/non-blank/i);
   });
 
+  it('saveRun truncates overlong error strings', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const runId = crypto.randomUUID();
+    workflows.saveRun({
+      id: runId,
+      workflowId: wf.id,
+      status: 'failed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      error: 'E'.repeat(5_000),
+    });
+    const run = workflows.getRun(runId);
+    expect(run?.error?.length).toBe(4_000);
+  });
+
   it('saveRun normalizes status/error and deleteRuns rejects unknown status', () => {
     const wf = workflows.createWorkflow({
       name: NAME,

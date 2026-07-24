@@ -45,7 +45,12 @@ artifacts.get('/:id/preview', (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
-  const content = artifact.content ?? '';
+  // Cap served preview body (align with ARTIFACT_CONTENT_MAX_CHARS)
+  let content = artifact.content ?? '';
+  const max = db.ARTIFACT_CONTENT_MAX_CHARS ?? 2 * 1024 * 1024;
+  if (content.length > max) {
+    content = content.slice(0, max);
+  }
   const isHtml = (artifact.contentType ?? '').includes('html');
   c.header('Content-Type', isHtml ? 'text/html; charset=utf-8' : 'text/plain; charset=utf-8');
   c.header('X-Content-Type-Options', 'nosniff');

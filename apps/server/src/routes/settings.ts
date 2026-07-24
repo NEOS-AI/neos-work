@@ -91,6 +91,13 @@ settings.post('/verify-key', async (c) => {
   if (!provider || !key) {
     return c.json({ ok: false, error: 'Missing provider or key' }, 400);
   }
+  // Reject control chars / pathological key lengths before calling providers
+  if (/[\0\r\n]/.test(key) || key.length > 8_192) {
+    return c.json({ ok: false, error: 'Invalid API key' }, 400);
+  }
+  if (/[\0\r\n]/.test(provider) || provider.length > 50) {
+    return c.json({ ok: false, error: 'Unknown provider' }, 400);
+  }
 
   try {
     const registry = new ProviderRegistry();

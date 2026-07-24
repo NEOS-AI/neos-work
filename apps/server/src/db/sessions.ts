@@ -209,6 +209,9 @@ function normalizeWorkspacePath(raw: unknown): string | null {
   return pathVal;
 }
 
+/** Cap workspace display name. */
+export const WORKSPACE_NAME_MAX_CHARS = 200;
+
 export function createWorkspace(params: {
   name: string;
   path?: string;
@@ -216,6 +219,12 @@ export function createWorkspace(params: {
 }): WorkspaceRow {
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   if (!name) throw new Error('name is required');
+  if (hasUnsafePathChars(name)) {
+    throw new Error('name contains invalid control characters');
+  }
+  if (name.length > WORKSPACE_NAME_MAX_CHARS) {
+    throw new Error(`name exceeds max length (${WORKSPACE_NAME_MAX_CHARS})`);
+  }
   const pathVal = normalizeWorkspacePath(params.path);
   const typeRaw =
     typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
@@ -242,6 +251,7 @@ export function updateWorkspace(
       ? (typeof params.name === 'string' ? params.name.trim() : '')
       : ws.name;
   if (!name) return undefined;
+  if (hasUnsafePathChars(name) || name.length > WORKSPACE_NAME_MAX_CHARS) return undefined;
   let pathVal = ws.path;
   if (params.path !== undefined) {
     try {

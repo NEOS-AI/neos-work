@@ -97,5 +97,18 @@ describe('FixedWindowRateLimiter status after partial use', () => {
     expect(st.limit).toBe(5);
     expect(st.windowMs).toBe(10_000);
   });
+
+  it('rejects blank/control-char keys and truncates overlong keys', () => {
+    const limiter = new FixedWindowRateLimiter(2, 1_000);
+    const now = 1;
+    expect(limiter.check('', now)).toBe(false);
+    expect(limiter.check('bad\nkey', now)).toBe(false);
+    const long = 'k'.repeat(300);
+    expect(limiter.check(long, now)).toBe(true);
+    // Truncated keys share a bucket
+    expect(limiter.check(long + 'x', now)).toBe(true);
+    expect(limiter.check(long + 'y', now)).toBe(false);
+  });
 });
+
 

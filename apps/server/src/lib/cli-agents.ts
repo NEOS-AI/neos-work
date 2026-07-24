@@ -53,8 +53,10 @@ async function resolveCliPath(
   defaultBinary: string,
   overrides?: CliPathOverrides,
 ): Promise<string | null> {
-  const override = overrides?.[id]?.trim();
-  if (override) {
+  const overrideRaw = overrides?.[id];
+  const override = typeof overrideRaw === 'string' ? overrideRaw.trim() : '';
+  // Reject control chars / overlong paths (settings override hygiene)
+  if (override && !/[\0\r\n]/.test(override) && override.length <= 1_024) {
     try {
       fs.accessSync(override, fs.constants.X_OK);
       return override;

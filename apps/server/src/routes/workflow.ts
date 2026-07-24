@@ -629,7 +629,16 @@ workflow.post('/:id/run', async (c) => {
   if (contentType.includes('application/json')) {
     try {
       const body = await c.req.json<{ inputs?: Record<string, unknown> }>();
-      if (body.inputs && typeof body.inputs === 'object') {
+      // Plain objects only (not arrays); cap payload size (align with plugin/webhook)
+      if (
+        body.inputs
+        && typeof body.inputs === 'object'
+        && !Array.isArray(body.inputs)
+      ) {
+        const serialized = JSON.stringify(body.inputs);
+        if (serialized.length > 256_000) {
+          return c.json({ ok: false, error: 'inputs payload too large' }, 400);
+        }
         triggerInputs = body.inputs;
       }
     } catch {

@@ -37,8 +37,18 @@ export class AgentOrchestrator {
     this.reflectionStrategy = new ReflectionStrategy(adapter);
   }
 
+  /** Cap orchestrator goal text (align with CLI prompt / healing bounds). */
+  static readonly GOAL_MAX_CHARS = 50_000;
+  /** Cap serialized step results pushed into conversation history. */
+  static readonly STEP_RESULT_MAX_CHARS = 32_000;
+
   async *run(goal: string, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-    const goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
+    let goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
+    if (goalText.length > AgentOrchestrator.GOAL_MAX_CHARS) {
+      goalText =
+        goalText.slice(0, AgentOrchestrator.GOAL_MAX_CHARS) +
+        '\n…[goal truncated]';
+    }
     const task: AgentTask = {
       id: crypto.randomUUID(),
       goal: goalText,
@@ -101,10 +111,17 @@ export class AgentOrchestrator {
           step.output = result;
           step.status = 'completed';
 
-          // Add step result to conversation for context
+          // Add step result to conversation for context (bounded)
+          let resultJson = JSON.stringify(result);
+          if (resultJson.length > AgentOrchestrator.STEP_RESULT_MAX_CHARS) {
+            resultJson =
+              resultJson.slice(0, AgentOrchestrator.STEP_RESULT_MAX_CHARS) +
+              '…[truncated]';
+          }
+          const stepDesc = String(step.description ?? '').slice(0, 500);
           conversationHistory.push({
             role: 'assistant',
-            content: `Step ${step.index + 1} (${step.description}): ${JSON.stringify(result)}`,
+            content: `Step ${step.index + 1} (${stepDesc}): ${resultJson}`,
           });
 
           yield { type: 'step_complete', step: { ...step } };

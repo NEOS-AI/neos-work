@@ -743,7 +743,7 @@ workspace.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!name || name.length > 200) {
+  if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
     return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
   }
   const path =
@@ -757,12 +757,17 @@ workspace.post('/', async (c) => {
     return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
   }
   const type = typeof body.type === 'string' ? body.type.trim() || undefined : body.type;
-  const created = db.createWorkspace({
-    name,
-    path,
-    type,
-  });
-  return c.json({ ok: true, data: created }, 201);
+  try {
+    const created = db.createWorkspace({
+      name,
+      path,
+      type,
+    });
+    return c.json({ ok: true, data: created }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create workspace';
+    return c.json({ ok: false, error: msg }, 400);
+  }
 });
 
 workspace.put('/:id', async (c) => {
@@ -776,7 +781,7 @@ workspace.put('/:id', async (c) => {
     body.name !== undefined
       ? (typeof body.name === 'string' ? body.name.trim() : '')
       : undefined;
-  if (name !== undefined && (!name || name.length > 200)) {
+  if (name !== undefined && (!name || name.length > 200 || /[\0\r\n]/.test(name))) {
     return c.json({ ok: false, error: 'Invalid "name"' }, 400);
   }
   const path =

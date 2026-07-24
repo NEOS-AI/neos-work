@@ -97,6 +97,8 @@ describe('sessions CRUD', () => {
     expect(deleteWorkspace('   ')).toBe(false);
     expect(() => createSession({ workspaceId: '   ' })).toThrow(/workspaceId/i);
     expect(() => createWorkspace({ name: '   ' })).toThrow(/name/i);
+    expect(() => createWorkspace({ name: 'bad\nname' })).toThrow(/control characters/i);
+    expect(() => createWorkspace({ name: 'n'.repeat(201) })).toThrow(/max length/i);
 
     const s = createSession({ workspaceId: '  default  ', title: '  _cov_sess  ' });
     expect(s.workspace_id).toBe('default');

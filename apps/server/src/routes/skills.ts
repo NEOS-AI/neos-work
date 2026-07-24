@@ -42,15 +42,27 @@ function upsertSkill(params: {
   if (/[\0\r\n]/.test(name) || name.length > 200) {
     throw new Error('invalid skill name');
   }
-  const description =
+  let description =
     typeof params.description === 'string' ? params.description.trim() || null : (params.description ?? null);
+  if (description && description.length > 4_000) {
+    description = description.slice(0, 4_000);
+  }
   const source = typeof params.source === 'string' ? params.source.trim() : String(params.source ?? '');
   const pathVal = typeof params.path === 'string' ? params.path.trim() : String(params.path ?? '');
   if (pathVal && /[\0\r\n]/.test(pathVal)) {
     throw new Error('invalid skill path');
   }
-  const version =
+  if (pathVal.length > 1_000) {
+    throw new Error('invalid skill path');
+  }
+  let version =
     typeof params.version === 'string' ? params.version.trim() || null : (params.version ?? null);
+  if (version && version.length > 64) version = version.slice(0, 64);
+  let manifestJson =
+    typeof params.manifestJson === 'string' ? params.manifestJson : (params.manifestJson ?? null);
+  if (manifestJson && manifestJson.length > 256 * 1024) {
+    manifestJson = JSON.stringify({ truncated: true });
+  }
   const dbInst = getDb();
   const id = crypto.randomUUID();
   dbInst.prepare(
@@ -62,7 +74,7 @@ function upsertSkill(params: {
        path = excluded.path,
        version = excluded.version,
        manifest_json = excluded.manifest_json`,
-  ).run(id, name, description, source, pathVal, version, params.manifestJson ?? null);
+  ).run(id, name, description, source, pathVal, version, manifestJson);
   return dbInst.prepare('SELECT * FROM skill WHERE name = ?').get(name) as SkillRow;
 }
 

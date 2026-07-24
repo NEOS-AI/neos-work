@@ -254,6 +254,11 @@ export function duplicateWorkflow(id: string): Workflow | undefined {
 
 const RUN_STATUSES = new Set(['running', 'completed', 'failed', 'cancelled']);
 
+/** Cap workflow run error strings stored in SQLite. */
+export const WORKFLOW_RUN_ERROR_MAX_CHARS = 4_000;
+/** Cap serialized node_results_json (runaway output defense). */
+export const WORKFLOW_RUN_RESULTS_MAX_CHARS = 1_048_576;
+
 export function saveRun(run: WorkflowRun): void {
   const id = typeof run.id === 'string' ? run.id.trim() : '';
   const workflowId = typeof run.workflowId === 'string' ? run.workflowId.trim() : '';
@@ -262,12 +267,15 @@ export function saveRun(run: WorkflowRun): void {
   }
   const statusRaw = typeof run.status === 'string' ? run.status.trim().toLowerCase() : '';
   const status = RUN_STATUSES.has(statusRaw) ? statusRaw : 'running';
-  const error =
+  let error =
     typeof run.error === 'string' ? run.error.trim() || null : (run.error ?? null);
+  if (error && error.length > WORKFLOW_RUN_ERROR_MAX_CHARS) {
+    error = error.slice(0, WORKFLOW_RUN_ERROR_MAX_CHARS);
+  }
   const db = getDb();
   const nodeResultsStr = JSON.stringify(run.nodeResults ?? {});
-  // Enforce 1MB limit on stored results
-  const truncated = nodeResultsStr.length > 1_048_576;
+  // Enforce size limit on stored results
+  const truncated = nodeResultsStr.length > WORKFLOW_RUN_RESULTS_MAX_CHARS;
   const stored = truncated ? '{"truncated":true}' : nodeResultsStr;
 
   db.prepare(

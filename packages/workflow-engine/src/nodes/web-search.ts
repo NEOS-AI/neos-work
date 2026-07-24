@@ -34,7 +34,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.92',
+          'User-Agent': 'neos-work/0.3.93',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
@@ -55,13 +55,29 @@ export class WebSearchNode implements ExecutableNode {
 
       const data = await res.json() as { results?: TavilyResult[] };
       const raw = Array.isArray(data.results) ? data.results : [];
-      // Clip title/content so runaway Tavily payloads do not bloat node results
-      const results = raw.map((r) => ({
-        title: typeof r.title === 'string' ? r.title.trim().slice(0, 500) : '',
-        url: typeof r.url === 'string' ? r.url.trim() : '',
-        content: typeof r.content === 'string' ? r.content.trim().slice(0, 2_000) : '',
-        score: typeof r.score === 'number' && Number.isFinite(r.score) ? r.score : 0,
-      }));
+      // Clip fields; only keep http(s) URLs; respect maxResults
+      const results = raw
+        .slice(0, maxResults)
+        .map((r) => {
+          const title = typeof r.title === 'string' ? r.title.trim().slice(0, 500) : '';
+          const content =
+            typeof r.content === 'string' ? r.content.trim().slice(0, 2_000) : '';
+          const url = typeof r.url === 'string' ? r.url.trim() : '';
+          let safeUrl = '';
+          try {
+            const u = new URL(url);
+            if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
+          } catch {
+            safeUrl = '';
+          }
+          return {
+            title,
+            url: safeUrl,
+            content,
+            score: typeof r.score === 'number' && Number.isFinite(r.score) ? r.score : 0,
+          };
+        })
+        .filter((r) => r.url.length > 0);
       return {
         ok: true,
         output: results,

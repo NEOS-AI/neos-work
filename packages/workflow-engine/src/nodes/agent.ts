@@ -46,6 +46,10 @@ function buildAdapter(settings: Record<string, string>) {
 const MEMORY_CONTEXT_MAX_CHARS = 32_000;
 /** Cap Design System DESIGN.md injection (plan Task 1). */
 const DESIGN_CONTEXT_MAX_CHARS = 32_000;
+/** Cap node/harness system prompts before memory/design injection. */
+const SYSTEM_PROMPT_MAX_CHARS = 100_000;
+/** Cap serialized agent inputs passed to CLI spawn. */
+const CLI_INPUTS_MAX_CHARS = 256 * 1024;
 
 async function buildSystemPromptWithMemory(
   basePrompt: string,
@@ -107,15 +111,24 @@ export class AgentNode implements ExecutableNode {
           : '';
     const harness = harnessId ? resolveHarness(harnessId) : undefined;
 
-    const nodeSystemPrompt =
+    let nodeSystemPrompt =
       typeof this.nodeConfig?.['systemPrompt'] === 'string'
         ? this.nodeConfig['systemPrompt'].trim()
         : String(this.nodeConfig?.['systemPrompt'] ?? '').trim();
-    const harnessPrompt =
+    if (nodeSystemPrompt.length > SYSTEM_PROMPT_MAX_CHARS) {
+      nodeSystemPrompt = nodeSystemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS);
+    }
+    let harnessPrompt =
       typeof harness?.systemPrompt === 'string' ? harness.systemPrompt.trim() : '';
-    const baseSystemPrompt = harnessPrompt
+    if (harnessPrompt.length > SYSTEM_PROMPT_MAX_CHARS) {
+      harnessPrompt = harnessPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS);
+    }
+    let baseSystemPrompt = harnessPrompt
       ? [harnessPrompt, nodeSystemPrompt].filter(Boolean).join('\n\n---\n')
       : nodeSystemPrompt;
+    if (baseSystemPrompt.length > SYSTEM_PROMPT_MAX_CHARS) {
+      baseSystemPrompt = baseSystemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS);
+    }
 
     const serverUrl = safeServerUrl(ctx.settings['SERVER_URL'], 'http://localhost:3579');
     // Prefer AUTH_TOKEN; fall back to SERVER_TOKEN (Media/Deploy share the runtime token)
@@ -160,9 +173,18 @@ export class AgentNode implements ExecutableNode {
       if (!ctx.cliSpawn) {
         return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };
       }
-      const prompt = systemPrompt
-        ? `${systemPrompt}\n\n---\n${JSON.stringify(ctx.inputs)}`
-        : JSON.stringify(ctx.inputs);
+      let inputsJson = JSON.stringify(ctx.inputs ?? {});
+      if (inputsJson.length > CLI_INPUTS_MAX_CHARS) {
+        inputsJson =
+          inputsJson.slice(0, CLI_INPUTS_MAX_CHARS) + '…[inputs truncated]';
+      }
+      let prompt = systemPrompt
+        ? `${systemPrompt}\n\n---\n${inputsJson}`
+        : inputsJson;
+      // CLI spawn already caps output; keep prompt bounded too
+      if (prompt.length > SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS) {
+        prompt = prompt.slice(0, SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS);
+      }
       const result = await ctx.cliSpawn(
         provider,
         prompt,

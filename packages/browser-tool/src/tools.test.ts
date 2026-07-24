@@ -135,6 +135,25 @@ describe('createBrowserTools', () => {
     });
   });
 
+  it('caps extract_links at 500 and rejects oversized screenshots', async () => {
+    const many = Array.from({ length: 600 }, (_, i) => ({
+      text: `L${i}`,
+      href: `https://x.test/${i}`,
+    }));
+    const page = {
+      evaluate: vi.fn(async () => many),
+      screenshot: vi.fn(async () => Buffer.alloc(8 * 1024 * 1024 + 1)),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const links = await tools.find((t) => t.name === 'browser_extract_links')!.execute({});
+    expect(links.success).toBe(true);
+    expect((links.output as { links: unknown[] }).links).toHaveLength(500);
+
+    const shot = await tools.find((t) => t.name === 'browser_screenshot')!.execute({});
+    expect(shot.success).toBe(false);
+    expect(shot.error).toMatch(/Screenshot exceeds max size/i);
+  });
+
   it('browser_extract_links passes null selector for whole page', async () => {
     const page = {
       evaluate: vi.fn(async (_fn: unknown, sel: string | null) => {

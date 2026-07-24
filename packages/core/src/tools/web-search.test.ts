@@ -42,6 +42,30 @@ describe('createWebSearchTool', () => {
     expect(body.api_key).toBe('test-key');
   });
 
+  it('filters non-http result URLs', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            { title: 'A', url: 'javascript:alert(1)', content: 'x' },
+            { title: 'B', url: 'https://ok.example', content: 'y' },
+            { title: 'C', url: 'file:///etc/passwd', content: 'z' },
+            { title: 'D', url: 'https://two.example', content: 'w' },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+    const result = await createWebSearchTool().execute({ query: 'q', maxResults: 10 });
+    expect(result.success).toBe(true);
+    const out = result.output as { results: Array<{ url: string }> };
+    expect(out.results.map((r) => r.url)).toEqual([
+      'https://ok.example',
+      'https://two.example',
+    ]);
+  });
+
   it('caps maxResults at 10', async () => {
     process.env['TAVILY_API_KEY'] = 'k';
     globalThis.fetch = vi.fn(async () =>

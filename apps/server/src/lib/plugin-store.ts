@@ -42,23 +42,40 @@ export function normalizePipelineStageKind(raw: unknown): PipelineStageKind {
   return PIPELINE_STAGE_KINDS.has(k) ? (k as PipelineStageKind) : 'execute';
 }
 
+/** Cap pipeline stages / stage field sizes (plugin MVP hygiene). */
+const PIPELINE_STAGES_MAX = 20;
+const PIPELINE_STAGE_ID_MAX = 100;
+const PIPELINE_STAGE_NAME_MAX = 200;
+const PIPELINE_STAGE_PROMPT_MAX = 100_000;
+const PLUGIN_SKILL_CONTENT_MAX = 500_000;
+const PLUGIN_DESCRIPTION_MAX = 4_000;
+
 function normalizePipelineStages(raw: unknown): PipelineStage[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const stages: PipelineStage[] = [];
   for (const s of raw) {
+    if (stages.length >= PIPELINE_STAGES_MAX) break;
     if (!s || typeof s !== 'object') continue;
     const stage = s as Partial<PipelineStage>;
     const id = typeof stage.id === 'string' ? stage.id.trim() : '';
-    if (!id) continue;
-    const name =
+    if (!id || /[\0\r\n]/.test(id) || id.length > PIPELINE_STAGE_ID_MAX) continue;
+    let name =
       typeof stage.name === 'string' ? stage.name.trim() || id : id;
+    if (/[\0\r\n]/.test(name)) name = id;
+    if (name.length > PIPELINE_STAGE_NAME_MAX) name = name.slice(0, PIPELINE_STAGE_NAME_MAX);
     const kind = normalizePipelineStageKind(stage.kind);
-    const outputKey =
+    let outputKey =
       typeof stage.outputKey === 'string'
         ? stage.outputKey.trim() || undefined
         : undefined;
-    const prompt =
+    if (outputKey && (/[\0\r\n]/.test(outputKey) || outputKey.length > PIPELINE_STAGE_ID_MAX)) {
+      outputKey = undefined;
+    }
+    let prompt =
       typeof stage.prompt === 'string' ? stage.prompt.trim() || undefined : undefined;
+    if (prompt && prompt.length > PIPELINE_STAGE_PROMPT_MAX) {
+      prompt = prompt.slice(0, PIPELINE_STAGE_PROMPT_MAX);
+    }
     stages.push({
       id,
       name,
@@ -114,10 +131,13 @@ export async function listPlugins(): Promise<PluginManifest[]> {
           manifest.name = id;
         }
         if (typeof manifest.description === 'string') {
-          manifest.description = manifest.description.trim() || undefined;
+          let d = manifest.description.trim() || undefined;
+          if (d && d.length > PLUGIN_DESCRIPTION_MAX) d = d.slice(0, PLUGIN_DESCRIPTION_MAX);
+          manifest.description = d;
         }
         if (typeof manifest.version === 'string') {
-          manifest.version = manifest.version.trim() || '0.0.0';
+          const v = manifest.version.trim() || '0.0.0';
+          manifest.version = v.length > 64 ? v.slice(0, 64) : v;
         }
         // Normalize pipeline stages (kind allow-list, trim ids/names)
         if (manifest.pipeline !== undefined) {
@@ -125,12 +145,17 @@ export async function listPlugins(): Promise<PluginManifest[]> {
           if (stages) manifest.pipeline = stages;
           else delete manifest.pipeline;
         }
-        // Optionally load SKILL.md content (whitespace-only → omit)
+        // Optionally load SKILL.md content (whitespace-only → omit; cap size)
         const skillPath = path.join(dir, 'SKILL.md');
         try {
           const skillBody = await fs.readFile(skillPath, 'utf-8');
           const trimmedSkill = skillBody.trim();
-          if (trimmedSkill) manifest.skillContent = skillBody;
+          if (trimmedSkill) {
+            manifest.skillContent =
+              skillBody.length > PLUGIN_SKILL_CONTENT_MAX
+                ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
+                : skillBody;
+          }
         } catch {
           // No SKILL.md — ok
         }
@@ -164,6 +189,9 @@ export async function upgradeSkillToPlugin(options: {
 }): Promise<PluginManifest> {
   const trimmed =
     typeof options.skillDirName === 'string' ? options.skillDirName.trim() : '';
+  if (/[\0\r\n]/.test(trimmed) || trimmed.length > 200) {
+    throw new Error('Invalid skill directory name');
+  }
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
   if (!safe) throw new Error('Invalid skill directory name');
   const dir = path.join(SKILLS_DIR, safe);
@@ -191,11 +219,13 @@ export async function upgradeSkillToPlugin(options: {
     // ignore
   }
   const firstLine = skillBody.split('\n').find((l) => l.trim() && !l.startsWith('---') && !l.startsWith('name:')) ?? '';
-  const title =
+  let title =
     (typeof options.name === 'string' ? options.name.trim() : '') || safe;
-  const description =
+  if (title.length > 200) title = title.slice(0, 200);
+  let description =
     (typeof options.description === 'string' ? options.description.trim() : '')
     || (firstLine.replace(/^#+\s*/, '').slice(0, 200) || `Plugin upgraded from skill ${safe}`);
+  if (description.length > 2_000) description = description.slice(0, 2_000);
 
   const manifest: PluginManifest = {
     schemaVersion: 'od-plugin/v1',

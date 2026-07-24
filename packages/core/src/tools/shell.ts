@@ -12,6 +12,8 @@ import type { Tool, ToolResult } from './base.js';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_BYTES = 512_000; // 512 KB
+/** Cap shell command string (runaway agent defense). */
+export const MAX_COMMAND_CHARS = 10_000;
 
 /** Patterns that are never allowed, regardless of context. */
 const FORBIDDEN_PATTERNS: RegExp[] = [
@@ -121,6 +123,13 @@ export function createShellTool(workspaceRoot: string): Tool {
         // Reject null bytes / CR / LF that confuse shell and path APIs
         if (/[\0\r\n]/.test(command)) {
           return { success: false, output: null, error: 'command contains invalid control characters' };
+        }
+        if (command.length > MAX_COMMAND_CHARS) {
+          return {
+            success: false,
+            output: null,
+            error: `command exceeds max length (${MAX_COMMAND_CHARS} characters)`,
+          };
         }
         const timeoutRaw =
           typeof input.timeout === 'number'

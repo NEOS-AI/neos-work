@@ -56,6 +56,25 @@ describe('ContextManager', () => {
     expect(chatSpy).not.toHaveBeenCalled();
   });
 
+  it('summarize truncates oversized message content in transcript', async () => {
+    const cm = new ContextManager(1); // force compression path via low threshold
+    const messages = Array.from({ length: 25 }, (_, i) =>
+      msg('user', i < 5 ? 'x'.repeat(8_000) : `m${i}`),
+    );
+    const adapter = mockAdapter(['summary-ok']);
+    const chat = adapter.chat.bind(adapter);
+    let captured = '';
+    adapter.chat = async function* (params) {
+      captured = JSON.stringify(params.messages);
+      yield* chat(params);
+    };
+    const out = await cm.compress(messages, adapter);
+    expect(out[0]?.role).toBe('system');
+    expect(String(out[0]?.content ?? '')).toContain('summary-ok');
+    // Per-message body was truncated with ellipsis marker in the summarize prompt
+    expect(captured).toContain('…');
+  });
+
   it('compress summarizes older messages and keeps recent 20', async () => {
     const cm = new ContextManager();
     const messages = Array.from({ length: 25 }, (_, i) => msg('user', `msg-${i}`));

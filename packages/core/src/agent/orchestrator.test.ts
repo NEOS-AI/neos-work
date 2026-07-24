@@ -441,4 +441,20 @@ describe('AgentOrchestrator', () => {
     expect(types).toContain('step_complete');
     expect(types[types.length - 1]).toBe('done');
   });
+
+  it('truncates oversized goals before planning', async () => {
+    const adapter = sequencedAdapter(['[]']);
+    const orch = new AgentOrchestrator(adapter, new ToolRegistry());
+    const huge = 'G'.repeat(AgentOrchestrator.GOAL_MAX_CHARS + 5_000);
+    const events = await collectEvents(orch.run(huge));
+    // empty plan falls through to direct response path
+    expect(events.some((e) => e.type === 'plan' || e.type === 'done')).toBe(true);
+    // Goal stored on task is capped (last done event)
+    const done = events.find((e) => e.type === 'done') as { task?: { goal?: string } } | undefined;
+    if (done?.task?.goal) {
+      expect(done.task.goal.length).toBeLessThanOrEqual(AgentOrchestrator.GOAL_MAX_CHARS + 30);
+      expect(done.task.goal).toMatch(/goal truncated|G{10}/);
+    }
+  });
 });
+

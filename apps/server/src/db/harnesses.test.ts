@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from './schema.js';
 import {
+  HARNESS_CONSTRAINTS_JSON_MAX_CHARS,
   createCustomHarness,
   deleteCustomHarness,
   getCustomHarness,
@@ -202,6 +203,36 @@ describe('custom harnesses CRUD', () => {
     expect(updated?.description).toBe('d2');
     expect(updated?.systemPrompt).toBe('p2');
     expect(updated?.allowedTools).toEqual(['a', 'b']);
+  });
+
+  it('rejects oversized constraints JSON on create/update', () => {
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: 'Big Constraints',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+        constraints: { note: 'x'.repeat(HARNESS_CONSTRAINTS_JSON_MAX_CHARS + 1) } as never,
+      }),
+    ).toThrow(/constraints exceed/i);
+
+    createCustomHarness({
+      id: ID,
+      name: 'Ok',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'p',
+      allowedTools: [],
+      constraints: { maxSteps: 3 },
+    });
+    expect(
+      updateCustomHarness(ID, {
+        constraints: { note: 'y'.repeat(HARNESS_CONSTRAINTS_JSON_MAX_CHARS + 1) } as never,
+      }),
+    ).toBeUndefined();
+    expect(getCustomHarness(ID)?.constraints).toEqual({ maxSteps: 3 });
   });
 
   it('tolerates corrupted allowed_tools / constraints JSON on read', () => {
