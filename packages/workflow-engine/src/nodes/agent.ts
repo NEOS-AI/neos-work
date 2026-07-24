@@ -175,30 +175,41 @@ export class AgentNode implements ExecutableNode {
       if (!ctx.cliSpawn) {
         return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };
       }
-      let inputsJson = JSON.stringify(ctx.inputs ?? {});
-      if (inputsJson.length > CLI_INPUTS_MAX_CHARS) {
-        inputsJson =
-          inputsJson.slice(0, CLI_INPUTS_MAX_CHARS) + '…[inputs truncated]';
+      try {
+        let inputsJson = JSON.stringify(ctx.inputs ?? {});
+        if (inputsJson.length > CLI_INPUTS_MAX_CHARS) {
+          inputsJson =
+            inputsJson.slice(0, CLI_INPUTS_MAX_CHARS) + '…[inputs truncated]';
+        }
+        let prompt = systemPrompt
+          ? `${systemPrompt}\n\n---\n${inputsJson}`
+          : inputsJson;
+        // CLI spawn already caps output; keep prompt bounded too
+        if (prompt.length > SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS) {
+          prompt = prompt.slice(0, SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS);
+        }
+        const result = await ctx.cliSpawn(
+          provider,
+          prompt,
+          (chunk, accumulated) => ctx.onProgress?.(chunk, accumulated),
+          ctx.signal,
+        );
+        return {
+          ok: result.exitCode === 0,
+          output: result.output,
+          error: result.exitCode !== 0 ? `CLI exited with code ${result.exitCode}` : undefined,
+          durationMs: Date.now() - start,
+        };
+      } catch (err) {
+        let msg = err instanceof Error ? err.message : String(err);
+        if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+        return {
+          ok: false,
+          output: null,
+          error: msg,
+          durationMs: Date.now() - start,
+        };
       }
-      let prompt = systemPrompt
-        ? `${systemPrompt}\n\n---\n${inputsJson}`
-        : inputsJson;
-      // CLI spawn already caps output; keep prompt bounded too
-      if (prompt.length > SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS) {
-        prompt = prompt.slice(0, SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS);
-      }
-      const result = await ctx.cliSpawn(
-        provider,
-        prompt,
-        (chunk, accumulated) => ctx.onProgress?.(chunk, accumulated),
-        ctx.signal,
-      );
-      return {
-        ok: result.exitCode === 0,
-        output: result.output,
-        error: result.exitCode !== 0 ? `CLI exited with code ${result.exitCode}` : undefined,
-        durationMs: Date.now() - start,
-      };
     }
 
     try {
