@@ -88,6 +88,37 @@ describe('custom harnesses CRUD', () => {
   it('trims fields on create/update; rejects invalid id and blank required fields', () => {
     expect(() =>
       createCustomHarness({
+        id: '  ',
+        name: 'x',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/id, name, and systemPrompt/i);
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: '  ',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/id, name, and systemPrompt/i);
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: 'x',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: '   ',
+        allowedTools: [],
+      }),
+    ).toThrow(/id, name, and systemPrompt/i);
+
+    expect(() =>
+      createCustomHarness({
         id: 'bad id!',
         name: 'x',
         domain: 'coding',

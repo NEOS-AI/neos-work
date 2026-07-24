@@ -59,6 +59,12 @@ describe('coding blocks', () => {
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
 
+    it('returns (no output) when script evaluates to undefined without logs', async () => {
+      const result = await exec().execute(ctx({ code: 'undefined', language: 'js' }));
+      expect(result.ok).toBe(true);
+      expect(String(result.output)).toMatch(/no output/i);
+    });
+
     it('captures console.log output', async () => {
       const result = await exec().execute(
         ctx({ code: 'console.log("hello"); console.log("world")', language: 'js' }),

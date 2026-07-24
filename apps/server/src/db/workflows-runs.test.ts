@@ -163,4 +163,46 @@ describe('workflow runs CRUD', () => {
     expect(workflows.deleteWorkflow(wf.id)).toBe(true);
     expect(workflows.getWorkflow(wf.id)).toBeUndefined();
   });
+
+  it('updateWorkflow keeps prior name on blank trim; clears designSystemId; deleteRun blanks', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      description: '  keep me  ',
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(wf.description).toBe('keep me');
+
+    workflows.updateWorkflow(wf.id, { designSystemId: '  ds-1  ' });
+    expect(workflows.getWorkflow(wf.id)?.designSystemId).toBe('ds-1');
+
+    // blank name after trim keeps existing name
+    const sameName = workflows.updateWorkflow(wf.id, { name: '   ' });
+    expect(sameName?.name).toBe(NAME);
+
+    // empty description clears to undefined
+    const clearedDesc = workflows.updateWorkflow(wf.id, { description: '   ' });
+    expect(clearedDesc?.description).toBeUndefined();
+
+    // empty designSystemId clears binding
+    const clearedDs = workflows.updateWorkflow(wf.id, { designSystemId: '  ' });
+    expect(clearedDs?.designSystemId).toBeUndefined();
+
+    const runId = crypto.randomUUID();
+    workflows.saveRun({
+      id: runId,
+      workflowId: wf.id,
+      status: 'completed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+    });
+    expect(workflows.getRun(`  ${runId}  `)?.id).toBe(runId);
+    expect(workflows.getRun('   ')).toBeUndefined();
+    expect(workflows.deleteRun('   ')).toBe(false);
+    expect(workflows.deleteRun(`  ${runId}  `)).toBe(true);
+    expect(workflows.getRun(runId)).toBeUndefined();
+
+    expect(workflows.updateWorkflow('   ', { name: 'x' })).toBeUndefined();
+  });
 });

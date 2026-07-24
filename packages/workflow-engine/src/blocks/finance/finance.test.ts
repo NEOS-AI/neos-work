@@ -394,4 +394,26 @@ describe('risk_report', () => {
     expect(result.ok).toBe(true);
     expect((result.output as { riskLevel: string }).riskLevel).toBe('low');
   });
+
+  it('classifies high risk for highly volatile series', async () => {
+    // Alternate between 10 and 200 → huge daily returns / high annualised vol
+    const volatile = Array.from({ length: 60 }, (_, i) => (i % 2 === 0 ? 10 : 200));
+    getStockChart.mockResolvedValue(barsNewestFirst(volatile));
+
+    const result = await exec().execute(ctx({ symbol: 'VOL', lookback: 60 }));
+    expect(result.ok).toBe(true);
+    const out = result.output as { riskLevel: string; annualisedVolatility: number; maxDrawdown: number };
+    expect(out.riskLevel).toBe('high');
+    expect(out.annualisedVolatility).toBeGreaterThanOrEqual(0.3);
+    expect(out.maxDrawdown).toBeGreaterThan(0);
+  });
+
+  it('clamps lookback below min to fallback 60', async () => {
+    const closes = syntheticCloses(80);
+    getStockChart.mockResolvedValue(barsNewestFirst([...closes].reverse()));
+    const result = await exec().execute(ctx({ symbol: '005930', lookback: 1 }));
+    expect(result.ok).toBe(true);
+    // clampPeriod(1, 60, 5, 500) → 1 < min 5 → fallback 60
+    expect((result.output as { lookbackDays: number }).lookbackDays).toBeGreaterThanOrEqual(5);
+  });
 });

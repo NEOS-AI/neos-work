@@ -125,6 +125,7 @@ describe('generateAudio', () => {
     });
 
     await expect(generateAudio({ text: '  ', apiKey: 'sk' })).rejects.toThrow(/text/i);
+    await expect(generateAudio({ text: 'hi', apiKey: '   ' })).rejects.toThrow(/apiKey/i);
 
     const result = await generateAudio({
       text: '  hi  ',
