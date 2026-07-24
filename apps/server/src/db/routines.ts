@@ -51,6 +51,18 @@ export interface RoutineRun {
   error?: string;
 }
 
+function safeParseInputs(raw: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw || '{}') as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 function rowToRoutine(row: RoutineRow): Routine {
   return {
     id: row.id,
@@ -59,7 +71,7 @@ function rowToRoutine(row: RoutineRow): Routine {
     schedule: row.schedule,
     timezone: row.timezone || 'UTC',
     enabled: row.enabled === 1,
-    inputs: JSON.parse(row.inputs_json || '{}') as Record<string, unknown>,
+    inputs: safeParseInputs(row.inputs_json),
     lastRunAt: row.last_run_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -112,6 +124,10 @@ export function createRoutine(input: {
   const timezoneRaw =
     typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : (input.timezone || 'UTC');
   const timezone = isValidTimeZone(timezoneRaw) ? timezoneRaw : 'UTC';
+  const inputs =
+    input.inputs && typeof input.inputs === 'object' && !Array.isArray(input.inputs)
+      ? input.inputs
+      : {};
   db.prepare(`
     INSERT INTO routine (id, name, workflow_id, schedule, timezone, enabled, inputs_json, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -122,7 +138,7 @@ export function createRoutine(input: {
     schedule,
     timezone,
     input.enabled !== false ? 1 : 0,
-    JSON.stringify(input.inputs ?? {}),
+    JSON.stringify(inputs),
     now,
     now,
   );
@@ -159,6 +175,13 @@ export function updateRoutine(
       : existing.timezone;
 
   const now = new Date().toISOString();
+  // Non-object inputs (arrays/primitives) → {} — matches webhook trigger hygiene
+  const inputs =
+    input.inputs !== undefined
+      ? input.inputs && typeof input.inputs === 'object' && !Array.isArray(input.inputs)
+        ? input.inputs
+        : {}
+      : existing.inputs;
   db.prepare(`
     UPDATE routine
     SET name = ?, schedule = ?, timezone = ?, enabled = ?, inputs_json = ?, updated_at = ?
@@ -168,7 +191,7 @@ export function updateRoutine(
     schedule,
     timezone,
     input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
-    JSON.stringify(input.inputs ?? existing.inputs),
+    JSON.stringify(inputs),
     now,
     trimmed,
   );

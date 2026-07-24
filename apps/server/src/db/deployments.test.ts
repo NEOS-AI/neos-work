@@ -50,6 +50,27 @@ describe('deployments CRUD', () => {
     expect(getDeployment(row.id)).toBeUndefined();
   });
 
+  it('rejects non-http deployment urls on create/update', () => {
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-url`,
+      status: 'pending',
+      url: 'file:///tmp/site',
+    });
+    expect(row.url).toBeUndefined();
+
+    const bare = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-bare`,
+      status: 'pending',
+      url: 'example.com',
+    });
+    expect(bare.url).toBe('https://example.com');
+
+    const patched = updateDeployment(bare.id, { url: 'javascript:alert(1)' });
+    expect(patched?.url).toBeUndefined();
+  });
+
   it('filters list by workflowId and returns empty for unknown', () => {
     const wfId = crypto.randomUUID();
     const a = createDeployment({

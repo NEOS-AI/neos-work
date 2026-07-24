@@ -532,4 +532,88 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(completed.map((e) => e.nodeId).sort()).toEqual(['output', 'trigger']);
     expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: 'run-pad-ids' });
   });
+
+  it('auto-generates a runId when omitted', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const started = events[0] as { type: string; runId: string };
+    expect(started.type).toBe('run.started');
+    expect(started.runId.length).toBeGreaterThan(8);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed', runId: started.runId });
+  });
+
+  it('truncates oversized node outputs before emitting node.completed', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    // > 1 MiB serialized payload (MAX_OUTPUT_BYTES)
+    const huge = 'x'.repeat(1_100_000);
+    await executeWorkflow({
+      runId: 'run-truncate-output',
+      triggerInputs: { blob: huge },
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const completed = events.find(
+      (e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'trigger',
+    ) as { output: { truncated?: boolean; preview?: string } } | undefined;
+    expect(completed).toBeDefined();
+    expect(completed!.output).toMatchObject({ truncated: true });
+    expect(typeof completed!.output.preview).toBe('string');
+    expect(completed!.output.preview!.length).toBe(256);
+  });
+
+  it('skips blank node ids and throws on unknown node types', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-blank-id',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: '   ', type: 'trigger', label: 'Blank', position: { x: 0, y: 0 }, config: {} },
+          { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    // only the non-blank trigger should run
+    const started = events.filter((e) => e.type === 'node.started') as Array<{ nodeId: string }>;
+    expect(started.map((e) => e.nodeId)).toEqual(['trigger']);
+
+    await expect(
+      executeWorkflow({
+        runId: 'run-unknown-type',
+        workflow: baseWorkflow({
+          nodes: [
+            {
+              id: 'bad',
+              type: 'not_a_real_node' as never,
+              label: 'Bad',
+              position: { x: 0, y: 0 },
+              config: {},
+            },
+          ],
+          edges: [],
+        }),
+        settings: {},
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow(/Unknown node type/i);
+  });
 });

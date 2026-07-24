@@ -34,7 +34,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.86',
+          'User-Agent': 'neos-work/0.3.87',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,

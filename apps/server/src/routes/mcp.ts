@@ -118,13 +118,25 @@ function deleteMcpServer(id: string): boolean {
   return result.changes > 0;
 }
 
+function safeParseArgs(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const args = parsed.map((a) => String(a).trim()).filter(Boolean);
+    return args.length > 0 ? args : null;
+  } catch {
+    return null;
+  }
+}
+
 function rowToResponse(row: McpServerRow) {
   return {
     id: row.id,
     name: row.name,
     transport: row.transport,
     command: row.command,
-    args: row.args ? (JSON.parse(row.args) as string[]) : null,
+    args: safeParseArgs(row.args),
     url: row.url,
     enabled: row.enabled === 1,
     createdAt: row.created_at,

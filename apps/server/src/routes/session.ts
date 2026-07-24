@@ -103,12 +103,24 @@ async function loadMcpTools(toolRegistry: ToolRegistry): Promise<void> {
     .all() as Array<{ id: string; name: string; transport: string; command: string | null; args: string | null; url: string | null }>;
 
   for (const row of rows) {
+    let args: string[] | undefined;
+    if (row.args) {
+      try {
+        const parsed = JSON.parse(row.args) as unknown;
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.map((a) => String(a).trim()).filter(Boolean);
+          args = cleaned.length > 0 ? cleaned : undefined;
+        }
+      } catch {
+        args = undefined;
+      }
+    }
     const config: McpServerConfig = {
       id: row.id,
       name: row.name,
       transport: row.transport as 'stdio' | 'http',
       command: row.command ?? undefined,
-      args: row.args ? (JSON.parse(row.args) as string[]) : undefined,
+      args,
       url: row.url ?? undefined,
       enabled: true,
     };

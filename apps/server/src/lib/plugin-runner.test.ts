@@ -426,7 +426,12 @@ describe('plugin-runner resume / abort / LLM paths', () => {
 
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: false, status: 529, json: async () => ({}) }),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 529,
+        text: async () => '  overloaded  ',
+        json: async () => ({}),
+      }),
     );
     const anthroEvents: Array<Record<string, unknown>> = [];
     await runPlugin({
@@ -435,13 +440,18 @@ describe('plugin-runner resume / abort / LLM paths', () => {
       settings: { ANTHROPIC_API_KEY: 'sk-ant' },
       onEvent: (e) => anthroEvents.push(e as unknown as Record<string, unknown>),
     });
-    expect(String(anthroEvents.find((e) => e.type === 'stage.completed')?.output ?? '')).toMatch(
-      /Anthropic API error 529/i,
-    );
+    const anthroOut = String(anthroEvents.find((e) => e.type === 'stage.completed')?.output ?? '');
+    expect(anthroOut).toMatch(/Anthropic API error 529/i);
+    expect(anthroOut).toContain('overloaded');
 
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) }),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => '  unavailable  ',
+        json: async () => ({}),
+      }),
     );
     const oaiEvents: Array<Record<string, unknown>> = [];
     await runPlugin({
@@ -450,9 +460,9 @@ describe('plugin-runner resume / abort / LLM paths', () => {
       settings: { OPENAI_API_KEY: 'sk-oai' },
       onEvent: (e) => oaiEvents.push(e as unknown as Record<string, unknown>),
     });
-    expect(String(oaiEvents.find((e) => e.type === 'stage.completed')?.output ?? '')).toMatch(
-      /OpenAI API error 503/i,
-    );
+    const oaiOut = String(oaiEvents.find((e) => e.type === 'stage.completed')?.output ?? '');
+    expect(oaiOut).toMatch(/OpenAI API error 503/i);
+    expect(oaiOut).toContain('unavailable');
   });
 });
 

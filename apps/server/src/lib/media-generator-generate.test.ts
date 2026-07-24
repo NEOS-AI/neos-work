@@ -17,6 +17,24 @@ import { generateAudio, generateImage, MEDIA_DIR } from './media-generator.js';
 
 const created: string[] = [];
 
+/** Minimal fetch Response shape used by generateImage download path. */
+function fetchImageOk(bytes: number[] | Uint8Array, contentLength?: string | null) {
+  const buf = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return {
+    ok: true as const,
+    headers: {
+      get: (k: string) =>
+        k.toLowerCase() === 'content-length'
+          ? contentLength === undefined
+            ? String(buf.byteLength)
+            : contentLength
+          : null,
+    },
+    arrayBuffer: async () =>
+      buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+  };
+}
+
 afterEach(async () => {
   generateMock.mockReset();
   speechCreateMock.mockReset();
@@ -31,13 +49,7 @@ describe('generateImage', () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png', revised_prompt: 'better' }],
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
-      }),
-    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetchImageOk([1, 2, 3])));
 
     const result = await generateImage({
       prompt: 'a cat',
@@ -61,7 +73,13 @@ describe('generateImage', () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/fail.png' }],
     });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        headers: { get: () => null },
+      }),
+    );
     await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Failed to download/);
   });
 
@@ -79,13 +97,8 @@ describe('generateImage', () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png' }],
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        arrayBuffer: async () => new Uint8Array([1]).buffer,
-      }),
-    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetchImageOk([1])));
+
 
     await expect(generateImage({ prompt: '   ', apiKey: 'sk' })).rejects.toThrow(/prompt/i);
 
@@ -105,6 +118,54 @@ describe('generateImage', () => {
         quality: 'standard',
       }),
     );
+  });
+
+  it('rejects non-http(s) image URLs before download', async () => {
+    generateMock.mockResolvedValue({
+      data: [{ url: 'file:///tmp/evil.png' }],
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/http\(s\)/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    generateMock.mockResolvedValue({
+      data: [{ url: 'not a url' }],
+    });
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Invalid image URL/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized image downloads via Content-Length and body size', async () => {
+    const max = 16 * 1024 * 1024;
+    generateMock.mockResolvedValue({
+      data: [{ url: 'https://cdn.example/huge.png' }],
+    });
+
+    // Content-Length over cap → reject without buffering body
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: (k: string) => (k.toLowerCase() === 'content-length' ? String(max + 1) : null) },
+        arrayBuffer: async () => {
+          throw new Error('should not read body when Content-Length exceeds max');
+        },
+      }),
+    );
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/max size/i);
+
+    // No Content-Length but body too large
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => new Uint8Array(max + 1).buffer,
+      }),
+    );
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/max size/i);
   });
 });
 
@@ -161,13 +222,8 @@ describe('generateAudio', () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png' }],
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        arrayBuffer: async () => new Uint8Array([9]).buffer,
-      }),
-    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetchImageOk([9])));
+
     const result = await generateImage({
       prompt: 'case',
       // @ts-expect-error intentional case

@@ -17,15 +17,37 @@ interface HarnessRow {
   updated_at: string;
 }
 
+function safeParseJsonArray(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((t) => String(t).trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function safeParseConstraints(raw: string): AgentHarness['constraints'] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as AgentHarness['constraints'];
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 function rowToHarness(row: HarnessRow): AgentHarness {
   return {
     id: row.id,
     name: row.name,
-    domain: row.domain as AgentHarness['domain'],
+    domain: normalizeHarnessDomain(row.domain),
     description: row.description,
     systemPrompt: row.system_prompt,
-    allowedTools: JSON.parse(row.allowed_tools_json) as string[],
-    constraints: JSON.parse(row.constraints_json) as AgentHarness['constraints'],
+    allowedTools: safeParseJsonArray(row.allowed_tools_json),
+    constraints: safeParseConstraints(row.constraints_json),
     isBuiltIn: false,
   };
 }
@@ -70,9 +92,13 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   const domain = normalizeHarnessDomain(input.domain);
   const description =
     typeof input.description === 'string' ? input.description.trim() : (input.description ?? '');
-  const allowedTools = (input.allowedTools ?? [])
+  const allowedTools = (Array.isArray(input.allowedTools) ? input.allowedTools : [])
     .map((t) => String(t).trim())
     .filter(Boolean);
+  const constraints =
+    input.constraints && typeof input.constraints === 'object' && !Array.isArray(input.constraints)
+      ? input.constraints
+      : {};
   const db = getDb();
   db.prepare(
     `INSERT INTO custom_harness (id, name, domain, description, system_prompt, allowed_tools_json, constraints_json)
@@ -84,7 +110,7 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
     description,
     systemPrompt,
     JSON.stringify(allowedTools),
-    JSON.stringify(input.constraints ?? {}),
+    JSON.stringify(constraints),
   );
   return getCustomHarness(id)!;
 }
@@ -117,14 +143,24 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
     input.description !== undefined
       ? (typeof input.description === 'string' ? input.description.trim() : '')
       : existing.description;
-  const allowedTools = input.allowedTools !== undefined
-    ? JSON.stringify(
-      input.allowedTools.map((t) => String(t).trim()).filter(Boolean),
-    )
-    : existing.allowed_tools_json;
-  const constraints = input.constraints !== undefined
-    ? JSON.stringify(input.constraints)
-    : existing.constraints_json;
+  const allowedTools =
+    input.allowedTools !== undefined
+      ? JSON.stringify(
+          (Array.isArray(input.allowedTools) ? input.allowedTools : [])
+            .map((t) => String(t).trim())
+            .filter(Boolean),
+        )
+      : existing.allowed_tools_json;
+  const constraints =
+    input.constraints !== undefined
+      ? JSON.stringify(
+          input.constraints &&
+            typeof input.constraints === 'object' &&
+            !Array.isArray(input.constraints)
+            ? input.constraints
+            : {},
+        )
+      : existing.constraints_json;
 
   db.prepare(
     `UPDATE custom_harness SET name = ?, domain = ?, description = ?, system_prompt = ?,

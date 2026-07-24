@@ -138,11 +138,19 @@ export async function generateImage(options: {
     throw new Error('Invalid image URL returned');
   }
   await ensureMediaDir();
-  const imgRes = await fetch(imageUrl);
-  if (!imgRes.ok) throw new Error('Failed to download image');
-  const buf = Buffer.from(await imgRes.arrayBuffer());
   // Cap downloaded image size (plan Task 7 — 16 MB max)
   const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) throw new Error('Failed to download image');
+  // Reject oversized payloads early via Content-Length when present
+  const clHeader = imgRes.headers?.get?.('content-length');
+  if (clHeader) {
+    const cl = Number(clHeader);
+    if (Number.isFinite(cl) && cl > MAX_IMAGE_BYTES) {
+      throw new Error(`Image exceeds max size (${MAX_IMAGE_BYTES} bytes)`);
+    }
+  }
+  const buf = Buffer.from(await imgRes.arrayBuffer());
   if (buf.length > MAX_IMAGE_BYTES) {
     throw new Error(`Image exceeds max size (${MAX_IMAGE_BYTES} bytes)`);
   }

@@ -15,6 +15,11 @@ export interface MemoryRow {
   updated_at: string;
 }
 
+/** Reject null bytes / CR / LF in memory keys (path/storage safety). */
+function hasUnsafeKeyChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
+}
+
 export function createMemory(params: {
   workspaceId: string;
   key: string;
@@ -24,10 +29,17 @@ export function createMemory(params: {
   const workspaceId = typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
   const key = typeof params.key === 'string' ? params.key.trim() : '';
   if (!workspaceId || !key) throw new Error('workspaceId and key are required');
+  if (hasUnsafeKeyChars(key) || hasUnsafeKeyChars(workspaceId)) {
+    throw new Error('key/workspaceId contains invalid control characters');
+  }
   const content =
     typeof params.content === 'string' ? params.content.trim() : String(params.content ?? '');
   const tagsStr = Array.isArray(params.tags)
-    ? JSON.stringify(params.tags.map((t) => String(t).trim()).filter(Boolean))
+    ? JSON.stringify(
+        params.tags
+          .map((t) => String(t).trim())
+          .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t)),
+      )
     : null;
   const db = getDb();
   const id = crypto.randomUUID();
@@ -72,11 +84,16 @@ export function searchMemory(
     .all(ws, like, like, capped) as MemoryRow[];
 
   if (tags && tags.length > 0) {
-    const want = tags.map((t) => String(t).trim()).filter(Boolean);
+    const want = tags
+      .map((t) => String(t).trim())
+      .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t));
+    if (want.length === 0) return [];
     rows = rows.filter((r) => {
       if (!r.tags) return false;
       try {
-        const memTags: string[] = JSON.parse(r.tags);
+        const parsed = JSON.parse(r.tags) as unknown;
+        if (!Array.isArray(parsed)) return false;
+        const memTags = parsed.map((t) => String(t));
         return want.some((t) => memTags.includes(t));
       } catch {
         return false;

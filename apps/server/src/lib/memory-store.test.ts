@@ -74,6 +74,18 @@ describe('memory-store', () => {
     deleteMemory(m.id);
   });
 
+  it('normalizes legacy type casing when reading from disk', () => {
+    const m = createMemory({ name: NAME, type: 'user', content: 'legacy' });
+    // Rewrite frontmatter with upper-case type (legacy files)
+    writeFileSync(
+      m.filePath,
+      `---\nid: ${m.id}\nname: ${NAME}\ntype: SESSION\nenabled: true\ncreatedAt: ${m.createdAt}\nupdatedAt: ${m.updatedAt}\n---\n\nlegacy\n`,
+      'utf-8',
+    );
+    expect(getMemory(m.id)?.type).toBe('session');
+    deleteMemory(m.id);
+  });
+
   it('updateMemory rejects blank name and normalizes type fallback', () => {
     const m = createMemory({ name: NAME, type: 'session', content: 's' });
     expect(updateMemory(m.id, { name: '   ' })).toBeNull();

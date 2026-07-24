@@ -21,6 +21,13 @@ function slugify(name: string): string {
     .slice(0, 40);
 }
 
+const MEMORY_TYPES = new Set(['user', 'session', 'skill', 'reference']);
+
+function normalizeMemoryType(raw: unknown, fallback: MemoryType = 'user'): MemoryType {
+  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return MEMORY_TYPES.has(t) ? (t as MemoryType) : fallback;
+}
+
 function parseFile(filePath: string): MemoryItem | null {
   try {
     const raw = readFileSync(filePath, 'utf-8');
@@ -38,7 +45,7 @@ function parseFile(filePath: string): MemoryItem | null {
     return {
       id: get('id') || randomUUID(),
       name: get('name'),
-      type: (get('type') || 'user') as MemoryType,
+      type: normalizeMemoryType(get('type')),
       enabled: get('enabled') !== 'false',
       content,
       filePath,
@@ -76,13 +83,6 @@ export function getMemory(id: string): MemoryItem | null {
   const trimmed = typeof id === 'string' ? id.trim() : '';
   if (!trimmed) return null;
   return listMemories().find((m) => m.id === trimmed) ?? null;
-}
-
-const MEMORY_TYPES = new Set(['user', 'session', 'skill', 'reference']);
-
-function normalizeMemoryType(raw: unknown, fallback: MemoryType = 'user'): MemoryType {
-  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  return MEMORY_TYPES.has(t) ? (t as MemoryType) : fallback;
 }
 
 export function createMemory(input: CreateMemoryInput): MemoryItem {

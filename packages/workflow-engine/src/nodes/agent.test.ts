@@ -421,6 +421,28 @@ describe('AgentNode LLM model selection', () => {
     expect(goal).not.toContain('## Agent Memory');
   });
 
+  it('truncates oversized memory export before injecting into the goal', async () => {
+    const huge = 'M'.repeat(40_000);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, text: async () => huge }),
+    );
+    const node = new AgentNode('agent_coding', { systemPrompt: 'Cap mem' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: 'http://memory.test',
+          AUTH_TOKEN: 'tok',
+        },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('## Agent Memory');
+    expect(goal).toContain('[memory truncated]');
+    expect(goal.length).toBeLessThan(huge.length + 500);
+  });
+
   it('trims SERVER_URL and AUTH_TOKEN for memory export', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => 'note' });
     vi.stubGlobal('fetch', fetchMock);
@@ -438,6 +460,27 @@ describe('AgentNode LLM model selection', () => {
       'http://mem.local/api/memory/export',
       expect.objectContaining({
         headers: { Authorization: 'Bearer secret' },
+      }),
+    );
+  });
+
+  it('falls back to SERVER_TOKEN when AUTH_TOKEN is absent', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => 'note' });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new AgentNode('agent_coding', { systemPrompt: 'P' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: 'http://mem.local',
+          SERVER_TOKEN: 'server-tok',
+        },
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://mem.local/api/memory/export',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer server-tok' },
       }),
     );
   });

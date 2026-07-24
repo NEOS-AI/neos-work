@@ -261,4 +261,59 @@ describe('workflow runs CRUD', () => {
     workflows.deleteWorkflow(wf.id);
     workflows.deleteWorkflow(gen.id);
   });
+
+  it('safe-parses corrupt nodes/edges/nodeResults JSON and coerces non-array updates', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [{ id: 't', type: 'trigger', label: 'T', config: {} }],
+      edges: [{ id: 'e1', source: 't', target: 't' }],
+    });
+
+    const db = getDb();
+    // Corrupt / non-array graph JSON → empty arrays on read
+    db.prepare(
+      `UPDATE workflow SET nodes_json = ?, edges_json = ? WHERE id = ?`,
+    ).run('{not-json', '"not-an-array"', wf.id);
+
+    const broken = workflows.getWorkflow(wf.id);
+    expect(broken?.nodes).toEqual([]);
+    expect(broken?.edges).toEqual([]);
+
+    // Object-shaped nodes_json (valid JSON but not array) → []
+    db.prepare(`UPDATE workflow SET nodes_json = ? WHERE id = ?`).run(
+      JSON.stringify({ id: 'x' }),
+      wf.id,
+    );
+    expect(workflows.getWorkflow(wf.id)?.nodes).toEqual([]);
+
+    // updateWorkflow: non-array nodes/edges coerced to []
+    const coerced = workflows.updateWorkflow(wf.id, {
+      nodes: { bad: true } as never,
+      edges: 'nope' as never,
+    });
+    expect(coerced?.nodes).toEqual([]);
+    expect(coerced?.edges).toEqual([]);
+
+    // Run row: invalid / array node_results_json → {}
+    const runId = crypto.randomUUID();
+    workflows.saveRun({
+      id: runId,
+      workflowId: wf.id,
+      status: 'completed',
+      nodeResults: { n1: { status: 'completed' } as never },
+      startedAt: new Date().toISOString(),
+    });
+    db.prepare(`UPDATE workflow_run SET node_results_json = ? WHERE id = ?`).run(
+      '[1,2,3]',
+      runId,
+    );
+    expect(workflows.getRun(runId)?.nodeResults).toEqual({});
+
+    db.prepare(`UPDATE workflow_run SET node_results_json = ? WHERE id = ?`).run(
+      'not-json',
+      runId,
+    );
+    expect(workflows.getRun(runId)?.nodeResults).toEqual({});
+  });
 });

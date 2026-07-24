@@ -61,6 +61,25 @@ describe('spawnCliAgent hygiene', () => {
       /prompt is required/i,
     );
   });
+
+  it('rejects control characters in prompt and cwd', async () => {
+    await expect(
+      spawnCliAgent({ cliId: 'cli-claude', prompt: 'hi\0there' }),
+    ).rejects.toThrow(/control characters/i);
+    await expect(
+      spawnCliAgent({ cliId: 'cli-claude', prompt: 'ok', cwd: '/tmp\n' }),
+    ).rejects.toThrow(/control characters/i);
+  });
+
+  it('rejects missing cwd', async () => {
+    await expect(
+      spawnCliAgent({
+        cliId: 'cli-claude',
+        prompt: 'ok',
+        cwd: path.join(os.tmpdir(), `neos-missing-cwd-${process.pid}`),
+      }),
+    ).rejects.toThrow(/cwd does not exist/i);
+  });
 });
 
 describe('buildCliArgs', () => {

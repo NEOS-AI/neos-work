@@ -161,10 +161,13 @@ async function executeStage(
         signal,
       });
       if (!res.ok) {
-        return `[Stage ${stageName}: Anthropic API error ${res.status}]`;
+        const body = await res.text().catch(() => '');
+        const detail = body.trim().slice(0, 500);
+        return `[Stage ${stageName}: Anthropic API error ${res.status}${detail ? `: ${detail}` : ''}]`;
       }
-      const data = await res.json() as { content?: { text: string }[] };
-      return data.content?.[0]?.text ?? '';
+      const data = await res.json() as { content?: { text?: string }[] };
+      const text = data.content?.[0]?.text;
+      return typeof text === 'string' ? text : '';
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'LLM request failed';
       return `[Stage ${stageName}: ${msg}]`;
@@ -187,10 +190,13 @@ async function executeStage(
       signal,
     });
     if (!res.ok) {
-      return `[Stage ${stageName}: OpenAI API error ${res.status}]`;
+      const body = await res.text().catch(() => '');
+      const detail = body.trim().slice(0, 500);
+      return `[Stage ${stageName}: OpenAI API error ${res.status}${detail ? `: ${detail}` : ''}]`;
     }
-    const data = await res.json() as { choices?: { message: { content: string } }[] };
-    return data.choices?.[0]?.message.content ?? '';
+    const data = await res.json() as { choices?: { message?: { content?: string } }[] };
+    const content = data.choices?.[0]?.message?.content;
+    return typeof content === 'string' ? content : '';
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'LLM request failed';
     return `[Stage ${stageName}: ${msg}]`;

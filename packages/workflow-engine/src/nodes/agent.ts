@@ -42,6 +42,9 @@ function buildAdapter(settings: Record<string, string>) {
   return new AnthropicAdapter(apiKey);
 }
 
+/** Cap injected memory context so runaway exports cannot bloat the system prompt. */
+const MEMORY_CONTEXT_MAX_CHARS = 32_000;
+
 async function buildSystemPromptWithMemory(
   basePrompt: string,
   serverUrl: string,
@@ -53,8 +56,13 @@ async function buildSystemPromptWithMemory(
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return basePrompt;
-    const memoryContext = await res.text();
+    let memoryContext = await res.text();
     if (!memoryContext.trim()) return basePrompt;
+    if (memoryContext.length > MEMORY_CONTEXT_MAX_CHARS) {
+      memoryContext =
+        memoryContext.slice(0, MEMORY_CONTEXT_MAX_CHARS) +
+        '\n\n…[memory truncated]';
+    }
     return `${basePrompt}\n\n---\n## Agent Memory\n${memoryContext}`;
   } catch {
     return basePrompt;
@@ -108,7 +116,10 @@ export class AgentNode implements ExecutableNode {
       : nodeSystemPrompt;
 
     const serverUrl = safeServerUrl(ctx.settings['SERVER_URL'], 'http://localhost:3579');
-    const authToken = String(ctx.settings['AUTH_TOKEN'] ?? '').trim();
+    // Prefer AUTH_TOKEN; fall back to SERVER_TOKEN (Media/Deploy share the runtime token)
+    const authToken = String(
+      ctx.settings['AUTH_TOKEN'] ?? ctx.settings['SERVER_TOKEN'] ?? '',
+    ).trim();
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
     // Prepend Design System context if injected (skip whitespace-only payloads)

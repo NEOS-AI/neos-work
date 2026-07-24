@@ -3,6 +3,7 @@
  */
 
 import { getDb } from './schema.js';
+import { safeDeployHostUrl } from '../lib/deploy.js';
 
 export interface DeploymentRow {
   id: string;
@@ -85,7 +86,9 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
     typeof input.projectName === 'string'
       ? input.projectName.trim() || null
       : (input.projectName ?? null);
-  const url = typeof input.url === 'string' ? input.url.trim() || null : (input.url ?? null);
+  // Only persist http(s) deployment URLs (drop file:/javascript: etc.)
+  const url =
+    input.url !== undefined ? (safeDeployHostUrl(input.url) ?? null) : null;
   const deploymentId =
     typeof input.deploymentId === 'string'
       ? input.deploymentId.trim() || null
@@ -152,7 +155,7 @@ export function updateDeployment(
 
   const url =
     patch.url !== undefined
-      ? (typeof patch.url === 'string' ? patch.url.trim() || null : null)
+      ? (safeDeployHostUrl(patch.url) ?? null)
       : (existing.url ?? null);
   const deploymentId =
     patch.deploymentId !== undefined

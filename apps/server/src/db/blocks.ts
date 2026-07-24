@@ -21,6 +21,35 @@ interface BlockRow {
   updated_at: string;
 }
 
+const IMPLEMENTATION_TYPES = new Set(['native', 'prompt', 'skill']);
+
+/** Normalize implementationType (unknown → native). */
+export function normalizeImplementationType(
+  raw: unknown,
+): WorkflowBlock['implementationType'] {
+  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return IMPLEMENTATION_TYPES.has(t)
+    ? (t as WorkflowBlock['implementationType'])
+    : 'native';
+}
+
+function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
+  const domainRaw =
+    typeof raw === 'string' ? raw.trim().toLowerCase() || 'general' : 'general';
+  return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as WorkflowBlock['domain'])
+    : 'general';
+}
+
+function safeParseParamDefs(raw: string): BlockParamDef[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as BlockParamDef[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 function rowToBlock(row: BlockRow): WorkflowBlock {
   return {
     id: row.id,
@@ -29,8 +58,8 @@ function rowToBlock(row: BlockRow): WorkflowBlock {
     category: row.category,
     description: row.description,
     isBuiltIn: false,
-    implementationType: row.implementation_type as WorkflowBlock['implementationType'],
-    paramDefs: JSON.parse(row.param_defs_json) as BlockParamDef[],
+    implementationType: normalizeImplementationType(row.implementation_type),
+    paramDefs: safeParseParamDefs(row.param_defs_json),
     inputDescription: row.input_description,
     outputDescription: row.output_description,
     promptTemplate: row.prompt_template ?? undefined,
@@ -40,7 +69,11 @@ function rowToBlock(row: BlockRow): WorkflowBlock {
 
 export function listCustomBlocks(domain?: string): WorkflowBlock[] {
   const db = getDb();
-  const domainFilter = typeof domain === 'string' ? domain.trim() || undefined : undefined;
+  // Normalize domain filter so " CODING " matches stored lower-case domain
+  const domainFilter =
+    typeof domain === 'string' && domain.trim()
+      ? normalizeDomain(domain)
+      : undefined;
   const rows = domainFilter
     ? db.prepare('SELECT * FROM custom_block WHERE domain = ? ORDER BY name').all(domainFilter) as BlockRow[]
     : db.prepare('SELECT * FROM custom_block ORDER BY name').all() as BlockRow[];
@@ -64,11 +97,7 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
   }
-  const domainRaw =
-    typeof block.domain === 'string' ? block.domain.trim().toLowerCase() || 'general' : 'general';
-  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
-    ? (domainRaw as WorkflowBlock['domain'])
-    : 'general';
+  const domain = normalizeDomain(block.domain);
   const category =
     (typeof block.category === 'string' ? block.category.trim() : '') || 'custom';
   const description =
@@ -85,6 +114,8 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
     typeof block.outputDescription === 'string'
       ? block.outputDescription.trim()
       : (block.outputDescription ?? '');
+  const implementationType = normalizeImplementationType(block.implementationType);
+  const paramDefs = Array.isArray(block.paramDefs) ? block.paramDefs : [];
 
   const db = getDb();
   db.prepare(`
@@ -99,8 +130,8 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
     domain,
     category,
     description,
-    block.implementationType,
-    JSON.stringify(block.paramDefs ?? []),
+    implementationType,
+    JSON.stringify(paramDefs),
     inputDescription,
     outputDescription,
     promptTemplate ?? null,
@@ -113,11 +144,12 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
     domain,
     category,
     description,
+    implementationType,
     promptTemplate,
     skillId,
     inputDescription,
     outputDescription,
-    paramDefs: block.paramDefs ?? [],
+    paramDefs,
     isBuiltIn: false,
   };
 }
@@ -142,11 +174,7 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     updated.name = name;
   }
   if (patch.domain !== undefined) {
-    const domainRaw =
-      typeof patch.domain === 'string' ? patch.domain.trim().toLowerCase() || 'general' : 'general';
-    updated.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
-      ? (domainRaw as WorkflowBlock['domain'])
-      : 'general';
+    updated.domain = normalizeDomain(patch.domain);
   }
   if (typeof patch.category === 'string') {
     updated.category = patch.category.trim() || 'custom';
@@ -166,6 +194,9 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
   if (typeof patch.outputDescription === 'string') {
     updated.outputDescription = patch.outputDescription.trim();
   }
+  if (patch.implementationType !== undefined) {
+    updated.implementationType = normalizeImplementationType(patch.implementationType);
+  }
   if (patch.paramDefs !== undefined) {
     updated.paramDefs = Array.isArray(patch.paramDefs) ? patch.paramDefs : existing.paramDefs;
   }
@@ -182,8 +213,8 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     updated.domain,
     updated.category,
     updated.description,
-    updated.implementationType,
-    JSON.stringify(updated.paramDefs ?? []),
+    normalizeImplementationType(updated.implementationType),
+    JSON.stringify(Array.isArray(updated.paramDefs) ? updated.paramDefs : []),
     updated.inputDescription,
     updated.outputDescription,
     updated.promptTemplate ?? null,
@@ -191,7 +222,12 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
     trimmed,
   );
 
-  return { ...updated, isBuiltIn: false };
+  return {
+    ...updated,
+    implementationType: normalizeImplementationType(updated.implementationType),
+    paramDefs: Array.isArray(updated.paramDefs) ? updated.paramDefs : [],
+    isBuiltIn: false,
+  };
 }
 
 export function deleteCustomBlock(id: string): boolean {

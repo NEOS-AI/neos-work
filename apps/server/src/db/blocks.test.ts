@@ -6,6 +6,7 @@ import {
   listCustomBlocks,
   updateCustomBlock,
 } from './blocks.js';
+import { getDb } from './schema.js';
 
 const IDS = ['_cov_blk_a', '_cov_blk_b'];
 
@@ -54,6 +55,27 @@ describe('custom blocks CRUD', () => {
     expect(created.category).toBe('test');
     expect(created.description).toBe('desc');
     deleteCustomBlock(IDS[0]!);
+  });
+
+  it('normalizes implementationType on create/update (unknown → native)', () => {
+    const created = createCustomBlock({
+      ...sampleBlock(IDS[0]!),
+      implementationType: ' PROMPT ' as never,
+    });
+    expect(created.implementationType).toBe('prompt');
+    expect(getCustomBlock(IDS[0]!)?.implementationType).toBe('prompt');
+
+    const unknown = createCustomBlock({
+      ...sampleBlock(IDS[1]!),
+      implementationType: 'atom' as never,
+    });
+    expect(unknown.implementationType).toBe('native');
+
+    const updated = updateCustomBlock(IDS[0]!, {
+      implementationType: ' SKILL ' as never,
+    });
+    expect(updated?.implementationType).toBe('skill');
+    expect(listCustomBlocks('  CODING  ').every((b) => b.domain === 'coding')).toBe(true);
   });
 
   it('creates, gets, lists by domain, updates, deletes', () => {
@@ -163,4 +185,18 @@ describe('custom blocks CRUD', () => {
     });
     expect(replaced?.paramDefs).toEqual([{ key: 'n', type: 'string', label: 'N' }]);
   });
+
+  it('tolerates corrupt param_defs_json and normalizes domain list filter', () => {
+    createCustomBlock(sampleBlock(IDS[0]!));
+    getDb()
+      .prepare(`UPDATE custom_block SET param_defs_json = ? WHERE id = ?`)
+      .run('not-json', IDS[0]!);
+    expect(getCustomBlock(IDS[0]!)?.paramDefs).toEqual([]);
+
+    getDb()
+      .prepare(`UPDATE custom_block SET param_defs_json = ? WHERE id = ?`)
+      .run(JSON.stringify({ key: 'x' }), IDS[0]!);
+    expect(getCustomBlock(IDS[0]!)?.paramDefs).toEqual([]);
+  });
 });
+

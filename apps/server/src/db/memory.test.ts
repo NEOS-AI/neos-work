@@ -97,4 +97,27 @@ describe('memory CRUD', () => {
     // whitespace-only tag filters become empty → no matches
     expect(searchMemory(WS, 'tagged', ['  '])).toEqual([]);
   });
+
+  it('rejects control chars in key/workspaceId and strips control-char tags', () => {
+    expect(() =>
+      createMemory({ workspaceId: WS, key: 'bad\nkey', content: 'x' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createMemory({ workspaceId: 'ws\0id', key: KEYS[0]!, content: 'x' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createMemory({ workspaceId: WS, key: 'bad\rkey', content: 'x' }),
+    ).toThrow(/control characters/i);
+
+    createMemory({
+      workspaceId: WS,
+      key: KEYS[0]!,
+      content: 'safe',
+      tags: ['ok', 'bad\ntag', '  '],
+    });
+    expect(JSON.parse(getMemory(WS, KEYS[0]!)!.tags!)).toEqual(['ok']);
+    // control-char-only tag filters → empty match set
+    expect(searchMemory(WS, 'safe', ['bad\ntag'])).toEqual([]);
+  });
 });
+

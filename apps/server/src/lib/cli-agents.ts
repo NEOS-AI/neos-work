@@ -214,12 +214,23 @@ export function ensureCliWorkspace(runId: string): string {
   return dir;
 }
 
+/** Cap CLI stream accumulation (plan Task 3 — runaway output defense). */
+const MAX_CLI_OUTPUT_CHARS = 2 * 1024 * 1024;
+
+/** Reject null bytes / CR / LF that confuse shell path APIs. */
+function hasUnsafeControlChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
+}
+
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
   const cliId = opts.cliId;
   const prompt = typeof opts.prompt === 'string' ? opts.prompt.trim() : '';
   if (!prompt) {
     return Promise.reject(new Error('prompt is required'));
+  }
+  if (hasUnsafeControlChars(prompt)) {
+    return Promise.reject(new Error('prompt contains invalid control characters'));
   }
   const signal = opts.signal;
   const onChunk = opts.onChunk;
@@ -237,7 +248,7 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
     const { getSetting } = await import('../db/settings.js');
     const key = CLI_PATH_SETTING_KEYS[cliId];
     const override = getSetting(key)?.trim();
-    if (override) {
+    if (override && !hasUnsafeControlChars(override)) {
       try {
         fs.accessSync(override, fs.constants.X_OK);
         binOverride = override;
@@ -254,7 +265,22 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
   const neosEnv = buildNeosCliEnv({ workflowId, runId, serverUrl, authToken });
 
   // Prefer explicit cwd; otherwise create a per-run workspace when runId is known
+  // Check control chars on raw input before trim (trim would strip CR/LF)
+  if (typeof opts.cwd === 'string' && hasUnsafeControlChars(opts.cwd)) {
+    return Promise.reject(new Error('cwd contains invalid control characters'));
+  }
   let cwd = typeof opts.cwd === 'string' ? opts.cwd.trim() || undefined : opts.cwd;
+  if (cwd) {
+    try {
+      const st = fs.statSync(cwd);
+      if (!st.isDirectory()) {
+        return Promise.reject(new Error('cwd is not a directory'));
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('not a directory')) throw err;
+      return Promise.reject(new Error(`cwd does not exist: ${cwd}`));
+    }
+  }
   if (!cwd && runId) {
     try {
       cwd = ensureCliWorkspace(runId);
@@ -274,6 +300,14 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
     let accumulated = '';
     let aborted = false;
 
+    const appendChunk = (chunk: string) => {
+      if (accumulated.length < MAX_CLI_OUTPUT_CHARS) {
+        const room = MAX_CLI_OUTPUT_CHARS - accumulated.length;
+        accumulated += chunk.length > room ? chunk.slice(0, room) : chunk;
+      }
+      onChunk?.(chunk, accumulated);
+    };
+
     const handleAbort = () => {
       aborted = true;
       child.kill('SIGTERM');
@@ -287,16 +321,12 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
     signal?.addEventListener('abort', handleAbort, { once: true });
 
     child.stdout?.on('data', (data: Buffer) => {
-      const chunk = data.toString('utf8');
-      accumulated += chunk;
-      onChunk?.(chunk, accumulated);
+      appendChunk(data.toString('utf8'));
     });
 
     child.stderr?.on('data', (data: Buffer) => {
       // Stream stderr as progress too (CLI tools often write status to stderr)
-      const chunk = data.toString('utf8');
-      accumulated += chunk;
-      onChunk?.(chunk, accumulated);
+      appendChunk(data.toString('utf8'));
     });
 
     child.on('error', (err) => {
@@ -306,13 +336,8 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
 
     child.on('exit', (code) => {
       signal?.removeEventListener('abort', handleAbort);
-      if (aborted) {
-        resolve({ output: accumulated, exitCode: code });
-      } else if (code !== 0) {
-        resolve({ output: accumulated, exitCode: code });
-      } else {
-        resolve({ output: accumulated, exitCode: code });
-      }
+      void aborted; // abort still returns accumulated output + exit code
+      resolve({ output: accumulated, exitCode: code });
     });
   });
 }

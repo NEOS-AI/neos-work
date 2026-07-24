@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { getDb } from './schema.js';
 import {
   createCustomHarness,
   deleteCustomHarness,
@@ -155,16 +156,43 @@ describe('custom harnesses CRUD', () => {
     expect(updated?.description).toBe('d2');
     expect(updated?.systemPrompt).toBe('p2');
     expect(updated?.allowedTools).toEqual(['a', 'b']);
+  });
+
+  it('tolerates corrupted allowed_tools / constraints JSON on read', () => {
+    createCustomHarness({
+      id: ID,
+      name: 'Corrupt',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'p',
+      allowedTools: ['read'],
+      constraints: { maxSteps: 3 },
+    });
+    const db = getDb();
+    db.prepare(
+      `UPDATE custom_harness SET allowed_tools_json = ?, constraints_json = ? WHERE id = ?`,
+    ).run('not-json', '[1,2,3]', ID);
+    const got = getCustomHarness(ID);
+    expect(got?.allowedTools).toEqual([]);
+    expect(got?.constraints).toEqual({});
+    expect(got?.name).toBe('Corrupt');
 
     // blank name/systemPrompt leave row unchanged
     expect(updateCustomHarness(ID, { name: '   ' })).toBeUndefined();
     expect(updateCustomHarness(ID, { systemPrompt: '   ' })).toBeUndefined();
-    expect(getCustomHarness(ID)?.name).toBe('Renamed');
-    expect(getCustomHarness(ID)?.systemPrompt).toBe('p2');
+    expect(getCustomHarness(ID)?.name).toBe('Corrupt');
+    expect(getCustomHarness(ID)?.systemPrompt).toBe('p');
 
-    // unknown domain → general
-    const gen = updateCustomHarness(ID, { domain: 'marketing' as never });
+    // unknown domain → general; non-array allowedTools → []
+    const gen = updateCustomHarness(ID, {
+      domain: 'marketing' as never,
+      allowedTools: 'nope' as never,
+      constraints: [1, 2] as never,
+    });
     expect(gen?.domain).toBe('general');
+    expect(gen?.allowedTools).toEqual([]);
+    expect(gen?.constraints).toEqual({});
   });
 });
+
 
