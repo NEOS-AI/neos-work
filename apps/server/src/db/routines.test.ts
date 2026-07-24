@@ -78,29 +78,6 @@ describe('routines CRUD', () => {
     expect(r.timezone).toBe('UTC');
   });
 
-  it('coerces non-object inputs to {} and tolerates corrupt inputs_json', () => {
-    const wf = workflows.createWorkflow({
-      name: WF_NAME,
-      domain: 'general',
-      nodes: [],
-      edges: [],
-    });
-    const r = createRoutine({
-      name: 'Inputs',
-      workflowId: wf.id,
-      schedule: '0 1 * * *',
-      inputs: [1, 2] as never,
-    });
-    expect(r.inputs).toEqual({});
-
-    const db = getDb();
-    db.prepare('UPDATE routine SET inputs_json = ? WHERE id = ?').run('not-json', r.id);
-    expect(getRoutine(r.id)?.inputs).toEqual({});
-
-    const kept = updateRoutine(r.id, { inputs: 'nope' as never });
-    expect(kept?.inputs).toEqual({});
-  });
-
   it('coerces non-object inputs and tolerates corrupt inputs_json', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,
@@ -128,6 +105,7 @@ describe('routines CRUD', () => {
     db.prepare(`UPDATE routine SET inputs_json = ? WHERE id = ?`).run('not-json', r.id);
     expect(getRoutine(r.id)?.inputs).toEqual({});
   });
+
 
 
   it('rejects blank name, workflowId, or schedule on create', () => {
