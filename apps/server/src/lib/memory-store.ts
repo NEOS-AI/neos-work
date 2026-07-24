@@ -85,14 +85,28 @@ export function getMemory(id: string): MemoryItem | null {
   return listMemories().find((m) => m.id === trimmed) ?? null;
 }
 
+/** Cap file-store memory body (plan Task 1 polish — align with settings/artifacts). */
+export const MEMORY_CONTENT_MAX_CHARS = 1 * 1024 * 1024;
+/** Cap memory name length. */
+export const MEMORY_NAME_MAX_CHARS = 200;
+
 export function createMemory(input: CreateMemoryInput): MemoryItem {
   ensureDir();
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) {
     throw new Error('name is required');
   }
+  if (name.length > MEMORY_NAME_MAX_CHARS) {
+    throw new Error(`name exceeds max length (${MEMORY_NAME_MAX_CHARS})`);
+  }
+  if (/[\0\r\n]/.test(name)) {
+    throw new Error('name contains invalid control characters');
+  }
   const content =
     typeof input.content === 'string' ? input.content.trim() : String(input.content ?? '');
+  if (content.length > MEMORY_CONTENT_MAX_CHARS) {
+    throw new Error(`content exceeds max size (${MEMORY_CONTENT_MAX_CHARS} characters)`);
+  }
   const type = normalizeMemoryType(input.type);
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -123,11 +137,13 @@ export function updateMemory(id: string, input: UpdateMemoryInput): MemoryItem |
       ? (typeof input.name === 'string' ? input.name.trim() : '')
       : existing.name;
   if (!name) return null;
+  if (name.length > MEMORY_NAME_MAX_CHARS || /[\0\r\n]/.test(name)) return null;
 
   const content =
     input.content !== undefined
       ? (typeof input.content === 'string' ? input.content.trim() : String(input.content ?? ''))
       : existing.content;
+  if (content.length > MEMORY_CONTENT_MAX_CHARS) return null;
   const type =
     input.type !== undefined
       ? normalizeMemoryType(input.type, existing.type)
@@ -162,10 +178,23 @@ export function toggleMemory(id: string): MemoryItem | null {
   return updateMemory(id, { enabled: !item.enabled });
 }
 
+/** Cap aggregate export text (matches AgentNode memory inject bound). */
+export const MEMORY_EXPORT_MAX_CHARS = 32_000;
+
 export function exportMemories(): string {
   const enabled = listMemories().filter((m) => m.enabled);
   if (enabled.length === 0) return '';
-  return enabled
-    .map((m) => `### ${m.name} (${m.type})\n\n${m.content}`)
-    .join('\n\n---\n\n');
+  let out = '';
+  for (const m of enabled) {
+    const block = `### ${m.name} (${m.type})\n\n${m.content}`;
+    const next = out ? `${out}\n\n---\n\n${block}` : block;
+    if (next.length > MEMORY_EXPORT_MAX_CHARS) {
+      out =
+        (out || block.slice(0, MEMORY_EXPORT_MAX_CHARS)) +
+        '\n\n…[memory export truncated]';
+      break;
+    }
+    out = next;
+  }
+  return out;
 }

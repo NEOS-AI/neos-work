@@ -59,7 +59,11 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
       if (stage.humanInLoop) {
         // Pause and wait for resume
         const response = await waitForResume(runId, normalizedStage, onEvent, signal);
-        const output = JSON.stringify(response);
+        let output = JSON.stringify(response ?? {});
+        // Cap HITL response payload (align with stage output clamp)
+        if (output.length > 200_000) {
+          output = output.slice(0, 200_000) + '…[truncated]';
+        }
         stageOutputs[outputKey] = output;
         onEvent({ type: 'stage.completed', stageId, output });
       } else {

@@ -1,7 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DESIGN_SYSTEMS_DIR, listDesignSystems, deleteDesignSystem } from '../lib/design-system-store.js';
+import {
+  DESIGN_MD_MAX_CHARS,
+  DESIGN_SYSTEMS_DIR,
+  deleteDesignSystem,
+  listDesignSystems,
+} from '../lib/design-system-store.js';
 import designSystems from './design-systems.js';
 
 const NAME = `_cov_ds_route_${process.pid}`;
@@ -161,6 +166,15 @@ describe('design-systems routes', () => {
       body: 'not-json',
     });
     expect(badJson.status).toBe(400);
+
+    // Route-level DESIGN.md size cap (before store write)
+    const huge = await designSystems.request(`/${id}/content`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'x'.repeat(DESIGN_MD_MAX_CHARS + 1) }),
+    });
+    expect(huge.status).toBe(400);
+    expect(((await huge.json()) as { error: string }).error).toMatch(/max size/i);
 
     await designSystems.request(`/${id}`, { method: 'DELETE' });
   });

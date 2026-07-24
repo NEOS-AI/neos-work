@@ -86,6 +86,19 @@ describe('custom harnesses CRUD', () => {
     expect(getCustomHarness(ID)).toBeUndefined();
   });
 
+  it('rejects oversized systemPrompt on create', () => {
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: 'x',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p'.repeat(100_001),
+        allowedTools: [],
+      }),
+    ).toThrow(/systemPrompt exceeds/i);
+  });
+
   it('trims fields on create/update; rejects invalid id and blank required fields', () => {
     expect(() =>
       createCustomHarness({

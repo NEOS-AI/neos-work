@@ -413,6 +413,56 @@ describe('plugin-runner resume / abort / LLM paths', () => {
     expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toContain('api.anthropic.com');
   });
 
+  it('truncates oversized stage prompts/outputs and skips unsafe placeholder keys', async () => {
+    const STAGE_PROMPT_MAX = 100_000;
+    const STAGE_OUTPUT_MAX = 200_000;
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'caps',
+      name: 'Caps',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          // dotted key is unsafe and must not interpolate
+          prompt: 'PRE{{evil.key}}{{blob}}',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    // Keep prefix + unsubbed placeholder visible, then overflow with blob
+    const blob = 'B'.repeat(STAGE_PROMPT_MAX);
+    const hugeOut = 'O'.repeat(STAGE_OUTPUT_MAX + 50);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [{ text: hugeOut }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { blob, 'evil.key': 'SHOULD_NOT_APPEAR' },
+      settings: { ANTHROPIC_API_KEY: 'sk-ant' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}')) as {
+      messages: Array<{ content: string }>;
+    };
+    const promptSent = body.messages[0]?.content ?? '';
+    expect(promptSent.startsWith('PRE{{evil.key}}')).toBe(true);
+    expect(promptSent).not.toContain('SHOULD_NOT_APPEAR');
+    expect(promptSent).toContain('…[prompt truncated]');
+    expect(promptSent.length).toBeLessThanOrEqual(STAGE_PROMPT_MAX + 30);
+
+    const out = String(events.find((e) => e.type === 'stage.completed')?.output ?? '');
+    expect(out).toContain('…[output truncated]');
+    expect(out.length).toBeLessThanOrEqual(STAGE_OUTPUT_MAX + 30);
+  });
+
   it('surfaces Anthropic and OpenAI HTTP error statuses', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',

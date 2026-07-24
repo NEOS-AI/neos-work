@@ -193,6 +193,45 @@ describe('OpenAIAdapter', () => {
     expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer sk-stream');
   });
 
+  it('clamps invalid maxTokens to default 4096 and caps huge values', async () => {
+    const sse = ['data: {"choices":[{"delta":{"content":"x"},"finish_reason":"stop"}]}', 'data: [DONE]', ''].join(
+      '\n',
+    );
+    const encoder = new TextEncoder();
+    const makeStream = () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(sse));
+          controller.close();
+        },
+      });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, body: makeStream() })
+      .mockResolvedValueOnce({ ok: true, body: makeStream() });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    for await (const _ of adapter.chat({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: Number.NaN,
+    })) {
+      /* drain */
+    }
+    let body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string);
+    expect(body.max_tokens).toBe(4096);
+
+    for await (const _ of adapter.chat({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxTokens: 999_999,
+    })) {
+      /* drain */
+    }
+    body = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string);
+    expect(body.max_tokens).toBe(128_000);
+  });
+
   it('chat yields tool_use when finish_reason is tool_calls', async () => {
     const sse = [
       'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"echo","arguments":"{\\"x\\""}}]}}]}',

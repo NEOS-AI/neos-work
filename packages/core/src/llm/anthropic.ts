@@ -26,7 +26,13 @@ export class AnthropicAdapter implements LLMProviderAdapter {
   }
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
-    const { model, messages, tools, thinkingMode = 'none', maxTokens = 4096, signal } = params;
+    const { model, messages, tools, thinkingMode = 'none', signal } = params;
+    // Clamp maxTokens (invalid → 4096; hard cap 128k)
+    const rawMax = Number(params.maxTokens ?? 4096);
+    const maxTokens =
+      Number.isFinite(rawMax) && rawMax >= 1
+        ? Math.min(128_000, Math.floor(rawMax))
+        : 4096;
 
     // Separate system messages from conversation
     const systemMessages = messages.filter((m) => m.role === 'system');

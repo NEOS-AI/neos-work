@@ -78,6 +78,11 @@ function normalizeHarnessDomain(raw: unknown, fallback: AgentHarness['domain'] =
     : 'general';
 }
 
+/** Cap harness system prompt (plan multi-LLM / harness polish). */
+export const HARNESS_SYSTEM_PROMPT_MAX_CHARS = 100_000;
+/** Cap harness description. */
+export const HARNESS_DESCRIPTION_MAX_CHARS = 2_000;
+
 export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): AgentHarness {
   const id = typeof input.id === 'string' ? input.id.trim() : '';
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -89,9 +94,17 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
   }
+  if (systemPrompt.length > HARNESS_SYSTEM_PROMPT_MAX_CHARS) {
+    throw new Error(
+      `systemPrompt exceeds max size (${HARNESS_SYSTEM_PROMPT_MAX_CHARS} characters)`,
+    );
+  }
   const domain = normalizeHarnessDomain(input.domain);
-  const description =
+  let description =
     typeof input.description === 'string' ? input.description.trim() : (input.description ?? '');
+  if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
+    description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);
+  }
   const allowedTools = (Array.isArray(input.allowedTools) ? input.allowedTools : [])
     .map((t) => String(t).trim())
     .filter(Boolean);
@@ -135,14 +148,18 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
       ? (typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '')
       : existing.system_prompt;
   if (!systemPrompt) return undefined;
+  if (systemPrompt.length > HARNESS_SYSTEM_PROMPT_MAX_CHARS) return undefined;
   const domain =
     input.domain !== undefined
       ? normalizeHarnessDomain(input.domain, existing.domain as AgentHarness['domain'])
       : existing.domain;
-  const description =
+  let description =
     input.description !== undefined
       ? (typeof input.description === 'string' ? input.description.trim() : '')
       : existing.description;
+  if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
+    description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);
+  }
   const allowedTools =
     input.allowedTools !== undefined
       ? JSON.stringify(

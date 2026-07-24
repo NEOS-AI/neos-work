@@ -39,10 +39,16 @@ function upsertSkill(params: {
 }): SkillRow {
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   if (!name) throw new Error('name is required');
+  if (/[\0\r\n]/.test(name) || name.length > 200) {
+    throw new Error('invalid skill name');
+  }
   const description =
     typeof params.description === 'string' ? params.description.trim() || null : (params.description ?? null);
   const source = typeof params.source === 'string' ? params.source.trim() : String(params.source ?? '');
   const pathVal = typeof params.path === 'string' ? params.path.trim() : String(params.path ?? '');
+  if (pathVal && /[\0\r\n]/.test(pathVal)) {
+    throw new Error('invalid skill path');
+  }
   const version =
     typeof params.version === 'string' ? params.version.trim() || null : (params.version ?? null);
   const dbInst = getDb();

@@ -74,6 +74,26 @@ describe('memory-store', () => {
     deleteMemory(m.id);
   });
 
+  it('rejects oversized content/name control chars; caps export size', () => {
+    expect(() =>
+      createMemory({ name: 'a\nb', type: 'user', content: 'x' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createMemory({
+        name: NAME,
+        type: 'user',
+        content: 'x'.repeat(1 * 1024 * 1024 + 1),
+      }),
+    ).toThrow(/max size/i);
+
+    const m = createMemory({ name: NAME, type: 'user', content: 'export-me' });
+    expect(exportMemories()).toContain('export-me');
+    // update with oversized content leaves row unchanged
+    expect(updateMemory(m.id, { content: 'y'.repeat(1 * 1024 * 1024 + 1) })).toBeNull();
+    expect(getMemory(m.id)?.content).toBe('export-me');
+    deleteMemory(m.id);
+  });
+
   it('normalizes legacy type casing when reading from disk', () => {
     const m = createMemory({ name: NAME, type: 'user', content: 'legacy' });
     // Rewrite frontmatter with upper-case type (legacy files)

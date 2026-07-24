@@ -51,6 +51,18 @@ describe('kis-api', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('rejects symbols with control chars or invalid charset', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getStockPrice({ appKey: 'k', appSecret: 's' }, '005\n930')).rejects.toThrow(
+      /symbol is required/i,
+    );
+    await expect(getStockPrice({ appKey: 'k', appSecret: 's' }, '../etc')).rejects.toThrow(
+      /symbol is required/i,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('fetches stock price after token', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({

@@ -214,12 +214,14 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
     .replace(/^-|-$/g, '')
     .slice(0, 48) || 'crystallized-skill';
   const skillName = `${slugBase}-${routineRun.id.slice(0, 8)}`;
-  const description =
+  let description =
     (typeof body.description === 'string' && body.description.trim()
       ? body.description.trim()
       : undefined)
     ?? `Crystallized from routine "${routine.name}"` +
       (workflow ? ` / workflow "${workflow.name}"` : '');
+  // Cap description / skill markdown size (plan Task 2 crystallize polish)
+  if (description.length > 4_000) description = description.slice(0, 4_000);
 
   const outputsSummary = workflowRun
     ? Object.entries(workflowRun.nodeResults)

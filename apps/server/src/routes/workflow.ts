@@ -320,6 +320,9 @@ type ZipBufferResult =
   | { ok: true; buffer: Buffer }
   | { ok: false; error: string; status: 400 };
 
+/** Cap ZIP import payload (plan Task 10 — runaway upload defense). */
+const ZIP_IMPORT_MAX_BYTES = 50 * 1024 * 1024;
+
 async function readZipBuffer(c: {
   req: {
     header: (n: string) => string | undefined;
@@ -331,15 +334,31 @@ async function readZipBuffer(c: {
   if (!contentType.includes('multipart/form-data') && !contentType.includes('application/octet-stream') && !contentType.includes('application/zip')) {
     return { ok: false, error: 'Expected multipart/form-data or application/zip', status: 400 };
   }
+  // Early reject via Content-Length when present
+  const clHeader = c.req.header('content-length');
+  if (clHeader) {
+    const cl = Number(clHeader);
+    if (Number.isFinite(cl) && cl > ZIP_IMPORT_MAX_BYTES) {
+      return { ok: false, error: `ZIP exceeds max size (${ZIP_IMPORT_MAX_BYTES} bytes)`, status: 400 };
+    }
+  }
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.formData();
     const file = form.get('file');
     if (!file || typeof file === 'string') {
       return { ok: false, error: 'Missing file field', status: 400 };
     }
-    return { ok: true, buffer: Buffer.from(await file.arrayBuffer()) };
+    const buffer = Buffer.from(await file.arrayBuffer());
+    if (buffer.length > ZIP_IMPORT_MAX_BYTES) {
+      return { ok: false, error: `ZIP exceeds max size (${ZIP_IMPORT_MAX_BYTES} bytes)`, status: 400 };
+    }
+    return { ok: true, buffer };
   }
-  return { ok: true, buffer: Buffer.from(await c.req.arrayBuffer()) };
+  const buffer = Buffer.from(await c.req.arrayBuffer());
+  if (buffer.length > ZIP_IMPORT_MAX_BYTES) {
+    return { ok: false, error: `ZIP exceeds max size (${ZIP_IMPORT_MAX_BYTES} bytes)`, status: 400 };
+  }
+  return { ok: true, buffer };
 }
 
 /**

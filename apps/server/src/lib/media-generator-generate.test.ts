@@ -192,6 +192,16 @@ describe('generateAudio', () => {
     ).rejects.toThrow(/text too long/i);
   });
 
+  it('rejects oversized TTS audio payloads (16 MiB cap)', async () => {
+    const max = 16 * 1024 * 1024;
+    speechCreateMock.mockResolvedValue({
+      arrayBuffer: async () => new Uint8Array(max + 1).buffer,
+    });
+    await expect(
+      generateAudio({ text: 'hello', apiKey: 'sk' }),
+    ).rejects.toThrow(/Audio exceeds max size/i);
+  });
+
   it('clamps invalid voice/model and rejects blank text', async () => {
     speechCreateMock.mockResolvedValue({
       arrayBuffer: async () => new Uint8Array([1]).buffer,

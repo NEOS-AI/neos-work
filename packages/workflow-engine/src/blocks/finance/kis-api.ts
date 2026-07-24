@@ -31,7 +31,12 @@ function normalizeConfig(config: KisConfig): KisConfig {
 }
 
 function normalizeSymbol(symbol: string): string {
-  return typeof symbol === 'string' ? symbol.trim() : '';
+  const s = typeof symbol === 'string' ? symbol.trim() : '';
+  // Reject control chars / path-like garbage in stock codes
+  if (!s || /[\0\r\n]/.test(s)) return '';
+  // KIS domestic symbols are typically 6 digits; allow alnum up to 16 for flexibility
+  if (s.length > 16 || !/^[A-Za-z0-9._-]+$/.test(s)) return '';
+  return s;
 }
 
 async function kisFetch(url: string, init: RequestInit): Promise<Response> {

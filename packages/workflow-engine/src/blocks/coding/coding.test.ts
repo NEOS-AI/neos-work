@@ -106,6 +106,22 @@ describe('coding blocks', () => {
         expect(result.error).toBeTruthy();
       }
     });
+
+    it('caps combined spawn stdout/stderr at 512 KiB when python is available', async () => {
+      // SPAWN_OUTPUT_MAX_CHARS = 512 * 1024 — force large stdout via python3
+      const result = await exec().execute(
+        ctx({ code: "print('x' * 600000, end='')", language: 'python' }),
+      );
+      expect(typeof result.durationMs).toBe('number');
+      if (result.ok) {
+        const out = String(result.output);
+        expect(out.length).toBeLessThanOrEqual(512 * 1024);
+        expect(out.length).toBeGreaterThan(100_000);
+      } else {
+        // python3 missing or spawn error — still a structured failure
+        expect(result.error).toBeTruthy();
+      }
+    });
   });
 
   describe('file_read / file_write path safety', () => {
