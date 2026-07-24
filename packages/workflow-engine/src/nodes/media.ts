@@ -3,6 +3,7 @@
  */
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
+import { safeServerUrl } from './server-url.js';
 
 /** Aligned with desktop NodeConfigPanel / media-node-options allow-lists. */
 const IMAGE_SIZES = new Set(['1024x1024', '1792x1024', '1024x1792']);
@@ -31,8 +32,7 @@ export const MediaNode: ExecutableNode = {
     const { config, settings, inputs } = ctx;
     // Normalize case/whitespace so "Image" / " AUDIO " work like the panel options
     const mediaType = String(config?.mediaType ?? 'image').trim().toLowerCase() || 'image';
-    const serverUrl = String(settings['SERVER_URL'] ?? 'http://localhost:3001').trim()
-      || 'http://localhost:3001';
+    const serverUrl = safeServerUrl(settings['SERVER_URL']);
     const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
 
     if (mediaType === 'image') {

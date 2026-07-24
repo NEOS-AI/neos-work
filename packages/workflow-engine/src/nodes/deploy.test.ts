@@ -196,4 +196,23 @@ describe('DeployNode', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.provider).toBe('cloudflare');
   });
+
+  it('uses default server URL when settings SERVER_URL is non-http', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, data: { url: 'https://x.vercel.app' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await DeployNode.execute({
+      workflowId: 'wf',
+      runId: 'run',
+      nodeId: 'd',
+      inputs: { content: '<html></html>' },
+      settings: { SERVER_URL: 'file:///tmp', SERVER_TOKEN: 't' },
+      config: { provider: 'vercel', projectName: 'neos' },
+    });
+    expect(result.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/^http:\/\/localhost:3001\/api\/deploy/);
+    vi.unstubAllGlobals();
+  });
 });

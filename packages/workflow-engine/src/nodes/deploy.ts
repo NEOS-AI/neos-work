@@ -4,6 +4,7 @@
 
 import { isValidDeployProjectName } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
+import { safeServerUrl } from './server-url.js';
 
 export { isValidDeployProjectName };
 
@@ -15,8 +16,7 @@ export const DeployNode: ExecutableNode = {
     const { config, settings, inputs } = ctx;
     const rawProvider = String(config?.provider ?? 'vercel').trim().toLowerCase();
     const provider = rawProvider === 'cloudflare' ? 'cloudflare' : 'vercel';
-    const serverUrl = String(settings['SERVER_URL'] ?? 'http://localhost:3001').trim()
-      || 'http://localhost:3001';
+    const serverUrl = safeServerUrl(settings['SERVER_URL']);
     const serverToken = String(settings['SERVER_TOKEN'] ?? '').trim();
 
     const rawContent = inputs['content'] ?? config?.content ?? '';

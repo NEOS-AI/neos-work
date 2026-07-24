@@ -242,6 +242,11 @@ describe('coding blocks', () => {
       expect(result.meta === undefined || typeof result.meta?.exitCode === 'number').toBe(true);
     });
 
+    it('case-folds path-qualified basenames (e.g. /usr/bin/NPM)', async () => {
+      const result = await runner().execute(ctx({ command: '/usr/bin/NPM --version' }));
+      expect(result.error ?? '').not.toMatch(/not in allowed list/i);
+    });
+
     it('allows go and cargo prefixes for structured failures', async () => {
       for (const command of ['go version', 'cargo --version']) {
         const result = await runner().execute(ctx({ command }));

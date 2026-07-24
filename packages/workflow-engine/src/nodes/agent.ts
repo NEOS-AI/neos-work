@@ -7,21 +7,7 @@
 import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveHarness } from '../harness/index.js';
-
-/** Only allow http(s) server URLs for memory callback (defense in depth). */
-function safeServerUrl(raw: unknown, fallback = 'http://localhost:3579'): string {
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s) return fallback;
-  try {
-    const u = new URL(s);
-    if (u.protocol === 'http:' || u.protocol === 'https:') {
-      return s.replace(/\/+$/, '');
-    }
-  } catch {
-    // ignore invalid
-  }
-  return fallback;
-}
+import { safeServerUrl } from './server-url.js';
 
 
 function buildAdapter(settings: Record<string, string>) {
@@ -121,7 +107,7 @@ export class AgentNode implements ExecutableNode {
       ? [harnessPrompt, nodeSystemPrompt].filter(Boolean).join('\n\n---\n')
       : nodeSystemPrompt;
 
-    const serverUrl = safeServerUrl(ctx.settings['SERVER_URL']);
+    const serverUrl = safeServerUrl(ctx.settings['SERVER_URL'], 'http://localhost:3579');
     const authToken = String(ctx.settings['AUTH_TOKEN'] ?? '').trim();
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 

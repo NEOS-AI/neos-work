@@ -87,31 +87,27 @@ export function validateWorkflowDraft(input: {
   blocks: Pick<WorkflowBlock, 'id' | 'paramDefs'>[];
 }): WorkflowValidationIssue[] {
   const issues: WorkflowValidationIssue[] = [];
-  const nodeIds = new Set(
-    input.nodes
-      .map((node) => (typeof node.id === 'string' ? node.id.trim() : ''))
-      .filter(Boolean),
-  );
-  // Also accept raw ids so untrimmed edge endpoints still match stored node ids
+  // Edge matching accepts both raw and trimmed ids; duplicates compare trimmed keys
+  const nodeIds = new Set<string>();
+  const seenTrimmed = new Set<string>();
   for (const node of input.nodes) {
-    if (typeof node.id === 'string' && node.id) nodeIds.add(node.id);
-  }
-  const blockMap = new Map(input.blocks.map((block) => [block.id, block]));
-
-  if (nodeIds.size !== input.nodes.length) {
-    const seen = new Set<string>();
-    for (const node of input.nodes) {
-      if (seen.has(node.id)) {
+    const raw = typeof node.id === 'string' ? node.id : '';
+    const trimmed = raw.trim();
+    if (raw) nodeIds.add(raw);
+    if (trimmed) {
+      nodeIds.add(trimmed);
+      if (seenTrimmed.has(trimmed)) {
         issues.push({
           code: 'duplicate_node_id',
           severity: 'error',
           nodeId: node.id,
-          message: `Duplicate node id "${node.id}".`,
+          message: `Duplicate node id "${trimmed}".`,
         });
       }
-      seen.add(node.id);
+      seenTrimmed.add(trimmed);
     }
   }
+  const blockMap = new Map(input.blocks.map((block) => [block.id, block]));
 
   // Non-empty labels shared by multiple nodes (confusing in logs / history)
   const labelsByNormalized = new Map<string, DraftNode[]>();
@@ -542,7 +538,9 @@ export function validateWorkflowDraft(input: {
         message: 'Edge points to a missing node.',
       });
     }
-        const pairKey = `${source}\0${target}`;
+    // Skip blank pairs so empty endpoints do not collapse into one duplicate bucket
+    if (!source || !target) continue;
+    const pairKey = `${source}\0${target}`;
     const list = pairCounts.get(pairKey) ?? [];
     list.push(edge.id);
     pairCounts.set(pairKey, list);

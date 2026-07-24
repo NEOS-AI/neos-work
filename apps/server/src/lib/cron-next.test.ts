@@ -122,4 +122,9 @@ describe('estimateNextCronRun', () => {
     const next = estimateNextCronRun('0 0 15 6 *', { from, timezone: 'UTC' });
     expect(next!.toISOString()).toBe('2026-06-15T00:00:00.000Z');
   }, 15_000);
+
+  it('returns null for blank expressions', () => {
+    expect(estimateNextCronRun('')).toBeNull();
+    expect(estimateNextCronRun('   ')).toBeNull();
+  });
 });

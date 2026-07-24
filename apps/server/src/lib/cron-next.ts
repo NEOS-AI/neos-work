@@ -41,7 +41,9 @@ export function estimateNextCronRun(
   expression: string,
   options?: { from?: Date; timezone?: string; horizonDays?: number },
 ): Date | null {
-  const parts = expression.trim().split(/\s+/);
+  const expr = typeof expression === 'string' ? expression.trim() : '';
+  if (!expr) return null;
+  const parts = expr.split(/\s+/);
   if (parts.length !== 5) return null;
 
   const minutes = parseField(parts[0]!, 0, 59);

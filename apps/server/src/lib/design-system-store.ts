@@ -80,7 +80,10 @@ export async function listDesignSystems(): Promise<DesignSystem[]> {
     if (hasManifest) {
       try {
         const manifest = JSON.parse(await fs.readFile(path.join(dirPath, 'manifest.json'), 'utf8'));
-        if (typeof manifest?.description === 'string') description = manifest.description;
+        if (typeof manifest?.description === 'string') {
+          const d = manifest.description.trim();
+          description = d || undefined;
+        }
       } catch {
         // ignore
       }

@@ -123,6 +123,24 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'duplicate_node_id' && i.nodeId === 'dup')).toBe(true);
   });
 
+  it('detects duplicate_node_id after trim (padded ids)', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: '  same  ', type: 'trigger', label: 'A', config: {} },
+        { id: 'same', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'duplicate_node_id')).toBe(true);
+    // message uses trimmed id
+    expect(
+      issues.some(
+        (i) => i.code === 'duplicate_node_id' && /"same"/.test(i.message),
+      ),
+    ).toBe(true);
+  });
+
   it('warns duplicate_node_label when two nodes share a label (case-insensitive)', () => {
     const issues = validateWorkflowDraft({
       nodes: [
@@ -209,6 +227,23 @@ describe('validateWorkflowDraft', () => {
       blocks: emptyBlocks,
     });
     expect(issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+
+  it('does not flag duplicate_edge for multiple blank-endpoint edges', () => {
+    // Blank pairs are skipped for pairKey buckets so they only surface as dangling
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 'a', type: 'trigger', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: '  ', target: '  ' },
+        { id: 'e2', source: '', target: '' },
+      ],
+      blocks: emptyBlocks,
+    });
+    expect(issues.filter((i) => i.code === 'dangling_edge').length).toBe(2);
+    expect(issues.some((i) => i.code === 'duplicate_edge')).toBe(false);
   });
 
   it('detects self_loop when edge source equals target', () => {

@@ -571,5 +571,54 @@ describe('AgentNode LLM model selection', () => {
     }
     vi.unstubAllGlobals();
   });
+
+  it('rejects javascript: SERVER_URL and skips whitespace-only design context', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    orchestratorCtor.mockClear();
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', { systemPrompt: '  Agent  ' });
+    const result = await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: 'javascript:alert(1)',
+          AUTH_TOKEN: 'tok',
+        },
+        designSystemContent: '   \n\t  ',
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (fetchMock.mock.calls.length > 0) {
+      expect(String(fetchMock.mock.calls[0]![0])).toMatch(/^https?:\/\//);
+      expect(String(fetchMock.mock.calls[0]![0])).not.toMatch(/javascript:/);
+    }
+    // design context skipped — run goal should not include DESIGN CONTEXT marker
+    expect(orchestratorRun).toHaveBeenCalled();
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goal).toContain('Agent');
+    expect(goal).not.toContain('DESIGN CONTEXT');
+    vi.unstubAllGlobals();
+  });
+
+  it('trims blank systemPrompt so goal is inputs-only JSON', async () => {
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', { systemPrompt: '   ' });
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        inputs: { q: 1 },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(orchestratorRun).toHaveBeenCalled();
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    // no empty system prompt prefix — pure inputs JSON
+    expect(goal).toBe(JSON.stringify({ q: 1 }));
+    expect(goal).not.toContain('---');
+  });
 });
 
