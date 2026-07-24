@@ -22,4 +22,9 @@ describe('validateWorkspacePath', () => {
     expect(validateWorkspacePath(`  ${home}  `)).toBe(true);
     expect(validateWorkspacePath(`  ${path.join(home, 'projects')}  `)).toBe(true);
   });
+  it('rejects null bytes and control characters', () => {
+    const home = homedir();
+    expect(validateWorkspacePath(home + '\0evil')).toBe(false);
+    expect(validateWorkspacePath(home + '\n/evil')).toBe(false);
+  });
 });

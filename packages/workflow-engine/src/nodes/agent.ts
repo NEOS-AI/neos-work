@@ -8,6 +8,22 @@ import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, Tool
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveHarness } from '../harness/index.js';
 
+/** Only allow http(s) server URLs for memory callback (defense in depth). */
+function safeServerUrl(raw: unknown, fallback = 'http://localhost:3579'): string {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return fallback;
+  try {
+    const u = new URL(s);
+    if (u.protocol === 'http:' || u.protocol === 'https:') {
+      return s.replace(/\/+$/, '');
+    }
+  } catch {
+    // ignore invalid
+  }
+  return fallback;
+}
+
+
 function buildAdapter(settings: Record<string, string>) {
   const provider = String(settings['llmProvider'] ?? 'anthropic').trim().toLowerCase() || 'anthropic';
 
@@ -95,12 +111,17 @@ export class AgentNode implements ExecutableNode {
           : '';
     const harness = harnessId ? resolveHarness(harnessId) : undefined;
 
-    const baseSystemPrompt = harness
-      ? [harness.systemPrompt, this.nodeConfig?.['systemPrompt']].filter(Boolean).join('\n\n---\n')
-      : String(this.nodeConfig?.['systemPrompt'] ?? '');
+    const nodeSystemPrompt =
+      typeof this.nodeConfig?.['systemPrompt'] === 'string'
+        ? this.nodeConfig['systemPrompt'].trim()
+        : String(this.nodeConfig?.['systemPrompt'] ?? '').trim();
+    const harnessPrompt =
+      typeof harness?.systemPrompt === 'string' ? harness.systemPrompt.trim() : '';
+    const baseSystemPrompt = harnessPrompt
+      ? [harnessPrompt, nodeSystemPrompt].filter(Boolean).join('\n\n---\n')
+      : nodeSystemPrompt;
 
-    const serverUrl = String(ctx.settings['SERVER_URL'] ?? 'http://localhost:3579').trim()
-      || 'http://localhost:3579';
+    const serverUrl = safeServerUrl(ctx.settings['SERVER_URL']);
     const authToken = String(ctx.settings['AUTH_TOKEN'] ?? '').trim();
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 

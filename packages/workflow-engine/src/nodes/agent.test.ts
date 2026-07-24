@@ -547,5 +547,29 @@ describe('AgentNode LLM model selection', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe('rate limited');
   });
+
+  it('falls back when SERVER_URL is non-http for memory fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => 'mem',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const node = new AgentNode('agent_coding', { systemPrompt: 'P' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: 'file:///etc/passwd',
+          AUTH_TOKEN: 'tok',
+        },
+      }),
+    );
+    // Should call default localhost URL, not file:
+    if (fetchMock.mock.calls.length > 0) {
+      expect(String(fetchMock.mock.calls[0][0])).toMatch(/^https?:\/\//);
+      expect(String(fetchMock.mock.calls[0][0])).not.toMatch(/^file:/);
+    }
+    vi.unstubAllGlobals();
+  });
 });
 

@@ -273,8 +273,12 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
     };
   }
 
-  const [bin, ...args] = command.trim().split(/\s+/);
-  const allowed = ALLOWED_TEST_PREFIXES.some((prefix) => bin === prefix || bin.endsWith(`/${prefix}`));
+  const parts = command.trim().split(/\s+/).filter(Boolean);
+  const bin = parts[0] ?? '';
+  const args = parts.slice(1);
+  // Case-insensitive allowlist on basename (NPM, /usr/bin/NPM)
+  const binBase = bin.split(/[/\\]/).pop()?.toLowerCase() ?? '';
+  const allowed = ALLOWED_TEST_PREFIXES.some((prefix) => binBase === prefix);
   if (!allowed) {
     return {
       ok: false,

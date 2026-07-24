@@ -1,3 +1,4 @@
+import { isSafeMediaFilename } from './media-filename.js';
 /**
  * Media Generation helpers — OpenAI DALL-E 3 (image) + TTS (audio)
  */
@@ -40,8 +41,7 @@ export async function listMediaFiles(limit = 100): Promise<MediaFileInfo[]> {
 
   const items: MediaFileInfo[] = [];
   for (const filename of names) {
-    if (filename.startsWith('.')) continue;
-    if (!/^[a-zA-Z0-9_\-.]+$/.test(filename)) continue;
+    if (!isSafeMediaFilename(filename)) continue;
     const filePath = path.join(MEDIA_DIR, filename);
     try {
       const st = await fs.stat(filePath);

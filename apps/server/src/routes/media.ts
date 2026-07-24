@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getSecretSetting } from '../db/settings.js';
 import { generateImage, generateAudio, listMediaFiles, MEDIA_DIR as MEDIA_DIR_EXPORT } from '../lib/media-generator.js';
+import { isSafeMediaFilename } from '../lib/media-filename.js';
 
 const media = new Hono();
 const MEDIA_DIR = MEDIA_DIR_EXPORT;
@@ -124,7 +125,7 @@ media.post('/audio', async (c) => {
 media.get('/file/:filename', (c) => {
   const filename = c.req.param('filename').trim();
   // Reject any path traversal
-  if (!filename || !/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
+  if (!isSafeMediaFilename(filename)) {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
   const filePath = path.join(MEDIA_DIR, filename);
@@ -232,7 +233,7 @@ media.post('/generate', async (c) => {
 /** Delete a generated media file */
 media.delete('/file/:filename', (c) => {
   const filename = c.req.param('filename').trim();
-  if (!filename || !/^[a-zA-Z0-9_\-.]+$/.test(filename)) {
+  if (!isSafeMediaFilename(filename)) {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
   const filePath = path.join(MEDIA_DIR, filename);

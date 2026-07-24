@@ -205,6 +205,13 @@ describe('coding blocks', () => {
   describe('test_runner allowlist', () => {
     const runner = () => getNativeExecutor('test_runner')!;
 
+    
+    it('accepts case-insensitive binary names on the allowlist', async () => {
+      const result = await runner().execute(ctx({ command: 'PNPM --version' }));
+      // may fail if pnpm missing but must not be allowlist rejection
+      expect(result.error ?? '').not.toMatch(/not in allowed list/i);
+    });
+
     it('rejects empty command', async () => {
       const result = await runner().execute(ctx({ command: '   ' }));
       expect(result.ok).toBe(false);

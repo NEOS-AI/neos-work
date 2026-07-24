@@ -87,7 +87,15 @@ export function validateWorkflowDraft(input: {
   blocks: Pick<WorkflowBlock, 'id' | 'paramDefs'>[];
 }): WorkflowValidationIssue[] {
   const issues: WorkflowValidationIssue[] = [];
-  const nodeIds = new Set(input.nodes.map((node) => node.id));
+  const nodeIds = new Set(
+    input.nodes
+      .map((node) => (typeof node.id === 'string' ? node.id.trim() : ''))
+      .filter(Boolean),
+  );
+  // Also accept raw ids so untrimmed edge endpoints still match stored node ids
+  for (const node of input.nodes) {
+    if (typeof node.id === 'string' && node.id) nodeIds.add(node.id);
+  }
   const blockMap = new Map(input.blocks.map((block) => [block.id, block]));
 
   if (nodeIds.size !== input.nodes.length) {
@@ -513,7 +521,9 @@ export function validateWorkflowDraft(input: {
 
   const pairCounts = new Map<string, string[]>();
   for (const edge of input.edges) {
-    if (edge.source === edge.target) {
+    const srcRaw = typeof edge.source === 'string' ? edge.source : '';
+    const tgtRaw = typeof edge.target === 'string' ? edge.target : '';
+    if (srcRaw.trim() && srcRaw.trim() === tgtRaw.trim()) {
       issues.push({
         code: 'self_loop',
         severity: 'error',
@@ -521,7 +531,10 @@ export function validateWorkflowDraft(input: {
         message: 'Edge cannot connect a node to itself.',
       });
     }
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+    const source = typeof edge.source === 'string' ? edge.source.trim() : '';
+    const target = typeof edge.target === 'string' ? edge.target.trim() : '';
+    if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) {
+      // Blank endpoints and missing nodes are both dangling (executor skips blank endpoints)
       issues.push({
         code: 'dangling_edge',
         severity: 'error',
@@ -529,7 +542,7 @@ export function validateWorkflowDraft(input: {
         message: 'Edge points to a missing node.',
       });
     }
-    const pairKey = `${edge.source}\0${edge.target}`;
+        const pairKey = `${source}\0${target}`;
     const list = pairCounts.get(pairKey) ?? [];
     list.push(edge.id);
     pairCounts.set(pairKey, list);

@@ -2,23 +2,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MEDIA_DIR } from './media-generator.js';
-
-/** Mirror route validation used by GET/DELETE /api/media/file/:filename */
-function isSafeMediaFilename(filename: string): boolean {
-  return /^[a-zA-Z0-9_\-.]+$/.test(filename);
-}
+import { isSafeMediaFilename } from './media-filename.js';
 
 describe('media filename safety', () => {
   it('accepts normal media names', () => {
     expect(isSafeMediaFilename('img_123.png')).toBe(true);
     expect(isSafeMediaFilename('audio-1.mp3')).toBe(true);
+    expect(isSafeMediaFilename('  img_123.png  ')).toBe(true);
   });
 
-  it('rejects path traversal', () => {
+  it('rejects path traversal and hidden names', () => {
     expect(isSafeMediaFilename('../etc/passwd')).toBe(false);
     expect(isSafeMediaFilename('a/b.png')).toBe(false);
     expect(isSafeMediaFilename('a\\b.png')).toBe(false);
     expect(isSafeMediaFilename('')).toBe(false);
+    expect(isSafeMediaFilename('   ')).toBe(false);
+    expect(isSafeMediaFilename('.hidden.png')).toBe(false);
+    expect(isSafeMediaFilename('.')).toBe(false);
+    expect(isSafeMediaFilename('..')).toBe(false);
   });
 });
 

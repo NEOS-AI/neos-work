@@ -199,6 +199,18 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
+  it('flags blank edge endpoints as dangling', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        { id: 'a', type: 'trigger', label: 'A', config: {} },
+        { id: 'b', type: 'output', label: 'B', config: {} },
+      ],
+      edges: [{ id: 'e1', source: '  ', target: 'b' }],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+
   it('detects self_loop when edge source equals target', () => {
     const issues = validateWorkflowDraft({
       nodes: [{ id: 'n1', type: 'trigger', label: 'T', config: {} }],
