@@ -52,6 +52,17 @@ describe('sessions CRUD', () => {
     expect(listSessions().some((x) => x.id === s.id)).toBe(true);
   });
 
+  it('truncates overlong session titles and falls back invalid model ids', () => {
+    const s = createSession({
+      workspaceId: 'default',
+      title: 'T'.repeat(250),
+      model: 'bad\nmodel',
+    });
+    expect(s.title!.length).toBe(200);
+    expect(s.model).toContain('claude');
+    deleteSession(s.id);
+  });
+
   it('rejects workspace path control characters', () => {
     expect(() =>
       createWorkspace({ name: WS_NAME, path: '/tmp/\0evil' }),

@@ -17,6 +17,8 @@ import { DeployNode } from './nodes/deploy.js';
 
 // Maximum serialized size for node_results_json (1 MB)
 const MAX_OUTPUT_BYTES = 1_048_576;
+/** Cap node.failed error strings in SSE / run logs. */
+const MAX_NODE_ERROR_CHARS = 4_000;
 
 export interface ExecutorOptions {
   workflow: Workflow;
@@ -57,7 +59,11 @@ async function runNode(
     return true;
   } else {
     failedNodes.add(nodeId);
-    onEvent({ type: 'node.failed', nodeId, error: result.error ?? 'Unknown error' });
+    let error = result.error ?? 'Unknown error';
+    if (error.length > MAX_NODE_ERROR_CHARS) {
+      error = error.slice(0, MAX_NODE_ERROR_CHARS);
+    }
+    onEvent({ type: 'node.failed', nodeId, error });
     return false;
   }
 }

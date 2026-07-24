@@ -82,6 +82,38 @@ function normalizeHarnessDomain(raw: unknown, fallback: AgentHarness['domain'] =
 export const HARNESS_SYSTEM_PROMPT_MAX_CHARS = 100_000;
 /** Cap harness description. */
 export const HARNESS_DESCRIPTION_MAX_CHARS = 2_000;
+/** Cap harness display name. */
+export const HARNESS_NAME_MAX_CHARS = 200;
+/** Cap allowed tool names list size. */
+export const HARNESS_ALLOWED_TOOLS_MAX = 100;
+/** Cap single allowed tool name length. */
+export const HARNESS_TOOL_NAME_MAX_CHARS = 100;
+/** Cap serialized constraints JSON. */
+export const HARNESS_CONSTRAINTS_JSON_MAX_CHARS = 16 * 1024;
+
+function normalizeAllowedTools(raw: unknown): string[] {
+  const list = (Array.isArray(raw) ? raw : [])
+    .map((t) => String(t).trim())
+    .filter((t) => t.length > 0 && t.length <= HARNESS_TOOL_NAME_MAX_CHARS && !/[\0\r\n]/.test(t));
+  return list.slice(0, HARNESS_ALLOWED_TOOLS_MAX);
+}
+
+function normalizeConstraints(raw: unknown): AgentHarness['constraints'] {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as AgentHarness['constraints'];
+  }
+  return {};
+}
+
+function serializeConstraints(constraints: AgentHarness['constraints']): string {
+  const json = JSON.stringify(constraints);
+  if (json.length > HARNESS_CONSTRAINTS_JSON_MAX_CHARS) {
+    throw new Error(
+      `constraints exceed max size (${HARNESS_CONSTRAINTS_JSON_MAX_CHARS} characters)`,
+    );
+  }
+  return json;
+}
 
 export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): AgentHarness {
   const id = typeof input.id === 'string' ? input.id.trim() : '';
@@ -94,6 +126,12 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
   }
+  if (/[\0\r\n]/.test(name)) {
+    throw new Error('name contains invalid control characters');
+  }
+  if (name.length > HARNESS_NAME_MAX_CHARS) {
+    throw new Error(`name exceeds max length (${HARNESS_NAME_MAX_CHARS})`);
+  }
   if (systemPrompt.length > HARNESS_SYSTEM_PROMPT_MAX_CHARS) {
     throw new Error(
       `systemPrompt exceeds max size (${HARNESS_SYSTEM_PROMPT_MAX_CHARS} characters)`,
@@ -105,13 +143,9 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);
   }
-  const allowedTools = (Array.isArray(input.allowedTools) ? input.allowedTools : [])
-    .map((t) => String(t).trim())
-    .filter(Boolean);
-  const constraints =
-    input.constraints && typeof input.constraints === 'object' && !Array.isArray(input.constraints)
-      ? input.constraints
-      : {};
+  const allowedTools = normalizeAllowedTools(input.allowedTools);
+  const constraints = normalizeConstraints(input.constraints);
+  const constraintsJson = serializeConstraints(constraints);
   const db = getDb();
   db.prepare(
     `INSERT INTO custom_harness (id, name, domain, description, system_prompt, allowed_tools_json, constraints_json)
@@ -123,7 +157,7 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
     description,
     systemPrompt,
     JSON.stringify(allowedTools),
-    JSON.stringify(constraints),
+    constraintsJson,
   );
   return getCustomHarness(id)!;
 }
@@ -143,6 +177,7 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
       : existing.name;
   // Blank name after trim is invalid — leave row unchanged
   if (!name) return undefined;
+  if (/[\0\r\n]/.test(name) || name.length > HARNESS_NAME_MAX_CHARS) return undefined;
   const systemPrompt =
     input.systemPrompt !== undefined
       ? (typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '')
@@ -162,22 +197,17 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
   }
   const allowedTools =
     input.allowedTools !== undefined
-      ? JSON.stringify(
-          (Array.isArray(input.allowedTools) ? input.allowedTools : [])
-            .map((t) => String(t).trim())
-            .filter(Boolean),
-        )
+      ? JSON.stringify(normalizeAllowedTools(input.allowedTools))
       : existing.allowed_tools_json;
-  const constraints =
-    input.constraints !== undefined
-      ? JSON.stringify(
-          input.constraints &&
-            typeof input.constraints === 'object' &&
-            !Array.isArray(input.constraints)
-            ? input.constraints
-            : {},
-        )
-      : existing.constraints_json;
+  let constraints: string;
+  try {
+    constraints =
+      input.constraints !== undefined
+        ? serializeConstraints(normalizeConstraints(input.constraints))
+        : existing.constraints_json;
+  } catch {
+    return undefined;
+  }
 
   db.prepare(
     `UPDATE custom_harness SET name = ?, domain = ?, description = ?, system_prompt = ?,

@@ -52,13 +52,18 @@ memory.post('/', async (c) => {
   if (!name || !type || !content) {
     return c.json({ ok: false, error: 'name, type, and content are required' }, 400);
   }
-  const item = createMemory({
-    name,
-    type,
-    content,
-    enabled: body.enabled,
-  });
-  return c.json({ ok: true, data: item }, 201);
+  try {
+    const item = createMemory({
+      name,
+      type,
+      content,
+      enabled: body.enabled,
+    });
+    return c.json({ ok: true, data: item }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create memory';
+    return c.json({ ok: false, error: msg }, 400);
+  }
 });
 
 memory.get('/:id', (c) => {

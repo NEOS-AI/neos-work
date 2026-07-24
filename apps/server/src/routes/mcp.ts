@@ -71,6 +71,11 @@ function getMcpServer(id: string): McpServerRow | undefined {
   return getDb().prepare('SELECT * FROM mcp_server WHERE id = ?').get(trimmed) as McpServerRow | undefined;
 }
 
+const MCP_NAME_MAX_CHARS = 200;
+const MCP_COMMAND_MAX_CHARS = 500;
+const MCP_ARGS_MAX = 50;
+const MCP_ARG_MAX_CHARS = 500;
+
 function createMcpServer(params: {
   name: string;
   transport: 'stdio' | 'http';
@@ -80,17 +85,30 @@ function createMcpServer(params: {
 }): McpServerRow {
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   if (!name) throw new Error('name is required');
+  if (/[\0\r\n]/.test(name)) throw new Error('name contains invalid control characters');
+  if (name.length > MCP_NAME_MAX_CHARS) {
+    throw new Error(`name exceeds max length (${MCP_NAME_MAX_CHARS})`);
+  }
   const transportRaw =
     typeof params.transport === 'string' ? params.transport.trim().toLowerCase() : '';
   if (transportRaw !== 'stdio' && transportRaw !== 'http') {
     throw new Error('transport must be "stdio" or "http"');
   }
-  const command =
+  let command =
     typeof params.command === 'string' ? params.command.trim() || null : (params.command ?? null);
+  if (command) {
+    if (/[\0\r\n]/.test(command)) throw new Error('command contains invalid control characters');
+    if (command.length > MCP_COMMAND_MAX_CHARS) {
+      throw new Error(`command exceeds max length (${MCP_COMMAND_MAX_CHARS})`);
+    }
+  }
   const url =
     typeof params.url === 'string' ? params.url.trim() || null : (params.url ?? null);
   const args = Array.isArray(params.args)
-    ? params.args.map((a) => String(a).trim()).filter(Boolean)
+    ? params.args
+        .map((a) => String(a).trim())
+        .filter((a) => a.length > 0 && a.length <= MCP_ARG_MAX_CHARS && !/[\0\r\n]/.test(a))
+        .slice(0, MCP_ARGS_MAX)
     : null;
   const argsStr = args && args.length > 0 ? JSON.stringify(args) : null;
   const db = getDb();
@@ -164,7 +182,7 @@ mcp.post('/', async (c) => {
     }
 
     const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name || name.length > 200) {
+    if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
       return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
     }
     const transportRaw =
@@ -175,11 +193,18 @@ mcp.post('/', async (c) => {
     const transport = transportRaw as 'stdio' | 'http';
     const command =
       typeof body.command === 'string' ? body.command.trim() : body.command;
+    if (typeof command === 'string' && command && /[\0\r\n]/.test(command)) {
+      return c.json({ ok: false, error: 'command contains invalid control characters' }, 400);
+    }
+    if (typeof command === 'string' && command.length > 500) {
+      return c.json({ ok: false, error: 'command exceeds max length (500)' }, 400);
+    }
     const url = typeof body.url === 'string' ? body.url.trim() : body.url;
     const args = Array.isArray(body.args)
       ? body.args
           .map((a) => (typeof a === 'string' ? a.trim() : String(a ?? '').trim()))
-          .filter((a) => a.length > 0)
+          .filter((a) => a.length > 0 && a.length <= 500 && !/[\0\r\n]/.test(a))
+          .slice(0, 50)
       : body.args;
     if (transport === 'stdio' && !command) {
       return c.json({ ok: false, error: 'command is required for stdio transport' }, 400);
@@ -200,6 +225,10 @@ mcp.post('/', async (c) => {
     });
     return c.json({ ok: true, data: rowToResponse(row) }, 201);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : 'mcp-create failed';
+    if (/control characters|max length|required|transport/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
     return c.json({ ok: false, error: safeError(err, 'mcp-create') }, 500);
   }
 });

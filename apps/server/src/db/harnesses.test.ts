@@ -99,6 +99,39 @@ describe('custom harnesses CRUD', () => {
     ).toThrow(/systemPrompt exceeds/i);
   });
 
+  it('rejects control-char / overlong name; filters bad allowed tools', () => {
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: 'bad\nname',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: 'n'.repeat(201),
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/max length/i);
+
+    const h = createCustomHarness({
+      id: ID,
+      name: 'Tool Filter',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'p',
+      allowedTools: ['read', 'bad\ntool', '', 'x'.repeat(101), 'write'],
+    });
+    expect(h.allowedTools).toEqual(['read', 'write']);
+  });
+
   it('trims fields on create/update; rejects invalid id and blank required fields', () => {
     expect(() =>
       createCustomHarness({

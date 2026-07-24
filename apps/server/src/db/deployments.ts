@@ -75,6 +75,18 @@ function normalizeDeployProvider(raw: unknown): string {
   return '';
 }
 
+/** Cap remote deployment id / status message fields. */
+export const DEPLOY_ID_MAX_CHARS = 200;
+export const DEPLOY_STATUS_MESSAGE_MAX_CHARS = 4_000;
+export const DEPLOY_PROJECT_NAME_MAX_CHARS = 63;
+
+function capOptionalString(raw: unknown, max: number): string | null {
+  if (typeof raw !== 'string') return raw == null ? null : null;
+  const s = raw.trim();
+  if (!s) return null;
+  return s.length > max ? s.slice(0, max) : s;
+}
+
 export function createDeployment(input: CreateDeploymentInput): Deployment {
   const provider = normalizeDeployProvider(input.provider);
   if (!provider) throw new Error('provider is required');
@@ -82,21 +94,18 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
     typeof input.workflowId === 'string' ? input.workflowId.trim() || null : (input.workflowId ?? null);
   const runId =
     typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
-  const projectName =
+  let projectName =
     typeof input.projectName === 'string'
       ? input.projectName.trim() || null
       : (input.projectName ?? null);
+  if (projectName && projectName.length > DEPLOY_PROJECT_NAME_MAX_CHARS) {
+    projectName = projectName.slice(0, DEPLOY_PROJECT_NAME_MAX_CHARS);
+  }
   // Only persist http(s) deployment URLs (drop file:/javascript: etc.)
   const url =
     input.url !== undefined ? (safeDeployHostUrl(input.url) ?? null) : null;
-  const deploymentId =
-    typeof input.deploymentId === 'string'
-      ? input.deploymentId.trim() || null
-      : (input.deploymentId ?? null);
-  const statusMessage =
-    typeof input.statusMessage === 'string'
-      ? input.statusMessage.trim() || null
-      : (input.statusMessage ?? null);
+  const deploymentId = capOptionalString(input.deploymentId, DEPLOY_ID_MAX_CHARS);
+  const statusMessage = capOptionalString(input.statusMessage, DEPLOY_STATUS_MESSAGE_MAX_CHARS);
   const status = normalizeDeployStatus(input.status, 'pending');
   const db = getDb();
   const id = crypto.randomUUID();
@@ -159,7 +168,7 @@ export function updateDeployment(
       : (existing.url ?? null);
   const deploymentId =
     patch.deploymentId !== undefined
-      ? (typeof patch.deploymentId === 'string' ? patch.deploymentId.trim() || null : null)
+      ? capOptionalString(patch.deploymentId, DEPLOY_ID_MAX_CHARS)
       : (existing.deploymentId ?? null);
   const status =
     patch.status !== undefined
@@ -167,7 +176,7 @@ export function updateDeployment(
       : existing.status;
   const statusMessage =
     patch.statusMessage !== undefined
-      ? (typeof patch.statusMessage === 'string' ? patch.statusMessage.trim() || null : null)
+      ? capOptionalString(patch.statusMessage, DEPLOY_STATUS_MESSAGE_MAX_CHARS)
       : (existing.statusMessage ?? null);
 
   db.prepare(`

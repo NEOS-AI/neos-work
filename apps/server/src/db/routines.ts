@@ -119,6 +119,12 @@ export function getRoutine(id: string): Routine | null {
   return row ? rowToRoutine(row) : null;
 }
 
+/** Cap routine name / trigger inputs JSON (plan Task 2). */
+export const ROUTINE_NAME_MAX_CHARS = 200;
+export const ROUTINE_INPUTS_JSON_MAX_CHARS = 256_000;
+/** Cap routine run error messages. */
+export const ROUTINE_RUN_ERROR_MAX_CHARS = 4_000;
+
 export function createRoutine(input: {
   name: string;
   workflowId: string;
@@ -134,6 +140,12 @@ export function createRoutine(input: {
   if (!name || !workflowId || !schedule) {
     throw new Error('name, workflowId, and schedule are required');
   }
+  if (/[\0\r\n]/.test(name)) {
+    throw new Error('name contains invalid control characters');
+  }
+  if (name.length > ROUTINE_NAME_MAX_CHARS) {
+    throw new Error(`name exceeds max length (${ROUTINE_NAME_MAX_CHARS})`);
+  }
   // Validate raw (pre-trim) so control chars are not stripped before check
   if (!isValidSchedule(scheduleRaw)) {
     throw new Error('schedule must be a valid 5-field cron expression');
@@ -148,6 +160,12 @@ export function createRoutine(input: {
     input.inputs && typeof input.inputs === 'object' && !Array.isArray(input.inputs)
       ? input.inputs
       : {};
+  const inputsJson = JSON.stringify(inputs);
+  if (inputsJson.length > ROUTINE_INPUTS_JSON_MAX_CHARS) {
+    throw new Error(
+      `inputs exceeds max size (${ROUTINE_INPUTS_JSON_MAX_CHARS} characters)`,
+    );
+  }
   db.prepare(`
     INSERT INTO routine (id, name, workflow_id, schedule, timezone, enabled, inputs_json, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -158,7 +176,7 @@ export function createRoutine(input: {
     schedule,
     timezone,
     input.enabled !== false ? 1 : 0,
-    JSON.stringify(inputs),
+    inputsJson,
     now,
     now,
   );
@@ -179,7 +197,7 @@ export function updateRoutine(
     input.name !== undefined
       ? (typeof input.name === 'string' ? input.name.trim() : '')
       : existing.name;
-  if (!name) return null;
+  if (!name || /[\0\r\n]/.test(name) || name.length > ROUTINE_NAME_MAX_CHARS) return null;
   if (input.schedule !== undefined) {
     if (typeof input.schedule !== 'string' || !isValidSchedule(input.schedule)) return null;
   }
@@ -205,6 +223,8 @@ export function updateRoutine(
         ? input.inputs
         : {}
       : existing.inputs;
+  const inputsJson = JSON.stringify(inputs);
+  if (inputsJson.length > ROUTINE_INPUTS_JSON_MAX_CHARS) return null;
   db.prepare(`
     UPDATE routine
     SET name = ?, schedule = ?, timezone = ?, enabled = ?, inputs_json = ?, updated_at = ?
@@ -214,7 +234,7 @@ export function updateRoutine(
     schedule,
     timezone,
     input.enabled !== undefined ? (input.enabled ? 1 : 0) : (existing.enabled ? 1 : 0),
-    JSON.stringify(inputs),
+    inputsJson,
     now,
     trimmed,
   );
@@ -258,8 +278,11 @@ export function completeRoutineRun(id: string, status: 'completed' | 'failed', e
   if (!trimmed) return;
   const statusRaw = typeof status === 'string' ? status.trim().toLowerCase() : '';
   const normalized: 'completed' | 'failed' = statusRaw === 'failed' ? 'failed' : 'completed';
-  const errorVal =
+  let errorVal =
     typeof error === 'string' ? error.trim() || null : (error ?? null);
+  if (errorVal && errorVal.length > ROUTINE_RUN_ERROR_MAX_CHARS) {
+    errorVal = errorVal.slice(0, ROUTINE_RUN_ERROR_MAX_CHARS);
+  }
   const db = getDb();
   db.prepare(`
     UPDATE routine_run

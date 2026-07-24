@@ -261,6 +261,38 @@ describe('runRoutine', () => {
     expect(mocks.completeRoutineRun).toHaveBeenCalledWith('rr-1', 'completed');
   });
 
+  it('skips overlapping concurrent runs of the same routine', async () => {
+    mocks.getRoutine.mockReturnValue({
+      id: 'r1',
+      enabled: true,
+      workflowId: 'wf1',
+      inputs: {},
+    });
+    mocks.getWorkflow.mockReturnValue({
+      id: 'wf1',
+      designSystemId: undefined,
+      nodes: [],
+      edges: [],
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.executeWorkflow.mockImplementation(async () => {
+      await gate;
+    });
+
+    const first = runRoutine('r1');
+    // allow first to acquire lock
+    await Promise.resolve();
+    await Promise.resolve();
+    const second = await runRoutine('r1');
+    expect(second).toBeNull();
+    release();
+    await first;
+    expect(mocks.executeWorkflow).toHaveBeenCalledTimes(1);
+  });
+
   it('loads design system content when designSystemId set', async () => {
     mocks.getRoutine.mockReturnValue({
       id: 'r1',

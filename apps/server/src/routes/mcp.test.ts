@@ -77,6 +77,30 @@ describe('mcp routes', () => {
     expect(create.status).toBe(201);
   });
 
+  it('rejects control-char name/command on create', async () => {
+    const badName = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `bad\n${NAME}`,
+        transport: 'stdio',
+        command: 'npx',
+      }),
+    });
+    expect(badName.status).toBe(400);
+
+    const badCmd = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        transport: 'stdio',
+        command: 'npx\nrm -rf /',
+      }),
+    });
+    expect(badCmd.status).toBe(400);
+  });
+
   it('rejects create with invalid JSON body', async () => {
     const res = await mcp.request('/', {
       method: 'POST',

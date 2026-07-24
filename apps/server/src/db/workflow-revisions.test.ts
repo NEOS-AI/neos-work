@@ -48,6 +48,21 @@ describe('createRevision input hygiene', () => {
     const ok = createRevision(wf.id, 'x'.repeat(Math.min(REVISION_SNAPSHOT_MAX_CHARS, 1024)));
     expect(ok).not.toBeNull();
   });
+
+  it('rejects control-char labels and caps overlong labels', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const rev = createRevision(wf.id, JSON.stringify({ n: 1 }), 'bad\nlabel');
+    expect(rev?.label).toBeUndefined();
+    const long = createRevision(wf.id, JSON.stringify({ n: 2 }), 'L'.repeat(250));
+    expect(long?.label?.length).toBe(200);
+    expect(updateRevisionLabel(long!.id, 'x\ny')).toBe(false);
+    expect(updateRevisionLabel(long!.id, 'ok-label')).toBe(true);
+  });
 });
 
 describe('createRevision dedup', () => {

@@ -11,6 +11,10 @@ import { createInterface } from 'node:readline';
 import type { Tool, ToolResult } from './base.js';
 
 const MAX_WRITE_SIZE = 1_048_576; // 1MB
+/** Cap read_file payload so huge files cannot bloat the agent context. */
+const MAX_READ_SIZE = 1_048_576; // 1MB
+/** Cap list_directory entries returned. */
+const MAX_LIST_ENTRIES = 1_000;
 
 const PROTECTED_PATTERNS = [
   /^\.env($|\.)/,     // .env, .env.local, .env.production, etc.
@@ -82,7 +86,12 @@ export function createReadFileTool(workspaceRoot: string): Tool {
       try {
         const userPath = typeof input.path === 'string' ? input.path : String(input.path ?? '');
         const filePath = safePath(workspaceRoot, userPath);
-        const content = await readFile(filePath, 'utf-8');
+        let content = await readFile(filePath, 'utf-8');
+        if (content.length > MAX_READ_SIZE) {
+          content =
+            content.slice(0, MAX_READ_SIZE) +
+            `\n…[truncated: exceeded ${MAX_READ_SIZE} characters]`;
+        }
         return { success: true, output: content };
       } catch (err) {
         return { success: false, output: null, error: (err as Error).message };
@@ -144,21 +153,20 @@ export function createListDirectoryTool(workspaceRoot: string): Tool {
           typeof input.path === 'string' ? input.path.trim() || '.' : '.';
         const dirPath = safePath(workspaceRoot, rawPath);
         const entries = await readdir(dirPath);
+        const visible = entries.filter((name) => !name.startsWith('.')).slice(0, MAX_LIST_ENTRIES);
         const results = await Promise.all(
-          entries
-            .filter((name) => !name.startsWith('.'))
-            .map(async (name) => {
-              try {
-                const s = await stat(join(dirPath, name));
-                return {
-                  name,
-                  type: s.isDirectory() ? 'directory' : 'file',
-                  size: s.isFile() ? s.size : undefined,
-                };
-              } catch {
-                return { name, type: 'unknown' };
-              }
-            }),
+          visible.map(async (name) => {
+            try {
+              const s = await stat(join(dirPath, name));
+              return {
+                name,
+                type: s.isDirectory() ? 'directory' : 'file',
+                size: s.isFile() ? s.size : undefined,
+              };
+            } catch {
+              return { name, type: 'unknown' };
+            }
+          }),
         );
         return { success: true, output: results };
       } catch (err) {
@@ -189,6 +197,13 @@ export function createSearchFilesTool(workspaceRoot: string): Tool {
           typeof input.pattern === 'string' ? input.pattern.trim() : String(input.pattern ?? '').trim();
         if (!pattern) {
           return { success: false, output: null, error: 'pattern is required' };
+        }
+        if (/[\0\r\n]/.test(pattern) || pattern.length > 1_000) {
+          return {
+            success: false,
+            output: null,
+            error: 'pattern is invalid or exceeds max length (1000)',
+          };
         }
         const searchTypeRaw =
           typeof input.type === 'string' ? input.type.trim().toLowerCase() : 'glob';

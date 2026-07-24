@@ -18,8 +18,17 @@ export function isSafeBrowserUrl(raw: unknown): string | null {
 }
 
 function trimSelector(raw: unknown): string {
-  return typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+  const s = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+  // Cap CSS selector length; reject control chars
+  if (!s || /[\0\r\n]/.test(s) || s.length > 1_000) return '';
+  return s;
 }
+
+/** Cap browser fill values / extracted text (runaway DOM defense). */
+const BROWSER_FILL_MAX_CHARS = 100_000;
+const BROWSER_TEXT_MAX_CHARS = 500_000;
+const BROWSER_LINKS_MAX = 500;
+const BROWSER_SCREENSHOT_MAX_BYTES = 8 * 1024 * 1024;
 
 function toolFailure(err: unknown, fallback: string): ToolResult {
   return {
@@ -105,7 +114,14 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
             return { success: false, output: null, error: 'selector is required' };
           }
           const valueRaw = (input as { value?: unknown }).value;
-          const value = typeof valueRaw === 'string' ? valueRaw : String(valueRaw ?? '');
+          let value = typeof valueRaw === 'string' ? valueRaw : String(valueRaw ?? '');
+          if (value.length > BROWSER_FILL_MAX_CHARS) {
+            return {
+              success: false,
+              output: null,
+              error: `value exceeds max size (${BROWSER_FILL_MAX_CHARS} characters)`,
+            };
+          }
           const page = manager.getPage();
           await page.fill(selector, value, { timeout: 10_000 });
           return { success: true, output: { success: true } };
@@ -131,6 +147,13 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
           const { fullPage = false } = input as { fullPage?: boolean };
           const page = manager.getPage();
           const buffer = await page.screenshot({ fullPage: Boolean(fullPage) });
+          if (buffer.byteLength > BROWSER_SCREENSHOT_MAX_BYTES) {
+            return {
+              success: false,
+              output: null,
+              error: `Screenshot exceeds max size (${BROWSER_SCREENSHOT_MAX_BYTES} bytes)`,
+            };
+          }
           return { success: true, output: { screenshot: buffer.toString('base64') } };
         } catch (err) {
           return toolFailure(err, 'browser_screenshot failed');
@@ -153,9 +176,13 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
         try {
           const selector = trimSelector((input as { selector?: unknown }).selector);
           const page = manager.getPage();
-          const text = selector
+          let text = selector
             ? await page.locator(selector).innerText({ timeout: 10_000 })
             : await page.evaluate(() => document.body.innerText);
+          if (typeof text !== 'string') text = String(text ?? '');
+          if (text.length > BROWSER_TEXT_MAX_CHARS) {
+            text = text.slice(0, BROWSER_TEXT_MAX_CHARS) + '\n…[text truncated]';
+          }
           return { success: true, output: { text } };
         } catch (err) {
           return toolFailure(err, 'browser_extract_text failed');
@@ -187,7 +214,8 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
               href: (a as HTMLAnchorElement).href,
             }));
           }, selector || null);
-          return { success: true, output: { links } };
+          const capped = Array.isArray(links) ? links.slice(0, BROWSER_LINKS_MAX) : [];
+          return { success: true, output: { links: capped } };
         } catch (err) {
           return toolFailure(err, 'browser_extract_links failed');
         }

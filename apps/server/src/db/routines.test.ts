@@ -108,6 +108,33 @@ describe('routines CRUD', () => {
 
 
 
+  it('rejects control-char / overlong name and oversized inputs', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createRoutine({ name: 'bad\nname', workflowId: wf.id, schedule: '0 9 * * *' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createRoutine({
+        name: 'x'.repeat(201),
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+      }),
+    ).toThrow(/max length/i);
+    expect(() =>
+      createRoutine({
+        name: 'Big',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+        inputs: { blob: 'y'.repeat(300_000) },
+      }),
+    ).toThrow(/inputs exceeds/i);
+  });
+
   it('rejects invalid schedule arity/control chars on create/update', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

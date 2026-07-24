@@ -20,6 +20,8 @@ import { createFirstHtmlArtifact } from './html-artifact.js';
 import * as artifactDb from '../db/artifacts.js';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
+/** In-memory lock: prevent overlapping runs of the same routine (plan Task 2). */
+const runningRoutines = new Set<string>();
 
 function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'): void {
   const id = typeof routineId === 'string' ? routineId.trim() : '';
@@ -44,9 +46,20 @@ function scheduleRoutine(routineId: string, schedule: string, timezone = 'UTC'):
   console.log(`[Scheduler] Scheduled routine ${id} with cron: ${cronExpr} (${tz})`);
 }
 
+/** Test helper — whether a routine is currently locked as running. */
+export function isRoutineRunning(routineId: string): boolean {
+  const id = typeof routineId === 'string' ? routineId.trim() : '';
+  return id ? runningRoutines.has(id) : false;
+}
+
 export async function runRoutine(routineId: string): Promise<string | null> {
   const id = typeof routineId === 'string' ? routineId.trim() : '';
   if (!id) return null;
+  // Skip overlapping schedule/manual triggers for the same routine
+  if (runningRoutines.has(id)) {
+    console.warn(`[Scheduler] Routine ${id} already running — skip overlapping trigger`);
+    return null;
+  }
   const routine = getRoutine(id);
   if (!routine || !routine.enabled) return null;
 
@@ -56,6 +69,7 @@ export async function runRoutine(routineId: string): Promise<string | null> {
     return null;
   }
 
+  runningRoutines.add(id);
   const runRecord = createRoutineRun({ routineId: id });
   setLastRunAt(id);
 
@@ -142,6 +156,8 @@ export async function runRoutine(routineId: string): Promise<string | null> {
     completeRoutineRun(runRecord.id, 'failed', errorMsg);
     console.error(`[Scheduler] Routine ${id} failed: ${errorMsg}`);
     return null;
+  } finally {
+    runningRoutines.delete(id);
   }
 }
 

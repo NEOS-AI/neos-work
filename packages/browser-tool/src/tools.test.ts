@@ -57,6 +57,26 @@ describe('createBrowserTools', () => {
     expect(page.fill).toHaveBeenCalledWith('#name', 'Ada', { timeout: 10_000 });
   });
 
+  it('browser_fill rejects oversized values; extract_text truncates', async () => {
+    const page = {
+      fill: vi.fn(async () => {}),
+      evaluate: vi.fn(async () => 'z'.repeat(600_000)),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const fill = tools.find((t) => t.name === 'browser_fill')!;
+    const extract = tools.find((t) => t.name === 'browser_extract_text')!;
+    const big = await fill.execute({ selector: '#x', value: 'v'.repeat(100_001) });
+    expect(big.success).toBe(false);
+    expect(big.error).toMatch(/max size/i);
+    expect(page.fill).not.toHaveBeenCalled();
+
+    const textRes = await extract.execute({});
+    expect(textRes.success).toBe(true);
+    const text = (textRes.output as { text: string }).text;
+    expect(text.length).toBeLessThanOrEqual(500_000 + 30);
+    expect(text).toContain('[text truncated]');
+  });
+
   it('browser_screenshot returns base64', async () => {
     const page = {
       screenshot: vi.fn(async () => Buffer.from('png-bytes')),

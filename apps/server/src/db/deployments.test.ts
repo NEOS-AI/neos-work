@@ -50,6 +50,26 @@ describe('deployments CRUD', () => {
     expect(getDeployment(row.id)).toBeUndefined();
   });
 
+  it('caps projectName, deploymentId, and statusMessage lengths', () => {
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-${'p'.repeat(80)}`,
+      status: 'pending',
+      deploymentId: 'd'.repeat(250),
+      statusMessage: 'm'.repeat(5_000),
+    });
+    expect(row.projectName!.length).toBeLessThanOrEqual(63);
+    expect(row.deploymentId!.length).toBe(200);
+    expect(row.statusMessage!.length).toBe(4_000);
+
+    const updated = updateDeployment(row.id, {
+      deploymentId: 'e'.repeat(300),
+      statusMessage: 's'.repeat(5_000),
+    });
+    expect(updated?.deploymentId!.length).toBe(200);
+    expect(updated?.statusMessage!.length).toBe(4_000);
+  });
+
   it('rejects non-http deployment urls on create/update', () => {
     const row = createDeployment({
       provider: 'vercel',

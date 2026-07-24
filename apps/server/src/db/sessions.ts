@@ -61,10 +61,15 @@ export function createSession(params: {
   if (!workspaceId) {
     throw new Error('workspaceId is required');
   }
-  const title =
+  /** Cap session title length (UI list hygiene). */
+  const SESSION_TITLE_MAX = 200;
+  let title =
     params.title !== undefined
       ? (typeof params.title === 'string' ? params.title.trim() || null : null)
       : null;
+  if (title && title.length > SESSION_TITLE_MAX) {
+    title = title.slice(0, SESSION_TITLE_MAX);
+  }
   const providerRaw =
     typeof params.provider === 'string' ? params.provider.trim().toLowerCase() : '';
   // Known chat providers; unknown/blank → anthropic default
@@ -72,8 +77,14 @@ export function createSession(params: {
     providerRaw === 'anthropic' || providerRaw === 'google' || providerRaw === 'openai'
       ? providerRaw
       : 'anthropic';
-  const model =
+  let model =
     typeof params.model === 'string' ? params.model.trim() || 'claude-sonnet-4-5-20250929' : (params.model ?? 'claude-sonnet-4-5-20250929');
+  // Cap model id length; reject control chars
+  if (typeof model === 'string') {
+    if (/[\0\r\n]/.test(model) || model.length > 200) {
+      model = 'claude-sonnet-4-5-20250929';
+    }
+  }
   const thinkingRaw =
     typeof params.thinkingMode === 'string' ? params.thinkingMode.trim().toLowerCase() : '';
   const thinkingMode = THINKING_MODES.has(thinkingRaw) ? thinkingRaw : 'none';
@@ -98,7 +109,8 @@ export function updateSessionTitle(id: string, title: string): void {
   const trimmed = typeof id === 'string' ? id.trim() : '';
   if (!trimmed) return;
   const db = getDb();
-  const name = typeof title === 'string' ? title.trim() : '';
+  let name = typeof title === 'string' ? title.trim() : '';
+  if (name.length > 200) name = name.slice(0, 200);
   db.prepare("UPDATE session SET title = ?, updated_at = datetime('now') WHERE id = ?").run(
     name || null,
     trimmed,

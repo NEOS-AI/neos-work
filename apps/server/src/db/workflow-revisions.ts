@@ -50,6 +50,17 @@ function rowToRevision(row: RevisionRow): WorkflowRevision {
 const MAX_REVISIONS = 50;
 /** Cap snapshot JSON size (plan Task 16 — runaway graph defense). */
 export const REVISION_SNAPSHOT_MAX_CHARS = 5 * 1024 * 1024;
+/** Cap revision label length. */
+export const REVISION_LABEL_MAX_CHARS = 200;
+
+function normalizeRevisionLabel(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const label = raw.trim();
+  if (!label || /[\0\r\n]/.test(label)) return null;
+  return label.length > REVISION_LABEL_MAX_CHARS
+    ? label.slice(0, REVISION_LABEL_MAX_CHARS)
+    : label;
+}
 
 export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snapshot'>[] {
   const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
@@ -95,8 +106,7 @@ export function createRevision(
   if (!wfId || typeof snapshot !== 'string') return null;
   // Reject oversized snapshots rather than bloating SQLite
   if (snapshot.length > REVISION_SNAPSHOT_MAX_CHARS) return null;
-  const labelVal =
-    typeof label === 'string' ? label.trim() || null : (label ?? null);
+  const labelVal = normalizeRevisionLabel(label);
   const db = getDb();
 
   // Skip identical consecutive snapshots
@@ -132,7 +142,7 @@ export function createRevision(
 export function updateRevisionLabel(revisionId: string, label: string): boolean {
   const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
   if (!trimmed) return false;
-  const labelVal = typeof label === 'string' ? label.trim() : '';
+  const labelVal = normalizeRevisionLabel(label);
   if (!labelVal) return false;
   const db = getDb();
   const result = db.prepare('UPDATE workflow_revisions SET label = ? WHERE id = ?').run(labelVal, trimmed);

@@ -100,6 +100,59 @@ describe('ReflectionStrategy', () => {
     expect(adapter.getModels().length).toBeGreaterThan(0);
   });
 
+  it('bounds history to last 20 steps and truncates long fields in the prompt', async () => {
+    let captured = '';
+    const adapter = {
+      id: 'openai' as const,
+      name: 'Cap',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai' as const,
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: { messages?: Array<{ content?: string }> }) {
+        captured = String(params.messages?.[0]?.content ?? '');
+        yield { type: 'text' as const, content: JSON.stringify({ action: 'skip' }) };
+        yield { type: 'done' as const };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const history: AgentStep[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `h${i}`,
+      index: i,
+      description: `step-${i}-${'D'.repeat(600)}`,
+      type: 'tool_use',
+      status: 'error',
+      error: 'E'.repeat(400),
+    }));
+    const fatStep: AgentStep = {
+      id: 'fat',
+      index: 99,
+      description: 'G'.repeat(2_000),
+      type: 'tool_use',
+      toolName: 'T'.repeat(150),
+      input: { blob: 'x'.repeat(4_000) },
+      status: 'error',
+    };
+    await new ReflectionStrategy(adapter).heal(fatStep, 'ERR'.repeat(1_500), history);
+
+    // Last 20 history entries only (step-0..9 dropped); history string then capped at 8k
+    expect(captured).not.toContain('step-0-');
+    expect(captured).not.toContain('step-9-');
+    expect(captured).toContain('step-10-');
+    // Field caps on the failed step
+    expect(captured).toMatch(/툴: T{100}/);
+    expect(captured.length).toBeLessThan(25_000);
+  });
+
   it('normalizes action case and trims revised fields', async () => {
     const adapter = mockAdapter([
       JSON.stringify({

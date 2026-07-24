@@ -99,6 +99,41 @@ describe('plugins routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('POST run rejects oversized inputs and ignores array inputs', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'SKILL.md'),
+      '---\nname: Cov Inputs Plugin\n---\n\n# Cov\n',
+      'utf8',
+    );
+    const up = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        skillDirName: DIR_NAME,
+        name: 'Cov Inputs Plugin',
+      }),
+    });
+    expect(up.status).toBe(201);
+
+    const tooBig = await plugins.request(`/${DIR_NAME}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: { blob: 'x'.repeat(260_000) } }),
+    });
+    expect(tooBig.status).toBe(400);
+    expect(((await tooBig.json()) as { error: string }).error).toMatch(/too large/i);
+
+    // Array inputs are not plain objects — treated as empty (no 400), run may start SSE
+    const arr = await plugins.request(`/${DIR_NAME}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: ['not', 'an', 'object'] }),
+    });
+    // Should not be the size-guard 400; 200 SSE or other non-size error
+    expect(arr.status).not.toBe(400);
+  });
+
   it('upgrades skill dir to plugin and returns detail', async () => {
     await fs.mkdir(DIR, { recursive: true });
     await fs.writeFile(

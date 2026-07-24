@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from './schema.js';
 import * as workflows from './workflows.js';
+import { WORKFLOW_GRAPH_JSON_MAX_CHARS } from './workflows.js';
 
 const NAME = `_cov_runs_${process.pid}`;
 
@@ -279,6 +280,39 @@ describe('workflow runs CRUD', () => {
         edges: [],
       }),
     ).toThrow(/max length/i);
+  });
+
+  it('create/update reject graphs over WORKFLOW_GRAPH_JSON_MAX_CHARS', () => {
+    // Two large labels so nodes+edges JSON exceeds the 5 MiB cap
+    const hugeLabel = 'L'.repeat(Math.floor(WORKFLOW_GRAPH_JSON_MAX_CHARS / 2) + 1);
+    expect(() =>
+      workflows.createWorkflow({
+        name: NAME,
+        domain: 'general',
+        nodes: [
+          { id: 't', type: 'trigger', label: hugeLabel, config: {} },
+          { id: 'o', type: 'output', label: hugeLabel, config: {} },
+        ] as never,
+        edges: [],
+      }),
+    ).toThrow(/graph exceeds max size/i);
+
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [{ id: 't', type: 'trigger', label: 'T', config: {} }],
+      edges: [],
+    });
+    expect(
+      workflows.updateWorkflow(wf.id, {
+        nodes: [
+          { id: 't', type: 'trigger', label: hugeLabel, config: {} },
+          { id: 'o', type: 'output', label: hugeLabel, config: {} },
+        ] as never,
+      }),
+    ).toBeUndefined();
+    // prior graph unchanged
+    expect(workflows.getWorkflow(wf.id)?.nodes).toHaveLength(1);
   });
 
   it('safe-parses corrupt nodes/edges/nodeResults JSON and coerces non-array updates', () => {

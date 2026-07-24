@@ -71,6 +71,22 @@ describe('filesystem tools', () => {
     expect(env.error).toMatch(/protected path/);
   });
 
+  it('read truncates oversized files; search rejects control-char patterns', async () => {
+    const write = createWriteFileTool(root);
+    // write is capped at 1 MiB so craft via fs for oversize read
+    await writeFile(join(root, 'huge.txt'), 'H'.repeat(1_048_576 + 50));
+    const read = createReadFileTool(root);
+    const got = await read.execute({ path: 'huge.txt' });
+    expect(got.success).toBe(true);
+    expect(String(got.output)).toContain('truncated');
+    expect(String(got.output).length).toBeLessThan(1_048_576 + 80);
+
+    const search = createSearchFilesTool(root);
+    const bad = await search.execute({ pattern: 'a\nb' });
+    expect(bad.success).toBe(false);
+    expect(bad.error).toMatch(/invalid or exceeds/i);
+  });
+
   it('list_directory skips hidden entries', async () => {
     await writeFile(join(root, 'visible.txt'), 'v');
     await writeFile(join(root, '.hidden'), 'h');

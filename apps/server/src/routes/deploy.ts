@@ -183,8 +183,9 @@ deploy.post('/', async (c) => {
     return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
   }
   const provider = providerRaw as 'vercel' | 'cloudflare';
-  if (content.length > 5_000_000) {
-    return c.json({ ok: false, error: 'content too large' }, 400);
+  // Align with deploy lib DEPLOY_CONTENT_MAX_CHARS (2 MiB)
+  if (content.length > 2 * 1024 * 1024) {
+    return c.json({ ok: false, error: 'content too large (max 2 MiB)' }, 400);
   }
 
   const projectName =

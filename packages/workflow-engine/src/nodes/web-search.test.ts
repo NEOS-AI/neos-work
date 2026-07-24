@@ -60,6 +60,46 @@ describe('WebSearchNode', () => {
     expect(result.output).toEqual(results);
   });
 
+  it('clips title/content fields from oversized Tavily payloads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              title: `  ${'T'.repeat(600)}  `,
+              url: '  https://long.test/path  ',
+              content: `  ${'C'.repeat(3_000)}  `,
+              score: 0.5,
+            },
+            {
+              title: 123,
+              url: null,
+              content: undefined,
+              score: 'na',
+            },
+          ],
+        }),
+      }),
+    );
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'q' }));
+    expect(result.ok).toBe(true);
+    const out = result.output as Array<{
+      title: string;
+      url: string;
+      content: string;
+      score: number;
+    }>;
+    expect(out[0]!.title).toHaveLength(500);
+    expect(out[0]!.title.startsWith('T')).toBe(true);
+    expect(out[0]!.content).toHaveLength(2_000);
+    expect(out[0]!.url).toBe('https://long.test/path');
+    expect(out[0]!.score).toBe(0.5);
+    // non-string fields coerced to empty / score 0
+    expect(out[1]).toEqual({ title: '', url: '', content: '', score: 0 });
+  });
+
   it('surfaces non-ok HTTP status', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
