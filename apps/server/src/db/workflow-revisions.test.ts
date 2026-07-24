@@ -22,6 +22,18 @@ function cleanup() {
 
 afterEach(cleanup);
 
+describe('createRevision input hygiene', () => {
+  it('returns null for blank workflowId or non-string snapshot', () => {
+    expect(createRevision('   ', '{}')).toBeNull();
+    expect(createRevision('wf', null as never)).toBeNull();
+    expect(getRevision('   ')).toBeUndefined();
+    expect(listRevisions('   ')).toEqual([]);
+    expect(updateRevisionLabel('   ', 'x')).toBe(false);
+    expect(updateRevisionLabel('id', '   ')).toBe(false);
+    expect(deleteRevision('   ')).toBe(false);
+  });
+});
+
 describe('createRevision dedup', () => {
   it('skips identical consecutive snapshots', () => {
     const wf = workflows.createWorkflow({

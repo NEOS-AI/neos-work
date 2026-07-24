@@ -27,7 +27,17 @@ export class BlockNode implements ExecutableNode {
       return { ok: false, output: null, error: `Block not found: ${blockId}`, durationMs: 0 };
     }
 
-    const params = (ctx.config?.['params'] as Record<string, unknown>) ?? {};
+    // Normalize params: drop blank keys; trim string values (prompt injection / hygiene)
+    const rawParams =
+      ctx.config?.['params'] && typeof ctx.config['params'] === 'object' && !Array.isArray(ctx.config['params'])
+        ? (ctx.config['params'] as Record<string, unknown>)
+        : {};
+    const params: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rawParams)) {
+      const key = typeof k === 'string' ? k.trim() : '';
+      if (!key) continue;
+      params[key] = typeof v === 'string' ? v.trim() : v;
+    }
 
     if (block.implementationType === 'native') {
       const executor = getNativeExecutor(blockId);

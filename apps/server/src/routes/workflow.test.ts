@@ -241,8 +241,9 @@ describe('workflow routes export/import/preflight/runs', () => {
       nodes: [],
       edges: [],
     });
+    const completedId = crypto.randomUUID();
     workflows.saveRun({
-      id: crypto.randomUUID(),
+      id: completedId,
       workflowId: wf.id,
       status: 'completed',
       nodeResults: {},
@@ -263,10 +264,44 @@ describe('workflow routes export/import/preflight/runs', () => {
     const listBody = await list.json() as { data: unknown[] };
     expect(listBody.data.length).toBeGreaterThanOrEqual(2);
 
+    // GET single run
+    const getOne = await workflow.request(`/${wf.id}/runs/${completedId}`);
+    expect(getOne.status).toBe(200);
+    const one = await getOne.json() as { data: { id: string; status: string } };
+    expect(one.data.id).toBe(completedId);
+    expect(one.data.status).toBe('completed');
+
+    // mismatch workflow / run → 404
+    const other = workflows.createWorkflow({
+      name: `${WF_NAME}-other-run`,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const mismatch = await workflow.request(`/${other.id}/runs/${completedId}`);
+    expect(mismatch.status).toBe(404);
+
+    const badStatus = await workflow.request(`/${wf.id}/runs?status=pending`, {
+      method: 'DELETE',
+    });
+    expect(badStatus.status).toBe(400);
+    expect(((await badStatus.json()) as { error: string }).error).toMatch(/Invalid status/i);
+
     const clear = await workflow.request(`/${wf.id}/runs?status=failed`, { method: 'DELETE' });
     expect(clear.status).toBe(200);
     const after = workflows.listRuns(wf.id);
     expect(after.every((r) => r.status !== 'failed')).toBe(true);
+
+    // DELETE single run
+    const delOne = await workflow.request(`/${wf.id}/runs/${completedId}`, { method: 'DELETE' });
+    expect(delOne.status).toBe(200);
+    const gone = await workflow.request(`/${wf.id}/runs/${completedId}`);
+    expect(gone.status).toBe(404);
+
+    // blank path ids
+    expect((await workflow.request('/%20/runs')).status).toBe(200); // empty list
+    expect((await workflow.request(`/${wf.id}/runs/%20`)).status).toBe(404);
+    expect((await workflow.request(`/${wf.id}/runs/%20`, { method: 'DELETE' })).status).toBe(404);
   });
 
   it('404s get/delete for missing workflow', async () => {

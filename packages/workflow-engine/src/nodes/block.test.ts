@@ -127,6 +127,15 @@ describe('BlockNode', () => {
     expect(result.ok).toBe(true);
     expect(result.output).toEqual({ echoed: 42 });
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+
+    const trimmedParams = await node.execute(
+      ctx({
+        blockId: 'cov_native_block',
+        params: { '  x  ': '  value  ', '  ': 'skip', y: 1 },
+      }),
+    );
+    expect(trimmedParams.ok).toBe(true);
+    expect(trimmedParams.output).toEqual({ echoed: 'value' });
   });
 
   it('fails when native meta exists but executor missing', async () => {

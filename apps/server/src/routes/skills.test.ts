@@ -77,6 +77,22 @@ describe('skills routes', () => {
       body: JSON.stringify({ enabled: true }),
     });
     expect(missing.status).toBe(404);
+
+    // blank path id
+    const blank = await skills.request('/%20/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(blank.status).toBe(404);
+
+    // padded id still works
+    const on = await skills.request(`/%20${id}%20/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(on.status).toBe(200);
   });
 
   it('deletes skill and 404s missing', async () => {

@@ -145,4 +145,32 @@ describe('McpClient', () => {
     await c.disconnect();
     expect(c.connected).toBe(false);
   });
+
+  it('rejects unsupported transport', async () => {
+    const c = new McpClient();
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'weird',
+        transport: 'websocket' as 'stdio',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/Unsupported MCP transport/i);
+    expect(c.connected).toBe(false);
+  });
+
+  it('listTools returns empty array when server exposes none', async () => {
+    listToolsMock.mockResolvedValue({ tools: [] });
+    const c = new McpClient();
+    await expect(c.listTools()).resolves.toEqual([]);
+  });
+
+  it('callTool joins empty content as empty string', async () => {
+    callToolMock.mockResolvedValue({ isError: false, content: [] });
+    const c = new McpClient();
+    await expect(c.callTool('noop', {})).resolves.toEqual({
+      success: true,
+      output: '',
+    });
+  });
 });

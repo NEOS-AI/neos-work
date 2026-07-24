@@ -274,4 +274,20 @@ describe('media routes', () => {
     const del = await media.request('/file/no_such_file_xyz.png', { method: 'DELETE' });
     expect(del.status).toBe(404);
   });
+
+  it('GET/DELETE file succeeds for an existing media file', async () => {
+    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    const name = path.basename(TMP);
+    fs.writeFileSync(TMP, 'png-bytes');
+
+    const get = await media.request(`/file/${name}`);
+    expect(get.status).toBe(200);
+    expect(get.headers.get('content-type')).toMatch(/image|octet|png/i);
+    const buf = Buffer.from(await get.arrayBuffer());
+    expect(buf.toString()).toBe('png-bytes');
+
+    const del = await media.request(`/file/${name}`, { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    expect(fs.existsSync(TMP)).toBe(false);
+  });
 });

@@ -116,6 +116,8 @@ export function listMessages(sessionId: string): MessageRow[] {
     .all(trimmed) as MessageRow[];
 }
 
+const MESSAGE_ROLES = new Set(['user', 'assistant', 'system', 'tool']);
+
 export function addMessage(params: {
   sessionId: string;
   role: string;
@@ -124,15 +126,18 @@ export function addMessage(params: {
 }): MessageRow {
   const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
   if (!sessionId) throw new Error('sessionId is required');
-  const role = typeof params.role === 'string' ? params.role.trim() : '';
-  if (!role) throw new Error('role is required');
-  const content = typeof params.content === 'string' ? params.content : '';
+  const roleRaw = typeof params.role === 'string' ? params.role.trim().toLowerCase() : '';
+  if (!roleRaw || !MESSAGE_ROLES.has(roleRaw)) {
+    throw new Error('role must be user|assistant|system|tool');
+  }
+  // Preserve intentional whitespace in chat content; only coerce non-strings
+  const content = typeof params.content === 'string' ? params.content : String(params.content ?? '');
   const db = getDb();
   const id = nanoid(12);
   db.prepare(
     `INSERT INTO message (id, session_id, role, content, metadata)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, sessionId, role, content, JSON.stringify(params.metadata ?? null));
+  ).run(id, sessionId, roleRaw, content, JSON.stringify(params.metadata ?? null));
   return db.prepare('SELECT * FROM message WHERE id = ?').get(id) as MessageRow;
 }
 

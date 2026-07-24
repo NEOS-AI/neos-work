@@ -29,9 +29,11 @@ describe('memory CRUD', () => {
     createMemory({
       workspaceId: `  ${WS}  `,
       key: `  ${KEYS[0]!}  `,
-      content: 'padded',
+      content: '  padded content  ',
+      tags: ['  t1  ', '  ', 't2'],
     });
-    expect(getMemory(WS, KEYS[0]!)?.content).toBe('padded');
+    expect(getMemory(WS, KEYS[0]!)?.content).toBe('padded content');
+    expect(JSON.parse(getMemory(WS, KEYS[0]!)!.tags!)).toEqual(['t1', 't2']);
     expect(deleteMemory(`  ${WS}  `, `  ${KEYS[0]!}  `)).toBe(true);
   });
 

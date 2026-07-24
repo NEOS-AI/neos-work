@@ -25,10 +25,22 @@ describe('memory tools', () => {
   it('remember validates key and content length', async () => {
     const cb = mockCallbacks();
     const tool = createRememberTool(cb);
-    expect((await tool.execute({ key: '', content: 'x' })).success).toBe(false);
-    expect((await tool.execute({ key: 'a'.repeat(201), content: 'x' })).success).toBe(false);
-    expect((await tool.execute({ key: 'k', content: '' })).success).toBe(false);
-    expect((await tool.execute({ key: 'k', content: 'c'.repeat(10_001) })).success).toBe(false);
+    const emptyKey = await tool.execute({ key: '', content: 'x' });
+    expect(emptyKey.success).toBe(false);
+    expect(emptyKey.error).toMatch(/Key must be between 1 and 200/i);
+
+    const longKey = await tool.execute({ key: 'a'.repeat(201), content: 'x' });
+    expect(longKey.success).toBe(false);
+    expect(longKey.error).toMatch(/Key must be between 1 and 200/i);
+
+    const emptyContent = await tool.execute({ key: 'k', content: '' });
+    expect(emptyContent.success).toBe(false);
+    expect(emptyContent.error).toMatch(/Content must be between 1 and 10,000/i);
+
+    const longContent = await tool.execute({ key: 'k', content: 'c'.repeat(10_001) });
+    expect(longContent.success).toBe(false);
+    expect(longContent.error).toMatch(/Content must be between 1 and 10,000/i);
+
     expect(cb.save).not.toHaveBeenCalled();
   });
 

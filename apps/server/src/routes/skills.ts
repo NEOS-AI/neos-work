@@ -37,6 +37,14 @@ function upsertSkill(params: {
   version?: string;
   manifestJson?: string;
 }): SkillRow {
+  const name = typeof params.name === 'string' ? params.name.trim() : '';
+  if (!name) throw new Error('name is required');
+  const description =
+    typeof params.description === 'string' ? params.description.trim() || null : (params.description ?? null);
+  const source = typeof params.source === 'string' ? params.source.trim() : String(params.source ?? '');
+  const pathVal = typeof params.path === 'string' ? params.path.trim() : String(params.path ?? '');
+  const version =
+    typeof params.version === 'string' ? params.version.trim() || null : (params.version ?? null);
   const dbInst = getDb();
   const id = crypto.randomUUID();
   dbInst.prepare(
@@ -48,19 +56,23 @@ function upsertSkill(params: {
        path = excluded.path,
        version = excluded.version,
        manifest_json = excluded.manifest_json`,
-  ).run(id, params.name, params.description ?? null, params.source, params.path, params.version ?? null, params.manifestJson ?? null);
-  return dbInst.prepare('SELECT * FROM skill WHERE name = ?').get(params.name) as SkillRow;
+  ).run(id, name, description, source, pathVal, version, params.manifestJson ?? null);
+  return dbInst.prepare('SELECT * FROM skill WHERE name = ?').get(name) as SkillRow;
 }
 
 function toggleSkill(id: string, enabled: boolean): boolean {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
   const result = getDb()
     .prepare('UPDATE skill SET enabled = ? WHERE id = ?')
-    .run(enabled ? 1 : 0, id);
+    .run(enabled ? 1 : 0, trimmed);
   return result.changes > 0;
 }
 
 function deleteSkillById(id: string): boolean {
-  const result = getDb().prepare('DELETE FROM skill WHERE id = ?').run(id);
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return false;
+  const result = getDb().prepare('DELETE FROM skill WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 

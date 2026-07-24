@@ -24,9 +24,13 @@ export function createMemory(params: {
   const workspaceId = typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
   const key = typeof params.key === 'string' ? params.key.trim() : '';
   if (!workspaceId || !key) throw new Error('workspaceId and key are required');
+  const content =
+    typeof params.content === 'string' ? params.content.trim() : String(params.content ?? '');
+  const tagsStr = Array.isArray(params.tags)
+    ? JSON.stringify(params.tags.map((t) => String(t).trim()).filter(Boolean))
+    : null;
   const db = getDb();
   const id = crypto.randomUUID();
-  const tagsStr = params.tags ? JSON.stringify(params.tags) : null;
   db.prepare(
     `INSERT INTO memory (id, workspace_id, key, content, tags)
      VALUES (?, ?, ?, ?, ?)
@@ -34,7 +38,7 @@ export function createMemory(params: {
        content = excluded.content,
        tags = excluded.tags,
        updated_at = datetime('now')`,
-  ).run(id, workspaceId, key, params.content, tagsStr);
+  ).run(id, workspaceId, key, content, tagsStr);
   return getMemory(workspaceId, key)!;
 }
 

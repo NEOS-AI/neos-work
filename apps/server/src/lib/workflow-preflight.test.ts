@@ -261,6 +261,24 @@ describe('assessWorkflowPreflight', () => {
     );
     expect(r.ok).toBe(false);
     expect(r.issues.some((i) => i.code === 'missing_cloudflare_creds')).toBe(true);
+
+    // padded provider still treated as cloudflare
+    const padded = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: '  CloudFlare  ' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(padded.issues.some((i) => i.code === 'missing_cloudflare_creds')).toBe(true);
+    expect(padded.issues.some((i) => i.code === 'missing_vercel_token')).toBe(false);
   });
 
   it('requires Slack and Discord secrets when those nodes exist', () => {
@@ -355,6 +373,18 @@ describe('assessWorkflowPreflight', () => {
     expect(r.ok).toBe(false);
     expect(r.issues.some((i) => i.code === 'no_trigger')).toBe(true);
     expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+
+    const blankEdge = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [{ id: 'e1', source: '  ', target: 'o' }],
+      },
+      {},
+    );
+    expect(blankEdge.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
   it('treats whitespace-only secrets as missing', () => {

@@ -44,7 +44,10 @@ export function assessWorkflowPreflight(
   }
 
   for (const edge of edges) {
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+    const source = typeof edge.source === 'string' ? edge.source.trim() : '';
+    const target = typeof edge.target === 'string' ? edge.target.trim() : '';
+    if (!source || !target || !nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      // Also treat blank endpoints as dangling (executor skips them, but graph is invalid)
       issues.push({
         code: 'dangling_edge',
         severity: 'error',
@@ -104,8 +107,10 @@ export function assessWorkflowPreflight(
     }
 
     if (node.type === 'deploy') {
-      // Match DeployNode runtime: unknown/missing provider defaults to vercel
-      const provider = config.provider === 'cloudflare' ? 'cloudflare' : 'vercel';
+      // Match DeployNode runtime: trim/lower-case; unknown/missing defaults to vercel
+      const providerRaw =
+        typeof config.provider === 'string' ? config.provider.trim().toLowerCase() : '';
+      const provider = providerRaw === 'cloudflare' ? 'cloudflare' : 'vercel';
       if (provider === 'vercel' && !secret(secrets, 'VERCEL_API_TOKEN')) {
         issues.push({
           code: 'missing_vercel_token',

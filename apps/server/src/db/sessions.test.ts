@@ -117,6 +117,9 @@ describe('sessions CRUD', () => {
       /sessionId/i,
     );
     expect(() => addMessage({ sessionId: s.id, role: '  ', content: 'x' })).toThrow(/role/i);
+    expect(() => addMessage({ sessionId: s.id, role: 'admin', content: 'x' })).toThrow(
+      /user\|assistant\|system\|tool/i,
+    );
   });
 
   it('trims session id and workspaceId; blank id is not-found', () => {
