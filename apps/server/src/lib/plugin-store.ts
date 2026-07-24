@@ -81,7 +81,9 @@ export async function upgradeSkillToPlugin(options: {
   name?: string;
   description?: string;
 }): Promise<PluginManifest> {
-  const safe = options.skillDirName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const trimmed =
+    typeof options.skillDirName === 'string' ? options.skillDirName.trim() : '';
+  const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
   if (!safe) throw new Error('Invalid skill directory name');
   const dir = path.join(SKILLS_DIR, safe);
   const skillPath = path.join(dir, 'SKILL.md');
@@ -108,10 +110,11 @@ export async function upgradeSkillToPlugin(options: {
     // ignore
   }
   const firstLine = skillBody.split('\n').find((l) => l.trim() && !l.startsWith('---') && !l.startsWith('name:')) ?? '';
-  const title = options.name ?? safe;
+  const title =
+    (typeof options.name === 'string' ? options.name.trim() : '') || safe;
   const description =
-    options.description
-    ?? (firstLine.replace(/^#+\s*/, '').slice(0, 200) || `Plugin upgraded from skill ${safe}`);
+    (typeof options.description === 'string' ? options.description.trim() : '')
+    || (firstLine.replace(/^#+\s*/, '').slice(0, 200) || `Plugin upgraded from skill ${safe}`);
 
   const manifest: PluginManifest = {
     schemaVersion: 'od-plugin/v1',

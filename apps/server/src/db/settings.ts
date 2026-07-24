@@ -27,12 +27,14 @@ export function getAllSettings(): Record<string, string> {
 }
 
 export function getSetting(key: string): string | undefined {
+  const k = typeof key === 'string' ? key.trim() : '';
+  if (!k) return undefined;
   const db = getDb();
-  const row = db.prepare('SELECT value FROM setting WHERE key = ?').get(key) as
+  const row = db.prepare('SELECT value FROM setting WHERE key = ?').get(k) as
     | { value: string }
     | undefined;
   if (!row) return undefined;
-  if (isSensitiveKey(key) && isEncrypted(row.value)) {
+  if (isSensitiveKey(k) && isEncrypted(row.value)) {
     return decrypt(row.value);
   }
   return row.value;
@@ -54,16 +56,18 @@ export function getSecretSetting(key: string): string | undefined {
 }
 
 export function setSetting(key: string, value: string): void {
+  const k = typeof key === 'string' ? key.trim() : '';
+  if (!k) return;
   const db = getDb();
   // Trim secrets on write so `"  sk  "` never persists padded (align with getSecretSetting).
   // Empty secrets stay as plain "" (encrypting empty breaks isEncrypted shape / decrypt path).
-  const normalized = isSensitiveKey(key) ? value.trim() : value;
+  const normalized = isSensitiveKey(k) ? value.trim() : value;
   const storedValue =
-    isSensitiveKey(key) && normalized.length > 0 ? encrypt(normalized) : normalized;
+    isSensitiveKey(k) && normalized.length > 0 ? encrypt(normalized) : normalized;
   db.prepare(
     `INSERT INTO setting (key, value, updated_at) VALUES (?, ?, datetime('now'))
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
-  ).run(key, storedValue);
+  ).run(k, storedValue);
 }
 
 /** Migrate plaintext sensitive values to encrypted format (one-time on startup). */
@@ -176,7 +180,9 @@ export function getExecutionSettings(runtime?: {
 }
 
 export function deleteSetting(key: string): boolean {
+  const k = typeof key === 'string' ? key.trim() : '';
+  if (!k) return false;
   const db = getDb();
-  const result = db.prepare('DELETE FROM setting WHERE key = ?').run(key);
+  const result = db.prepare('DELETE FROM setting WHERE key = ?').run(k);
   return result.changes > 0;
 }

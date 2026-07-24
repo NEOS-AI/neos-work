@@ -73,6 +73,32 @@ describe('media routes', () => {
     expect(body.data.some((f) => f.filename === path.basename(TMP))).toBe(true);
   });
 
+  it('GET /files trims and clamps limit query', async () => {
+    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    fs.writeFileSync(TMP, 'png');
+
+    const one = await media.request('/files?limit=%20%201%20%20');
+    expect(one.status).toBe(200);
+    const oneBody = await one.json() as { data: unknown[] };
+    expect(oneBody.data.length).toBe(1);
+
+    const blank = await media.request('/files?limit=%20%20');
+    expect(blank.status).toBe(200);
+    const blankBody = await blank.json() as { data: unknown[] };
+    // blank → default 100
+    expect(blankBody.data.some((f: { filename?: string }) => f.filename === path.basename(TMP))).toBe(true);
+
+    const junk = await media.request('/files?limit=abc');
+    expect(junk.status).toBe(200);
+    const junkBody = await junk.json() as { data: unknown[] };
+    expect(Array.isArray(junkBody.data)).toBe(true);
+
+    const huge = await media.request('/files?limit=9999');
+    expect(huge.status).toBe(200);
+    const hugeBody = await huge.json() as { data: unknown[] };
+    expect(hugeBody.data.length).toBeLessThanOrEqual(500);
+  });
+
   it('POST /image rejects missing prompt and missing API key', async () => {
     const noPrompt = await media.request('/image', {
       method: 'POST',

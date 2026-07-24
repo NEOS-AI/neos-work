@@ -56,6 +56,19 @@ describe('memory-store', () => {
     expect(toggleMemory('missing-id')).toBeNull();
   });
 
+  it('trims ids and rejects blank id lookups', () => {
+    const created = createMemory({
+      name: NAME,
+      type: 'user',
+      content: 'id trim',
+    });
+    expect(getMemory(`  ${created.id}  `)?.content).toBe('id trim');
+    expect(getMemory('   ')).toBeNull();
+    expect(updateMemory('  ', { content: 'nope' })).toBeNull();
+    expect(deleteMemory('  ')).toBe(false);
+    deleteMemory(created.id);
+  });
+
   it('creates memories of each type and lists them', () => {
     const types = ['user', 'session', 'skill', 'reference'] as const;
     const ids: string[] = [];

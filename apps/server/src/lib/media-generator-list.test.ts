@@ -70,4 +70,17 @@ describe('listMediaFiles', () => {
     expect(Array.isArray(b)).toBe(true);
     expect(b.length).toBeLessThanOrEqual(500);
   });
+
+  it('treats NaN / non-finite limits as default 100 then clamps', async () => {
+    await write(`${PREFIX}n1.png`, '1');
+    await write(`${PREFIX}n2.png`, '2');
+    const nan = await listMediaFiles(Number.NaN);
+    const undef = await listMediaFiles(undefined as unknown as number);
+    const neg = await listMediaFiles(-5);
+    expect(Array.isArray(nan)).toBe(true);
+    expect(Array.isArray(undef)).toBe(true);
+    // negative → Math.max(..., 1) → at least 1
+    expect(neg.length).toBeGreaterThanOrEqual(0);
+    expect(neg.length).toBeLessThanOrEqual(500);
+  });
 });

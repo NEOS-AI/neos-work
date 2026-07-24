@@ -72,7 +72,9 @@ export function listMemories(): MemoryItem[] {
 }
 
 export function getMemory(id: string): MemoryItem | null {
-  return listMemories().find((m) => m.id === id) ?? null;
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return null;
+  return listMemories().find((m) => m.id === trimmed) ?? null;
 }
 
 export function createMemory(input: CreateMemoryInput): MemoryItem {

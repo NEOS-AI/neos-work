@@ -57,6 +57,15 @@ describe('design-system-store', () => {
     expect(await createDesignSystem('../evil')).toBeNull();
     expect(await createDesignSystem('')).toBeNull();
     expect(await createDesignSystem('has space')).toBeNull();
+    expect(await createDesignSystem('   ')).toBeNull();
+  });
+
+  it('trims name and description on create', async () => {
+    const created = await createDesignSystem(`  ${NAME}  `, '  desc  ');
+    expect(created).not.toBeNull();
+    expect(created!.name).toBe(NAME);
+    expect(created!.description).toBe('desc');
+    await deleteDesignSystem(created!.id);
   });
 
   it('returns null for unknown id', async () => {

@@ -10,6 +10,8 @@ afterEach(() => {
 describe('plugin-runner', () => {
   it('resumeRun returns false for unknown run', () => {
     expect(resumeRun('no-run', 'stage', {})).toBe(false);
+    expect(resumeRun('  ', 'stage', {})).toBe(false);
+    expect(resumeRun('run', '  ', {})).toBe(false);
   });
 
   it('runs human-only pipeline with resume', async () => {

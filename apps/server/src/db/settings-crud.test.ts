@@ -34,6 +34,16 @@ describe('settings CRUD + encryption migration', () => {
     expect(getSetting('missing-key-xyz')).toBeUndefined();
   });
 
+  it('trims keys on get/set/delete; blank key is no-op', () => {
+    const key = `cov.settings.crud.${process.pid}`;
+    setSetting(`  ${key}  `, 'v1');
+    expect(getSetting(`  ${key}  `)).toBe('v1');
+    expect(getSetting('   ')).toBeUndefined();
+    setSetting('   ', 'ignored');
+    expect(deleteSetting('   ')).toBe(false);
+    expect(deleteSetting(`  ${key}  `)).toBe(true);
+  });
+
   it('encrypts sensitive keys at rest and decrypts on read', () => {
     setSetting('apiKey.anthropic', 'sk-ant-secret');
     const row = getDb()

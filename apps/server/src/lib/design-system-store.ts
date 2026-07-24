@@ -133,20 +133,23 @@ export async function updateDesignSystemContent(id: string, content: string): Pr
 }
 
 export async function createDesignSystem(name: string, description?: string): Promise<DesignSystem | null> {
-  if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) return null;
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  const trimmedDescription =
+    typeof description === 'string' ? description.trim() || undefined : description;
+  if (!trimmedName || !/^[a-zA-Z0-9_-]+$/.test(trimmedName)) return null;
   await ensureDesignSystemsDir();
 
-  const dirPath = path.join(DESIGN_SYSTEMS_DIR, name);
+  const dirPath = path.join(DESIGN_SYSTEMS_DIR, trimmedName);
   try {
     await fs.mkdir(dirPath, { recursive: false });
   } catch {
     return null; // already exists
   }
 
-  const templateContent = `# ${name} Design System
+  const templateContent = `# ${trimmedName} Design System
 
 ## Overview
-${description ?? 'Describe your design system here.'}
+${trimmedDescription ?? 'Describe your design system here.'}
 
 ## Brand Colors
 - Primary: #3B82F6
@@ -169,15 +172,15 @@ Describe your component conventions here.
 
   await fs.writeFile(path.join(dirPath, 'DESIGN.md'), templateContent, 'utf8');
 
-  if (description) {
+  if (trimmedDescription) {
     await fs.writeFile(
       path.join(dirPath, 'manifest.json'),
-      JSON.stringify({ name, description, version: '1.0.0' }, null, 2),
+      JSON.stringify({ name: trimmedName, description: trimmedDescription, version: '1.0.0' }, null, 2),
       'utf8',
     );
   }
 
-  return getDesignSystem(dirToId(name));
+  return getDesignSystem(dirToId(trimmedName));
 }
 
 export async function deleteDesignSystem(id: string): Promise<boolean> {

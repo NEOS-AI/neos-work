@@ -16,7 +16,8 @@ const MEDIA_DIR = MEDIA_DIR_EXPORT;
 
 /** List generated media files for FileViewer */
 media.get('/files', async (c) => {
-  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '100'), 1), 500);
+  const limitRaw = (c.req.query('limit') ?? '').trim();
+  const limit = limitRaw ? Math.min(Math.max(Number(limitRaw) || 100, 1), 500) : 100;
   const files = await listMediaFiles(limit);
   return c.json({ ok: true, data: files });
 });

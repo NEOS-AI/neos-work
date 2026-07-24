@@ -15,6 +15,7 @@ afterEach(async () => {
 describe('plugin-store upgradeSkillToPlugin', () => {
   it('rejects invalid empty dir name', async () => {
     await expect(upgradeSkillToPlugin({ skillDirName: '' })).rejects.toThrow(/Invalid|not found/i);
+    await expect(upgradeSkillToPlugin({ skillDirName: '   ' })).rejects.toThrow(/Invalid/i);
   });
 
   it('getPlugin trims id and returns null for blank', async () => {
@@ -35,14 +36,15 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     );
 
     const plugin = await upgradeSkillToPlugin({
-      skillDirName: DIR_NAME,
-      name: 'Cov Plugin',
-      description: 'From test',
+      skillDirName: `  ${DIR_NAME}  `,
+      name: '  Cov Plugin  ',
+      description: '  From test  ',
     });
 
     expect(plugin.schemaVersion).toBe('od-plugin/v1');
     expect(plugin.id).toBe(DIR_NAME);
     expect(plugin.name).toBe('Cov Plugin');
+    expect(plugin.description).toBe('From test');
     expect(plugin.pipeline).toHaveLength(4);
     expect(plugin.pipeline?.map((s) => s.id)).toEqual(['discovery', 'plan', 'execute', 'critique']);
 

@@ -73,10 +73,13 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
 }
 
 export function resumeRun(runId: string, stageId: string, response: Record<string, unknown>): boolean {
-  const pending = pendingRuns.get(runId);
-  if (!pending || pending.stageId !== stageId) return false;
-  pending.resolve(response);
-  pendingRuns.delete(runId);
+  const rid = typeof runId === 'string' ? runId.trim() : '';
+  const sid = typeof stageId === 'string' ? stageId.trim() : '';
+  if (!rid || !sid) return false;
+  const pending = pendingRuns.get(rid);
+  if (!pending || pending.stageId !== sid) return false;
+  pending.resolve(response ?? {});
+  pendingRuns.delete(rid);
   return true;
 }
 

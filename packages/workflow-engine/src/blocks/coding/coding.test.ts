@@ -40,6 +40,12 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/No code/);
     });
 
+    it('rejects oversized code payloads', async () => {
+      const result = await exec().execute(ctx({ code: 'x'.repeat(100_001) }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/max length/i);
+    });
+
     it('falls back unknown language to js', async () => {
       const result = await exec().execute(ctx({ code: '3 + 4', language: 'ruby' }));
       expect(result.ok).toBe(true);
@@ -147,6 +153,14 @@ describe('coding blocks', () => {
       const result = await write().execute(ctx({ path: '/tmp/evil.txt', content: 'nope' }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/workspaces|relative/i);
+    });
+
+    it('rejects oversized write content', async () => {
+      const result = await write().execute(
+        ctx({ path: testFile, content: 'x'.repeat(2 * 1024 * 1024 + 1) }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/max length/i);
     });
 
     it('writes then reads a relative workspace file', async () => {

@@ -315,4 +315,20 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     // cleanup
     try { fs.rmSync(dir, { recursive: true }); } catch { /* ignore */ }
   });
+
+  it('sanitizes runId and rejects blank / traversal-like ids', () => {
+    expect(() => ensureCliWorkspace('   ')).toThrow(/Invalid runId/i);
+    expect(() => ensureCliWorkspace('')).toThrow(/Invalid runId/i);
+
+    const dirty = `../evil_${process.pid}`;
+    const dir = ensureCliWorkspace(dirty);
+    const workspacesRoot = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
+    expect(path.resolve(dir).startsWith(path.resolve(workspacesRoot) + path.sep)).toBe(true);
+    expect(path.basename(dir)).toBe(`___evil_${process.pid}`);
+    try { fs.rmSync(dir, { recursive: true }); } catch { /* ignore */ }
+
+    const padded = ensureCliWorkspace(`  run_${process.pid}  `);
+    expect(path.basename(padded)).toBe(`run_${process.pid}`);
+    try { fs.rmSync(padded, { recursive: true }); } catch { /* ignore */ }
+  });
 });

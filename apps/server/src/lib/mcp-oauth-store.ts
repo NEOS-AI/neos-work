@@ -63,7 +63,23 @@ export async function loadToken(serverId: string): Promise<McpOAuthToken | null>
   if (!file) return null;
   try {
     const raw = await fs.readFile(file, 'utf-8');
-    return JSON.parse(raw) as McpOAuthToken;
+    const token = JSON.parse(raw) as McpOAuthToken;
+    // Normalize tokens loaded from disk (legacy files may have whitespace)
+    const accessToken =
+      typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
+    if (!accessToken) return null;
+    return {
+      ...token,
+      serverId: sanitizeServerId(token.serverId) ?? sanitizeServerId(serverId) ?? serverId,
+      accessToken,
+      refreshToken:
+        typeof token.refreshToken === 'string'
+          ? token.refreshToken.trim() || undefined
+          : token.refreshToken,
+      scope: typeof token.scope === 'string' ? token.scope.trim() || undefined : token.scope,
+      tokenType:
+        typeof token.tokenType === 'string' ? token.tokenType.trim() || undefined : token.tokenType,
+    };
   } catch {
     return null;
   }

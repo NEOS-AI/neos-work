@@ -177,9 +177,19 @@ export function buildNeosCliEnv(opts: {
 /**
  * Ensure a per-run workspace directory exists under
  * `~/.config/neos-work/workspaces/<runId>/` (plan Task 3).
+ * runId is sanitized to block path traversal.
  */
 export function ensureCliWorkspace(runId: string): string {
-  const dir = path.join(os.homedir(), '.config', 'neos-work', 'workspaces', runId);
+  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
+  if (!safe) throw new Error('Invalid runId');
+  const base = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
+  const dir = path.join(base, safe);
+  // Defence in depth: resolved path must stay under workspaces root
+  const resolved = path.resolve(dir);
+  if (!resolved.startsWith(path.resolve(base) + path.sep) && resolved !== path.resolve(base)) {
+    throw new Error('Invalid runId');
+  }
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

@@ -49,6 +49,18 @@ describe('createFirstHtmlArtifact', () => {
     expect(id).toBeUndefined();
   });
 
+  it('returns undefined when workflowId/runId blank after trim', () => {
+    const id = createFirstHtmlArtifact({
+      workflowId: '  ',
+      runId: 'run',
+      nodeResults: {
+        a: { status: 'completed', output: '<html>x</html>' },
+      },
+      create: () => ({ id: 'should-not' }),
+    });
+    expect(id).toBeUndefined();
+  });
+
   it('passes trimmed content and node metadata to create', () => {
     let captured: {
       workflowId: string;

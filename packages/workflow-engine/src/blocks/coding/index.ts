@@ -19,14 +19,20 @@ import type { BlockExecutionContext, BlockResult } from '../types.js';
 const WORKSPACES_DIR = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
 const ALLOWED_TEST_PREFIXES = ['npm', 'pnpm', 'yarn', 'pytest', 'go', 'cargo'];
 const CODE_EVAL_TIMEOUT_MS = 5000;
+/** Prevent pathological payloads (plan Task 12 coding blocks). */
+const CODE_EVAL_MAX_CHARS = 100_000;
+const FILE_READ_MAX_BYTES = 2 * 1024 * 1024;
+const FILE_WRITE_MAX_CHARS = 2 * 1024 * 1024;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function safePath(inputPath: string, baseDir?: string): string | null {
+  const trimmed = typeof inputPath === 'string' ? inputPath.trim() : '';
+  if (!trimmed) return null;
   // Reject absolute paths or traversal attempts
-  if (path.isAbsolute(inputPath)) return null;
+  if (path.isAbsolute(trimmed)) return null;
   const base = baseDir ?? WORKSPACES_DIR;
-  const resolved = path.resolve(base, inputPath);
+  const resolved = path.resolve(base, trimmed);
   if (!resolved.startsWith(path.resolve(base) + path.sep) && resolved !== path.resolve(base)) {
     return null;
   }
@@ -83,6 +89,14 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
 
   if (!code.trim()) {
     return { ok: false, output: null, error: 'No code provided', durationMs: Date.now() - start };
+  }
+  if (code.length > CODE_EVAL_MAX_CHARS) {
+    return {
+      ok: false,
+      output: null,
+      error: `Code exceeds max length (${CODE_EVAL_MAX_CHARS} characters)`,
+      durationMs: Date.now() - start,
+    };
   }
 
   if (language === 'python') {
@@ -144,6 +158,18 @@ async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult>
   }
 
   try {
+    const st = await fs.stat(resolved);
+    if (!st.isFile()) {
+      return { ok: false, output: null, error: 'Path is not a file', durationMs: Date.now() - start };
+    }
+    if (st.size > FILE_READ_MAX_BYTES) {
+      return {
+        ok: false,
+        output: null,
+        error: `File exceeds max size (${FILE_READ_MAX_BYTES} bytes)`,
+        durationMs: Date.now() - start,
+      };
+    }
     const content = await fs.readFile(resolved, 'utf8');
     return { ok: true, output: content, durationMs: Date.now() - start };
   } catch (err) {
@@ -165,6 +191,14 @@ async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult
 
   if (!inputPath) {
     return { ok: false, output: false, error: 'No path provided', durationMs: Date.now() - start };
+  }
+  if (content.length > FILE_WRITE_MAX_CHARS) {
+    return {
+      ok: false,
+      output: false,
+      error: `Content exceeds max length (${FILE_WRITE_MAX_CHARS} characters)`,
+      durationMs: Date.now() - start,
+    };
   }
 
   // Write restricted to WORKSPACES_DIR only

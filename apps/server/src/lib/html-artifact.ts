@@ -33,16 +33,22 @@ export function createFirstHtmlArtifact(options: {
     nodeId: string;
   }) => { id: string };
 }): string | undefined {
+  const workflowId = typeof options.workflowId === 'string' ? options.workflowId.trim() : '';
+  const runId = typeof options.runId === 'string' ? options.runId.trim() : '';
+  if (!workflowId || !runId) return undefined;
+
   for (const [nodeId, result] of Object.entries(options.nodeResults)) {
     const r = result as { output?: unknown; status?: string };
     if (r.status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
+    const nid = typeof nodeId === 'string' ? nodeId.trim() : String(nodeId);
+    if (!nid) continue;
     const artifact = options.create({
-      workflowId: options.workflowId,
-      runId: options.runId,
-      name: `Output (${nodeId})`,
+      workflowId,
+      runId,
+      name: `Output (${nid})`,
       contentType: 'text/html',
       content: r.output.trim(),
-      nodeId,
+      nodeId: nid,
     });
     return artifact.id;
   }
