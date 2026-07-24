@@ -37,8 +37,17 @@ plugins.post('/upgrade-from-skill', async (c) => {
   const body: UpgradeBody = await c.req.json<UpgradeBody>().catch(() => ({}));
 
   const skillId = typeof body.skillId === 'string' ? body.skillId.trim() : undefined;
+  if (skillId && (skillId.length > 100 || /[\0\r\n]/.test(skillId))) {
+    return c.json({ ok: false, error: 'Invalid skillId' }, 400);
+  }
   let skillDirName =
     typeof body.skillDirName === 'string' ? body.skillDirName.trim() || undefined : undefined;
+  if (
+    skillDirName
+    && (skillDirName.length > 200 || /[\0\r\n]/.test(skillDirName) || skillDirName.includes('/') || skillDirName.includes('\\'))
+  ) {
+    return c.json({ ok: false, error: 'Invalid skillDirName' }, 400);
+  }
   if (!skillDirName && skillId) {
     const row = getDb().prepare('SELECT path, name FROM skill WHERE id = ?').get(skillId) as
       | { path: string; name: string }
@@ -53,9 +62,15 @@ plugins.post('/upgrade-from-skill', async (c) => {
     return c.json({ ok: false, error: 'skillId or skillDirName required' }, 400);
   }
 
-  const name = typeof body.name === 'string' ? body.name.trim() || undefined : undefined;
-  const description =
+  let name = typeof body.name === 'string' ? body.name.trim() || undefined : undefined;
+  if (name && (name.length > 200 || /[\0\r\n]/.test(name))) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  let description =
     typeof body.description === 'string' ? body.description.trim() || undefined : undefined;
+  if (description && description.length > 2_000) {
+    description = description.slice(0, 2_000);
+  }
 
   try {
     const plugin = await upgradeSkillToPlugin({
@@ -131,13 +146,25 @@ plugins.post('/:id/run/:runId/resume', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
   const stageId = typeof body.stageId === 'string' ? body.stageId.trim() : '';
-  if (!stageId) return c.json({ ok: false, error: 'stageId required' }, 400);
+  if (!stageId || stageId.length > 100 || /[\0\r\n]/.test(stageId)) {
+    return c.json({ ok: false, error: 'stageId required' }, 400);
+  }
   const runId = c.req.param('runId').trim();
-  if (!runId) return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
+  if (!runId || runId.length > 100 || /[\0\r\n]/.test(runId)) {
+    return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
+  }
   // Ensure plugin still exists before resuming (id is part of the public path)
   const plugin = await getPlugin(pluginId);
   if (!plugin) return c.json({ ok: false, error: 'Not found' }, 404);
-  const ok = resumeRun(runId, stageId, body.response ?? {});
+  const response =
+    body.response && typeof body.response === 'object' && !Array.isArray(body.response)
+      ? body.response
+      : {};
+  // Cap HITL response payload
+  if (JSON.stringify(response).length > 200_000) {
+    return c.json({ ok: false, error: 'response payload too large' }, 400);
+  }
+  const ok = resumeRun(runId, stageId, response);
   if (!ok) return c.json({ ok: false, error: 'Run not found or stage mismatch' }, 404);
   return c.json({ ok: true });
 });

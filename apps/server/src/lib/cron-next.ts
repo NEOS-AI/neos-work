@@ -41,7 +41,10 @@ export function estimateNextCronRun(
   expression: string,
   options?: { from?: Date; timezone?: string; horizonDays?: number },
 ): Date | null {
-  const expr = typeof expression === 'string' ? expression.trim() : '';
+  const raw = typeof expression === 'string' ? expression : '';
+  // Reject control chars before trim (trim would strip CR/LF)
+  if (!raw || raw.length > 200 || /[\0\r\n]/.test(raw)) return null;
+  const expr = raw.trim();
   if (!expr) return null;
   const parts = expr.split(/\s+/);
   if (parts.length !== 5) return null;
@@ -86,7 +89,8 @@ export function estimateNextCronRun(
 
 export function isValidTimeZone(timeZone: string): boolean {
   const tz = typeof timeZone === 'string' ? timeZone.trim() : '';
-  if (!tz) return false;
+  // IANA names are short; reject control chars / pathological lengths
+  if (!tz || tz.length > 100 || /[\0\r\n]/.test(tz)) return false;
   try {
     Intl.DateTimeFormat(undefined, { timeZone: tz });
     return true;

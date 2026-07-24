@@ -71,6 +71,12 @@ describe('resolveMessageText', () => {
       ),
     ).toBe('a=1 b={{bad key}} c={{x.y}}');
   });
+
+  it('caps resolved message text length', async () => {
+    const { MESSAGE_TEXT_MAX_CHARS } = await import('./message-text.js');
+    const text = resolveMessageText({ text: 'x'.repeat(MESSAGE_TEXT_MAX_CHARS + 50) }, {});
+    expect(text.length).toBe(MESSAGE_TEXT_MAX_CHARS);
+  });
 });
 
 describe('resolveMaxResults', () => {

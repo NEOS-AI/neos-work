@@ -7,6 +7,14 @@ describe('estimateNextCronRun', () => {
     expect(estimateNextCronRun('* * *')).toBeNull();
     expect(estimateNextCronRun('')).toBeNull();
     expect(estimateNextCronRun('* * * * * *')).toBeNull(); // 6 fields
+    expect(estimateNextCronRun('0 9 * * *\n')).toBeNull();
+    expect(estimateNextCronRun('x'.repeat(250))).toBeNull();
+  });
+
+  it('rejects control-char or overlong timezones', () => {
+    expect(isValidTimeZone('UTC')).toBe(true);
+    expect(isValidTimeZone('bad\ntz')).toBe(false);
+    expect(isValidTimeZone('z'.repeat(101))).toBe(false);
   });
 
   it('finds next hourly run at minute 0', () => {

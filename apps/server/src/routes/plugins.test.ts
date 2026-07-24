@@ -72,6 +72,21 @@ describe('plugins routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects path-like or control-char skillDirName', async () => {
+    const pathLike = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ skillDirName: '../escape' }),
+    });
+    expect(pathLike.status).toBe(400);
+    const ctrl = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ skillDirName: 'bad\ndir' }),
+    });
+    expect(ctrl.status).toBe(400);
+  });
+
   it('upgrade rejects invalid JSON body', async () => {
     const res = await plugins.request('/upgrade-from-skill', {
       method: 'POST',

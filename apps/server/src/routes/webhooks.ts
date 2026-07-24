@@ -29,7 +29,10 @@ function getRateLimitStatus(workflowId: string) {
 }
 
 function paramWorkflowId(c: { req: { param: (k: string) => string } }): string {
-  return c.req.param('workflowId').trim();
+  const id = c.req.param('workflowId').trim();
+  // Workflow UUID/id practical bound
+  if (!id || id.length > 100 || /[\0\r\n]/.test(id)) return '';
+  return id;
 }
 
 // GET webhook secret

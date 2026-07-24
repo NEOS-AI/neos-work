@@ -66,37 +66,49 @@ routines.post('/', async (c) => {
   const timezone =
     typeof body.timezone === 'string' ? body.timezone.trim() || undefined : undefined;
 
-  if (!name || name.length > 200) {
+  if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
-  if (!workflowId) {
+  if (!workflowId || workflowId.length > 100 || /[\0\r\n]/.test(workflowId)) {
     return c.json({ ok: false, error: 'workflowId is required' }, 400);
   }
   if (!schedule) {
     return c.json({ ok: false, error: 'schedule is required' }, 400);
   }
+  // Cron expression practical bound (5 fields + long tokens)
+  if (schedule.length > 200 || /[\0\r\n]/.test(schedule)) {
+    return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
+  }
   if (!cron.validate(schedule)) {
     return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
+  }
+  if (timezone && (timezone.length > 100 || /[\0\r\n]/.test(timezone))) {
+    return c.json({ ok: false, error: 'Invalid timezone' }, 400);
   }
 
   // Validate workflow exists
   const wf = workflowDb.getWorkflow(workflowId);
   if (!wf) return c.json({ ok: false, error: 'Workflow not found' }, 404);
 
-  const routine = db.createRoutine({
-    name,
-    workflowId,
-    schedule,
-    timezone,
-    enabled: body.enabled !== false,
-    inputs: body.inputs,
-  });
+  try {
+    const routine = db.createRoutine({
+      name,
+      workflowId,
+      schedule,
+      timezone,
+      enabled: body.enabled !== false,
+      inputs: body.inputs,
+    });
 
-  if (routine.enabled) {
-    addOrUpdateSchedule(routine.id, routine.schedule, true, routine.timezone);
+    if (routine.enabled) {
+      addOrUpdateSchedule(routine.id, routine.schedule, true, routine.timezone);
+    }
+
+    return c.json({ ok: true, data: routine }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create routine';
+    return c.json({ ok: false, error: msg }, 400);
   }
-
-  return c.json({ ok: true, data: routine }, 201);
 });
 
 routines.put('/:id', async (c) => {
@@ -117,7 +129,7 @@ routines.put('/:id', async (c) => {
     body.name !== undefined
       ? (typeof body.name === 'string' ? body.name.trim() : '')
       : undefined;
-  if (name !== undefined && (!name || name.length > 200)) {
+  if (name !== undefined && (!name || name.length > 200 || /[\0\r\n]/.test(name))) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
   const schedule =
@@ -127,13 +139,19 @@ routines.put('/:id', async (c) => {
   if (schedule !== undefined && !schedule) {
     return c.json({ ok: false, error: 'schedule is required' }, 400);
   }
-  if (schedule !== undefined && !cron.validate(schedule)) {
+  if (
+    schedule !== undefined
+    && (schedule.length > 200 || /[\0\r\n]/.test(schedule) || !cron.validate(schedule))
+  ) {
     return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
   }
   const timezone =
     body.timezone !== undefined
       ? (typeof body.timezone === 'string' ? body.timezone.trim() || 'UTC' : 'UTC')
       : undefined;
+  if (timezone !== undefined && (timezone.length > 100 || /[\0\r\n]/.test(timezone))) {
+    return c.json({ ok: false, error: 'Invalid timezone' }, 400);
+  }
 
   const updated = db.updateRoutine(id, {
     name,

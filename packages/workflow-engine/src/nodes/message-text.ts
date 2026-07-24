@@ -23,26 +23,37 @@ function pickConfigMessage(config: Record<string, unknown> | undefined): string 
   return '';
 }
 
+/** Cap resolved messaging body before Slack/Discord hard limits apply. */
+export const MESSAGE_TEXT_MAX_CHARS = 16_000;
+
 export function resolveMessageText(
   config: Record<string, unknown> | undefined,
   inputs: Record<string, unknown>,
 ): string {
   const raw = pickConfigMessage(config);
 
+  let text = '';
   if (raw) {
-    let text = raw;
+    text = raw;
     for (const [key, val] of Object.entries(inputs)) {
       // Only interpolate safe placeholder keys (alnum/_/-) — matches plugin runner
       if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
       const replacement = typeof val === 'string' ? val : JSON.stringify(val);
       text = text.split(`{{${key}}}`).join(replacement);
     }
-    return text;
+  } else if (typeof inputs['text'] === 'string') {
+    text = inputs['text'].trim();
+  } else if (Object.keys(inputs).length === 0) {
+    text = '';
+  } else {
+    text = JSON.stringify(inputs);
   }
 
-  if (typeof inputs['text'] === 'string') return inputs['text'].trim();
-  if (Object.keys(inputs).length === 0) return '';
-  return JSON.stringify(inputs);
+  // Cap body size; null-byte rejection stays at Slack/Discord nodes for clear errors
+  if (text.length > MESSAGE_TEXT_MAX_CHARS) {
+    text = text.slice(0, MESSAGE_TEXT_MAX_CHARS);
+  }
+  return text;
 }
 
 /** Clamp Tavily max_results to a safe integer range (NodeConfig: 1–20). */

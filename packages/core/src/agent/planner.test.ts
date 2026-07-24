@@ -33,6 +33,16 @@ describe('Planner', () => {
     expect(steps[0]!.toolName!.length).toBeLessThanOrEqual(100);
   });
 
+  it('strips null bytes and caps oversized goal/context without failing', async () => {
+    const adapter = mockAdapter([JSON.stringify([{ description: 'ok' }])]);
+    const steps = await new Planner(adapter).plan(
+      `goal${'\0'}part`,
+      'ctx'.repeat(20_000),
+    );
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+    expect(steps[0]!.description).toBeTruthy();
+  });
+
   it('extracts JSON from markdown fences / surrounding text', async () => {
     const adapter = mockAdapter([
       'Here is the plan:\n```json\n[{"description":"One"}]\n```\n',

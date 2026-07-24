@@ -200,11 +200,18 @@ export function updateWorkflow(
   if (description && description.length > WORKFLOW_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
   }
-  const designSystemId = input.designSystemId !== undefined
+  let designSystemId = input.designSystemId !== undefined
     ? (typeof input.designSystemId === 'string'
         ? input.designSystemId.trim() || null
         : (input.designSystemId ?? '').toString().trim() || null)
     : existing.design_system_id;
+  // designSystemId is a short hash/id — reject control chars / overlong
+  if (
+    designSystemId
+    && (designSystemId.length > 64 || /[\0\r\n]/.test(designSystemId))
+  ) {
+    return undefined;
+  }
   const nodes =
     input.nodes !== undefined
       ? JSON.stringify(Array.isArray(input.nodes) ? input.nodes : [])

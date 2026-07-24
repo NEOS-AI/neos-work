@@ -36,9 +36,19 @@ export class Planner {
     context: string = '',
     signal?: AbortSignal,
   ): Promise<AgentStep[]> {
-    const goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
-    const contextText =
+    /** Cap planner goal/context (align with orchestrator goal bound). */
+    const GOAL_MAX = 50_000;
+    const CONTEXT_MAX = 32_000;
+    let goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
+    let contextText =
       typeof context === 'string' ? context.trim() : String(context ?? '').trim();
+    // Drop null bytes that break prompts
+    if (/\0/.test(goalText)) goalText = goalText.replace(/\0/g, '');
+    if (/\0/.test(contextText)) contextText = contextText.replace(/\0/g, '');
+    if (goalText.length > GOAL_MAX) goalText = goalText.slice(0, GOAL_MAX);
+    if (contextText.length > CONTEXT_MAX) {
+      contextText = contextText.slice(0, CONTEXT_MAX) + '\n…[context truncated]';
+    }
 
     if (!goalText) {
       return [

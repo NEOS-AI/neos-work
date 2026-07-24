@@ -40,6 +40,37 @@ describe('routines routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects control-char name and overlong schedule on create', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const badName = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'bad\nname',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+        enabled: false,
+      }),
+    });
+    expect(badName.status).toBe(400);
+    const longSched = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Ok',
+        workflowId: wf.id,
+        schedule: '0 '.repeat(150) + '* * *',
+        enabled: false,
+      }),
+    });
+    expect(longSched.status).toBe(400);
+  });
+
   it('rejects invalid cron schedule on create and update', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,
