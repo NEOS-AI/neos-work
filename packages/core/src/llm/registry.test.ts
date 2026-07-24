@@ -29,6 +29,8 @@ describe('ProviderRegistry', () => {
     reg.register(mockAdapter([''], { id: 'openai', models: [modelB] }));
 
     expect(reg.get('anthropic')?.name).toBe('Mock');
+    expect(reg.get('  ANTHROPIC  ')?.name).toBe('Mock');
+    expect(reg.get('   ')).toBeUndefined();
     expect(reg.getAll()).toHaveLength(2);
     expect(reg.getAllModels().map((m) => m.id).sort()).toEqual(['a-1', 'b-1']);
   });
@@ -39,6 +41,8 @@ describe('ProviderRegistry', () => {
     const hit = reg.findModel('b-1');
     expect(hit?.model).toEqual(modelB);
     expect(hit?.provider.id).toBe('openai');
+    expect(reg.findModel('  b-1  ')?.model.id).toBe('b-1');
     expect(reg.findModel('missing')).toBeUndefined();
+    expect(reg.findModel('   ')).toBeUndefined();
   });
 });

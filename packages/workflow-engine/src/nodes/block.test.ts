@@ -139,9 +139,46 @@ describe('BlockNode', () => {
   });
 
   it('fails when native meta exists but executor missing', async () => {
+    // Meta-only registration: no getNativeExecutor entry
+    registerBlockMeta({
+      id: 'cov_meta_only_native',
+      name: 'Meta Only Native',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'native',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const result = await node.execute(ctx({ blockId: 'cov_meta_only_native' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/Native executor not found/i);
+  });
+
+  it('rejects unknown implementationType', async () => {
+    registerBlockMeta({
+      id: 'cov_unknown_impl',
+      name: 'Unknown Impl',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'wasm' as never,
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const result = await node.execute(ctx({ blockId: 'cov_unknown_impl' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/Unknown implementationType/i);
+  });
+
+  it('coerces non-string blockId via String()', async () => {
     const meta: WorkflowBlock = {
-      id: 'cov_meta_only',
-      name: 'Meta Only',
+      id: '12345',
+      name: 'Numeric Id',
       domain: 'general',
       category: 'test',
       description: 'test',
@@ -151,18 +188,15 @@ describe('BlockNode', () => {
       inputDescription: '',
       outputDescription: '',
     };
-    // register with a throwaway then overwrite meta path by only registering meta via registerNativeBlock with empty execute that we remove - actually registry always sets executor
-    // Simulate: register executor then call with wrong type - use prompt type without template handled by agent
     registerNativeBlock(
       {
-        blockId: 'cov_meta_only',
-        execute: async () => ({ ok: true, output: 'ok', durationMs: 0 }),
+        blockId: '12345',
+        execute: async () => ({ ok: true, output: 'num', durationMs: 0 }),
       },
-      { ...meta, implementationType: 'native' },
+      meta,
     );
-    // re-register only changes executor; test missing executor by using unregistered id with... can't inject meta alone.
-    // Instead test that native path returns error if we use id with native type but after registering a dummy and checking - skip
-    const result = await node.execute(ctx({ blockId: 'cov_meta_only', params: {} }));
+    const result = await node.execute(ctx({ blockId: 12345 as never }));
     expect(result.ok).toBe(true);
+    expect(result.output).toBe('num');
   });
 });

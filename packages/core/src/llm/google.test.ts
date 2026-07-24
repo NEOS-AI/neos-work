@@ -203,5 +203,11 @@ describe('GoogleAdapter', () => {
 
     generateContent.mockRejectedValueOnce(new Error('401'));
     await expect(adapter.validateApiKey('bad')).resolves.toBe(false);
+    await expect(adapter.validateApiKey('   ')).resolves.toBe(false);
+  });
+
+  it('rejects blank/whitespace api keys in constructor', () => {
+    expect(() => new GoogleAdapter('   ')).toThrow(/GOOGLE_API_KEY/i);
+    expect(() => new GoogleAdapter('')).toThrow(/GOOGLE_API_KEY/i);
   });
 });

@@ -15,6 +15,24 @@ describe('OpenAIAdapter', () => {
     expect(adapter.getModels()).toEqual(OPENAI_MODELS);
   });
 
+  it('trims apiKey/baseUrl and strips trailing slash', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({
+      provider: 'openai',
+      apiKey: '  sk-x  ',
+      baseUrl: '  https://example.test/v1/  ',
+    });
+    await expect(adapter.validateApiKey('  sk-check  ')).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.test/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer sk-check' },
+      }),
+    );
+    await expect(adapter.validateApiKey('   ')).resolves.toBe(false);
+  });
+
   it('uses Ollama identity, models, and default base URL', () => {
     const adapter = new OpenAIAdapter({ provider: 'ollama' });
     expect(adapter.id).toBe('ollama');

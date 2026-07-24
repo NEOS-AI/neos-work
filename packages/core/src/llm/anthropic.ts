@@ -14,7 +14,11 @@ export class AnthropicAdapter implements LLMProviderAdapter {
   private client: Anthropic;
 
   constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
+    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (!key) {
+      throw new Error('ANTHROPIC_API_KEY is required');
+    }
+    this.client = new Anthropic({ apiKey: key });
   }
 
   getModels(): Model[] {
@@ -122,8 +126,10 @@ export class AnthropicAdapter implements LLMProviderAdapter {
   }
 
   async validateApiKey(apiKey: string): Promise<boolean> {
+    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (!key) return false;
     try {
-      const client = new Anthropic({ apiKey });
+      const client = new Anthropic({ apiKey: key });
       await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1,

@@ -14,7 +14,11 @@ export class GoogleAdapter implements LLMProviderAdapter {
   private client: GoogleGenAI;
 
   constructor(apiKey: string) {
-    this.client = new GoogleGenAI({ apiKey });
+    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (!key) {
+      throw new Error('GOOGLE_API_KEY is required');
+    }
+    this.client = new GoogleGenAI({ apiKey: key });
   }
 
   getModels(): Model[] {
@@ -92,8 +96,10 @@ export class GoogleAdapter implements LLMProviderAdapter {
   }
 
   async validateApiKey(apiKey: string): Promise<boolean> {
+    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (!key) return false;
     try {
-      const client = new GoogleGenAI({ apiKey });
+      const client = new GoogleGenAI({ apiKey: key });
       await client.models.generateContent({
         model: 'gemini-2.0-flash',
         contents: 'hi',

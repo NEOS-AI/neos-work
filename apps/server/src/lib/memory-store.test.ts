@@ -56,6 +56,37 @@ describe('memory-store', () => {
     expect(toggleMemory('missing-id')).toBeNull();
   });
 
+  it('rejects blank name on create and normalizes unknown type to user', () => {
+    expect(() =>
+      createMemory({ name: '   ', type: 'user', content: 'x' }),
+    ).toThrow(/name is required/i);
+
+    const m = createMemory({
+      name: NAME,
+      type: 'not-a-type' as never,
+      content: '  body  ',
+    });
+    expect(m.type).toBe('user');
+    expect(m.content).toBe('body');
+    deleteMemory(m.id);
+  });
+
+  it('updateMemory rejects blank name and normalizes type fallback', () => {
+    const m = createMemory({ name: NAME, type: 'session', content: 's' });
+    expect(updateMemory(m.id, { name: '   ' })).toBeNull();
+    expect(getMemory(m.id)?.name).toBe(NAME);
+
+    const updated = updateMemory(m.id, { type: 'bogus' as never, content: '  next  ' });
+    expect(updated?.type).toBe('session'); // fallback to existing type
+    expect(updated?.content).toBe('next');
+
+    // export empty when no enabled memories
+    updateMemory(m.id, { enabled: false });
+    // only this suite's disabled mem — export may still contain others; just ensure no throw
+    expect(typeof exportMemories()).toBe('string');
+    deleteMemory(m.id);
+  });
+
   it('trims ids and rejects blank id lookups', () => {
     const created = createMemory({
       name: NAME,

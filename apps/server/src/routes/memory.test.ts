@@ -125,4 +125,63 @@ describe('memory routes', () => {
     const missing = await memory.request(`/${id}`);
     expect(missing.status).toBe(404);
   });
+
+  it('PUT validates name/type and 404s blank path ids', async () => {
+    const create = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        type: 'reference',
+        content: 'ref body',
+        enabled: true,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const blankName = await memory.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(blankName.status).toBe(400);
+    expect(((await blankName.json()) as { error: string }).error).toMatch(/name cannot be empty/i);
+
+    const badType = await memory.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'galaxy' }),
+    });
+    expect(badType.status).toBe(400);
+    expect(((await badType.json()) as { error: string }).error).toMatch(/invalid memory type/i);
+
+    const rename = await memory.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `  ${NAME}  `, type: '  skill  ', enabled: false }),
+    });
+    expect(rename.status).toBe(200);
+    const renamed = await rename.json() as { data: { name: string; type: string; enabled: boolean } };
+    expect(renamed.data.name).toBe(NAME);
+    expect(renamed.data.type).toBe('skill');
+    expect(renamed.data.enabled).toBe(false);
+
+    expect((await memory.request('/%20')).status).toBe(404);
+    expect((await memory.request('/%20', { method: 'DELETE' })).status).toBe(404);
+    expect((await memory.request('/%20/toggle', { method: 'PUT' })).status).toBe(404);
+    expect((await memory.request('/missing-mem-id/toggle', { method: 'PUT' })).status).toBe(404);
+
+    await memory.request(`/${id}`, { method: 'DELETE' });
+  });
+
+  it('rejects whitespace-only content on create', async () => {
+    const res = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME, type: 'user', content: '  \n\t  ' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/name, type, and content/i);
+  });
 });

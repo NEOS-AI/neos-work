@@ -159,6 +159,38 @@ describe('McpClient', () => {
     expect(c.connected).toBe(false);
   });
 
+  it('trims stdio command/args and http url; rejects blank tool name', async () => {
+    const c = new McpClient();
+    await c.connect({
+      id: '1',
+      name: '  stdio  ',
+      transport: '  STDIO  ' as 'stdio',
+      command: '  npx  ',
+      args: ['  -y  ', '  ', 'server'],
+      enabled: true,
+    });
+    expect(c.connected).toBe(true);
+
+    await expect(c.callTool('   ', {})).rejects.toThrow(/Tool name is required/i);
+
+    callToolMock.mockResolvedValue({
+      isError: false,
+      content: [{ type: 'text', text: 'ok' }],
+    });
+    await c.callTool('  t1  ', { x: 1 });
+    expect(callToolMock).toHaveBeenCalledWith({ name: 't1', arguments: { x: 1 } });
+
+    const c2 = new McpClient();
+    await c2.connect({
+      id: '2',
+      name: 'http',
+      transport: '  HTTP  ' as 'http',
+      url: '  https://mcp.example/sse  ',
+      enabled: true,
+    });
+    expect(c2.connected).toBe(true);
+  });
+
   it('listTools returns empty array when server exposes none', async () => {
     listToolsMock.mockResolvedValue({ tools: [] });
     const c = new McpClient();

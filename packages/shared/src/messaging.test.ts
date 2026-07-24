@@ -21,10 +21,13 @@ describe('isDiscordWebhookUrl', () => {
 
   it('rejects non-https, wrong host, or non-webhook paths', () => {
     expect(isDiscordWebhookUrl('')).toBe(false);
+    expect(isDiscordWebhookUrl('   ')).toBe(false);
     expect(isDiscordWebhookUrl('http://discord.com/api/webhooks/1/abc')).toBe(false);
     expect(isDiscordWebhookUrl('https://evil.example.com/api/webhooks/1/abc')).toBe(false);
     expect(isDiscordWebhookUrl('https://discord.com.evil.com/api/webhooks/1/abc')).toBe(false);
+    expect(isDiscordWebhookUrl('https://cdn.discord.com/api/webhooks/1/abc')).toBe(false);
     expect(isDiscordWebhookUrl('https://discord.com/api/channels/1')).toBe(false);
+    expect(isDiscordWebhookUrl('https://discord.com/API/WEBHOOKS/1/abc')).toBe(true); // path case-insensitive
     expect(isDiscordWebhookUrl('not a url')).toBe(false);
   });
 });

@@ -24,12 +24,16 @@ export class OpenAIAdapter implements LLMProviderAdapter {
   }) {
     this.id = options.provider;
     this.name = options.provider === 'openai' ? 'OpenAI' : 'Ollama';
-    this.apiKey = options.apiKey ?? '';
+    this.apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
+    const base =
+      typeof options.baseUrl === 'string' ? options.baseUrl.trim() : '';
     this.baseUrl =
-      options.baseUrl ??
-      (options.provider === 'ollama'
+      base
+      || (options.provider === 'ollama'
         ? 'http://localhost:11434/v1'
         : 'https://api.openai.com/v1');
+    // Strip trailing slash for consistent request paths
+    this.baseUrl = this.baseUrl.replace(/\/+$/, '');
   }
 
   getModels(): Model[] {
@@ -38,9 +42,11 @@ export class OpenAIAdapter implements LLMProviderAdapter {
 
   async validateApiKey(apiKey: string): Promise<boolean> {
     if (this.id === 'ollama') return true; // Ollama runs locally, no key needed
+    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (!key) return false;
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: { Authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(5000),
       });
       return res.ok;

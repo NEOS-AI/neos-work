@@ -38,19 +38,29 @@ export class McpClient {
   }
 
   async connect(config: McpServerConfig): Promise<void> {
-    if (config.transport === 'stdio') {
-      if (!config.command) throw new Error(`MCP server "${config.name}" requires a command for stdio transport`);
-      const transport = new StdioClientTransport({
-        command: config.command,
-        args: config.args ?? [],
+    const name = typeof config.name === 'string' ? config.name.trim() : 'unknown';
+    const transportRaw =
+      typeof config.transport === 'string' ? config.transport.trim().toLowerCase() : '';
+    const transport = transportRaw === 'http' || transportRaw === 'stdio' ? transportRaw : '';
+
+    if (transport === 'stdio') {
+      const command = typeof config.command === 'string' ? config.command.trim() : '';
+      if (!command) throw new Error(`MCP server "${name}" requires a command for stdio transport`);
+      const args = Array.isArray(config.args)
+        ? config.args.map((a) => String(a).trim()).filter(Boolean)
+        : [];
+      const transportImpl = new StdioClientTransport({
+        command,
+        args,
       });
-      await this.client.connect(transport);
-    } else if (config.transport === 'http') {
-      if (!config.url) throw new Error(`MCP server "${config.name}" requires a URL for HTTP transport`);
-      const transport = new SSEClientTransport(new URL(config.url));
-      await this.client.connect(transport);
+      await this.client.connect(transportImpl);
+    } else if (transport === 'http') {
+      const url = typeof config.url === 'string' ? config.url.trim() : '';
+      if (!url) throw new Error(`MCP server "${name}" requires a URL for HTTP transport`);
+      const transportImpl = new SSEClientTransport(new URL(url));
+      await this.client.connect(transportImpl);
     } else {
-      throw new Error(`Unsupported MCP transport: ${(config as McpServerConfig).transport}`);
+      throw new Error(`Unsupported MCP transport: ${config.transport}`);
     }
     this._connected = true;
   }
@@ -58,14 +68,17 @@ export class McpClient {
   async listTools(): Promise<McpToolDefinition[]> {
     const result = await this.client.listTools();
     return result.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
+      name: typeof t.name === 'string' ? t.name.trim() : t.name,
+      description:
+        typeof t.description === 'string' ? t.description.trim() || undefined : t.description,
       inputSchema: t.inputSchema as Record<string, unknown>,
     }));
   }
 
   async callTool(name: string, input: Record<string, unknown>): Promise<{ success: boolean; output: unknown }> {
-    const result = await this.client.callTool({ name, arguments: input });
+    const toolName = typeof name === 'string' ? name.trim() : '';
+    if (!toolName) throw new Error('Tool name is required');
+    const result = await this.client.callTool({ name: toolName, arguments: input ?? {} });
 
     // Normalize content to string
     const contentArr = result.content as Array<{ type: string; text?: string; data?: unknown }>;

@@ -13,8 +13,10 @@ export class ProviderRegistry {
     this.adapters.set(adapter.id, adapter);
   }
 
-  get(id: ProviderId): LLMProviderAdapter | undefined {
-    return this.adapters.get(id);
+  get(id: ProviderId | string): LLMProviderAdapter | undefined {
+    const key = typeof id === 'string' ? id.trim().toLowerCase() : id;
+    if (!key) return undefined;
+    return this.adapters.get(key as ProviderId);
   }
 
   getAll(): LLMProvider[] {
@@ -30,8 +32,10 @@ export class ProviderRegistry {
   }
 
   findModel(modelId: string): { provider: LLMProviderAdapter; model: Model } | undefined {
+    const id = typeof modelId === 'string' ? modelId.trim() : '';
+    if (!id) return undefined;
     for (const adapter of this.adapters.values()) {
-      const model = adapter.getModels().find((m) => m.id === modelId);
+      const model = adapter.getModels().find((m) => m.id === id);
       if (model) return { provider: adapter, model };
     }
     return undefined;

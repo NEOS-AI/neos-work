@@ -14,5 +14,7 @@ describe('formatBytes', () => {
   it('guards invalid numbers', () => {
     expect(formatBytes(Number.NaN)).toBe('0 B');
     expect(formatBytes(-1)).toBe('0 B');
+    expect(formatBytes(Number.POSITIVE_INFINITY)).toBe('0 B');
+    expect(formatBytes(Number.NEGATIVE_INFINITY)).toBe('0 B');
   });
 });
