@@ -28,6 +28,15 @@ describe('memory CRUD', () => {
       createMemory({ workspaceId: '  ', key: KEYS[0]!, content: 'x' }),
     ).toThrow(/workspaceId and key/i);
 
+    expect(() =>
+      createMemory({ workspaceId: 'ws\nid', key: KEYS[0]!, content: 'x' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createMemory({ workspaceId: WS, key: KEYS[0]!, content: 'hi\0' }),
+    ).toThrow(/control characters/i);
+    expect(searchMemory(WS, 'q\nquery')).toEqual([]);
+    expect(getMemory('ws\nid', KEYS[0]!)).toBeUndefined();
+
     createMemory({
       workspaceId: `  ${WS}  `,
       key: `  ${KEYS[0]!}  `,

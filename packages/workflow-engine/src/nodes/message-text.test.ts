@@ -77,6 +77,21 @@ describe('resolveMessageText', () => {
     const text = resolveMessageText({ text: 'x'.repeat(MESSAGE_TEXT_MAX_CHARS + 50) }, {});
     expect(text.length).toBe(MESSAGE_TEXT_MAX_CHARS);
   });
+
+  it('caps placeholder replacement length and skips overlong keys', () => {
+    const long = 'v'.repeat(20_000);
+    const out = resolveMessageText({ textTemplate: 'x={{k}}' }, { k: long });
+    expect(out.length).toBeLessThanOrEqual(8_000 + 2); // 'x=' + capped replacement
+    expect(out.startsWith('x=')).toBe(true);
+    // Overlong key name is skipped
+    const longKey = 'k'.repeat(101);
+    expect(
+      resolveMessageText(
+        { textTemplate: `{{${longKey}}}` },
+        { [longKey]: 'NO' },
+      ),
+    ).toBe(`{{${longKey}}}`);
+  });
 });
 
 describe('resolveMaxResults', () => {

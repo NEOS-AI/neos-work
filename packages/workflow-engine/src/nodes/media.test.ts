@@ -83,6 +83,24 @@ describe('MediaNode', () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
   });
 
+  it('drops control-char or overlong SERVER_TOKEN (empty Authorization bearer)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'img.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (const badToken of [`tok${'\n'}en`, `tok${'\0'}en`, 't'.repeat(8_193)]) {
+      fetchMock.mockClear();
+      await MediaNode.execute(
+        ctx({
+          config: { mediaType: 'image', prompt: 'a cat' },
+          settings: { SERVER_URL: 'http://localhost:3001', SERVER_TOKEN: badToken },
+        }),
+      );
+      expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer ');
+    }
+  });
+
   it('falls back to default SERVER_URL when whitespace-only', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'img.png' } }),

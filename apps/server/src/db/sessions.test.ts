@@ -63,6 +63,19 @@ describe('sessions CRUD', () => {
     deleteSession(s.id);
   });
 
+  it('rejects control-char workspaceId/title; ignores control-char lookup ids', () => {
+    expect(() => createSession({ workspaceId: 'bad\nid' })).toThrow(/workspaceId/i);
+    expect(() =>
+      createSession({ workspaceId: 'default', title: 'bad\ntitle' }),
+    ).toThrow(/control characters/i);
+    expect(getSession('id\nwith')).toBeUndefined();
+    expect(listSessions('ws\nid')).toEqual(listSessions()); // unsafe filter → all
+    const s = createSession({ workspaceId: 'default', title: '_cov_sess' });
+    updateSessionTitle(s.id, 'clean\nbad');
+    expect(getSession(s.id)?.title).toBeNull();
+    deleteSession(s.id);
+  });
+
   it('rejects workspace path control characters', () => {
     expect(() =>
       createWorkspace({ name: WS_NAME, path: '/tmp/\0evil' }),

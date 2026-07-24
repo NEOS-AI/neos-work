@@ -39,7 +39,17 @@ export function createFirstHtmlArtifact(options: {
 }): string | undefined {
   const workflowId = typeof options.workflowId === 'string' ? options.workflowId.trim() : '';
   const runId = typeof options.runId === 'string' ? options.runId.trim() : '';
-  if (!workflowId || !runId) return undefined;
+  // Cap path/DB ids; reject control chars (align with artifact route safeId)
+  if (
+    !workflowId
+    || !runId
+    || workflowId.length > 100
+    || runId.length > 100
+    || /[\0\r\n]/.test(workflowId)
+    || /[\0\r\n]/.test(runId)
+  ) {
+    return undefined;
+  }
 
   for (const [nodeId, result] of Object.entries(options.nodeResults ?? {})) {
     const r = result as { output?: unknown; status?: string };

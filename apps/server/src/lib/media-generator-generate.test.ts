@@ -87,6 +87,14 @@ describe('generateImage', () => {
     await expect(generateImage({ prompt: 'x', apiKey: '   ' })).rejects.toThrow(/apiKey/i);
   });
 
+  it('rejects control-char or overlong apiKey', async () => {
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk\nbad' })).rejects.toThrow(/apiKey/i);
+    await expect(
+      generateImage({ prompt: 'x', apiKey: 'k'.repeat(9_000) }),
+    ).rejects.toThrow(/apiKey/i);
+    await expect(generateAudio({ text: 'hi', apiKey: 'sk\nbad' })).rejects.toThrow(/apiKey/i);
+  });
+
   it('rejects image prompts over 4000 characters', async () => {
     await expect(
       generateImage({ prompt: 'p'.repeat(4001), apiKey: 'sk' }),

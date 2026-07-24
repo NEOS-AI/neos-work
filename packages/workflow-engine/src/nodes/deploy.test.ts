@@ -138,6 +138,24 @@ describe('DeployNode', () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
   });
 
+  it('drops control-char or overlong SERVER_TOKEN (empty Authorization bearer)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { url: 'https://x.app' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (const badToken of [`tok${'\n'}en`, `tok${'\0'}en`, 't'.repeat(8_193)]) {
+      fetchMock.mockClear();
+      await DeployNode.execute(
+        ctx({
+          inputs: { content: '<p>x</p>' },
+          settings: { SERVER_URL: 'http://localhost:9', SERVER_TOKEN: badToken },
+        }),
+      );
+      expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer ');
+    }
+  });
+
   it('uses config.content and inputs.projectName', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { url: 'https://cf.pages.dev' } }),

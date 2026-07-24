@@ -33,6 +33,18 @@ describe('Planner', () => {
     expect(steps[0]!.toolName!.length).toBeLessThanOrEqual(100);
   });
 
+  it('drops control-char tool names from planner steps', async () => {
+    const adapter = mockAdapter([
+      JSON.stringify([
+        { description: 'A', toolName: 'bad\ntool' },
+        { description: 'B', toolName: 'read_file' },
+      ]),
+    ]);
+    const steps = await new Planner(adapter).plan('goal');
+    expect(steps[0]!.toolName).toBeUndefined();
+    expect(steps[1]!.toolName).toBe('read_file');
+  });
+
   it('strips null bytes and caps oversized goal/context without failing', async () => {
     const adapter = mockAdapter([JSON.stringify([{ description: 'ok' }])]);
     const steps = await new Planner(adapter).plan(

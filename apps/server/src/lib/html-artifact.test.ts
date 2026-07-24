@@ -73,6 +73,28 @@ describe('createFirstHtmlArtifact', () => {
     expect(id).toBe('art-a');
   });
 
+  it('returns undefined for control-char or overlong workflowId/runId', () => {
+    const nodeResults = {
+      a: { status: 'completed', output: '<html>x</html>' },
+    };
+    expect(
+      createFirstHtmlArtifact({
+        workflowId: 'wf\nid',
+        runId: 'run',
+        nodeResults,
+        create: () => ({ id: 'nope' }),
+      }),
+    ).toBeUndefined();
+    expect(
+      createFirstHtmlArtifact({
+        workflowId: 'wf',
+        runId: 'r'.repeat(101),
+        nodeResults,
+        create: () => ({ id: 'nope' }),
+      }),
+    ).toBeUndefined();
+  });
+
   it('returns undefined when workflowId/runId blank after trim', () => {
     const id = createFirstHtmlArtifact({
       workflowId: '  ',

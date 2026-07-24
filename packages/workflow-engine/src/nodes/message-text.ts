@@ -35,18 +35,33 @@ export function resolveMessageText(
   let text = '';
   if (raw) {
     text = raw;
+    // Cap placeholder fan-out so pathological input maps cannot explode string work
+    const PLACEHOLDER_KEY_MAX = 100;
+    const REPLACEMENT_MAX = 8_000;
+    let keyCount = 0;
     for (const [key, val] of Object.entries(inputs)) {
       // Only interpolate safe placeholder keys (alnum/_/-) — matches plugin runner
-      if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
-      const replacement = typeof val === 'string' ? val : JSON.stringify(val);
+      if (!/^[a-zA-Z0-9_-]+$/.test(key) || key.length > 100) continue;
+      if (++keyCount > PLACEHOLDER_KEY_MAX) break;
+      let replacement = typeof val === 'string' ? val : JSON.stringify(val);
+      if (typeof replacement !== 'string') replacement = String(replacement ?? '');
+      if (replacement.length > REPLACEMENT_MAX) {
+        replacement = replacement.slice(0, REPLACEMENT_MAX);
+      }
       text = text.split(`{{${key}}}`).join(replacement);
+      // Early stop if body already past cap (avoid further growth)
+      if (text.length > MESSAGE_TEXT_MAX_CHARS * 2) break;
     }
   } else if (typeof inputs['text'] === 'string') {
     text = inputs['text'].trim();
   } else if (Object.keys(inputs).length === 0) {
     text = '';
   } else {
-    text = JSON.stringify(inputs);
+    try {
+      text = JSON.stringify(inputs);
+    } catch {
+      text = '';
+    }
   }
 
   // Cap body size; null-byte rejection stays at Slack/Discord nodes for clear errors

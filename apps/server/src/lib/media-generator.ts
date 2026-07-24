@@ -9,6 +9,15 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 
+/** Cap OpenAI API key length; reject control chars (header hygiene). */
+const API_KEY_MAX_CHARS = 8_192;
+
+function sanitizeApiKey(raw: unknown): string {
+  const key = typeof raw === 'string' ? raw.trim() : '';
+  if (!key || key.length > API_KEY_MAX_CHARS || /[\0\r\n]/.test(key)) return '';
+  return key;
+}
+
 function getClient(apiKey: string) {
   return new OpenAI({ apiKey });
 }
@@ -113,7 +122,7 @@ export async function generateImage(options: {
   const rawQuality =
     typeof options.quality === 'string' ? options.quality.trim().toLowerCase() : 'standard';
   const quality = (IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard') as 'standard' | 'hd';
-  const apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
+  const apiKey = sanitizeApiKey(options.apiKey);
   if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
 
@@ -189,7 +198,7 @@ export async function generateAudio(options: {
   const rawModel =
     typeof options.model === 'string' ? options.model.trim().toLowerCase() : 'tts-1';
   const model = (TTS_MODELS.has(rawModel) ? rawModel : 'tts-1') as 'tts-1' | 'tts-1-hd';
-  const apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
+  const apiKey = sanitizeApiKey(options.apiKey);
   if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
 

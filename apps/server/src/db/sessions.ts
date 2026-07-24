@@ -28,12 +28,26 @@ export interface MessageRow {
 
 const THINKING_MODES = new Set(['none', 'low', 'medium', 'high']);
 const WORKSPACE_TYPES = new Set(['local', 'remote']);
+/** Practical bound for session / workspace / message ids (nanoid / UUID). */
+const LOOKUP_ID_MAX_CHARS = 100;
+/** Cap session title length (UI list hygiene). */
+const SESSION_TITLE_MAX = 200;
+
+/** Trim + reject blank / control-char / overlong lookup ids. */
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  const id = typeof raw === 'string' ? raw.trim() : '';
+  if (!id || id.length > max || /[\0\r\n]/.test(id)) return '';
+  return id;
+}
 
 // --- Sessions ---
 
 export function listSessions(workspaceId?: string): SessionRow[] {
   const db = getDb();
-  const ws = typeof workspaceId === 'string' ? workspaceId.trim() || undefined : undefined;
+  const wsRaw =
+    typeof workspaceId === 'string' ? workspaceId.trim() || undefined : undefined;
+  // Drop unsafe filter (list all when invalid) — matches route safeRouteId
+  const ws = wsRaw ? safeLookupId(wsRaw) || undefined : undefined;
   if (ws) {
     return db
       .prepare('SELECT * FROM session WHERE workspace_id = ? ORDER BY updated_at DESC')
@@ -43,7 +57,7 @@ export function listSessions(workspaceId?: string): SessionRow[] {
 }
 
 export function getSession(id: string): SessionRow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   return db.prepare('SELECT * FROM session WHERE id = ?').get(trimmed) as SessionRow | undefined;
@@ -56,17 +70,18 @@ export function createSession(params: {
   model?: string;
   thinkingMode?: string;
 }): SessionRow {
-  const workspaceId =
-    typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
+  const workspaceId = safeLookupId(params.workspaceId);
   if (!workspaceId) {
     throw new Error('workspaceId is required');
   }
-  /** Cap session title length (UI list hygiene). */
-  const SESSION_TITLE_MAX = 200;
   let title =
     params.title !== undefined
       ? (typeof params.title === 'string' ? params.title.trim() || null : null)
       : null;
+  // Reject control chars in titles (list/UI hygiene)
+  if (title && /[\0\r\n]/.test(title)) {
+    throw new Error('title contains invalid control characters');
+  }
   if (title && title.length > SESSION_TITLE_MAX) {
     title = title.slice(0, SESSION_TITLE_MAX);
   }
@@ -98,7 +113,7 @@ export function createSession(params: {
 }
 
 export function deleteSession(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM session WHERE id = ?').run(trimmed);
@@ -106,11 +121,13 @@ export function deleteSession(id: string): boolean {
 }
 
 export function updateSessionTitle(id: string, title: string): void {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return;
   const db = getDb();
   let name = typeof title === 'string' ? title.trim() : '';
-  if (name.length > 200) name = name.slice(0, 200);
+  // Drop control-char titles rather than persisting them
+  if (/[\0\r\n]/.test(name)) name = '';
+  if (name.length > SESSION_TITLE_MAX) name = name.slice(0, SESSION_TITLE_MAX);
   db.prepare("UPDATE session SET title = ?, updated_at = datetime('now') WHERE id = ?").run(
     name || null,
     trimmed,
@@ -118,7 +135,7 @@ export function updateSessionTitle(id: string, title: string): void {
 }
 
 export function touchSession(id: string): void {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return;
   const db = getDb();
   db.prepare("UPDATE session SET updated_at = datetime('now') WHERE id = ?").run(trimmed);
@@ -127,7 +144,7 @@ export function touchSession(id: string): void {
 // --- Messages ---
 
 export function listMessages(sessionId: string): MessageRow[] {
-  const trimmed = typeof sessionId === 'string' ? sessionId.trim() : '';
+  const trimmed = safeLookupId(sessionId);
   if (!trimmed) return [];
   const db = getDb();
   return db
@@ -147,7 +164,7 @@ export function addMessage(params: {
   content: string;
   metadata?: Record<string, unknown>;
 }): MessageRow {
-  const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
+  const sessionId = safeLookupId(params.sessionId);
   if (!sessionId) throw new Error('sessionId is required');
   const roleRaw = typeof params.role === 'string' ? params.role.trim().toLowerCase() : '';
   if (!roleRaw || !MESSAGE_ROLES.has(roleRaw)) {
@@ -192,7 +209,7 @@ export function listWorkspaces(): WorkspaceRow[] {
 }
 
 export function getWorkspace(id: string): WorkspaceRow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   return db.prepare('SELECT * FROM workspace WHERE id = ?').get(trimmed) as WorkspaceRow | undefined;
@@ -245,7 +262,7 @@ export function updateWorkspace(
   id: string,
   params: { name?: string; path?: string },
 ): WorkspaceRow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const ws = getWorkspace(trimmed);
@@ -271,7 +288,7 @@ export function updateWorkspace(
 }
 
 export function deleteWorkspace(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed || trimmed === 'default') return false; // Protect the default workspace
   const db = getDb();
   const result = db.prepare('DELETE FROM workspace WHERE id = ?').run(trimmed);

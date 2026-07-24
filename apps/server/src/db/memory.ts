@@ -28,16 +28,32 @@ export const MEMORY_DB_KEY_MAX_CHARS = 200;
 export const MEMORY_DB_TAGS_MAX = 50;
 export const MEMORY_DB_TAGS_JSON_MAX_CHARS = 4_000;
 
+/** Cap workspace id lookups (align with session safeLookupId). */
+const MEMORY_WORKSPACE_ID_MAX = 100;
+/** Cap search query string. */
+const MEMORY_SEARCH_QUERY_MAX = 2_000;
+
+function safeWorkspaceId(raw: unknown): string {
+  const ws = typeof raw === 'string' ? raw.trim() : '';
+  if (!ws || ws.length > MEMORY_WORKSPACE_ID_MAX || hasUnsafeKeyChars(ws)) return '';
+  return ws;
+}
+
 export function createMemory(params: {
   workspaceId: string;
   key: string;
   content: string;
   tags?: string[];
 }): MemoryRow {
-  const workspaceId = typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
+  const workspaceIdRaw =
+    typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
   const key = typeof params.key === 'string' ? params.key.trim() : '';
+  if (workspaceIdRaw && hasUnsafeKeyChars(workspaceIdRaw)) {
+    throw new Error('key/workspaceId contains invalid control characters');
+  }
+  const workspaceId = safeWorkspaceId(params.workspaceId);
   if (!workspaceId || !key) throw new Error('workspaceId and key are required');
-  if (hasUnsafeKeyChars(key) || hasUnsafeKeyChars(workspaceId)) {
+  if (hasUnsafeKeyChars(key)) {
     throw new Error('key/workspaceId contains invalid control characters');
   }
   if (key.length > MEMORY_DB_KEY_MAX_CHARS) {
@@ -45,6 +61,9 @@ export function createMemory(params: {
   }
   const content =
     typeof params.content === 'string' ? params.content.trim() : String(params.content ?? '');
+  if (/\0/.test(content)) {
+    throw new Error('content contains invalid control characters');
+  }
   if (content.length > MEMORY_DB_CONTENT_MAX_CHARS) {
     throw new Error(
       `content exceeds max size (${MEMORY_DB_CONTENT_MAX_CHARS} characters)`,
@@ -73,9 +92,11 @@ export function createMemory(params: {
 }
 
 export function getMemory(workspaceId: string, key: string): MemoryRow | undefined {
-  const ws = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+  const ws = safeWorkspaceId(workspaceId);
   const k = typeof key === 'string' ? key.trim() : '';
-  if (!ws || !k) return undefined;
+  if (!ws || !k || hasUnsafeKeyChars(k) || k.length > MEMORY_DB_KEY_MAX_CHARS) {
+    return undefined;
+  }
   const db = getDb();
   return db
     .prepare('SELECT * FROM memory WHERE workspace_id = ? AND key = ?')
@@ -88,10 +109,14 @@ export function searchMemory(
   tags?: string[],
   limit = 10,
 ): MemoryRow[] {
-  const ws = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+  const ws = safeWorkspaceId(workspaceId);
   if (!ws) return [];
   const db = getDb();
-  const like = `%${String(query ?? '').trim()}%`;
+  let q = typeof query === 'string' ? query.trim() : String(query ?? '').trim();
+  // Drop control-char queries; cap length (LIKE runaway defense)
+  if (hasUnsafeKeyChars(q)) return [];
+  if (q.length > MEMORY_SEARCH_QUERY_MAX) q = q.slice(0, MEMORY_SEARCH_QUERY_MAX);
+  const like = `%${q}%`;
   const capped = Math.min(Math.max(Number(limit) || 10, 1), 100);
   let rows = db
     .prepare(
@@ -123,7 +148,7 @@ export function searchMemory(
 }
 
 export function listMemories(workspaceId: string, limit = 20): MemoryRow[] {
-  const ws = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+  const ws = safeWorkspaceId(workspaceId);
   if (!ws) return [];
   const capped = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const db = getDb();
@@ -133,9 +158,9 @@ export function listMemories(workspaceId: string, limit = 20): MemoryRow[] {
 }
 
 export function deleteMemory(workspaceId: string, key: string): boolean {
-  const ws = typeof workspaceId === 'string' ? workspaceId.trim() : '';
+  const ws = safeWorkspaceId(workspaceId);
   const k = typeof key === 'string' ? key.trim() : '';
-  if (!ws || !k) return false;
+  if (!ws || !k || hasUnsafeKeyChars(k) || k.length > MEMORY_DB_KEY_MAX_CHARS) return false;
   const db = getDb();
   const result = db
     .prepare('DELETE FROM memory WHERE workspace_id = ? AND key = ?')

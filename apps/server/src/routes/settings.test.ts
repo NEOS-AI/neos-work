@@ -52,8 +52,20 @@ describe('settings routes', () => {
     });
     expect(res.status).toBe(400);
 
-    // GET/DELETE use same key hygiene (control-char mid-key / overlong → 404)
-    // Leading %0a alone is trimmed away by paramSettingKey — use mid-string control char
+    // GET/DELETE use same key hygiene (control-char / overlong → 404)
+    // Leading control char must NOT be stripped to a valid key (check before trim)
+    const leadCtrl = encodeURIComponent('\nevil');
+    expect((await settings.request(`/${leadCtrl}`)).status).toBe(404);
+    expect(
+      (await settings.request(`/${leadCtrl}`, { method: 'DELETE' })).status,
+    ).toBe(404);
+    const putLead = await settings.request(`/${leadCtrl}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: 'x' }),
+    });
+    expect(putLead.status).toBe(400);
+
     const ctrlKey = encodeURIComponent('bad\nkey');
     expect((await settings.request(`/${ctrlKey}`)).status).toBe(404);
     expect((await settings.request(`/${'k'.repeat(101)}`)).status).toBe(404);

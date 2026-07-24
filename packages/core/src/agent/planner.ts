@@ -71,6 +71,8 @@ export class Planner {
       { role: 'user', content: userContent },
     ];
 
+    /** Cap raw planner LLM output so parseSteps cannot receive multi-MiB dumps. */
+    const RAW_OUTPUT_MAX = 500_000;
     let rawOutput = '';
     for await (const chunk of this.adapter.chat({
       model: this.adapter.getModels()[0]?.id ?? '',
@@ -80,6 +82,10 @@ export class Planner {
     })) {
       if (chunk.type === 'text' && chunk.content) {
         rawOutput += chunk.content;
+        if (rawOutput.length > RAW_OUTPUT_MAX) {
+          rawOutput = rawOutput.slice(0, RAW_OUTPUT_MAX);
+          break;
+        }
       }
     }
 
@@ -98,12 +104,18 @@ export class Planner {
     // Extract JSON array from the response (handle potential markdown code blocks)
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      const fallback = raw.trim() || 'Execute the goal directly';
+      const fallback = (raw.trim() || 'Execute the goal directly').slice(0, 2_000);
       return [{ description: fallback }];
     }
 
     try {
-      const parsed = JSON.parse(jsonMatch[0]) as unknown[];
+      // Cap JSON blob size before parse (pathological nested arrays)
+      const JSON_BLOB_MAX = 500_000;
+      const jsonBlob =
+        jsonMatch[0]!.length > JSON_BLOB_MAX
+          ? jsonMatch[0]!.slice(0, JSON_BLOB_MAX)
+          : jsonMatch[0]!;
+      const parsed = JSON.parse(jsonBlob) as unknown[];
       if (!Array.isArray(parsed)) return [];
 
       // Cap step count so runaway planner JSON cannot bloat the orchestrator
@@ -118,14 +130,19 @@ export class Planner {
             typeof item['description'] === 'string'
               ? item['description'].trim()
               : String(item ?? '').trim();
-          const toolRaw =
+          let toolRaw =
             typeof item['toolName'] === 'string' ? item['toolName'].trim() : '';
+          // Drop control-char tool names; truncate overlong names
+          if (toolRaw && /[\0\r\n]/.test(toolRaw)) {
+            toolRaw = '';
+          } else if (toolRaw.length > 100) {
+            toolRaw = toolRaw.slice(0, 100);
+          }
           // Cap description length
           const description = (descriptionRaw || 'Execute the goal directly').slice(0, 2_000);
-          const toolName = toolRaw ? toolRaw.slice(0, 100) : undefined;
           return {
             description,
-            toolName: toolName || undefined,
+            toolName: toolRaw || undefined,
           };
         })
         .filter((s) => s.description.length > 0);

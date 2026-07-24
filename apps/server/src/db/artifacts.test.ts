@@ -461,5 +461,31 @@ describe('updateArtifact PATCH semantics', () => {
     expect(updateArtifactContent('i'.repeat(ARTIFACT_ID_FIELD_MAX + 1), 'x')).toBeUndefined();
     expect(updateArtifact(`id${'\r'}x`, { name: 'y' })).toBeUndefined();
   });
+
+  it('rejects leading/trailing control chars before trim on ids', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    // Leading/trailing \n would become a valid id if trim ran first — must drop instead
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'lead-ctrl.html',
+      contentType: 'text/html',
+      content: '<p>x</p>',
+      runId: `\nrun-ok`,
+      nodeId: `node-ok\r`,
+    });
+    expect(art.runId).toBeUndefined();
+    expect(art.nodeId).toBeUndefined();
+
+    expect(listArtifacts(`\n${wf.id}`)).toEqual([]);
+    expect(listArtifacts(`${wf.id}\n`)).toEqual([]);
+    expect(getArtifact(`\nok-id`)).toBeUndefined();
+    expect(deleteArtifact(`\nok-id`)).toBe(false);
+    deleteArtifact(art.id);
+  });
 });
 
