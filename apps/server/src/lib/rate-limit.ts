@@ -18,11 +18,18 @@ export class FixedWindowRateLimiter {
     private readonly windowMs: number,
   ) {}
 
+  private normalizeKey(key: string): string {
+    return typeof key === 'string' ? key.trim() : '';
+  }
+
   /** Returns true if the request is allowed and consumes one unit. */
   check(key: string, now = Date.now()): boolean {
-    const entry = this.map.get(key);
+    const k = this.normalizeKey(key);
+    // Blank keys are rejected (do not share a global bucket)
+    if (!k) return false;
+    const entry = this.map.get(k);
     if (!entry || now > entry.resetAt) {
-      this.map.set(key, { count: 1, resetAt: now + this.windowMs });
+      this.map.set(k, { count: 1, resetAt: now + this.windowMs });
       return true;
     }
     if (entry.count >= this.limit) return false;
@@ -31,7 +38,16 @@ export class FixedWindowRateLimiter {
   }
 
   status(key: string, now = Date.now()): RateLimitStatus {
-    const entry = this.map.get(key);
+    const k = this.normalizeKey(key);
+    if (!k) {
+      return {
+        limit: this.limit,
+        remaining: 0,
+        resetAt: now + this.windowMs,
+        windowMs: this.windowMs,
+      };
+    }
+    const entry = this.map.get(k);
     if (!entry || now > entry.resetAt) {
       return {
         limit: this.limit,

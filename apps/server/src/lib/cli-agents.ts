@@ -186,7 +186,20 @@ export function ensureCliWorkspace(runId: string): string {
 
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
-  const { cliId, prompt, signal, onChunk, workflowId, runId, serverUrl, authToken } = opts;
+  const cliId = opts.cliId;
+  const prompt = typeof opts.prompt === 'string' ? opts.prompt.trim() : '';
+  if (!prompt) {
+    return Promise.reject(new Error('prompt is required'));
+  }
+  const signal = opts.signal;
+  const onChunk = opts.onChunk;
+  const workflowId =
+    typeof opts.workflowId === 'string' ? opts.workflowId.trim() || undefined : opts.workflowId;
+  const runId = typeof opts.runId === 'string' ? opts.runId.trim() || undefined : opts.runId;
+  const serverUrl =
+    typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() || undefined : opts.serverUrl;
+  const authToken =
+    typeof opts.authToken === 'string' ? opts.authToken.trim() || undefined : opts.authToken;
 
   // Resolve optional path override from settings (lazy import avoids circular deps in tests)
   let binOverride: string | undefined;
@@ -211,7 +224,7 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
   const neosEnv = buildNeosCliEnv({ workflowId, runId, serverUrl, authToken });
 
   // Prefer explicit cwd; otherwise create a per-run workspace when runId is known
-  let cwd = opts.cwd;
+  let cwd = typeof opts.cwd === 'string' ? opts.cwd.trim() || undefined : opts.cwd;
   if (!cwd && runId) {
     try {
       cwd = ensureCliWorkspace(runId);

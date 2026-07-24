@@ -35,6 +35,21 @@ describe('webhook routes', () => {
     expect(res.status).toBe(404);
   });
 
+  it('returns 404 for blank workflowId after trim', async () => {
+    const secret = await webhooks.request('/%20/secret');
+    expect(secret.status).toBe(404);
+    const rl = await webhooks.request('/%20%20/rate-limit');
+    expect(rl.status).toBe(404);
+    const regen = await webhooks.request('/%20/regenerate', { method: 'POST' });
+    expect(regen.status).toBe(404);
+    const trigger = await webhooks.request('/%20', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-neos-signature': 'sha256=00' },
+      body: '{}',
+    });
+    expect(trigger.status).toBe(404);
+  });
+
   it('GET secret creates and returns secret + rateLimit', async () => {
     const wf = makeWf();
     const res = await webhooks.request(`/${wf.id}/secret`);

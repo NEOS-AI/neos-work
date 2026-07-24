@@ -86,4 +86,28 @@ describe('skills routes', () => {
     const again = await skills.request(`/${id}`, { method: 'DELETE' });
     expect(again.status).toBe(404);
   });
+
+  it('returns 404 for blank path ids after trim', async () => {
+    const toggle = await skills.request('/%20/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(toggle.status).toBe(404);
+
+    const del = await skills.request('/%20%20', { method: 'DELETE' });
+    expect(del.status).toBe(404);
+  });
+
+  it('scan returns scanned/total shape', async () => {
+    const res = await skills.request('/scan', { method: 'POST' });
+    // filesystem scan may succeed or fail depending on env; accept both structured outcomes
+    expect([200, 500]).toContain(res.status);
+    if (res.status === 200) {
+      const body = await res.json() as { ok: boolean; data: { scanned: number; total: number } };
+      expect(body.ok).toBe(true);
+      expect(typeof body.data.scanned).toBe('number');
+      expect(typeof body.data.total).toBe('number');
+    }
+  });
 });

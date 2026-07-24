@@ -56,6 +56,39 @@ describe('deploy routes', () => {
     expect(body.data.some((d) => d.id === row.id)).toBe(true);
   });
 
+  it('list trims and clamps limit query', async () => {
+    for (let i = 0; i < 3; i++) {
+      createDeployment({
+        provider: 'vercel',
+        projectName: `${MARKER}-lim-${i}`,
+        status: 'success',
+      });
+    }
+
+    const one = await deploy.request('/?limit=%20%201%20%20');
+    expect(one.status).toBe(200);
+    const oneBody = await one.json() as { data: unknown[] };
+    expect(oneBody.data.length).toBe(1);
+
+    const blank = await deploy.request('/?limit=%20%20');
+    expect(blank.status).toBe(200);
+    const blankBody = await blank.json() as { data: unknown[] };
+    // blank after trim → default 100 (at least our 3 rows)
+    expect(blankBody.data.length).toBeGreaterThanOrEqual(3);
+
+    const zero = await deploy.request('/?limit=0');
+    expect(zero.status).toBe(200);
+    const zeroBody = await zero.json() as { data: unknown[] };
+    // parse fails → 100, then clamp min is 1 for non-empty parse; "0" → parseInt 0 || 100 → 100
+    expect(zeroBody.data.length).toBeGreaterThanOrEqual(3);
+
+    const huge = await deploy.request('/?limit=9999');
+    expect(huge.status).toBe(200);
+    // clamps to 500 max — just ensure no throw
+    const hugeBody = await huge.json() as { data: unknown[] };
+    expect(Array.isArray(hugeBody.data)).toBe(true);
+  });
+
   it('preflight reports missing vercel token', async () => {
     const res = await deploy.request('/preflight', {
       method: 'POST',

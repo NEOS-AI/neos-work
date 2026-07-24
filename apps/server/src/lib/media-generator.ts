@@ -29,6 +29,7 @@ export interface MediaFileInfo {
 
 /** List generated media files under ~/.neos-work/media (newest first). */
 export async function listMediaFiles(limit = 100): Promise<MediaFileInfo[]> {
+  const capped = Math.min(Math.max(Number(limit) || 100, 1), 500);
   await ensureMediaDir();
   let names: string[];
   try {
@@ -73,7 +74,7 @@ export async function listMediaFiles(limit = 100): Promise<MediaFileInfo[]> {
   }
 
   items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return items.slice(0, Math.min(Math.max(limit, 1), 500));
+  return items.slice(0, capped);
 }
 
 export interface GenerateImageResult {

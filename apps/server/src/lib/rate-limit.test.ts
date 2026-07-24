@@ -51,6 +51,15 @@ describe('FixedWindowRateLimiter', () => {
     limiter.reset();
     expect(limiter.status('z', now).remaining).toBe(3);
   });
+
+  it('trims keys and rejects blank keys', () => {
+    const now = 20_000;
+    expect(limiter.check('  ', now)).toBe(false);
+    expect(limiter.status('  ', now).remaining).toBe(0);
+    expect(limiter.check('  k  ', now)).toBe(true);
+    expect(limiter.check('k', now)).toBe(true);
+    expect(limiter.status('  k  ', now).remaining).toBe(1);
+  });
 });
 
 describe('FixedWindowRateLimiter status after partial use', () => {

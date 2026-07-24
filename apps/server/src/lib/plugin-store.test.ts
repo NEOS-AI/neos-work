@@ -17,6 +17,11 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     await expect(upgradeSkillToPlugin({ skillDirName: '' })).rejects.toThrow(/Invalid|not found/i);
   });
 
+  it('getPlugin trims id and returns null for blank', async () => {
+    expect(await getPlugin('   ')).toBeNull();
+    expect(await getPlugin('')).toBeNull();
+  });
+
   it('rejects missing skill directory', async () => {
     await expect(upgradeSkillToPlugin({ skillDirName: 'no-such-skill-dir-xyz' })).rejects.toThrow(/not found/i);
   });

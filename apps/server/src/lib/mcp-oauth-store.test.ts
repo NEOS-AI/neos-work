@@ -71,4 +71,20 @@ describe('mcp-oauth-store', () => {
     expect(await loadToken('does-not-exist-xyz')).toBeNull();
     expect(await isTokenValid('does-not-exist-xyz')).toBe(false);
   });
+
+  it('rejects blank serverId and accessToken on save; trims on load path', async () => {
+    await expect(
+      saveToken({ serverId: '   ', accessToken: 'tok' }),
+    ).rejects.toThrow(/Invalid serverId/i);
+    await expect(
+      saveToken({ serverId: TEST_ID, accessToken: '   ' }),
+    ).rejects.toThrow(/accessToken/i);
+
+    await saveToken({
+      serverId: `  ${TEST_ID}  `,
+      accessToken: '  secret-token-xyz  ',
+    });
+    const loaded = await loadToken(`  ${TEST_ID}  `);
+    expect(loaded?.accessToken).toBe('secret-token-xyz');
+  });
 });

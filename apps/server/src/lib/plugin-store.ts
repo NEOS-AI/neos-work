@@ -66,8 +66,10 @@ export async function listPlugins(): Promise<PluginManifest[]> {
 }
 
 export async function getPlugin(id: string): Promise<PluginManifest | null> {
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return null;
   const plugins = await listPlugins();
-  return plugins.find((p) => p.id === id) ?? null;
+  return plugins.find((p) => p.id === trimmed) ?? null;
 }
 
 /**

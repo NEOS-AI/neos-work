@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { Hono } from 'hono';
+import * as cron from 'node-cron';
 import * as db from '../db/routines.js';
 import * as workflowDb from '../db/workflows.js';
 import { getDb } from '../db/schema.js';
@@ -74,6 +75,9 @@ routines.post('/', async (c) => {
   if (!schedule) {
     return c.json({ ok: false, error: 'schedule is required' }, 400);
   }
+  if (!cron.validate(schedule)) {
+    return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
+  }
 
   // Validate workflow exists
   const wf = workflowDb.getWorkflow(workflowId);
@@ -122,6 +126,9 @@ routines.put('/:id', async (c) => {
       : undefined;
   if (schedule !== undefined && !schedule) {
     return c.json({ ok: false, error: 'schedule is required' }, 400);
+  }
+  if (schedule !== undefined && !cron.validate(schedule)) {
+    return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
   }
   const timezone =
     body.timezone !== undefined

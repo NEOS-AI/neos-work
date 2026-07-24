@@ -55,6 +55,14 @@ function makeChild() {
   return child;
 }
 
+describe('spawnCliAgent hygiene', () => {
+  it('rejects blank/whitespace prompt', async () => {
+    await expect(spawnCliAgent({ cliId: 'cli-claude', prompt: '   ' })).rejects.toThrow(
+      /prompt is required/i,
+    );
+  });
+});
+
 describe('buildCliArgs', () => {
   it('maps each CLI to its non-interactive flags', () => {
     expect(buildCliArgs('cli-claude', 'hi')).toEqual({

@@ -22,20 +22,47 @@ async function ensureDir(): Promise<void> {
   await fs.mkdir(TOKEN_DIR, { recursive: true });
 }
 
-function tokenPath(serverId: string): string {
+function sanitizeServerId(serverId: string): string | null {
+  const trimmed = typeof serverId === 'string' ? serverId.trim() : '';
+  if (!trimmed) return null;
   // Sanitize serverId to prevent path traversal
-  const safe = serverId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return safe || null;
+}
+
+function tokenPath(serverId: string): string | null {
+  const safe = sanitizeServerId(serverId);
+  if (!safe) return null;
   return path.join(TOKEN_DIR, `${safe}.json`);
 }
 
 export async function saveToken(token: McpOAuthToken): Promise<void> {
+  const file = tokenPath(token.serverId);
+  if (!file) throw new Error('Invalid serverId');
   await ensureDir();
-  await fs.writeFile(tokenPath(token.serverId), JSON.stringify(token, null, 2), 'utf-8');
+  const accessToken =
+    typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
+  if (!accessToken) throw new Error('accessToken is required');
+  const payload: McpOAuthToken = {
+    ...token,
+    serverId: sanitizeServerId(token.serverId) ?? token.serverId.trim(),
+    accessToken,
+    refreshToken:
+      typeof token.refreshToken === 'string'
+        ? token.refreshToken.trim() || undefined
+        : token.refreshToken,
+    scope: typeof token.scope === 'string' ? token.scope.trim() || undefined : token.scope,
+    tokenType:
+      typeof token.tokenType === 'string' ? token.tokenType.trim() || undefined : token.tokenType,
+  };
+  await fs.writeFile(file, JSON.stringify(payload, null, 2), 'utf-8');
 }
 
 export async function loadToken(serverId: string): Promise<McpOAuthToken | null> {
+  const file = tokenPath(serverId);
+  if (!file) return null;
   try {
-    const raw = await fs.readFile(tokenPath(serverId), 'utf-8');
+    const raw = await fs.readFile(file, 'utf-8');
     return JSON.parse(raw) as McpOAuthToken;
   } catch {
     return null;
@@ -43,8 +70,10 @@ export async function loadToken(serverId: string): Promise<McpOAuthToken | null>
 }
 
 export async function deleteToken(serverId: string): Promise<void> {
+  const file = tokenPath(serverId);
+  if (!file) return;
   try {
-    await fs.unlink(tokenPath(serverId));
+    await fs.unlink(file);
   } catch {
     // Not found — ok
   }
@@ -67,10 +96,11 @@ export async function getTokenStatus(serverId: string): Promise<{
   const token = await loadToken(serverId);
   if (!token) return { connected: false };
   const expired = token.expiresAt ? new Date(token.expiresAt) <= new Date() : false;
+  const access = typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
   return {
-    connected: !expired,
+    connected: !expired && access.length > 0,
     expiresAt: token.expiresAt,
     scope: token.scope,
-    tokenTail: token.accessToken.slice(-6),
+    tokenTail: access ? access.slice(-6) : undefined,
   };
 }

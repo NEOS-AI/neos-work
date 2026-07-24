@@ -31,4 +31,9 @@ describe('escapeHtml', () => {
   it('leaves plain text unchanged', () => {
     expect(escapeHtml('access_denied')).toBe('access_denied');
   });
+
+  it('escapes empty string and multi-entity payloads', () => {
+    expect(escapeHtml('')).toBe('');
+    expect(escapeHtml('a&b<c>d"e\'f')).toBe('a&amp;b&lt;c&gt;d&quot;e&#39;f');
+  });
 });

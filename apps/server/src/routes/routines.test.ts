@@ -40,6 +40,51 @@ describe('routines routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects invalid cron schedule on create and update', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+
+    const bad = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Bad Cron',
+        workflowId: wf.id,
+        schedule: 'not a cron',
+        enabled: false,
+      }),
+    });
+    expect(bad.status).toBe(400);
+    const badBody = await bad.json() as { error: string };
+    expect(badBody.error).toMatch(/cron/i);
+
+    const create = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Good Cron',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+        enabled: false,
+      }),
+    });
+    expect([200, 201]).toContain(create.status);
+    const created = await create.json() as { data: { id: string } };
+
+    const putBad = await routines.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ schedule: '99 99 99 99 99' }),
+    });
+    expect(putBad.status).toBe(400);
+
+    await routines.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
   it('rejects whitespace-only name and trims fields on create', async () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,
