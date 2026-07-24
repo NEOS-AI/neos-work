@@ -163,6 +163,15 @@ describe('validateWorkflowDraft', () => {
     expect(issues.some((i) => i.code === 'missing_block_id' && i.nodeId === 'b1')).toBe(true);
   });
 
+  it('treats whitespace-only blockId as missing', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [{ id: 'b1', type: 'block', label: 'My Block', config: { blockId: '   ' } }],
+      edges: [],
+      blocks: emptyBlocks,
+    });
+    expect(issues.some((i) => i.code === 'missing_block_id' && i.nodeId === 'b1')).toBe(true);
+  });
+
   it('returns missing_required_block_param when required param is blank', () => {
     const issues = validateWorkflowDraft({
       nodes: [{ id: 'b1', type: 'block', label: 'My Block', config: { blockId: 'blk1', params: {} } }],

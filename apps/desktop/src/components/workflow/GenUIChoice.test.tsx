@@ -22,6 +22,11 @@ describe('GenUIChoice', () => {
     expect(screen.getByText('Bold')).toBeInTheDocument();
   });
 
+  it('shows empty state when options missing', () => {
+    render(<GenUIChoice schema={{ options: [] }} onSelect={() => {}} />);
+    expect(screen.getByText(/No choices available/i)).toBeInTheDocument();
+  });
+
   it('calls onSelect with value or label', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

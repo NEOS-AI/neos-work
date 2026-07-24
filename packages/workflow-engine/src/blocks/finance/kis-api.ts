@@ -157,7 +157,9 @@ export async function getStockChart(
 ): Promise<OhlcBar[]> {
   const sym = normalizeSymbol(symbol);
   if (!sym) throw new Error('symbol is required');
-  const periodCode = CHART_PERIODS.has(period) ? period : 'D';
+  const periodRaw =
+    typeof period === 'string' ? period.trim().toUpperCase() : String(period ?? 'D').trim().toUpperCase();
+  const periodCode = (CHART_PERIODS.has(periodRaw) ? periodRaw : 'D') as 'D' | 'W' | 'M';
   const barCount = Math.min(Math.max(Number(count) || 60, 1), 500);
   const { appKey, appSecret } = normalizeConfig(config);
   const token = await getKisToken({ appKey, appSecret });

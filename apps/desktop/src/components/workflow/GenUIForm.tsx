@@ -14,18 +14,33 @@ interface GenUIFormProps {
 }
 
 export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
+  const fields = Array.isArray(schema?.fields) ? schema.fields : [];
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(schema.fields.map((f) => [f.key, ''])),
+    Object.fromEntries(fields.map((f) => [f.key, ''])),
   );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(values);
+    // Trim submitted values so GenUI resume payloads stay clean (plan Task 6)
+    const trimmed: Record<string, string> = {};
+    for (const field of fields) {
+      const raw = values[field.key] ?? '';
+      trimmed[field.key] = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
+    }
+    onSubmit(trimmed);
   };
+
+  if (fields.length === 0) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        No form fields defined.
+      </p>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {schema.fields.map((field) => (
+      {fields.map((field) => (
         <div key={field.key}>
           <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>
             {field.label}

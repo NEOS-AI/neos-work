@@ -170,8 +170,13 @@ export function duplicateWorkflow(id: string): Workflow | undefined {
 // ── Workflow Runs ──────────────────────────────────────────
 
 export function saveRun(run: WorkflowRun): void {
+  const id = typeof run.id === 'string' ? run.id.trim() : '';
+  const workflowId = typeof run.workflowId === 'string' ? run.workflowId.trim() : '';
+  if (!id || !workflowId) {
+    throw new Error('saveRun requires non-blank id and workflowId');
+  }
   const db = getDb();
-  const nodeResultsStr = JSON.stringify(run.nodeResults);
+  const nodeResultsStr = JSON.stringify(run.nodeResults ?? {});
   // Enforce 1MB limit on stored results
   const truncated = nodeResultsStr.length > 1_048_576;
   const stored = truncated ? '{"truncated":true}' : nodeResultsStr;
@@ -185,8 +190,8 @@ export function saveRun(run: WorkflowRun): void {
        completed_at = excluded.completed_at,
        error = excluded.error`,
   ).run(
-    run.id,
-    run.workflowId,
+    id,
+    workflowId,
     run.status,
     stored,
     run.startedAt,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getNativeExecutor,
   listBlocks,
+  registerBlockMeta,
   registerNativeBlock,
   resolveBlock,
 } from './registry.js';
@@ -47,5 +48,81 @@ describe('block registry', () => {
   it('returns undefined for unknown block', () => {
     expect(getNativeExecutor('nope-unknown')).toBeUndefined();
     expect(resolveBlock('nope-unknown')).toBeUndefined();
+  });
+
+  it('registerBlockMeta and id/domain trim hygiene', () => {
+    const meta: WorkflowBlock = {
+      id: 'prompt_meta_only',
+      name: 'Prompt Only',
+      domain: 'general',
+      category: 'test',
+      description: 'meta without native executor',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      promptTemplate: 'Hello',
+    };
+    registerBlockMeta(meta);
+
+    expect(resolveBlock('  prompt_meta_only  ')?.name).toBe('Prompt Only');
+    expect(resolveBlock('   ')).toBeUndefined();
+    expect(getNativeExecutor('  test_block_coverage  ')).toBeDefined();
+    expect(getNativeExecutor('   ')).toBeUndefined();
+
+    // domain filter trims; blank domain → all blocks
+    expect(listBlocks('  general  ').some((b) => b.id === 'prompt_meta_only')).toBe(true);
+    const all = listBlocks('   ');
+    expect(all.some((b) => b.id === 'prompt_meta_only')).toBe(true);
+    expect(all.length).toBeGreaterThanOrEqual(listBlocks('general').length);
+  });
+
+  it('trims ids when registering native/meta blocks; ignores blank ids', async () => {
+    registerNativeBlock({
+      blockId: '  reg_trim_native  ',
+      execute: async () => ({ ok: true, output: 'n', durationMs: 0 }),
+    });
+    expect(getNativeExecutor('reg_trim_native')).toBeDefined();
+    const r = await getNativeExecutor('  reg_trim_native  ')!.execute({
+      params: {},
+      inputs: {},
+      settings: {},
+    });
+    expect(r.output).toBe('n');
+
+    registerBlockMeta({
+      id: '  reg_trim_meta  ',
+      name: 'Trim Meta',
+      domain: 'general',
+      category: 'test',
+      description: 'trim',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      promptTemplate: 'x',
+    });
+    expect(resolveBlock('reg_trim_meta')?.id).toBe('reg_trim_meta');
+
+    registerNativeBlock({
+      blockId: '   ',
+      execute: async () => ({ ok: true, output: 1, durationMs: 0 }),
+    });
+    registerBlockMeta({
+      id: '  ',
+      name: 'x',
+      domain: 'general',
+      category: 't',
+      description: '',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    expect(getNativeExecutor('')).toBeUndefined();
+    expect(resolveBlock('')).toBeUndefined();
   });
 });

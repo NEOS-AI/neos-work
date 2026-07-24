@@ -195,4 +195,79 @@ describe('kis-api', () => {
       getStockChart({ appKey: 'chart-err-key', appSecret: 'chart-err-sec' }, '005930'),
     ).rejects.toThrow(/chart request failed \(502\)/);
   });
+
+  it('rejects missing access_token and trims credentials', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: '   ', expires_in: 3600 }),
+      }),
+    );
+    await expect(
+      getKisToken({ appKey: 'blank-tok-k', appSecret: 'blank-tok-s' }),
+    ).rejects.toThrow(/missing access_token/i);
+
+    // Padded credentials still work (normalizeConfig)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: '  tok-pad  ', expires_in: 3600 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const tok = await getKisToken({ appKey: '  pad-k  ', appSecret: '  pad-s  ' });
+    expect(tok).toBe('tok-pad');
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body));
+    expect(body.appkey).toBe('pad-k');
+    expect(body.appsecret).toBe('pad-s');
+  });
+
+  it('normalizes invalid chart period to D and clamps count', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok-chart-norm', expires_in: 3600 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ output2: [] }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getStockChart(
+      { appKey: 'chart-norm-k', appSecret: 'chart-norm-s' },
+      '  005930  ',
+      'Y' as 'D',
+      0,
+    );
+    const chartUrl = String(fetchMock.mock.calls[1]![0]);
+    expect(chartUrl).toContain('FID_PERIOD_DIV_CODE=D');
+    expect(chartUrl).toContain('FID_INPUT_ISCD=005930');
+
+    // lowercase period is uppercased to W
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ output2: [] }),
+    });
+    await getStockChart(
+      { appKey: 'chart-norm-k', appSecret: 'chart-norm-s' },
+      '005930',
+      'w' as 'D',
+      10,
+    );
+    const weekUrl = String(fetchMock.mock.calls[2]![0]);
+    expect(weekUrl).toContain('FID_PERIOD_DIV_CODE=W');
+
+    // huge count still succeeds (clamped server-side)
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ output2: [] }),
+    });
+    await getStockChart(
+      { appKey: 'chart-norm-k', appSecret: 'chart-norm-s' },
+      '005930',
+      'D',
+      9999,
+    );
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4);
+  });
 });

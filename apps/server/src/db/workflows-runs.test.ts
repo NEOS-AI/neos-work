@@ -14,6 +14,18 @@ afterEach(() => {
 });
 
 describe('workflow runs CRUD', () => {
+  it('rejects blank id/workflowId on saveRun', () => {
+    expect(() =>
+      workflows.saveRun({
+        id: '  ',
+        workflowId: 'wf',
+        status: 'running',
+        nodeResults: {},
+        startedAt: new Date().toISOString(),
+      }),
+    ).toThrow(/non-blank/i);
+  });
+
   it('saves, lists, filters delete by status, truncates huge nodeResults', () => {
     const wf = workflows.createWorkflow({
       name: NAME,
@@ -25,8 +37,8 @@ describe('workflow runs CRUD', () => {
     const okId = crypto.randomUUID();
     const failId = crypto.randomUUID();
     workflows.saveRun({
-      id: okId,
-      workflowId: wf.id,
+      id: `  ${okId}  `,
+      workflowId: `  ${wf.id}  `,
       status: 'completed',
       nodeResults: { n1: { status: 'completed', output: 'ok' } as never },
       startedAt: new Date().toISOString(),

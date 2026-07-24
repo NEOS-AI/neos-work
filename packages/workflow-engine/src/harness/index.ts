@@ -17,14 +17,19 @@ const registry = new Map<string, AgentHarness>(
 );
 
 export function resolveHarness(id: string): AgentHarness | undefined {
-  return registry.get(id);
+  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (!trimmed) return undefined;
+  return registry.get(trimmed);
 }
 
 export function listHarnesses(domain?: string): AgentHarness[] {
+  const domainFilter = typeof domain === 'string' ? domain.trim() || undefined : undefined;
   const all = [...registry.values()];
-  return domain ? all.filter((h) => h.domain === domain) : all;
+  return domainFilter ? all.filter((h) => h.domain === domainFilter) : all;
 }
 
 export function registerHarness(harness: AgentHarness): void {
-  registry.set(harness.id, harness);
+  const id = typeof harness.id === 'string' ? harness.id.trim() : '';
+  if (!id) return;
+  registry.set(id, { ...harness, id });
 }

@@ -28,6 +28,22 @@ describe('harness registry', () => {
     expect(resolveHarness('does-not-exist-xyz')).toBeUndefined();
   });
 
+  it('trims id/domain and ignores blank register id', () => {
+    const first = listHarnesses()[0]!;
+    expect(resolveHarness(`  ${first.id}  `)?.id).toBe(first.id);
+    expect(resolveHarness('   ')).toBeUndefined();
+    expect(listHarnesses('  coding  ').every((h) => h.domain === 'coding')).toBe(true);
+    registerHarness({
+      id: '   ',
+      name: 'No',
+      domain: 'general',
+      description: '',
+      systemPrompt: 'x',
+      allowedTools: [],
+    });
+    expect(resolveHarness('')).toBeUndefined();
+  });
+
   it('registers custom harnesses', () => {
     const custom: AgentHarness = {
       id: 'test-custom-harness',

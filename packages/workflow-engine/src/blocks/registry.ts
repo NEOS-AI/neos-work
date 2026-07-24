@@ -13,13 +13,20 @@ const metaRegistry = new Map<string, WorkflowBlock>();
  * Called with a single executor object (blockId + execute) or with both meta + executor.
  */
 export function registerNativeBlock(executor: NativeBlockExecutor, meta?: WorkflowBlock): void {
-  builtInRegistry.set(executor.blockId, executor);
-  if (meta) metaRegistry.set(meta.id, meta);
+  const blockId = typeof executor.blockId === 'string' ? executor.blockId.trim() : '';
+  if (!blockId) return;
+  builtInRegistry.set(blockId, { ...executor, blockId });
+  if (meta) {
+    const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
+    if (metaId) metaRegistry.set(metaId, { ...meta, id: metaId });
+  }
 }
 
 /** Register block metadata without a native executor (prompt/skill blocks, tests). */
 export function registerBlockMeta(meta: WorkflowBlock): void {
-  metaRegistry.set(meta.id, meta);
+  const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
+  if (!metaId) return;
+  metaRegistry.set(metaId, { ...meta, id: metaId });
 }
 
 export function resolveBlock(id: string): WorkflowBlock | undefined {

@@ -55,6 +55,9 @@ export function estimateNextCronRun(
   const tz = options?.timezone?.trim() || 'UTC';
   const horizonDays = options?.horizonDays ?? 366;
 
+  // Invalid IANA timezone → null (callers treat as unknown next run)
+  if (!isValidTimeZone(tz)) return null;
+
   // Walk minute-by-minute in the target timezone wall clock via iterative UTC + formatter
   // Start from next whole minute after `from`
   let cursor = new Date(from.getTime());
@@ -64,6 +67,7 @@ export function estimateNextCronRun(
   const maxSteps = horizonDays * 24 * 60;
   for (let i = 0; i < maxSteps; i++) {
     const partsInTz = getZonedParts(cursor, tz);
+    if (!partsInTz) return null;
     if (
       months.includes(partsInTz.month)
       && daysOfMonth.includes(partsInTz.day)
@@ -78,6 +82,15 @@ export function estimateNextCronRun(
   return null;
 }
 
+function isValidTimeZone(timeZone: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getZonedParts(date: Date, timeZone: string): {
   year: number;
   month: number;
@@ -85,29 +98,33 @@ function getZonedParts(date: Date, timeZone: string): {
   hour: number;
   minute: number;
   weekday: number;
-} {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    weekday: 'short',
-    hourCycle: 'h23',
-  });
-  const map = Object.fromEntries(
-    dtf.formatToParts(date).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
-  );
-  const weekdayMap: Record<string, number> = {
-    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
-  };
-  return {
-    year: Number(map.year),
-    month: Number(map.month),
-    day: Number(map.day),
-    hour: Number(map.hour),
-    minute: Number(map.minute),
-    weekday: weekdayMap[map.weekday ?? 'Sun'] ?? 0,
-  };
+} | null {
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      weekday: 'short',
+      hourCycle: 'h23',
+    });
+    const map = Object.fromEntries(
+      dtf.formatToParts(date).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
+    );
+    const weekdayMap: Record<string, number> = {
+      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+    };
+    return {
+      year: Number(map.year),
+      month: Number(map.month),
+      day: Number(map.day),
+      hour: Number(map.hour),
+      minute: Number(map.minute),
+      weekday: weekdayMap[map.weekday ?? 'Sun'] ?? 0,
+    };
+  } catch {
+    return null;
+  }
 }

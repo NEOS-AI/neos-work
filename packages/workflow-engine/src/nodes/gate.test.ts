@@ -68,6 +68,16 @@ describe('gate nodes', () => {
     expect(modern.error).toMatch(/no upstream/i);
   });
 
+  it('AndGateNode and ParallelEndNode fail when no upstream inputs', async () => {
+    const and = await new AndGateNode().execute(makeCtx({}));
+    expect(and.ok).toBe(false);
+    expect(and.error).toMatch(/no upstream/i);
+
+    const pe = await new ParallelEndNode().execute(makeCtx({}));
+    expect(pe.ok).toBe(false);
+    expect(pe.error).toMatch(/no upstream|branch/i);
+  });
+
   it('ParallelStartNode echoes inputs', async () => {
     const node = new ParallelStartNode();
     const inputs = { branch: 'start' };

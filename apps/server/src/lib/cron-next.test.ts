@@ -57,6 +57,15 @@ describe('estimateNextCronRun', () => {
     expect(estimateNextCronRun('abc * * * *')).toBeNull();
   });
 
+  it('returns null for invalid IANA timezone', () => {
+    expect(
+      estimateNextCronRun('0 * * * *', {
+        from: new Date('2026-01-01T00:00:00.000Z'),
+        timezone: 'Not/A_Real_Zone',
+      }),
+    ).toBeNull();
+  });
+
   it('matches weekday-restricted schedules', () => {
     // Monday only at 09:00 UTC — 2026-01-01 is Thursday
     const from = new Date('2026-01-01T08:00:00.000Z');

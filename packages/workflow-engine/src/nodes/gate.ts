@@ -37,7 +37,15 @@ export class AndGateNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const values = Object.values(ctx.inputs);
+    const values = Object.values(ctx.inputs ?? {});
+    if (values.length === 0) {
+      return {
+        ok: false,
+        output: null,
+        error: 'AND gate: no upstream inputs',
+        durationMs: Date.now() - start,
+      };
+    }
     const merged = Object.assign(
       {},
       ...values.map((v) => (typeof v === 'object' && v !== null ? v : { value: v })),
@@ -81,7 +89,15 @@ export class ParallelEndNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const values = Object.values(ctx.inputs);
+    const values = Object.values(ctx.inputs ?? {});
+    if (values.length === 0) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Parallel end: no upstream branch inputs',
+        durationMs: Date.now() - start,
+      };
+    }
     const merged = Object.assign(
       {},
       ...values.map((v) => (typeof v === 'object' && v !== null ? v : { value: v })),

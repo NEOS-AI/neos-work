@@ -139,8 +139,9 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'block') {
-      const blockId = config.blockId;
-      if (typeof blockId !== 'string' || blockId.length === 0) {
+      const rawBlockId = config.blockId;
+      const blockId = typeof rawBlockId === 'string' ? rawBlockId.trim() : '';
+      if (!blockId) {
         issues.push({
           code: 'missing_block_id',
           severity: 'error',
@@ -148,7 +149,8 @@ export function validateWorkflowDraft(input: {
           message: 'Block node requires a block selection.',
         });
       } else {
-        const block = blockMap.get(blockId);
+        // Prefer exact id, then case-sensitive trimmed match already applied
+        const block = blockMap.get(blockId) ?? blockMap.get(rawBlockId as string);
         const params = (config.params ?? {}) as Record<string, unknown>;
         for (const param of block?.paramDefs ?? []) {
           if (param.default === undefined && isBlank(params[param.key])) {
