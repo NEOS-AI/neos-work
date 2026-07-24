@@ -65,4 +65,34 @@ x
 `;
     expect(parseSkillFile(content, '/n.md', 'local')!.manifest.examplePrompt).toBe('Try me');
   });
+
+  it('rejects whitespace-only name and trims fields', () => {
+    const blankName = `---
+name: "   "
+description:  desc  
+version:  1.2.3  
+---
+body
+`;
+    expect(parseSkillFile(blankName, '/x.md', 'local')).toBeNull();
+    expect(parseSkillFile('   ', '/x.md', 'local')).toBeNull();
+
+    const padded = `---
+name:  hello  
+description:  Greets  
+mode:  Reference  
+category:  Testing  
+triggers:  hi ,  hello  
+---
+  content  
+`;
+    const skill = parseSkillFile(padded, '  /skills/hello.md  ', 'local');
+    expect(skill!.manifest.name).toBe('hello');
+    expect(skill!.manifest.description).toBe('Greets');
+    expect(skill!.manifest.mode).toBe('reference');
+    expect(skill!.manifest.category).toBe('testing');
+    expect(skill!.manifest.triggers).toEqual(['hi', 'hello']);
+    expect(skill!.content).toBe('content');
+    expect(skill!.path).toBe('/skills/hello.md');
+  });
 });

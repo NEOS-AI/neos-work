@@ -4,6 +4,13 @@ import type { LLMProviderAdapter } from './provider.js';
 
 const DEFAULT_THRESHOLD = 80_000; // 토큰
 const RECENT_WINDOW = 20; // 항상 보존할 최근 메시지 수
+const MIN_THRESHOLD = 1;
+const MAX_THRESHOLD = 2_000_000;
+
+function clampThreshold(raw: number): number {
+  if (!Number.isFinite(raw)) return DEFAULT_THRESHOLD;
+  return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, Math.floor(raw)));
+}
 
 function estimateTokens(messages: Message[]): number {
   let chars = 0;
@@ -12,7 +19,9 @@ function estimateTokens(messages: Message[]): number {
       chars += msg.content.length;
     } else if (Array.isArray(msg.content)) {
       for (const block of msg.content) {
-        if ('text' in block) chars += (block as { text: string }).text.length;
+        if ('text' in block && typeof (block as { text?: unknown }).text === 'string') {
+          chars += (block as { text: string }).text.length;
+        }
       }
     }
   }
@@ -20,9 +29,14 @@ function estimateTokens(messages: Message[]): number {
 }
 
 export class ContextManager {
-  constructor(private threshold = DEFAULT_THRESHOLD) {}
+  private threshold: number;
+
+  constructor(threshold = DEFAULT_THRESHOLD) {
+    this.threshold = clampThreshold(threshold);
+  }
 
   needsCompression(messages: Message[]): boolean {
+    if (!Array.isArray(messages) || messages.length === 0) return false;
     return estimateTokens(messages) > this.threshold;
   }
 
@@ -31,6 +45,7 @@ export class ContextManager {
     adapter: LLMProviderAdapter,
     signal?: AbortSignal,
   ): Promise<Message[]> {
+    if (!Array.isArray(messages)) return [];
     if (messages.length <= RECENT_WINDOW) return messages;
 
     const recent = messages.slice(-RECENT_WINDOW);
@@ -53,11 +68,12 @@ export class ContextManager {
   ): Promise<string> {
     const transcript = messages
       .map((m) => {
+        const role = typeof m.role === 'string' ? m.role.trim() || 'unknown' : 'unknown';
         const text =
           typeof m.content === 'string'
             ? m.content
             : JSON.stringify(m.content);
-        return `${m.role}: ${text}`;
+        return `${role}: ${text}`;
       })
       .join('\n');
 
@@ -76,6 +92,6 @@ export class ContextManager {
         summary += chunk.content;
       }
     }
-    return summary;
+    return summary.trim();
   }
 }

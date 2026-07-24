@@ -20,41 +20,57 @@ function parseSimpleYaml(yaml: string): Record<string, string> {
   return result;
 }
 
+function optionalTrim(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const t = raw.trim();
+  return t.length > 0 ? t : undefined;
+}
+
 export function parseSkillFile(
   content: string,
   filePath: string,
   source: 'local' | 'global',
 ): Skill | null {
-  const match = FRONTMATTER_RE.exec(content);
+  const text = typeof content === 'string' ? content : String(content ?? '');
+  if (!text.trim()) return null;
+  const match = FRONTMATTER_RE.exec(text);
   if (!match) return null;
 
   const [, frontmatter, body] = match;
-  const raw = parseSimpleYaml(frontmatter);
+  const raw = parseSimpleYaml(frontmatter ?? '');
 
-  if (!raw.name) return null;
+  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+  if (!name) return null;
+
+  const sourceNorm =
+    source === 'global' || source === 'local' ? source : 'local';
+
+  const modeRaw = optionalTrim(raw.mode);
+  const categoryRaw = optionalTrim(raw.category);
 
   const manifest: SkillManifest = {
-    name: raw.name,
-    description: raw.description ?? '',
-    version: raw.version,
-    license: raw.license,
-    compatibility: raw.compatibility,
-    mode: raw.mode,
-    platform: raw.platform,
-    category: raw.category,
+    name,
+    description: typeof raw.description === 'string' ? raw.description.trim() : '',
+    version: optionalTrim(raw.version),
+    license: optionalTrim(raw.license),
+    compatibility: optionalTrim(raw.compatibility),
+    mode: modeRaw ? modeRaw.toLowerCase() : undefined,
+    platform: optionalTrim(raw.platform),
+    category: categoryRaw ? categoryRaw.toLowerCase() : undefined,
     featured: raw.featured === 'true',
-    examplePrompt: raw.examplePrompt ?? raw['example-prompt'],
+    examplePrompt: optionalTrim(raw.examplePrompt ?? raw['example-prompt']),
     triggers: raw.triggers
       ? raw.triggers.split(',').map((s) => s.trim()).filter(Boolean)
       : undefined,
-    designSystemRequired: raw.designSystemRequired === 'true' || raw['design-system-required'] === 'true',
-    fidelity: raw.fidelity,
+    designSystemRequired:
+      raw.designSystemRequired === 'true' || raw['design-system-required'] === 'true',
+    fidelity: optionalTrim(raw.fidelity),
   };
 
   return {
     manifest,
-    content: body.trim(),
-    path: filePath,
-    source,
+    content: (body ?? '').trim(),
+    path: typeof filePath === 'string' ? filePath.trim() || filePath : String(filePath ?? ''),
+    source: sourceNorm,
   };
 }

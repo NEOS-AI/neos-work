@@ -33,6 +33,21 @@ describe('OpenAIAdapter', () => {
     await expect(adapter.validateApiKey('   ')).resolves.toBe(false);
   });
 
+  it('falls back to default baseUrl for non-http custom URLs', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({
+      provider: 'openai',
+      apiKey: 'sk',
+      baseUrl: 'file:///etc/passwd',
+    });
+    await adapter.validateApiKey('sk');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/models',
+      expect.anything(),
+    );
+  });
+
   it('uses Ollama identity, models, and default base URL', () => {
     const adapter = new OpenAIAdapter({ provider: 'ollama' });
     expect(adapter.id).toBe('ollama');

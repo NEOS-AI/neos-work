@@ -57,7 +57,16 @@ export class McpClient {
     } else if (transport === 'http') {
       const url = typeof config.url === 'string' ? config.url.trim() : '';
       if (!url) throw new Error(`MCP server "${name}" requires a URL for HTTP transport`);
-      const transportImpl = new SSEClientTransport(new URL(url));
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        throw new Error(`MCP server "${name}" has an invalid URL`);
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error(`MCP server "${name}" URL must be http(s)`);
+      }
+      const transportImpl = new SSEClientTransport(parsed);
       await this.client.connect(transportImpl);
     } else {
       throw new Error(`Unsupported MCP transport: ${config.transport}`);
@@ -67,12 +76,17 @@ export class McpClient {
 
   async listTools(): Promise<McpToolDefinition[]> {
     const result = await this.client.listTools();
-    return result.tools.map((t) => ({
-      name: typeof t.name === 'string' ? t.name.trim() : t.name,
-      description:
-        typeof t.description === 'string' ? t.description.trim() || undefined : t.description,
-      inputSchema: t.inputSchema as Record<string, unknown>,
-    }));
+    return result.tools
+      .map((t) => ({
+        name: typeof t.name === 'string' ? t.name.trim() : '',
+        description:
+          typeof t.description === 'string' ? t.description.trim() || undefined : t.description,
+        inputSchema: (t.inputSchema as Record<string, unknown>) ?? {
+          type: 'object',
+          properties: {},
+        },
+      }))
+      .filter((t) => t.name.length > 0);
   }
 
   async callTool(name: string, input: Record<string, unknown>): Promise<{ success: boolean; output: unknown }> {

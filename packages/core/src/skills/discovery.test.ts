@@ -67,4 +67,29 @@ x
     const local = skills.filter((s) => s.source === 'local');
     expect(local.map((s) => s.manifest.name)).toEqual(['ok']);
   });
+
+  it('treats blank workspacePath as omitted (no local scan)', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'demo.md'),
+      `---
+name: demo
+description: Demo
+---
+x
+`,
+    );
+    // hidden .md should be ignored when scanning
+    await writeFile(
+      join(dir, '.hidden.md'),
+      `---
+name: hidden
+---
+x
+`,
+    );
+    const skills = await discoverSkills('   ');
+    expect(skills.filter((s) => s.source === 'local')).toEqual([]);
+  });
 });

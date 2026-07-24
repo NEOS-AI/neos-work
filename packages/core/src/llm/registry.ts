@@ -10,7 +10,11 @@ export class ProviderRegistry {
   private adapters = new Map<ProviderId, LLMProviderAdapter>();
 
   register(adapter: LLMProviderAdapter): void {
-    this.adapters.set(adapter.id, adapter);
+    // Index by trimmed lower-case id so get(' Anthropic ') resolves
+    const id =
+      typeof adapter.id === 'string' ? adapter.id.trim().toLowerCase() : adapter.id;
+    if (!id) return;
+    this.adapters.set(id as ProviderId, adapter);
   }
 
   get(id: ProviderId | string): LLMProviderAdapter | undefined {

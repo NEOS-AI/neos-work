@@ -7,9 +7,11 @@ import { isSensitiveKey } from '../db/crypto.js';
 
 /** Mask sensitive values so full secrets are never returned via API. */
 function maskValue(key: string, value: string): string {
-  if (!isSensitiveKey(key)) return value;
-  if (value.length <= 8) return '****';
-  return value.slice(0, 4) + '...' + value.slice(-4);
+  const k = typeof key === 'string' ? key.trim() : '';
+  const v = typeof value === 'string' ? value : String(value ?? '');
+  if (!isSensitiveKey(k)) return v;
+  if (v.length <= 8) return '****';
+  return v.slice(0, 4) + '...' + v.slice(-4);
 }
 
 const settings = new Hono();

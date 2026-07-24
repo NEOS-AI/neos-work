@@ -13,17 +13,20 @@ const GLOBAL_SKILL_DIR = join(homedir(), '.config', 'neos-work', 'skills');
 
 async function scanDirectory(dir: string, source: 'local' | 'global'): Promise<Skill[]> {
   const skills: Skill[] = [];
+  const base = typeof dir === 'string' ? dir.trim() : '';
+  if (!base) return skills;
 
   let entries: string[];
   try {
-    entries = await readdir(dir);
+    entries = await readdir(base);
   } catch {
     return skills; // Directory doesn't exist
   }
 
   for (const entry of entries) {
-    if (!entry.endsWith('.md')) continue;
-    const filePath = join(dir, entry);
+    // Skip hidden files and non-markdown
+    if (!entry || entry.startsWith('.') || !entry.endsWith('.md')) continue;
+    const filePath = join(base, entry);
     try {
       const s = await stat(filePath);
       if (!s.isFile()) continue;
@@ -45,9 +48,11 @@ export async function discoverSkills(workspacePath?: string): Promise<Skill[]> {
   const globalSkills = await scanDirectory(GLOBAL_SKILL_DIR, 'global');
   skills.push(...globalSkills);
 
-  // Local workspace skills
-  if (workspacePath) {
-    const localDir = resolve(workspacePath, '.neos-work', 'skills');
+  // Local workspace skills (blank/whitespace path treated as omitted)
+  const ws =
+    typeof workspacePath === 'string' ? workspacePath.trim() : '';
+  if (ws) {
+    const localDir = resolve(ws, '.neos-work', 'skills');
     const localSkills = await scanDirectory(localDir, 'local');
     skills.push(...localSkills);
   }

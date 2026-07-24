@@ -13,6 +13,16 @@ describe('ContextManager', () => {
     expect(cm.needsCompression([msg('user', 'hi')])).toBe(false);
     // 44 chars => 11 tokens > 10
     expect(cm.needsCompression([msg('user', 'x'.repeat(44))])).toBe(true);
+    expect(cm.needsCompression([])).toBe(false);
+  });
+
+  it('clamps invalid threshold to default', () => {
+    const bad = new ContextManager(Number.NaN);
+    // default threshold 80k: small message not compressed
+    expect(bad.needsCompression([msg('user', 'hi')])).toBe(false);
+    // oversized threshold clamps to max
+    const big = new ContextManager(9e12);
+    expect(big.needsCompression([msg('user', 'x'.repeat(100))])).toBe(false);
   });
 
   it('counts text blocks in multimodal content', () => {
@@ -91,5 +101,19 @@ describe('ContextManager', () => {
     const out = await cm.compress(messages, adapter);
     expect(out).toEqual(messages);
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('clamps invalid threshold and ignores empty message lists', () => {
+    const cmNaN = new ContextManager(Number.NaN);
+    // default threshold is high; short message does not compress
+    expect(cmNaN.needsCompression([msg('user', 'hi')])).toBe(false);
+
+    const cmZero = new ContextManager(0);
+    // clamped to min 1; 8 chars => 2 tokens > 1
+    expect(cmZero.needsCompression([msg('user', 'xxxxxxxx')])).toBe(true);
+
+    const cm = new ContextManager(10);
+    expect(cm.needsCompression([])).toBe(false);
+    expect(cm.needsCompression(null as never)).toBe(false);
   });
 });

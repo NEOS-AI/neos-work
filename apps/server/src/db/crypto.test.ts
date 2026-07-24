@@ -58,4 +58,14 @@ describe('crypto helpers', () => {
     const tampered = `${iv}:${tag}:${data!.slice(0, -2)}ff`;
     expect(() => decrypt(tampered)).toThrow();
   });
+
+  it('rejects invalid encrypted payloads on decrypt', () => {
+    expect(() => decrypt('not-encrypted')).toThrow(/Invalid encrypted/i);
+    expect(() => decrypt('   ')).toThrow(/Invalid encrypted/i);
+    expect(() => decrypt('')).toThrow(/Invalid encrypted/i);
+  });
+
+  it('coerces non-string encrypt input to string', () => {
+    expect(decrypt(encrypt(42 as never))).toBe('42');
+  });
 });

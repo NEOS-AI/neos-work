@@ -38,20 +38,25 @@ export function isSensitiveKey(key: string): boolean {
 export function isEncrypted(value: string): boolean {
   const v = typeof value === 'string' ? value.trim() : '';
   if (!v) return false;
-  return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]+$/.test(v);
+  return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]*$/.test(v);
 }
 
 export function encrypt(plaintext: string): string {
+  const text = typeof plaintext === 'string' ? plaintext : String(plaintext ?? '');
   const iv = randomBytes(12);
   const cipher = createCipheriv(ALGO, KEY, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
 export function decrypt(encoded: string): string {
-  const [ivHex, tagHex, dataHex] = encoded.split(':');
-  const decipher = createDecipheriv(ALGO, KEY, Buffer.from(ivHex, 'hex'));
-  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
-  return decipher.update(Buffer.from(dataHex, 'hex'), undefined, 'utf8') + decipher.final('utf8');
+  const raw = typeof encoded === 'string' ? encoded.trim() : '';
+  if (!raw || !isEncrypted(raw)) {
+    throw new Error('Invalid encrypted value');
+  }
+  const [ivHex, tagHex, dataHex] = raw.split(':');
+  const decipher = createDecipheriv(ALGO, KEY, Buffer.from(ivHex!, 'hex'));
+  decipher.setAuthTag(Buffer.from(tagHex!, 'hex'));
+  return decipher.update(Buffer.from(dataHex!, 'hex'), undefined, 'utf8') + decipher.final('utf8');
 }
