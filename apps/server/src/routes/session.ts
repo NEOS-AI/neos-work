@@ -608,11 +608,24 @@ session.post('/:id/agent', async (c) => {
           memoryDb.createMemory({ workspaceId, key, content, tags });
         },
         async search(query: string, tags?: string[], limit?: number) {
-          return memoryDb.searchMemory(workspaceId, query, tags, limit).map((r) => ({
-            key: r.key,
-            content: r.content,
-            tags: r.tags ? (JSON.parse(r.tags) as string[]) : undefined,
-          }));
+          return memoryDb.searchMemory(workspaceId, query, tags, limit).map((r) => {
+            let parsedTags: string[] | undefined;
+            if (r.tags) {
+              try {
+                const parsed = JSON.parse(r.tags) as unknown;
+                if (Array.isArray(parsed)) {
+                  parsedTags = parsed.map((t) => String(t).trim()).filter(Boolean);
+                }
+              } catch {
+                parsedTags = undefined;
+              }
+            }
+            return {
+              key: r.key,
+              content: r.content,
+              tags: parsedTags,
+            };
+          });
         },
         async remove(key: string) {
           memoryDb.deleteMemory(workspaceId, key);

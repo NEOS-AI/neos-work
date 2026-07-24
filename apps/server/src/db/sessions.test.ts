@@ -62,6 +62,23 @@ describe('sessions CRUD', () => {
     deleteWorkspace(ws.id);
   });
 
+  it('rejects oversized message content; truncates huge metadata', () => {
+    const s = createSession({ workspaceId: 'default', title: '_cov_msg' });
+    const huge = 'm'.repeat(1 * 1024 * 1024 + 1);
+    expect(() =>
+      addMessage({ sessionId: s.id, role: 'user', content: huge }),
+    ).toThrow(/max size/i);
+    const meta = { blob: 'x'.repeat(100_000) };
+    const m = addMessage({
+      sessionId: s.id,
+      role: 'user',
+      content: 'ok',
+      metadata: meta,
+    });
+    expect(JSON.parse(m.metadata!)).toEqual({ truncated: true });
+    deleteSession(s.id);
+  });
+
   it('trims session/workspace ids and rejects blank creates', () => {
     expect(getSession('   ')).toBeUndefined();
     expect(listMessages('   ')).toEqual([]);

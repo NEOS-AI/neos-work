@@ -44,6 +44,8 @@ function buildAdapter(settings: Record<string, string>) {
 
 /** Cap injected memory context so runaway exports cannot bloat the system prompt. */
 const MEMORY_CONTEXT_MAX_CHARS = 32_000;
+/** Cap Design System DESIGN.md injection (plan Task 1). */
+const DESIGN_CONTEXT_MAX_CHARS = 32_000;
 
 async function buildSystemPromptWithMemory(
   basePrompt: string,
@@ -122,10 +124,15 @@ export class AgentNode implements ExecutableNode {
     ).trim();
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
-    // Prepend Design System context if injected (skip whitespace-only payloads)
-    const designCtx =
+    // Prepend Design System context if injected (skip whitespace-only payloads; cap size)
+    let designCtx =
       typeof ctx.designSystemContent === 'string' ? ctx.designSystemContent.trim() : '';
     if (designCtx) {
+      if (designCtx.length > DESIGN_CONTEXT_MAX_CHARS) {
+        designCtx =
+          designCtx.slice(0, DESIGN_CONTEXT_MAX_CHARS) +
+          '\n\n…[design context truncated]';
+      }
       systemPrompt = `<!-- DESIGN CONTEXT -->\n${designCtx}\n<!-- /DESIGN CONTEXT -->\n\n${systemPrompt}`;
     }
 

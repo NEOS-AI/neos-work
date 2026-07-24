@@ -485,6 +485,20 @@ describe('AgentNode LLM model selection', () => {
     );
   });
 
+  it('truncates oversized design system context', async () => {
+    const node = new AgentNode('agent_coding', { systemPrompt: 'Agent body' });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        designSystemContent: 'D'.repeat(40_000),
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('DESIGN CONTEXT');
+    expect(goal).toContain('…[design context truncated]');
+    expect(goal.length).toBeLessThan(40_000 + 5_000);
+  });
+
   it('prepends design system content on the LLM path', async () => {
     const node = new AgentNode('agent_coding', { systemPrompt: 'Agent body' });
     await node.execute(

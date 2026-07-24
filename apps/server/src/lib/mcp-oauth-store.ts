@@ -95,11 +95,20 @@ export async function deleteToken(serverId: string): Promise<void> {
   }
 }
 
+/** Parse expiresAt; invalid dates are treated as expired (fail closed). */
+function isExpiresAtValidFuture(expiresAt: string | undefined): boolean | null {
+  if (!expiresAt || typeof expiresAt !== 'string' || !expiresAt.trim()) return null; // no expiry
+  const t = Date.parse(expiresAt.trim());
+  if (!Number.isFinite(t)) return false; // invalid → treat as expired
+  return t > Date.now();
+}
+
 export async function isTokenValid(serverId: string): Promise<boolean> {
   const token = await loadToken(serverId);
   if (!token) return false;
-  if (!token.expiresAt) return true; // no expiry — assume valid
-  return new Date(token.expiresAt) > new Date();
+  const future = isExpiresAtValidFuture(token.expiresAt);
+  if (future === null) return true; // no expiry — assume valid
+  return future;
 }
 
 /** Returns status info suitable for UI display (no raw token values). */
@@ -111,7 +120,9 @@ export async function getTokenStatus(serverId: string): Promise<{
 }> {
   const token = await loadToken(serverId);
   if (!token) return { connected: false };
-  const expired = token.expiresAt ? new Date(token.expiresAt) <= new Date() : false;
+  const future = isExpiresAtValidFuture(token.expiresAt);
+  // null = no expiry (connected if token present); false = expired/invalid
+  const expired = future === false;
   const access = typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
   return {
     connected: !expired && access.length > 0,

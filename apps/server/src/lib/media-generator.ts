@@ -194,7 +194,12 @@ export async function generateAudio(options: {
   });
 
   await ensureMediaDir();
+  // Cap TTS audio payload (plan Task 7 — runaway binary defense)
+  const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
   const buf = Buffer.from(await mp3.arrayBuffer());
+  if (buf.length > MAX_AUDIO_BYTES) {
+    throw new Error(`Audio exceeds max size (${MAX_AUDIO_BYTES} bytes)`);
+  }
   const filename = `audio_${Date.now()}_${crypto.randomUUID().slice(0, 8)}.mp3`;
   const filePath = path.join(MEDIA_DIR, filename);
   await fs.writeFile(filePath, buf);

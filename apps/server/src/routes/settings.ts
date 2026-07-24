@@ -51,8 +51,11 @@ settings.put('/:key', async (c) => {
     return c.json({ ok: false, error: 'Missing "value" in body' }, 400);
   }
 
-  // Limit value size to prevent memory abuse (1 MB)
-  if (typeof body.value !== 'string' || body.value.length > 1_000_000) {
+  // Limit value size to prevent memory abuse
+  if (
+    typeof body.value !== 'string'
+    || body.value.length > settingsDb.SETTING_VALUE_MAX_CHARS
+  ) {
     return c.json({ ok: false, error: 'Setting value too large or invalid type' }, 400);
   }
 
@@ -62,7 +65,12 @@ settings.put('/:key', async (c) => {
     return c.json({ ok: true, data: { deleted: true } });
   }
 
-  settingsDb.setSetting(key, body.value);
+  try {
+    settingsDb.setSetting(key, body.value);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to save setting';
+    return c.json({ ok: false, error: msg }, 400);
+  }
   return c.json({ ok: true });
 });
 

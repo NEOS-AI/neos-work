@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { ARTIFACT_CONTENT_MAX_CHARS } from '../db/artifacts.js';
 import { getDb } from '../db/schema.js';
 import * as workflows from '../db/workflows.js';
 import artifacts from './artifacts.js';
@@ -318,5 +319,63 @@ describe('artifacts routes', () => {
     ).toBe(404);
 
     await artifacts.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
+  it('rejects oversized content on create/put/patch with 400', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const huge = 'x'.repeat(ARTIFACT_CONTENT_MAX_CHARS + 1);
+
+    const create = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'huge.html',
+        contentType: 'text/html',
+        content: huge,
+      }),
+    });
+    expect(create.status).toBe(400);
+    expect(((await create.json()) as { error: string }).error).toMatch(/max size/i);
+
+    const ok = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'ok.html',
+        contentType: 'text/html',
+        content: '<p>ok</p>',
+      }),
+    });
+    expect(ok.status).toBe(201);
+    const id = ((await ok.json()) as { data: { id: string } }).data.id;
+
+    const put = await artifacts.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: huge }),
+    });
+    expect(put.status).toBe(400);
+    expect(((await put.json()) as { error: string }).error).toMatch(/max size/i);
+
+    const patch = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: huge }),
+    });
+    expect(patch.status).toBe(400);
+    expect(((await patch.json()) as { error: string }).error).toMatch(/max size/i);
+
+    // prior content unchanged
+    const get = await artifacts.request(`/${id}`);
+    expect(((await get.json()) as { data: { content: string } }).data.content).toBe('<p>ok</p>');
+
+    await artifacts.request(`/${id}`, { method: 'DELETE' });
   });
 });

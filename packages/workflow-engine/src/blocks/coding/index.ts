@@ -66,6 +66,9 @@ export function isAllowedTestCommand(parts: string[]): boolean {
   return sub === requiredSub;
 }
 
+/** Cap combined stdout/stderr from coding block spawns (plan Task 12). */
+const SPAWN_OUTPUT_MAX_CHARS = 512 * 1024;
+
 function runSpawn(
   bin: string,
   args: string[],
@@ -79,8 +82,13 @@ function runSpawn(
     });
 
     let output = '';
-    child.stdout?.on('data', (d: Buffer) => { output += d.toString('utf8'); });
-    child.stderr?.on('data', (d: Buffer) => { output += d.toString('utf8'); });
+    const append = (chunk: string) => {
+      if (output.length >= SPAWN_OUTPUT_MAX_CHARS) return;
+      const room = SPAWN_OUTPUT_MAX_CHARS - output.length;
+      output += chunk.length > room ? chunk.slice(0, room) : chunk;
+    };
+    child.stdout?.on('data', (d: Buffer) => { append(d.toString('utf8')); });
+    child.stderr?.on('data', (d: Buffer) => { append(d.toString('utf8')); });
 
     const timeout = opts.timeoutMs
       ? setTimeout(() => { try { child.kill('SIGTERM'); } catch { /* ignore */ } }, opts.timeoutMs)

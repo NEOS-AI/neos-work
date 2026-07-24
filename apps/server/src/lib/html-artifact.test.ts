@@ -18,6 +18,14 @@ describe('isHtmlArtifactOutput', () => {
     expect(isHtmlArtifactOutput({ html: true })).toBe(false);
     expect(isHtmlArtifactOutput('')).toBe(false);
   });
+
+  it('only scans a bounded prefix for late markers', () => {
+    // Marker far beyond 8 KiB scan window should not match
+    const late = '<' + 'x'.repeat(10_000) + '<div>hi</div>';
+    expect(isHtmlArtifactOutput(late)).toBe(false);
+    const early = '<' + 'x'.repeat(100) + '<div>hi</div>';
+    expect(isHtmlArtifactOutput(early)).toBe(true);
+  });
 });
 
 describe('createFirstHtmlArtifact', () => {

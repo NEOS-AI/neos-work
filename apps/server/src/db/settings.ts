@@ -55,13 +55,27 @@ export function getSecretSetting(key: string): string | undefined {
   return trimmedSecret(getSetting(key));
 }
 
+/** Cap persisted setting values (align with settings route — 1 MiB). */
+export const SETTING_VALUE_MAX_CHARS = 1 * 1024 * 1024;
+
 export function setSetting(key: string, value: string): void {
   const k = typeof key === 'string' ? key.trim() : '';
   if (!k) return;
+  // Reject control chars that confuse settings keys / env-style lookups
+  if (/[\0\r\n]/.test(k)) {
+    throw new Error('setting key contains invalid control characters');
+  }
+  if (k.length > 200) {
+    throw new Error('setting key exceeds max length (200)');
+  }
   const db = getDb();
   // Trim secrets on write so `"  sk  "` never persists padded (align with getSecretSetting).
   // Empty secrets stay as plain "" (encrypting empty breaks isEncrypted shape / decrypt path).
-  const normalized = isSensitiveKey(k) ? value.trim() : value;
+  const raw = typeof value === 'string' ? value : String(value ?? '');
+  const normalized = isSensitiveKey(k) ? raw.trim() : raw;
+  if (normalized.length > SETTING_VALUE_MAX_CHARS) {
+    throw new Error(`setting value exceeds max size (${SETTING_VALUE_MAX_CHARS} characters)`);
+  }
   const storedValue =
     isSensitiveKey(k) && normalized.length > 0 ? encrypt(normalized) : normalized;
   db.prepare(

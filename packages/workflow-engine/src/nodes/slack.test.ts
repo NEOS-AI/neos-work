@@ -58,6 +58,15 @@ describe('SlackMessageNode', () => {
     expect(result.error).toMatch(/channel/);
   });
 
+  it('rejects channel control characters', async () => {
+    const result = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#gen\neral' }, { text: 'hi' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/control characters/i);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   it('rejects whitespace-only channel', async () => {
     const result = await node.execute(
       ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '   ' }, { text: 'hi' }),

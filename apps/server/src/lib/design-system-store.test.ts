@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  DESIGN_MD_MAX_CHARS,
   DESIGN_SYSTEMS_DIR,
   createDesignSystem,
   deleteDesignSystem,
@@ -65,6 +66,16 @@ describe('design-system-store', () => {
     expect(await createDesignSystem('')).toBeNull();
     expect(await createDesignSystem('has space')).toBeNull();
     expect(await createDesignSystem('   ')).toBeNull();
+  });
+
+  it('rejects oversized DESIGN.md content; truncates long description', async () => {
+    const created = await createDesignSystem(NAME, 'x'.repeat(5_000));
+    expect(created).not.toBeNull();
+    expect(created!.description!.length).toBeLessThanOrEqual(2_000);
+    const huge = 'a'.repeat(1 * 1024 * 1024 + 1);
+    expect(await updateDesignSystemContent(created!.id, huge)).toBe(false);
+    expect(await getDesignSystemContent(created!.id)).toMatch(/Design System/i);
+    await deleteDesignSystem(created!.id);
   });
 
   it('trims name and description on create', async () => {
@@ -172,6 +183,15 @@ describe('design-system-store scan edge cases', () => {
     expect(hit!.hasManifest).toBe(true);
 
     await fs.unlink(path.join(DESIGN_SYSTEMS_DIR, `${EXTRA}.txt`)).catch(() => {});
+  });
+
+  it('rejects oversized DESIGN.md content on update', async () => {
+    const created = await createDesignSystem(EXTRA, 'desc');
+    expect(created).not.toBeNull();
+    const ok = await updateDesignSystemContent(created!.id, 'x'.repeat(DESIGN_MD_MAX_CHARS + 1));
+    expect(ok).toBe(false);
+    expect(await updateDesignSystemContent(created!.id, 'x'.repeat(100))).toBe(true);
+    await deleteDesignSystem(created!.id);
   });
 
   it('createDesignSystem drops whitespace-only description (no manifest)', async () => {

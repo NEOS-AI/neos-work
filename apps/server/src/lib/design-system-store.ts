@@ -126,11 +126,17 @@ export async function getDesignSystemContent(id: string): Promise<string | null>
   }
 }
 
+/** Cap DESIGN.md body (plan Task 1 — runaway paste defense). */
+export const DESIGN_MD_MAX_CHARS = 1 * 1024 * 1024;
+/** Cap optional description stored in manifest. */
+export const DESIGN_DESCRIPTION_MAX_CHARS = 2_000;
+
 export async function updateDesignSystemContent(id: string, content: string): Promise<boolean> {
   const ds = await getDesignSystem(id);
   if (!ds) return false;
   // Coerce to string so non-string callers cannot write "[object Object]"
   const body = typeof content === 'string' ? content : String(content ?? '');
+  if (body.length > DESIGN_MD_MAX_CHARS) return false;
   try {
     await fs.writeFile(path.join(ds.path, 'DESIGN.md'), body, 'utf8');
     return true;
@@ -141,8 +147,11 @@ export async function updateDesignSystemContent(id: string, content: string): Pr
 
 export async function createDesignSystem(name: string, description?: string): Promise<DesignSystem | null> {
   const trimmedName = typeof name === 'string' ? name.trim() : '';
-  const trimmedDescription =
+  let trimmedDescription =
     typeof description === 'string' ? description.trim() || undefined : description;
+  if (trimmedDescription && trimmedDescription.length > DESIGN_DESCRIPTION_MAX_CHARS) {
+    trimmedDescription = trimmedDescription.slice(0, DESIGN_DESCRIPTION_MAX_CHARS);
+  }
   if (!trimmedName || !/^[a-zA-Z0-9_-]+$/.test(trimmedName)) return null;
   await ensureDesignSystemsDir();
 

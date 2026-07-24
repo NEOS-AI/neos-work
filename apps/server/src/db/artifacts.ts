@@ -67,6 +67,10 @@ function rowToArtifact(row: ArtifactRow): Artifact {
   };
 }
 
+function hasUnsafeNameChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
+}
+
 export function createArtifact(input: CreateArtifactInput): Artifact {
   const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -75,6 +79,12 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
     typeof input.contentType === 'string' ? input.contentType.trim().toLowerCase() : '';
   if (!workflowId || !name || !contentType) {
     throw new Error('workflowId, name, and contentType are required');
+  }
+  if (hasUnsafeNameChars(name) || hasUnsafeNameChars(workflowId)) {
+    throw new Error('name/workflowId contains invalid control characters');
+  }
+  if (name.length > 500) {
+    throw new Error('name exceeds max length (500)');
   }
   const runId =
     typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
@@ -148,6 +158,7 @@ export function updateArtifact(
       ? (typeof input.name === 'string' ? input.name.trim() : '')
       : existing.name;
   if (!name) return undefined;
+  if (hasUnsafeNameChars(name) || name.length > 500) return undefined;
   const content =
     input.content !== undefined
       ? normalizeContent(input.content)

@@ -4,6 +4,7 @@ import {
   deleteCustomBlock,
   getCustomBlock,
   listCustomBlocks,
+  normalizeImplementationType,
   updateCustomBlock,
 } from './blocks.js';
 import { getDb } from './schema.js';
@@ -31,6 +32,20 @@ function sampleBlock(id: string, domain: 'general' | 'coding' = 'general') {
     skillId: undefined as string | undefined,
   };
 }
+
+describe('normalizeImplementationType', () => {
+  it('allow-lists native/prompt/skill (case-insensitive) and defaults unknown to native', () => {
+    expect(normalizeImplementationType('native')).toBe('native');
+    expect(normalizeImplementationType('  PROMPT  ')).toBe('prompt');
+    expect(normalizeImplementationType('Skill')).toBe('skill');
+    expect(normalizeImplementationType('wasm')).toBe('native');
+    expect(normalizeImplementationType('')).toBe('native');
+    expect(normalizeImplementationType('   ')).toBe('native');
+    expect(normalizeImplementationType(null)).toBe('native');
+    expect(normalizeImplementationType(undefined)).toBe('native');
+    expect(normalizeImplementationType(42)).toBe('native');
+  });
+});
 
 describe('custom blocks CRUD', () => {
   it('trims fields on create and rejects blank/invalid id', () => {

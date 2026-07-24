@@ -67,6 +67,16 @@ describe('mcp-oauth-store', () => {
     expect(status.connected).toBe(false);
   });
 
+  it('treats invalid expiresAt as expired (fail closed)', async () => {
+    await saveToken({
+      serverId: TEST_ID,
+      accessToken: 'tok-valid-enough',
+      expiresAt: 'not-a-date',
+    });
+    expect(await isTokenValid(TEST_ID)).toBe(false);
+    expect((await getTokenStatus(TEST_ID)).connected).toBe(false);
+  });
+
   it('returns null for missing token', async () => {
     expect(await loadToken('does-not-exist-xyz')).toBeNull();
     expect(await isTokenValid('does-not-exist-xyz')).toBe(false);

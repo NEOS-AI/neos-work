@@ -6,13 +6,14 @@ export function isHtmlArtifactOutput(output: unknown): output is string {
   if (typeof output !== 'string') return false;
   const htmlContent = output.trim();
   if (!htmlContent.startsWith('<')) return false;
+  // Only scan a bounded prefix for markers (avoid scanning multi-MiB agent dumps)
   const head = htmlContent.slice(0, 200).toLowerCase();
+  if (head.startsWith('<!doctype html') || head.startsWith('<html')) return true;
+  const scan = htmlContent.slice(0, 8_192).toLowerCase();
   return (
-    head.startsWith('<!doctype html')
-    || head.startsWith('<html')
-    || htmlContent.includes('<html')
-    || htmlContent.includes('<div')
-    || htmlContent.includes('<svg')
+    scan.includes('<html')
+    || scan.includes('<div')
+    || scan.includes('<svg')
   );
 }
 

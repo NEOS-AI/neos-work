@@ -131,17 +131,32 @@ async function executeStage(
     return `[Stage ${stageName}: No LLM API key configured]`;
   }
 
+  // Cap interpolated prompt / stage output (plan Task 5 — runaway context defense)
+  const STAGE_PROMPT_MAX = 100_000;
+  const STAGE_OUTPUT_MAX = 200_000;
+
   // Interpolate {{key}} placeholders in prompt (trim so whitespace-only falls back)
   let prompt =
     typeof stage.prompt === 'string' && stage.prompt.trim()
       ? stage.prompt.trim()
       : `Perform the ${stageName} step.`;
   for (const [key, val] of Object.entries(previousOutputs)) {
+    // Only interpolate safe placeholder keys (alnum/_/-)
+    if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
     prompt = prompt.replaceAll(`{{${key}}}`, val);
   }
   for (const [key, val] of Object.entries(context)) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
     prompt = prompt.replaceAll(`{{${key}}}`, String(val));
   }
+  if (prompt.length > STAGE_PROMPT_MAX) {
+    prompt = prompt.slice(0, STAGE_PROMPT_MAX) + '\n…[prompt truncated]';
+  }
+
+  const clampOutput = (text: string): string =>
+    text.length > STAGE_OUTPUT_MAX
+      ? text.slice(0, STAGE_OUTPUT_MAX) + '\n…[output truncated]'
+      : text;
 
   // Anthropic Messages API
   if (anthropicKey) {
@@ -167,7 +182,7 @@ async function executeStage(
       }
       const data = await res.json() as { content?: { text?: string }[] };
       const text = data.content?.[0]?.text;
-      return typeof text === 'string' ? text : '';
+      return clampOutput(typeof text === 'string' ? text : '');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'LLM request failed';
       return `[Stage ${stageName}: ${msg}]`;
@@ -196,7 +211,7 @@ async function executeStage(
     }
     const data = await res.json() as { choices?: { message?: { content?: string } }[] };
     const content = data.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
+    return clampOutput(typeof content === 'string' ? content : '');
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'LLM request failed';
     return `[Stage ${stageName}: ${msg}]`;

@@ -147,4 +147,14 @@ describe('isValidTimeZone', () => {
     expect(isValidTimeZone('Not/AZone')).toBe(false);
     expect(isValidTimeZone('')).toBe(false);
   });
+
+  it('rejects blank/whitespace and trims padded valid zones', () => {
+    expect(isValidTimeZone('   ')).toBe(false);
+    expect(isValidTimeZone('\t\n')).toBe(false);
+    // non-string values are treated as invalid
+    expect(isValidTimeZone(null as unknown as string)).toBe(false);
+    expect(isValidTimeZone(undefined as unknown as string)).toBe(false);
+    expect(isValidTimeZone('  UTC  ')).toBe(true);
+    expect(isValidTimeZone('  Asia/Seoul  ')).toBe(true);
+  });
 });

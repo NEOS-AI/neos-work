@@ -23,6 +23,15 @@ export class SlackMessageNode implements ExecutableNode {
     if (!channel) {
       return { ok: false, output: null, error: 'Slack channel not specified', durationMs: 0 };
     }
+    // Reject control chars that can confuse Slack API / logging
+    if (/[\0\r\n]/.test(channel)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Slack channel contains invalid control characters',
+        durationMs: 0,
+      };
+    }
 
     if (!text.trim()) {
       return { ok: false, output: null, error: 'Slack message text is empty', durationMs: 0 };

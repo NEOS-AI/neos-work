@@ -124,6 +124,10 @@ export function listMessages(sessionId: string): MessageRow[] {
 }
 
 const MESSAGE_ROLES = new Set(['user', 'assistant', 'system', 'tool']);
+/** Cap chat message body (runaway paste / tool dump defense). */
+export const MESSAGE_CONTENT_MAX_CHARS = 1 * 1024 * 1024;
+/** Cap serialized metadata JSON. */
+export const MESSAGE_METADATA_MAX_CHARS = 64 * 1024;
 
 export function addMessage(params: {
   sessionId: string;
@@ -139,12 +143,19 @@ export function addMessage(params: {
   }
   // Preserve intentional whitespace in chat content; only coerce non-strings
   const content = typeof params.content === 'string' ? params.content : String(params.content ?? '');
+  if (content.length > MESSAGE_CONTENT_MAX_CHARS) {
+    throw new Error(`content exceeds max size (${MESSAGE_CONTENT_MAX_CHARS} characters)`);
+  }
+  let metadataStr = JSON.stringify(params.metadata ?? null);
+  if (metadataStr.length > MESSAGE_METADATA_MAX_CHARS) {
+    metadataStr = JSON.stringify({ truncated: true });
+  }
   const db = getDb();
   const id = nanoid(12);
   db.prepare(
     `INSERT INTO message (id, session_id, role, content, metadata)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, sessionId, roleRaw, content, JSON.stringify(params.metadata ?? null));
+  ).run(id, sessionId, roleRaw, content, metadataStr);
   return db.prepare('SELECT * FROM message WHERE id = ?').get(id) as MessageRow;
 }
 

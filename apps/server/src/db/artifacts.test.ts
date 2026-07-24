@@ -280,5 +280,40 @@ describe('updateArtifact PATCH semantics', () => {
     deleteArtifact(empty.id);
     deleteArtifact(coerced.id);
   });
+
+  it('rejects control-char names and overlong names', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: `bad${'\n'}name`,
+        contentType: 'text/html',
+        content: '<p>x</p>',
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: 'a'.repeat(501),
+        contentType: 'text/html',
+        content: '<p>x</p>',
+      }),
+    ).toThrow(/max length/i);
+
+    const art = createArtifact({
+      workflowId: wf.id,
+      name: 'ok.html',
+      contentType: 'text/html',
+      content: '<p>ok</p>',
+    });
+    expect(updateArtifact(art.id, { name: `bad${'\0'}x` })).toBeUndefined();
+    expect(getArtifact(art.id)?.name).toBe('ok.html');
+    deleteArtifact(art.id);
+  });
 });
 

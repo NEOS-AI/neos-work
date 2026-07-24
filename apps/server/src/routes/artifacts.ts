@@ -82,15 +82,24 @@ artifacts.post('/', async (c) => {
     return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
   }
 
-  const artifact = db.createArtifact({
-    workflowId,
-    runId: typeof body.runId === 'string' ? body.runId.trim() || undefined : body.runId,
-    name,
-    contentType,
-    content: body.content,
-    nodeId: typeof body.nodeId === 'string' ? body.nodeId.trim() || undefined : body.nodeId,
-  });
-  return c.json({ ok: true, data: artifact }, 201);
+  try {
+    const artifact = db.createArtifact({
+      workflowId,
+      runId: typeof body.runId === 'string' ? body.runId.trim() || undefined : body.runId,
+      name,
+      contentType,
+      content: body.content,
+      nodeId: typeof body.nodeId === 'string' ? body.nodeId.trim() || undefined : body.nodeId,
+    });
+    return c.json({ ok: true, data: artifact }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to create artifact';
+    // Size / validation errors from db layer → 400
+    if (/max size|required/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
+    return c.json({ ok: false, error: msg }, 500);
+  }
 });
 
 artifacts.put('/:id', async (c) => {
@@ -104,9 +113,17 @@ artifacts.put('/:id', async (c) => {
   if (body.content.length > 0 && !body.content.trim()) {
     return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
   }
-  const updated = db.updateArtifactContent(id, body.content);
-  if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: updated });
+  try {
+    const updated = db.updateArtifactContent(id, body.content);
+    if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
+    return c.json({ ok: true, data: updated });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to update artifact';
+    if (/max size/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
+    return c.json({ ok: false, error: msg }, 500);
+  }
 });
 
 /** Plan Task 4 — PATCH name and/or content */
@@ -132,12 +149,20 @@ artifacts.patch('/:id', async (c) => {
       return c.json({ ok: false, error: 'content cannot be whitespace-only' }, 400);
     }
   }
-  const updated = db.updateArtifact(id, {
-    name,
-    content: body.content,
-  });
-  if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: updated });
+  try {
+    const updated = db.updateArtifact(id, {
+      name,
+      content: body.content,
+    });
+    if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
+    return c.json({ ok: true, data: updated });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to update artifact';
+    if (/max size/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
+    return c.json({ ok: false, error: msg }, 500);
+  }
 });
 
 artifacts.delete('/:id', (c) => {

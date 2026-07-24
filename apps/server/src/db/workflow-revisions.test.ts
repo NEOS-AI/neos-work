@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from './schema.js';
 import {
+  REVISION_SNAPSHOT_MAX_CHARS,
   createRevision,
   deleteRevision,
   getRevision,
@@ -40,9 +41,12 @@ describe('createRevision input hygiene', () => {
       nodes: [],
       edges: [],
     });
-    const huge = 'x'.repeat(5 * 1024 * 1024 + 1);
+    const huge = 'x'.repeat(REVISION_SNAPSHOT_MAX_CHARS + 1);
     expect(createRevision(wf.id, huge)).toBeNull();
     expect(listRevisions(wf.id)).toEqual([]);
+    // at-limit snapshot is accepted (when non-duplicate)
+    const ok = createRevision(wf.id, 'x'.repeat(Math.min(REVISION_SNAPSHOT_MAX_CHARS, 1024)));
+    expect(ok).not.toBeNull();
   });
 });
 

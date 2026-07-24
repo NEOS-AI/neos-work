@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from './schema.js';
 import {
+  SETTING_VALUE_MAX_CHARS,
   deleteSetting,
   getAllSettings,
   getSetting,
@@ -124,5 +125,13 @@ describe('settings CRUD + encryption migration', () => {
     setSetting('theme', 'a');
     setSetting('theme', 'b');
     expect(getSetting('theme')).toBe('b');
+  });
+
+  it('rejects control-char keys, overlong keys, and oversized values', () => {
+    expect(() => setSetting('bad\nkey', 'x')).toThrow(/control characters/i);
+    expect(() => setSetting('a'.repeat(201), 'x')).toThrow(/max length/i);
+    expect(() => setSetting('theme', 'x'.repeat(SETTING_VALUE_MAX_CHARS + 1))).toThrow(
+      /max size/i,
+    );
   });
 });

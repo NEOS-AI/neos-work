@@ -68,6 +68,12 @@ designSystems.put('/:id/content', async (c) => {
   if (!body.content.trim()) {
     return c.json({ ok: false, error: 'content cannot be empty' }, 400);
   }
+  if (body.content.length > store.DESIGN_MD_MAX_CHARS) {
+    return c.json({
+      ok: false,
+      error: `content exceeds max size (${store.DESIGN_MD_MAX_CHARS} characters)`,
+    }, 400);
+  }
   const updated = await store.updateDesignSystemContent(id, body.content);
   if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });

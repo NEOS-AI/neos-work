@@ -170,11 +170,11 @@ describe('settings routes', () => {
     expect(nonString.status).toBe(400);
     expect(((await nonString.json()) as { error: string }).error).toMatch(/too large|invalid type/i);
 
-    // 1MB + 1 exceeds limit
+    // 1 MiB + 1 exceeds SETTING_VALUE_MAX_CHARS (1 * 1024 * 1024)
     const tooBig = await settings.request(`/${KEY}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ value: 'x'.repeat(1_000_001) }),
+      body: JSON.stringify({ value: 'x'.repeat(1 * 1024 * 1024 + 1) }),
     });
     expect(tooBig.status).toBe(400);
     expect(((await tooBig.json()) as { error: string }).error).toMatch(/too large/i);
