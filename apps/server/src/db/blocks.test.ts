@@ -46,6 +46,9 @@ describe('normalizeImplementationType', () => {
     expect(normalizeImplementationType(null)).toBe('native');
     expect(normalizeImplementationType(undefined)).toBe('native');
     expect(normalizeImplementationType(42)).toBe('native');
+    // Leading control char must not strip to a valid type
+    expect(normalizeImplementationType('\nprompt')).toBe('native');
+    expect(normalizeImplementationType('skill\n')).toBe('native');
   });
 });
 
@@ -303,6 +306,56 @@ describe('custom blocks CRUD', () => {
       }),
     ).toBeNull();
     expect(updateCustomBlock(IDS[1]!, { name: 'x\ny' })).toBeNull();
+  });
+
+  it('control-char-before-trim: category/domain/name/skillId/description null-byte', () => {
+    // Leading control-char name on update must reject (not strip to valid name)
+    createCustomBlock(sampleBlock(IDS[0]!));
+    expect(updateCustomBlock(IDS[0]!, { name: '\nRenamed' })).toBeNull();
+    expect(getCustomBlock(IDS[0]!)?.name).toBe(`Block ${IDS[0]}`);
+
+    // Control-char category → custom; control-char domain → general
+    const cat = updateCustomBlock(IDS[0]!, { category: '\ncat', domain: '\ncoding' as never });
+    expect(cat?.category).toBe('custom');
+    expect(cat?.domain).toBe('general');
+
+    // Leading control-char skillId rejected
+    expect(updateCustomBlock(IDS[0]!, { skillId: '\nskill-x' })).toBeNull();
+    expect(getCustomBlock(IDS[0]!)?.skillId).toBeUndefined();
+
+    // Null-byte description/prompt/io rejected
+    expect(updateCustomBlock(IDS[0]!, { description: 'bad\0desc' })).toBeNull();
+    expect(updateCustomBlock(IDS[0]!, { promptTemplate: 'p\0t' })).toBeNull();
+    expect(updateCustomBlock(IDS[0]!, { inputDescription: 'in\0' })).toBeNull();
+    expect(updateCustomBlock(IDS[0]!, { outputDescription: 'out\0' })).toBeNull();
+
+    // Create: control-char category → custom; null-byte description throws
+    const created = createCustomBlock({
+      ...sampleBlock(IDS[1]!),
+      category: '\ncat',
+      domain: '\nfinance' as never,
+      implementationType: '\nprompt' as never,
+    });
+    expect(created.category).toBe('custom');
+    expect(created.domain).toBe('general');
+    expect(created.implementationType).toBe('native');
+
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock('_cov_blk_x'),
+        description: 'd\0x',
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock('_cov_blk_x'),
+        skillId: '\nskill',
+      }),
+    ).toThrow(/skillId is invalid/i);
+
+    // Control-char domain list filter → all blocks (not filtered to general)
+    const all = listCustomBlocks('\ncoding');
+    expect(all.some((b) => b.id === IDS[0])).toBe(true);
   });
 });
 

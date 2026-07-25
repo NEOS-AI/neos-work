@@ -129,6 +129,14 @@ describe('memory CRUD', () => {
     expect(JSON.parse(getMemory(WS, KEYS[0]!)!.tags!)).toEqual(['ok']);
     // control-char-only tag filters → empty match set
     expect(searchMemory(WS, 'safe', ['bad\ntag'])).toEqual([]);
+    // Leading control-char tag filter must not strip to a real tag
+    createMemory({
+      workspaceId: WS,
+      key: KEYS[1]!,
+      content: 'tagged2',
+      tags: ['ok'],
+    });
+    expect(searchMemory(WS, 'tagged2', ['\nok'])).toEqual([]);
   });
 
   it('rejects overlong keys and oversized content', () => {
@@ -142,6 +150,22 @@ describe('memory CRUD', () => {
         content: 'c'.repeat(MEMORY_DB_CONTENT_MAX_CHARS + 1),
       }),
     ).toThrow(/max size/i);
+  });
+
+  it('caps tags array length at MEMORY_DB_TAGS_MAX', async () => {
+    const { MEMORY_DB_TAGS_MAX } = await import('./memory.js');
+    const many = Array.from({ length: MEMORY_DB_TAGS_MAX + 25 }, (_, i) => `tag${i}`);
+    createMemory({
+      workspaceId: WS,
+      key: KEYS[0]!,
+      content: 'many-tags',
+      tags: many,
+    });
+    const stored = JSON.parse(getMemory(WS, KEYS[0]!)!.tags!) as string[];
+    expect(stored).toHaveLength(MEMORY_DB_TAGS_MAX);
+    expect(stored[0]).toBe('tag0');
+    expect(stored[MEMORY_DB_TAGS_MAX - 1]).toBe(`tag${MEMORY_DB_TAGS_MAX - 1}`);
+    deleteMemory(WS, KEYS[0]!);
   });
 
   it('drops overlong workspaceId lookups and caps search query length', () => {

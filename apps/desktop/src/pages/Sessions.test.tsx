@@ -386,16 +386,13 @@ describe('Sessions page', () => {
     expect(capturedSignal).toBeDefined();
     expect(capturedSignal!.aborted).toBe(false);
 
-    // While streaming the send button becomes stop (square icon) — click all enabled toolbar buttons
-    const toolbarButtons = Array.from(document.querySelectorAll('button')).filter(
+    // Stop control is the enabled button in the composer (Agent is disabled while streaming)
+    const composer = input.closest('div.rounded-xl') as HTMLElement;
+    const stopBtn = Array.from(composer.querySelectorAll('button')).find(
       (b) => !(b as HTMLButtonElement).disabled,
     );
-    // Prefer the button next to the input area that is not Agent
-    const stopCandidates = toolbarButtons.filter((b) => !/Agent/i.test(b.textContent ?? ''));
-    for (const btn of stopCandidates) {
-      fireEvent.click(btn);
-      if (capturedSignal?.aborted) break;
-    }
+    expect(stopBtn).toBeTruthy();
+    fireEvent.click(stopBtn!);
 
     await waitFor(() => expect(capturedSignal!.aborted).toBe(true));
     release?.();

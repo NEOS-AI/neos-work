@@ -277,6 +277,14 @@ describe('routine runs', () => {
     completeRoutineRun(`  ${failed2.id}  `, 'failed', '  padded error  ');
     expect(getRoutineRun(r.id, failed2.id)?.error).toBe('padded error');
     completeRoutineRun(failed2.id, 'failed', '   ');
+
+    // Control-char error text scrubbed; control-char status → completed fallback
+    const scrub = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(scrub.id, 'failed', 'line1\nline2\0x');
+    expect(getRoutineRun(r.id, scrub.id)?.error).toBe('line1 line2x');
+    const statusCtrl = createRoutineRun({ routineId: r.id });
+    completeRoutineRun(statusCtrl.id, '\nfailed' as never);
+    expect(getRoutineRun(r.id, statusCtrl.id)?.status).toBe('completed');
     // blank error stored as NULL → mapped to undefined on the row model
     expect(getRoutineRun(r.id, failed2.id)?.error).toBeUndefined();
 

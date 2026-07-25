@@ -196,9 +196,37 @@ describe('custom harnesses CRUD', () => {
       domain: 'coding',
       description: 'd',
       systemPrompt: 'p',
-      allowedTools: ['read', 'bad\ntool', '', 'x'.repeat(101), 'write'],
+      allowedTools: ['read', 'bad\ntool', '', 'x'.repeat(101), 'write', '\nread'],
     });
+    // Leading control-char tool names dropped before trim
     expect(h.allowedTools).toEqual(['read', 'write']);
+  });
+
+  it('control-char-before-trim: domain fallback and description collapse', () => {
+    const h = createCustomHarness({
+      id: ID,
+      name: 'Domain Ctrl',
+      domain: '\ncoding' as never,
+      description: '\nline1\nline2',
+      systemPrompt: 'p',
+      allowedTools: ['  shell  ', '\nshell'],
+    });
+    // Control-char domain → general fallback
+    expect(h.domain).toBe('general');
+    // Leading/embedded control chars collapsed before trim
+    expect(h.description).toBe('line1 line2');
+    // Leading-control tool dropped; padded tool kept
+    expect(h.allowedTools).toEqual(['shell']);
+
+    const updated = updateCustomHarness(ID, {
+      description: '\npatched',
+      domain: '\nfinance' as never,
+      allowedTools: ['\nread', 'write'],
+    });
+    expect(updated?.description).toBe('patched');
+    // Control-char domain falls back to existing domain (general)
+    expect(updated?.domain).toBe('general');
+    expect(updated?.allowedTools).toEqual(['write']);
   });
 
   it('trims fields on create/update; rejects invalid id and blank required fields', () => {

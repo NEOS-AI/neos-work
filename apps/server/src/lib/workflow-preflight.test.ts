@@ -180,6 +180,46 @@ describe('assessWorkflowPreflight', () => {
     expect(r.ok).toBe(true);
   });
 
+  it('control-char agent provider defaults to anthropic (not strip to cli-claude)', () => {
+    // Leading control char must not strip to a valid CLI provider
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'a', type: 'agent_coding', config: { provider: '\ncli-claude' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'a' },
+          { id: 'e2', source: 'a', target: 'o' },
+        ],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_anthropic_key')).toBe(true);
+  });
+
+  it('control-char deploy provider defaults to vercel token check', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 'd', type: 'deploy', config: { provider: '\ncloudflare' } },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'd' },
+          { id: 'e2', source: 'd', target: 'o' },
+        ],
+      },
+      {},
+    );
+    // Control-char provider → vercel path (not cloudflare)
+    expect(r.issues.some((i) => i.code === 'missing_vercel_token')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'missing_cloudflare_creds')).toBe(false);
+  });
+
   it('requires Vercel token for vercel deploy', () => {
     const r = assessWorkflowPreflight(
       {

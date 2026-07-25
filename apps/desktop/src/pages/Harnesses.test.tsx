@@ -165,7 +165,7 @@ describe('Harnesses page', () => {
   it('edits a custom harness via updateHarness and views built-in read-only', async () => {
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
     updateHarness.mockResolvedValue({ ok: true });
-    render(<Harnesses />);
+    const { unmount } = render(<Harnesses />);
     await waitFor(() => expect(screen.getByText('Custom Analyst')).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
@@ -183,8 +183,9 @@ describe('Harnesses page', () => {
         }),
       );
     });
+    unmount();
 
-    // Built-in view is read-only (no save path for updateHarness)
+    // Built-in view is read-only (no save button)
     updateHarness.mockClear();
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
     render(<Harnesses />);

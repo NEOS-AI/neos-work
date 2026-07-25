@@ -62,6 +62,26 @@ describe('deployments CRUD', () => {
     expect(row.runId).toBeUndefined();
   });
 
+  it('rejects control-char provider/status before trim', () => {
+    // Leading control-char provider must not strip to "vercel"
+    expect(() =>
+      createDeployment({
+        provider: '\nvercel',
+        projectName: `${MARKER}-prov`,
+        status: 'pending',
+      }),
+    ).toThrow(/provider is required/i);
+
+    // Control-char status → pending fallback
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-st`,
+      status: '\nsuccess' as never,
+    });
+    expect(row.status).toBe('pending');
+    deleteDeployment(row.id);
+  });
+
   it('rejects control-char / overlong lookup ids on get/list/update/delete', () => {
     expect(getDeployment('bad\nid')).toBeUndefined();
     expect(getDeployment('x'.repeat(101))).toBeUndefined();
