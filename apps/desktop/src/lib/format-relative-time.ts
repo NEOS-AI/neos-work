@@ -7,7 +7,10 @@
  */
 export function parseTimestampMs(value: string | undefined | null): number {
   if (value == null) return Number.NaN;
-  const s = String(value).trim();
+  const raw = String(value);
+  // Control-char timestamps are invalid (check before trim)
+  if (/[\0\r\n]/.test(raw)) return Number.NaN;
+  const s = raw.trim();
   if (!s) return Number.NaN;
 
   // SQLite UTC wall clock: "2026-07-19 12:34:56" or with fractional seconds

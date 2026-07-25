@@ -62,6 +62,8 @@ export class BlockNode implements ExecutableNode {
       const key = k.trim();
       if (!key || key.length > PARAM_KEY_MAX) continue;
       if (typeof v === 'string') {
+        // Null-byte string params dropped (multi-line OK)
+        if (/\0/.test(v)) continue;
         const trimmed = v.trim();
         params[key] =
           trimmed.length > PARAM_VALUE_MAX ? trimmed.slice(0, PARAM_VALUE_MAX) : trimmed;

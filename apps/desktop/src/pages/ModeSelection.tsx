@@ -25,9 +25,13 @@ export function ModeSelection() {
 
   const handleSelect = (mode: AppMode) => {
     if (mode === 'client' && !remoteUrl) return;
-    if (devToken) sessionStorage.setItem('devAuthToken', devToken);
+    // Control-char remote URL never used for connect (mode-prefs also rejects)
+    if (mode === 'client' && /[\0\r\n]/.test(remoteUrl)) return;
+    // Control-char bearer token never stored (header injection defense)
+    if (devToken && /[\0\r\n]/.test(devToken)) return;
+    if (devToken) sessionStorage.setItem('devAuthToken', devToken.trim());
     if (mode === 'client') saveRemoteUrl(remoteUrl);
-    connect(mode, mode === 'client' ? remoteUrl : undefined);
+    connect(mode, mode === 'client' ? remoteUrl.trim() : undefined);
   };
 
   return (

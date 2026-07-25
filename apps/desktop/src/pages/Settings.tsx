@@ -397,9 +397,15 @@ function ApiKeyInput({
 
   const handleVerify = async () => {
     if (!client || !value) return;
+    // Control-char secrets rejected before API (align with settings verify-key)
+    if (/[\0\r\n]/.test(value)) {
+      setVerifyStatus('invalid');
+      setTimeout(() => setVerifyStatus('idle'), 3000);
+      return;
+    }
     setVerifyStatus('verifying');
     try {
-      const res = await client.verifyApiKey(provider, value);
+      const res = await client.verifyApiKey(provider, value.trim());
       setVerifyStatus(res.ok && res.data?.valid ? 'valid' : 'invalid');
     } catch {
       setVerifyStatus('invalid');
@@ -410,9 +416,14 @@ function ApiKeyInput({
 
   const handleSave = async () => {
     if (!client || !value) return;
+    // Control-char secrets rejected before API (align with settings PUT)
+    if (/[\0\r\n]/.test(value)) {
+      setSaveStatus('idle');
+      return;
+    }
     setSaveStatus('saving');
     try {
-      await client.saveSetting(settingKey, value);
+      await client.saveSetting(settingKey, value.trim());
       setSaveStatus('saved');
       setHasSavedKey(true);
       setValue('');
@@ -549,8 +560,10 @@ function SimpleKeyInput({
 
   const handleSave = async () => {
     if (!client || !value) return;
+    // Control-char secrets/paths rejected before API (align with settings PUT)
+    if (/[\0\r\n]/.test(value)) return;
     setSaving(true);
-    await client.saveSetting(settingKey, value);
+    await client.saveSetting(settingKey, value.trim());
     setSaving(false);
     setHasSaved(true);
     setValue('');
@@ -1121,12 +1134,15 @@ function DevToolsSection() {
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
-    if (token) {
-      sessionStorage.setItem('devAuthToken', token);
+    // Control-char tokens never stored (header injection defense)
+    if (token && /[\0\r\n]/.test(token)) return;
+    const next = token.trim();
+    if (next) {
+      sessionStorage.setItem('devAuthToken', next);
     } else {
       sessionStorage.removeItem('devAuthToken');
     }
-    client?.setAuthToken(token || '');
+    client?.setAuthToken(next || '');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

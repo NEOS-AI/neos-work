@@ -26,6 +26,11 @@ describe('parseTimestampMs', () => {
     expect(Number.isNaN(parseTimestampMs(''))).toBe(true);
     expect(Number.isNaN(parseTimestampMs('not-a-date'))).toBe(true);
   });
+
+  it('returns NaN for control-char timestamps before trim', () => {
+    expect(Number.isNaN(parseTimestampMs(`2026-06-01T12:00:00.000Z${'\0'}`))).toBe(true);
+    expect(Number.isNaN(parseTimestampMs(`\n2026-06-01T12:00:00.000Z`))).toBe(true);
+  });
 });
 
 describe('formatRelativeTime', () => {

@@ -301,6 +301,40 @@ describe('Settings page', () => {
     expect(setAuthToken).toHaveBeenCalledWith('dev-token-1');
   });
 
+  it('rejects control-char API keys and dev auth tokens', async () => {
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code')).toBeInTheDocument();
+    });
+
+    // Dev token with control char never applied
+    fireEvent.change(screen.getByPlaceholderText('Override Bearer token'), {
+      target: { value: `tok${'\0'}bad` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(sessionStorage.getItem('devAuthToken')).toBeNull();
+    expect(setAuthToken).not.toHaveBeenCalled();
+
+    // Simple key (Tavily) control-char rejected
+    const tavily = screen.getByPlaceholderText(/tvly-/i);
+    fireEvent.change(tavily, { target: { value: `tvly${'\0'}bad` } });
+    // nearest Save in the same row
+    const row = tavily.closest('div')?.parentElement;
+    const saveBtn = row?.querySelector('button');
+    if (saveBtn) fireEvent.click(saveBtn);
+    expect(saveSetting).not.toHaveBeenCalledWith('TAVILY_API_KEY', expect.anything());
+
+    // Provider API key verify/save reject control chars
+    const anthropic = screen.getByPlaceholderText('sk-ant-...');
+    fireEvent.change(anthropic, { target: { value: `sk-ant${'\0'}bad` } });
+    const verifyButtons = screen.getAllByRole('button', { name: 'common:action.verify' });
+    fireEvent.click(verifyButtons[0]!);
+    expect(verifyApiKey).not.toHaveBeenCalled();
+    const saveButtons = screen.getAllByRole('button', { name: 'common:action.save' });
+    fireEvent.click(saveButtons[0]!);
+    expect(saveSetting).not.toHaveBeenCalledWith('apiKey.anthropic', expect.anything());
+  });
+
   it('shows empty CLI agents message when none detected', async () => {
     listCliAgents.mockResolvedValue({ ok: true, data: [] });
     render(<Settings />);

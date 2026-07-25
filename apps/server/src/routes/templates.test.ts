@@ -117,4 +117,36 @@ describe('workflow TEMPLATES', () => {
     const incoming = t.edges.filter((e) => e.target === or.id);
     expect(incoming.length).toBe(2);
   });
+
+  it('includes finance and coding starter templates with expected node types', () => {
+    const stock = TEMPLATES.find((t) => t.name === 'Stock Price Monitor');
+    expect(stock?.domain).toBe('finance');
+    expect(stock?.nodes.some((n) => n.type === 'block' && (n.config as { blockId?: string }).blockId === 'price_lookup')).toBe(true);
+    expect(stock?.nodes.some((n) => n.type === 'slack_message')).toBe(true);
+
+    const review = TEMPLATES.find((t) => t.name === 'Code Review Assistant');
+    expect(review?.domain).toBe('coding');
+    expect(review?.nodes.some((n) => n.type === 'agent_coding')).toBe(true);
+
+    const testWriter = TEMPLATES.find((t) => t.name === 'Test Writer');
+    expect(testWriter?.domain).toBe('coding');
+
+    const tech = TEMPLATES.find((t) => t.name === 'Technical Analysis Report');
+    expect(tech?.nodes.some((n) => n.type === 'gate_and')).toBe(true);
+    expect(tech?.nodes.some((n) => n.type === 'agent_finance')).toBe(true);
+
+    const portfolio = TEMPLATES.find((t) => t.name === 'Portfolio Risk Report');
+    expect(portfolio?.domain).toBe('finance');
+
+    const webResearch = TEMPLATES.find((t) => t.name === 'Web Research + Slack');
+    expect(webResearch?.domain).toBe('general');
+    expect(webResearch?.nodes.some((n) => n.type === 'web_search' || n.type === 'slack_message')).toBe(true);
+  });
+
+  it('every template has unique name and non-empty description', () => {
+    const names = TEMPLATES.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(TEMPLATES.every((t) => typeof t.description === 'string' && t.description.trim().length > 0)).toBe(true);
+    expect(TEMPLATES.length).toBeGreaterThanOrEqual(9);
+  });
 });

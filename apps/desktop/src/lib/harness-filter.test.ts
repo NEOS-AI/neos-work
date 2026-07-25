@@ -44,4 +44,24 @@ describe('filterAndSortHarnesses', () => {
     filterAndSortHarnesses(input, 'agent_coding');
     expect(input.map((h) => h.id)).toEqual(['c2', 'f1', 'g1', 'c1']);
   });
+
+  it('drops control-char domain/id/name harnesses', () => {
+    const mixed = [
+      { id: 'ok', name: 'Ok', domain: 'coding' },
+      { id: `bad${'\0'}id`, name: 'X', domain: 'coding' },
+      { id: 'n1', name: `bad${'\n'}name`, domain: 'coding' },
+      { id: 'd1', name: 'Dom', domain: `coding${'\0'}` },
+      { id: 'g', name: 'General', domain: 'GENERAL' },
+    ];
+    const filtered = filterAndSortHarnesses(mixed, 'agent_coding');
+    // Sort by domain:name → coding:Ok then general:General
+    expect(filtered.map((h) => h.id)).toEqual(['ok', 'g']);
+  });
+
+  it('treats control-char nodeType as coding default domains', () => {
+    expect([...allowedDomainsForAgentNode(`agent_finance${'\0'}`)].sort()).toEqual([
+      'coding',
+      'general',
+    ]);
+  });
 });

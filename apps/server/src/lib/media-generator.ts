@@ -192,8 +192,8 @@ export async function generateAudio(options: {
   model?: 'tts-1' | 'tts-1-hd';
   apiKey: string;
 }): Promise<GenerateAudioResult> {
-  // Control-char check before trim (trim strips leading/trailing \r\n)
-  if (typeof options.text === 'string' && /[\0\r\n]/.test(options.text)) {
+  // TTS allows multi-line text; only null-byte is rejected (align with media route)
+  if (typeof options.text === 'string' && /\0/.test(options.text)) {
     throw new Error('text contains invalid control characters');
   }
   const text = typeof options.text === 'string' ? options.text.trim() : '';

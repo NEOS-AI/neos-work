@@ -118,6 +118,21 @@ describe('generateImage', () => {
     ).rejects.toThrow(/control characters/i);
   });
 
+  it('allows multi-line TTS text (newlines are valid speech input)', async () => {
+    speechCreateMock.mockResolvedValue({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    });
+    const result = await generateAudio({
+      text: 'Hello\nWorld',
+      apiKey: 'sk-test',
+    });
+    expect(result.filePath.startsWith(MEDIA_DIR)).toBe(true);
+    created.push(result.filePath);
+    expect(speechCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ input: 'Hello\nWorld' }),
+    );
+  });
+
   it('clamps invalid size/quality and rejects blank prompt', async () => {
     generateMock.mockResolvedValue({
       data: [{ url: 'https://cdn.example/img.png' }],

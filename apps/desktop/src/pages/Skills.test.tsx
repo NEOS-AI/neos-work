@@ -208,4 +208,91 @@ describe('Skills page', () => {
       expect(window.alert).toHaveBeenCalledWith('upgrade failed hard');
     });
   });
+
+  it('falls back to all when persisted category is missing from skills', async () => {
+    localStorage.setItem('neos-skills-category', 'legacy-gone');
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+    // Both categories visible after fallback; chip "all" active
+    expect(screen.getByText('Beta Skill')).toBeInTheDocument();
+    expect(localStorage.getItem('neos-skills-category')).toBe('all');
+  });
+
+  it('shows scan unknown-error message and featured/source badges', async () => {
+    listSkills.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          ...skills[1]!,
+          version: '2.1.0',
+          mode: 'agent',
+          installedAt: '2026-01-15T12:00:00.000Z',
+        },
+        skills[0]!,
+      ],
+    });
+    scanSkills.mockResolvedValue({ ok: false });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+
+    // Featured star + source/version/mode badges (category appears as chip + badge)
+    expect(screen.getByText('★')).toBeInTheDocument();
+    expect(screen.getByText('local')).toBeInTheDocument();
+    expect(screen.getAllByText('writing').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('v2.1.0')).toBeInTheDocument();
+    expect(screen.getByText('agent')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Scan/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Scan failed: unknown error/)).toBeInTheDocument();
+    });
+  });
+
+  it('removes skill from list after delete and tolerates non-ok list', async () => {
+    listSkills
+      .mockResolvedValueOnce({ ok: true, data: skills })
+      .mockResolvedValueOnce({ ok: false, error: 'boom' });
+    deleteSkill.mockResolvedValue({ ok: true });
+    const { unmount } = render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+
+    // Delete Alpha (first Remove skill among cards after featured sort: Alpha first)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove skill' })[0]!);
+    await waitFor(() => {
+      expect(deleteSkill).toHaveBeenCalledWith('sk-a');
+      expect(screen.queryByText('Alpha Skill')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Beta Skill')).toBeInTheDocument();
+    unmount();
+
+    // Non-ok listSkills leaves empty without crashing
+    render(<Skills />);
+    await waitFor(() => {
+      expect(screen.getByText(/No skills installed/)).toBeInTheDocument();
+    });
+  });
+
+  it('alerts Upgrade failed when upgrade response has no error field', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    upgradeSkillToPlugin.mockResolvedValue({ ok: false });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle(/open-design\.json|Plugin/i)[0]!);
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Upgrade failed');
+    });
+  });
+
+  it('persists category chip selection via skills prefs', async () => {
+    const user = userEvent.setup();
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'writing' }));
+    expect(localStorage.getItem('neos-skills-category')).toBe('writing');
+    expect(screen.getByText('Alpha Skill')).toBeInTheDocument();
+    expect(screen.queryByText('Beta Skill')).not.toBeInTheDocument();
+  });
 });

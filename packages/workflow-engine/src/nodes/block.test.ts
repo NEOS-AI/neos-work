@@ -185,6 +185,16 @@ describe('BlockNode', () => {
     );
     expect(trimmedParams.ok).toBe(true);
     expect(trimmedParams.output).toEqual({ echoed: 'value' });
+
+    // Null-byte string param values dropped (multi-line OK)
+    const nullByteParam = await node.execute(
+      ctx({
+        blockId: 'cov_native_block',
+        params: { x: `bad${'\0'}value`, ok: 'kept' },
+      }),
+    );
+    expect(nullByteParam.ok).toBe(true);
+    expect(nullByteParam.output).toEqual({ echoed: null });
   });
 
   it('fails when native meta exists but executor missing', async () => {

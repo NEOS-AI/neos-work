@@ -432,4 +432,88 @@ describe('WorkflowEditor page', () => {
     await waitFor(() => expect(screen.queryByTestId('run-inputs-dialog')).not.toBeInTheDocument());
     expect(runWorkflow).not.toHaveBeenCalled();
   });
+
+  it('runs auto layout and toggles layout direction', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    expect(screen.getByTitle(/Auto Layout \(TB\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle(/Auto Layout \(TB\)/));
+    await waitFor(() => expect(fitView).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTitle(/Switch layout direction/));
+    await waitFor(() => {
+      expect(screen.getByTitle(/Auto Layout \(LR\)/)).toBeInTheDocument();
+    });
+    expect(localStorage.getItem('neos-layout-direction')).toBe('LR');
+  });
+
+  it('alerts Preflight OK when graph has no issues', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    preflightWorkflow.mockResolvedValueOnce({ ok: true, data: { ok: true, issues: [] } });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Preflight OK — ready to run.');
+    });
+  });
+
+  it('run path respects preflight hard-error confirm', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    runWorkflow.mockClear();
+
+    preflightWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ok: false,
+        issues: [{ severity: 'error', message: 'Missing trigger', nodeId: 'n1' }],
+      },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled());
+    expect(runWorkflow).not.toHaveBeenCalled();
+
+    // Proceed when user confirms
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
+  });
+
+  it('shows stop control while running and stops on click', async () => {
+    let stopFn = vi.fn();
+    runWorkflow.mockImplementation(() => stopFn);
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'workflow.stop' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'workflow.stop' }));
+    expect(stopFn).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /▶\s*workflow\.run/i })).toBeInTheDocument();
+    });
+  });
+
+  it('runs via Cmd/Ctrl+Enter shortcut', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    runWorkflow.mockClear();
+    // Cmd+Enter opens run path without dialog when handleRun is invoked directly
+    // (shortcut calls handleRun(), not the run-inputs dialog)
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
+    );
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
+  });
 });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const connect = vi.fn(async () => undefined);
@@ -81,6 +81,30 @@ describe('ModeSelection', () => {
     expect(connect).toHaveBeenCalledWith('client', 'http://10.0.0.5:57286');
   });
 
+  it('rejects control-char remote url and bearer token', async () => {
+    const user = userEvent.setup();
+    render(<ModeSelection />);
+
+    const urlInput = screen.getByPlaceholderText('http://192.168.1.100:57286');
+    const tokenInput = screen.getByPlaceholderText('Bearer token (optional)');
+
+    fireEvent.change(urlInput, { target: { value: `http://10.0.0.5:57286${'\0'}` } });
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(connect).not.toHaveBeenCalled();
+
+    fireEvent.change(urlInput, { target: { value: 'http://10.0.0.5:57286' } });
+    fireEvent.change(tokenInput, { target: { value: `tok${'\0'}bad` } });
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(connect).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('devAuthToken')).toBeNull();
+
+    // Clean token is trimmed before storage
+    fireEvent.change(tokenInput, { target: { value: '  tok-clean  ' } });
+    await user.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(connect).toHaveBeenCalledWith('client', 'http://10.0.0.5:57286');
+    expect(sessionStorage.getItem('devAuthToken')).toBe('tok-clean');
+  });
+
   it('disables host while connecting', () => {
     engineState = { status: 'connecting', error: null, connect };
     render(<ModeSelection />);
@@ -146,4 +170,5 @@ describe('ModeSelection', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect((screen.getByPlaceholderText('Bearer token (optional)') as HTMLInputElement).value).toBe('busy');
   });
+
 });
