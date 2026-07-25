@@ -137,6 +137,24 @@ describe('Media page', () => {
     });
   });
 
+  it('offers download link for other-kind files', async () => {
+    const user = userEvent.setup();
+    listMediaFiles.mockResolvedValue({ ok: true, data: files });
+    fetchMediaBlob.mockResolvedValue(new Blob(['bin'], { type: 'application/octet-stream' }));
+    render(<Media />);
+    await waitFor(() => expect(screen.getByText('notes.bin')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'other' }));
+    expect(screen.getByText('notes.bin')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /notes\.bin/i }));
+    await waitFor(() => {
+      expect(fetchMediaBlob).toHaveBeenCalledWith('notes.bin');
+    });
+    const link = await screen.findByRole('link', { name: /Download notes\.bin/i });
+    expect(link).toHaveAttribute('download', 'notes.bin');
+    expect(link).toHaveAttribute('href', 'blob:mock-url');
+  });
+
   it('previews audio files and cancels delete when confirm is false', async () => {
     const user = userEvent.setup();
     listMediaFiles.mockResolvedValue({ ok: true, data: files });

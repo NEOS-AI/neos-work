@@ -90,7 +90,12 @@ export async function getKisToken(config: KisConfig): Promise<string> {
   }
 
   const data = await res.json() as { access_token?: string; expires_in?: number };
-  const token = typeof data.access_token === 'string' ? data.access_token.trim() : '';
+  const tokenRaw = typeof data.access_token === 'string' ? data.access_token : '';
+  // Control-char / overlong tokens rejected before use (header hygiene)
+  if (!tokenRaw || /[\0\r\n]/.test(tokenRaw) || tokenRaw.length > 8_192) {
+    throw new Error('KIS token response missing access_token');
+  }
+  const token = tokenRaw.trim();
   if (!token) {
     throw new Error('KIS token response missing access_token');
   }
@@ -175,7 +180,9 @@ export async function getStockChart(
   const sym = normalizeSymbol(symbol);
   if (!sym) throw new Error('symbol is required');
   const periodRaw =
-    typeof period === 'string' ? period.trim().toUpperCase() : String(period ?? 'D').trim().toUpperCase();
+    typeof period === 'string' && !/[\0\r\n]/.test(period)
+      ? period.trim().toUpperCase()
+      : 'D';
   const periodCode = (CHART_PERIODS.has(periodRaw) ? periodRaw : 'D') as 'D' | 'W' | 'M';
   const barCount = Math.min(Math.max(Number(count) || 60, 1), 500);
   const { appKey, appSecret } = normalizeConfig(config);

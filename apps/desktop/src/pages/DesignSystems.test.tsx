@@ -159,4 +159,19 @@ describe('DesignSystems page', () => {
       expect(screen.queryByRole('heading', { name: 'New Design System' })).not.toBeInTheDocument();
     });
   });
+
+  it('cancels delete when confirm is false and shows no-match empty state', async () => {
+    const user = userEvent.setup();
+    listDesignSystems.mockResolvedValue({ ok: true, data: systems });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    expect(deleteDesignSystem).not.toHaveBeenCalled();
+
+    await user.type(screen.getByPlaceholderText('Search design systems…'), 'zzzz-none');
+    expect(screen.queryByText('Alpha Brand')).not.toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
 });

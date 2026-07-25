@@ -14,7 +14,10 @@ function loadPathOverrides(): CliPathOverrides {
   for (const [id, key] of Object.entries(CLI_PATH_SETTING_KEYS) as Array<
     [keyof typeof CLI_PATH_SETTING_KEYS, string]
   >) {
-    const v = getSetting(key)?.trim();
+    // Control-char check before trim so "\n/bin/claude" is not accepted
+    const raw = getSetting(key);
+    if (typeof raw !== 'string' || !raw || /[\0\r\n]/.test(raw)) continue;
+    const v = raw.trim();
     if (v) overrides[id] = v;
   }
   return overrides;

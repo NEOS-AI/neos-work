@@ -17,9 +17,12 @@ export interface WorkflowLike {
   edges: Array<{ id: string; source: string; target: string }>;
 }
 
-/** Treat missing or whitespace-only secret values as unset. */
+/** Treat missing, whitespace-only, or control-char secret values as unset. */
 function secret(secrets: Record<string, string>, key: string): string {
-  return String(secrets[key] ?? '').trim();
+  const raw = String(secrets[key] ?? '');
+  // Control-char secrets are unusable in headers/env (check before trim)
+  if (/[\0\r\n]/.test(raw)) return '';
+  return raw.trim();
 }
 
 /**

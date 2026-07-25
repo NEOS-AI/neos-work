@@ -76,7 +76,13 @@ export function resolveMessageText(
 /** Clamp Tavily max_results to a safe integer range (NodeConfig: 1–20). */
 export function resolveMaxResults(config: Record<string, unknown> | undefined, fallback = 5): number {
   const raw = config?.['maxResults'];
-  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : fallback;
+  // Control-char numeric strings are invalid (check before trim)
+  const n =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && !/[\0\r\n]/.test(raw) && raw.trim()
+        ? Number(raw.trim())
+        : fallback;
   if (!Number.isFinite(n)) return fallback;
   return Math.min(20, Math.max(1, Math.floor(n)));
 }
@@ -98,8 +104,10 @@ export function resolveSearchQuery(
   inputs: Record<string, unknown>,
 ): string {
   const fromConfig = config?.['query'];
-  if (typeof fromConfig === 'string' && fromConfig.trim()) {
-    return normalizeSearchQuery(fromConfig);
+  // normalizeSearchQuery checks control chars before trim; blank/control falls through to inputs
+  if (typeof fromConfig === 'string') {
+    const q = normalizeSearchQuery(fromConfig);
+    if (q) return q;
   }
   const fromInput = inputs['query'] ?? inputs['text'];
   if (typeof fromInput === 'string') return normalizeSearchQuery(fromInput);

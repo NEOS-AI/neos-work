@@ -186,4 +186,31 @@ describe('Deployments page', () => {
       expect(screen.getByText('deploy api down')).toBeInTheDocument();
     });
   });
+
+  it('filters by workflow select and surfaces refresh failure', async () => {
+    const user = userEvent.setup();
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    refreshDeployment.mockResolvedValue({ ok: false, error: 'provider timeout' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+
+    // Workflow filter reloads with workflowId query
+    const select = screen.getByDisplayValue('All workflows');
+    await user.selectOptions(select, 'wf-2');
+    await waitFor(() => {
+      expect(listDeployments).toHaveBeenCalledWith('wf-2');
+    });
+
+    // Back to all, then refresh first row fails
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    await user.selectOptions(screen.getByRole('combobox'), '');
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByTitle('Poll provider for latest status')[0]!);
+    await waitFor(() => {
+      expect(refreshDeployment).toHaveBeenCalledWith('d1');
+      expect(screen.getByText('provider timeout')).toBeInTheDocument();
+    });
+  });
 });

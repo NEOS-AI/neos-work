@@ -77,6 +77,25 @@ describe('mcp-oauth-store', () => {
     expect((await getTokenStatus(TEST_ID)).connected).toBe(false);
   });
 
+  it('treats control-char expiresAt as expired (legacy disk hygiene)', async () => {
+    // saveToken drops control-char expiresAt; write a legacy-shaped file directly
+    const dir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
+    await fs.mkdir(dir, { recursive: true });
+    const file = path.join(dir, `${TEST_ID}.json`);
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        serverId: TEST_ID,
+        accessToken: 'tok-valid-enough',
+        // Leading control must not strip to a future ISO date
+        expiresAt: '\n' + new Date(Date.now() + 60_000).toISOString(),
+      }),
+      'utf8',
+    );
+    expect(await isTokenValid(TEST_ID)).toBe(false);
+    expect((await getTokenStatus(TEST_ID)).connected).toBe(false);
+  });
+
   it('caps oversized access tokens on save', async () => {
     await saveToken({
       serverId: TEST_ID,

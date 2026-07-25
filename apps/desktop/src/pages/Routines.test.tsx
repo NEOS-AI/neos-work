@@ -274,6 +274,29 @@ describe('Routines page', () => {
     expect(screen.getByText('No routines match filters.')).toBeInTheDocument();
   });
 
+  it('run-now failure does not show success alert; crystallize failure alerts', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    runRoutineNow.mockResolvedValue({ ok: false, error: 'scheduler busy' });
+    crystallizeRoutineRun.mockResolvedValue({ ok: false, error: 'disk full' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Run Now' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '▶ Run Now' }));
+    await waitFor(() => expect(runRoutineNow).toHaveBeenCalledWith('r1'));
+    expect(window.alert).not.toHaveBeenCalledWith(expect.stringContaining('Triggered'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => {
+      expect(crystallizeRoutineRun).toHaveBeenCalledWith('r1', 'run-1');
+      expect(window.alert).toHaveBeenCalledWith('disk full');
+    });
+  });
+
   it('cancels crystallize when confirm is false', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });

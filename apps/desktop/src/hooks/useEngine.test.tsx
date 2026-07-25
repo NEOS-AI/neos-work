@@ -169,6 +169,38 @@ describe('useEngine / EngineProvider', () => {
     expect(checkConnection.mock.calls.length).toBe(3);
   });
 
+  it('sets error when host mode retries exhaust', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    checkConnection.mockResolvedValue(false);
+    startEngine.mockResolvedValue(false);
+    getEnginePort.mockResolvedValue(null);
+
+    render(
+      <EngineProvider>
+        <Probe />
+      </EngineProvider>,
+    );
+
+    const clickPromise = user.click(screen.getByRole('button', { name: 'host' }));
+    await act(async () => {
+      // host waits 1s for sidecar, then 20 × 500ms retries
+      await vi.advanceTimersByTimeAsync(1000);
+      for (let i = 0; i < 25; i++) {
+        await vi.advanceTimersByTimeAsync(500);
+      }
+    });
+    await clickPromise;
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('error');
+    });
+    expect(startEngine).toHaveBeenCalled();
+    expect(screen.getByTestId('error').textContent).toMatch(
+      /Could not connect to engine at http:\/\/127\.0\.0\.1:57286/,
+    );
+    expect(checkConnection.mock.calls.length).toBe(20);
+  });
+
   it('health check marks lost connection then recovers', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     checkConnection.mockResolvedValue(true);

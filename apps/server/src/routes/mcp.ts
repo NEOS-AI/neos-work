@@ -513,7 +513,12 @@ mcp.get('/oauth/callback', async (c) => {
       token_type?: string;
     };
 
-    if (typeof tokenData.access_token !== 'string' || !tokenData.access_token.trim()) {
+    // Control-char tokens are unusable in Authorization headers (check before trim)
+    if (
+      typeof tokenData.access_token !== 'string'
+      || /[\0\r\n]/.test(tokenData.access_token)
+      || !tokenData.access_token.trim()
+    ) {
       return c.html(
         '<html><body><h2>Token exchange failed</h2><p>Missing access_token in response</p></body></html>',
         500,
@@ -524,19 +529,28 @@ mcp.get('/oauth/callback', async (c) => {
       ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
       : undefined;
 
+    const pickTokenField = (raw: unknown, max = 16_384): string | undefined => {
+      if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return undefined;
+      const t = raw.trim();
+      if (!t || t.length > max) return undefined;
+      return t;
+    };
+
+    const accessToken = pickTokenField(tokenData.access_token);
+    if (!accessToken) {
+      return c.html(
+        '<html><body><h2>Token exchange failed</h2><p>Invalid access_token in response</p></body></html>',
+        500,
+      );
+    }
+
     const token: McpOAuthToken = {
       serverId: flow.serverId,
-      accessToken: tokenData.access_token.trim(),
-      refreshToken:
-        typeof tokenData.refresh_token === 'string'
-          ? tokenData.refresh_token.trim() || undefined
-          : tokenData.refresh_token,
+      accessToken,
+      refreshToken: pickTokenField(tokenData.refresh_token),
       expiresAt,
-      scope: typeof tokenData.scope === 'string' ? tokenData.scope.trim() || undefined : tokenData.scope,
-      tokenType:
-        typeof tokenData.token_type === 'string'
-          ? tokenData.token_type.trim() || undefined
-          : tokenData.token_type,
+      scope: pickTokenField(tokenData.scope, 2_000),
+      tokenType: pickTokenField(tokenData.token_type, 100),
     };
 
     await saveToken(token);
@@ -573,12 +587,22 @@ mcp.post('/oauth/:serverId/refresh', async (c) => {
   if (!serverId) return c.json({ ok: false, error: 'serverId required' }, 400);
   try {
     const body = await c.req.json<{ tokenEndpoint: string; clientId: string }>().catch(() => null);
-    const tokenEndpoint =
-      typeof body?.tokenEndpoint === 'string' ? body.tokenEndpoint.trim() : '';
-    const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : '';
+    const endpointRaw =
+      typeof body?.tokenEndpoint === 'string' ? body.tokenEndpoint : '';
+    const clientIdRaw = typeof body?.clientId === 'string' ? body.clientId : '';
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(endpointRaw) || /[\0\r\n]/.test(clientIdRaw)) {
+      return c.json({ ok: false, error: 'tokenEndpoint and clientId required' }, 400);
+    }
+    const tokenEndpoint = endpointRaw.trim();
+    const clientId = clientIdRaw.trim();
     if (!tokenEndpoint || !clientId) {
       return c.json({ ok: false, error: 'tokenEndpoint and clientId required' }, 400);
     }
+    if (clientId.length > 500) {
+      return c.json({ ok: false, error: 'clientId exceeds max length' }, 400);
+    }
+    // isSafeHttpBaseUrl also rejects control chars (defense-in-depth)
     if (!isSafeHttpBaseUrl(tokenEndpoint)) {
       return c.json({ ok: false, error: 'tokenEndpoint must be http(s)' }, 400);
     }

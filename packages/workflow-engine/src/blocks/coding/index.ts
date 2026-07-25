@@ -37,9 +37,11 @@ function hasUnsafeControlChars(value: string): boolean {
 }
 
 function safePath(inputPath: string, baseDir?: string): string | null {
-  const trimmed = typeof inputPath === 'string' ? inputPath.trim() : '';
+  if (typeof inputPath !== 'string') return null;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (hasUnsafeControlChars(inputPath)) return null;
+  const trimmed = inputPath.trim();
   if (!trimmed) return null;
-  if (hasUnsafeControlChars(trimmed)) return null;
   // Reject absolute paths or traversal attempts
   if (path.isAbsolute(trimmed)) return null;
   const base = baseDir ?? WORKSPACES_DIR;
@@ -118,7 +120,10 @@ const CODE_LANGUAGES = new Set(['js', 'ts', 'python']);
 async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
   const code = String(ctx.params['code'] ?? '');
-  const rawLanguage = String(ctx.params['language'] ?? 'js').trim().toLowerCase();
+  // Control-char language → js default (check before trim)
+  const languageRaw = String(ctx.params['language'] ?? 'js');
+  const rawLanguage =
+    hasUnsafeControlChars(languageRaw) ? 'js' : languageRaw.trim().toLowerCase();
   // Unknown / whitespace language → js (matches paramDefs options)
   const language = CODE_LANGUAGES.has(rawLanguage) ? rawLanguage : 'js';
 
@@ -187,7 +192,11 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
 
 async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
-  const inputPath = String(ctx.params['path'] ?? '').trim();
+  const pathRaw = String(ctx.params['path'] ?? '');
+  if (hasUnsafeControlChars(pathRaw)) {
+    return { ok: false, output: null, error: 'Invalid or unsafe path', durationMs: Date.now() - start };
+  }
+  const inputPath = pathRaw.trim();
 
   if (!inputPath) {
     return { ok: false, output: null, error: 'No path provided', durationMs: Date.now() - start };
@@ -227,7 +236,16 @@ async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult>
 
 async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
-  const inputPath = String(ctx.params['path'] ?? '').trim();
+  const pathRaw = String(ctx.params['path'] ?? '');
+  if (hasUnsafeControlChars(pathRaw)) {
+    return {
+      ok: false,
+      output: false,
+      error: 'Write path must be relative and within workspaces directory',
+      durationMs: Date.now() - start,
+    };
+  }
+  const inputPath = pathRaw.trim();
   const content = String(ctx.params['content'] ?? '');
 
   if (!inputPath) {
@@ -266,14 +284,19 @@ async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult
 
 async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
-  const rawRepo = ctx.params['repoPath'] != null ? String(ctx.params['repoPath']).trim() : '';
-  if (rawRepo && hasUnsafeControlChars(rawRepo)) {
-    return {
-      ok: false,
-      output: null,
-      error: 'Repo path contains invalid control characters',
-      durationMs: Date.now() - start,
-    };
+  // Control-char check before trim so "\n/path" is not accepted
+  let rawRepo = '';
+  if (ctx.params['repoPath'] != null) {
+    const repoRaw = String(ctx.params['repoPath']);
+    if (hasUnsafeControlChars(repoRaw)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Repo path contains invalid control characters',
+        durationMs: Date.now() - start,
+      };
+    }
+    rawRepo = repoRaw.trim();
   }
   const repoPath = rawRepo || process.cwd();
 
@@ -301,14 +324,19 @@ async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> 
 async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResult> {
   const start = Date.now();
   const command = String(ctx.params['command'] ?? '');
-  const rawCwd = ctx.params['cwd'] != null ? String(ctx.params['cwd']).trim() : '';
-  if (rawCwd && hasUnsafeControlChars(rawCwd)) {
-    return {
-      ok: false,
-      output: null,
-      error: 'Working directory contains invalid control characters',
-      durationMs: Date.now() - start,
-    };
+  // Control-char check before trim so "\n/tmp" is not accepted as cwd
+  let rawCwd = '';
+  if (ctx.params['cwd'] != null) {
+    const cwdRaw = String(ctx.params['cwd']);
+    if (hasUnsafeControlChars(cwdRaw)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Working directory contains invalid control characters',
+        durationMs: Date.now() - start,
+      };
+    }
+    rawCwd = cwdRaw.trim();
   }
   const cwd = rawCwd || process.cwd();
 

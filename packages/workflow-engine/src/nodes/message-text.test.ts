@@ -137,6 +137,12 @@ describe('resolveMaxResults', () => {
     expect(resolveMaxResults({}, 7)).toBe(7);
     expect(resolveMaxResults({ maxResults: Number.NaN }, 9)).toBe(9);
   });
+
+  it('rejects control-char maxResults strings before trim', () => {
+    // Leading control must not strip to a valid number
+    expect(resolveMaxResults({ maxResults: '\n10' })).toBe(5);
+    expect(resolveMaxResults({ maxResults: '10\n' }, 3)).toBe(3);
+  });
 });
 
 describe('resolveSearchQuery', () => {
@@ -163,5 +169,7 @@ describe('resolveSearchQuery', () => {
   it('rejects control-char queries and caps length', () => {
     expect(resolveSearchQuery({ query: 'hi\nthere' }, {})).toBe('');
     expect(resolveSearchQuery({}, { query: 'a'.repeat(2_500) }).length).toBe(2_000);
+    // Control-char config.query falls through to inputs
+    expect(resolveSearchQuery({ query: '\ncfg' }, { query: 'from-input' })).toBe('from-input');
   });
 });

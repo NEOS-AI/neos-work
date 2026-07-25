@@ -75,7 +75,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.118',
+            'User-Agent': 'neos-work/0.3.119',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
@@ -96,11 +96,16 @@ export function createWebSearchTool(): Tool {
         const results = rawResults
           .slice(0, maxResults)
           .map((r) => {
-            const title = typeof r.title === 'string' ? r.title.trim().slice(0, TITLE_MAX) : '';
-            const url = typeof r.url === 'string' ? r.url.trim() : '';
+            // Scrub control chars from title/snippet (result hygiene)
+            let title = '';
+            if (typeof r.title === 'string' && !/[\0\r\n]/.test(r.title)) {
+              title = r.title.trim().slice(0, TITLE_MAX);
+            }
+            const urlRaw = typeof r.url === 'string' ? r.url : '';
             // Only keep http(s) result URLs (drop javascript:/file: noise)
             let safeUrl = '';
-            if (url && url.length <= 2_048 && !/[\0\r\n]/.test(url)) {
+            if (urlRaw && urlRaw.length <= 2_048 && !/[\0\r\n]/.test(urlRaw)) {
+              const url = urlRaw.trim();
               try {
                 const u = new URL(url);
                 if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
@@ -108,8 +113,11 @@ export function createWebSearchTool(): Tool {
                 safeUrl = '';
               }
             }
-            const snippet =
-              typeof r.content === 'string' ? r.content.trim().slice(0, SNIPPET_MAX) : '';
+            let snippet = '';
+            if (typeof r.content === 'string' && !/[\0]/.test(r.content)) {
+              // Collapse CR/LF in snippets for single-line display
+              snippet = r.content.replace(/[\r\n]+/g, ' ').trim().slice(0, SNIPPET_MAX);
+            }
             return { title, url: safeUrl, snippet };
           })
           .filter((r) => r.url.length > 0);

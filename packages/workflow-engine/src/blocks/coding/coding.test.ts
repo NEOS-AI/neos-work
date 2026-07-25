@@ -117,6 +117,11 @@ describe('coding blocks', () => {
       const blank = await exec().execute(ctx({ code: '5 + 5', language: '   ' }));
       expect(blank.ok).toBe(true);
       expect(String(blank.output)).toContain('10');
+
+      // Leading control-char language must not strip to "python"
+      const ctrl = await exec().execute(ctx({ code: '6 + 1', language: '\npython' }));
+      expect(ctrl.ok).toBe(true);
+      expect(String(ctrl.output)).toContain('7');
     });
 
     it('runs python language via python3 -c when available', async () => {
@@ -195,6 +200,11 @@ describe('coding blocks', () => {
 
       const newline = await write().execute(ctx({ path: `safe${'\n'}evil.txt`, content: 'x' }));
       expect(newline.ok).toBe(false);
+
+      // Leading control-char must not strip to a valid relative path
+      const leading = await read().execute(ctx({ path: `\n${testFile}` }));
+      expect(leading.ok).toBe(false);
+      expect(leading.error).toMatch(/unsafe|Invalid/i);
     });
 
     it('rejects empty path for file_write', async () => {

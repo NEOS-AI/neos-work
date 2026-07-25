@@ -139,6 +139,43 @@ describe('Blocks page', () => {
     });
   });
 
+  it('requires id, name, and prompt template when creating a prompt block', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: [] });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Block' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New Block' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(createBlock).not.toHaveBeenCalled();
+
+    // fill name only → still need id
+    const inputs = Array.from(document.querySelectorAll('input, textarea')) as HTMLInputElement[];
+    for (const input of inputs) {
+      if (input.type === 'search' || input.tagName === 'TEXTAREA') continue;
+      if (!input.value) {
+        fireEvent.change(input, { target: { value: 'Named Only' } });
+        break;
+      }
+    }
+    // Name field may not be first empty - fill by finding empty inputs for id and name
+    let filled = 0;
+    for (const input of Array.from(document.querySelectorAll('input')) as HTMLInputElement[]) {
+      if (input.type === 'search') continue;
+      if (!input.value && filled === 0) {
+        fireEvent.change(input, { target: { value: 'id_only' } });
+        filled++;
+      } else if (!input.value && filled === 1) {
+        fireEvent.change(input, { target: { value: 'Has Name' } });
+        filled++;
+      }
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Prompt template is required')).toBeInTheDocument();
+    expect(createBlock).not.toHaveBeenCalled();
+  });
+
   it('deletes a custom block', async () => {
     listBlocks.mockResolvedValue({ ok: true, data: blocks });
     deleteBlock.mockResolvedValue({ ok: true });

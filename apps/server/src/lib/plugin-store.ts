@@ -38,7 +38,9 @@ export interface PipelineStage {
 
 /** Normalize pipeline stage kind (unknown → execute). */
 export function normalizePipelineStageKind(raw: unknown): PipelineStageKind {
-  const k = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Control-char check before trim so "\nplan" is not accepted as plan
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'execute';
+  const k = raw.trim().toLowerCase();
   return PIPELINE_STAGE_KINDS.has(k) ? (k as PipelineStageKind) : 'execute';
 }
 

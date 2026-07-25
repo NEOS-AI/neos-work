@@ -126,7 +126,10 @@ export async function deleteToken(serverId: string): Promise<void> {
 
 /** Parse expiresAt; invalid dates are treated as expired (fail closed). */
 function isExpiresAtValidFuture(expiresAt: string | undefined): boolean | null {
-  if (!expiresAt || typeof expiresAt !== 'string' || !expiresAt.trim()) return null; // no expiry
+  if (!expiresAt || typeof expiresAt !== 'string') return null; // no expiry
+  // Control-char expiry strings are invalid (check before trim)
+  if (/[\0\r\n]/.test(expiresAt)) return false;
+  if (!expiresAt.trim()) return null; // no expiry
   const t = Date.parse(expiresAt.trim());
   if (!Number.isFinite(t)) return false; // invalid → treat as expired
   return t > Date.now();
@@ -152,7 +155,11 @@ export async function getTokenStatus(serverId: string): Promise<{
   const future = isExpiresAtValidFuture(token.expiresAt);
   // null = no expiry (connected if token present); false = expired/invalid
   const expired = future === false;
-  const access = typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
+  // Control-char access tokens are unusable (check before trim)
+  const access =
+    typeof token.accessToken === 'string' && !/[\0\r\n]/.test(token.accessToken)
+      ? token.accessToken.trim()
+      : '';
   return {
     connected: !expired && access.length > 0,
     expiresAt: token.expiresAt,

@@ -70,12 +70,18 @@ export class WebSearchNode implements ExecutableNode {
       const results = raw
         .slice(0, maxResults)
         .map((r) => {
-          const title = typeof r.title === 'string' ? r.title.trim().slice(0, 500) : '';
-          const content =
-            typeof r.content === 'string' ? r.content.trim().slice(0, 2_000) : '';
-          const url = typeof r.url === 'string' ? r.url.trim() : '';
+          let title = '';
+          if (typeof r.title === 'string' && !/[\0\r\n]/.test(r.title)) {
+            title = r.title.trim().slice(0, 500);
+          }
+          let content = '';
+          if (typeof r.content === 'string' && !/\0/.test(r.content)) {
+            content = r.content.replace(/[\r\n]+/g, ' ').trim().slice(0, 2_000);
+          }
+          const urlRaw = typeof r.url === 'string' ? r.url : '';
           let safeUrl = '';
-          if (url && url.length <= 2_048 && !/[\0\r\n]/.test(url)) {
+          if (urlRaw && urlRaw.length <= 2_048 && !/[\0\r\n]/.test(urlRaw)) {
+            const url = urlRaw.trim();
             try {
               const u = new URL(url);
               if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;

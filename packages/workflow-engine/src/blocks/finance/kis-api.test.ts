@@ -241,6 +241,18 @@ describe('kis-api', () => {
       getKisToken({ appKey: 'blank-tok-k', appSecret: 'blank-tok-s' }),
     ).rejects.toThrow(/missing access_token/i);
 
+    // Control-char access_token must not be accepted after trim
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: 'tok\nbad', expires_in: 3600 }),
+      }),
+    );
+    await expect(
+      getKisToken({ appKey: 'ctrl-tok-k', appSecret: 'ctrl-tok-s' }),
+    ).rejects.toThrow(/missing access_token/i);
+
     // Padded credentials still work (normalizeConfig)
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

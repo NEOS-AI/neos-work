@@ -289,13 +289,16 @@ session.post('/:id/chat', async (c) => {
 
   // Input validation
   const MAX_CONTENT_LENGTH = 100_000; // 100KB
-  const content = typeof body.content === 'string' ? body.content.trim() : '';
-  if (!content) {
+  if (typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
   }
-  // Null bytes break SQLite/logging and LLM payloads
-  if (/\0/.test(content)) {
+  // Null bytes break SQLite/logging and LLM payloads (check before trim)
+  if (/\0/.test(body.content)) {
     return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
+  }
+  const content = body.content.trim();
+  if (!content) {
+    return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
   }
   if (content.length > MAX_CONTENT_LENGTH) {
     return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);
@@ -578,12 +581,16 @@ session.post('/:id/agent', async (c) => {
   }
 
   const MAX_CONTENT_LENGTH = 100_000;
-  const content = typeof body.content === 'string' ? body.content.trim() : '';
-  if (!content) {
+  if (typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
   }
-  if (/\0/.test(content)) {
+  // Null-byte check before trim
+  if (/\0/.test(body.content)) {
     return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
+  }
+  const content = body.content.trim();
+  if (!content) {
+    return c.json({ ok: false, error: 'Missing or invalid content' }, 400);
   }
   if (content.length > MAX_CONTENT_LENGTH) {
     return c.json({ ok: false, error: `Content exceeds max length (${MAX_CONTENT_LENGTH} characters)` }, 400);

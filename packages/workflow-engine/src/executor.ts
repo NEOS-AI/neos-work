@@ -376,8 +376,13 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
 }
 
 function resolveNode(type: NodeType | string, nodeConfig?: Record<string, unknown>): ExecutableNode {
+  // Control-char type → unknown (fail closed)
   const normalized =
-    typeof type === 'string' ? (type.trim().toLowerCase() as NodeType) : type;
+    typeof type === 'string' && !/[\0\r\n]/.test(type)
+      ? (type.trim().toLowerCase() as NodeType)
+      : typeof type === 'string'
+        ? ('' as NodeType)
+        : type;
   switch (normalized) {
     case 'trigger':         return new TriggerNode();
     case 'agent_finance':   return new AgentNode('agent_finance', nodeConfig);

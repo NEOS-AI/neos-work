@@ -13,7 +13,9 @@ const metaRegistry = new Map<string, WorkflowBlock>();
  * Called with a single executor object (blockId + execute) or with both meta + executor.
  */
 function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
-  const d = typeof raw === 'string' ? raw.trim().toLowerCase() || 'general' : 'general';
+  // Control-char domain → general (check before trim)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
+  const d = raw.trim().toLowerCase() || 'general';
   return (['finance', 'coding', 'general'] as const).includes(d as never)
     ? (d as WorkflowBlock['domain'])
     : 'general';
@@ -25,7 +27,9 @@ const IMPLEMENTATION_TYPES = new Set(['native', 'prompt', 'skill']);
 export function normalizeImplementationType(
   raw: unknown,
 ): WorkflowBlock['implementationType'] {
-  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Control-char check before trim so "\nprompt" is not accepted as prompt
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'native';
+  const t = raw.trim().toLowerCase();
   return IMPLEMENTATION_TYPES.has(t)
     ? (t as WorkflowBlock['implementationType'])
     : 'native';
@@ -39,26 +43,41 @@ const BLOCK_CATEGORY_MAX = 100;
 const BLOCK_SKILL_ID_MAX = 200;
 
 function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
-  let name = typeof meta.name === 'string' ? meta.name.trim() || id : id;
-  if (/[\0\r\n]/.test(name)) name = id;
+  // Control-char name → id fallback (check before trim)
+  let name = id;
+  if (typeof meta.name === 'string' && !/[\0\r\n]/.test(meta.name)) {
+    name = meta.name.trim() || id;
+  }
   if (name.length > BLOCK_NAME_MAX) name = name.slice(0, BLOCK_NAME_MAX);
 
-  let category =
-    typeof meta.category === 'string' ? meta.category.trim() || 'custom' : (meta.category ?? 'custom');
-  if (typeof category === 'string') {
-    if (/[\0\r\n]/.test(category) || category.length > BLOCK_CATEGORY_MAX) category = 'custom';
+  let category: string = 'custom';
+  if (typeof meta.category === 'string' && !/[\0\r\n]/.test(meta.category)) {
+    category = meta.category.trim() || 'custom';
   }
+  if (category.length > BLOCK_CATEGORY_MAX) category = 'custom';
 
-  let description =
-    typeof meta.description === 'string' ? meta.description.trim() : meta.description;
+  let description: string | undefined;
+  if (typeof meta.description === 'string') {
+    // Null-byte reject; multi-line descriptions allowed
+    if (!/\0/.test(meta.description)) {
+      description = meta.description.trim();
+    }
+  } else {
+    description = meta.description;
+  }
   if (typeof description === 'string' && description.length > BLOCK_DESC_MAX) {
     description = description.slice(0, BLOCK_DESC_MAX);
   }
 
-  let promptTemplate =
-    typeof meta.promptTemplate === 'string'
-      ? meta.promptTemplate.trim() || undefined
-      : meta.promptTemplate;
+  let promptTemplate: string | undefined;
+  if (typeof meta.promptTemplate === 'string') {
+    // Null-byte reject (newlines OK in templates)
+    if (!/\0/.test(meta.promptTemplate)) {
+      promptTemplate = meta.promptTemplate.trim() || undefined;
+    }
+  } else {
+    promptTemplate = meta.promptTemplate;
+  }
   if (typeof promptTemplate === 'string' && promptTemplate.length > BLOCK_PROMPT_MAX) {
     promptTemplate = promptTemplate.slice(0, BLOCK_PROMPT_MAX);
   }

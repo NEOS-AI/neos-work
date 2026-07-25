@@ -17,6 +17,9 @@ describe('block registry', () => {
     expect(normalizeImplementationType('wasm')).toBe('native');
     expect(normalizeImplementationType('')).toBe('native');
     expect(normalizeImplementationType(null)).toBe('native');
+    // Leading control-char must not strip to a valid type
+    expect(normalizeImplementationType('\nprompt')).toBe('native');
+    expect(normalizeImplementationType('skill\n')).toBe('native');
   });
 
   it('registers and resolves native executor', async () => {
@@ -203,5 +206,23 @@ describe('block registry', () => {
     expect(resolveBlock('valid_id')).toBeUndefined();
     expect(getNativeExecutor('\ncode_eval')).toBeUndefined();
     expect(listBlocks('\nfinance')).toEqual(listBlocks()); // filter ignored
+
+    // Leading control-char domain → general; control category → custom
+    registerBlockMeta({
+      id: 'meta_ctrl_domain',
+      name: 'Ctrl Domain',
+      domain: '\ncoding' as never,
+      category: '\ncat',
+      description: 'd',
+      isBuiltIn: true,
+      implementationType: '\nprompt' as never,
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const ctrlDom = resolveBlock('meta_ctrl_domain');
+    expect(ctrlDom?.domain).toBe('general');
+    expect(ctrlDom?.category).toBe('custom');
+    expect(ctrlDom?.implementationType).toBe('native');
   });
 });

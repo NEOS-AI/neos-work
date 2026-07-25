@@ -7,7 +7,9 @@ import { isSensitiveKey } from '../db/crypto.js';
 
 /** Mask sensitive values so full secrets are never returned via API. */
 function maskValue(key: string, value: string): string {
-  const k = typeof key === 'string' ? key.trim() : '';
+  // Control-char keys are never sensitive-prefix matches (isSensitiveKey also checks)
+  const k =
+    typeof key === 'string' && !/[\0\r\n]/.test(key) ? key.trim() : '';
   const v = typeof value === 'string' ? value : String(value ?? '');
   if (!isSensitiveKey(k)) return v;
   if (v.length <= 8) return '****';

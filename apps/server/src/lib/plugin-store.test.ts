@@ -273,6 +273,9 @@ describe('normalizePipelineStageKind', () => {
     expect(normalizePipelineStageKind('unknown')).toBe('execute');
     expect(normalizePipelineStageKind('')).toBe('execute');
     expect(normalizePipelineStageKind(null)).toBe('execute');
+    // Leading control-char must not strip to a valid kind
+    expect(normalizePipelineStageKind('\nplan')).toBe('execute');
+    expect(normalizePipelineStageKind('discovery\n')).toBe('execute');
   });
 });
 
