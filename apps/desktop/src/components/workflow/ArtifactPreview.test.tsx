@@ -183,6 +183,27 @@ describe('ArtifactPreview', () => {
     confirmSpy.mockRestore();
   });
 
+  it('cancels delete when confirm is false', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a3b',
+      workflowId: 'wf-1',
+      name: 'keep.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('keep.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    expect(deleteArtifact).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
   it('renames selected artifact via prompt', async () => {
     const user = userEvent.setup();
     const art = {

@@ -219,6 +219,22 @@ describe('deploy routes', () => {
       body: JSON.stringify({ provider: 'aws' }),
     });
     expect(res.status).toBe(400);
+
+    // Leading control-char provider
+    const leading = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: '\nvercel' }),
+    });
+    expect(leading.status).toBe(400);
+
+    // Control-char projectName
+    const badProj = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'vercel', projectName: 'bad\nname' }),
+    });
+    expect(badProj.status).toBe(400);
   });
 
   it('preflight reports missing cloudflare credentials', async () => {

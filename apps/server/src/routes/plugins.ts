@@ -41,17 +41,25 @@ plugins.post('/upgrade-from-skill', async (c) => {
   };
   const body: UpgradeBody = await c.req.json<UpgradeBody>().catch(() => ({}));
 
-  const skillId = typeof body.skillId === 'string' ? body.skillId.trim() : undefined;
-  if (skillId && (skillId.length > 100 || /[\0\r\n]/.test(skillId))) {
-    return c.json({ ok: false, error: 'Invalid skillId' }, 400);
+  let skillId: string | undefined;
+  if (typeof body.skillId === 'string') {
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(body.skillId) || body.skillId.trim().length > 100) {
+      return c.json({ ok: false, error: 'Invalid skillId' }, 400);
+    }
+    skillId = body.skillId.trim() || undefined;
   }
-  let skillDirName =
-    typeof body.skillDirName === 'string' ? body.skillDirName.trim() || undefined : undefined;
-  if (
-    skillDirName
-    && (skillDirName.length > 200 || /[\0\r\n]/.test(skillDirName) || skillDirName.includes('/') || skillDirName.includes('\\'))
-  ) {
-    return c.json({ ok: false, error: 'Invalid skillDirName' }, 400);
+  let skillDirName: string | undefined;
+  if (typeof body.skillDirName === 'string') {
+    if (
+      /[\0\r\n]/.test(body.skillDirName)
+      || body.skillDirName.includes('/')
+      || body.skillDirName.includes('\\')
+      || body.skillDirName.trim().length > 200
+    ) {
+      return c.json({ ok: false, error: 'Invalid skillDirName' }, 400);
+    }
+    skillDirName = body.skillDirName.trim() || undefined;
   }
   if (!skillDirName && skillId) {
     const row = getDb().prepare('SELECT path, name FROM skill WHERE id = ?').get(skillId) as
@@ -67,14 +75,22 @@ plugins.post('/upgrade-from-skill', async (c) => {
     return c.json({ ok: false, error: 'skillId or skillDirName required' }, 400);
   }
 
-  let name = typeof body.name === 'string' ? body.name.trim() || undefined : undefined;
-  if (name && (name.length > 200 || /[\0\r\n]/.test(name))) {
-    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  let name: string | undefined;
+  if (typeof body.name === 'string') {
+    if (/[\0\r\n]/.test(body.name) || body.name.trim().length > 200) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+    name = body.name.trim() || undefined;
   }
-  let description =
-    typeof body.description === 'string' ? body.description.trim() || undefined : undefined;
-  if (description && description.length > 2_000) {
-    description = description.slice(0, 2_000);
+  let description: string | undefined;
+  if (typeof body.description === 'string') {
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
+    description = body.description.trim() || undefined;
+    if (description && description.length > 2_000) {
+      description = description.slice(0, 2_000);
+    }
   }
 
   try {

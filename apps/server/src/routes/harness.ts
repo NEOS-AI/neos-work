@@ -50,8 +50,13 @@ function normalizeConstraints(
 function normalizeAllowedTools(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   return raw
-    .map((t) => (typeof t === 'string' ? t.trim() : String(t ?? '').trim()))
-    .filter((t) => t.length > 0 && t.length <= 100 && !/[\0\r\n]/.test(t))
+    .map((t) => {
+      const s = typeof t === 'string' ? t : String(t ?? '');
+      // Control-char check before trim
+      if (/[\0\r\n]/.test(s)) return '';
+      return s.trim();
+    })
+    .filter((t) => t.length > 0 && t.length <= 100)
     .slice(0, 100);
 }
 
@@ -92,12 +97,18 @@ harness.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const systemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
+  if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  if (typeof body.systemPrompt !== 'string' || /\0/.test(body.systemPrompt)) {
+    return c.json({ ok: false, error: 'name and systemPrompt are required' }, 400);
+  }
+  const name = body.name.trim();
+  const systemPrompt = body.systemPrompt.trim();
   if (!name || !systemPrompt) {
     return c.json({ ok: false, error: 'name and systemPrompt are required' }, 400);
   }
-  if (/[\0\r\n]/.test(name) || name.length > 200) {
+  if (name.length > 200) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
 
@@ -106,10 +117,17 @@ harness.post('/', async (c) => {
   }
   const allowedTools = normalizeAllowedTools(body.allowedTools) ?? [];
 
-  const description =
-    typeof body.description === 'string' ? body.description.trim() : (body.description ?? '');
+  let description = '';
+  if (typeof body.description === 'string') {
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
+    description = body.description.trim();
+  }
   const domainRaw =
-    typeof body.domain === 'string' ? body.domain.trim().toLowerCase() || 'general' : 'general';
+    typeof body.domain === 'string' && !/[\0\r\n]/.test(body.domain)
+      ? body.domain.trim().toLowerCase() || 'general'
+      : 'general';
   const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? domainRaw
     : 'general';
@@ -158,23 +176,34 @@ harness.put('/:id', async (c) => {
 
   const patch: Record<string, unknown> = { ...body };
   if (body.name !== undefined) {
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+    const name = body.name.trim();
     if (!name) return c.json({ ok: false, error: 'name is required' }, 400);
-    if (/[\0\r\n]/.test(name) || name.length > 200) {
+    if (name.length > 200) {
       return c.json({ ok: false, error: 'Invalid name' }, 400);
     }
     patch.name = name;
   }
   if (body.systemPrompt !== undefined) {
-    const systemPrompt = typeof body.systemPrompt === 'string' ? body.systemPrompt.trim() : '';
+    if (typeof body.systemPrompt !== 'string' || /\0/.test(body.systemPrompt)) {
+      return c.json({ ok: false, error: 'systemPrompt is required' }, 400);
+    }
+    const systemPrompt = body.systemPrompt.trim();
     if (!systemPrompt) return c.json({ ok: false, error: 'systemPrompt is required' }, 400);
     patch.systemPrompt = systemPrompt;
   }
   if (typeof body.description === 'string') {
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
     patch.description = body.description.trim();
   }
   if (typeof body.domain === 'string') {
-    const domainRaw = body.domain.trim().toLowerCase() || 'general';
+    const domainRaw = !/[\0\r\n]/.test(body.domain)
+      ? body.domain.trim().toLowerCase() || 'general'
+      : 'general';
     patch.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
       ? domainRaw
       : 'general';

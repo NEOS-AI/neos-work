@@ -100,6 +100,28 @@ describe('custom harnesses CRUD', () => {
     ).toThrow(/systemPrompt exceeds/i);
   });
 
+  it('rejects control-char name/systemPrompt on update; collapses description controls', () => {
+    createCustomHarness({
+      id: ID,
+      name: 'Base',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'You are base',
+      allowedTools: [],
+    });
+    // Control-char name / systemPrompt leave row unchanged
+    expect(updateCustomHarness(ID, { name: 'bad\nname' })).toBeUndefined();
+    expect(updateCustomHarness(ID, { name: '\nRenamed' })).toBeUndefined();
+    expect(updateCustomHarness(ID, { systemPrompt: 'bad\nprompt' })).toBeUndefined();
+    expect(getCustomHarness(ID)?.name).toBe('Base');
+    expect(getCustomHarness(ID)?.systemPrompt).toBe('You are base');
+
+    // Description control chars are collapsed rather than rejecting the update
+    const updated = updateCustomHarness(ID, { description: 'line1\nline2' });
+    expect(updated?.description).toBe('line1 line2');
+    expect(updated?.name).toBe('Base');
+  });
+
   it('rejects control-char / overlong lookup ids', () => {
     expect(getCustomHarness('bad\nid')).toBeUndefined();
     expect(updateCustomHarness('id\nbad', { name: 'x' })).toBeUndefined();

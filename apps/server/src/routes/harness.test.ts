@@ -57,6 +57,18 @@ describe('harness routes', () => {
     expect(controlName.status).toBe(400);
     expect(((await controlName.json()) as { error: string }).error).toMatch(/Invalid name/i);
 
+    // Leading control-char name must not strip to a valid name
+    const leadingName = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `\n${NAME}`,
+        systemPrompt: 'You',
+        allowedTools: [],
+      }),
+    });
+    expect(leadingName.status).toBe(400);
+
     const longName = await harness.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

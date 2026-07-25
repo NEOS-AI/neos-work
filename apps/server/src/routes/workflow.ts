@@ -620,7 +620,10 @@ workflow.delete('/:id/runs', (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const wf = db.getWorkflow(id);
   if (!wf) return c.json({ ok: false, error: 'Not found' }, 404);
-  const statusRaw = (c.req.query('status') ?? '').trim();
+  // Control-char status filter is ignored
+  const statusQuery = c.req.query('status') ?? '';
+  const statusRaw =
+    statusQuery && !/[\0\r\n]/.test(statusQuery) ? statusQuery.trim() : '';
   const status = statusRaw || undefined;
   const allowed = new Set(['completed', 'failed', 'cancelled', 'running']);
   if (status && !allowed.has(status)) {

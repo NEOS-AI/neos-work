@@ -36,8 +36,14 @@ function paramId(c: { req: { param: (k: string) => string } }): string {
  */
 deploy.post('/preflight', async (c) => {
   const body = await c.req.json<{ provider?: 'vercel' | 'cloudflare'; projectName?: string }>().catch(() => ({} as { provider?: string }));
-  const providerRaw =
-    typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : '';
+  let providerRaw = '';
+  if (typeof body.provider === 'string') {
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(body.provider)) {
+      return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
+    }
+    providerRaw = body.provider.trim().toLowerCase();
+  }
   const provider = (providerRaw || 'vercel') as 'vercel' | 'cloudflare';
   if (provider !== 'vercel' && provider !== 'cloudflare') {
     return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
@@ -68,7 +74,13 @@ deploy.post('/preflight', async (c) => {
   }
 
   const rawProject = (body as { projectName?: string }).projectName;
-  const projectName = (typeof rawProject === 'string' ? rawProject.trim() : '') || 'neos-deploy';
+  let projectName = 'neos-deploy';
+  if (typeof rawProject === 'string') {
+    if (/[\0\r\n]/.test(rawProject)) {
+      return c.json({ ok: false, error: 'Invalid projectName' }, 400);
+    }
+    projectName = rawProject.trim() || 'neos-deploy';
+  }
   const projectOk = isValidDeployProjectName(projectName);
   checks.push({
     key: 'projectName',
@@ -90,11 +102,14 @@ deploy.post('/preflight', async (c) => {
 });
 
 deploy.get('/', (c) => {
-  const workflowIdRaw = (c.req.query('workflowId') ?? '').trim();
   // Drop unsafe query filter (list all when invalid rather than 400)
+  // safeRouteId checks control chars before trim
+  const workflowIdRaw = c.req.query('workflowId') ?? '';
   const workflowId = workflowIdRaw ? safeRouteId(workflowIdRaw) || undefined : undefined;
-  const limitRaw = (c.req.query('limit') ?? '').trim();
-  const limit = limitRaw ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500) : 100;
+  const limitRaw = c.req.query('limit') ?? '';
+  const limit = limitRaw.trim()
+    ? Math.min(Math.max(parseInt(limitRaw.trim(), 10) || 100, 1), 500)
+    : 100;
   const rows = listDeployments({ workflowId, limit });
   return c.json({ ok: true, data: rows });
 });

@@ -159,6 +159,25 @@ describe('Deployments page', () => {
     await waitFor(() => expect(deleteDeployment).toHaveBeenCalledWith('d1'));
   });
 
+  it('cancels delete when confirm is false and shows no-match search', async () => {
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+
+    const deleteBtns = await screen.findAllByRole('button', { name: 'Delete' });
+    fireEvent.click(deleteBtns[0]!);
+    expect(deleteDeployment).not.toHaveBeenCalled();
+
+    const search = screen.getByPlaceholderText('Search project, URL, provider…');
+    fireEvent.change(search, { target: { value: 'zzzz-none' } });
+    await waitFor(() => {
+      expect(screen.queryByText('my-app')).not.toBeInTheDocument();
+      expect(screen.getByText('0/2')).toBeInTheDocument();
+    });
+  });
+
   it('shows load error', async () => {
     listDeployments.mockResolvedValue({ ok: false, error: 'deploy api down' });
     listWorkflows.mockResolvedValue({ ok: true, data: [] });

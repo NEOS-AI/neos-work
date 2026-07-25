@@ -320,6 +320,33 @@ describe('mcp routes', () => {
     });
     expect(missing.status).toBe(400);
 
+    // Leading control-char fields must not strip to valid values
+    const ctrl = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: '\ns1',
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    expect(ctrl.status).toBe(400);
+
+    const ctrlEndpoint = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: 's1',
+        authorizationEndpoint: '\nhttps://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    expect(ctrlEndpoint.status).toBe(400);
+
     const badEndpoint = await mcp.request('/oauth/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

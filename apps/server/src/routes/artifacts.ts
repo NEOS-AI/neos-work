@@ -227,7 +227,11 @@ artifacts.post('/:id/refresh', async (c) => {
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
 
   const body = await c.req.json<{ mode?: 'reload' | 'rerun' }>().catch(() => ({} as { mode?: string }));
-  const rawMode = typeof body.mode === 'string' ? body.mode.trim().toLowerCase() : '';
+  let rawMode = '';
+  if (typeof body.mode === 'string') {
+    // Control-char mode is ignored → default reload
+    if (!/[\0\r\n]/.test(body.mode)) rawMode = body.mode.trim().toLowerCase();
+  }
   const mode = rawMode === 'rerun' ? 'rerun' : 'reload';
 
   if (mode === 'rerun') {

@@ -411,17 +411,23 @@ mcp.get('/oauth/callback', async (c) => {
   const OAUTH_CODE_MAX = 4_096;
   const OAUTH_STATE_MAX = 512;
   const OAUTH_ERROR_MAX = 500;
-  let code = (c.req.query('code') ?? '').trim();
-  let state = (c.req.query('state') ?? '').trim();
-  let error = (c.req.query('error') ?? '').trim();
-  if (error.length > OAUTH_ERROR_MAX) error = error.slice(0, OAUTH_ERROR_MAX);
-  // Reject pathological OAuth params (query-string DoS / store abuse)
-  if (code.length > OAUTH_CODE_MAX || /[\0\r\n]/.test(code)) {
+  const codeRaw = c.req.query('code') ?? '';
+  const stateRaw = c.req.query('state') ?? '';
+  const errorRaw = c.req.query('error') ?? '';
+  // Reject pathological OAuth params before trim (query-string DoS / store abuse)
+  if (/[\0\r\n]/.test(codeRaw) || codeRaw.trim().length > OAUTH_CODE_MAX) {
     return c.html('<html><body><h2>Invalid authorization code</h2></body></html>', 400);
   }
-  if (state.length > OAUTH_STATE_MAX || /[\0\r\n]/.test(state)) {
+  if (/[\0\r\n]/.test(stateRaw) || stateRaw.trim().length > OAUTH_STATE_MAX) {
     return c.html('<html><body><h2>Invalid state</h2></body></html>', 400);
   }
+  if (/[\0\r\n]/.test(errorRaw)) {
+    return c.html('<html><body><h2>OAuth Error</h2><p>Invalid error parameter</p></body></html>', 400);
+  }
+  const code = codeRaw.trim();
+  const state = stateRaw.trim();
+  let error = errorRaw.trim();
+  if (error.length > OAUTH_ERROR_MAX) error = error.slice(0, OAUTH_ERROR_MAX);
 
   if (error) {
     return c.html(

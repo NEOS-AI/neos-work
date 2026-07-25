@@ -133,6 +133,13 @@ describe('plugins routes', () => {
       body: JSON.stringify({ skillDirName: 'bad\ndir' }),
     });
     expect(ctrl.status).toBe(400);
+    // Leading control-char skillDirName
+    const leading = await plugins.request('/upgrade-from-skill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ skillDirName: '\nok-dir' }),
+    });
+    expect(leading.status).toBe(400);
   });
 
   it('upgrade rejects invalid JSON body', async () => {

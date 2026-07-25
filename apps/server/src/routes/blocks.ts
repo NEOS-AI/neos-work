@@ -24,7 +24,12 @@ function paramBlockId(c: { req: { param: (k: string) => string } }): string {
 
 // GET /api/blocks
 blocks.get('/', (c) => {
-  const domainRaw = (c.req.query('domain') ?? '').trim().toLowerCase();
+  const domainQuery = c.req.query('domain') ?? '';
+  // Control-char domain filter is ignored (list all / unfiltered)
+  const domainRaw =
+    domainQuery && !/[\0\r\n]/.test(domainQuery)
+      ? domainQuery.trim().toLowerCase()
+      : '';
   // Only known domains filter; unknown → list all (align with templates)
   const domain =
     domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general'
