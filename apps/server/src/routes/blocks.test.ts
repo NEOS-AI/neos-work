@@ -62,6 +62,22 @@ describe('blocks routes', () => {
     const unkBody = await unknown.json() as { data: Array<{ id: string }> };
     expect(unkBody.data.some((b) => b.id === ID)).toBe(true);
     expect(unkBody.data.length).toBeGreaterThan(1);
+
+    // Control-char domain filter is ignored → unfiltered list still includes our block
+    const ctrlDomain = await blocks.request(
+      `/?domain=${encodeURIComponent('coding\n')}`,
+    );
+    expect(ctrlDomain.status).toBe(200);
+    const ctrlBody = await ctrlDomain.json() as { data: Array<{ id: string }> };
+    expect(ctrlBody.data.some((b) => b.id === ID)).toBe(true);
+    expect(ctrlBody.data.length).toBeGreaterThan(1);
+
+    const leadDomain = await blocks.request(
+      `/?domain=${encodeURIComponent('\ncoding')}`,
+    );
+    expect(leadDomain.status).toBe(200);
+    const leadBody = await leadDomain.json() as { data: Array<{ id: string }> };
+    expect(leadBody.data.some((b) => b.id === ID)).toBe(true);
   });
 
   it('GET missing custom block returns 404', async () => {

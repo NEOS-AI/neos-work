@@ -128,16 +128,19 @@ export function createWriteFileTool(workspaceRoot: string): Tool {
           return { success: false, output: null, error: `Content exceeds max size (${MAX_WRITE_SIZE} bytes)` };
         }
 
-        const userPath = typeof input.path === 'string' ? input.path.trim() : String(input.path ?? '');
+        // Pass raw path to safePath (control-char check before trim lives there)
+        const userPath =
+          typeof input.path === 'string' ? input.path : String(input.path ?? '');
         const absoluteRoot = realpathSync(resolve(workspaceRoot));
         const filePath = safePath(workspaceRoot, userPath);
         const rel = relative(absoluteRoot, filePath);
+        const displayPath = userPath.trim() || userPath;
         if (isProtectedPath(rel)) {
-          return { success: false, output: null, error: `Cannot write to protected path: ${userPath}` };
+          return { success: false, output: null, error: `Cannot write to protected path: ${displayPath}` };
         }
 
         await writeFile(filePath, content, 'utf-8');
-        return { success: true, output: `File written: ${userPath}` };
+        return { success: true, output: `File written: ${displayPath}` };
       } catch (err) {
         return { success: false, output: null, error: (err as Error).message };
       }
@@ -157,9 +160,22 @@ export function createListDirectoryTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
+        // Pass raw path to safePath (control-char before trim); blank → workspace root
         const rawPath =
-          typeof input.path === 'string' ? input.path.trim() || '.' : '.';
-        const dirPath = safePath(workspaceRoot, rawPath);
+          typeof input.path === 'string'
+            ? input.path.length === 0 || input.path.trim() === ''
+              ? '.'
+              : input.path
+            : '.';
+        // Reject control-char blank-like paths before collapsing to '.'
+        if (typeof input.path === 'string' && input.path && /[\0\r\n]/.test(input.path)) {
+          return {
+            success: false,
+            output: null,
+            error: 'Path contains invalid control characters',
+          };
+        }
+        const dirPath = safePath(workspaceRoot, rawPath === '' ? '.' : rawPath);
         const entries = await readdir(dirPath);
         const visible = entries.filter((name) => !name.startsWith('.')).slice(0, MAX_LIST_ENTRIES);
         const results = await Promise.all(
@@ -201,30 +217,43 @@ export function createSearchFilesTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const pattern =
-          typeof input.pattern === 'string' ? input.pattern.trim() : String(input.pattern ?? '').trim();
-        if (!pattern) {
-          return { success: false, output: null, error: 'pattern is required' };
-        }
-        if (/[\0\r\n]/.test(pattern) || pattern.length > 1_000) {
+        const patternRaw =
+          typeof input.pattern === 'string' ? input.pattern : String(input.pattern ?? '');
+        // Control-char check before trim
+        if (/[\0\r\n]/.test(patternRaw) || patternRaw.trim().length > 1_000) {
           return {
             success: false,
             output: null,
             error: 'pattern is invalid or exceeds max length (1000)',
           };
         }
+        const pattern = patternRaw.trim();
+        if (!pattern) {
+          return { success: false, output: null, error: 'pattern is required' };
+        }
         const searchTypeRaw =
-          typeof input.type === 'string' ? input.type.trim().toLowerCase() : 'glob';
+          typeof input.type === 'string' && !/[\0\r\n]/.test(input.type)
+            ? input.type.trim().toLowerCase()
+            : 'glob';
         const searchType = searchTypeRaw === 'content' ? 'content' : 'glob';
 
         const absoluteRoot = realpathSync(resolve(workspaceRoot));
         let searchRoot = absoluteRoot;
 
         if (input.directory != null && input.directory !== '') {
-          const dir =
+          const dirRaw =
             typeof input.directory === 'string'
-              ? input.directory.trim()
+              ? input.directory
               : String(input.directory);
+          // Control-char check before trim
+          if (/[\0\r\n]/.test(dirRaw)) {
+            return {
+              success: false,
+              output: null,
+              error: 'directory contains invalid control characters',
+            };
+          }
+          const dir = dirRaw.trim();
           if (!dir) {
             return { success: false, output: null, error: 'directory is required when provided' };
           }
@@ -311,30 +340,40 @@ export function createMoveFileTool(workspaceRoot: string): Tool {
       try {
         const absoluteRoot = realpathSync(resolve(workspaceRoot));
 
+        // Pass raw paths to safePath (control-char before trim)
         const source =
-          typeof input.source === 'string' ? input.source.trim() : String(input.source ?? '').trim();
+          typeof input.source === 'string' ? input.source : String(input.source ?? '');
         const destination =
           typeof input.destination === 'string'
-            ? input.destination.trim()
-            : String(input.destination ?? '').trim();
-        if (!source || !destination) {
+            ? input.destination
+            : String(input.destination ?? '');
+        if (!source.trim() || !destination.trim()) {
           return { success: false, output: null, error: 'source and destination are required' };
         }
 
         const srcPath = safePath(workspaceRoot, source);
         const srcRel = relative(absoluteRoot, srcPath);
         if (isProtectedPath(srcRel)) {
-          return { success: false, output: null, error: `Cannot move protected path: ${source}` };
+          return { success: false, output: null, error: `Cannot move protected path: ${source.trim()}` };
         }
 
-        // Destination may not exist yet — validate parent
-        const destResolved = resolve(absoluteRoot, destination);
+        // Destination may not exist yet — validate via safePath (parent may not exist)
+        const destTrimmed = destination.trim();
+        // Control-char already rejected by safePath when dest exists path is validated
+        if (/[\0\r\n]/.test(destination)) {
+          return {
+            success: false,
+            output: null,
+            error: 'Destination contains invalid control characters',
+          };
+        }
+        const destResolved = resolve(absoluteRoot, destTrimmed);
         const destRel = relative(absoluteRoot, destResolved);
         if (destRel.startsWith('..')) {
-          return { success: false, output: null, error: `Destination is outside the workspace: ${destination}` };
+          return { success: false, output: null, error: `Destination is outside the workspace: ${destTrimmed}` };
         }
         if (isProtectedPath(destRel)) {
-          return { success: false, output: null, error: `Cannot move to protected path: ${destination}` };
+          return { success: false, output: null, error: `Cannot move to protected path: ${destTrimmed}` };
         }
 
         await rename(srcPath, destResolved);

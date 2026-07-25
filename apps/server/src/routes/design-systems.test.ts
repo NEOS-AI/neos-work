@@ -123,6 +123,14 @@ describe('design-systems routes', () => {
     const contentBody = await contentGet.json() as { data: { content: string } };
     expect(contentBody.data.content.length).toBeGreaterThan(0);
 
+    const putNull = await designSystems.request(`/${id}/content`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: `ok${'\0'}bad` }),
+    });
+    expect(putNull.status).toBe(400);
+    expect(((await putNull.json()) as { error: string }).error).toMatch(/control characters/i);
+
     const putBlank = await designSystems.request(`/${id}/content`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },

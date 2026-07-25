@@ -13,8 +13,9 @@ const GLOBAL_SKILL_DIR = join(homedir(), '.config', 'neos-work', 'skills');
 
 async function scanDirectory(dir: string, source: 'local' | 'global'): Promise<Skill[]> {
   const skills: Skill[] = [];
-  const base = typeof dir === 'string' ? dir.trim() : '';
-  if (!base) return skills;
+  if (typeof dir !== 'string' || /[\0\r\n]/.test(dir)) return skills;
+  const base = dir.trim();
+  if (!base || base.length > 4_096) return skills;
 
   let entries: string[];
   try {
@@ -59,13 +60,17 @@ export async function discoverSkills(workspacePath?: string): Promise<Skill[]> {
   skills.push(...globalSkills);
 
   // Local workspace skills (blank/whitespace path treated as omitted)
-  const ws =
-    typeof workspacePath === 'string' ? workspacePath.trim() : '';
-  // Reject control chars / overlong paths that confuse path APIs
-  if (ws && !/[\0\r\n]/.test(ws) && ws.length <= 4_096) {
-    const localDir = resolve(ws, '.neos-work', 'skills');
-    const localSkills = await scanDirectory(localDir, 'local');
-    skills.push(...localSkills);
+  // Control-char check before trim
+  if (
+    typeof workspacePath === 'string'
+    && !/[\0\r\n]/.test(workspacePath)
+  ) {
+    const ws = workspacePath.trim();
+    if (ws && ws.length <= 4_096) {
+      const localDir = resolve(ws, '.neos-work', 'skills');
+      const localSkills = await scanDirectory(localDir, 'local');
+      skills.push(...localSkills);
+    }
   }
 
   return skills;

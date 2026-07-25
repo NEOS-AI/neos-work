@@ -54,14 +54,16 @@ async function resolveCliPath(
   overrides?: CliPathOverrides,
 ): Promise<string | null> {
   const overrideRaw = overrides?.[id];
-  const override = typeof overrideRaw === 'string' ? overrideRaw.trim() : '';
-  // Reject control chars / overlong paths (settings override hygiene)
-  if (override && !/[\0\r\n]/.test(override) && override.length <= 1_024) {
-    try {
-      fs.accessSync(override, fs.constants.X_OK);
-      return override;
-    } catch {
-      // fall through to PATH
+  // Control-char check before trim (settings override hygiene)
+  if (typeof overrideRaw === 'string' && !/[\0\r\n]/.test(overrideRaw)) {
+    const override = overrideRaw.trim();
+    if (override && override.length <= 1_024) {
+      try {
+        fs.accessSync(override, fs.constants.X_OK);
+        return override;
+      } catch {
+        // fall through to PATH
+      }
     }
   }
   return which(defaultBinary);

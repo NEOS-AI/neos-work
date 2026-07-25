@@ -17,10 +17,10 @@ export class WebSearchNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    let apiKey = String(ctx.settings['TAVILY_API_KEY'] ?? '').trim();
-    // Reject control chars / pathological key lengths before calling Tavily
+    const apiKeyRaw = String(ctx.settings['TAVILY_API_KEY'] ?? '');
+    // Reject control chars before trim / pathological key lengths before calling Tavily
     const API_KEY_MAX = 8_192;
-    if (/[\0\r\n]/.test(apiKey) || apiKey.length > API_KEY_MAX) {
+    if (/[\0\r\n]/.test(apiKeyRaw) || apiKeyRaw.trim().length > API_KEY_MAX) {
       return {
         ok: false,
         output: null,
@@ -28,6 +28,7 @@ export class WebSearchNode implements ExecutableNode {
         durationMs: 0,
       };
     }
+    const apiKey = apiKeyRaw.trim();
     if (!apiKey) {
       return { ok: false, output: null, error: 'TAVILY_API_KEY not set', durationMs: 0 };
     }
@@ -44,7 +45,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.113',
+          'User-Agent': 'neos-work/0.3.114',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,

@@ -230,11 +230,20 @@ function hasUnsafePathChars(value: string): boolean {
 
 function normalizeWorkspacePath(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
-  const pathVal = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
-  if (!pathVal) return null;
-  if (hasUnsafePathChars(pathVal)) {
+  if (typeof raw !== 'string') {
+    const pathVal = String(raw ?? '').trim();
+    if (!pathVal) return null;
+    if (hasUnsafePathChars(pathVal)) {
+      throw new Error('path contains invalid control characters');
+    }
+    return pathVal;
+  }
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (hasUnsafePathChars(raw)) {
     throw new Error('path contains invalid control characters');
   }
+  const pathVal = raw.trim();
+  if (!pathVal) return null;
   return pathVal;
 }
 
@@ -246,17 +255,21 @@ export function createWorkspace(params: {
   path?: string;
   type?: string;
 }): WorkspaceRow {
-  const name = typeof params.name === 'string' ? params.name.trim() : '';
-  if (!name) throw new Error('name is required');
-  if (hasUnsafePathChars(name)) {
+  const nameRaw = typeof params.name === 'string' ? params.name : '';
+  // Control-char check before trim
+  if (hasUnsafePathChars(nameRaw)) {
     throw new Error('name contains invalid control characters');
   }
+  const name = nameRaw.trim();
+  if (!name) throw new Error('name is required');
   if (name.length > WORKSPACE_NAME_MAX_CHARS) {
     throw new Error(`name exceeds max length (${WORKSPACE_NAME_MAX_CHARS})`);
   }
   const pathVal = normalizeWorkspacePath(params.path);
   const typeRaw =
-    typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
+    typeof params.type === 'string' && !hasUnsafePathChars(params.type)
+      ? params.type.trim().toLowerCase()
+      : '';
   const type = WORKSPACE_TYPES.has(typeRaw) ? typeRaw : 'local';
   const db = getDb();
   const id = nanoid(12);
@@ -275,12 +288,12 @@ export function updateWorkspace(
   const db = getDb();
   const ws = getWorkspace(trimmed);
   if (!ws) return undefined;
-  const name =
-    params.name !== undefined
-      ? (typeof params.name === 'string' ? params.name.trim() : '')
-      : ws.name;
-  if (!name) return undefined;
-  if (hasUnsafePathChars(name) || name.length > WORKSPACE_NAME_MAX_CHARS) return undefined;
+  let name = ws.name;
+  if (params.name !== undefined) {
+    if (typeof params.name !== 'string' || hasUnsafePathChars(params.name)) return undefined;
+    name = params.name.trim();
+  }
+  if (!name || name.length > WORKSPACE_NAME_MAX_CHARS) return undefined;
   let pathVal = ws.path;
   if (params.path !== undefined) {
     try {

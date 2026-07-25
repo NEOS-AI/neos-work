@@ -301,6 +301,25 @@ describe('mcp routes', () => {
     );
     expect(nullCode.status).toBe(400);
     expect(await nullCode.text()).toMatch(/Invalid authorization code/i);
+
+    // Leading control-char code/state must not strip to valid values
+    const leadCode = await mcp.request(
+      `/oauth/callback?code=${encodeURIComponent('\nabc')}&state=ok`,
+    );
+    expect(leadCode.status).toBe(400);
+
+    const leadState = await mcp.request(
+      `/oauth/callback?code=abc&state=${encodeURIComponent('\nok')}`,
+    );
+    expect(leadState.status).toBe(400);
+
+    const nlError = await mcp.request(
+      `/oauth/callback?error=${encodeURIComponent('access\ndenied')}`,
+    );
+    expect(nlError.status).toBe(400);
+    const nlHtml = await nlError.text();
+    // Error is escaped and control chars do not break HTML structure
+    expect(nlHtml).toMatch(/access|denied|Invalid|error/i);
   });
 
   it('oauth/start trims fields and rejects non-http endpoints', async () => {

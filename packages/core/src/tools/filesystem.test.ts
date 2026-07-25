@@ -94,6 +94,18 @@ describe('filesystem tools', () => {
     const lead = await read.execute({ path: '\nhuge.txt' });
     expect(lead.success).toBe(false);
     expect(lead.error).toMatch(/control characters/i);
+
+    const writeBad = await write.execute({ path: '\nok.txt', content: 'x' });
+    expect(writeBad.success).toBe(false);
+    expect(writeBad.error).toMatch(/control characters/i);
+
+    const listBad = await createListDirectoryTool(root).execute({ path: '\n.' });
+    expect(listBad.success).toBe(false);
+    expect(listBad.error).toMatch(/control characters/i);
+
+    const dirBad = await search.execute({ pattern: '*.ts', directory: 'src\n' });
+    expect(dirBad.success).toBe(false);
+    expect(dirBad.error).toMatch(/control characters/i);
   });
 
   it('list_directory skips hidden entries', async () => {

@@ -82,6 +82,10 @@ designSystems.put('/:id/content', async (c) => {
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
   }
+  // Null bytes break DESIGN.md text files / editors
+  if (/\0/.test(body.content)) {
+    return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
+  }
   // Reject pure-whitespace so getDesignSystemContent does not treat it as missing later
   if (!body.content.trim()) {
     return c.json({ ok: false, error: 'content cannot be empty' }, 400);

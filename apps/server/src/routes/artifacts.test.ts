@@ -362,6 +362,23 @@ describe('artifacts routes', () => {
     const refreshBody = await refresh.json() as { meta: { mode: string } };
     expect(refreshBody.meta.mode).toBe('reload');
 
+    // Control-char mode is ignored → default reload (not treated as rerun)
+    const ctrlMode = await artifacts.request(`/${created.data.id}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'rerun\n' }),
+    });
+    expect(ctrlMode.status).toBe(200);
+    expect(((await ctrlMode.json()) as { meta: { mode: string } }).meta.mode).toBe('reload');
+
+    const leadMode = await artifacts.request(`/${created.data.id}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: '\nrerun' }),
+    });
+    expect(leadMode.status).toBe(200);
+    expect(((await leadMode.json()) as { meta: { mode: string } }).meta.mode).toBe('reload');
+
     // missing artifact ops
     expect((await artifacts.request('/no-such-id')).status).toBe(404);
     expect((await artifacts.request('/no-such-id', { method: 'DELETE' })).status).toBe(404);

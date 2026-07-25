@@ -41,6 +41,10 @@ describe('WebSearchNode', () => {
     const ctrl = await node.execute(ctx({ TAVILY_API_KEY: 'tv\nly' }, { query: 'hello' }));
     expect(ctrl.ok).toBe(false);
     expect(ctrl.error).toMatch(/invalid/i);
+    // Leading control char must not strip to a valid key
+    const leading = await node.execute(ctx({ TAVILY_API_KEY: '\ntvly' }, { query: 'hello' }));
+    expect(leading.ok).toBe(false);
+    expect(leading.error).toMatch(/invalid/i);
     const long = await node.execute(
       ctx({ TAVILY_API_KEY: 'k'.repeat(9_000) }, { query: 'hello' }),
     );

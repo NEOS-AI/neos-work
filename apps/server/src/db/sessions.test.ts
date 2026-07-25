@@ -111,6 +111,8 @@ describe('sessions CRUD', () => {
     expect(() => createSession({ workspaceId: '   ' })).toThrow(/workspaceId/i);
     expect(() => createWorkspace({ name: '   ' })).toThrow(/name/i);
     expect(() => createWorkspace({ name: 'bad\nname' })).toThrow(/control characters/i);
+    // Leading control char must not strip to a valid name
+    expect(() => createWorkspace({ name: '\nValidName' })).toThrow(/control characters/i);
     expect(() => createWorkspace({ name: 'n'.repeat(201) })).toThrow(/max length/i);
 
     const s = createSession({ workspaceId: '  default  ', title: '  _cov_sess  ' });
@@ -237,13 +239,20 @@ describe('workspaces CRUD', () => {
     expect(() =>
       createWorkspace({ name: WS_NAME, path: `/tmp/cov${'\r'}x` }),
     ).toThrow(/control characters/i);
+    // Leading control char must not strip to a valid path
+    expect(() =>
+      createWorkspace({ name: WS_NAME, path: '\n/tmp/ok' }),
+    ).toThrow(/control characters/i);
 
     const ws = createWorkspace({ name: WS_NAME, path: '  /tmp/safe  ' });
     expect(ws.path).toBe('/tmp/safe');
 
     // invalid path update is a no-op (returns undefined, keeps prior path)
     expect(updateWorkspace(ws.id, { path: `bad${'\n'}path` })).toBeUndefined();
+    expect(updateWorkspace(ws.id, { path: '\n/tmp/other' })).toBeUndefined();
+    expect(updateWorkspace(ws.id, { name: '\nRenamed' })).toBeUndefined();
     expect(getWorkspace(ws.id)?.path).toBe('/tmp/safe');
+    expect(getWorkspace(ws.id)?.name).toBe(WS_NAME);
 
     // blank path clears to null
     const cleared = updateWorkspace(ws.id, { path: '   ' });

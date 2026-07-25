@@ -136,7 +136,16 @@ plugins.post('/:id/run', async (c) => {
       if (serialized.length > 256_000) {
         return c.json({ ok: false, error: 'inputs payload too large' }, 400);
       }
-      inputs = body.inputs;
+      // Drop control-char keys from plugin inputs
+      const clean: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(body.inputs)) {
+        if (Object.keys(clean).length >= 200) break;
+        if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
+        const key = k.trim();
+        if (!key || key.length > 200) continue;
+        clean[key] = v;
+      }
+      inputs = clean;
     }
   } catch {
     // No body
@@ -166,8 +175,11 @@ plugins.post('/:id/run/:runId/resume', async (c) => {
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
-  const stageId = typeof body.stageId === 'string' ? body.stageId.trim() : '';
-  if (!stageId || stageId.length > 100 || /[\0\r\n]/.test(stageId)) {
+  if (typeof body.stageId !== 'string' || /[\0\r\n]/.test(body.stageId)) {
+    return c.json({ ok: false, error: 'stageId required' }, 400);
+  }
+  const stageId = body.stageId.trim();
+  if (!stageId || stageId.length > 100) {
     return c.json({ ok: false, error: 'stageId required' }, 400);
   }
   const runId = paramId(c, 'runId');

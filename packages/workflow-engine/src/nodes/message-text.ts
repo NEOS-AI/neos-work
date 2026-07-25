@@ -85,8 +85,10 @@ export function resolveMaxResults(config: Record<string, unknown> | undefined, f
 export const SEARCH_QUERY_MAX_CHARS = 2_000;
 
 function normalizeSearchQuery(raw: string): string {
+  // Control-char check before trim
+  if (/[\0\r\n]/.test(raw)) return '';
   const q = raw.trim();
-  if (!q || /[\0\r\n]/.test(q)) return '';
+  if (!q) return '';
   return q.length > SEARCH_QUERY_MAX_CHARS ? q.slice(0, SEARCH_QUERY_MAX_CHARS) : q;
 }
 

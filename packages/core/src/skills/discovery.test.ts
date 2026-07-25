@@ -26,6 +26,11 @@ describe('discoverSkills', () => {
     expect(skills.every((s) => s.source === 'global')).toBe(true);
   });
 
+  it('ignores control-char workspace paths (no local scan)', async () => {
+    const skills = await discoverSkills(`\n${workspace}`);
+    expect(skills.filter((s) => s.source === 'local')).toEqual([]);
+  });
+
   it('discovers local SKILL.md-style files under .neos-work/skills', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });

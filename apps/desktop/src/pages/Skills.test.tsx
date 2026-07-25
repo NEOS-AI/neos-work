@@ -117,6 +117,22 @@ describe('Skills page', () => {
     await waitFor(() => expect(deleteSkill).toHaveBeenCalled());
   });
 
+  it('disables an enabled skill and shows no-match search', async () => {
+    const user = userEvent.setup();
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    toggleSkill.mockResolvedValue({ ok: true });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(toggleSkill).toHaveBeenCalledWith('sk-b', false));
+
+    await user.type(screen.getByPlaceholderText('Search skills…'), 'zzzz-none');
+    expect(screen.queryByText('Alpha Skill')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beta Skill')).not.toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
   it('opens try-prompt modal and Escape closes it', async () => {
     listSkills.mockResolvedValue({ ok: true, data: skills });
     render(<Skills />);

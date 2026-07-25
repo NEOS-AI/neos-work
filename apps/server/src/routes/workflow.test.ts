@@ -311,6 +311,32 @@ describe('workflow routes export/import/preflight/runs', () => {
     expect(badStatus.status).toBe(400);
     expect(((await badStatus.json()) as { error: string }).error).toMatch(/Invalid status/i);
 
+    // Control-char status filter is ignored → treated as no filter (deletes all runs)
+    const ctrlStatus = await workflow.request(
+      `/${wf.id}/runs?status=${encodeURIComponent('failed\n')}`,
+      { method: 'DELETE' },
+    );
+    expect(ctrlStatus.status).toBe(200);
+    expect(workflows.listRuns(wf.id)).toEqual([]);
+
+    // Re-seed completed + failed for remaining assertions
+    workflows.saveRun({
+      id: completedId,
+      workflowId: wf.id,
+      status: 'completed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    });
+    workflows.saveRun({
+      id: crypto.randomUUID(),
+      workflowId: wf.id,
+      status: 'failed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      error: 'x',
+    });
+
     const clear = await workflow.request(`/${wf.id}/runs?status=failed`, { method: 'DELETE' });
     expect(clear.status).toBe(200);
     const after = workflows.listRuns(wf.id);

@@ -391,4 +391,44 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByDisplayValue('ping')).toBeInTheDocument();
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
   });
+
+  it('renders block node selector fields when blockId set', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'price_lookup',
+          name: 'Price Lookup',
+          domain: 'finance',
+          category: 'market',
+          description: 'lookup',
+          isBuiltIn: true,
+          implementationType: 'native',
+          paramDefs: [{ key: 'symbol', label: 'Symbol', type: 'string' }],
+        },
+      ],
+    });
+    const onPatchNodeData = vi.fn();
+    const blockNode = {
+      id: 'b1',
+      type: 'block',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'block',
+        label: 'Price',
+        config: { blockId: 'price_lookup', params: { symbol: '005930' } },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={blockNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    await waitFor(() => expect(listBlocks).toHaveBeenCalled());
+    // Label and/or block-related UI should appear
+    expect(screen.getByDisplayValue('Price')).toBeInTheDocument();
+  });
 });

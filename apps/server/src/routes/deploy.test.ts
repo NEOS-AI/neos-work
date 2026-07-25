@@ -259,7 +259,7 @@ describe('deploy routes', () => {
       body: JSON.stringify({ content: '<p>x</p>' }),
     });
     expect(noProvider.status).toBe(400);
-    expect(((await noProvider.json()) as { error: string }).error).toMatch(/provider and content/i);
+    expect(((await noProvider.json()) as { error: string }).error).toMatch(/provider|content/i);
 
     const badProvider = await deploy.request('/', {
       method: 'POST',
@@ -268,6 +268,14 @@ describe('deploy routes', () => {
     });
     expect(badProvider.status).toBe(400);
     expect(((await badProvider.json()) as { error: string }).error).toMatch(/vercel or cloudflare/i);
+
+    // Leading control-char provider
+    const leading = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: '\nvercel', content: '<p>x</p>' }),
+    });
+    expect(leading.status).toBe(400);
 
     // 5MB+1 is intentional to hit the size guard without calling remote APIs
     const huge = 'x'.repeat(5_000_001);

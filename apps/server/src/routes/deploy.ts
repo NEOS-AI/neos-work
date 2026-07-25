@@ -195,9 +195,15 @@ deploy.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const content = typeof body.content === 'string' ? body.content.trim() : '';
-  const providerRaw =
-    typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : '';
+  // Control-char checks before trim
+  if (typeof body.provider !== 'string' || /[\0\r\n]/.test(body.provider)) {
+    return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
+  }
+  if (typeof body.content !== 'string' || /\0/.test(body.content)) {
+    return c.json({ ok: false, error: 'provider and content are required' }, 400);
+  }
+  const content = body.content.trim();
+  const providerRaw = body.provider.trim().toLowerCase();
   if (!providerRaw || !content) {
     return c.json({ ok: false, error: 'provider and content are required' }, 400);
   }
@@ -210,8 +216,13 @@ deploy.post('/', async (c) => {
     return c.json({ ok: false, error: 'content too large (max 2 MiB)' }, 400);
   }
 
-  const projectName =
-    (typeof body.projectName === 'string' ? body.projectName.trim() : '') || 'neos-deploy';
+  let projectName = 'neos-deploy';
+  if (typeof body.projectName === 'string') {
+    if (/[\0\r\n]/.test(body.projectName)) {
+      return c.json({ ok: false, error: 'Invalid project name' }, 400);
+    }
+    projectName = body.projectName.trim() || 'neos-deploy';
+  }
   if (!isValidDeployProjectName(projectName)) {
     return c.json({
       ok: false,
@@ -220,14 +231,20 @@ deploy.post('/', async (c) => {
     }, 400);
   }
 
-  let workflowId =
-    typeof body.workflowId === 'string' ? body.workflowId.trim() || undefined : undefined;
-  if (workflowId && (workflowId.length > 100 || /[\0\r\n]/.test(workflowId))) {
-    return c.json({ ok: false, error: 'Invalid workflowId' }, 400);
+  let workflowId: string | undefined;
+  if (typeof body.workflowId === 'string' && body.workflowId) {
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(body.workflowId) || body.workflowId.trim().length > 100) {
+      return c.json({ ok: false, error: 'Invalid workflowId' }, 400);
+    }
+    workflowId = body.workflowId.trim() || undefined;
   }
-  let runId = typeof body.runId === 'string' ? body.runId.trim() || undefined : undefined;
-  if (runId && (runId.length > 100 || /[\0\r\n]/.test(runId))) {
-    return c.json({ ok: false, error: 'Invalid runId' }, 400);
+  let runId: string | undefined;
+  if (typeof body.runId === 'string' && body.runId) {
+    if (/[\0\r\n]/.test(body.runId) || body.runId.trim().length > 100) {
+      return c.json({ ok: false, error: 'Invalid runId' }, 400);
+    }
+    runId = body.runId.trim() || undefined;
   }
 
   const record = createDeployment({

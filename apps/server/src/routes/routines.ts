@@ -244,8 +244,15 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
   const workflowRunId = routineRun.runId;
   const workflowRun = workflowRunId ? workflowDb.getRun(workflowRunId) : undefined;
 
-  const rawName =
-    typeof body.name === 'string' && body.name.trim() ? body.name.trim() : routine.name;
+  // Control-char name → fall back to routine name (check before trim)
+  let rawName = routine.name;
+  if (typeof body.name === 'string') {
+    if (/[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+    const n = body.name.trim();
+    if (n) rawName = n;
+  }
   const slugBase = rawName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -253,11 +260,16 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
     .slice(0, 48) || 'crystallized-skill';
   const skillName = `${slugBase}-${routineRun.id.slice(0, 8)}`;
   let description =
-    (typeof body.description === 'string' && body.description.trim()
-      ? body.description.trim()
-      : undefined)
-    ?? `Crystallized from routine "${routine.name}"` +
-      (workflow ? ` / workflow "${workflow.name}"` : '');
+    `Crystallized from routine "${routine.name}"` +
+    (workflow ? ` / workflow "${workflow.name}"` : '');
+  if (typeof body.description === 'string') {
+    // Multi-line OK; reject null bytes
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
+    const d = body.description.trim();
+    if (d) description = d;
+  }
   // Cap description / skill markdown size (plan Task 2 crystallize polish)
   if (description.length > 4_000) description = description.slice(0, 4_000);
 
