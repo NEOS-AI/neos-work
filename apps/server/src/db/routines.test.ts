@@ -207,6 +207,8 @@ describe('routines CRUD', () => {
       createRoutine({ name: 'BadWf', workflowId: 'bad\nid', schedule: '0 9 * * *' }),
     ).toThrow(/workflowId is invalid/i);
     expect(() => createRoutineRun({ routineId: 'bad\nid' })).toThrow(/routineId is invalid/i);
+    // Leading control must not strip to a valid routine id
+    expect(() => createRoutineRun({ routineId: '\nvalid-looking' })).toThrow(/routineId is invalid/i);
   });
 
   it('rejects blank routineId on createRoutineRun', () => {

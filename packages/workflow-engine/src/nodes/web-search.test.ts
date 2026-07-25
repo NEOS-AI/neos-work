@@ -170,6 +170,23 @@ describe('WebSearchNode', () => {
     expect(result.error).toMatch(/rate limited/);
   });
 
+  it('scrubs control characters from Tavily error bodies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => `up\nstream${'\0'}err`,
+      }),
+    );
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'x' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/502/);
+    expect(result.error).toContain('up stream');
+    expect(result.error).not.toMatch(/\n/);
+    expect(result.error).not.toContain('\0');
+  });
+
   it('sends User-Agent and tolerates missing results array', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

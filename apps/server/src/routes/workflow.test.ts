@@ -477,6 +477,15 @@ describe('workflow routes export/import/preflight/runs', () => {
     const wrongBody = await wrongType.json() as { error: string };
     expect(wrongBody.error).toMatch(/multipart|zip/i);
 
+    // Control-char content-type must not strip to a valid zip type
+    const ctrlType = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip\nbad' },
+      body: 'PK',
+    });
+    expect(ctrlType.status).toBe(400);
+    expect(((await ctrlType.json()) as { error: string }).error).toMatch(/multipart|zip/i);
+
     const form = new FormData();
     form.set('notfile', 'x');
     const missingFile = await workflow.request('/import.zip', {
