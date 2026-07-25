@@ -250,6 +250,59 @@ describe('AgentOrchestrator', () => {
     expect(llmCalls).toBe(1); // synthesize only
   });
 
+  it('skips control-char tool_use names before trim (does not execute them)', async () => {
+    const registry = new ToolRegistry();
+    const executed: string[] = [];
+    registry.register({
+      name: 'echo',
+      description: 'Echo',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
+      async execute(input) {
+        executed.push(String(input.text ?? ''));
+        return { success: true, output: { echoed: input.text } };
+      },
+    });
+
+    let call = 0;
+    const adapter = sequencedAdapter([]);
+    adapter.chat = async function* () {
+      call += 1;
+      if (call === 1) {
+        // plan
+        yield {
+          type: 'text',
+          content: JSON.stringify([{ description: 'Echo', toolName: 'echo' }]),
+        };
+        yield { type: 'done' };
+        return;
+      }
+      if (call === 2) {
+        // Leading control must not strip to "echo"
+        yield {
+          type: 'tool_use',
+          toolName: '\necho',
+          toolUseId: 'tu-bad',
+          toolInput: { text: 'should-not-run' },
+        };
+        yield {
+          type: 'tool_use',
+          toolName: 'echo',
+          toolUseId: 'tu-ok',
+          toolInput: { text: 'ok' },
+        };
+        yield { type: 'done' };
+        return;
+      }
+      yield { type: 'text', content: 'done' };
+      yield { type: 'done' };
+    };
+
+    const orch = new AgentOrchestrator(adapter, registry);
+    const events = await collectEvents(orch.run('echo carefully'));
+    expect(executed).toEqual(['ok']);
+    expect(events.some((e) => e.type === 'step_complete')).toBe(true);
+  });
+
   it('retries a failed tool step and completes on second attempt', async () => {
     const registry = new ToolRegistry();
     let attempts = 0;

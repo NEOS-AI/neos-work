@@ -154,6 +154,44 @@ describe('MediaNode', () => {
     expect(body.prompt).toBe('a cat');
   });
 
+  it('drops control-char filename/revised prompt and control error strings from API', async () => {
+    // Leading control filename/revised must not strip to valid values
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: {
+            filename: '\nimg.png',
+            revisedPrompt: 'line1\nline2',
+          },
+        }),
+      }),
+    );
+    const ok = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'a cat' } }),
+    );
+    expect(ok.ok).toBe(true);
+    expect(String(ok.output)).toContain('Image generated:');
+    expect(String(ok.output)).not.toContain('img.png');
+    // CR/LF in revised prompt collapsed to spaces
+    expect(String(ok.output)).toContain('line1 line2');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: false, error: '\nquota exceeded' }),
+      }),
+    );
+    const err = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'x' } }),
+    );
+    expect(err.ok).toBe(false);
+    expect(err.error).toBe('Image generation failed');
+  });
+
   it('posts audio request', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'speech.mp3' } }),
