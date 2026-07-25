@@ -33,6 +33,8 @@ export function safeError(error: unknown, context: string): string {
 /** Escape text for safe embedding in HTML (MCP OAuth callback pages, etc.). */
 export function escapeHtml(value: string): string {
   let s = typeof value === 'string' ? value : String(value ?? '');
+  // Drop null bytes before HTML escaping (DOM / attribute injection defense)
+  if (s.includes('\0')) s = s.replace(/\0/g, '');
   if (s.length > HTML_ESCAPE_MAX) s = s.slice(0, HTML_ESCAPE_MAX);
   return s
     .replace(/&/g, '&amp;')

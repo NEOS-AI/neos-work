@@ -29,12 +29,14 @@ function makeRun(
   id: string,
   status: 'running' | 'completed' | 'failed' | 'cancelled',
   startedAt = '2020-01-01T00:00:00.000Z',
+  extra?: { error?: string; nodeResults?: Record<string, unknown> },
 ) {
   return {
     id,
     workflowId: 'wf-1',
     status,
-    nodeResults: {},
+    nodeResults: extra?.nodeResults ?? {},
+    error: extra?.error,
     startedAt,
     completedAt: status === 'running' ? undefined : '2020-01-01T00:01:00.000Z',
   };
@@ -185,6 +187,22 @@ describe('RunHistoryPanel', () => {
     // Second page has only 5 items → no further "load more"
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /load more|common.loadMore/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('scrubs control-char run errors in the list', async () => {
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [
+        makeRun('run-err-1', 'failed', '2020-01-01T00:00:00.000Z', {
+          error: `boom${'\0'}err\nnext`,
+        }),
+      ],
+    });
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => {
+      // null-byte stripped, newline collapsed
+      expect(screen.getByText(/boomerr next/)).toBeInTheDocument();
     });
   });
 });

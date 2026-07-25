@@ -91,7 +91,7 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
     >
       <div className="flex items-center justify-between">
         <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-          Run {runId.slice(0, 8)} — node results
+          Run {scrubDisplayText(runId, { collapseLines: true, maxChars: 64 }).slice(0, 8) || 'run'} — node results
         </span>
         <button
           onClick={onClose}
@@ -173,7 +173,8 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
                 wordBreak: 'break-all',
               }}
             >
-              {serializeNodeOutput(nr.output)}
+              {/* Cap on-screen output; full (capped) payload still available via Copy */}
+              {serializeNodeOutput(nr.output, 8_000)}
             </pre>
           )}
         </div>

@@ -58,6 +58,15 @@ describe('isHtmlContent / isMarkdownContent', () => {
     expect(isMarkdownContent('text/plain', 'notes.md')).toBe(true);
     expect(isMarkdownContent('text/plain', 'notes.txt')).toBe(false);
   });
+
+  it('rejects control-char contentType / null-byte body / control names', () => {
+    expect(isHtmlContent(`text/html${'\0'}`, null)).toBe(false);
+    expect(isHtmlContent('\ntext/html', null)).toBe(false);
+    expect(isHtmlContent(undefined, `<html>${'\0'}</html>`)).toBe(false);
+    expect(isMarkdownContent(`text/markdown${'\0'}`, 'x')).toBe(false);
+    expect(isMarkdownContent('text/plain', `notes${'\0'}.md`)).toBe(false);
+    expect(isMarkdownContent('text/plain', '\nnotes.md')).toBe(false);
+  });
 });
 
 describe('ArtifactPreview', () => {

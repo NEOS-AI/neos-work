@@ -115,6 +115,32 @@ describe('RunDetailPanel', () => {
     expect(screen.getByText('output')).toBeInTheDocument();
   });
 
+  it('scrubs control-char runId in the panel header', async () => {
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-x',
+        workflowId: 'wf',
+        status: 'completed',
+        nodeResults: {},
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+
+    render(
+      <RunDetailPanel
+        workflowId="wf"
+        runId={`run${'\n'}abcd12`}
+        onClose={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      // collapsed control → "run abcd…" header slice
+      expect(screen.getByText(/Run run abcd/i)).toBeInTheDocument();
+    });
+  });
+
   it('copies node output to clipboard', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);

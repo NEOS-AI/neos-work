@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EngineClient } from './engine.js';
+import { EngineClient, parseSseDataPayload, parseSseEventName } from './engine.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -456,6 +456,42 @@ describe('EngineClient', () => {
     const result = await client.testWebhookFire('wf-1');
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/secret/i);
+  });
+
+  it('parseSseDataPayload / parseSseEventName reject control-char payloads', () => {
+    expect(parseSseDataPayload('data: {"ok":true}')).toBe('{"ok":true}');
+    expect(parseSseDataPayload('data: {"ok":true}\r')).toBe('{"ok":true}');
+    expect(parseSseDataPayload(`data: {"x":1${'\0'}}`)).toBeNull();
+    expect(parseSseDataPayload('data:')).toBeNull();
+    expect(parseSseDataPayload('event: foo')).toBeNull();
+    expect(parseSseEventName('event: tool_call')).toBe('tool_call');
+    expect(parseSseEventName(`event: bad${'\0'}name`)).toBe('');
+    expect(parseSseEventName('event: \nlead')).toBe('');
+  });
+
+  it('runWorkflow skips null-byte SSE data lines', async () => {
+    const client = new EngineClient('http://engine.test');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: {"type":"run.started","runId":"r1"}\n\ndata: {"type":"evil${'\0'}","runId":"x"}\n\ndata: {"type":"run.completed","runId":"r1","duration":1}\n\n`,
+          ),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+    const events: unknown[] = [];
+    client.runWorkflow('w1', (e) => events.push(e));
+    await vi.waitFor(() => {
+      expect(events.length).toBe(2);
+    });
+    expect(events[0]).toMatchObject({ type: 'run.started' });
+    expect(events[1]).toMatchObject({ type: 'run.completed' });
   });
 
   it('runWorkflow parses SSE data lines and abort cancels', async () => {

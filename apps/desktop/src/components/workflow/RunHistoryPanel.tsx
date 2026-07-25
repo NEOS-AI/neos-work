@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
-import { formatDuration } from '../../lib/format-duration.js';
+import { formatDuration, scrubDisplayText } from '../../lib/format-duration.js';
 import { formatListCount } from '../../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../../lib/format-relative-time.js';
 import {
   filterRunsByStatus,
   loadRunStatusFilter,
+  normalizeRunStatus,
   RUN_STATUS_FILTERS,
   saveRunStatusFilter,
   type RunStatusFilter,
@@ -55,7 +56,18 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
         const fetched = res.data;
         const hasMoreData = fetched.length > PAGE_SIZE;
         const page = fetched.slice(0, PAGE_SIZE);
-        setRuns((prev) => (offset === 0 ? page : [...prev, ...page]));
+        setRuns((prev) => {
+          if (offset === 0) return page;
+          // Dedup by id (Strict Mode double-fetch / overlapping pages)
+          const seen = new Set(prev.map((r) => r.id));
+          const merged = [...prev];
+          for (const r of page) {
+            if (seen.has(r.id)) continue;
+            seen.add(r.id);
+            merged.push(r);
+          }
+          return merged;
+        });
         setHasMore(hasMoreData);
       }
     }).catch(() => {});
@@ -165,18 +177,27 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           const nodeResults = run.nodeResults ?? {};
           const failedCount = Object.values(nodeResults).filter((value) => {
             const result = value as { status?: string };
-            return result.status === 'failed';
+            return normalizeRunStatus(result.status) === 'failed';
           }).length;
-          const firstError = run.error ?? Object.values(nodeResults).map((value) => {
+          const rawError = run.error ?? Object.values(nodeResults).map((value) => {
             const result = value as { error?: string };
             return result.error;
           }).find(Boolean);
+          // Collapse control-char errors for list display (align with RunLogPanel)
+          const firstError = rawError
+            ? scrubDisplayText(rawError, { collapseLines: true, maxChars: 500 })
+            : undefined;
+          const statusLabel = scrubDisplayText(run.status, { collapseLines: true, maxChars: 40 })
+            || normalizeRunStatus(run.status)
+            || 'unknown';
+          const runIdSafe = scrubDisplayText(run.id, { collapseLines: true, maxChars: 100 }) || 'run';
 
           const isSelected = selectedRunId === run.id;
 
           return (
             <div
-              key={run.id}
+              // Prefer raw run.id for React identity (unique); scrub only for display
+              key={typeof run.id === 'string' && run.id ? run.id : runIdSafe}
               className="group relative cursor-pointer rounded-md border p-2 text-xs transition-colors"
               style={{
                 borderColor: isSelected ? 'var(--border-accent, #3b82f6)' : 'var(--border-primary)',
@@ -186,10 +207,10 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                  {run.status}
+                  {statusLabel}
                 </span>
                 <div className="flex items-center gap-1">
-                  <span style={{ color: 'var(--text-muted)' }}>{run.id.slice(0, 8)}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{runIdSafe.slice(0, 8)}</span>
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();
@@ -202,7 +223,7 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `run-${run.id.slice(0, 8)}.json`;
+                      a.download = `run-${runIdSafe.slice(0, 8)}.json`;
                       a.click();
                       URL.revokeObjectURL(url);
                     }}

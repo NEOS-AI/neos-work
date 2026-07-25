@@ -3,6 +3,7 @@ import {
   filterRunsByStatus,
   isRunStatusFilter,
   loadRunStatusFilter,
+  normalizeRunStatus,
   RUN_STATUS_FILTERS,
   saveRunStatusFilter,
 } from './run-history-filter.js';
@@ -47,6 +48,17 @@ describe('filterRunsByStatus', () => {
   it('returns empty when no status matches', () => {
     expect(filterRunsByStatus(runs, 'unknown-status')).toEqual([]);
   });
+
+  it('ignores control-char filter and normalizes control statuses', () => {
+    expect(filterRunsByStatus(runs, `failed${'\0'}`)).toEqual(runs);
+    expect(filterRunsByStatus(runs, '\nfailed')).toEqual(runs);
+    expect(normalizeRunStatus(` failed `)).toBe('failed');
+    expect(normalizeRunStatus(`bad${'\0'}`)).toBe('');
+    expect(normalizeRunStatus('\nfailed')).toBe('');
+    // Leading-padded status still matches after normalize
+    const padded = [{ id: 'p', status: '  failed  ' }];
+    expect(filterRunsByStatus(padded, 'failed')).toHaveLength(1);
+  });
 });
 
 describe('run status filter prefs', () => {
@@ -79,6 +91,15 @@ describe('run status filter prefs', () => {
 
   it('ignores invalid stored values', () => {
     localStorage.setItem('neos-run-history-status', 'pending');
+    expect(loadRunStatusFilter()).toBe('all');
+  });
+
+  it('ignores control-char stored filter values', () => {
+    localStorage.setItem('neos-run-history-status', `failed${'\0'}`);
+    expect(loadRunStatusFilter()).toBe('all');
+    localStorage.setItem('neos-run-history-status', '\nfailed');
+    expect(loadRunStatusFilter()).toBe('all');
+    localStorage.setItem('neos-run-history-status', '\ncompleted');
     expect(loadRunStatusFilter()).toBe('all');
   });
 

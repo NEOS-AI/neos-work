@@ -73,4 +73,9 @@ describe('escapeHtml', () => {
     const escaped = escapeHtml('x'.repeat(60_000));
     expect(escaped.length).toBeLessThanOrEqual(50_000);
   });
+
+  it('strips null bytes before HTML escaping', () => {
+    expect(escapeHtml(`hi${'\0'}<b>`)).toBe('hi&lt;b&gt;');
+    expect(escapeHtml(`a${'\0'}b`)).toBe('ab');
+  });
 });

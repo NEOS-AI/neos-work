@@ -48,6 +48,21 @@ describe('scrubDisplayText', () => {
     expect(scrubDisplayText('abcdef', { maxChars: 3 })).toBe('abc');
     expect(scrubDisplayText(null)).toBe('');
   });
+
+  it('coerces non-strings and ignores non-positive maxChars', () => {
+    expect(scrubDisplayText(42)).toBe('42');
+    expect(scrubDisplayText({ a: 1 })).toBe('[object Object]');
+    expect(scrubDisplayText(undefined)).toBe('');
+    // maxChars <= 0 is a no-op (not treated as empty string)
+    expect(scrubDisplayText('abcdef', { maxChars: 0 })).toBe('abcdef');
+    expect(scrubDisplayText('abcdef', { maxChars: -5 })).toBe('abcdef');
+    // collapseLines + maxChars apply after null-byte strip
+    // `a\0\nb\nc` → strip null → collapse → "a b c" → max 3 → "a b"
+    expect(
+      scrubDisplayText(`a${'\0'}\nb\nc`, { collapseLines: true, maxChars: 3 }),
+    ).toBe('a b');
+    expect(scrubDisplayText('line1\nline2', { collapseLines: true, maxChars: 4 })).toBe('line');
+  });
 });
 
 describe('serializeNodeOutput', () => {
@@ -61,6 +76,12 @@ describe('serializeNodeOutput', () => {
     expect(serializeNodeOutput({ t: `a${'\0'}b` })).not.toContain('\0');
   });
 
+  it('caps serialized length (display / clipboard defense)', () => {
+    expect(serializeNodeOutput('abcdef', 3)).toBe('abc');
+    const big = { blob: 'x'.repeat(200) };
+    expect(serializeNodeOutput(big, 40).length).toBeLessThanOrEqual(40);
+  });
+
   it('serializes null, numbers, arrays, and falls back for circular values', () => {
     expect(serializeNodeOutput(null)).toBe('null');
     expect(serializeNodeOutput(42)).toBe('42');
@@ -68,5 +89,13 @@ describe('serializeNodeOutput', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(serializeNodeOutput(circular)).toBe('[object Object]');
+  });
+});
+
+describe('scrubDisplayText non-string coerce', () => {
+  it('coerces numbers/objects and strips null from coerced strings', () => {
+    expect(scrubDisplayText(42)).toBe('42');
+    expect(scrubDisplayText(undefined)).toBe('');
+    expect(scrubDisplayText({ toString: () => `a${'\0'}b` })).toBe('ab');
   });
 });

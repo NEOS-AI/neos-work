@@ -88,6 +88,10 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
             finalUrl = url;
           } else {
             finalUrl = finalUrl.trim() || url;
+            // Cap redirected URL length (pathological query defense)
+            if (finalUrl.length > BROWSER_URL_MAX_CHARS) finalUrl = url;
+            // Only accept http(s) after redirect
+            if (!isSafeBrowserUrl(finalUrl)) finalUrl = url;
           }
           return { success: true, output: { title, url: finalUrl } };
         } catch (err) {

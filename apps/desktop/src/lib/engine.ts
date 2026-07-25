@@ -4,6 +4,37 @@
 
 import type { ApiResponse, ChatChunk, HealthResponse } from '@neos-work/shared';
 
+/**
+ * Extract SSE `data:` payload. Rejects null-byte lines (control injection);
+ * trims trailing CR from CRLF streams.
+ * Exported for unit tests.
+ */
+export function parseSseDataPayload(line: string): string | null {
+  if (typeof line !== 'string' || !line.startsWith('data:')) return null;
+  // Allow "data:" or "data: " prefix
+  let payload = line.slice(5);
+  if (payload.startsWith(' ')) payload = payload.slice(1);
+  // Null-byte SSE payloads never parsed (JSON injection / log hygiene)
+  if (/\0/.test(payload)) return null;
+  // Strip trailing CR from CRLF framing; keep JSON body intact
+  if (payload.endsWith('\r')) payload = payload.slice(0, -1);
+  payload = payload.trim();
+  return payload.length > 0 ? payload : null;
+}
+
+/**
+ * Extract SSE `event:` name. Control-char / blank → empty (caller skips).
+ * Exported for unit tests.
+ */
+export function parseSseEventName(line: string): string {
+  if (typeof line !== 'string' || !line.startsWith('event:')) return '';
+  let name = line.slice(6);
+  if (name.startsWith(' ')) name = name.slice(1);
+  // Control-char event names rejected before trim
+  if (/[\0\r\n]/.test(name)) return '';
+  return name.trim();
+}
+
 export interface SessionData {
   id: string;
   workspace_id: string;
@@ -272,7 +303,7 @@ export class EngineClient {
 
       for (const line of lines) {
         if (line.startsWith('data:')) {
-          const data = line.slice(5).trim();
+          const data = parseSseDataPayload(line);
           if (!data) continue;
           try {
             yield JSON.parse(data) as ChatChunk;
@@ -318,9 +349,9 @@ export class EngineClient {
 
       for (const line of lines) {
         if (line.startsWith('event:')) {
-          currentEvent = line.slice(6).trim();
+          currentEvent = parseSseEventName(line);
         } else if (line.startsWith('data:')) {
-          const data = line.slice(5).trim();
+          const data = parseSseDataPayload(line);
           if (!data || !currentEvent) continue;
           try {
             const parsed = JSON.parse(data);
@@ -837,10 +868,27 @@ export class EngineClient {
           const parts = buffer.split('\n\n');
           buffer = parts.pop() ?? '';
           for (const part of parts) {
-            const line = part.startsWith('data: ') ? part.slice(6) : part;
+            // Part may be multi-line; take first data: line
+            const dataLine = part
+              .split('\n')
+              .find((l) => l.startsWith('data:'));
+            const payload = dataLine ? parseSseDataPayload(dataLine) : null;
+            // Fallback: bare JSON without data: prefix (tests / legacy)
+            let jsonText = payload;
+            if (!jsonText && part && !/\0/.test(part)) {
+              const bare = part.trim();
+              if (bare.startsWith('{')) jsonText = bare;
+            }
+            if (!jsonText) continue;
             try {
-              const event = JSON.parse(line);
-              if (event.type === 'pipeline.started') runId = event.runId;
+              const event = JSON.parse(jsonText) as { type?: string; runId?: string };
+              if (event.type === 'pipeline.started' && typeof event.runId === 'string') {
+                // Control-char runId ignored
+                if (!/[\0\r\n]/.test(event.runId)) {
+                  const idTrim = event.runId.trim();
+                  if (idTrim) runId = idTrim;
+                }
+              }
               onEvent(event);
             } catch { /* ignore */ }
           }
@@ -1024,9 +1072,11 @@ export class EngineClient {
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith('data:')) {
+            const data = parseSseDataPayload(line);
+            if (!data) continue;
             try {
-              onEvent(JSON.parse(line.slice(6)) as WorkflowSSEEvent);
+              onEvent(JSON.parse(data) as WorkflowSSEEvent);
             } catch {
               // skip malformed
             }

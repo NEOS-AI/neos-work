@@ -7,7 +7,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
-import { formatDurationMs, scrubDisplayText } from '../../lib/format-duration.js';
+import {
+  formatDurationMs,
+  scrubDisplayText,
+  serializeNodeOutput,
+} from '../../lib/format-duration.js';
 import {
   loadRunLogFilter,
   saveRunLogFilter,
@@ -88,15 +92,6 @@ export function linkifyText(text: string): ReactNode[] {
     }
     return <span key={i}>{part}</span>;
   });
-}
-
-function formatOutput(output: unknown): string {
-  if (typeof output === 'string') return scrubDisplayText(output);
-  try {
-    return scrubDisplayText(JSON.stringify(output, null, 2));
-  } catch {
-    return scrubDisplayText(String(output));
-  }
 }
 
 /** Safe single-line label/error for log rows (control collapsed). */
@@ -195,6 +190,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
           (ev as { accumulated?: string; chunk?: string }).accumulated
             ?? (ev as { chunk?: string }).chunk
             ?? '',
+          { maxChars: 100_000 },
         );
         const nodeTypeSafe =
           ev.type === 'node.started'
@@ -273,7 +269,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                     onClick={(e) => {
                       e.stopPropagation();
                       void navigator.clipboard?.writeText(
-                        formatOutput((ev as { output: unknown }).output),
+                        serializeNodeOutput((ev as { output: unknown }).output),
                       );
                     }}
                   >
@@ -284,7 +280,9 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                   className="max-h-48 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
                   style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
                 >
-                  {linkifyText(formatOutput((ev as { output: unknown }).output).slice(0, 2000))}
+                  {linkifyText(
+                    serializeNodeOutput((ev as { output: unknown }).output, 2_000),
+                  )}
                 </pre>
               </div>
             )}

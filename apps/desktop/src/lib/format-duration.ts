@@ -40,12 +40,16 @@ export function scrubDisplayText(
   return s;
 }
 
-/** Serialize node output for clipboard / export (null-byte scrubbed). */
-export function serializeNodeOutput(output: unknown): string {
-  if (typeof output === 'string') return scrubDisplayText(output);
+/** Practical bound for clipboard / preformatted node output. */
+export const NODE_OUTPUT_MAX_CHARS = 100_000;
+
+/** Serialize node output for clipboard / export (null-byte scrubbed, size-capped). */
+export function serializeNodeOutput(output: unknown, maxChars = NODE_OUTPUT_MAX_CHARS): string {
+  const cap = typeof maxChars === 'number' && maxChars > 0 ? maxChars : NODE_OUTPUT_MAX_CHARS;
+  if (typeof output === 'string') return scrubDisplayText(output, { maxChars: cap });
   try {
-    return scrubDisplayText(JSON.stringify(output, null, 2));
+    return scrubDisplayText(JSON.stringify(output, null, 2), { maxChars: cap });
   } catch {
-    return scrubDisplayText(String(output));
+    return scrubDisplayText(String(output), { maxChars: cap });
   }
 }

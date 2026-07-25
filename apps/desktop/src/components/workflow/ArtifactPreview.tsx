@@ -31,25 +31,49 @@ interface ArtifactPreviewProps {
 
 /** Exported for unit tests — HTML vs plain/markdown content routing. */
 export function isHtmlContent(contentType: string | undefined, content: string | null): boolean {
-  if (contentType?.includes('html')) return true;
+  // Control-char contentType never treated as html mime (check before includes)
+  if (typeof contentType === 'string' && !/[\0\r\n]/.test(contentType)) {
+    const ct = contentType.trim().toLowerCase();
+    if (ct.includes('html')) return true;
+  }
   if (!content) return false;
+  // Null-byte bodies never auto-detected as HTML (iframe srcDoc injection defense)
+  if (/\0/.test(content)) return false;
   const head = content.trimStart().slice(0, 200).toLowerCase();
   return head.startsWith('<!doctype html') || head.startsWith('<html') || head.includes('<body');
 }
 
 /** Exported for unit tests. */
 export function isMarkdownContent(contentType: string | undefined, name?: string): boolean {
-  if (contentType?.includes('markdown') || contentType === 'text/md') return true;
-  return !!name && /\.(md|markdown)$/i.test(name);
+  if (typeof contentType === 'string' && !/[\0\r\n]/.test(contentType)) {
+    const ct = contentType.trim().toLowerCase();
+    if (ct.includes('markdown') || ct === 'text/md') return true;
+  }
+  // Control-char / blank names never match markdown extension
+  if (typeof name !== 'string' || /[\0\r\n]/.test(name)) return false;
+  const n = name.trim();
+  return !!n && /\.(md|markdown)$/i.test(n);
 }
 
 /** Trigger a browser download of text content (exported for unit tests). */
 export function downloadTextFile(filename: string, content: string, mimeType = 'text/plain'): void {
-  const blob = new Blob([content], { type: mimeType });
+  // Scrub control from download filename (path-ish / control injection)
+  let safeName = typeof filename === 'string' ? filename : 'artifact.txt';
+  if (/[\0\r\n]/.test(safeName)) {
+    safeName = safeName.replace(/[\0\r\n]/g, '_');
+  }
+  safeName = safeName.trim() || 'artifact.txt';
+  if (safeName.length > 200) safeName = safeName.slice(0, 200);
+  // Drop null bytes from body; multi-line OK
+  let body = typeof content === 'string' ? content : String(content ?? '');
+  if (/\0/.test(body)) body = body.replace(/\0/g, '');
+  let safeMime = typeof mimeType === 'string' ? mimeType : 'text/plain';
+  if (/[\0\r\n]/.test(safeMime)) safeMime = 'text/plain';
+  const blob = new Blob([body], { type: safeMime.trim() || 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename || 'artifact.txt';
+  a.download = safeName;
   a.click();
   URL.revokeObjectURL(url);
 }

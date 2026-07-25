@@ -133,6 +133,24 @@ describe('createBrowserTools', () => {
     expect(full.output).toEqual({ text: 'full-body' });
   });
 
+  it('browser_navigate falls back to request url when final url is unsafe', async () => {
+    const page = {
+      goto: vi.fn(async () => {}),
+      title: vi.fn(async () => 'Ok'),
+      url: vi.fn(() => 'javascript:alert(1)'),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const nav = tools.find((t) => t.name === 'browser_navigate')!;
+    const result = await nav.execute({ url: 'https://example.com/start' });
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ title: 'Ok', url: 'https://example.com/start' });
+
+    page.url = vi.fn(() => `https://example.com/${'q'.repeat(3_000)}`);
+    const overlong = await nav.execute({ url: 'https://example.com/start' });
+    expect(overlong.success).toBe(true);
+    expect((overlong.output as { url: string }).url).toBe('https://example.com/start');
+  });
+
   it('browser_extract_text strips null bytes; navigate scrubs control title', async () => {
     const page = {
       evaluate: vi.fn(async () => `hello${'\0'}world\nnext`),
@@ -153,6 +171,79 @@ describe('createBrowserTools', () => {
       title: 'Title X Y',
       url: 'https://example.com/done',
     });
+  });
+
+  it('navigate falls back unsafe final URL and truncates long titles', async () => {
+    const page = {
+      goto: vi.fn(async () => {}),
+      title: vi.fn(async () => 'T'.repeat(600)),
+      url: vi.fn(() => `https://evil.example/${'\n'}path`),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const nav = tools.find((t) => t.name === 'browser_navigate')!;
+    const res = await nav.execute({ url: 'https://example.com/start' });
+    expect(res.success).toBe(true);
+    const out = res.output as { title: string; url: string };
+    expect(out.title).toHaveLength(500);
+    expect(out.title).toBe('T'.repeat(500));
+    // Control-char final URL replaced with the requested navigation URL
+    expect(out.url).toBe('https://example.com/start');
+  });
+
+  it('toolFailure collapses control chars in Playwright errors', async () => {
+    const page = {
+      click: vi.fn(async () => {
+        throw new Error(`Timeout${'\n'}waiting${'\0'}for selector`);
+      }),
+      fill: vi.fn(async () => {
+        throw new Error(`Fill failed\r\non line 2`);
+      }),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const click = await tools.find((t) => t.name === 'browser_click')!.execute({
+      selector: '#x',
+    });
+    expect(click.success).toBe(false);
+    expect(click.error).not.toMatch(/[\0\r\n]/);
+    expect(click.error).toMatch(/Timeout waiting for selector/i);
+
+    const fill = await tools.find((t) => t.name === 'browser_fill')!.execute({
+      selector: '#y',
+      value: 'v',
+    });
+    expect(fill.success).toBe(false);
+    expect(fill.error).not.toMatch(/[\0\r\n]/);
+    expect(fill.error).toMatch(/Fill failed on line 2/i);
+  });
+
+  it('rejects control-char selectors on click/fill/extract', async () => {
+    const page = {
+      click: vi.fn(async () => {}),
+      fill: vi.fn(async () => {}),
+      locator: vi.fn(() => ({ innerText: vi.fn(async () => 'x') })),
+      evaluate: vi.fn(async () => 'body'),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const bad = `#btn${'\n'}`;
+    expect(
+      (await tools.find((t) => t.name === 'browser_click')!.execute({ selector: bad })).success,
+    ).toBe(false);
+    expect(
+      (
+        await tools.find((t) => t.name === 'browser_fill')!.execute({
+          selector: `\0#f`,
+          value: 'v',
+        })
+      ).success,
+    ).toBe(false);
+    // Control-char selector treated as empty → whole-page extract path
+    await tools.find((t) => t.name === 'browser_extract_text')!.execute({
+      selector: 'div\nid',
+    });
+    expect(page.evaluate).toHaveBeenCalled();
+    expect(page.locator).not.toHaveBeenCalled();
+    expect(page.click).not.toHaveBeenCalled();
+    expect(page.fill).not.toHaveBeenCalled();
   });
 
   it('browser_extract_links evaluates in page context', async () => {
