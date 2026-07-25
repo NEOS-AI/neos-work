@@ -654,7 +654,12 @@ session.post('/:id/agent', async (c) => {
               try {
                 const parsed = JSON.parse(r.tags) as unknown;
                 if (Array.isArray(parsed)) {
-                  parsedTags = parsed.map((t) => String(t).trim()).filter(Boolean);
+                  // Control-char check before trim (align with memory DB tags)
+                  parsedTags = parsed
+                    .map((t) => String(t ?? ''))
+                    .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t))
+                    .map((t) => t.trim())
+                    .filter(Boolean);
                 }
               } catch {
                 parsedTags = undefined;

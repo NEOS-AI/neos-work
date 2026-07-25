@@ -108,6 +108,13 @@ describe('deploy routes', () => {
     // clamps to 500 max — just ensure no throw
     const hugeBody = await huge.json() as { data: unknown[] };
     expect(Array.isArray(hugeBody.data)).toBe(true);
+
+    // Leading control-char limit must not strip to a numeric limit
+    const ctrl = await deploy.request(`/?limit=${encodeURIComponent('\n1')}`);
+    expect(ctrl.status).toBe(200);
+    const ctrlBody = await ctrl.json() as { data: unknown[] };
+    // ignored → default 100 (at least our seeded rows)
+    expect(ctrlBody.data.length).toBeGreaterThanOrEqual(3);
   });
 
   it('preflight reports missing vercel token', async () => {

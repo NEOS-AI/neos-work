@@ -122,16 +122,20 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   for (const node of sorted) {
     if (signal?.aborted) break;
 
-    // topologicalSort normalizes ids; still trim for defense-in-depth
-    const nodeId = typeof node.id === 'string' ? node.id.trim() : String(node.id ?? '');
+    // topologicalSort normalizes ids; still control-char-check + trim for defense-in-depth
+    const nodeIdRaw = typeof node.id === 'string' ? node.id : String(node.id ?? '');
+    if (!nodeIdRaw || /[\0\r\n]/.test(nodeIdRaw)) continue;
+    const nodeId = nodeIdRaw.trim();
     if (!nodeId) continue;
 
-    // Collect inputs from upstream nodes via edges (exclude failed / blank endpoints)
+    // Collect inputs from upstream nodes via edges (exclude failed / blank / control-char endpoints)
     const incomingEdges = workflow.edges.filter(
       (e) =>
         typeof e.target === 'string'
+        && !/[\0\r\n]/.test(e.target)
         && e.target.trim() === nodeId
         && typeof e.source === 'string'
+        && !/[\0\r\n]/.test(e.source)
         && e.source.trim().length > 0,
     );
     const inputs: Record<string, unknown> = {};

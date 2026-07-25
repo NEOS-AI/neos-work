@@ -99,6 +99,40 @@ describe('workflow runs CRUD', () => {
     expect(workflows.deleteRuns(wf.id, '  COMPLETED  ')).toBe(1);
   });
 
+  it('saveRun control-char status/error hygiene; deleteRuns control status no-op', () => {
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    // Leading control-char status must not strip to "completed"
+    const id = crypto.randomUUID();
+    workflows.saveRun({
+      id,
+      workflowId: wf.id,
+      status: '\ncompleted' as never,
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      error: 'line1\nline2\0x',
+    });
+    const got = workflows.getRun(id);
+    expect(got?.status).toBe('running');
+    expect(got?.error).toBe('line1 line2x');
+
+    // Control-char status filter → no-op (do not delete)
+    workflows.saveRun({
+      id,
+      workflowId: wf.id,
+      status: 'failed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+    });
+    expect(workflows.deleteRuns(wf.id, '\nfailed')).toBe(0);
+    expect(workflows.getRun(id)?.status).toBe('failed');
+    expect(workflows.deleteRuns(wf.id, 'failed')).toBe(1);
+  });
+
   it('defaults missing nodeResults to empty object and trims ids', () => {
     const wf = workflows.createWorkflow({
       name: NAME,
@@ -308,8 +342,18 @@ describe('workflow runs CRUD', () => {
       edges: [],
     });
     expect(gen.domain).toBe('general');
+
+    // Leading control-char domain must not strip to "coding"
+    const ctrl = workflows.createWorkflow({
+      name: `${NAME}_ctrl_dom`,
+      domain: '\ncoding' as never,
+      nodes: [],
+      edges: [],
+    });
+    expect(ctrl.domain).toBe('general');
     workflows.deleteWorkflow(wf.id);
     workflows.deleteWorkflow(gen.id);
+    workflows.deleteWorkflow(ctrl.id);
   });
 
   it('createWorkflow rejects control-char names and overlong names', () => {

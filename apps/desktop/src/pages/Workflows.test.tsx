@@ -7,11 +7,22 @@ const listWorkflows = vi.fn();
 const createWorkflow = vi.fn();
 const deleteWorkflow = vi.fn();
 const duplicateWorkflow = vi.fn();
+const importWorkflow = vi.fn();
+const importWorkflowZip = vi.fn();
+const importClaudeDesignZip = vi.fn();
 const navigate = vi.fn();
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listWorkflows, createWorkflow, deleteWorkflow, duplicateWorkflow },
+    client: {
+      listWorkflows,
+      createWorkflow,
+      deleteWorkflow,
+      duplicateWorkflow,
+      importWorkflow,
+      importWorkflowZip,
+      importClaudeDesignZip,
+    },
   }),
 }));
 
@@ -63,9 +74,13 @@ describe('Workflows page', () => {
     createWorkflow.mockReset();
     deleteWorkflow.mockReset();
     duplicateWorkflow.mockReset();
+    importWorkflow.mockReset();
+    importWorkflowZip.mockReset();
+    importClaudeDesignZip.mockReset();
     navigate.mockReset();
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
     vi.spyOn(crypto, 'randomUUID')
       .mockReturnValueOnce('trig-1')
       .mockReturnValueOnce('out-1')
@@ -203,5 +218,54 @@ describe('Workflows page', () => {
     expect(screen.queryByText('Beta Flow')).not.toBeInTheDocument();
     // counter reflects filter
     expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
+  it('imports JSON workflow and navigates to editor', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    importWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-imported' } });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+
+    const jsonInput = document.querySelector('input[accept=".json"]') as HTMLInputElement;
+    expect(jsonInput).toBeTruthy();
+    const payload = { name: 'Imported', domain: 'general', nodes: [], edges: [] };
+    const file = new File([JSON.stringify(payload)], 'wf.json', { type: 'application/json' });
+    // jsdom File may lack Blob.text()
+    Object.defineProperty(file, 'text', {
+      value: async () => JSON.stringify(payload),
+    });
+    fireEvent.change(jsonInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(importWorkflow).toHaveBeenCalledWith(payload);
+      expect(navigate).toHaveBeenCalledWith('/workflows/wf-imported');
+    });
+  });
+
+  it('imports ZIP and Claude Design ZIP; alerts on failure', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    importWorkflowZip.mockResolvedValue({ ok: true, data: { id: 'wf-zip' } });
+    importClaudeDesignZip.mockResolvedValue({ ok: false, error: 'bad zip' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+
+    const zipInputs = Array.from(document.querySelectorAll('input[accept=".zip"]')) as HTMLInputElement[];
+    expect(zipInputs.length).toBeGreaterThanOrEqual(2);
+
+    const zipFile = new File([new Uint8Array([1, 2, 3])], 'wf.zip', { type: 'application/zip' });
+    fireEvent.change(zipInputs[0]!, { target: { files: [zipFile] } });
+    await waitFor(() => {
+      expect(importWorkflowZip).toHaveBeenCalled();
+      expect(navigate).toHaveBeenCalledWith('/workflows/wf-zip');
+    });
+
+    navigate.mockClear();
+    const designFile = new File([new Uint8Array([9])], 'design.zip', { type: 'application/zip' });
+    fireEvent.change(zipInputs[1]!, { target: { files: [designFile] } });
+    await waitFor(() => {
+      expect(importClaudeDesignZip).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('bad zip');
+      expect(navigate).not.toHaveBeenCalled();
+    });
   });
 });

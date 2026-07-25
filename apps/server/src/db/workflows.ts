@@ -118,8 +118,9 @@ export function getWorkflow(id: string): Workflow | undefined {
 }
 
 function normalizeWorkflowDomain(raw: unknown): Workflow['domain'] {
-  const domainRaw =
-    typeof raw === 'string' ? raw.trim().toLowerCase() || 'general' : 'general';
+  // Control-char domain → general (check before trim)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
+  const domainRaw = raw.trim().toLowerCase() || 'general';
   return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? (domainRaw as Workflow['domain'])
     : 'general';
@@ -300,10 +301,19 @@ export function saveRun(run: WorkflowRun): void {
   if (!id || !workflowId) {
     throw new Error('saveRun requires non-blank id and workflowId');
   }
-  const statusRaw = typeof run.status === 'string' ? run.status.trim().toLowerCase() : '';
+  // Control-char status → running fallback (check before trim)
+  const statusRaw =
+    typeof run.status === 'string' && !/[\0\r\n]/.test(run.status)
+      ? run.status.trim().toLowerCase()
+      : '';
   const status = RUN_STATUSES.has(statusRaw) ? statusRaw : 'running';
-  let error =
-    typeof run.error === 'string' ? run.error.trim() || null : (run.error ?? null);
+  // Scrub control chars from error text before trim (align with routine-run / agent-steps)
+  let error: string | null = null;
+  if (typeof run.error === 'string') {
+    error = run.error.replace(/\0/g, '').replace(/[\r\n]+/g, ' ').trim() || null;
+  } else if (run.error != null) {
+    error = String(run.error).replace(/[\r\n]+/g, ' ').trim() || null;
+  }
   if (error && error.length > WORKFLOW_RUN_ERROR_MAX_CHARS) {
     error = error.slice(0, WORKFLOW_RUN_ERROR_MAX_CHARS);
   }
@@ -369,8 +379,11 @@ export function deleteRun(runId: string): boolean {
 export function deleteRuns(workflowId: string, status?: string): number {
   const trimmed = safeLookupId(workflowId);
   if (!trimmed) return 0;
+  // Control-char status filter → no-op (check before trim)
   const statusRaw =
-    typeof status === 'string' ? status.trim().toLowerCase() || undefined : undefined;
+    typeof status === 'string' && !/[\0\r\n]/.test(status)
+      ? status.trim().toLowerCase() || undefined
+      : undefined;
   // Only known statuses filter; unknown → no-op delete (safer than matching nothing silently misleads)
   const statusFilter = statusRaw && RUN_STATUSES.has(statusRaw) ? statusRaw : undefined;
   const db = getDb();

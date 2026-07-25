@@ -11,10 +11,11 @@ const DEFAULT_PORT = 3000;
 
 /** Clamp listen port to a valid TCP port (1–65535); invalid → default. */
 export function normalizeListenPort(raw: unknown, fallback = DEFAULT_PORT): number {
+  // Control-char port strings are invalid (check before trim)
   const n =
     typeof raw === 'number'
       ? raw
-      : typeof raw === 'string' && raw.trim()
+      : typeof raw === 'string' && !/[\0\r\n]/.test(raw) && raw.trim()
         ? Number(raw.trim())
         : NaN;
   if (!Number.isFinite(n)) return fallback;

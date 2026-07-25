@@ -172,4 +172,32 @@ describe('Memory page', () => {
       expect((screen.getByPlaceholderText('Search memory…') as HTMLInputElement).value).toBe('');
     });
   });
+
+  it('edits a memory item via updateMemory', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    updateMemory.mockResolvedValue({ ok: true });
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.edit' })[0]!);
+    await waitFor(() => expect(screen.getByDisplayValue('User Pref')).toBeInTheDocument());
+    expect(screen.getByDisplayValue('likes dark mode')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue('User Pref'), { target: { value: 'User Pref v2' } });
+    fireEvent.change(screen.getByDisplayValue('likes dark mode'), {
+      target: { value: 'likes light mode' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(updateMemory).toHaveBeenCalledWith(
+        'm1',
+        expect.objectContaining({
+          name: 'User Pref v2',
+          content: 'likes light mode',
+          type: 'user',
+        }),
+      );
+    });
+  });
 });

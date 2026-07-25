@@ -42,6 +42,15 @@ describe('getSecretSetting / whitespace secrets', () => {
     expect(getSecretSetting('OPENAI_API_KEY_MISSING')).toBeUndefined();
     expect(getWorkflowSecrets().OPENAI_API_KEY).toBeUndefined();
   });
+
+  it('rejects control-char sensitive values on write; treats control secrets as unset', () => {
+    // Leading control char must not strip to a valid key
+    expect(() => setSetting('OPENAI_API_KEY', '\nsk-bad')).toThrow(/control characters/i);
+    expect(() => setSetting('OPENAI_API_KEY', 'sk\nbad')).toThrow(/control characters/i);
+    // Non-sensitive defaults may be stored but control-char values are unused at read
+    setSetting('defaults.provider', 'openai');
+    expect(getExecutionSettings().llmProvider).toBe('openai');
+  });
 });
 
 describe('getWorkflowSecrets aliases', () => {
@@ -177,6 +186,13 @@ describe('getExecutionSettings', () => {
     const s = getExecutionSettings();
     expect(s.llmProvider).toBe('ollama');
     expect(s.model).toBe('llama3');
+
+    // Control-char defaults are treated as unset (getSecretSetting hygiene)
+    setSetting('defaults.provider', '\nopenai');
+    setSetting('defaults.model', 'gpt\n4o');
+    const ctrl = getExecutionSettings();
+    expect(ctrl.llmProvider).toBeUndefined();
+    expect(ctrl.model).toBeUndefined();
 
     setSetting('defaults.provider', '   ');
     setSetting('defaults.model', '   ');

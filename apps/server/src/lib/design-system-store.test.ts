@@ -194,6 +194,28 @@ describe('design-system-store scan edge cases', () => {
     expect(hit!.hasManifest).toBe(true);
   });
 
+  it('collapses CR/LF in list manifest description and drops null-byte', async () => {
+    await ensureDesignSystemsDir();
+    const dir = path.join(DESIGN_SYSTEMS_DIR, EXTRA);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), '# Brand\n', 'utf8');
+    await fs.writeFile(
+      path.join(dir, 'manifest.json'),
+      JSON.stringify({ name: EXTRA, description: 'line1\nline2\r\nline3' }),
+      'utf8',
+    );
+    let hit = (await listDesignSystems()).find((d) => d.name === EXTRA);
+    expect(hit?.description).toBe('line1 line2 line3');
+
+    await fs.writeFile(
+      path.join(dir, 'manifest.json'),
+      JSON.stringify({ name: EXTRA, description: `has${'\0'}null` }),
+      'utf8',
+    );
+    hit = (await listDesignSystems()).find((d) => d.name === EXTRA);
+    expect(hit?.description).toBeUndefined();
+  });
+
   it('ignores invalid manifest JSON and skips non-directory entries', async () => {
     await ensureDesignSystemsDir();
     const dir = path.join(DESIGN_SYSTEMS_DIR, EXTRA);

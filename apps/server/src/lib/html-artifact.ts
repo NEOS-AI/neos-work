@@ -4,6 +4,8 @@
 
 export function isHtmlArtifactOutput(output: unknown): output is string {
   if (typeof output !== 'string') return false;
+  // Null bytes break artifact storage / preview
+  if (/\0/.test(output)) return false;
   const htmlContent = output.trim();
   if (!htmlContent.startsWith('<')) return false;
   // Only scan a bounded prefix for markers (avoid scanning multi-MiB agent dumps)

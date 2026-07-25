@@ -78,6 +78,27 @@ describe('executeWorkflow', () => {
     expect(events.some((e) => (e as { nodeId?: string }).nodeId === 'bad\nid')).toBe(false);
   });
 
+  it('ignores control-char edge endpoints (does not wire inputs)', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-bad-edge',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          { id: 'output', type: 'output', label: 'O', position: { x: 1, y: 0 }, config: {} },
+        ],
+        // Leading control must not strip to a valid endpoint
+        edges: [{ id: 'e1', source: '\ntrigger', target: 'output' }],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    // Graph drops the edge; both nodes still run independently
+    expect(events.some((e) => e.type === 'node.started' && (e as { nodeId?: string }).nodeId === 'trigger')).toBe(true);
+    expect(events.some((e) => e.type === 'node.started' && (e as { nodeId?: string }).nodeId === 'output')).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+  });
+
   it('passes triggerInputs as trigger node output', async () => {
     const events: WorkflowSSEEvent[] = [];
 

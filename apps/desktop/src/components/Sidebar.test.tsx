@@ -110,6 +110,22 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'connection.stop' })).not.toBeInTheDocument();
   });
 
+  it('shows client mode without local-only assumptions', async () => {
+    engine = {
+      status: 'connected',
+      mode: 'client',
+      serverUrl: 'https://remote.example:8443',
+      disconnect,
+      client: { health },
+    };
+    renderSidebar();
+    await waitFor(() => expect(health).toHaveBeenCalled());
+    expect(screen.getByText('https://remote.example:8443')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Engine v0\.3\.54 · client/)).toBeInTheDocument();
+    });
+  });
+
   it('swallows health errors without crashing', async () => {
     health.mockRejectedValue(new Error('offline'));
     renderSidebar();

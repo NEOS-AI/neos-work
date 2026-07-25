@@ -83,8 +83,11 @@ export async function listDesignSystems(): Promise<DesignSystem[]> {
       try {
         const manifest = JSON.parse(await fs.readFile(path.join(dirPath, 'manifest.json'), 'utf8'));
         if (typeof manifest?.description === 'string') {
-          const d = manifest.description.trim();
-          description = d || undefined;
+          // Null-byte reject; collapse CR/LF before trim for UI list hygiene
+          if (!/\0/.test(manifest.description)) {
+            const d = manifest.description.replace(/[\r\n]+/g, ' ').trim();
+            description = d || undefined;
+          }
         }
       } catch {
         // ignore

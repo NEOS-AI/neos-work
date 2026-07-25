@@ -23,6 +23,9 @@ describe('runtime-context', () => {
     expect(normalizeListenPort(NaN)).toBe(3000);
     expect(normalizeListenPort(443)).toBe(443);
     expect(normalizeListenPort('  9000  ')).toBe(9000);
+    // Control-char port strings → fallback (check before trim)
+    expect(normalizeListenPort('\n9000')).toBe(3000);
+    expect(normalizeListenPort('9000\n')).toBe(3000);
 
     setRuntimeContext({ authToken: 'x', port: 99999 });
     // Invalid port falls back to previous valid port

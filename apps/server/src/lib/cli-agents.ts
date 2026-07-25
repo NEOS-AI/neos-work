@@ -280,13 +280,21 @@ export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCl
   try {
     const { getSetting } = await import('../db/settings.js');
     const key = CLI_PATH_SETTING_KEYS[cliId];
-    const override = getSetting(key)?.trim();
-    if (override && !hasUnsafeControlChars(override)) {
-      try {
-        fs.accessSync(override, fs.constants.X_OK);
-        binOverride = override;
-      } catch {
-        // ignore invalid override
+    // Control-char check before trim so "\n/bin/claude" is not accepted
+    const overrideRaw = getSetting(key);
+    if (
+      typeof overrideRaw === 'string'
+      && overrideRaw
+      && !hasUnsafeControlChars(overrideRaw)
+    ) {
+      const override = overrideRaw.trim();
+      if (override) {
+        try {
+          fs.accessSync(override, fs.constants.X_OK);
+          binOverride = override;
+        } catch {
+          // ignore invalid override
+        }
       }
     }
   } catch {

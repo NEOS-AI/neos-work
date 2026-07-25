@@ -17,6 +17,8 @@ describe('isHtmlArtifactOutput', () => {
     expect(isHtmlArtifactOutput('plain text')).toBe(false);
     expect(isHtmlArtifactOutput({ html: true })).toBe(false);
     expect(isHtmlArtifactOutput('')).toBe(false);
+    // Null-byte HTML is not accepted (storage / preview hygiene)
+    expect(isHtmlArtifactOutput('<html>\0</html>')).toBe(false);
   });
 
   it('only scans a bounded prefix for late markers', () => {
@@ -98,6 +100,23 @@ describe('createFirstHtmlArtifact', () => {
         create: () => ({ id: 'nope' }),
       }),
     ).toBeUndefined();
+    // Leading control-char must not strip to a valid id
+    expect(
+      createFirstHtmlArtifact({
+        workflowId: '\nwf',
+        runId: 'run',
+        nodeResults,
+        create: () => ({ id: 'nope' }),
+      }),
+    ).toBeUndefined();
+    expect(
+      createFirstHtmlArtifact({
+        workflowId: 'wf',
+        runId: '\nrun',
+        nodeResults,
+        create: () => ({ id: 'nope' }),
+      }),
+    ).toBeUndefined();
     expect(
       createFirstHtmlArtifact({
         workflowId: 'wf',
@@ -106,6 +125,25 @@ describe('createFirstHtmlArtifact', () => {
         create: () => ({ id: 'nope' }),
       }),
     ).toBeUndefined();
+  });
+
+  it('skips control-char and overlong node ids', () => {
+    const created: string[] = [];
+    const id = createFirstHtmlArtifact({
+      workflowId: 'wf',
+      runId: 'run',
+      nodeResults: {
+        '\nbad': { status: 'completed', output: '<html>nope</html>' },
+        ['x'.repeat(201)]: { status: 'completed', output: '<html>nope2</html>' },
+        good: { status: 'completed', output: '<html>yes</html>' },
+      },
+      create: (input) => {
+        created.push(input.nodeId);
+        return { id: `art-${input.nodeId}` };
+      },
+    });
+    expect(id).toBe('art-good');
+    expect(created).toEqual(['good']);
   });
 
   it('returns undefined when workflowId/runId blank after trim', () => {

@@ -318,6 +318,46 @@ describe('WorkflowEditor page', () => {
     });
   });
 
+  it('alerts preflight blocked and warning issues', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    preflightWorkflow.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        ok: false,
+        issues: [
+          { severity: 'error', message: 'Missing trigger', nodeId: 'n1' },
+          { severity: 'warning', message: 'No API key' },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Preflight blocked'));
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Missing trigger'));
+    });
+
+    preflightWorkflow.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        ok: true,
+        issues: [{ severity: 'warning', message: 'Slow node', nodeId: 'n2' }],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Preflight warnings'));
+      expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Slow node'));
+    });
+
+    preflightWorkflow.mockResolvedValueOnce({ ok: false, error: 'preflight down' });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('preflight down');
+    });
+  });
+
   it('cancels run dialog without invoking runWorkflow', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());

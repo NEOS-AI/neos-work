@@ -52,6 +52,8 @@ export function getSetting(key: string): string | undefined {
 /** Trim and treat whitespace-only values as unset (align with preflight `secret()`). */
 function trimmedSecret(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
+  // Control-char secrets are unusable in headers/env — treat as unset
+  if (/[\0\r\n]/.test(value)) return undefined;
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
 }
@@ -82,6 +84,10 @@ export function setSetting(key: string, value: string): void {
   // Trim secrets on write so `"  sk  "` never persists padded (align with getSecretSetting).
   // Empty secrets stay as plain "" (encrypting empty breaks isEncrypted shape / decrypt path).
   const raw = typeof value === 'string' ? value : String(value ?? '');
+  // Sensitive values must not contain control chars (header/env hygiene; check before trim)
+  if (isSensitiveKey(k) && /[\0\r\n]/.test(raw)) {
+    throw new Error('setting value contains invalid control characters');
+  }
   const normalized = isSensitiveKey(k) ? raw.trim() : raw;
   if (normalized.length > SETTING_VALUE_MAX_CHARS) {
     throw new Error(`setting value exceeds max size (${SETTING_VALUE_MAX_CHARS} characters)`);
@@ -184,12 +190,21 @@ export function getExecutionSettings(runtime?: {
     }
   }
 
-  // Settings UI defaults → agent adapter selection (plan multi-LLM)
-  const defaultProvider = getSecretSetting('defaults.provider')?.trim().toLowerCase();
+  // Settings UI defaults → agent adapter selection (plan multi-LLM).
+  // getSecretSetting already drops control-char values; still normalize case/trim.
+  const defaultProviderRaw = getSecretSetting('defaults.provider');
+  const defaultProvider =
+    defaultProviderRaw && !/[\0\r\n]/.test(defaultProviderRaw)
+      ? defaultProviderRaw.trim().toLowerCase()
+      : undefined;
   if (defaultProvider && !result.llmProvider) {
     result.llmProvider = defaultProvider;
   }
-  const defaultModel = getSecretSetting('defaults.model')?.trim();
+  const defaultModelRaw = getSecretSetting('defaults.model');
+  const defaultModel =
+    defaultModelRaw && !/[\0\r\n]/.test(defaultModelRaw)
+      ? defaultModelRaw.trim()
+      : undefined;
   if (defaultModel && !result.model) {
     result.model = defaultModel;
   }
