@@ -5,10 +5,11 @@ import { parseTimestampMs } from './format-relative-time.js';
 /** Sort key for names: drop null bytes; collapse CR/LF so sort order is stable. */
 function nameSortKey(raw: unknown): string {
   if (typeof raw !== 'string') return '';
-  let s = raw;
-  if (/\0/.test(s)) s = s.replace(/\0/g, '');
-  if (/[\r\n]/.test(s)) s = s.replace(/[\r\n]+/g, ' ');
-  return s.trim().toLowerCase();
+  // Control-char collapse before trim (leading \n must not create empty-looking order quirks alone)
+  let s = raw.replace(/\0/g, '').replace(/[\r\n]+/g, ' ').trim().toLowerCase();
+  // Cap key length for pathological names
+  if (s.length > 500) s = s.slice(0, 500);
+  return s;
 }
 
 export function sortByName<T extends { name: string }>(items: T[]): T[] {

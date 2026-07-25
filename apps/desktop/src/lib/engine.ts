@@ -1043,7 +1043,10 @@ export class EngineClient {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename.endsWith('.zip') ? filename : `${filename}.zip`;
+    // Align with exportWorkflow: strip control / non-filename chars before download
+    const raw = typeof filename === 'string' ? filename : 'workflow';
+    const base = raw.replace(/\.zip$/i, '').replace(/[^a-z0-9_-]/gi, '_') || 'workflow';
+    a.download = `${base}.zip`;
     a.click();
     URL.revokeObjectURL(url);
   }

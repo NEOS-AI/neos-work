@@ -376,4 +376,35 @@ describe('ArtifactPreview', () => {
     expect(updateArtifact).not.toHaveBeenCalled();
     promptSpy.mockRestore();
   });
+
+  it('scrubs control-char artifact names in tab list', async () => {
+    listArtifacts.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'a1',
+          workflowId: 'wf-1',
+          name: 'Out' + String.fromCharCode(0) + 'put.html',
+          contentType: 'text/html',
+          createdAt: '2020-01-01T00:00:00.000Z',
+          updatedAt: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getArtifact.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'a1',
+        workflowId: 'wf-1',
+        name: 'Out' + String.fromCharCode(0) + 'put.html',
+        contentType: 'text/html',
+        content: '<html></html>',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('Output.html')).toBeInTheDocument());
+  });
+
 });

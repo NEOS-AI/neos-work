@@ -856,6 +856,14 @@ describe('EngineClient', () => {
     urlProto.revokeObjectURL = revokeObjectURL;
     await client.exportWorkflowZip('w1', 'out.zip');
     expect(click).toHaveBeenCalled();
+    // Control / spaces sanitized to download-safe basename
+    await client.exportWorkflowZip('w1', `bad${'\n'} name.zip`);
+    const lastAnchor = createElement.mock.results
+      .map((r) => r.value as { download?: string })
+      .filter((el) => typeof el?.download === 'string')
+      .at(-1);
+    expect(lastAnchor?.download).toMatch(/\.zip$/);
+    expect(lastAnchor?.download).not.toMatch(/[\0\r\n]/);
     createElement.mockRestore();
     urlProto.createObjectURL = prevCreate;
     urlProto.revokeObjectURL = prevRevoke;

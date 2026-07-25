@@ -320,6 +320,12 @@ function EngineStatusSection() {
   const uptimeLabel = formatEngineUptime(uptimeSec);
   const statusLabel =
     status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting…' : 'Disconnected';
+  const versionSafe = version
+    ? scrubDisplayText(version, { collapseLines: true, maxChars: 40 })
+    : '';
+  const urlSafe = serverUrl
+    ? scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })
+    : '';
 
   return (
     <section
@@ -338,24 +344,22 @@ function EngineStatusSection() {
         </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Version</dt>
         <dd style={{ color: 'var(--text-primary)' }}>
-          {version
-            ? `v${scrubDisplayText(version, { collapseLines: true, maxChars: 40 })}`
-            : '—'}
+          {versionSafe ? `v${versionSafe}` : '—'}
         </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Uptime</dt>
         <dd style={{ color: 'var(--text-primary)' }}>{uptimeLabel || '—'}</dd>
-        {serverUrl && (
+        {urlSafe ? (
           <>
             <dt style={{ color: 'var(--text-muted)' }}>URL</dt>
             <dd
               className="truncate"
               style={{ color: 'var(--text-primary)' }}
-              title={scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })}
+              title={urlSafe}
             >
-              {scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })}
+              {urlSafe}
             </dd>
           </>
-        )}
+        ) : null}
       </dl>
     </section>
   );
@@ -816,7 +820,7 @@ function McpServersSection() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-80 rounded-xl border p-5 shadow-xl" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
             <h3 className="mb-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-              Connect: {oauthModal.serverName}
+              Connect: {scrubDisplayText(oauthModal.serverName, { collapseLines: true, maxChars: 200 }) || 'MCP'}
             </h3>
             <div className="flex flex-col gap-2">
               <input
@@ -985,11 +989,21 @@ function McpServersSection() {
                     </div>
                     <p className="mt-0.5 truncate text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
                       {server.transport === 'stdio'
-                        ? scrubDisplayText(
-                            `${server.command ?? ''} ${(server.args ?? []).filter((a) => typeof a === 'string' && !/[\0\r\n]/.test(a)).join(' ')}`,
-                            { collapseLines: true, maxChars: 300 },
-                          )
-                        : scrubDisplayText(server.url, { collapseLines: true, maxChars: 300 })}
+                        ? (() => {
+                            const cmd =
+                              typeof server.command === 'string' && !/[\0\r\n]/.test(server.command)
+                                ? server.command.trim()
+                                : '';
+                            const args = (server.args ?? [])
+                              .filter((a): a is string => typeof a === 'string' && !/[\0\r\n]/.test(a) && a.trim().length > 0)
+                              .map((a) => a.trim())
+                              .join(' ');
+                            return scrubDisplayText([cmd, args].filter(Boolean).join(' '), {
+                              collapseLines: true,
+                              maxChars: 300,
+                            }) || '—';
+                          })()
+                        : scrubDisplayText(server.url, { collapseLines: true, maxChars: 300 }) || '—'}
                     </p>
                   </div>
                   <div className="ml-2 flex items-center gap-2">
@@ -1004,7 +1018,14 @@ function McpServersSection() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => setOauthModal({ serverId: server.id, serverName: server.name, authorizationEndpoint: '', tokenEndpoint: '', clientId: '', scope: '' })}
+                        onClick={() => setOauthModal({
+                          serverId: server.id,
+                          serverName: scrubDisplayText(server.name, { collapseLines: true, maxChars: 200 }) || 'MCP',
+                          authorizationEndpoint: '',
+                          tokenEndpoint: '',
+                          clientId: '',
+                          scope: '',
+                        })}
                         className="rounded px-2 py-1 text-[10px] transition-colors"
                         style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)' }}
                       >

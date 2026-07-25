@@ -26,6 +26,31 @@ describe('sortByName', () => {
       'c amma',
     ]);
   });
+
+  it('treats non-string and blank-after-scrub names as empty sort keys', () => {
+    const items = [
+      { name: 'zeta' },
+      { name: null as unknown as string },
+      { name: '   ' },
+      { name: '\n\r' },
+      { name: 'alpha' },
+    ];
+    const sorted = sortByName(items).map((i) => i.name);
+    // empty keys first (localeCompare of ''), then alpha, zeta
+    expect(sorted.slice(-2)).toEqual(['alpha', 'zeta']);
+    expect(sorted.slice(0, 3).every((n) => !String(n ?? '').trim() || /^[\r\n]+$/.test(String(n)))).toBe(
+      true,
+    );
+  });
+
+  it('collapses CR and LF identically for sort stability', () => {
+    const items = [{ name: 'a\rb' }, { name: 'a\nb' }, { name: 'ac' }];
+    const keys = sortByName(items).map((i) => i.name.replace(/[\r\n]+/g, ' '));
+    // a b sorts before ac
+    expect(keys[0]).toBe('a b');
+    expect(keys[1]).toBe('a b');
+    expect(keys[2]).toBe('ac');
+  });
 });
 
 describe('sortByDateDesc', () => {

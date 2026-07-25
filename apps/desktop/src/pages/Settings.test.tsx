@@ -747,13 +747,21 @@ describe('Settings page', () => {
           url: 'https://mcp.example' + String.fromCharCode(10) + '/v1',
           enabled: true,
         },
+        {
+          id: 'm2',
+          name: 'Local' + String.fromCharCode(10) + 'MCP',
+          transport: 'stdio',
+          command: 'npx' + String.fromCharCode(0),
+          args: ['-y', 'pkg' + String.fromCharCode(10) + 'x', 'bad\0arg'],
+          enabled: true,
+        },
       ],
     });
     listCliAgents.mockResolvedValue({
       ok: true,
       data: [
         {
-          id: 'cli-claude',
+          id: 'cli' + String.fromCharCode(0) + 'claude',
           name: 'Claude' + String.fromCharCode(10) + 'Code',
           path: '/usr/bin/claude' + String.fromCharCode(0),
           version: '1.0' + String.fromCharCode(10) + 'x',
@@ -768,15 +776,23 @@ describe('Settings page', () => {
     await waitFor(() => expect(screen.getByText('SrvX')).toBeInTheDocument());
     // URL newline collapsed to space
     expect(document.body.textContent).toMatch(/mcp\.example/);
+    // stdio: control-char command omitted entirely; only control-free args shown
+    expect(document.body.textContent).toMatch(/Local MCP/);
+    expect(document.body.textContent).toMatch(/-y/);
+    expect(document.body.textContent).not.toMatch(/badarg|pkg x/);
     await waitFor(() => {
-      // Scrubbed CLI path (null-byte stripped)
+      // Scrubbed CLI path (null-byte stripped) + name/id
       expect(document.body.textContent).toContain('/usr/bin/claude');
+      expect(document.body.textContent).toMatch(/Claude Code/);
       expect(document.body.textContent).toMatch(/1\.0 x/);
+      expect(document.body.textContent).toMatch(/cliclaude/);
     });
-    // Engine version newline collapsed
+    // Engine version + URL scrubbed
     await waitFor(() => {
       expect(document.body.textContent).toMatch(/v0\.3\.1 z/);
+      expect(document.body.textContent).toContain('http://127.0.0.1:1');
     });
+    expect(document.body.textContent).not.toContain('\0');
   });
 
 });

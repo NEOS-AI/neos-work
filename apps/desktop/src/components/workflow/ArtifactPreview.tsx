@@ -8,6 +8,7 @@ import {
   saveArtifactViewport,
   type ArtifactViewportMode,
 } from '../../lib/artifact-preview-prefs.js';
+import { scrubDisplayText } from '../../lib/format-duration.js';
 
 type ViewportMode = ArtifactViewportMode;
 
@@ -295,7 +296,7 @@ export function ArtifactPreview({
                   : 'bg-white/5 text-white/50 hover:bg-white/10'
               }`}
             >
-              {a.name}
+              {scrubDisplayText(a.name, { collapseLines: true, maxChars: 80 }) || 'artifact'}
             </button>
           ))}
         </div>
@@ -373,9 +374,11 @@ export function ArtifactPreview({
           ))}
         </div>
       )}
-      {statusMsg && (
-        <p className="px-2 py-1 text-[10px] text-white/40 border-b border-white/5">{statusMsg}</p>
-      )}
+      {statusMsg ? (
+        <p className="px-2 py-1 text-[10px] text-white/40 border-b border-white/5">
+          {scrubDisplayText(statusMsg, { collapseLines: true, maxChars: 300 })}
+        </p>
+      ) : null}
 
       {/* Preview: HTML iframe, Markdown/text renderer (plan Task 4 content-type) */}
       <div className="flex-1 min-h-0 relative overflow-auto flex justify-center bg-black/20">

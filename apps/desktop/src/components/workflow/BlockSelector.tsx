@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowBlock } from '../../lib/engine.js';
+import { scrubDisplayText } from '../../lib/format-duration.js';
 import { SelectField } from './fields.js';
 
 /** Safe block id for select value / config: control-char rejected, trimmed. */
@@ -86,9 +87,12 @@ export function BlockSelector(props: {
             .map((block) => {
               const id = safeBlockId(block.id);
               if (!id) return null;
+              const domain = scrubDisplayText(block.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+              const category = scrubDisplayText(block.category, { collapseLines: true, maxChars: 40 }) || 'custom';
+              const name = scrubDisplayText(block.name, { collapseLines: true, maxChars: 80 }) || id;
               return {
                 value: id,
-                label: `${block.domain} / ${block.category} / ${block.name}`,
+                label: `${domain} / ${category} / ${name}`,
               };
             })
             .filter((opt): opt is { value: string; label: string } => opt !== null),
@@ -96,11 +100,23 @@ export function BlockSelector(props: {
       />
       {selected && (
         <div className="space-y-1 rounded-md border p-2 text-[11px]" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}>
-          <p>{selected.description}</p>
-          <p>Input: {selected.inputDescription}</p>
-          <p>Output: {selected.outputDescription}</p>
+          <p>{scrubDisplayText(selected.description, { maxChars: 500 })}</p>
+          <p>
+            Input:{' '}
+            {scrubDisplayText(selected.inputDescription, { collapseLines: true, maxChars: 200 }) || '—'}
+          </p>
+          <p>
+            Output:{' '}
+            {scrubDisplayText(selected.outputDescription, { collapseLines: true, maxChars: 200 }) || '—'}
+          </p>
           {selected.requiredSettings && selected.requiredSettings.length > 0 && (
-            <p>Settings: {selected.requiredSettings.join(', ')}</p>
+            <p>
+              Settings:{' '}
+              {selected.requiredSettings
+                .filter((s) => typeof s === 'string' && !/[\0\r\n]/.test(s) && s.trim())
+                .map((s) => s.trim())
+                .join(', ') || '—'}
+            </p>
           )}
         </div>
       )}

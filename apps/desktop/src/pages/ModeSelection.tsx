@@ -63,7 +63,8 @@ export function ModeSelection() {
           {status === 'connecting'
             ? t('connection.connecting')
             : error
-              ? scrubDisplayText(error, { collapseLines: true, maxChars: 300 })
+              ? (scrubDisplayText(error, { collapseLines: true, maxChars: 300 })
+                || t('connection.disconnected'))
               : t('connection.disconnected')}
         </span>
       </div>

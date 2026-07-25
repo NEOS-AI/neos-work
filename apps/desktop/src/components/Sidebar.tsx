@@ -118,7 +118,9 @@ export function Sidebar() {
         {engineVersion && (
           <p className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
             Engine v{scrubDisplayText(engineVersion, { collapseLines: true, maxChars: 40 })}
-            {mode ? ` · ${mode}` : ''}
+            {mode
+              ? ` · ${scrubDisplayText(mode, { collapseLines: true, maxChars: 20 }) || mode}`
+              : ''}
           </p>
         )}
         {status === 'connected' && (

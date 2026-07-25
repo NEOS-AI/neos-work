@@ -516,4 +516,20 @@ describe('WorkflowEditor page', () => {
     );
     await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
   });
+
+  it('scrubs control-char workflow name in toolbar title', async () => {
+    getWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ...sampleWorkflow,
+        name: `Evil${'\0'}Flow${'\n'}X`,
+      },
+    });
+    renderEditor();
+    await waitFor(() => {
+      // null-byte stripped; newline collapsed for display title
+      expect(screen.getByText(/EvilFlow X/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

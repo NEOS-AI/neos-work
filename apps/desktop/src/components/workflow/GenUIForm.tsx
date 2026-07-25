@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+
+import { scrubDisplayText } from '../../lib/format-duration.js';
 
 interface FormField {
   key: string;
@@ -13,10 +15,39 @@ interface GenUIFormProps {
   onSubmit: (values: Record<string, string>) => void;
 }
 
+/** Safe field key for render/submit (control-char rejected before trim). */
+function safeFieldKey(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const k = raw.trim();
+  return k && k.length <= 200 ? k : '';
+}
+
 export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
   const fields = Array.isArray(schema?.fields) ? schema.fields : [];
+  // Skip control-char / blank keys for display (align with submit hygiene)
+  const visibleFields = useMemo(
+    () =>
+      fields
+        .map((field) => {
+          const key = safeFieldKey(field.key);
+          if (!key) return null;
+          const label =
+            scrubDisplayText(field.label, { collapseLines: true, maxChars: 100 }) || key;
+          const placeholder = field.placeholder
+            ? scrubDisplayText(field.placeholder, { collapseLines: true, maxChars: 200 })
+            : undefined;
+          const options = (field.options ?? [])
+            .filter((opt) => typeof opt === 'string' && !/[\0\r\n]/.test(opt) && opt.trim())
+            .map((opt) => opt.trim())
+            .slice(0, 100);
+          return { ...field, key, label, placeholder, options };
+        })
+        .filter((f): f is FormField & { key: string; label: string } => f != null),
+    [fields],
+  );
+
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [f.key, ''])),
+    Object.fromEntries(visibleFields.map((f) => [f.key, ''])),
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -25,10 +56,10 @@ export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
     // Control-char keys dropped (check before trim).
     const trimmed: Record<string, string> = {};
     for (const field of fields) {
-      if (typeof field.key !== 'string' || /[\0\r\n]/.test(field.key)) continue;
-      const key = field.key.trim();
-      if (!key || key.length > 200) continue;
-      const raw = values[field.key] ?? values[key] ?? '';
+      const key = safeFieldKey(field.key);
+      if (!key) continue;
+      if (Object.keys(trimmed).length >= 200) break;
+      const raw = values[key] ?? values[field.key] ?? '';
       // Null-byte values dropped from resume payload
       if (typeof raw === 'string' && /\0/.test(raw)) continue;
       trimmed[key] = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
@@ -36,7 +67,7 @@ export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
     onSubmit(trimmed);
   };
 
-  if (fields.length === 0) {
+  if (visibleFields.length === 0) {
     return (
       <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
         No form fields defined.
@@ -46,7 +77,7 @@ export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {fields.map((field) => (
+      {visibleFields.map((field) => (
         <div key={field.key}>
           <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>
             {field.label}

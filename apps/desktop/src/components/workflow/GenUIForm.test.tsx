@@ -128,14 +128,41 @@ describe('GenUIForm', () => {
         onSubmit={onSubmit}
       />,
     );
+    // Overlong keys are not rendered
+    expect(screen.queryByPlaceholderText('long-ph')).not.toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('safe-ph'), 'keep');
     // Inject null via fireEvent so userEvent does not sanitize
     const tainted = screen.getByPlaceholderText('tainted-ph') as HTMLInputElement;
     fireEvent.change(tainted, { target: { value: `bad${'\0'}val` } });
-    await user.type(screen.getByPlaceholderText('long-ph'), 'ignored');
     await user.click(screen.getByRole('button', { name: /submit/i }));
     expect(onSubmit).toHaveBeenCalledWith({ safe: 'keep' });
     expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('tainted');
     expect(onSubmit.mock.calls[0][0]).not.toHaveProperty(longKey);
   });
+
+  it('scrubs control-char field labels and omits control keys', async () => {
+    const onSubmit = vi.fn();
+    render(
+      <GenUIForm
+        schema={{
+          fields: [
+            { key: 'ok', label: 'Name' + String.fromCharCode(10) + 'X', type: 'text', placeholder: 'ph' + String.fromCharCode(0) + 'x' },
+            { key: 'bad' + String.fromCharCode(10) + 'k', label: 'Hidden', type: 'text', placeholder: 'nope' },
+            { key: 'tone', label: 'Tone', type: 'select', options: ['good', 'bad' + String.fromCharCode(0) + 'opt', String.fromCharCode(10) + 'lead'] },
+          ],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+    expect(screen.getByText('Name X')).toBeInTheDocument();
+    expect(screen.queryByText('Hidden')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('nope')).not.toBeInTheDocument();
+    // placeholder null-byte stripped
+    expect(screen.getByPlaceholderText('phx')).toBeInTheDocument();
+    const select = screen.getByRole('combobox');
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toContain('good');
+    expect(values.some((v) => v.includes('\0') || v === 'lead')).toBe(false);
+  });
+
 });
