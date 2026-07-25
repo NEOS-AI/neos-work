@@ -35,6 +35,30 @@ export function parseSseEventName(line: string): string {
   return name.trim();
 }
 
+/**
+ * Format an HTTP error for SSE/UI surfaces. Scrubs control chars from statusText
+ * so hostile proxies cannot inject multi-line / null-byte error chrome.
+ * Exported for unit tests.
+ */
+export function formatHttpErrorMessage(status: number, statusText: unknown): string {
+  const code = Number.isFinite(status) ? Math.trunc(status) : 0;
+  let st = typeof statusText === 'string' ? statusText : '';
+  if (/\0/.test(st)) st = st.replace(/\0/g, '');
+  st = st.replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+  return st ? `HTTP ${code}: ${st}` : `HTTP ${code}`;
+}
+
+/**
+ * Scrub API error strings (webhook fire, etc.) before surfacing to UI.
+ * Exported for unit tests.
+ */
+export function scrubApiErrorMessage(raw: unknown, fallback = 'Request failed'): string {
+  let s = typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+  if (/\0/.test(s)) s = s.replace(/\0/g, '');
+  s = s.replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
+  return s || fallback;
+}
+
 export interface SessionData {
   id: string;
   workspace_id: string;
@@ -285,7 +309,7 @@ export class EngineClient {
     });
 
     if (!res.ok || !res.body) {
-      yield { type: 'error', content: `HTTP ${res.status}: ${res.statusText}` };
+      yield { type: 'error', content: formatHttpErrorMessage(res.status, res.statusText) };
       return;
     }
 
@@ -330,7 +354,7 @@ export class EngineClient {
     });
 
     if (!res.ok || !res.body) {
-      yield { type: 'error', error: `HTTP ${res.status}: ${res.statusText}` };
+      yield { type: 'error', error: formatHttpErrorMessage(res.status, res.statusText) };
       return;
     }
 
@@ -1193,7 +1217,12 @@ export class EngineClient {
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({})) as { error?: string };
-      return { ok: false, status: res.status, error: errBody.error ?? res.statusText };
+      const raw = errBody.error ?? res.statusText;
+      return {
+        ok: false,
+        status: res.status,
+        error: scrubApiErrorMessage(raw, formatHttpErrorMessage(res.status, res.statusText)),
+      };
     }
     // SSE stream — we only need to confirm acceptance; cancel read
     try { res.body?.cancel(); } catch { /* ignore */ }

@@ -622,7 +622,8 @@ describe('Sessions page', () => {
           step: {
             ...stepA,
             status: 'completed',
-            output: { screenshot: 'abc123' },
+            // valid short-ish base64 payload (≥8 chars)
+            output: { screenshot: 'iVBORw0KGgo=' },
           },
         };
         yield {
@@ -651,6 +652,45 @@ describe('Sessions page', () => {
       expect(screen.getByText('agent finished')).toBeInTheDocument();
       expect(screen.getByText('스크린샷 보기 ▼')).toBeInTheDocument();
     });
+  });
+
+  it('hides screenshot toggle when base64 payload has control chars', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    const stepA = {
+      id: 'step-a',
+      description: 'Shot',
+      toolName: 'browser_screenshot',
+      status: 'pending' as const,
+      type: 'plan' as const,
+      index: 0,
+    };
+    runAgent.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'plan', steps: [stepA] };
+        yield {
+          type: 'step_complete',
+          step: {
+            ...stepA,
+            status: 'completed',
+            output: { screenshot: `iVBORw0K${'\0'}Ggo=` },
+          },
+        };
+        yield { type: 'text', content: 'done' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Agent/i }));
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'shot' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.getByText('done')).toBeInTheDocument());
+    expect(screen.queryByText('스크린샷 보기 ▼')).not.toBeInTheDocument();
   });
 
   it('creates session with selected thinking mode and does not send on Shift+Enter', async () => {

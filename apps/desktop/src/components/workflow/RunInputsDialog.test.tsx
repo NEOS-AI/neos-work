@@ -167,4 +167,22 @@ describe('RunInputsDialog', () => {
     fireEvent.change(area, { target: { value: 'x'.repeat(60_000) } });
     expect(area.value.length).toBe(50_000);
   });
+
+  it('caps confirmed string values at 10k characters', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <RunInputsDialog defaultInputs={{}} onConfirm={onConfirm} onCancel={() => {}} />,
+    );
+    const area = screen.getByRole('textbox');
+    await user.clear(area);
+    const longVal = 'v'.repeat(12_000);
+    await user.paste(JSON.stringify({ payload: longVal, n: 1 }));
+    await user.click(screen.getByRole('button', { name: /^run$/i }));
+    expect(onConfirm).toHaveBeenCalled();
+    const payload = onConfirm.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.n).toBe(1);
+    expect(typeof payload.payload).toBe('string');
+    expect((payload.payload as string).length).toBe(10_000);
+  });
 });

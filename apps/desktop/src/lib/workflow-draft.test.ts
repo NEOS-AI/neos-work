@@ -73,6 +73,21 @@ describe('buildWorkflowDraft', () => {
     expect(draft.edges.map((e) => e.label)).toEqual([undefined, undefined, 'ok']);
   });
 
+  it('falls back control-char node labels to id and rejects control nodeType', () => {
+    const nodes = [
+      rfNode('n1', { label: `Start${'\0'}X`, nodeType: 'trigger' }),
+      rfNode('n2', { label: '\n', nodeType: `agent${'\n'}bad` }),
+      rfNode('n3', { label: '  Ok  ', nodeType: '  output  ' }),
+    ];
+    const draft = buildWorkflowDraft(nodes, []);
+    expect(draft.nodes[0]!.label).toBe('n1'); // control label → id
+    expect(draft.nodes[0]!.type).toBe('trigger');
+    expect(draft.nodes[1]!.label).toBe('n2');
+    expect(draft.nodes[1]!.type).toBe('trigger'); // control type → default
+    expect(draft.nodes[2]!.label).toBe('Ok');
+    expect(draft.nodes[2]!.type).toBe('output');
+  });
+
   it('defaults missing node config to empty object', () => {
     const nodes = [rfNode('n1')];
     // explicit undefined config
@@ -131,6 +146,26 @@ describe('toReactFlowNodes / toReactFlowEdges', () => {
     expect(nodes[0]!.data.isFailed).toBe(true);
     expect(nodes[0]!.data.isRunning).toBe(false);
     expect(nodes[0]!.data.isDone).toBe(false);
+  });
+
+  it('scrubs control-char labels/types when mapping to React Flow', () => {
+    const dirty = {
+      nodes: [
+        {
+          id: 'n1',
+          type: `agent${'\0'}x`,
+          label: `Coder${'\n'}X`,
+          position: { x: 0, y: 0 },
+          config: {},
+        },
+      ],
+      edges: [{ id: 'e1', source: 'n1', target: 'n1', label: `go${'\0'}` }],
+    };
+    const nodes = toReactFlowNodes(dirty, {});
+    expect(nodes[0]!.data.label).toBe('n1');
+    expect(nodes[0]!.data.nodeType).toBe('trigger');
+    const edges = toReactFlowEdges(dirty);
+    expect(edges[0]!.label).toBeUndefined();
   });
 
   it('maps edges including optional labels', () => {

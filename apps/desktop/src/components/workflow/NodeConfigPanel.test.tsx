@@ -925,6 +925,58 @@ describe('NodeConfigPanel', () => {
     window.history.pushState({}, '', prev || '/');
   });
 
+  it('scrubs webhook secret display and empty fire error fallback; copies scrubbed secret', async () => {
+    const user = userEvent.setup();
+    const prev = window.location.pathname + window.location.search;
+    window.history.pushState({}, '', '/workflows/wf-webhook-3');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    getWebhookSecret.mockResolvedValue({
+      ok: true,
+      data: {
+        secret: 'whsec_' + String.fromCharCode(0) + 'abc' + String.fromCharCode(10) + 'xyz',
+        rateLimit: { limit: 60, remaining: 59, resetAt: Date.now() + 60_000 },
+      },
+    });
+    testWebhookFire.mockResolvedValue({
+      ok: false,
+      error: String.fromCharCode(0) + String.fromCharCode(10),
+    });
+
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await waitFor(() => expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-3'));
+
+    // Masked secret display must not include raw null bytes
+    expect(document.body.textContent).not.toContain('\0');
+    await user.click(screen.getByRole('button', { name: /^Show$/i }));
+    expect(document.body.textContent).toMatch(/whsec_abc xyz/);
+    expect(document.body.textContent).not.toContain('\0');
+
+    await user.click(screen.getByRole('button', { name: 'Test fire' }));
+    await waitFor(() => {
+      expect(screen.getByText(/Fire failed/)).toBeInTheDocument();
+    });
+
+    // Secret row "Copy" (not "Copy URL" / "Copy curl")
+    const copyBtns = screen.getAllByRole('button', { name: /^Copy$/i });
+    expect(copyBtns.length).toBeGreaterThan(0);
+    await user.click(copyBtns[copyBtns.length - 1]!);
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const copied = String(writeText.mock.calls[0]?.[0] ?? '');
+    // Clipboard scrub drops null bytes but keeps newlines (no collapseLines)
+    expect(copied).not.toContain('\0');
+    expect(copied).toMatch(/whsec_abc/);
+    expect(copied).toContain('xyz');
+
+    window.history.pushState({}, '', prev || '/');
+  });
+
   it('scrubs control-char validation issue messages', () => {
     const node = {
       id: 't1',

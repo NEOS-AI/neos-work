@@ -449,4 +449,50 @@ describe('ArtifactPreview', () => {
     promptSpy.mockRestore();
   });
 
+  it('scrubs rename prompt seed and re-run meta status message', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-seed',
+      workflowId: 'wf-1',
+      name: 'Out' + String.fromCharCode(0) + 'put' + String.fromCharCode(10) + '.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(null);
+
+    const { unmount } = render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText(/Output/)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(promptSpy).toHaveBeenCalled();
+    const seed = String(promptSpy.mock.calls[0]?.[1] ?? '');
+    // null stripped, LF collapsed to space
+    expect(seed).toBe('Output .html');
+    expect(seed).not.toContain('\0');
+    promptSpy.mockRestore();
+    unmount();
+
+    // Re-run button only when onRerunWorkflow is provided; success meta scrubbed
+    refreshArtifact.mockResolvedValueOnce({
+      ok: true,
+      meta: {
+        mode: 'rerun',
+        message: 'Re' + String.fromCharCode(0) + 'run' + String.fromCharCode(10) + 'queued',
+      },
+    });
+    const onRerun = vi.fn();
+    render(<ArtifactPreview workflowId="wf-1" onRerunWorkflow={onRerun} />);
+    await waitFor(() => expect(screen.getByText(/Output/)).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /▶ Re-run|Re-run/i }));
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/Rerun queued|Re run queued/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    expect(onRerun).toHaveBeenCalled();
+  });
+
 });

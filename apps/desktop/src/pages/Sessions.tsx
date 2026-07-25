@@ -594,12 +594,13 @@ function ChatArea({
                 ...m,
                 agentPlan: m.agentPlan.map((s) => {
                   if (s.id !== chunk.step.id) return s;
-                  // browser_screenshot output에서 base64 추출
+                  // browser_screenshot output에서 base64 추출 (control/overlong rejected)
                   const output = chunk.step.output as Record<string, unknown> | undefined;
-                  const screenshot =
+                  const rawShot =
                     output && typeof output === 'object' && 'screenshot' in output
-                      ? (output.screenshot as string)
+                      ? output.screenshot
                       : undefined;
+                  const screenshot = safeScreenshotBase64(rawShot) || undefined;
                   return {
                     ...chunk.step,
                     status: 'completed' as const,
@@ -1077,8 +1078,26 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
 
 // --- Screenshot Toggle ---
 
+/** Accept only base64 image payloads (reject control chars / data-URL injection / overlong). */
+function safeScreenshotBase64(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw) return '';
+  // Reject control chars before any processing
+  if (/[\0\r\n]/.test(raw)) return '';
+  // Strip accidental data-URL prefix if present
+  let s = raw.trim();
+  if (s.length > 2_000_000) return '';
+  const dataUrl = /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.exec(s);
+  if (dataUrl) s = s.slice(dataUrl[0].length);
+  // Pure base64 alphabet only (no whitespace — hostile embeds often use newlines)
+  if (!/^[A-Za-z0-9+/]+=*$/.test(s)) return '';
+  if (s.length < 8) return '';
+  return s;
+}
+
 function ScreenshotToggle({ screenshot }: { screenshot: string }) {
   const [open, setOpen] = useState(false);
+  const safe = safeScreenshotBase64(screenshot);
+  if (!safe) return null;
   return (
     <span className="ml-1 inline-block">
       <button
@@ -1091,7 +1110,7 @@ function ScreenshotToggle({ screenshot }: { screenshot: string }) {
       {open && (
         <div className="mt-1">
           <img
-            src={`data:image/png;base64,${screenshot}`}
+            src={`data:image/png;base64,${safe}`}
             alt="browser screenshot"
             className="max-w-xs rounded border"
             style={{ borderColor: 'var(--border-primary)' }}

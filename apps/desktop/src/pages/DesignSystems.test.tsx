@@ -245,4 +245,32 @@ describe('DesignSystems page', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('scrubs control-char name in delete confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds-del',
+          name: 'Brand' + String.fromCharCode(0) + 'X' + String.fromCharCode(10) + 'Y',
+          description: 'd',
+          path: '/x',
+          hasManifest: false,
+          hasTokens: true,
+          hasComponents: false,
+          createdAt: '2020-01-01T00:00:00.000Z',
+          updatedAt: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/BrandX/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirmSpy).toHaveBeenCalled();
+    const msg = String(confirmSpy.mock.calls[0]?.[0] ?? '');
+    expect(msg).toContain('BrandX Y');
+    expect(msg).not.toContain('\0');
+    expect(deleteDesignSystem).not.toHaveBeenCalled();
+  });
+
 });

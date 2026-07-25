@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EngineClient, parseSseDataPayload, parseSseEventName } from './engine.js';
+import {
+  EngineClient,
+  formatHttpErrorMessage,
+  parseSseDataPayload,
+  parseSseEventName,
+  scrubApiErrorMessage,
+} from './engine.js';
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -618,7 +624,20 @@ describe('EngineClient', () => {
     for await (const c of client.chat('s1', 'x')) {
       errChunks.push(c);
     }
-    expect(errChunks[0]).toMatchObject({ type: 'error' });
+    expect(errChunks[0]).toMatchObject({ type: 'error', content: 'HTTP 500: Err' });
+
+    // Control-char statusText scrubbed in chat HTTP errors (mock Response-like; ctor rejects controls)
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: `Bad${'\0'}Gateway\nnow`,
+      body: null,
+    });
+    const dirty: unknown[] = [];
+    for await (const c of client.chat('s1', 'y')) {
+      dirty.push(c);
+    }
+    expect(dirty[0]).toEqual({ type: 'error', content: 'HTTP 502: BadGateway now' });
   });
 
   it('runAgent SSE maps event name into chunk type', async () => {
@@ -647,7 +666,29 @@ describe('EngineClient', () => {
     for await (const c of client.runAgent('s1', 'x')) {
       err.push(c);
     }
-    expect(err[0]).toMatchObject({ type: 'error' });
+    expect(err[0]).toMatchObject({ type: 'error', error: 'HTTP 503: Down' });
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 504,
+      statusText: `Time${'\n'}out${'\0'}`,
+      body: null,
+    });
+    const dirtyAgent: unknown[] = [];
+    for await (const c of client.runAgent('s1', 'y')) {
+      dirtyAgent.push(c);
+    }
+    expect(dirtyAgent[0]).toEqual({ type: 'error', error: 'HTTP 504: Time out' });
+  });
+
+  it('formatHttpErrorMessage / scrubApiErrorMessage collapse control chars', () => {
+    expect(formatHttpErrorMessage(500, 'Internal')).toBe('HTTP 500: Internal');
+    expect(formatHttpErrorMessage(502, `Bad${'\0'}Gateway\r\nX`)).toBe('HTTP 502: BadGateway X');
+    expect(formatHttpErrorMessage(404, '\0\n')).toBe('HTTP 404');
+    expect(formatHttpErrorMessage(Number.NaN, 'x')).toBe('HTTP 0: x');
+    expect(scrubApiErrorMessage(`disk${'\n'}full${'\0'}!`)).toBe('disk full!');
+    expect(scrubApiErrorMessage('\0\r\n', 'fallback')).toBe('fallback');
+    expect(scrubApiErrorMessage(null, 'fallback')).toBe('fallback');
   });
 
   it('harness and block CRUD with domain query', async () => {
