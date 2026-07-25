@@ -361,4 +361,160 @@ describe('routines routes', () => {
 
     await routines.request(`/${routine.id}`, { method: 'DELETE' });
   });
+
+  it('rejects blank schedule, control-char timezone/workflowId on create', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+
+    const blankSched = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'No Sched',
+        workflowId: wf.id,
+        schedule: '   ',
+        enabled: false,
+      }),
+    });
+    expect(blankSched.status).toBe(400);
+    expect(((await blankSched.json()) as { error: string }).error).toMatch(/schedule/i);
+
+    const ctrlTz = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Bad Tz',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+        timezone: 'UTC\n',
+        enabled: false,
+      }),
+    });
+    expect(ctrlTz.status).toBe(400);
+    expect(((await ctrlTz.json()) as { error: string }).error).toMatch(/timezone/i);
+
+    // Leading control-char timezone must not strip to UTC
+    const leadTz = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Lead Tz',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+        timezone: '\nUTC',
+        enabled: false,
+      }),
+    });
+    expect(leadTz.status).toBe(400);
+
+    // Control-char workflowId rejected (before missing-workflow 404)
+    const ctrlWf = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Bad Wf',
+        workflowId: `bad${'\n'}id`,
+        schedule: '0 9 * * *',
+        enabled: false,
+      }),
+    });
+    expect(ctrlWf.status).toBe(400);
+    expect(((await ctrlWf.json()) as { error: string }).error).toMatch(/workflowId/i);
+  });
+
+  it('PUT rejects control-char timezone/schedule and blank schedule', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const routine = routinesDb.createRoutine({
+      name: 'Put Hygiene',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'UTC',
+      enabled: false,
+    });
+
+    const ctrlTz = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ timezone: 'Asia/Seoul\n' }),
+    });
+    expect(ctrlTz.status).toBe(400);
+    expect(((await ctrlTz.json()) as { error: string }).error).toMatch(/timezone/i);
+
+    const blankSched = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ schedule: '   ' }),
+    });
+    expect(blankSched.status).toBe(400);
+    expect(((await blankSched.json()) as { error: string }).error).toMatch(/schedule/i);
+
+    const ctrlSched = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ schedule: '0 9 * * *\n' }),
+    });
+    expect(ctrlSched.status).toBe(400);
+    expect(((await ctrlSched.json()) as { error: string }).error).toMatch(/cron|schedule/i);
+
+    const ctrlName = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'bad\nname' }),
+    });
+    expect(ctrlName.status).toBe(400);
+    expect(((await ctrlName.json()) as { error: string }).error).toMatch(/name/i);
+
+    // overlong timezone
+    const longTz = await routines.request(`/${routine.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ timezone: 'T'.repeat(101) }),
+    });
+    expect(longTz.status).toBe(400);
+
+    await routines.request(`/${routine.id}`, { method: 'DELETE' });
+  });
+
+  it('crystallize rejects control-char name and null-byte description', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const routine = routinesDb.createRoutine({
+      name: 'Crystallize Ctrl',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'UTC',
+      enabled: false,
+    });
+    const run = routinesDb.createRoutineRun({ routineId: routine.id });
+    routinesDb.completeRoutineRun(run.id, 'completed');
+
+    const badName = await routines.request(`/${routine.id}/runs/${run.id}/crystallize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'bad\nname' }),
+    });
+    expect(badName.status).toBe(400);
+    expect(((await badName.json()) as { error: string }).error).toMatch(/Invalid name/i);
+
+    const nulDesc = await routines.request(`/${routine.id}/runs/${run.id}/crystallize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'ok', description: `desc${'\0'}x` }),
+    });
+    expect(nulDesc.status).toBe(400);
+    expect(((await nulDesc.json()) as { error: string }).error).toMatch(/Invalid description/i);
+  });
 });

@@ -65,6 +65,38 @@ describe('RunLogPanel', () => {
     await user.click(screen.getByText(/✓ A/));
     expect(screen.getByText(/"ok": true/)).toBeInTheDocument();
   });
+
+  it('scrubs control chars from failed errors and null-byte stream text', async () => {
+    const user = userEvent.setup();
+    const events: WorkflowSSEEvent[] = [
+      {
+        type: 'node.progress',
+        nodeId: 'n1',
+        chunk: 'x',
+        accumulated: `hello${'\0'}world\nline2`,
+      },
+      {
+        type: 'node.failed',
+        nodeId: 'n2',
+        error: `boom${'\0'}err\nnext`,
+      },
+      { type: 'run.failed', runId: 'run-1', error: `fail${'\n'}ed` },
+    ];
+    render(
+      <RunLogPanel
+        events={events}
+        nodeLabelMap={{ n1: `Coder${'\n'}X`, n2: 'B' }}
+      />,
+    );
+    // Collapsed error lines: null-byte stripped (no gap), CR/LF → space
+    expect(screen.getByText(/boomerr next/)).toBeInTheDocument();
+    expect(screen.getByText(/fail ed/)).toBeInTheDocument();
+
+    await user.click(screen.getByText(/streaming/i));
+    // Stream keeps multi-line but drops null bytes
+    expect(screen.getByText(/helloworld/)).toBeInTheDocument();
+    expect(screen.getByText(/line2/)).toBeInTheDocument();
+  });
 });
 
 describe('filterRunLogEvents', () => {

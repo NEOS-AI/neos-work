@@ -358,6 +358,36 @@ describe('mcp routes', () => {
     expect(nlHtml).toMatch(/access|denied|Invalid|error/i);
   });
 
+  it('rejects overlong command and filters overlong args on create', async () => {
+    const longCmd = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        transport: 'stdio',
+        command: 'c'.repeat(501),
+      }),
+    });
+    expect(longCmd.status).toBe(400);
+    expect(((await longCmd.json()) as { error: string }).error).toMatch(/command|max length/i);
+
+    const create = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        transport: 'stdio',
+        command: 'npx',
+        args: ['ok', 'a'.repeat(501), `bad${'\n'}arg`, 'tail'],
+      }),
+    });
+    expect(create.status).toBe(201);
+    const body = await create.json() as { data: { id: string; args: string[] | null } };
+    // Overlong and control-char args dropped
+    expect(body.data.args).toEqual(['ok', 'tail']);
+    await mcp.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
+
   it('oauth/start trims fields and rejects non-http endpoints', async () => {
     const badJson = await mcp.request('/oauth/start', {
       method: 'POST',
@@ -434,6 +464,52 @@ describe('mcp routes', () => {
     expect(body.data.authUrl).toContain('client_id=cid');
     expect(body.data.authUrl).toContain('scope=read');
     expect(body.data.state).toBeTruthy();
+
+    // scope > 1000 rejected explicitly
+    const longScope = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: 's1',
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+        scope: 's'.repeat(1_001),
+      }),
+    });
+    expect(longScope.status).toBe(400);
+    expect(((await longScope.json()) as { error: string }).error).toMatch(/scope too long/i);
+
+    // overlong clientId treated as missing required field
+    const longClient = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: 's1',
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'c'.repeat(501),
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    expect(longClient.status).toBe(400);
+    expect(((await longClient.json()) as { error: string }).error).toMatch(/required|clientId/i);
+
+    // non-http redirectUri rejected
+    const badRedirect = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: 's1',
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'file:///tmp/cb',
+      }),
+    });
+    expect(badRedirect.status).toBe(400);
+    expect(((await badRedirect.json()) as { error: string }).error).toMatch(/redirectUri|http/i);
   });
 
   it('accepts case-insensitive transport and trims name/args', async () => {

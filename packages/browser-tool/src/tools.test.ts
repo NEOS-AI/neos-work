@@ -133,6 +133,28 @@ describe('createBrowserTools', () => {
     expect(full.output).toEqual({ text: 'full-body' });
   });
 
+  it('browser_extract_text strips null bytes; navigate scrubs control title', async () => {
+    const page = {
+      evaluate: vi.fn(async () => `hello${'\0'}world\nnext`),
+      goto: vi.fn(async () => {}),
+      title: vi.fn(async () => `Title${'\n'}X${'\0'}Y`),
+      url: vi.fn(() => 'https://example.com/done'),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const extract = tools.find((t) => t.name === 'browser_extract_text')!;
+    const textRes = await extract.execute({});
+    expect(textRes.success).toBe(true);
+    expect((textRes.output as { text: string }).text).toBe('helloworld\nnext');
+
+    const nav = tools.find((t) => t.name === 'browser_navigate')!;
+    const navRes = await nav.execute({ url: 'https://example.com' });
+    expect(navRes.success).toBe(true);
+    expect(navRes.output).toEqual({
+      title: 'Title X Y',
+      url: 'https://example.com/done',
+    });
+  });
+
   it('browser_extract_links evaluates in page context', async () => {
     const page = {
       evaluate: vi.fn(async (_fn: unknown, sel: string | null) => {

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
-import { formatDurationMs } from '../../lib/format-duration.js';
+import { formatDurationMs, scrubDisplayText } from '../../lib/format-duration.js';
 import {
   loadRunLogFilter,
   saveRunLogFilter,
@@ -56,11 +56,21 @@ export function filterRunLogEvents(
 
 /** Exported for unit tests — turn plain text into linkified React nodes. */
 export function linkifyText(text: string): ReactNode[] {
-  const parts = text.split(URL_RE);
+  // Scrub null bytes before splitting / rendering (keep multi-line for outputs)
+  const safe = scrubDisplayText(text);
+  const parts = safe.split(URL_RE);
   return parts.map((part, i) => {
     if (/^https?:\/\//.test(part)) {
+      // Drop control-char / non-http hrefs from linkify (defense-in-depth)
+      if (/[\0\r\n]/.test(part)) {
+        return <span key={i}>{scrubDisplayText(part, { collapseLines: true })}</span>;
+      }
       const href = part.replace(/[.,;:)]+$/, '');
       const trailing = part.slice(href.length);
+      // Only linkify plain http(s) without embedded whitespace
+      if (/\s/.test(href)) {
+        return <span key={i}>{part}</span>;
+      }
       return (
         <span key={i}>
           <a
@@ -81,12 +91,18 @@ export function linkifyText(text: string): ReactNode[] {
 }
 
 function formatOutput(output: unknown): string {
-  if (typeof output === 'string') return output;
+  if (typeof output === 'string') return scrubDisplayText(output);
   try {
-    return JSON.stringify(output, null, 2);
+    return scrubDisplayText(JSON.stringify(output, null, 2));
   } catch {
-    return String(output);
+    return scrubDisplayText(String(output));
   }
+}
+
+/** Safe single-line label/error for log rows (control collapsed). */
+function safeLogLine(raw: unknown, fallback = ''): string {
+  const s = scrubDisplayText(raw, { collapseLines: true, maxChars: 2_000 });
+  return s || fallback;
 }
 
 export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
@@ -152,8 +168,14 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
         <p style={{ color: 'var(--text-muted)' }}>No events match this filter.</p>
       ) : null}
       {visibleEvents.map((ev, i) => {
+        const rawNodeId =
+          'nodeId' in ev ? String((ev as { nodeId: string }).nodeId ?? '') : '';
+        // Control-char node ids / labels collapsed for safe single-line display
         const nodeLabel = 'nodeId' in ev
-          ? (nodeLabelMap[(ev as { nodeId: string }).nodeId] ?? (ev as { nodeId: string }).nodeId)
+          ? safeLogLine(
+              nodeLabelMap[rawNodeId] ?? rawNodeId,
+              safeLogLine(rawNodeId, 'node'),
+            )
           : null;
         const isExpanded = expandedIdx === i;
         const hasOutput = ev.type === 'node.completed' && (ev as { output?: unknown }).output !== undefined;
@@ -162,9 +184,30 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
         const durationMs = ev.type === 'node.completed'
           ? (ev as { durationMs?: number }).durationMs
           : undefined;
-        const artifactId = ev.type === 'run.completed'
+        const artifactIdRaw = ev.type === 'run.completed'
           ? (ev as { artifactId?: string }).artifactId
           : undefined;
+        const artifactId =
+          typeof artifactIdRaw === 'string' && !/[\0\r\n]/.test(artifactIdRaw)
+            ? artifactIdRaw.trim()
+            : undefined;
+        const streamText = scrubDisplayText(
+          (ev as { accumulated?: string; chunk?: string }).accumulated
+            ?? (ev as { chunk?: string }).chunk
+            ?? '',
+        );
+        const nodeTypeSafe =
+          ev.type === 'node.started'
+            ? safeLogLine((ev as { nodeType?: string }).nodeType, 'node')
+            : '';
+        const failedError =
+          ev.type === 'node.failed' || ev.type === 'run.failed'
+            ? safeLogLine((ev as { error?: string }).error, 'error')
+            : '';
+        const runIdSafe =
+          ev.type === 'run.started' || ev.type === 'run.completed' || ev.type === 'run.failed'
+            ? safeLogLine((ev as { runId?: string }).runId, 'run')
+            : '';
         return (
           <div
             key={i}
@@ -175,10 +218,10 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
               if (hasOutput || isProgress) setExpandedIdx(isExpanded ? null : i);
             }}
           >
-            {ev.type === 'node.started' && `▶ ${nodeLabel} (${(ev as { nodeType: string }).nodeType})`}
+            {ev.type === 'node.started' && `▶ ${nodeLabel} (${nodeTypeSafe})`}
             {ev.type === 'node.progress' && (
               <span className="text-sky-400">
-                … {nodeLabel} streaming{(ev as { accumulated?: string }).accumulated ? ' ▸' : ''}
+                … {nodeLabel} streaming{streamText ? ' ▸' : ''}
               </span>
             )}
             {ev.type === 'node.completed' && (
@@ -188,15 +231,15 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                 {hasOutput ? ' ▸' : ''}
               </span>
             )}
-            {ev.type === 'node.failed' && `✗ ${nodeLabel}: ${(ev as { error: string }).error}`}
-            {ev.type === 'run.started' && `Run ${(ev as { runId: string }).runId.slice(0, 8)}`}
+            {ev.type === 'node.failed' && `✗ ${nodeLabel}: ${failedError}`}
+            {ev.type === 'run.started' && `Run ${runIdSafe.slice(0, 8)}`}
             {ev.type === 'run.completed' && (
               <span>
                 {t('workflow.done')} ({(ev as { duration: number }).duration}ms)
                 {artifactId ? ` · artifact ${artifactId.slice(0, 8)}` : ''}
               </span>
             )}
-            {ev.type === 'run.failed' && (ev as { error: string }).error}
+            {ev.type === 'run.failed' && failedError}
             {isExpanded && isProgress && (
               <div className="mt-1">
                 <div className="mb-1 flex justify-end">
@@ -206,10 +249,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                     style={{ color: 'var(--text-muted)' }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      const text = ((ev as { accumulated?: string; chunk?: string }).accumulated
-                        ?? (ev as { chunk?: string }).chunk
-                        ?? '');
-                      void navigator.clipboard?.writeText(text);
+                      void navigator.clipboard?.writeText(streamText);
                     }}
                   >
                     Copy
@@ -219,9 +259,7 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                   className="max-h-40 overflow-auto whitespace-pre-wrap rounded p-1 text-[10px]"
                   style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
                 >
-                  {((ev as { accumulated?: string; chunk?: string }).accumulated
-                    ?? (ev as { chunk?: string }).chunk
-                    ?? '').slice(-2000)}
+                  {streamText.slice(-2000)}
                 </pre>
               </div>
             )}

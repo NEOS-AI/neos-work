@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
-import { formatDurationMs, serializeNodeOutput } from '../../lib/format-duration.js';
+import {
+  formatDurationMs,
+  scrubDisplayText,
+  serializeNodeOutput,
+} from '../../lib/format-duration.js';
 
 interface NodeRunResult {
   nodeId: string;
@@ -105,21 +109,31 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
         <p style={{ color: 'var(--text-muted)' }}>No node results recorded.</p>
       )}
 
-      {nodeResults.map((nr) => (
+      {nodeResults.map((nr) => {
+        // Control-char node ids / labels collapsed for safe display
+        const rawId = typeof nr.nodeId === 'string' ? nr.nodeId : String(nr.nodeId ?? '');
+        const idSafe = scrubDisplayText(rawId, { collapseLines: true, maxChars: 200 }) || 'node';
+        const labelRaw = nodeLabelMap?.[rawId] ?? nodeLabelMap?.[idSafe] ?? idSafe;
+        const label = scrubDisplayText(labelRaw, { collapseLines: true, maxChars: 200 }) || idSafe;
+        const statusSafe = scrubDisplayText(nr.status, { collapseLines: true, maxChars: 40 }) || 'pending';
+        const errorSafe = nr.error
+          ? scrubDisplayText(nr.error, { collapseLines: true, maxChars: 2_000 })
+          : '';
+        return (
         <div
-          key={nr.nodeId}
+          key={idSafe}
           className="rounded-md border p-2"
           style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-secondary)' }}
         >
           <div className="flex items-center gap-2">
             <span
               className="rounded px-1 font-medium"
-              style={{ color: STATUS_COLORS[nr.status] ?? '#6b7280' }}
+              style={{ color: STATUS_COLORS[statusSafe] ?? '#6b7280' }}
             >
-              {nr.status}
+              {statusSafe}
             </span>
             <span className="font-mono" style={{ color: 'var(--text-primary)' }}>
-              {nodeLabelMap?.[nr.nodeId] ?? nr.nodeId}
+              {label}
             </span>
             {nr.durationMs !== undefined && (
               <span className="ml-auto text-[10px]" style={{ color: 'var(--text-muted)' }}>
@@ -136,18 +150,18 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
                   marginLeft: nr.durationMs === undefined ? 'auto' : undefined,
                 }}
                 title="Copy node output"
-                onClick={() => void handleCopyOutput(nr.nodeId, nr.output)}
+                onClick={() => void handleCopyOutput(idSafe, nr.output)}
               >
-                {copiedNodeId === nr.nodeId ? 'Copied' : 'Copy'}
+                {copiedNodeId === idSafe ? 'Copied' : 'Copy'}
               </button>
             )}
           </div>
 
-          {nr.error && (
+          {errorSafe ? (
             <p className="mt-1 rounded px-1 text-red-400" style={{ backgroundColor: '#450a0a33' }}>
-              {nr.error}
+              {errorSafe}
             </p>
-          )}
+          ) : null}
 
           {nr.output !== undefined && (
             <pre
@@ -163,7 +177,8 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
             </pre>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -303,4 +303,81 @@ describe('harness routes', () => {
     expect(updated.data.allowedTools).toEqual(['grep']);
     expect(updated.data.constraints?.maxSteps).toBe(50);
   });
+
+  it('rejects null-byte description/systemPrompt on create and PUT', async () => {
+    const nulDesc = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        description: `bad${'\0'}desc`,
+        systemPrompt: 'prompt',
+        allowedTools: [],
+      }),
+    });
+    expect(nulDesc.status).toBe(400);
+    expect(((await nulDesc.json()) as { error: string }).error).toMatch(/Invalid description/i);
+
+    const nulPrompt = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        systemPrompt: `p${'\0'}x`,
+        allowedTools: [],
+      }),
+    });
+    expect(nulPrompt.status).toBe(400);
+    expect(((await nulPrompt.json()) as { error: string }).error).toMatch(/systemPrompt|required/i);
+
+    const create = await harness.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        description: 'ok',
+        systemPrompt: 'prompt',
+        allowedTools: [],
+      }),
+    });
+    expect([200, 201]).toContain(create.status);
+    const created = await create.json() as { data: { id: string } };
+
+    const putDesc = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ description: `x${'\0'}y` }),
+    });
+    expect(putDesc.status).toBe(400);
+    expect(((await putDesc.json()) as { error: string }).error).toMatch(/Invalid description/i);
+
+    const putPrompt = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ systemPrompt: `sys${'\0'}` }),
+    });
+    expect(putPrompt.status).toBe(400);
+    expect(((await putPrompt.json()) as { error: string }).error).toMatch(/systemPrompt/i);
+
+    const putBlankName = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(putBlankName.status).toBe(400);
+    expect(((await putBlankName.json()) as { error: string }).error).toMatch(/name/i);
+
+    // Multi-line description accepted at route; DB collapses control chars to spaces
+    const multi = await harness.request(`/${created.data.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'line1\nline2' }),
+    });
+    expect(multi.status).toBe(200);
+    expect(((await multi.json()) as { data: { description: string } }).data.description).toBe(
+      'line1 line2',
+    );
+
+    await harness.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
 });

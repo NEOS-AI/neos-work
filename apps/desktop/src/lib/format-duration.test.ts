@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatDurationMs, serializeNodeOutput } from './format-duration.js';
+import {
+  formatDuration,
+  formatDurationMs,
+  scrubDisplayText,
+  serializeNodeOutput,
+} from './format-duration.js';
 
 describe('formatDurationMs', () => {
   it('guards invalid values', () => {
@@ -35,10 +40,25 @@ describe('formatDuration', () => {
   });
 });
 
+describe('scrubDisplayText', () => {
+  it('strips null bytes and optionally collapses lines', () => {
+    expect(scrubDisplayText(`hi${'\0'}there`)).toBe('hithere');
+    expect(scrubDisplayText('a\nb\rc', { collapseLines: true })).toBe('a b c');
+    expect(scrubDisplayText('keep\nline')).toBe('keep\nline');
+    expect(scrubDisplayText('abcdef', { maxChars: 3 })).toBe('abc');
+    expect(scrubDisplayText(null)).toBe('');
+  });
+});
+
 describe('serializeNodeOutput', () => {
   it('returns strings as-is and JSON for objects', () => {
     expect(serializeNodeOutput('hello')).toBe('hello');
     expect(serializeNodeOutput({ a: 1 })).toBe('{\n  "a": 1\n}');
+  });
+
+  it('strips null bytes from string and JSON outputs', () => {
+    expect(serializeNodeOutput(`x${'\0'}y`)).toBe('xy');
+    expect(serializeNodeOutput({ t: `a${'\0'}b` })).not.toContain('\0');
   });
 
   it('serializes null, numbers, arrays, and falls back for circular values', () => {

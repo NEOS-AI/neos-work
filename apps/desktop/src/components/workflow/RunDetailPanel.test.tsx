@@ -79,6 +79,42 @@ describe('RunDetailPanel', () => {
     expect(screen.getByText(/completed/i)).toBeInTheDocument();
   });
 
+  it('scrubs control-char errors and null-byte output text', async () => {
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-ctrl0001',
+        workflowId: 'wf',
+        status: 'failed',
+        nodeResults: {
+          n1: {
+            nodeId: 'n1',
+            status: 'failed',
+            error: `err${'\0'}or\nline`,
+            output: `out${'\0'}put`,
+          },
+        },
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+
+    render(
+      <RunDetailPanel
+        workflowId="wf"
+        runId="run-ctrl0001"
+        nodeLabelMap={{ n1: `Lab${'\n'}el` }}
+        onClose={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      // null-byte stripped (err+or), newline collapsed → "error line"
+      expect(screen.getByText(/error line/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Lab el/)).toBeInTheDocument();
+    expect(screen.getByText('output')).toBeInTheDocument();
+  });
+
   it('copies node output to clipboard', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);

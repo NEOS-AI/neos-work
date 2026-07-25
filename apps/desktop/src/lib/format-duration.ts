@@ -17,12 +17,35 @@ export function formatDuration(startedAt: string, completedAt?: string): string 
   return formatDurationMs(end - start);
 }
 
-/** Serialize node output for clipboard / export. */
+/**
+ * Scrub control characters from run UI / clipboard text.
+ * - Null bytes always stripped
+ * - When `collapseLines` is true, CR/LF become spaces (error / label lines)
+ * - Multi-line stream/output keeps newlines unless collapseLines
+ */
+export function scrubDisplayText(
+  raw: unknown,
+  options?: { collapseLines?: boolean; maxChars?: number },
+): string {
+  let s = typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+  // Always drop null bytes (DOM/clipboard injection defense)
+  if (/\0/.test(s)) s = s.replace(/\0/g, '');
+  if (options?.collapseLines) {
+    s = s.replace(/[\r\n]+/g, ' ').trim();
+  }
+  const max = options?.maxChars;
+  if (typeof max === 'number' && max > 0 && s.length > max) {
+    s = s.slice(0, max);
+  }
+  return s;
+}
+
+/** Serialize node output for clipboard / export (null-byte scrubbed). */
 export function serializeNodeOutput(output: unknown): string {
-  if (typeof output === 'string') return output;
+  if (typeof output === 'string') return scrubDisplayText(output);
   try {
-    return JSON.stringify(output, null, 2);
+    return scrubDisplayText(JSON.stringify(output, null, 2));
   } catch {
-    return String(output);
+    return scrubDisplayText(String(output));
   }
 }

@@ -39,10 +39,14 @@ const BROWSER_LINKS_MAX = 500;
 const BROWSER_SCREENSHOT_MAX_BYTES = 8 * 1024 * 1024;
 
 function toolFailure(err: unknown, fallback: string): ToolResult {
+  // Scrub control chars from upstream Playwright error text (log/UI hygiene)
+  let msg = err instanceof Error ? err.message : fallback;
+  if (typeof msg !== 'string') msg = fallback;
+  msg = msg.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 2_000) || fallback;
   return {
     success: false,
     output: null,
-    error: err instanceof Error ? err.message : fallback,
+    error: msg,
   };
 }
 
@@ -74,7 +78,18 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
           }
           const page = manager.getPage();
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-          return { success: true, output: { title: await page.title(), url: page.url() } };
+          let title = await page.title();
+          if (typeof title !== 'string') title = String(title ?? '');
+          // Scrub null-byte / CR/LF in page titles before returning to agent
+          if (/[\0\r\n]/.test(title)) title = title.replace(/[\0\r\n]+/g, ' ').trim();
+          if (title.length > 500) title = title.slice(0, 500);
+          let finalUrl = page.url();
+          if (typeof finalUrl !== 'string' || /[\0\r\n]/.test(finalUrl)) {
+            finalUrl = url;
+          } else {
+            finalUrl = finalUrl.trim() || url;
+          }
+          return { success: true, output: { title, url: finalUrl } };
         } catch (err) {
           return toolFailure(err, 'browser_navigate failed');
         }
@@ -196,6 +211,8 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
             ? await page.locator(selector).innerText({ timeout: 10_000 })
             : await page.evaluate(() => document.body.innerText);
           if (typeof text !== 'string') text = String(text ?? '');
+          // Drop null bytes from DOM text (multi-line OK; align with extract_links)
+          if (/\0/.test(text)) text = text.replace(/\0/g, '');
           if (text.length > BROWSER_TEXT_MAX_CHARS) {
             text = text.slice(0, BROWSER_TEXT_MAX_CHARS) + '\n…[text truncated]';
           }
