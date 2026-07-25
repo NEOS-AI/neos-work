@@ -101,22 +101,37 @@ describe('ReflectionStrategy', () => {
   });
 
   it('scrubs control characters from the current error in the reflection prompt', async () => {
-    const adapter = mockAdapter(['{"action":"skip"}']);
-    const strategy = new ReflectionStrategy(adapter);
-    const step = {
-      id: 's1',
-      index: 0,
-      description: 'do thing',
-      type: 'tool' as const,
-      status: 'error' as const,
-      error: 'ignored',
+    let captured = '';
+    const adapter = {
+      id: 'openai' as const,
+      name: 'Cap',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai' as const,
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: { messages?: Array<{ content?: string }> }) {
+        captured = String(params.messages?.[0]?.content ?? '');
+        yield { type: 'text' as const, content: JSON.stringify({ action: 'skip' }) };
+        yield { type: 'done' as const };
+      },
+      async validateApiKey() {
+        return true;
+      },
     };
-    await strategy.decide(step, `line1\nline2${'\0'}x`, []);
-    const prompt = (adapter as unknown as { lastParams?: { messages: Array<{ content: string }> } })
-      .lastParams?.messages?.[0]?.content
-      ?? '';
-    // Prefer inspecting via mock chat if available
-    // Fall back: re-run with capturing adapter
+    await new ReflectionStrategy(adapter).heal(step, `line1\nline2${'\0'}x`, []);
+    const errorLine = captured.split('\n').find((l) => l.startsWith('에러:')) ?? '';
+    expect(errorLine).toContain('line1');
+    expect(errorLine).toContain('line2');
+    // Control chars scrubbed to spaces within the error line
+    expect(errorLine).not.toMatch(/[\r\n\0]/);
+    expect(errorLine).toBe('에러: line1 line2 x');
   });
 
   it('includes history errors in the reflection prompt', async () => {

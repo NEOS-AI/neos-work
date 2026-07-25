@@ -40,11 +40,10 @@ describe('resolveMessageText', () => {
     expect(resolveMessageText({ content: '  padded content  ' }, {})).toBe('padded content');
   });
 
-  it('skips null-byte config/input text fields', () => {
-    expect(resolveMessageText({ content: 'bad\0text' }, { text: 'upstream' })).toBe('upstream');
-    // Null-byte input text is skipped; falls through to JSON of remaining inputs
-    expect(resolveMessageText({}, { text: 'hi\0there' })).toContain('text');
-    expect(resolveMessageText({ textTemplate: 'ok {{x}}' }, { x: 'y' })).toBe('ok y');
+  it('preserves null-byte content for node-level rejection', () => {
+    // Slack/Discord nodes reject null bytes after resolve
+    expect(resolveMessageText({ content: `bad${'\0'}text` }, {})).toContain('\0');
+    expect(resolveMessageText({}, { text: `hi${'\0'}there` })).toContain('\0');
   });
 
   it('treats whitespace-only templates as missing and tries next config key', () => {
