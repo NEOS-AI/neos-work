@@ -247,6 +247,23 @@ describe('plugin-store listPlugins edge cases', () => {
     expect(plugin?.skillContent).toBeUndefined();
   });
 
+  it('omits null-byte SKILL.md content', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), `# Skill${'\0'}corrupt\n`, 'utf8');
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'Corrupt Skill',
+        version: '0.1.0',
+      }),
+      'utf8',
+    );
+    const plugin = await getPlugin(DIR_NAME);
+    expect(plugin?.skillContent).toBeUndefined();
+  });
+
   it('sanitizes skillDirName when upgrading', async () => {
     const weird = `_cov_skill_weird_${process.pid}`;
     // only alnum/_/- allowed after sanitize; use a clean dir
