@@ -8,6 +8,7 @@ import {
   saveEnabledFilter,
   type EnabledFilterPref,
 } from '../lib/enabled-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -323,7 +324,14 @@ export default function Memory() {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No memory items match your filters.</p>
         ) : (
           <div className="flex flex-col gap-3">
-            {filteredItems.map((item) => (
+            {filteredItems.map((item) => {
+              const typeSafe =
+                scrubDisplayText(item.type, { collapseLines: true, maxChars: 40 }) || 'reference';
+              const typeColor = TYPE_COLORS[typeSafe as MemoryType] ?? TYPE_COLORS.reference;
+              const nameSafe =
+                scrubDisplayText(item.name, { collapseLines: true, maxChars: 200 }) || 'Memory';
+              const contentSafe = scrubDisplayText(item.content, { maxChars: 300 });
+              return (
               <div
                 key={item.id}
                 className="rounded-xl border p-4"
@@ -337,12 +345,12 @@ export default function Memory() {
                   <div className="flex items-center gap-2">
                     <span
                       className="rounded px-1.5 py-0.5 text-[10px] font-medium text-white"
-                      style={{ backgroundColor: TYPE_COLORS[item.type] }}
+                      style={{ backgroundColor: typeColor }}
                     >
-                      {item.type}
+                      {typeSafe}
                     </span>
                     <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                      {item.name}
+                      {nameSafe}
                     </span>
                     {!item.enabled && (
                       <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
@@ -389,7 +397,8 @@ export default function Memory() {
                     maxHeight: '120px',
                   }}
                 >
-                  {item.content.slice(0, 300)}{item.content.length > 300 ? '…' : ''}
+                  {contentSafe}
+                  {typeof item.content === 'string' && item.content.length > 300 ? '…' : ''}
                 </pre>
 
                 <p
@@ -400,7 +409,8 @@ export default function Memory() {
                   {formatRelativeTime(item.updatedAt)}
                 </p>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

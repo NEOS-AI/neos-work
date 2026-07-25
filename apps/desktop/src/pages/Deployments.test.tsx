@@ -8,9 +8,17 @@ const listWorkflows = vi.fn();
 const deleteDeployment = vi.fn();
 const refreshDeployment = vi.fn();
 
+// Stable client identity — avoids load() re-firing every render via useCallback deps
+const engineClient = {
+  listDeployments,
+  listWorkflows,
+  deleteDeployment,
+  refreshDeployment,
+};
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listDeployments, listWorkflows, deleteDeployment, refreshDeployment },
+    client: engineClient,
   }),
 }));
 
@@ -315,5 +323,56 @@ describe('Deployments page', () => {
     await user.click(screen.getByRole('button', { name: 'pending' }));
     expect(screen.getByText('No deployments match the current filters.')).toBeInTheDocument();
     expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
+  it('scrubs control chars from status, message, provider, project, and workflow label', async () => {
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'd-scrub',
+          workflowId: 'wf-1',
+          provider: `vercel${'\n'}x`,
+          status: `success${'\0'}`,
+          projectName: `my${'\0'}app`,
+          url: 'https://safe.example',
+          deploymentId: 'dep-scrub',
+          statusMessage: `build${'\n'}failed`,
+          createdAt: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'wf-1',
+          name: `Deploy${'\0'}Flow`,
+          domain: 'general' as const,
+          nodes: [],
+          edges: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => {
+      // null-byte stripped from project name
+      expect(screen.getByText('myapp')).toBeInTheDocument();
+    });
+    // provider/statusMessage control collapsed for display
+    expect(screen.getByText(/vercel x/)).toBeInTheDocument();
+    expect(screen.getByText(/build failed/)).toBeInTheDocument();
+    // workflow name scrubbed in table link and filter option
+    expect(screen.getAllByText('DeployFlow').length).toBeGreaterThanOrEqual(1);
+    const table = screen.getByRole('table');
+    expect(table.textContent).toMatch(/success/);
+    expect(table.textContent).toContain('myapp');
+    expect(table.textContent).toContain('DeployFlow');
+    expect(table.textContent).toMatch(/vercel x/);
+    // Table + filter options scrubbed (no raw null bytes in document)
+    expect(table.textContent).not.toContain('\0');
+    expect(document.body.textContent).not.toContain('\0');
   });
 });

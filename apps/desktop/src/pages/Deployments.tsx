@@ -205,7 +205,7 @@ export function Deployments() {
             <option value="">All workflows</option>
             {workflowOptions.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.name}
+                {scrubDisplayText(w.name, { collapseLines: true, maxChars: 100 }) || w.id}
               </option>
             ))}
           </select>

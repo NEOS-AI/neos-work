@@ -151,4 +151,27 @@ describe('Plugins page', () => {
       expect(screen.getByText(/No plugins found/)).toBeInTheDocument();
     });
   });
+
+  it('scrubs control chars from plugin name, description, and version', async () => {
+    listPlugins.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'p-evil',
+          name: `Evil${'\0'}Plugin`,
+          version: `1.0${'\n'}0`,
+          description: `line1${'\n'}line2${'\0'}x`,
+          pipeline: [{ id: 'a', name: 'A', kind: 'discovery' }],
+        },
+      ],
+    });
+    render(<Plugins />);
+    await waitFor(() => {
+      expect(screen.getByText('EvilPlugin')).toBeInTheDocument();
+    });
+    // version newlines collapsed; description multi-line collapsed for card
+    expect(screen.getByText(/v1\.0 0/)).toBeInTheDocument();
+    expect(screen.getByText(/line1 line2x/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

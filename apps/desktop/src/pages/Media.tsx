@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEngine } from '../hooks/useEngine.js';
 import type { MediaFileInfo } from '../lib/engine.js';
 import { formatBytes } from '../lib/format-bytes.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -30,7 +31,12 @@ export function Media() {
 
   const visibleFiles = useMemo(() => {
     const byKind = filterByKind(files, kindFilter);
-    const matched = filterByTextMatch(byKind, search, (f) => `${f.filename} ${f.kind}`);
+    // Haystack uses scrubbed fields so null-bytes do not poison search matching
+    const matched = filterByTextMatch(byKind, search, (f) => {
+      const name = scrubDisplayText(f.filename, { collapseLines: true, maxChars: 500 });
+      const kind = scrubDisplayText(f.kind, { collapseLines: true, maxChars: 40 });
+      return `${name} ${kind}`;
+    });
     return sortByDateDesc(matched, (f) => f.createdAt);
   }, [files, kindFilter, search]);
 
@@ -190,9 +196,13 @@ export function Media() {
                     color: 'var(--text-primary)',
                   }}
                 >
-                  <div className="font-medium truncate">{f.filename}</div>
+                  <div className="font-medium truncate">
+                    {scrubDisplayText(f.filename, { collapseLines: true, maxChars: 200 }) || 'file'}
+                  </div>
                   <div style={{ color: 'var(--text-muted)' }} title={formatAbsoluteTime(f.createdAt)}>
-                    {f.kind} · {formatBytes(f.size)} · {formatRelativeTime(f.createdAt)}
+                    {scrubDisplayText(f.kind, { collapseLines: true, maxChars: 40 }) || 'other'}
+                    {' · '}
+                    {formatBytes(f.size)} · {formatRelativeTime(f.createdAt)}
                   </div>
                 </button>
                 <button
@@ -218,14 +228,27 @@ export function Media() {
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading preview…</p>
             )}
             {selected && blobUrl && selected.kind === 'image' && (
-              <img src={blobUrl} alt={selected.filename} className="max-h-[60vh] max-w-full rounded object-contain" />
+              <img
+                src={blobUrl}
+                alt={scrubDisplayText(selected.filename, { collapseLines: true, maxChars: 200 }) || 'image'}
+                className="max-h-[60vh] max-w-full rounded object-contain"
+              />
             )}
             {selected && blobUrl && selected.kind === 'audio' && (
               <audio src={blobUrl} controls className="w-full" />
             )}
             {selected && blobUrl && selected.kind === 'other' && (
-              <a href={blobUrl} download={selected.filename} className="text-sm text-blue-400 underline">
-                Download {selected.filename}
+              <a
+                href={blobUrl}
+                download={
+                  scrubDisplayText(selected.filename, { collapseLines: true, maxChars: 200 })
+                    .replace(/[^\w.\-()+ ]+/g, '_')
+                  || 'download'
+                }
+                className="text-sm text-blue-400 underline"
+              >
+                Download{' '}
+                {scrubDisplayText(selected.filename, { collapseLines: true, maxChars: 200 }) || 'file'}
               </a>
             )}
           </div>
