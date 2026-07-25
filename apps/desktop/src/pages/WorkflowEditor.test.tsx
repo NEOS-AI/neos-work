@@ -323,6 +323,22 @@ describe('WorkflowEditor page', () => {
     });
   });
 
+  it('rejects control-char workflow rename without calling API', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle('workflow.rename'));
+    const input = screen.getByDisplayValue('Editor Flow');
+    fireEvent.change(input, { target: { value: `bad${'\0'}name` } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(updateWorkflow).not.toHaveBeenCalled();
+    // Exits edit mode; original title remains
+    await waitFor(() => {
+      expect(screen.getByText('Editor Flow')).toBeInTheDocument();
+    });
+  });
+
   it('shows not-found when workflow load fails', async () => {
     getWorkflow.mockResolvedValue({ ok: false, error: 'missing' });
     renderEditor();

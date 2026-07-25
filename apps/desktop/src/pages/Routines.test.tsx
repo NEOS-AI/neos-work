@@ -295,6 +295,50 @@ describe('Routines page', () => {
     });
   });
 
+  it('rejects control-char schedule/timezone on create and schedule edit', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    render(<Routines />);
+
+    // Create form: control-char schedule
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    await waitFor(() => expect(screen.getByText('New Routine')).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText('Daily digest'), {
+      target: { value: 'Valid Name' },
+    });
+    fireEvent.change(screen.getByDisplayValue('— Select workflow —'), { target: { value: 'wf-1' } });
+    fireEvent.change(screen.getByPlaceholderText('0 9 * * *'), {
+      target: { value: `0 9 * * *${'\0'}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(screen.getByText('Schedule is invalid')).toBeInTheDocument();
+    expect(createRoutine).not.toHaveBeenCalled();
+
+    // Create form: control-char timezone
+    fireEvent.change(screen.getByPlaceholderText('0 9 * * *'), {
+      target: { value: '0 9 * * *' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Asia/Seoul'), {
+      target: { value: `UTC${'\0'}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(screen.getByText('Timezone is invalid')).toBeInTheDocument();
+    expect(createRoutine).not.toHaveBeenCalled();
+
+    // Close modal and edit existing schedule
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByText('New Routine')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save schedule' })).toBeInTheDocument());
+
+    const scheduleInputs = screen.getAllByPlaceholderText('0 9 * * *');
+    fireEvent.change(scheduleInputs[0]!, { target: { value: `0 * * * *${'\0'}` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+    expect(screen.getByText('Schedule is invalid')).toBeInTheDocument();
+    expect(updateRoutine).not.toHaveBeenCalled();
+  });
+
   it('shows no-match filter empty state', async () => {
     const user = userEvent.setup();
     listRoutines.mockResolvedValue({ ok: true, data: routines });

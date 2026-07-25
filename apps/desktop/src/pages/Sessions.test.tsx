@@ -112,6 +112,14 @@ describe('Sessions page', () => {
     await user.clear(screen.getByPlaceholderText('Search…'));
     await user.type(screen.getByPlaceholderText('Search…'), 'zzzz');
     expect(screen.getByText('No matches')).toBeInTheDocument();
+
+    // Control-char search ignored → show all sessions
+    fireEvent.change(screen.getByPlaceholderText('Search…'), {
+      target: { value: `gemini${'\0'}` },
+    });
+    expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
+    expect(screen.getByText('New session')).toBeInTheDocument();
+    expect(screen.getByText('2/2')).toBeInTheDocument();
   });
 
   it('Escape clears search and closes new-session modal', async () => {
@@ -290,6 +298,12 @@ describe('Sessions page', () => {
 
     const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(chat).not.toHaveBeenCalled();
+    expect(runAgent).not.toHaveBeenCalled();
+
+    // Null-byte content blocked (align with session message API)
+    fireEvent.change(input, { target: { value: `hello${'\0'}world` } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(chat).not.toHaveBeenCalled();
     expect(runAgent).not.toHaveBeenCalled();

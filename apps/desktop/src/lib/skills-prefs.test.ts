@@ -36,4 +36,13 @@ describe('skills-prefs', () => {
     localStorage.setItem('neos-skills-category', 'bad\ncat');
     expect(loadSkillsCategoryFilter()).toBe('all');
   });
+
+  it('caps category length on save and rejects overlong stored values on load', () => {
+    saveSkillsCategoryFilter('c'.repeat(150));
+    expect(localStorage.getItem('neos-skills-category')?.length).toBe(100);
+    expect(loadSkillsCategoryFilter().length).toBe(100);
+
+    localStorage.setItem('neos-skills-category', 'c'.repeat(101));
+    expect(loadSkillsCategoryFilter()).toBe('all');
+  });
 });
