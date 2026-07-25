@@ -46,12 +46,33 @@ describe('MediaNode', () => {
     expect(result.error).toMatch(/No text/);
   });
 
-  it('rejects audio text with control characters', async () => {
-    const result = await MediaNode.execute(
-      ctx({ config: { mediaType: 'audio', text: 'hello\nworld' } }),
+  it('rejects audio text with null bytes (multi-line TTS allowed)', async () => {
+    const nullByte = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: `hello${'\0'}world` } }),
     );
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/control characters/i);
+    expect(nullByte.ok).toBe(false);
+    expect(nullByte.error).toMatch(/control characters/i);
+
+    // Multi-line speech input is valid (align with media route / generator)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, data: { filename: 'speech.mp3' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const multi = await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'audio', text: 'Hello\nWorld' },
+        settings: { SERVER_URL: 'http://localhost:3001' },
+      }),
+    );
+    expect(multi.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/media/audio'),
+      expect.objectContaining({
+        body: expect.stringContaining('Hello\\nWorld'),
+      }),
+    );
   });
 
   it('rejects unknown media type', async () => {

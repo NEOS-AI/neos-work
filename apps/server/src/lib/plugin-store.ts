@@ -161,12 +161,17 @@ export async function listPlugins(): Promise<PluginManifest[]> {
         const skillPath = path.join(dir, 'SKILL.md');
         try {
           const skillBody = await fs.readFile(skillPath, 'utf-8');
-          const trimmedSkill = skillBody.trim();
-          if (trimmedSkill) {
-            manifest.skillContent =
-              skillBody.length > PLUGIN_SKILL_CONTENT_MAX
-                ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
-                : skillBody;
+          // Null-byte skill files omitted (cannot inject into prompts safely)
+          if (/\0/.test(skillBody)) {
+            // skip corrupt SKILL.md
+          } else {
+            const trimmedSkill = skillBody.trim();
+            if (trimmedSkill) {
+              manifest.skillContent =
+                skillBody.length > PLUGIN_SKILL_CONTENT_MAX
+                  ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
+                  : skillBody;
+            }
           }
         } catch {
           // No SKILL.md — ok
@@ -245,7 +250,16 @@ export async function upgradeSkillToPlugin(options: {
   } catch {
     // ignore
   }
-  const firstLine = skillBody.split('\n').find((l) => l.trim() && !l.startsWith('---') && !l.startsWith('name:')) ?? '';
+  // Null-byte skill body cannot contribute title/description lines
+  if (/\0/.test(skillBody)) skillBody = '';
+  const firstLine =
+    skillBody
+      .split('\n')
+      .find((l) => {
+        if (/[\0\r\n]/.test(l)) return false;
+        const t = l.trim();
+        return t.length > 0 && !t.startsWith('---') && !t.startsWith('name:');
+      }) ?? '';
   let title =
     (typeof options.name === 'string' && !/[\0\r\n]/.test(options.name)
       ? options.name.trim()

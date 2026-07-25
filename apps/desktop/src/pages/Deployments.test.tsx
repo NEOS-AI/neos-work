@@ -79,6 +79,10 @@ describe('Deployments page', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('shows empty state', async () => {
     listDeployments.mockResolvedValue({ ok: true, data: [] });
     listWorkflows.mockResolvedValue({ ok: true, data: [] });
@@ -205,5 +209,111 @@ describe('Deployments page', () => {
     await waitFor(() => {
       expect(listDeployments).toHaveBeenCalledWith('wf-2');
     });
+  });
+
+  it('clears stale persisted workflow filter after workflows load', async () => {
+    localStorage.setItem('neos-deployments-workflow', 'wf-gone');
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+    // Stale id dropped from prefs + combobox returns to empty (all workflows)
+    await waitFor(() => {
+      expect(localStorage.getItem('neos-deployments-workflow') ?? '').toBe('');
+    });
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('');
+  });
+
+  it('persists status/provider filter chips and removes row after delete', async () => {
+    const user = userEvent.setup();
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    deleteDeployment.mockResolvedValue({ ok: true });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'success' }));
+    expect(localStorage.getItem('neos-deployments-status')).toBe('success');
+    expect(screen.getByText('my-app')).toBeInTheDocument();
+    expect(screen.queryByText('pages-site')).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'all' })[0]!);
+    await user.click(screen.getByRole('button', { name: 'cloudflare' }));
+    expect(localStorage.getItem('neos-deployments-provider')).toBe('cloudflare');
+    expect(screen.getByText('pages-site')).toBeInTheDocument();
+
+    // Delete remaining row
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(deleteDeployment).toHaveBeenCalledWith('d2');
+      expect(screen.queryByText('pages-site')).not.toBeInTheDocument();
+    });
+  });
+
+  it('refresh applies updated status and URL from provider poll', async () => {
+    const active = {
+      id: 'd-active',
+      workflowId: 'wf-1',
+      provider: 'vercel' as const,
+      status: 'deploying' as const,
+      projectName: 'shipping',
+      url: null as string | null,
+      deploymentId: 'dep-live',
+      createdAt: '2026-03-01T00:00:00.000Z',
+    };
+    const updated = {
+      ...active,
+      status: 'success' as const,
+      url: 'https://shipping.vercel.app',
+    };
+    listDeployments.mockResolvedValue({ ok: true, data: [active] });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    refreshDeployment.mockImplementation(async () => {
+      listDeployments.mockResolvedValue({ ok: true, data: [updated] });
+      return { ok: true as const, data: updated };
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('shipping')).toBeInTheDocument());
+    expect(screen.getAllByText('deploying').length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByTitle('Poll provider for latest status'));
+    await waitFor(() => expect(refreshDeployment).toHaveBeenCalledWith('d-active'));
+    await waitFor(() => {
+      expect(screen.getByTitle('https://shipping.vercel.app')).toBeInTheDocument();
+      expect(document.body.textContent).toContain('shipping.vercel.app');
+    });
+  });
+
+  it('shows default load error message when API omits error field', async () => {
+    listDeployments.mockResolvedValue({ ok: false });
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load deployments')).toBeInTheDocument();
+    });
+  });
+
+  it('does not remove row when delete fails', async () => {
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    deleteDeployment.mockResolvedValue({ ok: false as const, error: 'forbidden' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    await waitFor(() => expect(deleteDeployment).toHaveBeenCalledWith('d1'));
+    expect(screen.getByText('my-app')).toBeInTheDocument();
+    expect(screen.getByText('pages-site')).toBeInTheDocument();
+  });
+
+  it('shows no-match empty message when status filter excludes all rows', async () => {
+    const user = userEvent.setup();
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'pending' }));
+    expect(screen.getByText('No deployments match the current filters.')).toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
   });
 });

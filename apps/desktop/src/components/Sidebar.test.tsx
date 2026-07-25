@@ -56,6 +56,35 @@ describe('Sidebar', () => {
     expect(screen.getByText('nav.media')).toBeInTheDocument();
   });
 
+  it('renders full nav catalog including secondary destinations', () => {
+    renderSidebar();
+    for (const id of [
+      'dashboard',
+      'sessions',
+      'workflows',
+      'harnesses',
+      'blocks',
+      'templates',
+      'skills',
+      'memory',
+      'design-systems',
+      'routines',
+      'plugins',
+      'deployments',
+      'media',
+      'settings',
+    ]) {
+      expect(screen.getByText(`nav.${id}`)).toBeInTheDocument();
+    }
+    expect(screen.getByText('app.name')).toBeInTheDocument();
+    // NavLink hrefs
+    expect(screen.getByRole('link', { name: /nav\.deployments/i })).toHaveAttribute(
+      'href',
+      '/deployments',
+    );
+    expect(screen.getByRole('link', { name: /nav\.templates/i })).toHaveAttribute('href', '/templates');
+  });
+
   it('shows connected status, server url, and engine version', async () => {
     renderSidebar();
     expect(screen.getByText('connection.connected')).toBeInTheDocument();

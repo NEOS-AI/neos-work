@@ -75,6 +75,14 @@ describe('design-system-store', () => {
     expect(await updateDesignSystemContent(created!.id, `ok${'\0'}bad`)).toBe(false);
   });
 
+  it('treats on-disk DESIGN.md with null bytes as missing content', async () => {
+    const created = await createDesignSystem(NAME, 'Corrupt body');
+    expect(created).not.toBeNull();
+    // Bypass updateDesignSystemContent validation — simulate corrupt file on disk
+    await fs.writeFile(path.join(created!.path, 'DESIGN.md'), `# Brand${'\0'}x`, 'utf8');
+    expect(await getDesignSystemContent(created!.id)).toBeNull();
+  });
+
   it('returns null for invalid names', async () => {
     expect(await createDesignSystem('../evil')).toBeNull();
     expect(await createDesignSystem('')).toBeNull();

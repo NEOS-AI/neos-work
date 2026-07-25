@@ -134,6 +134,8 @@ export async function getDesignSystemContent(id: string): Promise<string | null>
   if (!ds) return null;
   try {
     const content = await fs.readFile(path.join(ds.path, 'DESIGN.md'), 'utf8');
+    // Null bytes break DESIGN CONTEXT injection / editors
+    if (/\0/.test(content)) return null;
     // Whitespace-only DESIGN.md is treated as missing (Agent skips empty DESIGN CONTEXT)
     return content.trim().length > 0 ? content : null;
   } catch {

@@ -161,8 +161,8 @@ export const MediaNode: ExecutableNode = {
 
     if (mediaType === 'audio') {
       const textRaw = resolveAudioTextRaw(config, inputs);
-      // Node-level: reject \0/\r/\n before trim (stricter than route TTS null-byte-only)
-      if (/[\0\r\n]/.test(textRaw)) {
+      // TTS allows multi-line text; only null-byte is rejected (align with media route / generator)
+      if (/\0/.test(textRaw)) {
         return {
           ok: false,
           output: null,

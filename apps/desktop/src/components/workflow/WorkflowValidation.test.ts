@@ -1589,6 +1589,96 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
     expect(nodeId.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
+  it('control-char labels/query/media/deploy content do not strip to valid values', () => {
+    // Control-char label → missing_node_label (not a blank-only miss)
+    const label = validateWorkflowDraft({
+      nodes: [{ id: 't', type: 'trigger', label: `Start${'\0'}`, config: {} }],
+      edges: [],
+      blocks: [],
+    });
+    expect(label.some((i) => i.code === 'missing_node_label' && i.nodeId === 't')).toBe(true);
+
+    // Leading control label must not collide with a clean duplicate
+    const dups = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Worker', config: {} },
+        { id: 'a', type: 'agent_coding', label: '\nWorker', config: { harnessId: 'h1' } },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(dups.some((i) => i.code === 'duplicate_node_label')).toBe(false);
+    expect(dups.some((i) => i.code === 'missing_node_label' && i.nodeId === 'a')).toBe(true);
+
+    // Control-char search query → missing without upstream
+    const search = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'w',
+          type: 'web_search',
+          label: 'Search',
+          config: { query: '\nhello' },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(search.some((i) => i.code === 'missing_search_query')).toBe(true);
+
+    // Control-char image prompt → missing media prompt
+    const mediaPrompt = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'Media',
+          config: { mediaType: 'image', prompt: '\na cat' },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(mediaPrompt.some((i) => i.code === 'missing_media_prompt')).toBe(true);
+
+    // Multi-line TTS text is valid content
+    const mediaAudio = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'TTS',
+          config: { mediaType: 'audio', text: 'Hello\nWorld' },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(mediaAudio.some((i) => i.code === 'missing_media_prompt')).toBe(false);
+
+    // Null-byte deploy content → missing without upstream
+    const deploy = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'Deploy',
+          config: {
+            provider: 'vercel',
+            projectName: 'app',
+            content: `html${'\0'}`,
+          },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(deploy.some((i) => i.code === 'missing_deploy_content')).toBe(true);
+  });
+
   it('also recognizes llmProvider for CLI harness skip', () => {
     const issues = validateWorkflowDraft({
       nodes: [

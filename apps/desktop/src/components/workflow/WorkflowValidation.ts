@@ -58,6 +58,24 @@ function endpoint(value: unknown): string {
   return value.trim();
 }
 
+/** Safe node label for duplicate / missing checks (control before trim). */
+function safeLabel(value: unknown): string {
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return '';
+  return value.trim();
+}
+
+/** Non-blank free-text field; control-char values treated as empty. */
+function hasNonBlankText(value: unknown): boolean {
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
+  return value.trim().length > 0;
+}
+
+/** Multi-line body (Slack/Discord/TTS): only null-byte is unsafe. */
+function hasNonBlankMultiline(value: unknown): boolean {
+  if (typeof value !== 'string' || /\0/.test(value)) return false;
+  return value.trim().length > 0;
+}
+
 function hasCycle(nodes: Array<{ id: string }>, edges: Array<{ source: string; target: string }>): boolean {
   const visiting = new Set<string>();
   const visited = new Set<string>();
@@ -141,9 +159,10 @@ export function validateWorkflowDraft(input: {
   const blockMap = new Map(input.blocks.map((block) => [block.id, block]));
 
   // Non-empty labels shared by multiple nodes (confusing in logs / history)
+  // Control-char labels skipped (check before trim so "\nSame" cannot collide with "Same")
   const labelsByNormalized = new Map<string, DraftNode[]>();
   for (const node of input.nodes) {
-    const key = node.label.trim().toLowerCase();
+    const key = safeLabel(node.label).toLowerCase();
     if (!key) continue;
     const group = labelsByNormalized.get(key) ?? [];
     group.push(node);
@@ -152,11 +171,12 @@ export function validateWorkflowDraft(input: {
   for (const group of labelsByNormalized.values()) {
     if (group.length < 2) continue;
     for (const node of group) {
+      const display = safeLabel(node.label) || node.label;
       issues.push({
         code: 'duplicate_node_label',
         severity: 'warning',
         nodeId: node.id,
-        message: `Node label "${node.label.trim()}" is used more than once.`,
+        message: `Node label "${display}" is used more than once.`,
       });
     }
   }
@@ -164,7 +184,8 @@ export function validateWorkflowDraft(input: {
   for (const node of input.nodes) {
     const config = node.config ?? {};
 
-    if (!node.label.trim()) {
+    // Control-char / blank label → missing (cannot strip "\nLabel" to a valid label)
+    if (!safeLabel(node.label)) {
       issues.push({
         code: 'missing_node_label',
         severity: 'error',
@@ -278,7 +299,8 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'web_search') {
-      const hasQuery = typeof config.query === 'string' && config.query.trim().length > 0;
+      // Control-char query → missing (check before trim; align with WebSearchNode)
+      const hasQuery = hasNonBlankText(config.query);
       const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       if (!hasQuery && !hasIncoming) {
         issues.push({
@@ -319,10 +341,11 @@ export function validateWorkflowDraft(input: {
         });
       }
       const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
+      // Multi-line templates OK; null-byte bodies do not count as content
       const hasTemplate =
-        (typeof config.textTemplate === 'string' && config.textTemplate.trim().length > 0)
-        || (typeof config.content === 'string' && config.content.trim().length > 0)
-        || (typeof config.text === 'string' && config.text.trim().length > 0);
+        hasNonBlankMultiline(config.textTemplate)
+        || hasNonBlankMultiline(config.content)
+        || hasNonBlankMultiline(config.text);
       if (!hasIncoming && !hasTemplate) {
         issues.push({
           code: 'missing_slack_content',
@@ -332,7 +355,7 @@ export function validateWorkflowDraft(input: {
         });
       }
       const slackBodies = [config.textTemplate, config.content, config.text]
-        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        .filter((v): v is string => typeof v === 'string' && !/\0/.test(v) && v.trim().length > 0);
       if (slackBodies.some((body) => body.length > SLACK_CONTENT_MAX_LENGTH)) {
         issues.push({
           code: 'slack_content_too_long',
@@ -347,9 +370,9 @@ export function validateWorkflowDraft(input: {
       const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       // NodeConfigPanel stores template as textTemplate (also accept content/text)
       const hasStatic =
-        (typeof config.textTemplate === 'string' && config.textTemplate.trim().length > 0)
-        || (typeof config.content === 'string' && config.content.trim().length > 0)
-        || (typeof config.text === 'string' && config.text.trim().length > 0);
+        hasNonBlankMultiline(config.textTemplate)
+        || hasNonBlankMultiline(config.content)
+        || hasNonBlankMultiline(config.text);
       if (!hasIncoming && !hasStatic) {
         issues.push({
           code: 'missing_discord_content',
@@ -360,7 +383,7 @@ export function validateWorkflowDraft(input: {
       }
       // Check all static fields (whitespace-only textTemplate must not hide a long content field)
       const staticBodies = [config.textTemplate, config.content, config.text]
-        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        .filter((v): v is string => typeof v === 'string' && !/\0/.test(v) && v.trim().length > 0);
       if (staticBodies.some((body) => body.length > DISCORD_CONTENT_MAX_LENGTH)) {
         issues.push({
           code: 'discord_content_too_long',
@@ -395,9 +418,16 @@ export function validateWorkflowDraft(input: {
       }
       const hasIncoming = input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       const isAudio = mediaType === 'audio';
-      // Image uses `prompt`; TTS audio uses `text` (NodeConfigPanel)
-      const promptBody = typeof config.prompt === 'string' ? config.prompt.trim() : '';
-      const textBody = typeof config.text === 'string' ? config.text.trim() : '';
+      // Image prompt: no control chars (align MediaNode / media-generator)
+      // TTS text: multi-line OK; only null-byte unsafe
+      const promptBody =
+        typeof config.prompt === 'string' && !/[\0\r\n]/.test(config.prompt)
+          ? config.prompt.trim()
+          : '';
+      const textBody =
+        typeof config.text === 'string' && !/\0/.test(config.text)
+          ? config.text.trim()
+          : '';
       const hasBody = isAudio ? textBody.length > 0 : promptBody.length > 0;
       if (!hasBody && !hasIncoming) {
         issues.push({
@@ -504,8 +534,9 @@ export function validateWorkflowDraft(input: {
             'Deploy project name should start with a letter or digit and use only letters, digits, hyphens, or underscores.',
         });
       }
+      // Multi-line HTML content OK; null-byte does not count as content
       const hasContent =
-        (typeof config.content === 'string' && config.content.trim().length > 0)
+        hasNonBlankMultiline(config.content)
         || input.edges.some((edge) => edgeTargetsNode(edge, node.id));
       if (!hasContent) {
         issues.push({

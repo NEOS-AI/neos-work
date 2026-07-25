@@ -190,4 +190,60 @@ describe('Dashboard page', () => {
     expect(screen.getByText('Remote')).toBeInTheDocument();
     expect(screen.queryByText('Local')).not.toBeInTheDocument();
   });
+
+  it('renders quick actions and status card links', async () => {
+    renderPage();
+    await waitFor(() => expect(health).toHaveBeenCalled());
+
+    expect(screen.getByText('Quick Actions')).toBeInTheDocument();
+    for (const title of [
+      'New Session',
+      'Templates',
+      'Blocks',
+      'Settings',
+    ]) {
+      expect(screen.getByText(title)).toBeInTheDocument();
+    }
+    // Labels that also appear on status cards exist at least once
+    expect(screen.getAllByText('Workflows').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Deployments').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Media').length).toBeGreaterThanOrEqual(1);
+
+    // Quick action link for Templates
+    const templateLinks = screen.getAllByRole('link').filter((a) => a.getAttribute('href') === '/templates');
+    expect(templateLinks.length).toBeGreaterThan(0);
+    const workflowLinks = screen.getAllByRole('link').filter((a) => a.getAttribute('href') === '/workflows');
+    expect(workflowLinks.length).toBeGreaterThan(0);
+    const sessionLinks = screen.getAllByRole('link').filter((a) => a.getAttribute('href') === '/sessions');
+    expect(sessionLinks.length).toBeGreaterThan(0);
+  });
+
+  it('shows em-dash engine mode when mode is null and includes server URL detail', async () => {
+    engineMode = null;
+    renderPage();
+    await waitFor(() => expect(health).toHaveBeenCalled());
+    expect(screen.getByText('—')).toBeInTheDocument();
+    // Engine detail includes server URL from useEngine
+    expect(screen.getByText(/127\.0\.0\.1:57286/)).toBeInTheDocument();
+  });
+
+  it('hides recent sections when lists are empty and shows plugin count on skills card', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    listRoutines.mockResolvedValue({ ok: true, data: [] });
+    listDeployments.mockResolvedValue({ ok: true, data: [] });
+    listPlugins.mockResolvedValue({ ok: true, data: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] });
+    listSkills.mockResolvedValue({ ok: true, data: [{ id: 's1' }] });
+    renderPage();
+    await waitFor(() => expect(listPlugins).toHaveBeenCalled());
+    expect(screen.queryByText('Nightly Report')).not.toBeInTheDocument();
+    expect(screen.queryByText('neos-preview')).not.toBeInTheDocument();
+    expect(screen.getByText('3 plugin(s)')).toBeInTheDocument();
+  });
+
+  it('passes listDeployments limit of 200 for dashboard recents', async () => {
+    renderPage();
+    await waitFor(() => expect(listDeployments).toHaveBeenCalled());
+    expect(listDeployments).toHaveBeenCalledWith(undefined, 200);
+    expect(listMediaFiles).toHaveBeenCalledWith(200);
+  });
 });
