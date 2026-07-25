@@ -164,4 +164,23 @@ describe('Sidebar', () => {
     expect(screen.getByText('connection.connected')).toBeInTheDocument();
     expect(screen.queryByText(/Engine v/)).not.toBeInTheDocument();
   });
+
+  it('scrubs control-char engine version and remote URL', async () => {
+    health.mockResolvedValue({ status: 'ok', version: '0.3.54' + String.fromCharCode(10) + 'evil' });
+    engine = {
+      status: 'connected',
+      mode: 'client',
+      serverUrl: 'https://remote.example' + String.fromCharCode(0) + '.app',
+      disconnect: vi.fn(),
+      client: { health },
+    };
+    renderSidebar();
+    await waitFor(() => expect(health).toHaveBeenCalled());
+    // null-byte stripped from URL display
+    expect(screen.getByText('https://remote.example.app')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Engine v0\.3\.54 evil · client/)).toBeInTheDocument();
+    });
+  });
+
 });

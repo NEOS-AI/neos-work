@@ -33,6 +33,7 @@ import {
   saveLayoutDirection,
   type EditorRightPanelTab,
 } from '../lib/layout-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import {
   buildWorkflowDraft,
   toReactFlowEdges,
@@ -500,7 +501,7 @@ export function WorkflowEditor() {
               }}
               title={t('workflow.rename')}
             >
-              {workflow.name}
+              {scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 }) || 'Workflow'}
             </span>
           )}
           {isDirty && (

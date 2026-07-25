@@ -337,5 +337,43 @@ describe('PipelineRunner', () => {
     });
   });
 
+  it('scrubs field labels/placeholders and pipeline failed error text', async () => {
+    const user = userEvent.setup();
+    const dirtyPlugin = {
+      id: 'p1',
+      name: 'Clean',
+      version: '1',
+      description: 'd',
+      skillDirName: 'p',
+      pipeline: [],
+      inputFields: [
+        {
+          key: 'goal',
+          label: `Goal${'\n'}X`,
+          type: 'text',
+          placeholder: `type${'\0'}here`,
+        },
+      ],
+    };
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-1') };
+    });
+    render(<PipelineRunner plugin={dirtyPlugin as never} onClose={() => {}} />);
+    // label collapsed; placeholder null-byte stripped
+    expect(screen.getByText(/Goal X/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('typehere')).toBeInTheDocument();
 
+    await user.type(screen.getByPlaceholderText('typehere'), 'go');
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-1' });
+      onEvent?.({ type: 'pipeline.failed', error: `boom${'\n'}now${'\0'}!` });
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Error: boom now!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

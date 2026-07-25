@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { AppMode } from '../hooks/useEngine.js';
 import { useEngine } from '../hooks/useEngine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { loadRemoteUrl, saveRemoteUrl } from '../lib/mode-prefs.js';
 
 export function ModeSelection() {
@@ -62,7 +63,7 @@ export function ModeSelection() {
           {status === 'connecting'
             ? t('connection.connecting')
             : error
-              ? error
+              ? scrubDisplayText(error, { collapseLines: true, maxChars: 300 })
               : t('connection.disconnected')}
         </span>
       </div>

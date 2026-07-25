@@ -171,4 +171,15 @@ describe('ModeSelection', () => {
     expect((screen.getByPlaceholderText('Bearer token (optional)') as HTMLInputElement).value).toBe('busy');
   });
 
+
+  it('scrubs control-char error message', () => {
+    engineState = {
+      status: 'error',
+      error: 'boom' + String.fromCharCode(0) + 'err' + String.fromCharCode(10) + 'next',
+      connect: vi.fn(),
+    };
+    render(<ModeSelection />);
+    expect(screen.getByText(/boomerr next/)).toBeInTheDocument();
+  });
+
 });

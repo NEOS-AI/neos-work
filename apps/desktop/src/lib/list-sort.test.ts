@@ -12,6 +12,20 @@ describe('sortByName', () => {
   it('handles empty list', () => {
     expect(sortByName([])).toEqual([]);
   });
+
+  it('sorts with null-byte and multi-line names via scrubbed keys', () => {
+    const items = [
+      { name: 'b' + String.fromCharCode(0) + 'eta' },
+      { name: 'Alpha' },
+      { name: 'c' + String.fromCharCode(10) + 'amma' },
+    ];
+    // beta, Alpha, c amma → Alpha, beta, c amma
+    expect(sortByName(items).map((i) => i.name.replace(/\0/g, '').replace(/\n/g, ' '))).toEqual([
+      'Alpha',
+      'beta',
+      'c amma',
+    ]);
+  });
 });
 
 describe('sortByDateDesc', () => {

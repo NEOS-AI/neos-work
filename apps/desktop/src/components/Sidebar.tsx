@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 
 const NAV_ITEMS = [
   { id: 'dashboard', path: '/', icon: DashboardIcon },
@@ -110,11 +111,14 @@ export function Sidebar() {
           </span>
         </div>
         {serverUrl && (
-          <p className="mt-1 truncate text-xs" style={{ color: 'var(--text-muted)' }}>{serverUrl}</p>
+          <p className="mt-1 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+            {scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })}
+          </p>
         )}
         {engineVersion && (
           <p className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-            Engine v{engineVersion}{mode ? ` · ${mode}` : ''}
+            Engine v{scrubDisplayText(engineVersion, { collapseLines: true, maxChars: 40 })}
+            {mode ? ` · ${mode}` : ''}
           </p>
         )}
         {status === 'connected' && (

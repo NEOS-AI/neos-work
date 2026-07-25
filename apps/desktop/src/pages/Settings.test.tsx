@@ -735,4 +735,48 @@ describe('Settings page', () => {
       expect(saveSetting).toHaveBeenCalledWith('apiKey.google', 'AIza-test-key');
     });
   });
+
+  it('scrubs control-char MCP server name and CLI agent path display', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'm1',
+          name: 'Srv' + String.fromCharCode(0) + 'X',
+          transport: 'http',
+          url: 'https://mcp.example' + String.fromCharCode(10) + '/v1',
+          enabled: true,
+        },
+      ],
+    });
+    listCliAgents.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'cli-claude',
+          name: 'Claude' + String.fromCharCode(10) + 'Code',
+          path: '/usr/bin/claude' + String.fromCharCode(0),
+          version: '1.0' + String.fromCharCode(10) + 'x',
+          available: true,
+        },
+      ],
+    });
+    health.mockResolvedValue({ status: 'ok', version: '0.3.1' + String.fromCharCode(10) + 'z', uptime: 10 });
+    engine.status = 'connected';
+    engine.serverUrl = 'http://127.0.0.1:1' + String.fromCharCode(0);
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('SrvX')).toBeInTheDocument());
+    // URL newline collapsed to space
+    expect(document.body.textContent).toMatch(/mcp\.example/);
+    await waitFor(() => {
+      // Scrubbed CLI path (null-byte stripped)
+      expect(document.body.textContent).toContain('/usr/bin/claude');
+      expect(document.body.textContent).toMatch(/1\.0 x/);
+    });
+    // Engine version newline collapsed
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/v0\.3\.1 z/);
+    });
+  });
+
 });

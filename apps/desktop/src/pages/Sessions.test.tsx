@@ -675,4 +675,78 @@ describe('Sessions page', () => {
     await waitFor(() => expect(screen.getByText('ChatX')).toBeInTheDocument());
   });
 
+  it('scrubs control chars from agent step description, toolName, healing, and error', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    const dirtyA = {
+      id: 'step-a',
+      description: `Inspect${'\0'}repo`,
+      toolName: `list${'\n'}dir`,
+      status: 'pending' as const,
+      type: 'plan' as const,
+      index: 0,
+    };
+    const dirtyB = {
+      id: 'step-b',
+      description: `Fix${'\n'}bug`,
+      toolName: 'write_file',
+      status: 'pending' as const,
+      type: 'plan' as const,
+      index: 1,
+    };
+
+    runAgent.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'plan', steps: [dirtyA, dirtyB] };
+        yield {
+          type: 'step_healing',
+          step: { ...dirtyA, status: 'running' },
+          strategy: 'retry',
+        };
+        // healingStatus may be set on the step by the UI from strategy — also send on step
+        yield {
+          type: 'step_complete',
+          step: {
+            ...dirtyA,
+            status: 'completed',
+            healingStatus: `retrying${'\0'}now`,
+          },
+        };
+        yield {
+          type: 'step_error',
+          step: {
+            ...dirtyB,
+            status: 'error',
+            error: `write${'\n'}failed${'\0'}!`,
+          },
+        };
+        yield { type: 'text', content: 'done' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Agent/i }));
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'plan it' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Inspectrepo')).toBeInTheDocument();
+      expect(screen.getByText(/list dir/)).toBeInTheDocument();
+      expect(screen.getByText(/write failed!/)).toBeInTheDocument();
+      expect(screen.getByText('done')).toBeInTheDocument();
+    });
+    // healing status if rendered
+    const body = document.body.textContent ?? '';
+    expect(body).not.toContain('\0');
+    if (body.includes('retrying')) {
+      expect(body).toMatch(/retryingnow|retrying now/);
+    }
+  });
+
 });

@@ -148,4 +148,41 @@ describe('DesignSystemEditor page', () => {
     window.removeEventListener('keydown', stop, true);
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('scrubs control-char design system name in breadcrumb', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds-1',
+          name: `Brand${'\0'}X${'\n'}Y`,
+          description: '',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    renderEditor();
+    await waitFor(() => {
+      // null-byte stripped; newline collapsed for breadcrumb
+      expect(screen.getByText(/BrandX Y/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('scrubs control chars in save failure toast text', async () => {
+    saveDesignSystemContent.mockResolvedValue({
+      ok: false,
+      error: `disk${'\n'}full${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      // saveMessage is "Save failed: disk\nfull\0!" then scrub collapses newlines / strips null
+      expect(screen.getByText(/Save failed: disk full!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

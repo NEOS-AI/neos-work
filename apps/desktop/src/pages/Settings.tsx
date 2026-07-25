@@ -5,6 +5,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import { useTheme } from '../hooks/useTheme.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
 import type { McpServerData } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
 
 export function Settings() {
@@ -336,14 +337,22 @@ function EngineStatusSection() {
           {mode === 'host' ? 'Local' : mode === 'client' ? 'Remote' : '—'}
         </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Version</dt>
-        <dd style={{ color: 'var(--text-primary)' }}>{version ? `v${version}` : '—'}</dd>
+        <dd style={{ color: 'var(--text-primary)' }}>
+          {version
+            ? `v${scrubDisplayText(version, { collapseLines: true, maxChars: 40 })}`
+            : '—'}
+        </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Uptime</dt>
         <dd style={{ color: 'var(--text-primary)' }}>{uptimeLabel || '—'}</dd>
         {serverUrl && (
           <>
             <dt style={{ color: 'var(--text-muted)' }}>URL</dt>
-            <dd className="truncate" style={{ color: 'var(--text-primary)' }} title={serverUrl}>
-              {serverUrl}
+            <dd
+              className="truncate"
+              style={{ color: 'var(--text-primary)' }}
+              title={scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })}
+            >
+              {scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })}
             </dd>
           </>
         )}
@@ -953,13 +962,13 @@ function McpServersSection() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {server.name}
+                        {scrubDisplayText(server.name, { collapseLines: true, maxChars: 200 }) || 'MCP'}
                       </span>
                       <span
                         className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono"
                         style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
                       >
-                        {server.transport}
+                        {scrubDisplayText(server.transport, { collapseLines: true, maxChars: 20 }) || '—'}
                       </span>
                       {/* OAuth status badge */}
                       {oauthSt && (
@@ -976,8 +985,11 @@ function McpServersSection() {
                     </div>
                     <p className="mt-0.5 truncate text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
                       {server.transport === 'stdio'
-                        ? `${server.command} ${(server.args ?? []).join(' ')}`
-                        : server.url}
+                        ? scrubDisplayText(
+                            `${server.command ?? ''} ${(server.args ?? []).filter((a) => typeof a === 'string' && !/[\0\r\n]/.test(a)).join(' ')}`,
+                            { collapseLines: true, maxChars: 300 },
+                          )
+                        : scrubDisplayText(server.url, { collapseLines: true, maxChars: 300 })}
                     </p>
                   </div>
                   <div className="ml-2 flex items-center gap-2">
@@ -1110,18 +1122,21 @@ function CliAgentsSection() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {agent.name}
+                    {scrubDisplayText(agent.name, { collapseLines: true, maxChars: 120 }) || 'CLI'}
                   </span>
                   <span className="rounded bg-emerald-900/50 px-1.5 py-0.5 text-[10px] text-emerald-400">
                     detected
                   </span>
                 </div>
                 <p className="mt-0.5 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  {agent.path}{agent.version ? ` · ${agent.version}` : ''}
+                  {scrubDisplayText(agent.path, { collapseLines: true, maxChars: 200 })}
+                  {agent.version
+                    ? ` · ${scrubDisplayText(agent.version, { collapseLines: true, maxChars: 40 })}`
+                    : ''}
                 </p>
               </div>
               <span className="rounded px-2 py-0.5 font-mono text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
-                {agent.id}
+                {scrubDisplayText(agent.id, { collapseLines: true, maxChars: 40 }) || '—'}
               </span>
             </div>
           ))}
