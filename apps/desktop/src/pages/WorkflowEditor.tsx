@@ -853,6 +853,12 @@ export function WorkflowEditor() {
                 style={{ backgroundColor: '#10b981' }}
                 onClick={async () => {
                   if (!client || !workflow) return;
+                  // Control-char name/schedule rejected before trim (align with routines API)
+                  if (/[\0\r\n]/.test(scheduleName) || /[\0\r\n]/.test(scheduleCron)) {
+                    alert('Name or schedule contains invalid control characters');
+                    return;
+                  }
+                  if (!scheduleName.trim() || !scheduleCron.trim()) return;
                   setScheduleBusy(true);
                   const res = await client.createRoutine({
                     name: scheduleName.trim(),

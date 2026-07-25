@@ -153,6 +153,35 @@ describe('Memory page', () => {
     expect(createMemory).not.toHaveBeenCalled();
   });
 
+  it('rejects control-char name and null-byte content without calling API', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ memory\.new/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('My context')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('My context'), {
+      target: { value: `bad${'\0'}name` },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Markdown content...'), {
+      target: { value: 'ok content' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(screen.getByText('Name is invalid')).toBeInTheDocument();
+    expect(createMemory).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText('My context'), {
+      target: { value: 'Valid Name' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Markdown content...'), {
+      target: { value: `bad${'\0'}content` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(screen.getByText('Content is invalid')).toBeInTheDocument();
+    expect(createMemory).not.toHaveBeenCalled();
+  });
+
   it('toggles and deletes items', async () => {
     listMemories.mockResolvedValue({ ok: true, data: items });
     toggleMemory.mockResolvedValue({ ok: true });

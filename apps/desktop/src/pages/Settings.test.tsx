@@ -20,29 +20,33 @@ const setAuthToken = vi.fn();
 const setTheme = vi.fn();
 const changeLanguage = vi.fn();
 
+const clientApi = {
+  getSettings,
+  getSetting,
+  saveSetting,
+  verifyApiKey,
+  health,
+  getMediaConfig,
+  listMcpServers,
+  getMcpOAuthStatus,
+  createMcpServer,
+  toggleMcpServer,
+  deleteMcpServer,
+  revokeMcpOAuth,
+  startMcpOAuth,
+  listCliAgents,
+  setAuthToken,
+};
+
+let engine = {
+  status: 'connected' as string,
+  mode: 'host' as string | null,
+  serverUrl: 'http://127.0.0.1:57286' as string | null,
+  client: clientApi as typeof clientApi | null,
+};
+
 vi.mock('../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    status: 'connected',
-    mode: 'host',
-    serverUrl: 'http://127.0.0.1:57286',
-    client: {
-      getSettings,
-      getSetting,
-      saveSetting,
-      verifyApiKey,
-      health,
-      getMediaConfig,
-      listMcpServers,
-      getMcpOAuthStatus,
-      createMcpServer,
-      toggleMcpServer,
-      deleteMcpServer,
-      revokeMcpOAuth,
-      startMcpOAuth,
-      listCliAgents,
-      setAuthToken,
-    },
-  }),
+  useEngine: () => engine,
 }));
 
 vi.mock('../hooks/useTheme.js', () => ({
@@ -96,6 +100,12 @@ describe('Settings page', () => {
     changeLanguage.mockReset();
     setAuthToken.mockReset();
     sessionStorage.clear();
+    engine = {
+      status: 'connected',
+      mode: 'host',
+      serverUrl: 'http://127.0.0.1:57286',
+      client: clientApi,
+    };
   });
 
   it('renders sections and engine/media status', async () => {
@@ -343,6 +353,43 @@ describe('Settings page', () => {
     expect(screen.queryByText('Dup')).not.toBeInTheDocument();
   });
 
+  it('rejects control-char MCP name/command/url without calling API', async () => {
+    listMcpServers.mockResolvedValue({ ok: true, data: [] });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText(/No MCP servers configured/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('Server name')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Server name'), {
+      target: { value: `bad${'\0'}name` },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Command (e.g. npx)'), {
+      target: { value: 'npx' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
+    expect(createMcpServer).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText('Server name'), {
+      target: { value: 'ok-name' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Command (e.g. npx)'), {
+      target: { value: `npx${'\0'}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
+    expect(createMcpServer).not.toHaveBeenCalled();
+
+    // HTTP transport: control-char URL rejected
+    fireEvent.click(screen.getByRole('button', { name: 'http' }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/https?:\/\//i)).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/https?:\/\//i), {
+      target: { value: `http://x${'\0'}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
+    expect(createMcpServer).not.toHaveBeenCalled();
+  });
+
   it('shows invalid verify status and not-configured media', async () => {
     const user = userEvent.setup();
     verifyApiKey.mockResolvedValue({ ok: true, data: { valid: false } });
@@ -452,6 +499,83 @@ describe('Settings page', () => {
     fireEvent.click(ollamaSave!);
     await waitFor(() => {
       expect(saveSetting).toHaveBeenCalledWith('OLLAMA_BASE_URL', 'http://127.0.0.1:11434');
+    });
+  });
+
+  it('shows disconnected and connecting engine status labels', async () => {
+    engine = {
+      status: 'disconnected',
+      mode: null,
+      serverUrl: null,
+      client: null,
+    };
+    const { unmount } = render(<Settings />);
+    expect(screen.getByText('Disconnected')).toBeInTheDocument();
+    expect(health).not.toHaveBeenCalled();
+    unmount();
+
+    engine = {
+      status: 'connecting',
+      mode: 'client',
+      serverUrl: 'http://remote.example',
+      client: null,
+    };
+    render(<Settings />);
+    expect(screen.getByText('Connecting…')).toBeInTheDocument();
+    expect(screen.getByText('Remote')).toBeInTheDocument();
+  });
+
+  it('saves Tavily and Slack workflow keys', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByPlaceholderText('tvly-...')).toBeInTheDocument());
+
+    const tavily = screen.getByPlaceholderText('tvly-...');
+    await user.type(tavily, 'tvly-test-key');
+    const tavilyRow = tavily.closest('div')!.parentElement!;
+    const tavilySave = Array.from(tavilyRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    fireEvent.click(tavilySave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('TAVILY_API_KEY', 'tvly-test-key');
+    });
+
+    const slack = screen.getByPlaceholderText('xoxb-...');
+    await user.type(slack, 'xoxb-test-token');
+    const slackRow = slack.closest('div')!.parentElement!;
+    const slackSave = Array.from(slackRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    fireEvent.click(slackSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('SLACK_BOT_TOKEN', 'xoxb-test-token');
+    });
+  });
+
+  it('verifies Google API key and shows verified status then saves', async () => {
+    const user = userEvent.setup();
+    verifyApiKey.mockResolvedValue({ ok: true, data: { valid: true } });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByPlaceholderText('AIza...')).toBeInTheDocument());
+
+    await user.type(screen.getByPlaceholderText('AIza...'), 'AIza-test-key');
+    // Google verify is the second verify button (anthropic first, google second, openai third)
+    const verifyButtons = screen.getAllByRole('button', { name: 'common:action.verify' });
+    expect(verifyButtons.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(verifyButtons[1]!);
+    await waitFor(() => {
+      expect(verifyApiKey).toHaveBeenCalledWith('google', 'AIza-test-key');
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText('settings:apiKeys.verified').length).toBeGreaterThan(0);
+    });
+
+    const saveButtons = screen.getAllByRole('button', { name: 'common:action.save' });
+    // Google save is second among provider key saves
+    fireEvent.click(saveButtons[1]!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('apiKey.google', 'AIza-test-key');
     });
   });
 });

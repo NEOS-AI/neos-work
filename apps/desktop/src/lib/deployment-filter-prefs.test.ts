@@ -89,6 +89,10 @@ describe('deployment-filter-prefs', () => {
     saveDeploymentWorkflowFilter('w'.repeat(101));
     expect(loadDeploymentWorkflowFilter()).toBe('');
     expect(localStorage.getItem('neos-deployments-workflow')).toBeNull();
+
+    // Pre-existing overlong storage ignored on load
+    localStorage.setItem('neos-deployments-workflow', 'w'.repeat(101));
+    expect(loadDeploymentWorkflowFilter()).toBe('');
   });
 
   it('load returns empty when localStorage throws', () => {

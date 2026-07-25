@@ -259,6 +259,35 @@ describe('WorkflowEditor page', () => {
     expect(screen.getByText('Schedule this workflow')).toBeInTheDocument();
   });
 
+  it('rejects control-char schedule name/cron without calling API', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Schedule/i }));
+    await waitFor(() => expect(screen.getByText('Create routine')).toBeInTheDocument());
+
+    // Name field is prefilled; inject control char
+    const nameInput = screen.getByDisplayValue('Editor Flow schedule');
+    fireEvent.change(nameInput, { target: { value: `bad${'\0'}schedule` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+
+    expect(createRoutine).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith(
+      'Name or schedule contains invalid control characters',
+    );
+
+    // Valid name + control-char cron also rejected
+    fireEvent.change(nameInput, { target: { value: 'Valid schedule' } });
+    fireEvent.change(screen.getByPlaceholderText('0 9 * * *'), {
+      target: { value: `0 9 * * *${'\0'}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+    expect(createRoutine).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith(
+      'Name or schedule contains invalid control characters',
+    );
+  });
+
   it('opens shortcuts help, history panel, and run dialog', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());

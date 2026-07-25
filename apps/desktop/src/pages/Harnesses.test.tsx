@@ -120,6 +120,31 @@ describe('Harnesses page', () => {
     });
   });
 
+  it('rejects control-char id/name without calling API', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: [] });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('harness.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'harness.new' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('my_harness_id')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_harness_id'), {
+      target: { value: `bad${'\0'}id` },
+    });
+    const textareas = document.querySelectorAll('textarea');
+    if (textareas[0]) fireEvent.change(textareas[0], { target: { value: 'System prompt' } });
+    // fill other textboxes with a valid-looking name
+    for (const input of screen.getAllByRole('textbox')) {
+      const el = input as HTMLInputElement | HTMLTextAreaElement;
+      if (el.placeholder === 'my_harness_id') continue;
+      if (el.tagName === 'TEXTAREA') continue;
+      if (!el.value) fireEvent.change(el, { target: { value: 'My Harness' } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
+    expect(createHarness).not.toHaveBeenCalled();
+    expect(screen.getByText('harness.validationError')).toBeInTheDocument();
+  });
+
   it('deletes custom harness but not built-in', async () => {
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
     deleteHarness.mockResolvedValue({ ok: true });
@@ -203,5 +228,94 @@ describe('Harnesses page', () => {
     await user.type(screen.getByPlaceholderText('Search harnesses…'), 'zzzz-none');
     expect(screen.queryByText('Custom Analyst')).not.toBeInTheDocument();
     expect(screen.getByText('0/2')).toBeInTheDocument();
+    expect(screen.getByText('No harnesses match filters')).toBeInTheDocument();
+  });
+
+  it('rejects blank required fields and null-byte prompt without calling API', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: [] });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('harness.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'harness.new' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('my_harness_id')).toBeInTheDocument());
+
+    // Empty save → validation error
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
+    expect(createHarness).not.toHaveBeenCalled();
+    expect(screen.getByText('harness.validationError')).toBeInTheDocument();
+
+    // Fill id/name but null-byte system prompt
+    fireEvent.change(screen.getByPlaceholderText('my_harness_id'), { target: { value: 'ok_id' } });
+    for (const input of screen.getAllByRole('textbox')) {
+      const el = input as HTMLInputElement | HTMLTextAreaElement;
+      if (el.placeholder === 'my_harness_id') continue;
+      if (el.tagName === 'TEXTAREA') {
+        fireEvent.change(el, { target: { value: `prompt${'\0'}bad` } });
+      } else if (!el.value) {
+        fireEvent.change(el, { target: { value: 'Named' } });
+      }
+    }
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
+    expect(createHarness).not.toHaveBeenCalled();
+    expect(screen.getByText('harness.validationError')).toBeInTheDocument();
+  });
+
+  it('surfaces createHarness errors and filters control-char tool tokens', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: [] });
+    createHarness.mockRejectedValue(new Error('id already exists'));
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('harness.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'harness.new' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('my_harness_id')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_harness_id'), { target: { value: 'dup_h' } });
+    for (const input of screen.getAllByRole('textbox')) {
+      const el = input as HTMLInputElement | HTMLTextAreaElement;
+      if (el.placeholder === 'my_harness_id') continue;
+      if (el.tagName === 'TEXTAREA') {
+        fireEvent.change(el, { target: { value: 'A valid system prompt' } });
+      } else if (!el.value && el.placeholder !== 'web_search, read_file, ...') {
+        fireEvent.change(el, { target: { value: 'Dup Harness' } });
+      }
+    }
+    // Null-byte tool tokens are dropped; newline-only tokens are also filtered when present in state
+    const toolsInput = screen.getByPlaceholderText('web_search, read_file, ...');
+    fireEvent.change(toolsInput, {
+      target: { value: `web_search, bad${'\0'}tool, read_file, ${'\n'}only` },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
+    await waitFor(() => {
+      expect(createHarness).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'dup_h',
+          allowedTools: ['web_search', 'read_file'],
+        }),
+      );
+    });
+    expect(await screen.findByText('id already exists')).toBeInTheDocument();
+  });
+
+  it('shows overflow tool count when more than four tools', async () => {
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'many-tools',
+          name: 'Many Tools',
+          domain: 'general' as const,
+          description: 'lots',
+          systemPrompt: 'p',
+          allowedTools: ['a', 'b', 'c', 'd', 'e', 'f'],
+          isBuiltIn: false,
+        },
+      ],
+    });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Many Tools')).toBeInTheDocument());
+    expect(screen.getByText('+2')).toBeInTheDocument();
+    expect(screen.getByText('a')).toBeInTheDocument();
+    expect(screen.queryByText('e')).not.toBeInTheDocument();
   });
 });

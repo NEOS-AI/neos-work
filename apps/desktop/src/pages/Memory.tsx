@@ -54,6 +54,16 @@ function MemoryModal({ item, onSave, onClose }: MemoryModalProps) {
   }, [onClose]);
 
   const handleSave = async () => {
+    // Control-char name rejected before trim (align with memory API)
+    if (/[\0\r\n]/.test(name)) {
+      setError('Name is invalid');
+      return;
+    }
+    // Null-byte content rejected (multi-line markdown OK)
+    if (/\0/.test(content)) {
+      setError('Content is invalid');
+      return;
+    }
     if (!name.trim() || !content.trim()) {
       setError('Name and content are required');
       return;

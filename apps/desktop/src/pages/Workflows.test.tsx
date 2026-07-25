@@ -167,6 +167,23 @@ describe('Workflows page', () => {
     });
   });
 
+  it('rejects control-char workflow name without calling API', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('workflow.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: /workflow\.new/i })[0]!);
+    const nameInput = await waitFor(() => {
+      const inputs = document.querySelectorAll('input[type="text"]');
+      expect(inputs.length).toBeGreaterThan(0);
+      return inputs[0] as HTMLInputElement;
+    });
+    fireEvent.change(nameInput, { target: { value: `bad${'\0'}name` } });
+    const form = nameInput.closest('form');
+    if (form) fireEvent.submit(form);
+    expect(createWorkflow).not.toHaveBeenCalled();
+  });
+
   it('deletes a workflow after confirm', async () => {
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
     deleteWorkflow.mockResolvedValue({ ok: true });

@@ -120,6 +120,30 @@ describe('DesignSystems page', () => {
     });
   });
 
+  it('rejects control-char name and description without calling API', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
+    fireEvent.change(screen.getByPlaceholderText('my-design-system'), {
+      target: { value: `bad${'\0'}name` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(screen.getByText('Name contains invalid control characters')).toBeInTheDocument();
+    expect(createDesignSystem).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText('my-design-system'), {
+      target: { value: 'ValidDS' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Brand guidelines and component styles'), {
+      target: { value: `desc${'\0'}line` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(screen.getByText('Description contains invalid control characters')).toBeInTheDocument();
+    expect(createDesignSystem).not.toHaveBeenCalled();
+  });
+
   it('deletes after confirm', async () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: systems });
     deleteDesignSystem.mockResolvedValue({ ok: true });

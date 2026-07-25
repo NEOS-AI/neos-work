@@ -81,7 +81,10 @@ export function loadDeploymentWorkflowFilter(): string {
     const raw = localStorage.getItem(WORKFLOW_KEY) ?? '';
     // Control-char stored values ignored (check before trim)
     if (!raw || /[\0\r\n]/.test(raw)) return '';
-    return raw.trim();
+    const id = raw.trim();
+    // Align with save cap (overlong → treat as all workflows)
+    if (!id || id.length > 100) return '';
+    return id;
   } catch {
     return '';
   }

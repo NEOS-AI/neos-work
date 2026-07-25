@@ -139,6 +139,38 @@ describe('Blocks page', () => {
     });
   });
 
+  it('rejects control-char name/id without calling API', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: [] });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Block' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New Block' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_custom_block'), {
+      target: { value: 'valid_id' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('My Custom Block'), {
+      target: { value: `bad${'\0'}name` },
+    });
+    for (const ta of Array.from(document.querySelectorAll('textarea'))) {
+      fireEvent.change(ta, { target: { value: 'Prompt body' } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name or ID contains invalid control characters')).toBeInTheDocument();
+    expect(createBlock).not.toHaveBeenCalled();
+
+    // Control-char id also rejected
+    fireEvent.change(screen.getByPlaceholderText('my_custom_block'), {
+      target: { value: `bad${'\0'}id` },
+    });
+    fireEvent.change(screen.getByPlaceholderText('My Custom Block'), {
+      target: { value: 'Valid Name' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name or ID contains invalid control characters')).toBeInTheDocument();
+    expect(createBlock).not.toHaveBeenCalled();
+  });
+
   it('requires id, name, and prompt template when creating a prompt block', async () => {
     listBlocks.mockResolvedValue({ ok: true, data: [] });
     render(<Blocks />);
@@ -239,5 +271,86 @@ describe('Blocks page', () => {
         expect.objectContaining({ name: 'Custom Block Renamed' }),
       );
     });
+  });
+
+  it('rejects control-char category and null-byte description without calling API', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: [] });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Block' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New Block' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_custom_block'), { target: { value: 'ok_block' } });
+    fireEvent.change(screen.getByPlaceholderText('My Custom Block'), { target: { value: 'Ok Name' } });
+    // Use null byte — single-line inputs may strip bare newlines
+    fireEvent.change(screen.getByPlaceholderText('custom'), { target: { value: `cat${'\0'}bad` } });
+    fireEvent.change(screen.getByPlaceholderText(/You are a helpful assistant/), {
+      target: { value: 'Prompt body' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Category contains invalid control characters')).toBeInTheDocument();
+    expect(createBlock).not.toHaveBeenCalled();
+
+    // Fix category, put null byte in description
+    fireEvent.change(screen.getByPlaceholderText('custom'), { target: { value: 'custom' } });
+    fireEvent.change(screen.getByPlaceholderText('What does this block do?'), {
+      target: { value: `desc${'\0'}bad` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Fields contain invalid control characters')).toBeInTheDocument();
+    expect(createBlock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces createBlock errors in the modal', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: [] });
+    createBlock.mockRejectedValue(new Error('duplicate block id'));
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Block' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New Block' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_custom_block'), { target: { value: 'dup_block' } });
+    fireEvent.change(screen.getByPlaceholderText('My Custom Block'), { target: { value: 'Dup' } });
+    fireEvent.change(screen.getByPlaceholderText(/You are a helpful assistant/), {
+      target: { value: 'Prompt {{x}}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(createBlock).toHaveBeenCalled());
+    expect(await screen.findByText('duplicate block id')).toBeInTheDocument();
+    // Modal stays open for correction
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
+  it('filters built-in vs custom source and drops control-char param keys on save', async () => {
+    const user = userEvent.setup();
+    listBlocks.mockResolvedValue({ ok: true, data: blocks });
+    updateBlock.mockResolvedValue({ ok: true });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('Custom Block')).toBeInTheDocument());
+
+    // Source filter: Built-in only
+    await user.click(screen.getByRole('button', { name: 'Built-in' }));
+    expect(screen.getByText('Price Lookup')).toBeInTheDocument();
+    expect(screen.queryByText('Custom Block')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Custom' }));
+    expect(screen.getByText('Custom Block')).toBeInTheDocument();
+    expect(screen.queryByText('Price Lookup')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    // Add a param with control-char key (should be dropped on save)
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
+    const keyInputs = Array.from(document.querySelectorAll('input[placeholder="key"]')) as HTMLInputElement[];
+    const lastKey = keyInputs[keyInputs.length - 1]!;
+    fireEvent.change(lastKey, { target: { value: `bad${'\0'}key` } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateBlock).toHaveBeenCalled());
+    const payload = updateBlock.mock.calls.at(-1)![1] as { paramDefs: { key: string }[] };
+    expect(payload.paramDefs.every((p) => !/[\0\r\n]/.test(p.key))).toBe(true);
+    expect(payload.paramDefs.some((p) => p.key === 'x')).toBe(true);
+    expect(payload.paramDefs.some((p) => p.key.includes('bad'))).toBe(false);
   });
 });

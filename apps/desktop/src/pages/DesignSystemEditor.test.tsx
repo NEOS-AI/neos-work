@@ -73,6 +73,25 @@ describe('DesignSystemEditor page', () => {
     });
   });
 
+  it('rejects null-byte and empty content without calling API', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: `# bad${'\0'}content` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('Save failed: content contains invalid control characters'),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(screen.getByText('Save failed: content cannot be empty')).toBeInTheDocument();
+  });
+
   it('saves via Cmd/Ctrl+S', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());

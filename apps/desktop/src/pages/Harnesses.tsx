@@ -277,18 +277,45 @@ function HarnessModal({
 
   const handleSave = async () => {
     if (!client || readOnly) return;
+    // Control-char id/name rejected before trim; null-byte prompt/description rejected
+    if ((!existing && /[\0\r\n]/.test(id)) || /[\0\r\n]/.test(name)) {
+      setError(t('harness.validationError'));
+      return;
+    }
+    if (/\0/.test(systemPrompt) || /\0/.test(description)) {
+      setError(t('harness.validationError'));
+      return;
+    }
     if (!id.trim() || !name.trim() || !systemPrompt.trim()) {
       setError(t('harness.validationError'));
       return;
     }
     setSaving(true);
     setError('');
-    const tools = allowedTools.split(',').map((s) => s.trim()).filter(Boolean);
+    // Drop control-char tool tokens before trim
+    const tools = allowedTools
+      .split(',')
+      .filter((s) => !/[\0\r\n]/.test(s))
+      .map((s) => s.trim())
+      .filter(Boolean);
     try {
       if (existing) {
-        await client.updateHarness(existing.id, { name, domain, description, systemPrompt, allowedTools: tools });
+        await client.updateHarness(existing.id, {
+          name: name.trim(),
+          domain,
+          description: description.trim(),
+          systemPrompt: systemPrompt.trim(),
+          allowedTools: tools,
+        });
       } else {
-        await client.createHarness({ id: id.trim(), name, domain, description, systemPrompt, allowedTools: tools });
+        await client.createHarness({
+          id: id.trim(),
+          name: name.trim(),
+          domain,
+          description: description.trim(),
+          systemPrompt: systemPrompt.trim(),
+          allowedTools: tools,
+        });
       }
       onSaved();
     } catch (e) {

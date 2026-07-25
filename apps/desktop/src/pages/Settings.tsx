@@ -676,16 +676,27 @@ function McpServersSection() {
   }, [oauthModal, oauthConnecting, showAddForm, closeAddForm]);
 
   const handleAdd = async () => {
-    if (!client || !formName) return;
+    if (!client) return;
+    // Control-char name/command/url rejected before trim (align with MCP create route)
+    if (/[\0\r\n]/.test(formName)) return;
+    if (transport === 'stdio' && formCommand && /[\0\r\n]/.test(formCommand)) return;
+    if (transport === 'http' && formUrl && /[\0\r\n]/.test(formUrl)) return;
+    if (!formName.trim()) return;
     setAdding(true);
     try {
-      const args = formArgs.trim() ? formArgs.split(/\s+/) : undefined;
+      // Drop control-char args tokens before trim
+      const args =
+        transport === 'stdio' && formArgs
+          ? formArgs
+              .split(/\s+/)
+              .filter((a) => a.length > 0 && !/[\0\r\n]/.test(a))
+          : undefined;
       const res = await client.createMcpServer({
-        name: formName,
+        name: formName.trim(),
         transport,
-        command: transport === 'stdio' ? formCommand : undefined,
-        args: transport === 'stdio' ? args : undefined,
-        url: transport === 'http' ? formUrl : undefined,
+        command: transport === 'stdio' ? (formCommand.trim() || undefined) : undefined,
+        args: transport === 'stdio' ? (args && args.length > 0 ? args : undefined) : undefined,
+        url: transport === 'http' ? (formUrl.trim() || undefined) : undefined,
       });
       if (res.ok) {
         closeAddForm();

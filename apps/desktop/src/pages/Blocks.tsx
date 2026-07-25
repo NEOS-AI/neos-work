@@ -68,32 +68,61 @@ function BlockModal({ block, onSave, onClose }: ModalProps) {
   };
 
   const handleSave = async () => {
-    if (!name) { setError('Name is required'); return; }
-    if (!isEdit && !id) { setError('ID is required'); return; }
-    if (implType === 'prompt' && !promptTemplate) { setError('Prompt template is required'); return; }
+    // Control-char id/name/category rejected before trim (align with blocks API)
+    if ((!isEdit && /[\0\r\n]/.test(id)) || /[\0\r\n]/.test(name)) {
+      setError('Name or ID contains invalid control characters');
+      return;
+    }
+    if (category && /[\0\r\n]/.test(category)) {
+      setError('Category contains invalid control characters');
+      return;
+    }
+    // Null-byte description/prompt rejected (multi-line OK)
+    if (/\0/.test(description) || /\0/.test(promptTemplate)
+      || /\0/.test(inputDesc) || /\0/.test(outputDesc)) {
+      setError('Fields contain invalid control characters');
+      return;
+    }
+    if (!name.trim()) { setError('Name is required'); return; }
+    if (!isEdit && !id.trim()) { setError('ID is required'); return; }
+    if (implType === 'prompt' && !promptTemplate.trim()) { setError('Prompt template is required'); return; }
     setSaving(true);
     try {
       const paramDefs = paramDrafts
-        .filter((d) => d.key.trim())
-        .map((d) => ({
-          key: d.key.trim(),
-          label: d.label.trim() || d.key.trim(),
-          type: d.type,
-          description: d.description.trim() || undefined,
-          default: d.default.trim() ? d.default.trim() : undefined,
-          options: d.options.trim() ? d.options.split(',').map((o) => o.trim()).filter(Boolean) : undefined,
-        }));
+        // Drop control-char keys before trim
+        .filter((d) => !/[\0\r\n]/.test(d.key) && d.key.trim())
+        .map((d) => {
+          const key = d.key.trim();
+          const labelRaw = !/[\0\r\n]/.test(d.label) ? d.label.trim() : '';
+          const descRaw = !/\0/.test(d.description) ? d.description.trim() : '';
+          const defaultRaw = !/[\0\r\n]/.test(d.default) ? d.default.trim() : '';
+          const options = !/[\0\r\n]/.test(d.options)
+            ? d.options
+                .split(',')
+                .filter((o) => !/[\0\r\n]/.test(o))
+                .map((o) => o.trim())
+                .filter(Boolean)
+            : undefined;
+          return {
+            key,
+            label: labelRaw || key,
+            type: d.type,
+            description: descRaw || undefined,
+            default: defaultRaw || undefined,
+            options: options && options.length > 0 ? options : undefined,
+          };
+        });
       await onSave({
-        id,
-        name,
+        id: id.trim(),
+        name: name.trim(),
         domain,
-        category,
-        description,
+        category: category.trim() || 'custom',
+        description: description.trim(),
         implementationType: implType,
-        promptTemplate: implType === 'prompt' ? promptTemplate : undefined,
+        promptTemplate: implType === 'prompt' ? promptTemplate.trim() : undefined,
         paramDefs,
-        inputDescription: inputDesc,
-        outputDescription: outputDesc,
+        inputDescription: inputDesc.trim(),
+        outputDescription: outputDesc.trim(),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');

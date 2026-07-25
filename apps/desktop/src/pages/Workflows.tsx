@@ -105,7 +105,8 @@ export function Workflows() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client || !newName.trim()) return;
+    // Control-char name rejected before trim (align with workflow API)
+    if (!client || /[\0\r\n]/.test(newName) || !newName.trim()) return;
     setCreating(true);
     const triggerId = crypto.randomUUID();
     const outputId = crypto.randomUUID();

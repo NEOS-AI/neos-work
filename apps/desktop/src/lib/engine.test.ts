@@ -741,6 +741,30 @@ describe('EngineClient', () => {
     expect(events[0]).toMatchObject({ type: 'pipeline.started', runId: 'run-9' });
     stop();
 
+    // non-ok plugin run → null runId
+    fetchMock.mockResolvedValueOnce(new Response('nope', { status: 500 }));
+    const failed = client.runPlugin('p1', {}, () => {});
+    await expect(failed.runIdPromise).resolves.toBeNull();
+
+    // malformed SSE chunks ignored; still extracts runId from valid event
+    const badStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: not-json\n\n'));
+        controller.enqueue(
+          encoder.encode('data: {"type":"pipeline.started","runId":"run-ok"}\n\n'),
+        );
+        controller.enqueue(encoder.encode('data: {"type":"stage.done"}\n\n'));
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(badStream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+    const events2: unknown[] = [];
+    const okRun = client.runPlugin('p2', {}, (e) => events2.push(e));
+    await expect(okRun.runIdPromise).resolves.toBe('run-ok');
+    expect(events2.some((e) => (e as { type?: string }).type === 'stage.done')).toBe(true);
+
     // export zip download
     fetchMock.mockResolvedValueOnce(
       new Response(new Blob(['zip']), { status: 200 }),

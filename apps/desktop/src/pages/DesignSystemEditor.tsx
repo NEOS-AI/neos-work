@@ -38,6 +38,15 @@ export function DesignSystemEditor() {
 
   const handleSave = useCallback(async () => {
     if (!client || !id || saving) return;
+    // Null-byte content rejected (align with design-systems content API)
+    if (/\0/.test(content)) {
+      setSaveMessage('Save failed: content contains invalid control characters');
+      return;
+    }
+    if (!content.trim()) {
+      setSaveMessage('Save failed: content cannot be empty');
+      return;
+    }
     setSaving(true);
     setSaveMessage(null);
     const res = await client.saveDesignSystemContent(id, content);

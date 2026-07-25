@@ -57,7 +57,17 @@ export function DesignSystems() {
   }, [isCreating, search, cancelCreate]);
 
   const handleCreate = async () => {
-    if (!client || !newName.trim()) return;
+    if (!client) return;
+    // Control-char name/description rejected before trim (align with design-systems API)
+    if (/[\0\r\n]/.test(newName)) {
+      setCreateError('Name contains invalid control characters');
+      return;
+    }
+    if (newDescription && /[\0\r\n]/.test(newDescription)) {
+      setCreateError('Description contains invalid control characters');
+      return;
+    }
+    if (!newName.trim()) return;
     setCreateError(null);
     const res = await client.createDesignSystem(newName.trim(), newDescription.trim() || undefined);
     if (res.ok && res.data) {
