@@ -164,4 +164,19 @@ describe('ContextManager', () => {
     expect(captured).not.toContain('user\n');
     expect(captured).not.toContain('\0');
   });
+
+  it('scrubs null bytes from model summary output while keeping multi-line text', async () => {
+    const cm = new ContextManager();
+    const messages = Array.from({ length: 25 }, (_, i) => msg('user', `msg-${i}`));
+    // Model returns null-byte + newlines in the summary chunk
+    const adapter = mockAdapter([`line1${'\0'}mid\nline2`]);
+    const out = await cm.compress(messages, adapter);
+    expect(out[0]?.role).toBe('system');
+    const content = String(out[0]?.content ?? '');
+    expect(content).toContain('line1mid');
+    expect(content).toContain('line2');
+    expect(content).not.toContain('\0');
+    // Multi-line summaries are allowed (only null bytes stripped)
+    expect(content).toMatch(/line1mid\nline2/);
+  });
 });

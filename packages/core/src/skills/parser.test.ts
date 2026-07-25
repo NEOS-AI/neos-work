@@ -76,6 +76,21 @@ body
       '',
     ].join('\n');
     expect(parseSkillFile(mid, '/x.md', 'local')).toBeNull();
+
+    // Overlong YAML key (>100) is dropped before value association
+    const longKey = 'n'.repeat(101);
+    const overlong = [
+      '---',
+      `${longKey}: should-not-bind`,
+      'name: real',
+      'description: ok',
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    const parsed = parseSkillFile(overlong, '/x.md', 'local');
+    expect(parsed?.manifest.name).toBe('real');
+    expect(parsed?.manifest.description).toBe('ok');
   });
 
   it('returns null for control-char path and null-byte description', () => {

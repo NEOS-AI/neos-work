@@ -105,6 +105,15 @@ describe('settings routes', () => {
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/control characters/i);
+
+    // Embedded null must not be accepted (and must not delete as blank)
+    const nul = await settings.request(`/${SENSITIVE}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: `sk${'\0'}bad` }),
+    });
+    expect(nul.status).toBe(400);
+    expect(((await nul.json()) as { error: string }).error).toMatch(/control characters/i);
   });
 
   it('PUT blank sensitive value deletes the setting', async () => {

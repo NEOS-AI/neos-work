@@ -156,6 +156,15 @@ describe('memory-store', () => {
       'utf-8',
     );
     expect(getMemory(m.id)).toBeNull();
+
+    // Missing name field → blank name → skip rather than surface empty UI row
+    writeFileSync(
+      m.filePath,
+      `---\nid: ${m.id}\ntype: user\nenabled: true\ncreatedAt: ${m.createdAt}\nupdatedAt: ${m.updatedAt}\n---\n\nok\n`,
+      'utf-8',
+    );
+    expect(getMemory(m.id)).toBeNull();
+
     // Restore valid file so afterEach cleanup can delete by id if needed
     try { deleteMemory(m.id); } catch { /* ignore */ }
   });

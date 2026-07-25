@@ -101,6 +101,23 @@ describe('Planner', () => {
     expect(steps[0].description).toBe('just do it');
   });
 
+  it('scrubs free-text fallback: collapses newlines and drops null bytes', async () => {
+    const multi = mockAdapter(['do this\nthen that']);
+    const multiSteps = await new Planner(multi).plan('goal');
+    expect(multiSteps).toHaveLength(1);
+    expect(multiSteps[0]!.description).toBe('do this then that');
+
+    // Null-only free text → default after scrub
+    const nul = mockAdapter([`\0\0`]);
+    const nulSteps = await new Planner(nul).plan('goal');
+    expect(nulSteps[0]!.description).toBe('Execute the goal directly');
+
+    // Null embedded in free text is stripped, rest kept
+    const mid = mockAdapter([`ship${'\0'}it`]);
+    const midSteps = await new Planner(mid).plan('goal');
+    expect(midSteps[0]!.description).toBe('shipit');
+  });
+
   it('falls back on invalid JSON array payload', async () => {
     // Matches /\\[[\\s\\S]*\\]/ but is not valid JSON → catch branch
     const adapter = mockAdapter(['[{broken]']);

@@ -78,6 +78,14 @@ describe('deploy helpers', () => {
     await expect(
       deployToVercel({ projectName: 'x', content: '<p/>', apiToken: 'tok\nbad' }),
     ).rejects.toThrow(/apiToken/i);
+
+    // Pure null-byte content: null check before empty trim (not "content is required")
+    await expect(
+      deployToVercel({ projectName: 'x', content: '\0', apiToken: 'tok' }),
+    ).rejects.toThrow(/control characters/i);
+    await expect(
+      deployToVercel({ projectName: 'x', content: '  \0  ', apiToken: 'tok' }),
+    ).rejects.toThrow(/control characters/i);
   });
 
   it('rejects control-char deploymentId for status poll', async () => {
