@@ -34,6 +34,7 @@ describe('hmacSha256Hex', () => {
     await expect(hmacSha256Hex('secret\n', 'body')).rejects.toThrow(/control characters/i);
     await expect(hmacSha256Hex('secret', `body${'\0'}`)).rejects.toThrow(/control characters/i);
     await expect(hmacSha256Hex('   ', 'body')).rejects.toThrow(/required/i);
+    await expect(hmacSha256Hex('s'.repeat(8_193), 'body')).rejects.toThrow(/max length/i);
   });
 
   it('trims secret before signing', async () => {

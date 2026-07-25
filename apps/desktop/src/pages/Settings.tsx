@@ -740,7 +740,7 @@ function McpServersSection() {
 
   const handleOAuthConnect = async () => {
     if (!client || !oauthModal) return;
-    // Control-char OAuth fields rejected before API (endpoint/token injection defense)
+    // Control-char OAuth fields rejected before trim (endpoint/token injection defense)
     const { authorizationEndpoint, tokenEndpoint, clientId, scope } = oauthModal;
     if (
       /[\0\r\n]/.test(authorizationEndpoint)
@@ -750,14 +750,18 @@ function McpServersSection() {
     ) {
       return;
     }
+    const authEp = authorizationEndpoint.trim();
+    const tokenEp = tokenEndpoint.trim();
+    const cid = clientId.trim();
+    if (!authEp || !tokenEp || !cid) return;
     setOauthConnecting(true);
     try {
       const redirectUri = `http://localhost:3000/api/mcp/oauth/callback`;
       const res = await client.startMcpOAuth({
         serverId: oauthModal.serverId,
-        authorizationEndpoint: authorizationEndpoint.trim(),
-        tokenEndpoint: tokenEndpoint.trim(),
-        clientId: clientId.trim(),
+        authorizationEndpoint: authEp,
+        tokenEndpoint: tokenEp,
+        clientId: cid,
         redirectUri,
         scope: scope?.trim() || undefined,
       });

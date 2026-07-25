@@ -286,7 +286,7 @@ describe('Settings page', () => {
     await waitFor(() => expect(deleteMcpServer).toHaveBeenCalledWith('mcp-1'));
   });
 
-  it('rejects control-char MCP OAuth fields without calling API', async () => {
+  it('rejects control-char / blank MCP OAuth fields without calling API', async () => {
     listMcpServers.mockResolvedValue({
       ok: true,
       data: [
@@ -311,6 +311,19 @@ describe('Settings page', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
       target: { value: `https://auth.example${'\0'}/authorize` },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
+      target: { value: 'https://auth.example/token' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Client ID'), {
+      target: { value: 'client-id' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+    expect(startMcpOAuth).not.toHaveBeenCalled();
+
+    // Blank-after-trim required fields no-op
+    fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
+      target: { value: '   ' },
     });
     fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
       target: { value: 'https://auth.example/token' },
