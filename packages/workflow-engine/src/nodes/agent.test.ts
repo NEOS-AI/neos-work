@@ -534,6 +534,29 @@ describe('AgentNode LLM model selection', () => {
     expect(goal).not.toContain('## Agent Memory');
   });
 
+  it('skips null-byte memory export before injecting into the goal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => `remember this${'\0'}bad`,
+      }),
+    );
+    const node = new AgentNode('agent_coding', { systemPrompt: 'No null mem' });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          SERVER_URL: 'http://memory.test',
+          AUTH_TOKEN: 'tok',
+        },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('No null mem');
+    expect(goal).not.toContain('## Agent Memory');
+  });
+
   it('truncates oversized memory export before injecting into the goal', async () => {
     const huge = 'M'.repeat(40_000);
     vi.stubGlobal(

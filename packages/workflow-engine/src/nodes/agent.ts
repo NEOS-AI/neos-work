@@ -77,6 +77,8 @@ async function buildSystemPromptWithMemory(
     });
     if (!res.ok) return basePrompt;
     let memoryContext = await res.text();
+    // Null-byte memory export skipped (prompt/header injection defense)
+    if (/\0/.test(memoryContext)) return basePrompt;
     if (!memoryContext.trim()) return basePrompt;
     if (memoryContext.length > MEMORY_CONTEXT_MAX_CHARS) {
       memoryContext =

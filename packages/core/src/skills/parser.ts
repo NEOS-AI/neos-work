@@ -111,6 +111,8 @@ export function parseSkillFile(
     fidelity: optionalTrim(raw.fidelity)?.slice(0, 50),
   };
 
+  // Null-byte skill bodies rejected (cannot inject into prompts safely)
+  if (typeof body === 'string' && /\0/.test(body)) return null;
   let skillBody = (body ?? '').trim();
   if (skillBody.length > SKILL_BODY_MAX) {
     skillBody = skillBody.slice(0, SKILL_BODY_MAX) + '\n…[skill truncated]';

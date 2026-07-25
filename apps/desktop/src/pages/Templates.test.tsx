@@ -161,4 +161,66 @@ describe('Templates page', () => {
     await waitFor(() => expect(createWorkflow).toHaveBeenCalled());
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('settles to empty when getTemplates is non-ok', async () => {
+    getTemplates.mockResolvedValue({ ok: false, error: 'down' });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('No templates found.')).toBeInTheDocument();
+    });
+  });
+
+  it('shows node/edge counts and required settings badges', async () => {
+    getTemplates.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          name: 'Slack Alert',
+          description: 'Notify on deploy',
+          domain: 'general' as const,
+          nodes: [
+            { id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+            { id: 's', type: 'slack_message', label: 'S', position: { x: 1, y: 0 }, config: {} },
+            { id: 'w', type: 'web_search', label: 'W', position: { x: 2, y: 0 }, config: {} },
+          ],
+          edges: [
+            { id: 'e1', source: 't', target: 's' },
+            { id: 'e2', source: 's', target: 'w' },
+          ],
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Slack Alert')).toBeInTheDocument());
+    expect(screen.getByText('3 nodes · 2 edges')).toBeInTheDocument();
+    expect(screen.getByText('SLACK_BOT_TOKEN')).toBeInTheDocument();
+    expect(screen.getByText('TAVILY_API_KEY')).toBeInTheDocument();
+  });
+
+  it('disables Use Template while a create is in flight', async () => {
+    const user = userEvent.setup();
+    let resolveCreate: (v: unknown) => void = () => {};
+    createWorkflow.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    getTemplates.mockResolvedValue({ ok: true, data: templates });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
+
+    const buttons = screen.getAllByRole('button', { name: 'Use Template' });
+    await user.click(buttons[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('...')).toBeInTheDocument();
+      // All Use Template buttons disabled while creating
+      for (const b of screen.getAllByRole('button', { name: /\.\.\.|Use Template/ })) {
+        expect(b).toBeDisabled();
+      }
+    });
+
+    resolveCreate({ ok: true, data: { id: 'wf-late' } });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/workflows/wf-late'));
+  });
 });

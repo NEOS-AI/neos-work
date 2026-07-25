@@ -18,8 +18,13 @@ export function inferRequiredSettings(template: {
     if (node.type === 'media') keys.add('OPENAI_API_KEY');
     // Deploy nodes need provider tokens (plan Task 8)
     if (node.type === 'deploy') {
+      // Control-char provider → vercel default (check before trim)
+      const rawProvider =
+        typeof node.config?.provider === 'string' ? node.config.provider : '';
       const provider =
-        typeof node.config?.provider === 'string' ? node.config.provider : 'vercel';
+        rawProvider && !/[\0\r\n]/.test(rawProvider)
+          ? rawProvider.trim().toLowerCase() || 'vercel'
+          : 'vercel';
       if (provider === 'cloudflare') {
         keys.add('CLOUDFLARE_API_TOKEN');
         keys.add('CLOUDFLARE_ACCOUNT_ID');

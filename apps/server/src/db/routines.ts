@@ -287,9 +287,9 @@ export function setLastRunAt(id: string): void {
 // Routine run records
 export function createRoutineRun(input: { routineId: string; runId?: string }): RoutineRun {
   const rawRid = typeof input.routineId === 'string' ? input.routineId : '';
-  if (!rawRid.trim()) throw new Error('routineId is required');
-  // Control-char before trim so "\nrid" is invalid, not stripped
+  // Control-char before trim so "\nrid" is invalid, not stripped to a valid id
   if (/[\0\r\n]/.test(rawRid)) throw new Error('routineId is invalid');
+  if (!rawRid.trim()) throw new Error('routineId is required');
   const routineId = safeLookupId(input.routineId);
   if (!routineId) throw new Error('routineId is invalid');
   let runId: string | null = null;

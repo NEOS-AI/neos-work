@@ -740,16 +740,26 @@ function McpServersSection() {
 
   const handleOAuthConnect = async () => {
     if (!client || !oauthModal) return;
+    // Control-char OAuth fields rejected before API (endpoint/token injection defense)
+    const { authorizationEndpoint, tokenEndpoint, clientId, scope } = oauthModal;
+    if (
+      /[\0\r\n]/.test(authorizationEndpoint)
+      || /[\0\r\n]/.test(tokenEndpoint)
+      || /[\0\r\n]/.test(clientId)
+      || (scope && /[\0\r\n]/.test(scope))
+    ) {
+      return;
+    }
     setOauthConnecting(true);
     try {
       const redirectUri = `http://localhost:3000/api/mcp/oauth/callback`;
       const res = await client.startMcpOAuth({
         serverId: oauthModal.serverId,
-        authorizationEndpoint: oauthModal.authorizationEndpoint,
-        tokenEndpoint: oauthModal.tokenEndpoint,
-        clientId: oauthModal.clientId,
+        authorizationEndpoint: authorizationEndpoint.trim(),
+        tokenEndpoint: tokenEndpoint.trim(),
+        clientId: clientId.trim(),
         redirectUri,
-        scope: oauthModal.scope || undefined,
+        scope: scope?.trim() || undefined,
       });
       if (res.ok && res.data?.authUrl) {
         // Open in system browser via Tauri

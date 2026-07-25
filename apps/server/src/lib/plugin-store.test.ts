@@ -63,6 +63,45 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(plugin.description.length).toBeGreaterThan(0);
   });
 
+  it('skips frontmatter and name: lines when deriving description from SKILL.md', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'SKILL.md'),
+      [
+        '---',
+        'name: frontmatter-name',
+        '---',
+        '',
+        'name: also-skipped',
+        '',
+        '# Real Title From Skill',
+        '',
+        'Body paragraph.',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const plugin = await upgradeSkillToPlugin({ skillDirName: DIR_NAME });
+    // Name falls back to dir when options.name omitted; description from first usable markdown line
+    expect(plugin.name).toBe(DIR_NAME);
+    expect(plugin.description).toBe('Real Title From Skill');
+  });
+
+  it('null-byte in SKILL.md body prevents first-line title fallback', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'SKILL.md'),
+      `# Title\n\nBody with${'\0'}null\n`,
+      'utf8',
+    );
+
+    const plugin = await upgradeSkillToPlugin({ skillDirName: DIR_NAME });
+    expect(plugin.name).toBe(DIR_NAME);
+    // Whole-body null wipe → default description
+    expect(plugin.description).toContain('Plugin upgraded from skill');
+  });
+
   it('creates open-design.json with 4-step pipeline', async () => {
     await fs.mkdir(DIR, { recursive: true });
     await fs.writeFile(

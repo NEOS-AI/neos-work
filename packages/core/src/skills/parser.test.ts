@@ -112,6 +112,18 @@ body
     expect(parseSkillFile(nulDesc, '/skills/hello.md', 'local')).toBeNull();
   });
 
+  it('returns null for null-byte skill body', () => {
+    const content = [
+      '---',
+      'name: hello',
+      'description: ok',
+      '---',
+      `body with${'\0'}null`,
+      '',
+    ].join('\n');
+    expect(parseSkillFile(content, '/skills/hello.md', 'local')).toBeNull();
+  });
+
   it('strips quoted values and defaults description', () => {
     const content = `---
 name: "quoted"

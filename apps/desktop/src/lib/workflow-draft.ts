@@ -33,9 +33,23 @@ export function buildWorkflowDraft(
   description?: string,
   designSystemId?: string,
 ): WorkflowDraft {
+  // Control-char designSystemId never persisted (check before empty)
+  let safeDesignId: string | undefined;
+  if (typeof designSystemId === 'string' && designSystemId) {
+    if (!/[\0\r\n]/.test(designSystemId)) {
+      const id = designSystemId.trim();
+      if (id && id.length <= 64) safeDesignId = id;
+    }
+  }
+  // Multi-line description OK; null-byte dropped
+  let safeDescription: string | undefined;
+  if (typeof description === 'string' && description && !/\0/.test(description)) {
+    const d = description.trim();
+    if (d) safeDescription = d;
+  }
   return {
-    description,
-    designSystemId: designSystemId || undefined,
+    description: safeDescription,
+    designSystemId: safeDesignId,
     nodes: nodes.map((n) => ({
       id: n.id,
       type: n.data.nodeType as string,
@@ -43,12 +57,20 @@ export function buildWorkflowDraft(
       position: n.position,
       config: (n.data.config as Record<string, unknown>) ?? {},
     })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label as string | undefined,
-    })),
+    edges: edges.map((e) => {
+      // Control-char edge labels dropped (not stripped to a valid label)
+      let label: string | undefined;
+      if (typeof e.label === 'string' && e.label && !/[\0\r\n]/.test(e.label)) {
+        const l = e.label.trim();
+        if (l) label = l;
+      }
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label,
+      };
+    }),
   };
 }
 

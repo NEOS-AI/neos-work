@@ -28,4 +28,17 @@ describe('hmacSha256Hex', () => {
     expect(a).not.toBe(b);
     expect(a).not.toBe(c);
   });
+
+  it('rejects control-char secret/message and blank secret', async () => {
+    await expect(hmacSha256Hex(`sec${'\0'}ret`, 'body')).rejects.toThrow(/control characters/i);
+    await expect(hmacSha256Hex('secret\n', 'body')).rejects.toThrow(/control characters/i);
+    await expect(hmacSha256Hex('secret', `body${'\0'}`)).rejects.toThrow(/control characters/i);
+    await expect(hmacSha256Hex('   ', 'body')).rejects.toThrow(/required/i);
+  });
+
+  it('trims secret before signing', async () => {
+    const a = await hmacSha256Hex('  secret  ', 'hello');
+    const b = await hmacSha256Hex('secret', 'hello');
+    expect(a).toBe(b);
+  });
 });

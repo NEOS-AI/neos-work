@@ -286,6 +286,42 @@ describe('Settings page', () => {
     await waitFor(() => expect(deleteMcpServer).toHaveBeenCalledWith('mcp-1'));
   });
 
+  it('rejects control-char MCP OAuth fields without calling API', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-1',
+          name: 'Remote MCP',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'http://localhost:3000/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Remote MCP')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
+    await waitFor(() => expect(screen.getByText('Connect: Remote MCP')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
+      target: { value: `https://auth.example${'\0'}/authorize` },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
+      target: { value: 'https://auth.example/token' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Client ID'), {
+      target: { value: 'client-id' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+    expect(startMcpOAuth).not.toHaveBeenCalled();
+  });
+
   it('shows CLI agents and applies dev auth token', async () => {
     const user = userEvent.setup();
     render(<Settings />);

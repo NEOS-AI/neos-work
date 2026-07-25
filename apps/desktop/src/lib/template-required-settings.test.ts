@@ -52,6 +52,12 @@ describe('inferRequiredSettings', () => {
         nodes: [{ type: 'deploy', config: { provider: 'netlify' } }],
       }),
     ).toEqual(['VERCEL_API_TOKEN']);
+    // Control-char / leading-control provider must not strip to cloudflare
+    expect(
+      inferRequiredSettings({
+        nodes: [{ type: 'deploy', config: { provider: '\ncloudflare' } }],
+      }),
+    ).toEqual(['VERCEL_API_TOKEN']);
   });
 
   it('unions media and deploy secrets without duplicating openai key', () => {

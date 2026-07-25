@@ -503,6 +503,51 @@ describe('Sessions page', () => {
     release?.();
   });
 
+  it('rejects pending tool use via confirmTool', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield {
+          type: 'tool_use',
+          toolName: 'shell',
+          toolUseId: 'tu-reject',
+          toolInput: { cmd: 'rm -rf /' },
+        };
+        yield { type: 'tool_pending', toolUseId: 'tu-reject' };
+        await gate;
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'dangerous' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Awaiting approval')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    await waitFor(() => {
+      expect(confirmTool).toHaveBeenCalledWith('s1', 'tu-reject', false);
+    });
+    release?.();
+    // Drain generator so no late act() warnings / unhandled rejections
+    await waitFor(() => expect(chat).toHaveBeenCalled());
+  });
+
   it('streams agent plan steps including healing and errors', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({ ok: true, data: [] });

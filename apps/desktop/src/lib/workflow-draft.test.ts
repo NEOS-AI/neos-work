@@ -56,6 +56,23 @@ describe('buildWorkflowDraft', () => {
     expect(draft.designSystemId).toBeUndefined();
   });
 
+  it('rejects control-char designSystemId / description / edge labels', () => {
+    const edges: Edge[] = [
+      { id: 'e1', source: 'a', target: 'b', label: `next${'\0'}` },
+      { id: 'e2', source: 'a', target: 'b', label: '\nskip' },
+      { id: 'e3', source: 'a', target: 'b', label: '  ok  ' },
+    ];
+    const draft = buildWorkflowDraft(
+      [],
+      edges,
+      `desc${'\0'}bad`,
+      `ds${'\0'}1`,
+    );
+    expect(draft.designSystemId).toBeUndefined();
+    expect(draft.description).toBeUndefined();
+    expect(draft.edges.map((e) => e.label)).toEqual([undefined, undefined, 'ok']);
+  });
+
   it('defaults missing node config to empty object', () => {
     const nodes = [rfNode('n1')];
     // explicit undefined config
