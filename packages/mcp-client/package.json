@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/mcp-client",
-  "version": "0.3.107",
+  "version": "0.3.108",
   "private": true,
   "license": "MIT",
   "type": "module",

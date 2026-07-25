@@ -16,11 +16,16 @@ export class ToolRegistry {
   private tools = new Map<string, Tool>();
 
   register(tool: Tool): void {
-    let name = typeof tool?.name === 'string' ? tool.name.trim() : '';
-    if (!name || /[\0\r\n]/.test(name) || name.length > TOOL_NAME_MAX_CHARS) return;
+    const nameRaw = typeof tool?.name === 'string' ? tool.name : '';
+    // Control-char check before trim
+    if (!nameRaw || /[\0\r\n]/.test(nameRaw)) return;
+    const name = nameRaw.trim();
+    if (!name || name.length > TOOL_NAME_MAX_CHARS) return;
     if (this.tools.size >= TOOL_REGISTRY_MAX && !this.tools.has(name)) return;
     let description =
-      typeof tool.description === 'string' ? tool.description.trim() : String(tool.description ?? '');
+      typeof tool.description === 'string' && !/[\0]/.test(tool.description)
+        ? tool.description.trim()
+        : String(tool.description ?? '').replace(/\0/g, ' ').trim();
     if (description.length > TOOL_DESCRIPTION_MAX_CHARS) {
       description = description.slice(0, TOOL_DESCRIPTION_MAX_CHARS);
     }
@@ -32,8 +37,9 @@ export class ToolRegistry {
   }
 
   get(name: string): Tool | undefined {
-    const n = typeof name === 'string' ? name.trim() : '';
-    if (!n || /[\0\r\n]/.test(n)) return undefined;
+    if (typeof name !== 'string' || /[\0\r\n]/.test(name)) return undefined;
+    const n = name.trim();
+    if (!n) return undefined;
     return this.tools.get(n);
   }
 
@@ -52,11 +58,14 @@ export class ToolRegistry {
 
   /** Execute a tool by name. Returns an error result if the tool is not found. */
   async execute(name: string, input: Record<string, unknown>): Promise<ToolResult> {
-    const n = typeof name === 'string' ? name.trim() : '';
+    if (typeof name !== 'string' || /[\0\r\n]/.test(name)) {
+      return { success: false, output: null, error: 'Invalid tool name' };
+    }
+    const n = name.trim();
     if (!n) {
       return { success: false, output: null, error: 'Tool name is required' };
     }
-    if (/[\0\r\n]/.test(n) || n.length > TOOL_NAME_MAX_CHARS) {
+    if (n.length > TOOL_NAME_MAX_CHARS) {
       return { success: false, output: null, error: 'Invalid tool name' };
     }
     const tool = this.tools.get(n);

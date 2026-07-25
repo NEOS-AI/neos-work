@@ -104,18 +104,24 @@ export const MEMORY_NAME_MAX_CHARS = 200;
 
 export function createMemory(input: CreateMemoryInput): MemoryItem {
   ensureDir();
-  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const nameRaw = typeof input.name === 'string' ? input.name : '';
+  // Control-char check before trim
+  if (/[\0\r\n]/.test(nameRaw)) {
+    throw new Error('name contains invalid control characters');
+  }
+  const name = nameRaw.trim();
   if (!name) {
     throw new Error('name is required');
   }
   if (name.length > MEMORY_NAME_MAX_CHARS) {
     throw new Error(`name exceeds max length (${MEMORY_NAME_MAX_CHARS})`);
   }
-  if (/[\0\r\n]/.test(name)) {
-    throw new Error('name contains invalid control characters');
+  const contentRaw =
+    typeof input.content === 'string' ? input.content : String(input.content ?? '');
+  if (/\0/.test(contentRaw)) {
+    throw new Error('content contains invalid control characters');
   }
-  const content =
-    typeof input.content === 'string' ? input.content.trim() : String(input.content ?? '');
+  const content = contentRaw.trim();
   if (content.length > MEMORY_CONTENT_MAX_CHARS) {
     throw new Error(`content exceeds max size (${MEMORY_CONTENT_MAX_CHARS} characters)`);
   }
@@ -144,18 +150,22 @@ export function updateMemory(id: string, input: UpdateMemoryInput): MemoryItem |
   const existing = getMemory(id);
   if (!existing) return null;
 
-  const name =
-    input.name !== undefined
-      ? (typeof input.name === 'string' ? input.name.trim() : '')
-      : existing.name;
-  if (!name) return null;
-  if (name.length > MEMORY_NAME_MAX_CHARS || /[\0\r\n]/.test(name)) return null;
+  let name = existing.name;
+  if (input.name !== undefined) {
+    const nameRaw = typeof input.name === 'string' ? input.name : '';
+    if (/[\0\r\n]/.test(nameRaw)) return null;
+    name = nameRaw.trim();
+    if (!name || name.length > MEMORY_NAME_MAX_CHARS) return null;
+  }
 
-  const content =
-    input.content !== undefined
-      ? (typeof input.content === 'string' ? input.content.trim() : String(input.content ?? ''))
-      : existing.content;
-  if (content.length > MEMORY_CONTENT_MAX_CHARS) return null;
+  let content = existing.content;
+  if (input.content !== undefined) {
+    const contentRaw =
+      typeof input.content === 'string' ? input.content : String(input.content ?? '');
+    if (/\0/.test(contentRaw)) return null;
+    content = contentRaw.trim();
+    if (content.length > MEMORY_CONTENT_MAX_CHARS) return null;
+  }
   const type =
     input.type !== undefined
       ? normalizeMemoryType(input.type, existing.type)

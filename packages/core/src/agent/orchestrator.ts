@@ -32,7 +32,10 @@ export class AgentOrchestrator {
       Number.isFinite(rawMax) && rawMax >= 0
         ? Math.min(200, Math.floor(rawMax))
         : 10;
-    const modelOpt = typeof options.model === 'string' ? options.model.trim() : '';
+    const modelRaw = typeof options.model === 'string' ? options.model : '';
+    // Control-char model ids are dropped (fall back to adapter default)
+    const modelOpt =
+      modelRaw && !/[\0\r\n]/.test(modelRaw) ? modelRaw.trim().slice(0, 200) : '';
     this.model = modelOpt || (adapter.getModels()[0]?.id ?? '');
     this.reflectionStrategy = new ReflectionStrategy(adapter);
   }
@@ -43,8 +46,9 @@ export class AgentOrchestrator {
   static readonly STEP_RESULT_MAX_CHARS = 32_000;
 
   async *run(goal: string, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
-    let goalText = typeof goal === 'string' ? goal.trim() : String(goal ?? '').trim();
-    if (/\0/.test(goalText)) goalText = goalText.replace(/\0/g, '');
+    const goalRaw = typeof goal === 'string' ? goal : String(goal ?? '');
+    // Strip null bytes; reject CR/LF-only goals after trim
+    let goalText = goalRaw.replace(/\0/g, '').trim();
     if (goalText.length > AgentOrchestrator.GOAL_MAX_CHARS) {
       goalText =
         goalText.slice(0, AgentOrchestrator.GOAL_MAX_CHARS) +

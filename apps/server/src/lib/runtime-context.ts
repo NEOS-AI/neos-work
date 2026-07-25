@@ -27,11 +27,14 @@ export function normalizeListenPort(raw: unknown, fallback = DEFAULT_PORT): numb
 const AUTH_TOKEN_MAX_CHARS = 8_192;
 
 export function setRuntimeContext(ctx: { authToken: string; port: number }): void {
-  let token =
-    typeof ctx.authToken === 'string' ? ctx.authToken.trim() : String(ctx.authToken ?? '');
-  // Drop control chars that would break Authorization headers
-  if (/[\0\r\n]/.test(token)) token = '';
-  if (token.length > AUTH_TOKEN_MAX_CHARS) token = token.slice(0, AUTH_TOKEN_MAX_CHARS);
+  const raw =
+    typeof ctx.authToken === 'string' ? ctx.authToken : String(ctx.authToken ?? '');
+  // Drop control chars before trim (would break Authorization headers)
+  let token = '';
+  if (!/[\0\r\n]/.test(raw)) {
+    token = raw.trim();
+    if (token.length > AUTH_TOKEN_MAX_CHARS) token = token.slice(0, AUTH_TOKEN_MAX_CHARS);
+  }
   authToken = token;
   port = normalizeListenPort(ctx.port, port || DEFAULT_PORT);
 }

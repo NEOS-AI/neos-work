@@ -32,6 +32,9 @@ describe('runtime-context', () => {
   it('drops control-char tokens and caps overlong auth tokens', () => {
     setRuntimeContext({ authToken: 'good\nbad', port: 3001 });
     expect(getRuntimeAuthToken()).toBe('');
+    // Leading control char must not strip to a valid token
+    setRuntimeContext({ authToken: '\ntok', port: 3001 });
+    expect(getRuntimeAuthToken()).toBe('');
     setRuntimeContext({ authToken: 't'.repeat(10_000), port: 3001 });
     expect(getRuntimeAuthToken().length).toBe(8_192);
   });

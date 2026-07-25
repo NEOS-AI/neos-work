@@ -57,22 +57,27 @@ function normalizePipelineStages(raw: unknown): PipelineStage[] | undefined {
     if (stages.length >= PIPELINE_STAGES_MAX) break;
     if (!s || typeof s !== 'object') continue;
     const stage = s as Partial<PipelineStage>;
-    const id = typeof stage.id === 'string' ? stage.id.trim() : '';
-    if (!id || /[\0\r\n]/.test(id) || id.length > PIPELINE_STAGE_ID_MAX) continue;
-    let name =
-      typeof stage.name === 'string' ? stage.name.trim() || id : id;
-    if (/[\0\r\n]/.test(name)) name = id;
+    const idRaw = typeof stage.id === 'string' ? stage.id : '';
+    // Control-char check before trim
+    if (!idRaw || /[\0\r\n]/.test(idRaw)) continue;
+    const id = idRaw.trim();
+    if (!id || id.length > PIPELINE_STAGE_ID_MAX) continue;
+    let name = id;
+    if (typeof stage.name === 'string' && !/[\0\r\n]/.test(stage.name)) {
+      name = stage.name.trim() || id;
+    }
     if (name.length > PIPELINE_STAGE_NAME_MAX) name = name.slice(0, PIPELINE_STAGE_NAME_MAX);
     const kind = normalizePipelineStageKind(stage.kind);
-    let outputKey =
-      typeof stage.outputKey === 'string'
-        ? stage.outputKey.trim() || undefined
-        : undefined;
-    if (outputKey && (/[\0\r\n]/.test(outputKey) || outputKey.length > PIPELINE_STAGE_ID_MAX)) {
-      outputKey = undefined;
+    let outputKey: string | undefined;
+    if (typeof stage.outputKey === 'string' && !/[\0\r\n]/.test(stage.outputKey)) {
+      const ok = stage.outputKey.trim();
+      if (ok && ok.length <= PIPELINE_STAGE_ID_MAX) outputKey = ok;
     }
-    let prompt =
-      typeof stage.prompt === 'string' ? stage.prompt.trim() || undefined : undefined;
+    let prompt: string | undefined;
+    if (typeof stage.prompt === 'string' && !/\0/.test(stage.prompt)) {
+      // Allow newlines inside multi-line prompts; reject null bytes
+      prompt = stage.prompt.trim() || undefined;
+    }
     if (prompt && prompt.length > PIPELINE_STAGE_PROMPT_MAX) {
       prompt = prompt.slice(0, PIPELINE_STAGE_PROMPT_MAX);
     }

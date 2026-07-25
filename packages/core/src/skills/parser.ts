@@ -46,8 +46,11 @@ export function parseSkillFile(
   const [, frontmatter, body] = match;
   const raw = parseSimpleYaml(frontmatter ?? '');
 
-  let name = typeof raw.name === 'string' ? raw.name.trim() : '';
-  if (!name || /[\0\r\n]/.test(name)) return null;
+  const nameRaw = typeof raw.name === 'string' ? raw.name : '';
+  // Control-char check before trim
+  if (!nameRaw || /[\0\r\n]/.test(nameRaw)) return null;
+  let name = nameRaw.trim();
+  if (!name) return null;
   if (name.length > SKILL_NAME_MAX) name = name.slice(0, SKILL_NAME_MAX);
 
   const sourceNorm =

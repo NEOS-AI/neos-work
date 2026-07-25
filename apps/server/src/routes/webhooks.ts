@@ -109,11 +109,13 @@ webhooks.post('/:workflowId', async (c) => {
   try {
     const parsed = JSON.parse(rawBody) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      // Drop blank / control-char keys from trigger bag
+      // Drop blank / control-char keys from trigger bag (check before trim)
       const clean: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-        const key = typeof k === 'string' ? k.trim() : '';
-        if (!key || /[\0\r\n]/.test(key) || key.length > 200) continue;
+        if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
+        const key = k.trim();
+        if (!key || key.length > 200) continue;
+        if (Object.keys(clean).length >= 200) break;
         clean[key] = v;
       }
       triggerInputs = clean;

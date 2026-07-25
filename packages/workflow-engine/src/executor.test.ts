@@ -59,6 +59,25 @@ describe('executeWorkflow', () => {
     });
   });
 
+  it('skips control-char node ids (graph hygiene); does not execute them', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-bad-id',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'bad\nid', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          { id: 'ok', type: 'output', label: 'O', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    // Control-char id is dropped by topologicalSort; only valid nodes run
+    expect(events.some((e) => e.type === 'node.started' && (e as { nodeId?: string }).nodeId === 'ok')).toBe(true);
+    expect(events.some((e) => (e as { nodeId?: string }).nodeId === 'bad\nid')).toBe(false);
+  });
+
   it('passes triggerInputs as trigger node output', async () => {
     const events: WorkflowSSEEvent[] = [];
 

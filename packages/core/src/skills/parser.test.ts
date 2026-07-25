@@ -43,6 +43,28 @@ body
     expect(parseSkillFile(content, '/x.md', 'local')).toBeNull();
   });
 
+  it('returns null for control-char names before trim', () => {
+    // Same-line control chars survive simple YAML line parse
+    const nullByte = [
+      '---',
+      `name: hi${'\0'}there`,
+      'description: x',
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    expect(parseSkillFile(nullByte, '/x.md', 'local')).toBeNull();
+    const cr = [
+      '---',
+      `name: bad${'\r'}name`,
+      'description: x',
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    expect(parseSkillFile(cr, '/x.md', 'local')).toBeNull();
+  });
+
   it('strips quoted values and defaults description', () => {
     const content = `---
 name: "quoted"

@@ -312,4 +312,44 @@ describe('Sessions page', () => {
       expect(chat).not.toHaveBeenCalled();
     });
   });
+
+  it('shows null-title sessions as New session and loads chat history', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: false, error: 'history failed' });
+    render(<Sessions />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
+    });
+    // Second session has title: null → "New session"
+    expect(screen.getByText('New session')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(listMessages).toHaveBeenCalledWith('s1'));
+  });
+
+  it('surfaces chat stream errors without crashing', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'error', content: 'model blew up' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'Hi' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(chat).toHaveBeenCalled();
+    });
+    // Page remains mounted
+    expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
+  });
 });

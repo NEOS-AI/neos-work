@@ -23,6 +23,13 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     await expect(upgradeSkillToPlugin({ skillDirName: '   ' })).rejects.toThrow(/Invalid/i);
   });
 
+  it('rejects control-char skillDirName before trim', async () => {
+    await expect(upgradeSkillToPlugin({ skillDirName: 'bad\nname' })).rejects.toThrow(/Invalid/i);
+    await expect(upgradeSkillToPlugin({ skillDirName: '\nok-dir' })).rejects.toThrow(/Invalid/i);
+    await expect(upgradeSkillToPlugin({ skillDirName: `dir${'\0'}x` })).rejects.toThrow(/Invalid/i);
+    await expect(upgradeSkillToPlugin({ skillDirName: 'x'.repeat(201) })).rejects.toThrow(/Invalid/i);
+  });
+
   it('getPlugin trims id and returns null for blank', async () => {
     expect(await getPlugin('   ')).toBeNull();
     expect(await getPlugin('')).toBeNull();
@@ -39,6 +46,21 @@ describe('plugin-store upgradeSkillToPlugin', () => {
 
   it('rejects missing skill directory', async () => {
     await expect(upgradeSkillToPlugin({ skillDirName: 'no-such-skill-dir-xyz' })).rejects.toThrow(/not found/i);
+  });
+
+  it('drops control-char name/description on upgrade and falls back to dir name', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), '# From Skill File\n\nBody\n', 'utf8');
+
+    const plugin = await upgradeSkillToPlugin({
+      skillDirName: DIR_NAME,
+      name: 'bad\nname',
+      description: 'bad\ndesc',
+    });
+    // Control-char name → skill dir fallback; description falls back to first skill line or default
+    expect(plugin.name).toBe(DIR_NAME);
+    expect(plugin.description).not.toMatch(/\n/);
+    expect(plugin.description.length).toBeGreaterThan(0);
   });
 
   it('creates open-design.json with 4-step pipeline', async () => {
@@ -90,6 +112,28 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     await fs.writeFile(path.join(DIR, 'SKILL.md'), '# Skill only\n', 'utf8');
     const list = await listPlugins();
     expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
+  });
+
+  it('listPlugins drops stages with control-char ids before trim', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'Stage Hyg',
+        version: '0.0.1',
+        pipeline: [
+          { id: '\nbad', name: 'Bad', kind: 'execute' },
+          { id: 'good', name: 'Good', kind: 'plan' },
+          { id: 'x\ny', name: 'Mid', kind: 'execute' },
+        ],
+      }),
+      'utf8',
+    );
+    const list = await listPlugins();
+    const p = list.find((x) => x.id === DIR_NAME);
+    expect(p?.pipeline?.map((s) => s.id)).toEqual(['good']);
   });
 
   it('listPlugins skips hidden skill directories', async () => {

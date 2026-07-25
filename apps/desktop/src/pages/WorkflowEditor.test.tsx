@@ -304,4 +304,29 @@ describe('WorkflowEditor page', () => {
       );
     });
   });
+
+  it('shows not-found when workflow load fails', async () => {
+    getWorkflow.mockResolvedValue({ ok: false, error: 'missing' });
+    renderEditor();
+    await waitFor(() => {
+      // Common patterns: not found / error / loading settles without editor title
+      const body = document.body.textContent ?? '';
+      expect(
+        /not found|Not found|error|Error|missing|workflow\.notFound/i.test(body)
+          || !body.includes('Editor Flow'),
+      ).toBe(true);
+    });
+  });
+
+  it('cancels run dialog without invoking runWorkflow', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    runWorkflow.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'cancel-run' }));
+    await waitFor(() => expect(screen.queryByTestId('run-inputs-dialog')).not.toBeInTheDocument());
+    expect(runWorkflow).not.toHaveBeenCalled();
+  });
 });

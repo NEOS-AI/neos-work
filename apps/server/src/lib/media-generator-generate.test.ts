@@ -105,6 +105,17 @@ describe('generateImage', () => {
     await expect(
       generateImage({ prompt: `line1${'\n'}line2`, apiKey: 'sk' }),
     ).rejects.toThrow(/control characters/i);
+
+    // Leading control chars must fail before trim (would otherwise become valid)
+    await expect(
+      generateImage({ prompt: '\nok-looking-prompt', apiKey: 'sk' }),
+    ).rejects.toThrow(/control characters/i);
+  });
+
+  it('rejects audio text with null bytes before trim', async () => {
+    await expect(
+      generateAudio({ text: `hello${'\0'}world`, apiKey: 'sk' }),
+    ).rejects.toThrow(/control characters/i);
   });
 
   it('clamps invalid size/quality and rejects blank prompt', async () => {

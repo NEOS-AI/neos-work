@@ -45,7 +45,22 @@ async function runNode(
   nodeOutputs: Map<string, unknown>,
   failedNodes: Set<string>,
 ): Promise<boolean> {
-  const nodeId = typeof node.id === 'string' ? node.id.trim() : String(node.id ?? '');
+  const nodeIdRaw = typeof node.id === 'string' ? node.id : String(node.id ?? '');
+  // Control-char / blank ids are unusable in SSE and result maps
+  if (!nodeIdRaw || /[\0\r\n]/.test(nodeIdRaw)) {
+    const nodeId = 'invalid';
+    onEvent({ type: 'node.started', nodeId, nodeType: node.type });
+    onEvent({ type: 'node.failed', nodeId, error: 'Invalid node id' });
+    failedNodes.add(nodeId);
+    return false;
+  }
+  const nodeId = nodeIdRaw.trim();
+  if (!nodeId || nodeId.length > 200) {
+    onEvent({ type: 'node.started', nodeId: 'invalid', nodeType: node.type });
+    onEvent({ type: 'node.failed', nodeId: 'invalid', error: 'Invalid node id' });
+    failedNodes.add('invalid');
+    return false;
+  }
   onEvent({ type: 'node.started', nodeId, nodeType: node.type });
   const nodeImpl = resolveNode(node.type, node.config as Record<string, unknown> | undefined);
   const result = await nodeImpl.execute(ctx);

@@ -82,6 +82,18 @@ describe('design-system-store', () => {
     expect(await createDesignSystem('   ')).toBeNull();
   });
 
+  it('rejects control-char names and drops control-char descriptions', async () => {
+    expect(await createDesignSystem('bad\nname')).toBeNull();
+    expect(await createDesignSystem('\nBrand')).toBeNull();
+    expect(await createDesignSystem(`Brand${'\0'}`)).toBeNull();
+
+    const created = await createDesignSystem(NAME, 'bad\ndesc');
+    expect(created).not.toBeNull();
+    // Control-char description is dropped rather than persisted
+    expect(created!.description == null || created!.description === '').toBe(true);
+    await deleteDesignSystem(created!.id);
+  });
+
   it('rejects oversized DESIGN.md content; truncates long description', async () => {
     const created = await createDesignSystem(NAME, 'x'.repeat(5_000));
     expect(created).not.toBeNull();

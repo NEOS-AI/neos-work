@@ -131,10 +131,13 @@ export class AgentNode implements ExecutableNode {
     }
     const harness = harnessId ? resolveHarness(harnessId) : undefined;
 
-    let nodeSystemPrompt =
+    const sysRaw =
       typeof this.nodeConfig?.['systemPrompt'] === 'string'
-        ? this.nodeConfig['systemPrompt'].trim()
-        : String(this.nodeConfig?.['systemPrompt'] ?? '').trim();
+        ? this.nodeConfig['systemPrompt']
+        : String(this.nodeConfig?.['systemPrompt'] ?? '');
+    // Strip null bytes; allow newlines in multi-line system prompts
+    let nodeSystemPrompt = /\0/.test(sysRaw) ? sysRaw.replace(/\0/g, '') : sysRaw;
+    nodeSystemPrompt = nodeSystemPrompt.trim();
     if (nodeSystemPrompt.length > SYSTEM_PROMPT_MAX_CHARS) {
       nodeSystemPrompt = nodeSystemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS);
     }
@@ -188,8 +191,10 @@ export class AgentNode implements ExecutableNode {
 
     // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig)
     const rawProvider = this.nodeConfig?.['provider'] ?? this.nodeConfig?.['llmProvider'];
-    const provider =
-      typeof rawProvider === 'string' ? rawProvider.trim().toLowerCase() : '';
+    let provider = '';
+    if (typeof rawProvider === 'string' && !/[\0\r\n]/.test(rawProvider)) {
+      provider = rawProvider.trim().toLowerCase();
+    }
     if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
       if (!ctx.cliSpawn) {
         return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };

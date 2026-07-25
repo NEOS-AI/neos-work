@@ -66,6 +66,15 @@ describe('memory-store', () => {
     expect(deleteMemory('id\nbad')).toBe(false);
   });
 
+  it('rejects leading control-char names before trim', () => {
+    expect(() =>
+      createMemory({ name: '\nmem', type: 'user', content: 'x' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createMemory({ name: NAME, type: 'user', content: 'hi\0there' }),
+    ).toThrow(/control characters/i);
+  });
+
   it('rejects blank name on create and normalizes unknown type to user', () => {
     expect(() =>
       createMemory({ name: '   ', type: 'user', content: 'x' }),

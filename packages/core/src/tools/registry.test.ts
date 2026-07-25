@@ -52,10 +52,15 @@ describe('ToolRegistry', () => {
     expect(blank.error).toMatch(/Tool name is required/i);
   });
 
-  it('rejects control-char / overlong tool names and caps description', () => {
+  it('rejects control-char / overlong tool names and caps description', async () => {
     const reg = new ToolRegistry();
     reg.register(makeTool('bad\nname'));
     expect(reg.getAll()).toHaveLength(0);
+    // Leading control char must not strip to a valid name
+    reg.register(makeTool('\necho'));
+    expect(reg.get('echo')).toBeUndefined();
+    expect(reg.get('\necho')).toBeUndefined();
+    expect(await reg.execute('\necho', {})).toMatchObject({ success: false });
     reg.register(makeTool('n'.repeat(201)));
     expect(reg.getAll()).toHaveLength(0);
     reg.register({
