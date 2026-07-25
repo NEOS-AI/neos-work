@@ -12,18 +12,23 @@ export const RUN_LOG_FILTERS: readonly RunLogFilterPref[] = [
 
 const FILTER_KEY = 'neos-run-log-filter';
 
+function isRunLogFilterPref(value: unknown): value is RunLogFilterPref {
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
+  const v = value.trim();
+  return (
+    v === 'all'
+    || v === 'progress'
+    || v === 'completed'
+    || v === 'failed'
+    || v === 'lifecycle'
+  );
+}
+
 export function loadRunLogFilter(): RunLogFilterPref {
   try {
-    const v = localStorage.getItem(FILTER_KEY);
-    if (
-      v === 'all' ||
-      v === 'progress' ||
-      v === 'completed' ||
-      v === 'failed' ||
-      v === 'lifecycle'
-    ) {
-      return v;
-    }
+    const raw = localStorage.getItem(FILTER_KEY);
+    // Control-char / unknown storage → all (align with run-history-filter)
+    if (raw && isRunLogFilterPref(raw)) return raw.trim() as RunLogFilterPref;
     return 'all';
   } catch {
     return 'all';
@@ -32,14 +37,8 @@ export function loadRunLogFilter(): RunLogFilterPref {
 
 export function saveRunLogFilter(filter: RunLogFilterPref): void {
   try {
-    if (
-      filter === 'all' ||
-      filter === 'progress' ||
-      filter === 'completed' ||
-      filter === 'failed' ||
-      filter === 'lifecycle'
-    ) {
-      localStorage.setItem(FILTER_KEY, filter);
+    if (isRunLogFilterPref(filter)) {
+      localStorage.setItem(FILTER_KEY, filter.trim());
     }
   } catch {
     // ignore quota / private mode

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Deployment, Routine, Workflow } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import {
@@ -88,6 +89,13 @@ export function Dashboard() {
   }, [client]);
 
   const uptimeLabel = formatEngineUptime(stats.engineUptimeSec);
+  // Scrub control from health version / remote URL before status card display
+  const versionSafe = stats.engineVersion
+    ? scrubDisplayText(stats.engineVersion, { collapseLines: true, maxChars: 40 })
+    : '';
+  const serverUrlSafe = serverUrl
+    ? scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })
+    : '';
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,7 +106,7 @@ export function Dashboard() {
         <StatusCard
           label="Engine"
           value={mode === 'host' ? 'Local' : mode === 'client' ? 'Remote' : '—'}
-          detail={[stats.engineVersion ? `v${stats.engineVersion}` : null, uptimeLabel, serverUrl]
+          detail={[versionSafe ? `v${versionSafe}` : null, uptimeLabel, serverUrlSafe || null]
             .filter(Boolean)
             .join(' · ')}
           color="emerald"
@@ -175,10 +183,10 @@ export function Dashboard() {
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {wf.name}
+                    {scrubDisplayText(wf.name, { collapseLines: true, maxChars: 200 }) || 'Workflow'}
                   </p>
                   <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
-                    {wf.domain}
+                    {scrubDisplayText(wf.domain, { collapseLines: true, maxChars: 40 }) || 'general'}
                     {' · '}
                     {(wf.nodes?.length ?? 0)} nodes
                   </p>
@@ -213,10 +221,10 @@ export function Dashboard() {
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {r.name}
+                    {scrubDisplayText(r.name, { collapseLines: true, maxChars: 200 }) || 'Routine'}
                   </p>
                   <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
-                    {r.schedule}
+                    {scrubDisplayText(r.schedule, { collapseLines: true, maxChars: 80 }) || '—'}
                     {' · '}
                     {r.enabled ? 'enabled' : 'disabled'}
                   </p>
@@ -257,7 +265,10 @@ export function Dashboard() {
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {d.projectName || d.provider}
+                    {scrubDisplayText(d.projectName || d.provider, {
+                      collapseLines: true,
+                      maxChars: 200,
+                    }) || 'Deploy'}
                   </p>
                   <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
                     {d.provider}

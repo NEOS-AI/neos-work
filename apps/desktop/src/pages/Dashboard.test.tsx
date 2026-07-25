@@ -96,6 +96,35 @@ describe('Dashboard page', () => {
     expect(screen.getByText('WF One')).toBeInTheDocument();
   });
 
+  it('scrubs control chars from engine version and recent names', async () => {
+    health.mockResolvedValue({
+      status: 'ok',
+      version: `0.3.99${'\n'}evil`,
+      uptime: 10,
+    });
+    listWorkflows.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'w1',
+          name: `Bad${'\0'}Name`,
+          domain: `coding${'\n'}x`,
+          nodes: [],
+          edges: [],
+          updatedAt: '2020-01-02T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => {
+      // newlines collapsed in version display
+      expect(screen.getByText(/v0\.3\.99 evil/)).toBeInTheDocument();
+    });
+    // null-byte stripped from name; domain collapsed
+    expect(screen.getByText('BadName')).toBeInTheDocument();
+    expect(screen.getByText(/coding x/)).toBeInTheDocument();
+  });
+
   it('tolerates API failures without crashing', async () => {
     listSessions.mockRejectedValue(new Error('down'));
     listWorkflows.mockRejectedValue(new Error('down'));

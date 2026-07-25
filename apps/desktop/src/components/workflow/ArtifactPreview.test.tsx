@@ -42,6 +42,44 @@ describe('downloadTextFile', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:test');
     createEl.mockRestore();
   });
+
+  it('scrubs control-char filename/mime and null-byte body', () => {
+    const click = vi.fn();
+    const createObjectURL = vi.fn(() => 'blob:safe');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    const origCreate = document.createElement.bind(document);
+    let downloadName = '';
+    const createEl = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag);
+      if (tag === 'a') {
+        Object.defineProperty(el, 'click', { value: click });
+        Object.defineProperty(el, 'download', {
+          configurable: true,
+          get: () => downloadName,
+          set: (v: string) => {
+            downloadName = v;
+          },
+        });
+      }
+      return el;
+    });
+
+    downloadTextFile(`evil${'\0'}name\n.html`, `body${'\0'}x`, `text/plain${'\n'}`);
+    expect(downloadName).toBe('evil_name_.html');
+    expect(createObjectURL).toHaveBeenCalled();
+    const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.type).toBe('text/plain');
+
+    // blank-after-scrub / overlong name
+    downloadTextFile('   ', 'x');
+    expect(downloadName).toBe('artifact.txt');
+    downloadTextFile('n'.repeat(250), 'y');
+    expect(downloadName.length).toBe(200);
+
+    createEl.mockRestore();
+  });
 });
 
 describe('isHtmlContent / isMarkdownContent', () => {

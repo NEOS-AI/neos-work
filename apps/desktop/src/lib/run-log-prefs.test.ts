@@ -31,6 +31,13 @@ describe('run-log-prefs', () => {
     expect(loadRunLogFilter()).toBe('all');
   });
 
+  it('ignores control-char stored filter values', () => {
+    localStorage.setItem('neos-run-log-filter', `failed${'\0'}`);
+    expect(loadRunLogFilter()).toBe('all');
+    localStorage.setItem('neos-run-log-filter', '\nprogress');
+    expect(loadRunLogFilter()).toBe('all');
+  });
+
   it('does not persist invalid filter values', () => {
     saveRunLogFilter('failed');
     saveRunLogFilter('not-a-filter' as RunLogFilterPref);

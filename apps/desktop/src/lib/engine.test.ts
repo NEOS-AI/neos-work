@@ -463,10 +463,19 @@ describe('EngineClient', () => {
     expect(parseSseDataPayload('data: {"ok":true}\r')).toBe('{"ok":true}');
     expect(parseSseDataPayload(`data: {"x":1${'\0'}}`)).toBeNull();
     expect(parseSseDataPayload('data:')).toBeNull();
+    expect(parseSseDataPayload('data:   ')).toBeNull();
     expect(parseSseDataPayload('event: foo')).toBeNull();
+    expect(parseSseDataPayload('not-data')).toBeNull();
+    expect(parseSseDataPayload(null as unknown as string)).toBeNull();
+    // "data:" without space and with space
+    expect(parseSseDataPayload('data:{"a":1}')).toBe('{"a":1}');
     expect(parseSseEventName('event: tool_call')).toBe('tool_call');
+    expect(parseSseEventName('event:  padded  ')).toBe('padded');
     expect(parseSseEventName(`event: bad${'\0'}name`)).toBe('');
     expect(parseSseEventName('event: \nlead')).toBe('');
+    expect(parseSseEventName('event:')).toBe('');
+    expect(parseSseEventName('data: x')).toBe('');
+    expect(parseSseEventName(42 as unknown as string)).toBe('');
   });
 
   it('runWorkflow skips null-byte SSE data lines', async () => {
@@ -800,6 +809,29 @@ describe('EngineClient', () => {
     const okRun = client.runPlugin('p2', {}, (e) => events2.push(e));
     await expect(okRun.runIdPromise).resolves.toBe('run-ok');
     expect(events2.some((e) => (e as { type?: string }).type === 'stage.done')).toBe(true);
+
+    // Control-char pipeline runId ignored (never captured)
+    const ctrlRunStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: {"type":"pipeline.started","runId":"bad${'\0'}id"}\n\n`,
+          ),
+        );
+        controller.enqueue(
+          encoder.encode('data: {"type":"pipeline.started","runId":"  run-clean  "}\n\n'),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(ctrlRunStream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    const ctrlRun = client.runPlugin('p3', {}, () => {});
+    await expect(ctrlRun.runIdPromise).resolves.toBe('run-clean');
 
     // export zip download
     fetchMock.mockResolvedValueOnce(

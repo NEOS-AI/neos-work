@@ -77,6 +77,24 @@ describe('filterByStatus', () => {
   it('returns empty when no status matches', () => {
     expect(filterByStatus([{ status: 'pending' }], 'failed')).toEqual([]);
   });
+
+  it('normalizes padded item status/kind and drops control-char item fields', () => {
+    expect(filterByStatus([{ status: '  success  ' }], 'success')).toHaveLength(1);
+    expect(filterByStatus([{ status: `success${'\0'}` }], 'success')).toHaveLength(0);
+    expect(filterByKind([{ kind: '  image  ' }], 'image')).toHaveLength(1);
+    expect(filterByKind([{ kind: '\nimage' }], 'image')).toHaveLength(0);
+    expect(filterByFieldValue([{ provider: ' vercel ' }], 'provider', 'vercel')).toHaveLength(1);
+    expect(filterByEnabled([{ enabled: true }], '\nenabled')).toHaveLength(1);
+    expect(filterByEnabled([{ enabled: true }], 'enabled')).toHaveLength(1);
+    expect(filterByEnabled([{ enabled: false }], 'enabled')).toHaveLength(0);
+    // Control-char domain on item does not match chip
+    expect(
+      filterWorkflowList(
+        [{ name: 'X', domain: '\ncoding', description: '' }],
+        { domain: 'coding' },
+      ),
+    ).toHaveLength(0);
+  });
 });
 
 describe('filterBySearchText case-insensitivity', () => {

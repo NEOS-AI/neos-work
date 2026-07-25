@@ -113,7 +113,7 @@ export function Skills() {
     [skills],
   );
 
-  // Categories + enabled + search
+  // Categories + enabled + search (control-char categories never become chips)
   const categories = useMemo(
     () => [
       'all',
@@ -121,7 +121,13 @@ export function Skills() {
         new Set(
           skills
             .map((s) => s.category)
-            .filter((c): c is string => typeof c === 'string' && c.length > 0),
+            .filter(
+              (c): c is string =>
+                typeof c === 'string'
+                && !/[\0\r\n]/.test(c)
+                && c.trim().length > 0,
+            )
+            .map((c) => c.trim()),
         ),
       ),
     ],

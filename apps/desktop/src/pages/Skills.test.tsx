@@ -295,4 +295,37 @@ describe('Skills page', () => {
     expect(screen.getByText('Alpha Skill')).toBeInTheDocument();
     expect(screen.queryByText('Beta Skill')).not.toBeInTheDocument();
   });
+
+  it('omits control-char skill categories from chips', async () => {
+    listSkills.mockResolvedValue({
+      ok: true,
+      data: [
+        ...skills,
+        {
+          id: 'evil',
+          name: 'Evil Skill',
+          description: 'x',
+          category: `bad${'\0'}cat`,
+          enabled: true,
+          featured: false,
+          source: 'local',
+        },
+        {
+          id: 'pad',
+          name: 'Pad Skill',
+          description: 'x',
+          category: '  tools  ',
+          enabled: true,
+          featured: false,
+          source: 'local',
+        },
+      ],
+    });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Evil Skill')).toBeInTheDocument());
+    // Control-char category never becomes a chip label
+    expect(screen.queryByRole('button', { name: /bad/i })).not.toBeInTheDocument();
+    // Padded category trimmed to chip
+    expect(screen.getByRole('button', { name: 'tools' })).toBeInTheDocument();
+  });
 });

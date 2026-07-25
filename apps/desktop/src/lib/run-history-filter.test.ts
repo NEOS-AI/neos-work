@@ -16,6 +16,10 @@ describe('isRunStatusFilter', () => {
     expect(isRunStatusFilter('pending')).toBe(false);
     expect(isRunStatusFilter('')).toBe(false);
     expect(isRunStatusFilter('COMPLETED')).toBe(false);
+    expect(isRunStatusFilter(null as unknown as string)).toBe(false);
+    expect(isRunStatusFilter(42 as unknown as string)).toBe(false);
+    expect(isRunStatusFilter(`failed${'\0'}`)).toBe(false);
+    expect(isRunStatusFilter('  completed  ')).toBe(true);
   });
 });
 
