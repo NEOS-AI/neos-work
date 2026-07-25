@@ -51,6 +51,19 @@ describe('sortByName', () => {
     expect(keys[1]).toBe('a b');
     expect(keys[2]).toBe('ac');
   });
+
+  it('caps pathological name keys at 500 chars for stable compare', () => {
+    const longA = 'a'.repeat(600);
+    const longB = 'a'.repeat(500) + 'z'.repeat(100);
+    // After cap both keys are 500 'a's → equal order is stable (input order preserved by localeCompare of equal keys is implementation-defined; both sort before 'b')
+    const items = [{ name: longB }, { name: 'b-short' }, { name: longA }];
+    const sorted = sortByName(items);
+    expect(sorted[sorted.length - 1]!.name).toBe('b-short');
+    // Cap: names that only differ past 500 chars share the same sort key
+    const onlyLong = sortByName([{ name: longB }, { name: longA }]);
+    expect(onlyLong).toHaveLength(2);
+    expect(onlyLong.map((i) => i.name[0])).toEqual(['a', 'a']);
+  });
 });
 
 describe('sortByDateDesc', () => {

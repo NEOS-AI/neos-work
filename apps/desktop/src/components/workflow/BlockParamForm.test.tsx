@@ -162,4 +162,13 @@ describe('BlockParamForm', () => {
     // Must not invent a padded key in the map
     expect(onChange.mock.calls[0][0]).not.toHaveProperty('  url  ');
   });
+
+  it('scrubs control-char param labels for display', () => {
+    const block = makeBlock([
+      { key: 'q', type: 'string', label: 'Query' + String.fromCharCode(10) + 'X', description: 'd' + String.fromCharCode(0) + 'esc' },
+    ]);
+    render(<BlockParamForm block={block} value={{}} onChange={() => {}} />);
+    expect(screen.getByText('Query X')).toBeInTheDocument();
+  });
+
 });

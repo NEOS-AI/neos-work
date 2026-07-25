@@ -1,4 +1,5 @@
 import type { WorkflowBlock } from '../../lib/engine.js';
+import { scrubDisplayText } from '../../lib/format-duration.js';
 import { CheckboxField, NumberField, SelectField, TextField } from './fields.js';
 
 export function BlockParamForm(props: {
@@ -30,15 +31,20 @@ export function BlockParamForm(props: {
         // Prefer trimmed key (align with defaultsForBlock / BlockNode normalize)
         const key = param.key.trim();
         const value = props.value[key] ?? props.value[param.key];
+        const label =
+          scrubDisplayText(param.label, { collapseLines: true, maxChars: 100 }) || key;
+        const description = param.description
+          ? scrubDisplayText(param.description, { collapseLines: true, maxChars: 300 }) || undefined
+          : undefined;
         if (param.type === 'number') {
           return (
             <NumberField
               key={key}
-              label={param.label}
+              label={label}
               value={typeof value === 'number' ? value : undefined}
               min={param.min}
               max={param.max}
-              description={param.description}
+              description={description}
               onChange={(next) => patchParam(key, next)}
             />
           );
@@ -47,9 +53,9 @@ export function BlockParamForm(props: {
           return (
             <CheckboxField
               key={key}
-              label={param.label}
+              label={label}
               value={value === true}
-              description={param.description}
+              description={description}
               onChange={(next) => patchParam(key, next)}
             />
           );
@@ -64,11 +70,11 @@ export function BlockParamForm(props: {
           return (
             <SelectField
               key={key}
-              label={param.label}
+              label={label}
               value={
                 typeof value === 'string' && !/[\0\r\n]/.test(value) ? value.trim() : ''
               }
-              description={param.description}
+              description={description}
               options={[{ value: '', label: 'Select...' }, ...options]}
               onChange={(next) => {
                 if (next && /[\0\r\n]/.test(next)) return;
@@ -80,9 +86,9 @@ export function BlockParamForm(props: {
         return (
           <TextField
             key={key}
-            label={param.label}
+            label={label}
             value={typeof value === 'string' ? value : ''}
-            description={param.description}
+            description={description}
             onChange={(next) => {
               // Null-byte string params never applied (align with BlockNode)
               if (/\0/.test(next)) return;

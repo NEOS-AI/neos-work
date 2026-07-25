@@ -166,4 +166,48 @@ describe('HarnessSelector', () => {
     expect(values).not.toContain('\nbad-id');
     expect(screen.queryByText(/Evil/)).not.toBeInTheDocument();
   });
+
+  it('scrubs description and filters control-char tools from details', async () => {
+    // filterAndSortHarnesses drops control-char id/name/domain; residual scrub is description + tools
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'h-scrub',
+          name: 'ScrubCoder',
+          domain: 'coding',
+          description: 'Agent' + String.fromCharCode(0) + ' harness' + String.fromCharCode(10) + 'details',
+          systemPrompt: 'x',
+          allowedTools: [
+            'shell',
+            'bad' + String.fromCharCode(0) + 'tool',
+            String.fromCharCode(10) + 'lead',
+            '  read  ',
+            '   ',
+          ],
+          constraints: { maxSteps: 5, timeoutMs: 1000 },
+          isBuiltIn: false,
+        },
+      ],
+    });
+
+    render(
+      <HarnessSelector nodeType="agent_coding" value="h-scrub" onChange={() => {}} />,
+    );
+
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => {
+      const labels = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+      expect(labels.some((t) => t?.includes('ScrubCoder (coding)'))).toBe(true);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    // description: null stripped, newline retained (no collapseLines on description)
+    await waitFor(() => {
+      expect(screen.getByText(/Agent harness/)).toBeInTheDocument();
+    });
+    // Control-char / blank tools dropped; valid tools trimmed
+    expect(screen.getByText(/Tools:\s*shell, read/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/badtool/);
+  });
 });

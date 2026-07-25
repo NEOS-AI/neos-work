@@ -780,4 +780,29 @@ describe('NodeConfigPanel', () => {
 
     window.history.pushState({}, '', prev || '/');
   });
+
+  it('scrubs control-char validation issue messages', () => {
+    const node = {
+      id: 't1',
+      type: 'trigger',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'trigger', label: 'Start', config: {} },
+    } as unknown as import('@xyflow/react').Node;
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[
+          {
+            code: 'test',
+            severity: 'error',
+            nodeId: 't1',
+            message: 'bad' + String.fromCharCode(0) + 'msg' + String.fromCharCode(10) + 'line',
+          },
+        ]}
+        onPatchNodeData={() => {}}
+      />,
+    );
+    expect(screen.getByText(/badmsg line/)).toBeInTheDocument();
+  });
+
 });

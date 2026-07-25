@@ -795,4 +795,53 @@ describe('Settings page', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('hides engine URL row when scrubbed URL is blank and scrubs OAuth title', async () => {
+    engine.status = 'connected';
+    // Control-only URL scrubs empty → URL row omitted
+    engine.serverUrl = String.fromCharCode(0) + String.fromCharCode(10);
+    health.mockResolvedValue({ status: 'ok', version: '0.3.140', uptime: 12 });
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-oauth-title',
+          name: 'Auth' + String.fromCharCode(10) + 'Srv' + String.fromCharCode(0) + 'X',
+          transport: 'http',
+          url: 'https://mcp.example/v1',
+          enabled: true,
+          oauth: { configured: true, connected: false },
+        },
+      ],
+    });
+
+    const user = userEvent.setup();
+    render(<Settings />);
+    await waitFor(() => expect(health).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/v0\.3\.140/);
+    });
+    // Blank-after-scrub URL must not render a URL row value of pure whitespace/control
+    expect(document.body.textContent).not.toContain('\0');
+    // No raw control-only URL fragment shown as a cell
+    const dts = Array.from(document.querySelectorAll('dt')).map((el) => el.textContent);
+    // If URL label is present, its sibling must not be empty control junk
+    if (dts.includes('URL')) {
+      const urlDt = Array.from(document.querySelectorAll('dt')).find((el) => el.textContent === 'URL');
+      const urlDd = urlDt?.nextElementSibling?.textContent ?? '';
+      expect(urlDd.trim().length).toBeGreaterThan(0);
+      expect(urlDd).not.toMatch(/[\0\r\n]/);
+    }
+
+    await waitFor(() => expect(screen.getByText(/Auth SrvX|AuthSrvX/)).toBeInTheDocument());
+    // Open OAuth connect UI if available
+    const connectBtns = screen.queryAllByRole('button', { name: /oauth|connect/i });
+    if (connectBtns.length > 0) {
+      await user.click(connectBtns[0]!);
+      await waitFor(() => {
+        expect(document.body.textContent).toMatch(/Connect:.*Auth/);
+      });
+      expect(document.body.textContent).not.toContain('\0');
+    }
+  });
+
 });

@@ -12,6 +12,7 @@ import {
   MEDIA_TTS_MODELS,
   MEDIA_VOICES,
 } from '../../lib/media-node-options.js';
+import { scrubDisplayText } from '../../lib/format-duration.js';
 import { BlockParamForm } from './BlockParamForm.js';
 import { BlockSelector, defaultsForBlock, safeBlockId } from './BlockSelector.js';
 import { CheckboxField, NumberField, TextAreaField, TextField } from './fields.js';
@@ -549,7 +550,7 @@ function ValidationList({ issues }: { issues: WorkflowValidationIssue[] }) {
             backgroundColor: issue.severity === 'error' ? '#450a0a33' : '#451a0333',
           }}
         >
-          {issue.message}
+          {scrubDisplayText(issue.message, { collapseLines: true, maxChars: 500 }) || issue.code}
         </div>
       ))}
     </div>

@@ -183,4 +183,21 @@ describe('Sidebar', () => {
     });
   });
 
+  it('scrubs control-char mode token in engine footer', async () => {
+    health.mockResolvedValue({ status: 'ok', version: '1.2.3' });
+    engine = {
+      status: 'connected',
+      mode: 'cli' + String.fromCharCode(0) + 'ent' + String.fromCharCode(10) + 'x',
+      serverUrl: null,
+      disconnect: vi.fn(),
+      client: { health },
+    };
+    renderSidebar();
+    await waitFor(() => {
+      expect(screen.getByText(/Engine v1\.2\.3 · client x|Engine v1\.2\.3 · clientx/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    expect(document.body.textContent).not.toMatch(/cli\0ent/);
+  });
+
 });

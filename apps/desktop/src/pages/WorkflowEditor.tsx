@@ -566,7 +566,11 @@ export function WorkflowEditor() {
             if (!client || !workflow) return;
             const res = await client.preflightWorkflow(workflow.id);
             if (!res.ok || !res.data) {
-              window.alert((res as { error?: string }).error ?? 'Preflight failed');
+              const err = scrubDisplayText(
+                (res as { error?: string }).error ?? 'Preflight failed',
+                { collapseLines: true, maxChars: 500 },
+              );
+              window.alert(err || 'Preflight failed');
               return;
             }
             const { ok, issues } = res.data;
@@ -574,7 +578,14 @@ export function WorkflowEditor() {
               window.alert('Preflight OK — ready to run.');
               return;
             }
-            const lines = issues.map((i) => `[${i.severity}] ${i.message}${i.nodeId ? ` (${i.nodeId})` : ''}`);
+            const lines = issues.map((i) => {
+              const sev = scrubDisplayText(i.severity, { collapseLines: true, maxChars: 20 }) || 'info';
+              const msg = scrubDisplayText(i.message, { collapseLines: true, maxChars: 300 }) || i.code || 'issue';
+              const nid = i.nodeId
+                ? scrubDisplayText(i.nodeId, { collapseLines: true, maxChars: 80 })
+                : '';
+              return `[${sev}] ${msg}${nid ? ` (${nid})` : ''}`;
+            });
             window.alert(`${ok ? 'Preflight warnings' : 'Preflight blocked'}:\n\n${lines.join('\n')}`);
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
@@ -874,7 +885,11 @@ export function WorkflowEditor() {
                       navigate('/routines');
                     }
                   } else {
-                    alert((res as { error?: string }).error ?? 'Failed to create routine');
+                    const err = scrubDisplayText(
+                      (res as { error?: string }).error ?? 'Failed to create routine',
+                      { collapseLines: true, maxChars: 500 },
+                    );
+                    alert(err || 'Failed to create routine');
                   }
                 }}
               >

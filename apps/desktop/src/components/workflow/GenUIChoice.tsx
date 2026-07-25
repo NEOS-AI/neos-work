@@ -10,9 +10,11 @@ interface GenUIChoiceProps {
 }
 
 function safeChoiceText(raw: unknown): string {
-  // Control-char labels/values dropped (check before trim)
+  // Control-char labels/values dropped (check before trim); cap display length
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
-  return raw.trim();
+  const t = raw.trim();
+  if (!t) return '';
+  return t.length > 200 ? t.slice(0, 200) : t;
 }
 
 function safePreviewUrl(raw: unknown): string {
@@ -30,10 +32,10 @@ function safePreviewUrl(raw: unknown): string {
 
 export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
   const options = Array.isArray(schema?.options) ? schema.options : [];
-  // Null-byte prompt hidden; multi-line OK after collapse
+  // Null-byte prompt hidden; multi-line collapsed; length capped
   let prompt = '';
   if (typeof schema?.prompt === 'string' && !/\0/.test(schema.prompt)) {
-    prompt = schema.prompt.replace(/[\r\n]+/g, ' ').trim();
+    prompt = schema.prompt.replace(/[\r\n]+/g, ' ').trim().slice(0, 500);
   }
 
   if (options.length === 0) {

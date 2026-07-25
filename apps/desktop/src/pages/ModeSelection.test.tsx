@@ -182,4 +182,15 @@ describe('ModeSelection', () => {
     expect(screen.getByText(/boomerr next/)).toBeInTheDocument();
   });
 
+  it('falls back to disconnected label when error scrubs to empty', () => {
+    engineState = {
+      status: 'error',
+      error: String.fromCharCode(0) + String.fromCharCode(10) + String.fromCharCode(13),
+      connect: vi.fn(),
+    };
+    render(<ModeSelection />);
+    expect(screen.getByText('connection.disconnected')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

@@ -148,4 +148,17 @@ describe('GenUIChoice', () => {
       'https://cdn.example/ok.png',
     );
   });
+
+  it('caps overlong choice labels', () => {
+    const long = 'x'.repeat(250);
+    render(
+      <GenUIChoice
+        schema={{ options: [{ label: long, value: 'v1' }] }}
+        onSelect={() => {}}
+      />,
+    );
+    const shown = screen.getByRole('button').textContent ?? '';
+    expect(shown.length).toBeLessThanOrEqual(200);
+  });
+
 });

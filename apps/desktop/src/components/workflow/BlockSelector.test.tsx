@@ -282,4 +282,51 @@ describe('BlockSelector', () => {
       expect(screen.getByText('Padded block')).toBeInTheDocument();
     });
   });
+
+  it('scrubs option labels and filters control-char requiredSettings', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        block({
+          id: 'blk-scrub',
+          name: 'Alpha' + String.fromCharCode(10) + 'Block',
+          domain: 'cod' + String.fromCharCode(0) + 'ing',
+          // collapseLines turns embedded LF into space in the option label
+          category: 'ut' + String.fromCharCode(10) + 'il',
+          description: 'Desc' + String.fromCharCode(0) + 'X' + String.fromCharCode(10) + 'Y',
+          inputDescription: 'in' + String.fromCharCode(10) + 'put',
+          outputDescription: 'out' + String.fromCharCode(0) + 'put',
+          requiredSettings: [
+            'OPENAI_API_KEY',
+            'bad' + String.fromCharCode(0) + 'key',
+            String.fromCharCode(10) + 'lead',
+            '  trim-me  ',
+            '   ',
+          ],
+        }),
+      ],
+    });
+    render(<BlockSelector value="blk-scrub" onChange={() => {}} />);
+
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => {
+      const labels = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+      // domain null-byte stripped; category LF → space; name LF → space
+      expect(labels.some((t) => t?.includes('coding / ut il / Alpha Block'))).toBe(true);
+    });
+    // Raw null bytes never appear in labels or details
+    expect(document.body.textContent).not.toContain('\0');
+    expect(document.body.textContent).not.toMatch(/Alpha\nBlock/);
+
+    // description: null stripped, newline kept (no collapseLines)
+    await waitFor(() => {
+      expect(screen.getByText(/DescX/)).toBeInTheDocument();
+    });
+    // null-byte stripped from description; newline collapsed for input/output
+    expect(screen.getByText(/Input:\s*in put/)).toBeInTheDocument();
+    expect(screen.getByText(/Output:\s*output/)).toBeInTheDocument();
+    // Control-char settings dropped; blank dropped; valid trimmed
+    expect(screen.getByText(/Settings:\s*OPENAI_API_KEY, trim-me/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/badkey/);
+  });
 });
