@@ -398,45 +398,51 @@ describe('AgentNode LLM model selection', () => {
   });
 
   it('strips null bytes from harness prompt; skips null-byte design context', async () => {
-    const { registerHarness } = await import('../harness/index.js');
-    registerHarness({
+    const harnessMod = await import('../harness/index.js');
+    const spy = vi.spyOn(harnessMod, 'resolveHarness').mockReturnValue({
       id: 'cov_agent_null_harness',
       name: 'Null Harness',
       domain: 'coding',
       description: 'test',
       systemPrompt: `Harness${'\0'}Prompt`,
-      allowedTools: ['read', '\nbad', 'write\n', '  ok  '],
+      // web_search is a real tool name; control-char entries must be dropped at agent layer
+      allowedTools: ['web_search', '\nbad', 'shell\n', '  web_search  '],
       isBuiltIn: false,
     });
     orchestratorCtor.mockClear();
     orchestratorRun.mockClear();
 
-    const node = new AgentNode('agent_coding', {
-      harnessId: 'cov_agent_null_harness',
-      systemPrompt: 'Node body',
-    });
-    await node.execute(
-      ctx({
-        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
-        designSystemContent: `Brand${'\0'}Leak`,
-      }),
-    );
-    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
-    expect(goal).toContain('HarnessPrompt');
-    expect(goal).toContain('Node body');
-    expect(goal).not.toContain('\0');
-    // Null-byte design context is dropped entirely
-    expect(goal).not.toContain('DESIGN CONTEXT');
-    expect(goal).not.toContain('Brand');
+    try {
+      const node = new AgentNode('agent_coding', {
+        harnessId: 'cov_agent_null_harness',
+        systemPrompt: 'Node body',
+      });
+      await node.execute(
+        ctx({
+          settings: {
+            ANTHROPIC_API_KEY: 'sk-ant-test',
+            TAVILY_API_KEY: 'tvly-test',
+          },
+          designSystemContent: `Brand${'\0'}Leak`,
+        }),
+      );
+      const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+      expect(goal).toContain('HarnessPrompt');
+      expect(goal).toContain('Node body');
+      expect(goal).not.toContain('\0');
+      // Null-byte design context is dropped entirely
+      expect(goal).not.toContain('DESIGN CONTEXT');
+      expect(goal).not.toContain('Brand');
 
-    // Control-char allowedTools dropped before trim; clean tools remain
-    const registry = orchestratorCtor.mock.calls[0]?.[1] as {
-      getAll: () => Array<{ name: string }>;
-    };
-    const names = registry.getAll().map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['read', 'ok']));
-    expect(names).not.toContain('bad');
-    expect(names).not.toContain('write');
+      // Control-char allowedTools dropped before trim; only web_search remains
+      const registry = orchestratorCtor.mock.calls[0]?.[1] as {
+        getAll: () => Array<{ name: string }>;
+      };
+      const names = registry.getAll().map((t) => t.name);
+      expect(names).toEqual(['web_search']);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('ignores whitespace-only harnessId and designSystemContent', async () => {

@@ -663,9 +663,9 @@ describe('workflow routes export/import/preflight/runs', () => {
 
     const zipBuf = await makeZip({
       'workflow.json': JSON.stringify({
-        version: 1,
+        version: '1',
         workflow: {
-          // Leading control name is scrubbed (spaces) not accepted as coding domain name
+          // Leading control name is scrubbed (spaces) not accepted as domain name
           name: `\n${WF_NAME}-zip-ctrl`,
           description: `bad${'\0'}desc`,
           domain: '\nfinance',
