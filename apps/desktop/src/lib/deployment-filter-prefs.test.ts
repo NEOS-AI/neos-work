@@ -110,4 +110,14 @@ describe('deployment-filter-prefs', () => {
     expect(() => saveDeploymentWorkflowFilter('wf-x')).not.toThrow();
     spy.mockRestore();
   });
+
+  it('ignores control-char status/provider storage', () => {
+    localStorage.setItem('neos-deployments-status', `failed${'\0'}`);
+    expect(loadDeploymentStatusFilter()).toBe('all');
+    localStorage.setItem('neos-deployments-status', '  success  ');
+    expect(loadDeploymentStatusFilter()).toBe('success');
+    localStorage.setItem('neos-deployments-provider', '\nvercel');
+    expect(loadDeploymentProviderFilter()).toBe('all');
+  });
+
 });

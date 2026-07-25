@@ -55,4 +55,14 @@ describe('layout-prefs right panel tab', () => {
     localStorage.setItem('neos-editor-right-panel-tab', 'logs');
     expect(loadEditorRightPanelTab()).toBe('config');
   });
+
+  it('ignores control-char layout/tab storage', () => {
+    localStorage.setItem('neos-layout-direction', `LR${'\0'}`);
+    expect(loadLayoutDirection()).toBe('TB');
+    localStorage.setItem('neos-layout-direction', '  LR  ');
+    expect(loadLayoutDirection()).toBe('LR');
+    localStorage.setItem('neos-editor-right-panel-tab', '\nhistory');
+    expect(loadEditorRightPanelTab()).toBe('config');
+  });
+
 });

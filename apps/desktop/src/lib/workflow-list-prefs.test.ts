@@ -42,4 +42,14 @@ describe('workflow-list-prefs', () => {
     localStorage.setItem('neos-workflows-domain', 'ops');
     expect(loadWorkflowListDomain()).toBe('all');
   });
+
+  it('ignores control-char sort/domain storage', () => {
+    localStorage.setItem('neos-workflows-sort', `name${'\0'}`);
+    expect(loadWorkflowListSort()).toBe('updated');
+    localStorage.setItem('neos-workflows-sort', '  name  ');
+    expect(loadWorkflowListSort()).toBe('name');
+    localStorage.setItem('neos-workflows-domain', '\ncoding');
+    expect(loadWorkflowListDomain()).toBe('all');
+  });
+
 });

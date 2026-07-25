@@ -327,5 +327,11 @@ describe('Skills page', () => {
     expect(screen.queryByRole('button', { name: /bad/i })).not.toBeInTheDocument();
     // Padded category trimmed to chip
     expect(screen.getByRole('button', { name: 'tools' })).toBeInTheDocument();
+
+    // Selecting trimmed chip still matches padded skill.category
+    fireEvent.click(screen.getByRole('button', { name: 'tools' }));
+    expect(screen.getByText('Pad Skill')).toBeInTheDocument();
+    expect(screen.queryByText('Evil Skill')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alpha Skill')).not.toBeInTheDocument();
   });
 });

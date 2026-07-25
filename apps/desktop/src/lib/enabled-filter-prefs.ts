@@ -10,11 +10,18 @@ const KEYS = {
 
 export type EnabledFilterScope = keyof typeof KEYS;
 
+const ALLOWED = new Set<string>(['all', 'enabled', 'disabled']);
+
+function parseEnabled(raw: unknown): EnabledFilterPref | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return ALLOWED.has(v) ? (v as EnabledFilterPref) : null;
+}
+
 export function loadEnabledFilter(scope: EnabledFilterScope): EnabledFilterPref {
   try {
-    const v = localStorage.getItem(KEYS[scope]);
-    if (v === 'enabled' || v === 'disabled' || v === 'all') return v;
-    return 'all';
+    const parsed = parseEnabled(localStorage.getItem(KEYS[scope]));
+    return parsed ?? 'all';
   } catch {
     return 'all';
   }
@@ -22,9 +29,8 @@ export function loadEnabledFilter(scope: EnabledFilterScope): EnabledFilterPref 
 
 export function saveEnabledFilter(scope: EnabledFilterScope, value: EnabledFilterPref): void {
   try {
-    if (value === 'all' || value === 'enabled' || value === 'disabled') {
-      localStorage.setItem(KEYS[scope], value);
-    }
+    const parsed = parseEnabled(value);
+    if (parsed) localStorage.setItem(KEYS[scope], parsed);
   } catch {
     // ignore quota / private mode
   }

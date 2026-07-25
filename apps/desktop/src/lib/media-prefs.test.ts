@@ -28,4 +28,12 @@ describe('media-prefs', () => {
     saveMediaKindFilter('other');
     expect(loadMediaKindFilter()).toBe('other');
   });
+
+  it('ignores control-char and trims padded stored kind', () => {
+    localStorage.setItem('neos-media-kind', `image${'\0'}`);
+    expect(loadMediaKindFilter()).toBe('all');
+    localStorage.setItem('neos-media-kind', '  audio  ');
+    expect(loadMediaKindFilter()).toBe('audio');
+  });
+
 });

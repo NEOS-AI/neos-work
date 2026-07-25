@@ -10,11 +10,17 @@ export const ARTIFACT_VIEWPORT_MODES: readonly ArtifactViewportMode[] = [
   'mobile',
 ] as const;
 
+const ALLOWED = new Set<string>(['full', 'tablet', 'mobile']);
+
+function parseViewport(raw: unknown): ArtifactViewportMode | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return ALLOWED.has(v) ? (v as ArtifactViewportMode) : null;
+}
+
 export function loadArtifactViewport(): ArtifactViewportMode {
   try {
-    const v = localStorage.getItem(VIEWPORT_KEY);
-    if (v === 'full' || v === 'tablet' || v === 'mobile') return v;
-    return 'full';
+    return parseViewport(localStorage.getItem(VIEWPORT_KEY)) ?? 'full';
   } catch {
     return 'full';
   }
@@ -22,9 +28,8 @@ export function loadArtifactViewport(): ArtifactViewportMode {
 
 export function saveArtifactViewport(mode: ArtifactViewportMode): void {
   try {
-    if (mode === 'full' || mode === 'tablet' || mode === 'mobile') {
-      localStorage.setItem(VIEWPORT_KEY, mode);
-    }
+    const parsed = parseViewport(mode);
+    if (parsed) localStorage.setItem(VIEWPORT_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }

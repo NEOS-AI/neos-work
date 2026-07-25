@@ -15,6 +15,7 @@ import {
   type DeploymentProviderFilter,
   type DeploymentStatusFilter,
 } from '../lib/deployment-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
@@ -295,8 +296,22 @@ export function Deployments() {
             </thead>
             <tbody>
               {visibleDeployments.map((d) => {
-                const st = STATUS_STYLES[d.status] ?? STATUS_STYLES.pending;
+                const statusSafe =
+                  scrubDisplayText(d.status, { collapseLines: true, maxChars: 40 }) || 'pending';
+                const st = STATUS_STYLES[statusSafe] ?? STATUS_STYLES.pending;
                 const wfName = d.workflowId ? workflows[d.workflowId]?.name : undefined;
+                const statusMsgSafe = d.statusMessage
+                  ? scrubDisplayText(d.statusMessage, { collapseLines: true, maxChars: 200 })
+                  : '';
+                const providerSafe =
+                  scrubDisplayText(d.provider, { collapseLines: true, maxChars: 40 }) || '—';
+                const projectSafe = d.projectName
+                  ? scrubDisplayText(d.projectName, { collapseLines: true, maxChars: 100 }) || '—'
+                  : '—';
+                const wfLabel = scrubDisplayText(wfName ?? d.workflowId?.slice(0, 8) ?? '', {
+                  collapseLines: true,
+                  maxChars: 100,
+                });
                 return (
                   <tr
                     key={d.id}
@@ -308,17 +323,17 @@ export function Deployments() {
                         className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium"
                         style={{ backgroundColor: st.bg, color: st.color }}
                       >
-                        {d.status}
+                        {statusSafe}
                       </span>
-                      {d.statusMessage && (
-                        <p className="mt-1 max-w-[12rem] truncate text-xs" style={{ color: 'var(--text-muted)' }} title={d.statusMessage}>
-                          {d.statusMessage}
+                      {statusMsgSafe ? (
+                        <p className="mt-1 max-w-[12rem] truncate text-xs" style={{ color: 'var(--text-muted)' }} title={statusMsgSafe}>
+                          {statusMsgSafe}
                         </p>
-                      )}
+                      ) : null}
                     </td>
-                    <td className="px-4 py-3 capitalize">{d.provider}</td>
+                    <td className="px-4 py-3 capitalize">{providerSafe}</td>
                     <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>
-                      {d.projectName ?? '—'}
+                      {projectSafe}
                     </td>
                     <td className="px-4 py-3">
                       {d.workflowId ? (
@@ -326,7 +341,7 @@ export function Deployments() {
                           to={`/workflows/${d.workflowId}`}
                           className="text-blue-400 hover:underline"
                         >
-                          {wfName ?? d.workflowId.slice(0, 8)}
+                          {wfLabel || d.workflowId.slice(0, 8)}
                         </Link>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>—</span>

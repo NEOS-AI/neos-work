@@ -21,19 +21,24 @@ const STATUS_KEY = 'neos-deployments-status';
 const PROVIDER_KEY = 'neos-deployments-provider';
 const WORKFLOW_KEY = 'neos-deployments-workflow';
 
+const STATUS_ALLOWED = new Set<string>(['all', 'success', 'failed', 'deploying', 'pending']);
+const PROVIDER_ALLOWED = new Set<string>(['all', 'vercel', 'cloudflare']);
+
+function parseStatus(raw: unknown): DeploymentStatusFilter | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return STATUS_ALLOWED.has(v) ? (v as DeploymentStatusFilter) : null;
+}
+
+function parseProvider(raw: unknown): DeploymentProviderFilter | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return PROVIDER_ALLOWED.has(v) ? (v as DeploymentProviderFilter) : null;
+}
+
 export function loadDeploymentStatusFilter(): DeploymentStatusFilter {
   try {
-    const v = localStorage.getItem(STATUS_KEY);
-    if (
-      v === 'all' ||
-      v === 'success' ||
-      v === 'failed' ||
-      v === 'deploying' ||
-      v === 'pending'
-    ) {
-      return v;
-    }
-    return 'all';
+    return parseStatus(localStorage.getItem(STATUS_KEY)) ?? 'all';
   } catch {
     return 'all';
   }
@@ -41,15 +46,8 @@ export function loadDeploymentStatusFilter(): DeploymentStatusFilter {
 
 export function saveDeploymentStatusFilter(status: DeploymentStatusFilter): void {
   try {
-    if (
-      status === 'all' ||
-      status === 'success' ||
-      status === 'failed' ||
-      status === 'deploying' ||
-      status === 'pending'
-    ) {
-      localStorage.setItem(STATUS_KEY, status);
-    }
+    const parsed = parseStatus(status);
+    if (parsed) localStorage.setItem(STATUS_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }
@@ -57,9 +55,7 @@ export function saveDeploymentStatusFilter(status: DeploymentStatusFilter): void
 
 export function loadDeploymentProviderFilter(): DeploymentProviderFilter {
   try {
-    const v = localStorage.getItem(PROVIDER_KEY);
-    if (v === 'all' || v === 'vercel' || v === 'cloudflare') return v;
-    return 'all';
+    return parseProvider(localStorage.getItem(PROVIDER_KEY)) ?? 'all';
   } catch {
     return 'all';
   }
@@ -67,9 +63,8 @@ export function loadDeploymentProviderFilter(): DeploymentProviderFilter {
 
 export function saveDeploymentProviderFilter(provider: DeploymentProviderFilter): void {
   try {
-    if (provider === 'all' || provider === 'vercel' || provider === 'cloudflare') {
-      localStorage.setItem(PROVIDER_KEY, provider);
-    }
+    const parsed = parseProvider(provider);
+    if (parsed) localStorage.setItem(PROVIDER_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }

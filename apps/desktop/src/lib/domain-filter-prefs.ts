@@ -18,11 +18,17 @@ const KEYS = {
 
 export type DomainFilterScope = keyof typeof KEYS;
 
+const DOMAIN_ALLOWED = new Set<string>(['all', 'finance', 'coding', 'general']);
+
+function parseDomain(raw: unknown): DomainFilterPref | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return DOMAIN_ALLOWED.has(v) ? (v as DomainFilterPref) : null;
+}
+
 export function loadDomainFilter(scope: DomainFilterScope): DomainFilterPref {
   try {
-    const v = localStorage.getItem(KEYS[scope]);
-    if (v === 'finance' || v === 'coding' || v === 'general' || v === 'all') return v;
-    return 'all';
+    return parseDomain(localStorage.getItem(KEYS[scope])) ?? 'all';
   } catch {
     return 'all';
   }
@@ -30,9 +36,8 @@ export function loadDomainFilter(scope: DomainFilterScope): DomainFilterPref {
 
 export function saveDomainFilter(scope: DomainFilterScope, value: DomainFilterPref): void {
   try {
-    if (value === 'all' || value === 'finance' || value === 'coding' || value === 'general') {
-      localStorage.setItem(KEYS[scope], value);
-    }
+    const parsed = parseDomain(value);
+    if (parsed) localStorage.setItem(KEYS[scope], parsed);
   } catch {
     // ignore quota / private mode
   }
@@ -42,12 +47,17 @@ export function saveDomainFilter(scope: DomainFilterScope, value: DomainFilterPr
 export type BlocksSourceFilter = 'all' | 'builtin' | 'custom';
 
 const BLOCKS_SOURCE_KEY = 'neos-blocks-source';
+const SOURCE_ALLOWED = new Set<string>(['all', 'builtin', 'custom']);
+
+function parseSource(raw: unknown): BlocksSourceFilter | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return SOURCE_ALLOWED.has(v) ? (v as BlocksSourceFilter) : null;
+}
 
 export function loadBlocksSourceFilter(): BlocksSourceFilter {
   try {
-    const v = localStorage.getItem(BLOCKS_SOURCE_KEY);
-    if (v === 'builtin' || v === 'custom' || v === 'all') return v;
-    return 'all';
+    return parseSource(localStorage.getItem(BLOCKS_SOURCE_KEY)) ?? 'all';
   } catch {
     return 'all';
   }
@@ -55,9 +65,8 @@ export function loadBlocksSourceFilter(): BlocksSourceFilter {
 
 export function saveBlocksSourceFilter(value: BlocksSourceFilter): void {
   try {
-    if (value === 'all' || value === 'builtin' || value === 'custom') {
-      localStorage.setItem(BLOCKS_SOURCE_KEY, value);
-    }
+    const parsed = parseSource(value);
+    if (parsed) localStorage.setItem(BLOCKS_SOURCE_KEY, parsed);
   } catch {
     // ignore
   }

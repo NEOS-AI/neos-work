@@ -115,6 +115,32 @@ describe('Dashboard page', () => {
         },
       ],
     });
+    listRoutines.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'r1',
+          name: `Rtn${'\0'}X`,
+          schedule: `0 9 * * *${'\n'}extra`,
+          enabled: true,
+          workflowId: 'w1',
+          updatedAt: '2020-01-03T00:00:00.000Z',
+        },
+      ],
+    });
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'd1',
+          projectName: `proj${'\0'}ect`,
+          provider: 'vercel',
+          status: 'success',
+          workflowId: 'w1',
+          createdAt: '2020-01-04T00:00:00.000Z',
+        },
+      ],
+    });
     renderPage();
     await waitFor(() => {
       // newlines collapsed in version display
@@ -123,6 +149,11 @@ describe('Dashboard page', () => {
     // null-byte stripped from name; domain collapsed
     expect(screen.getByText('BadName')).toBeInTheDocument();
     expect(screen.getByText(/coding x/)).toBeInTheDocument();
+    // routine name/schedule scrubbed
+    expect(screen.getByText('RtnX')).toBeInTheDocument();
+    expect(screen.getByText(/0 9 \* \* \* extra/)).toBeInTheDocument();
+    // deployment projectName scrubbed
+    expect(screen.getByText('project')).toBeInTheDocument();
   });
 
   it('tolerates API failures without crashing', async () => {

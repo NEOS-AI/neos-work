@@ -12,19 +12,17 @@ export const MEMORY_TYPE_FILTERS: readonly MemoryTypeFilter[] = [
 
 const TYPE_KEY = 'neos-memory-type';
 
+const ALLOWED = new Set<string>(['all', 'user', 'session', 'skill', 'reference']);
+
+function parseType(raw: unknown): MemoryTypeFilter | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return ALLOWED.has(v) ? (v as MemoryTypeFilter) : null;
+}
+
 export function loadMemoryTypeFilter(): MemoryTypeFilter {
   try {
-    const v = localStorage.getItem(TYPE_KEY);
-    if (
-      v === 'all' ||
-      v === 'user' ||
-      v === 'session' ||
-      v === 'skill' ||
-      v === 'reference'
-    ) {
-      return v;
-    }
-    return 'all';
+    return parseType(localStorage.getItem(TYPE_KEY)) ?? 'all';
   } catch {
     return 'all';
   }
@@ -32,15 +30,8 @@ export function loadMemoryTypeFilter(): MemoryTypeFilter {
 
 export function saveMemoryTypeFilter(type: MemoryTypeFilter): void {
   try {
-    if (
-      type === 'all' ||
-      type === 'user' ||
-      type === 'session' ||
-      type === 'skill' ||
-      type === 'reference'
-    ) {
-      localStorage.setItem(TYPE_KEY, type);
-    }
+    const parsed = parseType(type);
+    if (parsed) localStorage.setItem(TYPE_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }

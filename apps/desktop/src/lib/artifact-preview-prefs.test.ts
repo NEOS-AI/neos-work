@@ -31,4 +31,12 @@ describe('artifact-preview-prefs', () => {
     localStorage.setItem('neos-artifact-viewport', 'desktop');
     expect(loadArtifactViewport()).toBe('full');
   });
+
+  it('ignores control-char viewport storage', () => {
+    localStorage.setItem('neos-artifact-viewport', `mobile${'\0'}`);
+    expect(loadArtifactViewport()).toBe('full');
+    localStorage.setItem('neos-artifact-viewport', '  tablet  ');
+    expect(loadArtifactViewport()).toBe('tablet');
+  });
+
 });

@@ -4,11 +4,17 @@ const KIND_KEY = 'neos-media-kind';
 
 export type MediaKindFilter = 'all' | 'image' | 'audio' | 'other';
 
+const ALLOWED = new Set<string>(['all', 'image', 'audio', 'other']);
+
+function parseKind(raw: unknown): MediaKindFilter | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return ALLOWED.has(v) ? (v as MediaKindFilter) : null;
+}
+
 export function loadMediaKindFilter(): MediaKindFilter {
   try {
-    const v = localStorage.getItem(KIND_KEY);
-    if (v === 'image' || v === 'audio' || v === 'other' || v === 'all') return v;
-    return 'all';
+    return parseKind(localStorage.getItem(KIND_KEY)) ?? 'all';
   } catch {
     return 'all';
   }
@@ -16,9 +22,8 @@ export function loadMediaKindFilter(): MediaKindFilter {
 
 export function saveMediaKindFilter(kind: MediaKindFilter): void {
   try {
-    if (kind === 'all' || kind === 'image' || kind === 'audio' || kind === 'other') {
-      localStorage.setItem(KIND_KEY, kind);
-    }
+    const parsed = parseKind(kind);
+    if (parsed) localStorage.setItem(KIND_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }

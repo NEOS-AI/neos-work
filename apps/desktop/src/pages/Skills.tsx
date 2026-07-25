@@ -8,6 +8,7 @@ import {
   saveEnabledFilter,
   type EnabledFilterPref,
 } from '../lib/enabled-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { loadSkillsCategoryFilter, saveSkillsCategoryFilter } from '../lib/skills-prefs.js';
@@ -145,7 +146,14 @@ export function Skills() {
   const activeCategory =
     categoryFilter === 'all' || categories.includes(categoryFilter) ? categoryFilter : 'all';
   const filtered = useMemo(() => {
-    const byCat = activeCategory === 'all' ? sorted : sorted.filter((s) => s.category === activeCategory);
+    // Match trimmed category (chips store trimmed; padded server values still select)
+    const byCat =
+      activeCategory === 'all'
+        ? sorted
+        : sorted.filter((s) => {
+            if (typeof s.category !== 'string' || /[\0\r\n]/.test(s.category)) return false;
+            return s.category.trim() === activeCategory;
+          });
     const byEnabled = filterByEnabled(byCat, enabledFilter);
     return filterBySearchText(byEnabled, search);
   }, [sorted, activeCategory, enabledFilter, search]);
@@ -363,17 +371,17 @@ function SkillCard({
             <span className="shrink-0 text-[10px]" style={{ color: '#f59e0b' }}>★</span>
           )}
           <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-            {skill.name}
+            {scrubDisplayText(skill.name, { collapseLines: true, maxChars: 200 }) || 'Skill'}
           </span>
           <span
             className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
             style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
           >
-            {skill.source}
+            {scrubDisplayText(skill.source, { collapseLines: true, maxChars: 40 }) || 'local'}
           </span>
           {skill.version && (
             <span className="shrink-0 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              v{skill.version}
+              v{scrubDisplayText(skill.version, { collapseLines: true, maxChars: 32 }) || '—'}
             </span>
           )}
           {skill.mode && (
@@ -381,21 +389,21 @@ function SkillCard({
               className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
               style={{ backgroundColor: '#3b82f620', color: '#3b82f6' }}
             >
-              {skill.mode}
+              {scrubDisplayText(skill.mode, { collapseLines: true, maxChars: 40 }) || 'mode'}
             </span>
           )}
-          {skill.category && (
+          {skill.category && typeof skill.category === 'string' && !/[\0\r\n]/.test(skill.category) && skill.category.trim() && (
             <span
               className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
               style={{ backgroundColor: '#8b5cf620', color: '#8b5cf6' }}
             >
-              {skill.category}
+              {scrubDisplayText(skill.category.trim(), { collapseLines: true, maxChars: 40 })}
             </span>
           )}
         </div>
         {skill.description && (
           <p className="mt-0.5 line-clamp-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {skill.description}
+            {scrubDisplayText(skill.description, { maxChars: 500 })}
           </p>
         )}
         {skill.installedAt && (

@@ -51,4 +51,14 @@ describe('domain-filter-prefs', () => {
     saveDomainFilter('blocks', 'ops');
     expect(loadDomainFilter('blocks')).toBe('coding');
   });
+
+  it('ignores control-char and trims padded domain storage', () => {
+    localStorage.setItem('neos-blocks-domain', `coding${'\0'}`);
+    expect(loadDomainFilter('blocks')).toBe('all');
+    localStorage.setItem('neos-blocks-domain', '  finance  ');
+    expect(loadDomainFilter('blocks')).toBe('finance');
+    localStorage.setItem('neos-blocks-source', '\ncustom');
+    expect(loadBlocksSourceFilter()).toBe('all');
+  });
+
 });

@@ -7,6 +7,7 @@ import {
   filterByStatus,
   filterByTextMatch,
   filterWorkflowList,
+  normalizeListDomain,
 } from './workflow-list-filter.js';
 
 const items = [
@@ -48,6 +49,36 @@ describe('filterWorkflowList', () => {
     expect(filterByStatus([{ status: 'success' }], '\nsuccess')).toHaveLength(1);
     expect(filterByKind([{ kind: 'image' }], 'image\n')).toHaveLength(1);
   });
+
+  it('excludes null-byte name/description from search haystack', () => {
+    const dirty = [
+      { name: `Stock${'\0'}Bot`, description: 'prices', domain: 'finance' },
+      { name: 'Clean', description: `has${'\0'}secret`, domain: 'general' },
+      { name: 'Visible', description: 'ok', domain: 'coding' },
+    ];
+    // null-byte name → empty haystack name; "stock" must not match
+    expect(filterWorkflowList(dirty, { search: 'stock' })).toHaveLength(0);
+    // null-byte description → empty desc haystack; "secret" must not match
+    expect(filterWorkflowList(dirty, { search: 'secret' })).toHaveLength(0);
+    // clean fields still match
+    expect(filterWorkflowList(dirty, { search: 'visible' }).map((w) => w.name)).toEqual([
+      'Visible',
+    ]);
+    // domain chip still matches clean domain
+    expect(filterWorkflowList(dirty, { domain: 'coding' })).toHaveLength(1);
+  });
+
+  it('matches padded item domains via normalizeListDomain', () => {
+    expect(normalizeListDomain('  coding  ')).toBe('coding');
+    expect(normalizeListDomain(`coding${'\0'}`)).toBe('');
+    expect(normalizeListDomain('\ncoding')).toBe('');
+    expect(normalizeListDomain(null)).toBe('');
+    expect(
+      filterWorkflowList([{ name: 'X', domain: '  finance  ', description: '' }], {
+        domain: 'finance',
+      }),
+    ).toHaveLength(1);
+  });
 });
 
 describe('filterBySearchText', () => {
@@ -59,6 +90,20 @@ describe('filterBySearchText', () => {
     expect(filterBySearchText(items, 'atom')).toHaveLength(1);
     expect(filterBySearchText(items, 'other')).toHaveLength(1);
     expect(filterBySearchText(items, '')).toHaveLength(2);
+  });
+
+  it('excludes null-byte name/description from search haystack', () => {
+    const items = [
+      { name: `bad${'\0'}name`, description: 'clean' },
+      { name: 'Good', description: `d${'\0'}esc` },
+      { name: 'MatchMe', description: 'ok' },
+    ];
+    // Null-byte name is not searchable by its visible letters
+    expect(filterBySearchText(items, 'bad')).toHaveLength(0);
+    expect(filterBySearchText(items, 'name')).toHaveLength(0);
+    // Description with null-byte excluded; name still matches
+    expect(filterBySearchText(items, 'good')).toHaveLength(1);
+    expect(filterBySearchText(items, 'match')).toHaveLength(1);
   });
 });
 
@@ -152,6 +197,18 @@ describe('filterByTextMatch', () => {
       filterByTextMatch(items, 'docs', (d) => `${d.projectName} ${d.provider} ${d.url}`),
     ).toHaveLength(1);
     expect(filterByTextMatch(items, '', (d) => d.projectName)).toHaveLength(2);
+    // Control-char search → return all
+    expect(
+      filterByTextMatch(items, `ver${'\0'}cel`, (d) => d.projectName),
+    ).toHaveLength(2);
+    expect(filterByTextMatch(items, '\ndocs', (d) => d.projectName)).toHaveLength(2);
+  });
+
+  it('strips null bytes from haystack before matching', () => {
+    const items = [{ projectName: `land${'\0'}ing`, provider: 'vercel' }];
+    expect(
+      filterByTextMatch(items, 'landing', (d) => `${d.projectName} ${d.provider}`),
+    ).toHaveLength(1);
   });
 });
 

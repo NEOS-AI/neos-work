@@ -38,11 +38,22 @@ describe('run-log-prefs', () => {
     expect(loadRunLogFilter()).toBe('all');
   });
 
+  it('trims padded valid chips on load and save', () => {
+    localStorage.setItem('neos-run-log-filter', '  lifecycle  ');
+    expect(loadRunLogFilter()).toBe('lifecycle');
+    saveRunLogFilter('  completed  ' as RunLogFilterPref);
+    expect(localStorage.getItem('neos-run-log-filter')).toBe('completed');
+    expect(loadRunLogFilter()).toBe('completed');
+  });
+
   it('does not persist invalid filter values', () => {
     saveRunLogFilter('failed');
     saveRunLogFilter('not-a-filter' as RunLogFilterPref);
     expect(localStorage.getItem('neos-run-log-filter')).toBe('failed');
     expect(loadRunLogFilter()).toBe('failed');
+    // Control-char save ignored (previous value kept)
+    saveRunLogFilter(`failed${'\0'}` as RunLogFilterPref);
+    expect(localStorage.getItem('neos-run-log-filter')).toBe('failed');
   });
 
   it('load returns all when localStorage throws', () => {

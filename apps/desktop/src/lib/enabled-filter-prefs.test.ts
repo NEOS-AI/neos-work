@@ -24,4 +24,14 @@ describe('enabled-filter-prefs', () => {
     localStorage.setItem('neos-skills-enabled', 'maybe');
     expect(loadEnabledFilter('skills')).toBe('all');
   });
+
+  it('ignores control-char and trims padded stored values', () => {
+    localStorage.setItem('neos-skills-enabled', `enabled${'\0'}`);
+    expect(loadEnabledFilter('skills')).toBe('all');
+    localStorage.setItem('neos-skills-enabled', '\nenabled');
+    expect(loadEnabledFilter('skills')).toBe('all');
+    localStorage.setItem('neos-skills-enabled', '  disabled  ');
+    expect(loadEnabledFilter('skills')).toBe('disabled');
+  });
+
 });

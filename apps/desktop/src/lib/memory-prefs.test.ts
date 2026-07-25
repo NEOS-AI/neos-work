@@ -31,4 +31,12 @@ describe('memory-prefs', () => {
     localStorage.setItem('neos-memory-type', 'agent');
     expect(loadMemoryTypeFilter()).toBe('all');
   });
+
+  it('ignores control-char and trims padded memory type', () => {
+    localStorage.setItem('neos-memory-type', `user${'\0'}`);
+    expect(loadMemoryTypeFilter()).toBe('all');
+    localStorage.setItem('neos-memory-type', '  skill  ');
+    expect(loadMemoryTypeFilter()).toBe('skill');
+  });
+
 });

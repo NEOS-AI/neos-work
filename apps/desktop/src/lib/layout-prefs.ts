@@ -14,10 +14,15 @@ export const EDITOR_RIGHT_PANEL_TABS: readonly EditorRightPanelTab[] = [
   'preview',
 ] as const;
 
+function parseDirection(raw: unknown): LayoutDirection | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return v === 'LR' || v === 'TB' ? v : null;
+}
+
 export function loadLayoutDirection(): LayoutDirection {
   try {
-    const v = localStorage.getItem(LAYOUT_DIR_KEY);
-    return v === 'LR' ? 'LR' : 'TB';
+    return parseDirection(localStorage.getItem(LAYOUT_DIR_KEY)) ?? 'TB';
   } catch {
     return 'TB';
   }
@@ -25,19 +30,24 @@ export function loadLayoutDirection(): LayoutDirection {
 
 export function saveLayoutDirection(direction: LayoutDirection): void {
   try {
-    if (direction === 'TB' || direction === 'LR') {
-      localStorage.setItem(LAYOUT_DIR_KEY, direction);
-    }
+    const parsed = parseDirection(direction);
+    if (parsed) localStorage.setItem(LAYOUT_DIR_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }
 }
 
+const TAB_ALLOWED = new Set<string>(['config', 'run', 'history', 'preview']);
+
+function parseTab(raw: unknown): EditorRightPanelTab | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return TAB_ALLOWED.has(v) ? (v as EditorRightPanelTab) : null;
+}
+
 export function loadEditorRightPanelTab(): EditorRightPanelTab {
   try {
-    const v = localStorage.getItem(RIGHT_PANEL_TAB_KEY);
-    if (v === 'config' || v === 'run' || v === 'history' || v === 'preview') return v;
-    return 'config';
+    return parseTab(localStorage.getItem(RIGHT_PANEL_TAB_KEY)) ?? 'config';
   } catch {
     return 'config';
   }
@@ -45,9 +55,8 @@ export function loadEditorRightPanelTab(): EditorRightPanelTab {
 
 export function saveEditorRightPanelTab(tab: EditorRightPanelTab): void {
   try {
-    if (tab === 'config' || tab === 'run' || tab === 'history' || tab === 'preview') {
-      localStorage.setItem(RIGHT_PANEL_TAB_KEY, tab);
-    }
+    const parsed = parseTab(tab);
+    if (parsed) localStorage.setItem(RIGHT_PANEL_TAB_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }

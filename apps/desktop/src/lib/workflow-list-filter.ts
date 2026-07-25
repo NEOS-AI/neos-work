@@ -48,11 +48,15 @@ export function filterBySearchText<T extends { name: string; description?: strin
 ): T[] {
   const q = normalizeSearchQuery(search);
   if (!q) return items;
-  return items.filter(
-    (item) =>
-      item.name.toLowerCase().includes(q)
-      || (item.description ?? '').toLowerCase().includes(q),
-  );
+  return items.filter((item) => {
+    // Null-byte name/desc excluded from haystack (align with filterWorkflowList)
+    const name = typeof item.name === 'string' && !/\0/.test(item.name) ? item.name : '';
+    const desc =
+      typeof item.description === 'string' && !/\0/.test(item.description)
+        ? item.description
+        : '';
+    return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
+  });
 }
 
 /** Normalize item field for chip compare (control → empty = no match). */
@@ -106,7 +110,13 @@ export function filterByTextMatch<T>(
 ): T[] {
   const q = normalizeSearchQuery(search);
   if (!q) return items;
-  return items.filter((item) => getHaystack(item).toLowerCase().includes(q));
+  return items.filter((item) => {
+    let hay = getHaystack(item);
+    if (typeof hay !== 'string') hay = String(hay ?? '');
+    // Drop null bytes from haystack before match
+    if (/\0/.test(hay)) hay = hay.replace(/\0/g, '');
+    return hay.toLowerCase().includes(q);
+  });
 }
 
 /** Filter by a string field chip (e.g. deployment provider). */

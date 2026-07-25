@@ -6,10 +6,15 @@ const DOMAIN_KEY = 'neos-workflows-domain';
 export type WorkflowListSortMode = 'updated' | 'name';
 export type WorkflowListDomainFilter = 'all' | 'finance' | 'coding' | 'general';
 
+function parseSort(raw: unknown): WorkflowListSortMode | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return v === 'name' || v === 'updated' ? v : null;
+}
+
 export function loadWorkflowListSort(): WorkflowListSortMode {
   try {
-    const v = localStorage.getItem(SORT_KEY);
-    return v === 'name' ? 'name' : 'updated';
+    return parseSort(localStorage.getItem(SORT_KEY)) ?? 'updated';
   } catch {
     return 'updated';
   }
@@ -17,19 +22,24 @@ export function loadWorkflowListSort(): WorkflowListSortMode {
 
 export function saveWorkflowListSort(mode: WorkflowListSortMode): void {
   try {
-    if (mode === 'updated' || mode === 'name') {
-      localStorage.setItem(SORT_KEY, mode);
-    }
+    const parsed = parseSort(mode);
+    if (parsed) localStorage.setItem(SORT_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }
 }
 
+const DOMAIN_ALLOWED = new Set<string>(['all', 'finance', 'coding', 'general']);
+
+function parseDomain(raw: unknown): WorkflowListDomainFilter | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return DOMAIN_ALLOWED.has(v) ? (v as WorkflowListDomainFilter) : null;
+}
+
 export function loadWorkflowListDomain(): WorkflowListDomainFilter {
   try {
-    const v = localStorage.getItem(DOMAIN_KEY);
-    if (v === 'finance' || v === 'coding' || v === 'general' || v === 'all') return v;
-    return 'all';
+    return parseDomain(localStorage.getItem(DOMAIN_KEY)) ?? 'all';
   } catch {
     return 'all';
   }
@@ -37,9 +47,8 @@ export function loadWorkflowListDomain(): WorkflowListDomainFilter {
 
 export function saveWorkflowListDomain(domain: WorkflowListDomainFilter): void {
   try {
-    if (domain === 'all' || domain === 'finance' || domain === 'coding' || domain === 'general') {
-      localStorage.setItem(DOMAIN_KEY, domain);
-    }
+    const parsed = parseDomain(domain);
+    if (parsed) localStorage.setItem(DOMAIN_KEY, parsed);
   } catch {
     // ignore quota / private mode
   }

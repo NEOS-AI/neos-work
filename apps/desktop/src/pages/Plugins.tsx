@@ -4,6 +4,7 @@ import type { Plugin } from '../lib/engine.js';
 import { PipelineRunner } from '../components/workflow/PipelineRunner.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Plugins() {
@@ -85,17 +86,23 @@ export function Plugins() {
               style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
             >
               <div className="flex items-start justify-between gap-2">
-                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{p.name}</h2>
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {scrubDisplayText(p.name, { collapseLines: true, maxChars: 200 }) || 'Plugin'}
+                </h2>
                 <span className="text-[10px] rounded px-1.5 py-0.5 font-medium" style={{ backgroundColor: '#1e3a8a40', color: '#60a5fa' }}>
                   Plugin
                 </span>
               </div>
-              {p.description && (
-                <p className="text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>{p.description}</p>
-              )}
+              {p.description ? (
+                <p className="text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>
+                  {scrubDisplayText(p.description, { collapseLines: true, maxChars: 500 })}
+                </p>
+              ) : null}
               <div className="flex items-center justify-between mt-auto pt-2">
                 <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  v{p.version} · {(p.pipeline ?? []).length} stages
+                  v{scrubDisplayText(p.version, { collapseLines: true, maxChars: 40 }) || '—'}
+                  {' · '}
+                  {(p.pipeline ?? []).length} stages
                 </span>
                 <button
                   type="button"

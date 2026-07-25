@@ -271,9 +271,9 @@ export function Dashboard() {
                     }) || 'Deploy'}
                   </p>
                   <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
-                    {d.provider}
+                    {scrubDisplayText(d.provider, { collapseLines: true, maxChars: 40 }) || '—'}
                     {' · '}
-                    {d.status}
+                    {scrubDisplayText(d.status, { collapseLines: true, maxChars: 40 }) || '—'}
                   </p>
                 </div>
                 <span
