@@ -13,9 +13,14 @@ function parseSimpleYaml(yaml: string): Record<string, string> {
   for (const line of yaml.split('\n')) {
     const colonIdx = line.indexOf(':');
     if (colonIdx < 1) continue;
-    const key = line.slice(0, colonIdx).trim();
+    const keyRaw = line.slice(0, colonIdx);
+    // Control-char keys dropped (check before trim)
+    if (/[\0\r\n]/.test(keyRaw)) continue;
+    const key = keyRaw.trim();
+    if (!key || key.length > 100) continue;
+    // Value: keep raw for field-level hygiene (name/description handle control later)
     const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, '');
-    if (key) result[key] = value;
+    result[key] = value;
   }
   return result;
 }

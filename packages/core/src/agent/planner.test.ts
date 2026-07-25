@@ -45,6 +45,21 @@ describe('Planner', () => {
     expect(steps[1]!.toolName).toBe('read_file');
   });
 
+  it('collapses multi-line descriptions and drops null-byte descriptions', async () => {
+    const adapter = mockAdapter([
+      JSON.stringify([
+        { description: 'line1\nline2' },
+        { description: 'bad\0desc' },
+        { description: '  ok  ' },
+      ]),
+    ]);
+    const steps = await new Planner(adapter).plan('goal');
+    expect(steps[0]!.description).toBe('line1 line2');
+    // Null-byte description falls back to default step text
+    expect(steps[1]!.description).toBe('Execute the goal directly');
+    expect(steps[2]!.description).toBe('ok');
+  });
+
   it('caps multi-chunk raw LLM output and still returns a plan', async () => {
     // RAW_OUTPUT_MAX is 500_000 — stream past that without hanging parseSteps
     const adapter = mockAdapter(['']);

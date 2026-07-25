@@ -185,6 +185,35 @@ describe('SlackMessageNode', () => {
     expect(result.error).toMatch(/channel_not_found/);
   });
 
+  it('drops control-char Slack API error codes (generic ok=false)', async () => {
+    // Leading control-char must not strip to a usable error code
+    postMessage.mockResolvedValueOnce({
+      ok: false,
+      error: '\nchannel_not_found',
+      ts: undefined,
+      channel: undefined,
+    });
+    const lead = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#x' }, { text: 'hi' }),
+    );
+    expect(lead.ok).toBe(false);
+    expect(lead.error).toMatch(/ok=false/);
+    expect(lead.error).not.toMatch(/channel_not_found/);
+
+    postMessage.mockResolvedValueOnce({
+      ok: false,
+      error: 'rate_limited\n',
+      ts: undefined,
+      channel: undefined,
+    });
+    const trail = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '#x' }, { text: 'hi' }),
+    );
+    expect(trail.ok).toBe(false);
+    expect(trail.error).toMatch(/ok=false/);
+    expect(trail.error).not.toMatch(/rate_limited/);
+  });
+
   it('rejects content longer than 4000 characters', async () => {
     const result = await node.execute(
       ctx(

@@ -37,16 +37,26 @@ function parseFile(filePath: string): MemoryItem | null {
     if (!match) return null;
 
     const frontmatter = match[1];
-    const content = match[2].trim();
+    // Null-byte body is unusable
+    const contentRaw = match[2] ?? '';
+    if (/\0/.test(contentRaw)) return null;
+    const content = contentRaw.trim();
 
     const get = (key: string): string => {
       const m = frontmatter.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
-      return m ? m[1].trim() : '';
+      if (!m?.[1]) return '';
+      // Control-char field values dropped (check before trim)
+      if (/[\0\r\n]/.test(m[1])) return '';
+      return m[1].trim();
     };
+
+    const name = get('name');
+    // Name is required for list/UI; skip corrupt files rather than surface blank
+    if (!name) return null;
 
     return {
       id: get('id') || randomUUID(),
-      name: get('name'),
+      name,
       type: normalizeMemoryType(get('type')),
       enabled: get('enabled') !== 'false',
       content,

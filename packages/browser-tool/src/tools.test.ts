@@ -144,6 +144,26 @@ describe('createBrowserTools', () => {
     });
   });
 
+  it('browser_extract_links drops control-char / non-http hrefs and text', async () => {
+    const page = {
+      evaluate: vi.fn(async () => [
+        { text: 'Ok', href: 'https://ok.test/' },
+        { text: 'bad\ntext', href: 'https://ok.test/2' },
+        { text: 'js', href: 'javascript:alert(1)' },
+        { text: 'lead', href: '\nhttps://evil.test/' },
+      ]),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const result = await tools.find((t) => t.name === 'browser_extract_links')!.execute({});
+    expect(result.success).toBe(true);
+    const links = (result.output as { links: Array<{ text: string; href: string }> }).links;
+    // control text → empty string kept with valid href; js / leading-control href dropped
+    expect(links).toEqual([
+      { text: 'Ok', href: 'https://ok.test/' },
+      { text: '', href: 'https://ok.test/2' },
+    ]);
+  });
+
   it('caps extract_links at 500 and rejects oversized screenshots', async () => {
     const many = Array.from({ length: 600 }, (_, i) => ({
       text: `L${i}`,

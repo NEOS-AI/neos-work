@@ -104,7 +104,8 @@ export class ContextManager {
         if (summary.length > SUMMARY_MAX) break;
       }
     }
-    const out = summary.trim();
+    // Scrub null bytes from model summary; multi-line OK
+    const out = summary.replace(/\0/g, '').trim();
     return out.length > SUMMARY_MAX ? out.slice(0, SUMMARY_MAX) : out;
   }
 }

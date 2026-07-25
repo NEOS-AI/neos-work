@@ -344,6 +344,12 @@ describe('coding blocks', () => {
       const result = await runner().execute(ctx({ command: `pnpm${'\0'}test` }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/control characters/i);
+
+      // Leading control must not strip to a valid command (check before empty trim)
+      const lead = await runner().execute(ctx({ command: '\npnpm --version' }));
+      expect(lead.ok).toBe(false);
+      expect(lead.error).toMatch(/control characters/i);
+      expect(lead.error).not.toMatch(/No command/);
     });
   });
 

@@ -197,6 +197,28 @@ describe('Routines page', () => {
     });
   });
 
+  it('shows create API error and keeps modal open', async () => {
+    const user = userEvent.setup();
+    listRoutines.mockResolvedValue({ ok: true, data: [] });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    createRoutine.mockResolvedValue({ ok: false, error: 'invalid cron' });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText(/No routines/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    await waitFor(() => expect(screen.getByText('New Routine')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Daily digest'), 'Broken');
+    fireEvent.change(screen.getByDisplayValue('— Select workflow —'), { target: { value: 'wf-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(createRoutine).toHaveBeenCalled();
+      expect(screen.getByText('invalid cron')).toBeInTheDocument();
+    });
+    // Modal stays open for correction
+    expect(screen.getByText('New Routine')).toBeInTheDocument();
+  });
+
   it('selects routine, loads runs, toggles, runs now, deletes', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });

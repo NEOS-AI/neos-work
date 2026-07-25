@@ -294,6 +294,57 @@ describe('RevisionPanel', () => {
     });
   });
 
+  it('saves revision label on Enter', async () => {
+    const user = userEvent.setup();
+    listRevisions
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          {
+            id: 'rev-1',
+            workflowId: 'wf-1',
+            label: 'Snap A',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [
+          {
+            id: 'rev-1',
+            workflowId: 'wf-1',
+            label: 'Deploy ready',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+    updateRevisionLabel.mockResolvedValue({ ok: true });
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
+    await user.click(screen.getByText('Snap A'));
+    const input = await screen.findByDisplayValue('Snap A');
+    await user.clear(input);
+    await user.type(input, 'Deploy ready{Enter}');
+
+    await waitFor(() => {
+      expect(updateRevisionLabel).toHaveBeenCalledWith('wf-1', 'rev-1', 'Deploy ready');
+    });
+    // loadRevisions after save picks up the new label
+    await waitFor(() => {
+      expect(screen.getByText('Deploy ready')).toBeInTheDocument();
+    });
+  });
+
   it('Escape preventDefault so stacked listeners do not double-fire', async () => {
     listRevisions.mockResolvedValue({
       ok: true,

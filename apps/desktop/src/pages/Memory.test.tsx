@@ -39,6 +39,24 @@ const items = [
     updatedAt: '2026-01-15T00:00:00.000Z',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
+  {
+    id: 'm3',
+    name: 'Session Scratch',
+    type: 'session' as const,
+    content: 'temp session note',
+    enabled: true,
+    updatedAt: '2026-01-20T00:00:00.000Z',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'm4',
+    name: 'API Docs',
+    type: 'reference' as const,
+    content: 'reference material',
+    enabled: true,
+    updatedAt: '2026-01-10T00:00:00.000Z',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
 ];
 
 describe('Memory page', () => {
@@ -67,12 +85,24 @@ describe('Memory page', () => {
 
     await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
     expect(screen.getByText('Skill Note')).toBeInTheDocument();
-    expect(screen.getByText('2/2')).toBeInTheDocument();
+    expect(screen.getByText('4/4')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'user' }));
     expect(screen.getByText('User Pref')).toBeInTheDocument();
     expect(screen.queryByText('Skill Note')).not.toBeInTheDocument();
-    expect(screen.getByText('1/2')).toBeInTheDocument();
+    expect(screen.getByText('1/4')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'skill' }));
+    expect(screen.getByText('Skill Note')).toBeInTheDocument();
+    expect(screen.queryByText('User Pref')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'session' }));
+    expect(screen.getByText('Session Scratch')).toBeInTheDocument();
+    expect(screen.queryByText('Skill Note')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'reference' }));
+    expect(screen.getByText('API Docs')).toBeInTheDocument();
+    expect(screen.queryByText('Session Scratch')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'all' }));
     await user.click(screen.getByRole('button', { name: 'OFF' }));
@@ -150,7 +180,7 @@ describe('Memory page', () => {
 
     await user.type(screen.getByPlaceholderText('Search memory…'), 'zzzz-none');
     expect(screen.queryByText('User Pref')).not.toBeInTheDocument();
-    expect(screen.getByText('0/2')).toBeInTheDocument();
+    expect(screen.getByText('0/4')).toBeInTheDocument();
   });
 
   it('Escape closes modal and clears search', async () => {

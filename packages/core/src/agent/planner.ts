@@ -105,7 +105,10 @@ export class Planner {
     // Extract JSON array from the response (handle potential markdown code blocks)
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      const fallback = (raw.trim() || 'Execute the goal directly').slice(0, 2_000);
+      // Scrub control chars from free-text fallback (check before / with replace)
+      const fallback = (
+        raw.replace(/\0/g, '').replace(/[\r\n]+/g, ' ').trim() || 'Execute the goal directly'
+      ).slice(0, 2_000);
       return [{ description: fallback }];
     }
 
@@ -127,10 +130,18 @@ export class Planner {
         )
         .slice(0, MAX_PLAN_STEPS)
         .map((item) => {
-          const descriptionRaw =
-            typeof item['description'] === 'string'
-              ? item['description'].trim()
-              : String(item ?? '').trim();
+          // Null-byte drop; collapse CR/LF before trim for single-line step text
+          let descriptionRaw = '';
+          if (typeof item['description'] === 'string') {
+            if (!/\0/.test(item['description'])) {
+              descriptionRaw = item['description'].replace(/[\r\n]+/g, ' ').trim();
+            }
+          } else {
+            descriptionRaw = String(item ?? '')
+              .replace(/\0/g, '')
+              .replace(/[\r\n]+/g, ' ')
+              .trim();
+          }
           let toolRaw = '';
           if (typeof item['toolName'] === 'string') {
             // Drop control-char tool names before trim; truncate overlong names

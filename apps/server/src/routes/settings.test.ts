@@ -97,6 +97,16 @@ describe('settings routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PUT rejects control-char sensitive values before blank-delete', async () => {
+    const res = await settings.request(`/${SENSITIVE}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value: '\nsk-bad' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/control characters/i);
+  });
+
   it('PUT blank sensitive value deletes the setting', async () => {
     const put = await settings.request(`/${SENSITIVE}`, {
       method: 'PUT',

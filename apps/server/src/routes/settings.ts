@@ -73,6 +73,11 @@ settings.put('/:key', async (c) => {
     return c.json({ ok: false, error: 'Setting value too large or invalid type' }, 400);
   }
 
+  // Control-char sensitive values are invalid (align with setSetting hygiene)
+  if (isSensitiveKey(key) && /[\0\r\n]/.test(body.value)) {
+    return c.json({ ok: false, error: 'Setting value contains invalid control characters' }, 400);
+  }
+
   // Clearing a sensitive secret (blank/whitespace) deletes the key so getSecretSetting is unset
   if (isSensitiveKey(key) && body.value.trim().length === 0) {
     settingsDb.deleteSetting(key);

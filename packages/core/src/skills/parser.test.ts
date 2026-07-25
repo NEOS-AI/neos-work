@@ -65,6 +65,19 @@ body
     expect(parseSkillFile(cr, '/x.md', 'local')).toBeNull();
   });
 
+  it('drops control-char YAML keys rather than accepting stripped keys', () => {
+    // Null byte inside key must not register as "name"
+    const mid = [
+      '---',
+      `na${'\0'}me: hi`,
+      'description: x',
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    expect(parseSkillFile(mid, '/x.md', 'local')).toBeNull();
+  });
+
   it('returns null for control-char path and null-byte description', () => {
     const content = `---
 name: hello

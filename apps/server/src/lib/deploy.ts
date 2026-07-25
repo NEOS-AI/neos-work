@@ -163,10 +163,11 @@ export const DEPLOY_CONTENT_MAX_CHARS = 2 * 1024 * 1024;
 
 function normalizeDeployContent(raw: unknown): string {
   const content = typeof raw === 'string' ? raw : String(raw ?? '');
-  if (!content.trim()) throw new Error('content is required');
-  if (/[\0]/.test(content)) {
+  // Null-byte check before empty trim (trim does not strip \0)
+  if (/\0/.test(content)) {
     throw new Error('content contains invalid control characters');
   }
+  if (!content.trim()) throw new Error('content is required');
   if (content.length > DEPLOY_CONTENT_MAX_CHARS) {
     throw new Error(`content exceeds max size (${DEPLOY_CONTENT_MAX_CHARS} characters)`);
   }

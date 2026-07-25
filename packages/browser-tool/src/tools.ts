@@ -222,8 +222,22 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
               href: (a as HTMLAnchorElement).href,
             }));
           }, selector || null);
-          const capped = Array.isArray(links) ? links.slice(0, BROWSER_LINKS_MAX) : [];
-          return { success: true, output: { links: capped } };
+          // Sanitize evaluate results: control-char text/href dropped; only http(s)
+          const sanitized = (Array.isArray(links) ? links : [])
+            .slice(0, BROWSER_LINKS_MAX)
+            .map((l) => {
+              const href = isSafeBrowserUrl(
+                typeof l?.href === 'string' ? l.href : '',
+              );
+              if (!href) return null;
+              let text = '';
+              if (typeof l?.text === 'string' && !/[\0\r\n]/.test(l.text)) {
+                text = l.text.trim().slice(0, 500);
+              }
+              return { text, href };
+            })
+            .filter((l): l is { text: string; href: string } => l != null);
+          return { success: true, output: { links: sanitized } };
         } catch (err) {
           return toolFailure(err, 'browser_extract_links failed');
         }

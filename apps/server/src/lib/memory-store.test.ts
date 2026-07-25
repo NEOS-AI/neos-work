@@ -139,6 +139,27 @@ describe('memory-store', () => {
     deleteMemory(m.id);
   });
 
+  it('skips disk files with control-char name or null-byte body', () => {
+    const m = createMemory({ name: NAME, type: 'user', content: 'ok' });
+    // Same-line control char in name value (survives frontmatter line parse)
+    writeFileSync(
+      m.filePath,
+      `---\nid: ${m.id}\nname: bad${'\0'}name\ntype: user\nenabled: true\ncreatedAt: ${m.createdAt}\nupdatedAt: ${m.updatedAt}\n---\n\nok\n`,
+      'utf-8',
+    );
+    // Control-char name value → empty name → file skipped
+    expect(getMemory(m.id)).toBeNull();
+
+    writeFileSync(
+      m.filePath,
+      `---\nid: ${m.id}\nname: ${NAME}\ntype: user\nenabled: true\ncreatedAt: ${m.createdAt}\nupdatedAt: ${m.updatedAt}\n---\n\nok${'\0'}bad\n`,
+      'utf-8',
+    );
+    expect(getMemory(m.id)).toBeNull();
+    // Restore valid file so afterEach cleanup can delete by id if needed
+    try { deleteMemory(m.id); } catch { /* ignore */ }
+  });
+
   it('updateMemory rejects blank name and normalizes type fallback', () => {
     const m = createMemory({ name: NAME, type: 'session', content: 's' });
     expect(updateMemory(m.id, { name: '   ' })).toBeNull();

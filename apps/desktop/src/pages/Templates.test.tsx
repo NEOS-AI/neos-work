@@ -98,10 +98,24 @@ describe('Templates page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
 
+    // Domain filter coding
+    await user.click(screen.getByRole('button', { name: 'coding' }));
+    expect(screen.getByText('Code Review')).toBeInTheDocument();
+    expect(screen.queryByText('Finance Brief')).not.toBeInTheDocument();
+    expect(localStorage.getItem('neos-templates-domain')).toBe('coding');
+    await user.click(screen.getByRole('button', { name: 'all' }));
+
     const search = screen.getByPlaceholderText('Search templates…');
     await user.type(search, 'Code');
     expect(screen.getByText('Code Review')).toBeInTheDocument();
     expect(screen.queryByText('Finance Brief')).not.toBeInTheDocument();
+
+    // Escape with defaultPrevented must not clear search
+    const stop = (ev: KeyboardEvent) => ev.preventDefault();
+    window.addEventListener('keydown', stop, true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    window.removeEventListener('keydown', stop, true);
+    expect((search as HTMLInputElement).value).toBe('Code');
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await waitFor(() => {
