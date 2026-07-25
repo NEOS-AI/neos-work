@@ -309,30 +309,96 @@ describe('Settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
     await waitFor(() => expect(screen.getByText('Connect: Remote MCP')).toBeInTheDocument());
 
-    fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
-      target: { value: `https://auth.example${'\0'}/authorize` },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
-      target: { value: 'https://auth.example/token' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Client ID'), {
-      target: { value: 'client-id' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+    const authEp = screen.getByPlaceholderText('Authorization Endpoint');
+    const tokenEp = screen.getByPlaceholderText('Token Endpoint');
+    const clientId = screen.getByPlaceholderText('Client ID');
+    const scope = screen.getByPlaceholderText('Scope (optional)');
+    const open = () => fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+
+    // Use null-byte only — single-line inputs may strip bare \n/\r in jsdom
+    fireEvent.change(authEp, { target: { value: `https://auth.example${'\0'}/authorize` } });
+    fireEvent.change(tokenEp, { target: { value: 'https://auth.example/token' } });
+    fireEvent.change(clientId, { target: { value: 'client-id' } });
+    open();
+    expect(startMcpOAuth).not.toHaveBeenCalled();
+
+    fireEvent.change(authEp, { target: { value: 'https://auth.example/authorize' } });
+    fireEvent.change(tokenEp, { target: { value: `https://auth.example/token${'\0'}` } });
+    open();
+    expect(startMcpOAuth).not.toHaveBeenCalled();
+
+    fireEvent.change(tokenEp, { target: { value: 'https://auth.example/token' } });
+    fireEvent.change(clientId, { target: { value: `cid${'\0'}bad` } });
+    open();
+    expect(startMcpOAuth).not.toHaveBeenCalled();
+
+    fireEvent.change(clientId, { target: { value: 'client-id' } });
+    fireEvent.change(scope, { target: { value: `openid${'\0'}profile` } });
+    open();
     expect(startMcpOAuth).not.toHaveBeenCalled();
 
     // Blank-after-trim required fields no-op
+    fireEvent.change(scope, { target: { value: '' } });
+    fireEvent.change(authEp, { target: { value: '   ' } });
+    fireEvent.change(tokenEp, { target: { value: 'https://auth.example/token' } });
+    fireEvent.change(clientId, { target: { value: 'client-id' } });
+    open();
+    expect(startMcpOAuth).not.toHaveBeenCalled();
+  });
+
+  it('starts MCP OAuth with trimmed fields when connect succeeds', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-oauth',
+          name: 'OAuth Target',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
+    startMcpOAuth.mockResolvedValue({ ok: true, data: { authUrl: 'https://auth.example/start' } });
+
+    // Settings uses dynamic Tauri shell open for authUrl
+    const openMock = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@tauri-apps/plugin-shell', () => ({ open: openMock }));
+
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('OAuth Target')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
+    await waitFor(() => expect(screen.getByText('Connect: OAuth Target')).toBeInTheDocument());
+
     fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
-      target: { value: '   ' },
+      target: { value: '  https://auth.example/authorize  ' },
     });
     fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
-      target: { value: 'https://auth.example/token' },
+      target: { value: '  https://auth.example/token  ' },
     });
     fireEvent.change(screen.getByPlaceholderText('Client ID'), {
-      target: { value: 'client-id' },
+      target: { value: '  my-client  ' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Scope (optional)'), {
+      target: { value: '  openid profile  ' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
-    expect(startMcpOAuth).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(startMcpOAuth).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serverId: 'mcp-oauth',
+          authorizationEndpoint: 'https://auth.example/authorize',
+          tokenEndpoint: 'https://auth.example/token',
+          clientId: 'my-client',
+          scope: 'openid profile',
+        }),
+      );
+    });
   });
 
   it('shows CLI agents and applies dev auth token', async () => {

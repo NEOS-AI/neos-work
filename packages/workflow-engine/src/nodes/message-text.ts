@@ -47,6 +47,8 @@ export function resolveMessageText(
       if (++keyCount > PLACEHOLDER_KEY_MAX) break;
       let replacement = typeof val === 'string' ? val : JSON.stringify(val);
       if (typeof replacement !== 'string') replacement = String(replacement ?? '');
+      // Drop null bytes from interpolated values (multi-line OK)
+      if (/\0/.test(replacement)) replacement = replacement.replace(/\0/g, '');
       if (replacement.length > REPLACEMENT_MAX) {
         replacement = replacement.slice(0, REPLACEMENT_MAX);
       }
@@ -55,6 +57,7 @@ export function resolveMessageText(
       if (text.length > MESSAGE_TEXT_MAX_CHARS * 2) break;
     }
   } else if (typeof inputs['text'] === 'string') {
+    // Multi-line OK; null-byte left for Slack/Discord node rejection
     text = inputs['text'].trim();
   } else if (Object.keys(inputs).length === 0) {
     text = '';

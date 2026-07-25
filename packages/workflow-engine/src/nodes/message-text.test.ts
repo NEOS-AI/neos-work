@@ -46,6 +46,12 @@ describe('resolveMessageText', () => {
     expect(resolveMessageText({}, { text: `hi${'\0'}there` })).toContain('\0');
   });
 
+  it('strips null bytes from interpolated placeholder values', () => {
+    expect(
+      resolveMessageText({ textTemplate: 'hi {{name}}' }, { name: `Ada${'\0'}Lovelace` }),
+    ).toBe('hi AdaLovelace');
+  });
+
   it('treats whitespace-only templates as missing and tries next config key', () => {
     expect(resolveMessageText({ textTemplate: '   ' }, { text: 'upstream' })).toBe('upstream');
     expect(

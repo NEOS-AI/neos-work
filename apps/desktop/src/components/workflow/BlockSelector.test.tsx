@@ -64,6 +64,25 @@ describe('defaultsForBlock', () => {
     ).toEqual({});
   });
 
+  it('drops control-char / blank param keys from defaults', () => {
+    expect(
+      defaultsForBlock(
+        block({
+          id: 'b1',
+          name: 'Test',
+          domain: 'general',
+          category: 'cat',
+          paramDefs: [
+            { key: `bad${'\0'}key`, type: 'string', label: 'B', default: 'no' },
+            { key: '\nurl', type: 'string', label: 'U', default: 'no' },
+            { key: '  ok  ', type: 'string', label: 'O', default: 'yes' },
+            { key: '   ', type: 'string', label: 'Blank', default: 'no' },
+          ],
+        }),
+      ),
+    ).toEqual({ ok: 'yes' });
+  });
+
   it('includes falsy defaults (0, false, empty string)', () => {
     expect(
       defaultsForBlock(
@@ -165,5 +184,44 @@ describe('BlockSelector', () => {
     });
     await user.selectOptions(select, '');
     expect(onChange).toHaveBeenCalledWith(null);
+  });
+
+  it('omits blocks with control-char ids from select options', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        ...blocks,
+        block({
+          id: `bad${'\0'}id`,
+          name: 'Evil',
+          domain: 'general',
+          category: 'x',
+        }),
+        block({
+          id: '\nlead',
+          name: 'Lead Ctrl',
+          domain: 'general',
+          category: 'x',
+        }),
+        block({
+          id: '  pad-id  ',
+          name: 'Padded',
+          domain: 'general',
+          category: 'x',
+        }),
+      ],
+    });
+    render(<BlockSelector value="" onChange={() => {}} />);
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => {
+      expect(select.querySelectorAll('option').length).toBeGreaterThan(1);
+    });
+    const values = Array.from(select.querySelectorAll('option')).map((o) => (o as HTMLOptionElement).value);
+    expect(values).toContain('blk-a');
+    expect(values).toContain('blk-b');
+    expect(values).toContain('pad-id');
+    expect(values.some((v) => v.includes('\0') || v.includes('\n'))).toBe(false);
+    expect(values).not.toContain('lead');
+    expect(screen.queryByText(/Evil/)).not.toBeInTheDocument();
   });
 });

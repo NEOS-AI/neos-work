@@ -7,8 +7,15 @@ import { SelectField } from './fields.js';
 export function defaultsForBlock(block: WorkflowBlock): Record<string, unknown> {
   return Object.fromEntries(
     block.paramDefs
-      .filter((param) => param.default !== undefined)
-      .map((param) => [param.key, param.default]),
+      // Control-char / blank keys never become defaults (align with BlockNode params)
+      .filter(
+        (param) =>
+          param.default !== undefined
+          && typeof param.key === 'string'
+          && !/[\0\r\n]/.test(param.key)
+          && param.key.trim().length > 0,
+      )
+      .map((param) => [param.key.trim(), param.default]),
   );
 }
 
@@ -50,10 +57,13 @@ export function BlockSelector(props: {
         onChange={(next) => props.onChange(blocks.find((block) => block.id === next) ?? null)}
         options={[
           { value: '', label: 'No block selected' },
-          ...blocks.map((block) => ({
-            value: block.id,
-            label: `${block.domain} / ${block.category} / ${block.name}`,
-          })),
+          ...blocks
+            // Control-char block ids never selectable
+            .filter((block) => typeof block.id === 'string' && !/[\0\r\n]/.test(block.id) && block.id.trim())
+            .map((block) => ({
+              value: block.id.trim(),
+              label: `${block.domain} / ${block.category} / ${block.name}`,
+            })),
         ]}
       />
       {selected && (

@@ -56,10 +56,9 @@ export function createAgentStep(params: {
   data?: unknown;
 }): AgentStepRow {
   const rawSid = typeof params.sessionId === 'string' ? params.sessionId : '';
-  // Blank before control check (clear required vs invalid messages)
-  if (!rawSid.trim()) throw new Error('sessionId is required');
-  // Control-char before trim so "\nsid" is invalid, not stripped
+  // Control-char before trim so "\nsid" is invalid, not stripped to a valid id
   if (/[\0\r\n]/.test(rawSid)) throw new Error('sessionId is invalid');
+  if (!rawSid.trim()) throw new Error('sessionId is required');
   const sessionId = safeLookupId(params.sessionId);
   if (!sessionId) throw new Error('sessionId is invalid');
   // Control-char check before trim (leading \n must not strip to a valid type)

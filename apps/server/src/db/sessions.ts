@@ -242,19 +242,13 @@ function hasUnsafePathChars(value: string): boolean {
 
 function normalizeWorkspacePath(raw: unknown): string | null {
   if (raw === undefined || raw === null) return null;
-  if (typeof raw !== 'string') {
-    const pathVal = String(raw ?? '').trim();
-    if (!pathVal) return null;
-    if (hasUnsafePathChars(pathVal)) {
-      throw new Error('path contains invalid control characters');
-    }
-    return pathVal;
-  }
+  // Coerce non-strings then apply the same control-before-trim hygiene
+  const asString = typeof raw === 'string' ? raw : String(raw ?? '');
   // Control-char check before trim (trim strips leading/trailing \r\n)
-  if (hasUnsafePathChars(raw)) {
+  if (hasUnsafePathChars(asString)) {
     throw new Error('path contains invalid control characters');
   }
-  const pathVal = raw.trim();
+  const pathVal = asString.trim();
   if (!pathVal) return null;
   return pathVal;
 }

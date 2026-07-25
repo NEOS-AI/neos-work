@@ -215,6 +215,40 @@ describe('routines CRUD', () => {
     expect(() => createRoutineRun({ routineId: '   ' })).toThrow(/routineId/i);
   });
 
+  it('rejects null-byte and non-string routineId before empty-trim check', () => {
+    // Control-char check runs before blank-after-trim so messages stay "invalid" not "required"
+    expect(() => createRoutineRun({ routineId: `rid${'\0'}` })).toThrow(/routineId is invalid/i);
+    expect(() => createRoutineRun({ routineId: '\r\n' })).toThrow(/routineId is invalid/i);
+    expect(() => createRoutineRun({ routineId: null as unknown as string })).toThrow(
+      /routineId is required|routineId is invalid/i,
+    );
+    expect(() => createRoutineRun({ routineId: 42 as unknown as string })).toThrow(
+      /routineId is required|routineId is invalid/i,
+    );
+  });
+
+  it('drops unsafe linked workflow runId on createRoutineRun', () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const r = createRoutine({
+      name: 'Link Run',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+    });
+    // rowToRun maps SQL null → undefined on the DTO
+    const withBad = createRoutineRun({ routineId: r.id, runId: 'bad\nid' });
+    expect(withBad.runId).toBeUndefined();
+    const withBlank = createRoutineRun({ routineId: r.id, runId: '   ' });
+    expect(withBlank.runId).toBeUndefined();
+    const withOk = createRoutineRun({ routineId: `  ${r.id}  `, runId: '  run-ok-1  ' });
+    expect(withOk.routineId).toBe(r.id);
+    expect(withOk.runId).toBe('run-ok-1');
+  });
+
   it('trims ids; blank get/update/delete/run lookup short-circuit', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

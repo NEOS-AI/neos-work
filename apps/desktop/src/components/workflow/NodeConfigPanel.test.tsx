@@ -173,6 +173,54 @@ describe('NodeConfigPanel', () => {
     expect(onPatchNodeData).toHaveBeenCalled();
   });
 
+  it('rejects control-char label and null-byte initial inputs JSON', async () => {
+    const onPatchNodeData = vi.fn();
+    const node = {
+      id: 't1',
+      type: 'trigger',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'trigger', label: 'Start', config: {} },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    const label = screen.getByDisplayValue('Start');
+    fireEvent.change(label, { target: { value: `bad${'\0'}label` } });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
+
+    const ta = screen.getByRole('textbox', { name: /Initial inputs/i });
+    fireEvent.change(ta, { target: { value: `{"a":1${'\0'}}` } });
+    // null-byte JSON never applied (no config patch)
+    expect(
+      onPatchNodeData.mock.calls.every(
+        (c) => !(c[1] as { config?: { initialInputs?: unknown } })?.config?.initialInputs,
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects null-byte workflow description when no node selected', async () => {
+    const onUpdateDescription = vi.fn();
+    render(
+      <NodeConfigPanel
+        selectedNode={null}
+        validationIssues={[]}
+        onPatchNodeData={() => {}}
+        workflowDescription="ok"
+        onUpdateDescription={onUpdateDescription}
+      />,
+    );
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+    const ta = screen.getByRole('textbox');
+    fireEvent.change(ta, { target: { value: `desc${'\0'}x` } });
+    expect(onUpdateDescription).not.toHaveBeenCalled();
+  });
+
   it('shows CLI hint when agent provider is cli-*', async () => {
     const node = {
       id: 'a2',

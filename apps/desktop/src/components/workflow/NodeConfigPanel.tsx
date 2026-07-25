@@ -76,7 +76,11 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               label=""
               value={workflowDescription ?? ''}
               rows={3}
-              onChange={onUpdateDescription}
+              onChange={(desc) => {
+                // Null-byte description rejected (multi-line OK)
+                if (/\0/.test(desc)) return;
+                onUpdateDescription(desc);
+              }}
             />
           </div>
         )}
@@ -85,7 +89,12 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Design System</p>
             <select
               value={designSystemId ?? ''}
-              onChange={(e) => onUpdateDesignSystemId(e.target.value)}
+              onChange={(e) => {
+                const id = e.target.value;
+                // Control-char design system id never applied (select values are server ids)
+                if (id && /[\0\r\n]/.test(id)) return;
+                onUpdateDesignSystemId(id);
+              }}
               className="w-full rounded bg-black/20 border border-white/10 px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">None</option>
@@ -121,7 +130,11 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
       <TextField
         label="Label"
         value={String(selectedNode.data.label ?? '')}
-        onChange={(label) => onPatchNodeData(selectedNode.id, { label })}
+        onChange={(label) => {
+          // Control-char labels rejected (align with WorkflowValidation safeLabel)
+          if (/[\0\r\n]/.test(label)) return;
+          onPatchNodeData(selectedNode.id, { label });
+        }}
       />
 
       {(nodeType === 'agent_finance' || nodeType === 'agent_coding') && (
@@ -234,6 +247,8 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           rows={5}
           description="JSON object passed to the workflow start."
           onChange={(next) => {
+            // Null-byte JSON drafts never applied (parse/config injection defense)
+            if (/\0/.test(next)) return;
             setJsonDrafts((current) => ({ ...current, [selectedNode.id]: next }));
             if (next.trim() === '') {
               patchConfig({ initialInputs: undefined });
