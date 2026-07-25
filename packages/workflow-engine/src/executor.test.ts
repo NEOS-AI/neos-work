@@ -741,4 +741,103 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(progress!.chunk.length).toBe(32_000);
     expect(progress!.accumulated.length).toBe(256_000);
   });
+
+  it('rejects control-char node types and resolves agent/message node types', async () => {
+    await expect(
+      executeWorkflow({
+        runId: 'run-ctrl-type',
+        workflow: baseWorkflow({
+          nodes: [
+            {
+              id: 'bad',
+              type: 'trigger\n' as never,
+              label: 'Bad',
+              position: { x: 0, y: 0 },
+              config: {},
+            },
+          ],
+          edges: [],
+        }),
+        settings: {},
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow(/Unknown node type/i);
+
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-agent-types',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'fin',
+            type: 'agent_finance',
+            label: 'F',
+            position: { x: 1, y: 0 },
+            config: { provider: 'cli-claude' },
+          },
+          {
+            id: 'slack',
+            type: 'slack_message',
+            label: 'S',
+            position: { x: 2, y: 0 },
+            config: {},
+          },
+          {
+            id: 'discord',
+            type: 'discord_message',
+            label: 'D',
+            position: { x: 3, y: 0 },
+            config: {},
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'fin' },
+          { id: 'e2', source: 'fin', target: 'slack' },
+          { id: 'e3', source: 'slack', target: 'discord' },
+        ],
+      }),
+      settings: {},
+      cliSpawn: async () => ({ output: 'ok', exitCode: 0 }),
+      onEvent: (event) => events.push(event),
+    });
+    // Nodes run (may fail on missing tokens) but types resolve without throwing
+    expect(events.some((e) => e.type === 'node.started' && (e as { nodeId: string }).nodeId === 'fin')).toBe(
+      true,
+    );
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+  });
+
+  it('legacy gate_or keeps first successful upstream input', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-gate-or-success',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'b1',
+            type: 'block',
+            label: 'B1',
+            position: { x: 1, y: 0 },
+            config: {}, // missing blockId → fail
+          },
+          { id: 'b2', type: 'output', label: 'B2', position: { x: 1, y: 1 }, config: {} },
+          { id: 'or', type: 'gate_or', label: 'OR', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'b1' },
+          { id: 'e2', source: 'trigger', target: 'b2' },
+          { id: 'e3', source: 'b1', target: 'or' },
+          { id: 'e4', source: 'b2', target: 'or' },
+        ],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+    expect(
+      events.some((e) => e.type === 'node.completed' && (e as { nodeId: string }).nodeId === 'or'),
+    ).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+  });
 });

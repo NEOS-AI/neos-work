@@ -517,7 +517,10 @@ export function WorkflowEditor() {
               className="cursor-text hover:opacity-80"
               onClick={() => {
                 skipNameBlurCommitRef.current = false;
-                setNameInput(workflow.name);
+                // Seed editor with scrubbed name (control-char names never re-enter the input)
+                setNameInput(
+                  scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 }),
+                );
                 setEditingName(true);
               }}
               title={t('workflow.rename')}
@@ -556,7 +559,11 @@ export function WorkflowEditor() {
         </button>
         <button
           onClick={() => {
-            setScheduleName(workflow ? `${workflow.name} schedule` : 'Scheduled run');
+            // Scrub workflow name seed so control chars never enter the schedule form
+            const base =
+              scrubDisplayText(workflow?.name, { collapseLines: true, maxChars: 160 })
+              || 'Workflow';
+            setScheduleName(workflow ? `${base} schedule` : 'Scheduled run');
             setScheduleCron('0 9 * * *');
             setScheduleOpen(true);
           }}

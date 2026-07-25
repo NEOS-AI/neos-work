@@ -350,4 +350,65 @@ describe('filesystem tools', () => {
       true,
     );
   });
+
+  it('rejects control-char list/search/move inputs and coerces non-string move paths', async () => {
+    const list = createListDirectoryTool(root);
+    const listCtrl = await list.execute({ path: 'dir\nname' });
+    expect(listCtrl.success).toBe(false);
+    expect(listCtrl.error).toMatch(/control characters/i);
+
+    const search = createSearchFilesTool(root);
+    const searchDirCtrl = await search.execute({
+      pattern: '*.ts',
+      type: 'glob',
+      directory: 'sub\ndir',
+    });
+    expect(searchDirCtrl.success).toBe(false);
+    expect(searchDirCtrl.error).toMatch(/control characters|directory/i);
+
+    // Non-string directory coerced then rejected if control-char
+    const dirObj = await search.execute({
+      pattern: 'answer',
+      type: 'content',
+      directory: { toString: () => 'x\ny' } as never,
+    });
+    expect(dirObj.success).toBe(false);
+    expect(dirObj.error).toMatch(/control characters/i);
+
+    await writeFile(join(root, 'src.txt'), 's');
+    const move = createMoveFileTool(root);
+    // Non-string source/destination coercion
+    const moveCoerced = await move.execute({
+      source: { toString: () => 'src.txt' } as never,
+      destination: { toString: () => 'dst.txt' } as never,
+    });
+    expect(moveCoerced.success).toBe(true);
+
+    // read coerces non-string path via String() — missing file fails closed
+    const read = createReadFileTool(root);
+    const nonStr = await read.execute({ path: 123 as unknown as string });
+    expect(nonStr.success).toBe(false);
+    expect(nonStr.error).toBeTruthy();
+  });
+
+  it('search_files glob mode caps matches at 200 when fs.glob is available', async () => {
+    const { glob: nodeGlob } = await import('node:fs/promises');
+    if (typeof nodeGlob !== 'function') {
+      // Node < 22: glob path is unavailable; covered by graceful failure test above
+      return;
+    }
+    await mkdir(join(root, 'many'), { recursive: true });
+    for (let i = 0; i < 220; i++) {
+      await writeFile(join(root, 'many', `f${i}.txt`), 'x');
+    }
+    const search = createSearchFilesTool(root);
+    const result = await search.execute({
+      pattern: '**/*.txt',
+      type: 'glob',
+      directory: 'many',
+    });
+    expect(result.success).toBe(true);
+    const matches = (result.output as { matches: string[] }).matches;
+    expect(matches.length).toBeLessThanOrEqual(200);
+  });
 });

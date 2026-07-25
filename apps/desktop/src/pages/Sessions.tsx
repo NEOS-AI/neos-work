@@ -131,9 +131,19 @@ export function Sessions() {
   const visibleSessions = (() => {
     const filtered = q
       ? sessions.filter((s) => {
-          const title = (s.title || 'New session').toLowerCase();
-          const model = (s.model || '').toLowerCase();
-          const provider = (s.provider || '').toLowerCase();
+          // Scrub haystack so null-bytes do not poison search matching
+          const title = scrubDisplayText(s.title || 'New session', {
+            collapseLines: true,
+            maxChars: 200,
+          }).toLowerCase();
+          const model = scrubDisplayText(s.model, {
+            collapseLines: true,
+            maxChars: 80,
+          }).toLowerCase();
+          const provider = scrubDisplayText(s.provider, {
+            collapseLines: true,
+            maxChars: 80,
+          }).toLowerCase();
           return title.includes(q) || model.includes(q) || provider.includes(q);
         })
       : sessions;
@@ -686,11 +696,19 @@ function ChatArea({
     }
   };
 
-  // Model display name
+  // Model display name (scrub provider/model from session API / static catalog)
   const modelInfo = AVAILABLE_MODELS.find((m) => m.id === session.model);
-  const modelLabel = modelInfo
-    ? `${modelInfo.providerName} · ${modelInfo.name}`
-    : `${session.provider} · ${session.model}`;
+  const modelLabel =
+    scrubDisplayText(
+      modelInfo
+        ? `${modelInfo.providerName} · ${modelInfo.name}`
+        : `${session.provider ?? ''} · ${session.model ?? ''}`,
+      { collapseLines: true, maxChars: 120 },
+    ) || 'Model';
+  const thinkingLabel = scrubDisplayText(session.thinking_mode, {
+    collapseLines: true,
+    maxChars: 40,
+  });
 
   return (
     <>
@@ -774,9 +792,9 @@ function ChatArea({
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <span>{modelLabel}</span>
-                {session.thinking_mode !== 'none' && (
+                {thinkingLabel && thinkingLabel !== 'none' && (
                   <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-                    Thinking: {session.thinking_mode}
+                    Thinking: {thinkingLabel}
                   </span>
                 )}
                 {/* Agent mode toggle */}

@@ -667,4 +667,34 @@ describe('WorkflowEditor page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('scrubs control-char workflow name when seeding schedule and rename inputs', async () => {
+    getWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ...sampleWorkflow,
+        name: `Evil${'\0'}Flow${'\n'}X`,
+      },
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText(/EvilFlow X/)).toBeInTheDocument());
+
+    // Schedule form seed
+    fireEvent.click(screen.getByRole('button', { name: /Schedule/i }));
+    await waitFor(() => expect(screen.getByText('Schedule this workflow')).toBeInTheDocument());
+    const scheduleInput = screen.getByDisplayValue('EvilFlow X schedule') as HTMLInputElement;
+    expect(scheduleInput.value).not.toContain('\0');
+    expect(scheduleInput.value).not.toMatch(/[\r\n]/);
+    // Close schedule modal
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await waitFor(() => expect(screen.queryByText('Schedule this workflow')).not.toBeInTheDocument());
+
+    // Rename editor seed
+    fireEvent.click(screen.getByTitle('workflow.rename'));
+    await waitFor(() => {
+      const renameInput = screen.getByDisplayValue('EvilFlow X') as HTMLInputElement;
+      expect(renameInput.value).toBe('EvilFlow X');
+      expect(renameInput.value).not.toContain('\0');
+    });
+  });
 });

@@ -483,6 +483,7 @@ describe('Routines page', () => {
     listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
     runRoutineNow.mockResolvedValue({
       ok: true,
+      // null stripped, LF collapsed → "abcd efghijkl", then slice(0, 8) → "abcd efg"
       data: { runId: 'ab' + String.fromCharCode(0) + 'cd' + String.fromCharCode(10) + 'efghijkl' },
     });
     crystallizeRoutineRun
@@ -502,37 +503,39 @@ describe('Routines page', () => {
         error: String.fromCharCode(0) + String.fromCharCode(10),
       });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alertMock = window.alert as ReturnType<typeof vi.fn>;
     render(<Routines />);
     await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Morning Digest'));
     await waitFor(() => expect(screen.getByRole('button', { name: '▶ Run Now' })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '▶ Run Now' }));
+    await waitFor(() => expect(runRoutineNow).toHaveBeenCalledWith('r1'));
     await waitFor(() => {
-      // scrubbed runId collapsed then sliced to 8
-      expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/Triggered! runId: abcd ef/));
+      expect(alertMock).toHaveBeenCalledWith('Triggered! runId: abcd efg');
     });
-    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+    expect(String(alertMock.mock.calls.at(-1)?.[0] ?? '')).not.toContain('\0');
 
-    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    alertMock.mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => expect(crystallizeRoutineRun).toHaveBeenCalledWith('r1', 'run-1'));
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringMatching(/Crystallized skill: skill x[\s\S]*\/path/),
-      );
-    });
-    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
-
-    (window.alert as ReturnType<typeof vi.fn>).mockClear();
-    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
-    await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith('diskfull now');
+      const msg = String(alertMock.mock.calls.at(-1)?.[0] ?? '');
+      expect(msg).toMatch(/^Crystallized skill: skill x/);
+      expect(msg).toContain('/path');
+      expect(msg).not.toContain('\0');
     });
 
-    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    alertMock.mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith('Crystallize failed');
+      expect(alertMock).toHaveBeenCalledWith('diskfull now');
+    });
+
+    alertMock.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => {
+      expect(alertMock).toHaveBeenCalledWith('Crystallize failed');
     });
   });
 

@@ -754,6 +754,59 @@ describe('Sessions page', () => {
     await waitFor(() => expect(screen.getByText('ChatX')).toBeInTheDocument());
   });
 
+  it('scrubs control-char model/provider/thinking labels in composer chrome', async () => {
+    listSessions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 's1',
+          workspace_id: 'default',
+          title: 'Alpha Chat',
+          provider: `anthro${'\0'}pic`,
+          model: `claude${'\n'}max`,
+          thinking_mode: `exten${'\0'}ded`,
+          created_at: '2020-01-01T00:00:00.000Z',
+          updated_at: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => {
+      // provider · model scrubbed (null stripped; newline → space)
+      expect(screen.getByText(/anthropic · claude max/)).toBeInTheDocument();
+      expect(screen.getByText(/Thinking: extended/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('search matches scrubbed session haystack (title without null bytes)', async () => {
+    const user = userEvent.setup();
+    listSessions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 's1',
+          workspace_id: 'default',
+          title: `Alpha${'\0'}Chat`,
+          provider: 'anthropic',
+          model: 'claude',
+          thinking_mode: 'none',
+          created_at: '2020-01-01T00:00:00.000Z',
+          updated_at: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('AlphaChat')).toBeInTheDocument());
+    const search = screen.getByPlaceholderText('Search…');
+    await user.type(search, 'AlphaChat');
+    expect(screen.getByText('AlphaChat')).toBeInTheDocument();
+  });
+
   it('scrubs control chars from chat stream error messages', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({ ok: true, data: [] });
