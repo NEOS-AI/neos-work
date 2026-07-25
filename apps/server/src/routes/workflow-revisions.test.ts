@@ -60,6 +60,14 @@ describe('workflow-revisions routes', () => {
     });
     expect(patchBlank.status).toBe(400);
 
+    // Leading control-char label must not strip to a valid label
+    const patchCtrl = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ label: '\nrenamed' }),
+    });
+    expect(patchCtrl.status).toBe(400);
+
     const patch = await workflowRevisions.request(`/${wf.id}/${rev.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },

@@ -201,29 +201,36 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
     .get(trimmed) as HarnessRow | undefined;
   if (!existing) return undefined;
 
-  const name =
-    input.name !== undefined
-      ? (typeof input.name === 'string' ? input.name.trim() : '')
-      : existing.name;
+  let name = existing.name;
+  if (input.name !== undefined) {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name)) return undefined;
+    name = input.name.trim();
+  }
   // Blank name after trim is invalid — leave row unchanged
-  if (!name) return undefined;
-  if (/[\0\r\n]/.test(name) || name.length > HARNESS_NAME_MAX_CHARS) return undefined;
-  const systemPrompt =
-    input.systemPrompt !== undefined
-      ? (typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '')
-      : existing.system_prompt;
+  if (!name || name.length > HARNESS_NAME_MAX_CHARS) return undefined;
+  let systemPrompt = existing.system_prompt;
+  if (input.systemPrompt !== undefined) {
+    if (typeof input.systemPrompt !== 'string' || /[\0\r\n]/.test(input.systemPrompt)) {
+      return undefined;
+    }
+    systemPrompt = input.systemPrompt.trim();
+  }
   if (!systemPrompt) return undefined;
   if (systemPrompt.length > HARNESS_SYSTEM_PROMPT_MAX_CHARS) return undefined;
   const domain =
     input.domain !== undefined
       ? normalizeHarnessDomain(input.domain, existing.domain as AgentHarness['domain'])
       : existing.domain;
-  let description =
-    input.description !== undefined
-      ? (typeof input.description === 'string' ? input.description.trim() : '')
-      : existing.description;
-  if (typeof description === 'string' && /[\0\r\n]/.test(description)) {
-    description = description.replace(/[\0\r\n]/g, ' ').trim();
+  let description = existing.description;
+  if (input.description !== undefined) {
+    if (typeof input.description === 'string') {
+      // Collapse control chars rather than reject whole update
+      description = /[\0\r\n]/.test(input.description)
+        ? input.description.replace(/[\0\r\n]/g, ' ').trim()
+        : input.description.trim();
+    } else {
+      description = '';
+    }
   }
   if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);

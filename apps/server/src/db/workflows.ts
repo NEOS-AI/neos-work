@@ -153,7 +153,8 @@ export function createWorkflow(input: {
   let description: string | null = null;
   if (input.description !== undefined) {
     if (typeof input.description === 'string') {
-      if (/[\0\r\n]/.test(input.description)) {
+      // Multi-line descriptions are allowed; reject null bytes only
+      if (/\0/.test(input.description)) {
         throw new Error('description contains invalid control characters');
       }
       description = input.description.trim() || null;
@@ -218,7 +219,8 @@ export function updateWorkflow(
   let description = existing.description;
   if (input.description !== undefined) {
     if (typeof input.description === 'string') {
-      if (/[\0\r\n]/.test(input.description)) return undefined;
+      // Multi-line descriptions allowed; null bytes only
+      if (/\0/.test(input.description)) return undefined;
       description = input.description.trim() || null;
     } else {
       description = null;

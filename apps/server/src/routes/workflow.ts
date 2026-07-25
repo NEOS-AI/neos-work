@@ -63,13 +63,25 @@ workflow.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
+  if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
-  const description =
-    typeof body.description === 'string' ? body.description.trim() || undefined : body.description;
-  const domainRaw = typeof body.domain === 'string' ? body.domain.trim().toLowerCase() : 'general';
+  const name = body.name.trim();
+  if (!name || name.length > 200) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  let description: string | undefined;
+  if (typeof body.description === 'string') {
+    // Allow multi-line descriptions; reject null bytes only
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
+    description = body.description.trim() || undefined;
+  }
+  const domainRaw =
+    typeof body.domain === 'string' && !/[\0\r\n]/.test(body.domain)
+      ? body.domain.trim().toLowerCase()
+      : 'general';
   const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? (domainRaw as 'finance' | 'coding' | 'general')
     : 'general';
@@ -106,21 +118,33 @@ workflow.put('/:id', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const name =
-    body.name !== undefined
-      ? (typeof body.name === 'string' ? body.name.trim() : '')
-      : undefined;
-  if (name !== undefined && (!name || name.length > 200 || /[\0\r\n]/.test(name))) {
-    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+    name = body.name.trim();
+    if (!name || name.length > 200) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
   }
-  const description =
-    body.description !== undefined && typeof body.description === 'string'
-      ? body.description.trim()
-      : body.description;
-  const designSystemId =
-    body.designSystemId !== undefined
-      ? (typeof body.designSystemId === 'string' ? body.designSystemId.trim() : body.designSystemId)
+  let description: string | undefined = body.description as string | undefined;
+  if (body.description !== undefined && typeof body.description === 'string') {
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
+    description = body.description.trim();
+  }
+  let designSystemId: string | undefined =
+    body.designSystemId !== undefined && typeof body.designSystemId !== 'string'
+      ? (body.designSystemId as string)
       : undefined;
+  if (body.designSystemId !== undefined && typeof body.designSystemId === 'string') {
+    if (/[\0\r\n]/.test(body.designSystemId)) {
+      return c.json({ ok: false, error: 'Invalid designSystemId' }, 400);
+    }
+    designSystemId = body.designSystemId.trim() || undefined;
+  }
 
   // Auto-snapshot before update (Task 16: version history)
   const current = db.getWorkflow(id);

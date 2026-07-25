@@ -129,6 +129,10 @@ describe('createWebSearchTool', () => {
     const ctrl = await createWebSearchTool().execute({ query: `bad${'\n'}q` });
     expect(ctrl.success).toBe(false);
     expect(ctrl.error).toMatch(/control characters/i);
+    // Leading control char must not be stripped to a valid query
+    const lead = await createWebSearchTool().execute({ query: '\nhello' });
+    expect(lead.success).toBe(false);
+    expect(lead.error).toMatch(/control characters/i);
 
     globalThis.fetch = vi.fn(async () =>
       new Response(

@@ -130,8 +130,11 @@ workflowRevisions.patch('/:workflowId/:id', async (c) => {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
   const body = await c.req.json<{ label?: string }>().catch(() => null);
-  const label = typeof body?.label === 'string' ? body.label.trim() : '';
-  if (!label || label.length > 200 || /[\0\r\n]/.test(label)) {
+  if (typeof body?.label !== 'string' || /[\0\r\n]/.test(body.label)) {
+    return c.json({ ok: false, error: 'Invalid label' }, 400);
+  }
+  const label = body.label.trim();
+  if (!label || label.length > 200) {
     return c.json({ ok: false, error: 'Invalid label' }, 400);
   }
   db.updateRevisionLabel(id, label);

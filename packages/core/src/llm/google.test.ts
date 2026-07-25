@@ -121,6 +121,21 @@ describe('GoogleAdapter', () => {
     expect(contents[1]?.role).toBe('model');
   });
 
+  it('falls back to catalog model for control-char model ids', async () => {
+    const adapter = new GoogleAdapter('sk-test');
+    const catalogId = adapter.getModels()[0]!.id;
+    generateContentStream.mockResolvedValue(
+      streamOf([{ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }]),
+    );
+    for await (const _ of adapter.chat({
+      model: 'bad\nmodel',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      // drain
+    }
+    expect(generateContentStream.mock.calls[0][0].model).toBe(catalogId);
+  });
+
   it('falls back to catalog model and truncates oversized system/user content', async () => {
     generateContentStream.mockResolvedValue(streamOf([]));
     const adapter = new GoogleAdapter('sk');

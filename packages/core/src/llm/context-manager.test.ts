@@ -135,4 +135,33 @@ describe('ContextManager', () => {
     expect(cm.needsCompression([])).toBe(false);
     expect(cm.needsCompression(null as never)).toBe(false);
   });
+
+  it('scrubs control-char roles and null bytes from summarize transcript', async () => {
+    const cm = new ContextManager();
+    const older = Array.from({ length: 5 }, (_, i) => {
+      if (i === 0) {
+        return {
+          role: `user${'\n'}evil` as Message['role'],
+          content: `secret${'\0'}payload`,
+        };
+      }
+      return msg('user', `old-${i}`);
+    });
+    const recent = Array.from({ length: 20 }, (_, i) => msg('assistant', `recent-${i}`));
+    const messages = [...older, ...recent];
+
+    let captured = '';
+    const adapter = mockAdapter(['sum']);
+    const base = adapter.chat.bind(adapter);
+    adapter.chat = async function* (params) {
+      captured = String(params.messages?.[0]?.content ?? '');
+      yield* base(params);
+    };
+
+    await cm.compress(messages, adapter);
+    // Control-char role falls back to "unknown"
+    expect(captured).toContain('unknown: secretpayload');
+    expect(captured).not.toContain('user\n');
+    expect(captured).not.toContain('\0');
+  });
 });

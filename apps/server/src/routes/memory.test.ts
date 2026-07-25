@@ -20,6 +20,16 @@ describe('memory routes', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects create with leading control-char name', async () => {
+    const res = await memory.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `\n${NAME}`, type: 'user', content: 'x' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/name/i);
+  });
+
   it('returns 404 for control-char or overlong path ids', async () => {
     const ctrl = await memory.request('/%0aevil', { method: 'GET' });
     expect(ctrl.status).toBe(404);

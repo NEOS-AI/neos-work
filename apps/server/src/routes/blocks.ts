@@ -126,29 +126,47 @@ blocks.put('/:id', async (c) => {
 
   const patch: Partial<WorkflowBlock> = { ...body };
   if (body.name !== undefined) {
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'name cannot be empty' }, 400);
+    }
+    const name = body.name.trim();
     if (!name) return c.json({ ok: false, error: 'name cannot be empty' }, 400);
     patch.name = name;
   }
   if (typeof body.domain === 'string') {
-    const domainRaw = body.domain.trim().toLowerCase() || 'general';
+    const domainRaw = !/[\0\r\n]/.test(body.domain)
+      ? body.domain.trim().toLowerCase() || 'general'
+      : 'general';
     patch.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
       ? (domainRaw as WorkflowBlock['domain'])
       : 'general';
   }
   if (typeof body.category === 'string') {
-    patch.category = body.category.trim() || 'custom';
+    patch.category =
+      !/[\0\r\n]/.test(body.category) ? body.category.trim() || 'custom' : 'custom';
   }
   if (typeof body.description === 'string') {
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'Invalid description' }, 400);
+    }
     patch.description = body.description.trim();
   }
   if (typeof body.promptTemplate === 'string') {
+    if (/\0/.test(body.promptTemplate)) {
+      return c.json({ ok: false, error: 'Invalid promptTemplate' }, 400);
+    }
     patch.promptTemplate = body.promptTemplate.trim();
   }
   if (typeof body.inputDescription === 'string') {
+    if (/\0/.test(body.inputDescription)) {
+      return c.json({ ok: false, error: 'Invalid inputDescription' }, 400);
+    }
     patch.inputDescription = body.inputDescription.trim();
   }
   if (typeof body.outputDescription === 'string') {
+    if (/\0/.test(body.outputDescription)) {
+      return c.json({ ok: false, error: 'Invalid outputDescription' }, 400);
+    }
     patch.outputDescription = body.outputDescription.trim();
   }
 

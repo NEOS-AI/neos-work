@@ -133,6 +133,15 @@ describe('Harnesses page', () => {
     await waitFor(() => expect(deleteHarness).toHaveBeenCalledWith('h-custom'));
   });
 
+  it('cancels delete when confirm is false', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Custom Analyst')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    expect(deleteHarness).not.toHaveBeenCalled();
+  });
+
   it('Escape closes modal and clears search', async () => {
     const user = userEvent.setup();
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });

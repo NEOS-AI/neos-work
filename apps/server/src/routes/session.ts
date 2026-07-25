@@ -777,21 +777,32 @@ workspace.post('/', async (c) => {
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
+  const nameRaw = typeof body.name === 'string' ? body.name : '';
+  // Control-char check before trim
+  if (/[\0\r\n]/.test(nameRaw) || nameRaw.trim().length > 200) {
     return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
   }
-  const path =
-    body.path !== undefined
-      ? (typeof body.path === 'string' ? body.path.trim() : '')
-      : undefined;
+  const name = nameRaw.trim();
+  if (!name) {
+    return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
+  }
+  let path: string | undefined;
+  if (body.path !== undefined) {
+    if (typeof body.path !== 'string' || /[\0\r\n]/.test(body.path)) {
+      return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
+    }
+    path = body.path.trim();
+  }
   if (path !== undefined && path && !validateWorkspacePath(path)) {
     return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
   }
   if (path !== undefined && !path) {
     return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
   }
-  const type = typeof body.type === 'string' ? body.type.trim() || undefined : body.type;
+  const type =
+    typeof body.type === 'string' && !/[\0\r\n]/.test(body.type)
+      ? body.type.trim() || undefined
+      : undefined;
   try {
     const created = db.createWorkspace({
       name,
@@ -812,19 +823,25 @@ workspace.put('/:id', async (c) => {
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
-  const name =
-    body.name !== undefined
-      ? (typeof body.name === 'string' ? body.name.trim() : '')
-      : undefined;
-  if (name !== undefined && (!name || name.length > 200 || /[\0\r\n]/.test(name))) {
-    return c.json({ ok: false, error: 'Invalid "name"' }, 400);
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'Invalid "name"' }, 400);
+    }
+    name = body.name.trim();
+    if (!name || name.length > 200) {
+      return c.json({ ok: false, error: 'Invalid "name"' }, 400);
+    }
   }
-  const path =
-    body.path !== undefined
-      ? (typeof body.path === 'string' ? body.path.trim() : '')
-      : undefined;
-  if (path !== undefined && (!path || !validateWorkspacePath(path))) {
-    return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
+  let path: string | undefined;
+  if (body.path !== undefined) {
+    if (typeof body.path !== 'string' || /[\0\r\n]/.test(body.path)) {
+      return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
+    }
+    path = body.path.trim();
+    if (!path || !validateWorkspacePath(path)) {
+      return c.json({ ok: false, error: 'Workspace path must be within the home directory' }, 400);
+    }
   }
   const updated = db.updateWorkspace(id, { name, path });
   if (!updated) return c.json({ ok: false, error: 'Workspace not found' }, 404);

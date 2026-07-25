@@ -150,6 +150,21 @@ describe('Blocks page', () => {
     await waitFor(() => expect(deleteBlock).toHaveBeenCalledWith('my_custom'));
   });
 
+  it('cancels delete when confirm is false and shows no-match filter', async () => {
+    const user = userEvent.setup();
+    listBlocks.mockResolvedValue({ ok: true, data: blocks });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('Custom Block')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(deleteBlock).not.toHaveBeenCalled();
+
+    await user.type(screen.getByPlaceholderText('Search blocks…'), 'zzzz-none');
+    expect(screen.queryByText('Custom Block')).not.toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
   it('Escape closes modal and clears search', async () => {
     const user = userEvent.setup();
     listBlocks.mockResolvedValue({ ok: true, data: blocks });

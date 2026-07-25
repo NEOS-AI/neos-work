@@ -333,12 +333,22 @@ describe('workflow runs CRUD', () => {
     expect(() =>
       workflows.createWorkflow({
         name: 'ok',
-        description: 'bad\ndesc',
+        description: `bad${'\0'}desc`,
         domain: 'general',
         nodes: [],
         edges: [],
       }),
     ).toThrow(/control characters/i);
+    // Multi-line descriptions are allowed
+    const multi = workflows.createWorkflow({
+      name: `${NAME}-multi`,
+      description: 'line1\nline2',
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(multi.description).toBe('line1\nline2');
+    workflows.deleteWorkflow(multi.id);
     expect(() =>
       workflows.createWorkflow({
         name: 'x'.repeat(201),
@@ -356,7 +366,10 @@ describe('workflow runs CRUD', () => {
     });
     expect(workflows.updateWorkflow(wf.id, { name: '\nRenamed' })).toBeUndefined();
     expect(workflows.getWorkflow(wf.id)?.name).toBe(NAME);
-    expect(workflows.updateWorkflow(wf.id, { description: 'line\nbreak' })).toBeUndefined();
+    expect(workflows.updateWorkflow(wf.id, { description: `nul${'\0'}x` })).toBeUndefined();
+    expect(workflows.updateWorkflow(wf.id, { description: 'line\nbreak' })?.description).toBe(
+      'line\nbreak',
+    );
     workflows.deleteWorkflow(wf.id);
   });
 

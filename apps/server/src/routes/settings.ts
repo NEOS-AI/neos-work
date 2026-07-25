@@ -98,16 +98,22 @@ settings.delete('/:key', (c) => {
 // POST /api/settings/verify-key — validate an API key
 settings.post('/verify-key', async (c) => {
   const body = await c.req.json<{ provider: string; key: string }>().catch(() => null);
-  const provider = typeof body?.provider === 'string' ? body.provider.trim().toLowerCase() : '';
-  const key = typeof body?.key === 'string' ? body.key.trim() : '';
+  // Reject control chars before trim (trim would strip leading/trailing \r\n)
+  if (typeof body?.provider !== 'string' || /[\0\r\n]/.test(body.provider)) {
+    return c.json({ ok: false, error: 'Unknown provider' }, 400);
+  }
+  if (typeof body?.key !== 'string' || /[\0\r\n]/.test(body.key)) {
+    return c.json({ ok: false, error: 'Invalid API key' }, 400);
+  }
+  const provider = body.provider.trim().toLowerCase();
+  const key = body.key.trim();
   if (!provider || !key) {
     return c.json({ ok: false, error: 'Missing provider or key' }, 400);
   }
-  // Reject control chars / pathological key lengths before calling providers
-  if (/[\0\r\n]/.test(key) || key.length > 8_192) {
+  if (key.length > 8_192) {
     return c.json({ ok: false, error: 'Invalid API key' }, 400);
   }
-  if (/[\0\r\n]/.test(provider) || provider.length > 50) {
+  if (provider.length > 50) {
     return c.json({ ok: false, error: 'Unknown provider' }, 400);
   }
 

@@ -89,6 +89,11 @@ describe('filesystem tools', () => {
     const bad = await search.execute({ pattern: 'a\nb' });
     expect(bad.success).toBe(false);
     expect(bad.error).toMatch(/invalid or exceeds/i);
+
+    // Leading control char must not be stripped to a valid path
+    const lead = await read.execute({ path: '\nhuge.txt' });
+    expect(lead.success).toBe(false);
+    expect(lead.error).toMatch(/control characters/i);
   });
 
   it('list_directory skips hidden entries', async () => {

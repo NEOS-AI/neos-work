@@ -46,6 +46,14 @@ describe('workflow routes CRUD', () => {
     });
     expect(ctrl.status).toBe(400);
 
+    // Leading control char must not strip to a valid name
+    const leading = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `\n${WF_NAME}`, domain: 'general', ...minimalGraph }),
+    });
+    expect(leading.status).toBe(400);
+
     const long = await workflow.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

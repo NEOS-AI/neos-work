@@ -132,7 +132,7 @@ describe('settings routes', () => {
       body: JSON.stringify({ key: 'sk-test' }),
     });
     expect(missingProv.status).toBe(400);
-    expect(((await missingProv.json()) as { error: string }).error).toMatch(/Missing provider or key/i);
+    expect(((await missingProv.json()) as { error: string }).error).toMatch(/Missing provider or key|Unknown provider|Invalid API key/i);
 
     const unknown = await settings.request('/verify-key', {
       method: 'POST',
@@ -142,6 +142,15 @@ describe('settings routes', () => {
     expect(unknown.status).toBe(400);
     const body = await unknown.json() as { error: string };
     expect(body.error).toMatch(/Unknown provider/i);
+
+    // Leading control-char key must not strip to a valid key
+    const leadingKey = await settings.request('/verify-key', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'anthropic', key: '\nsk-test' }),
+    });
+    expect(leadingKey.status).toBe(400);
+    expect(((await leadingKey.json()) as { error: string }).error).toMatch(/Invalid API key/i);
   });
 
   it('GET / lists settings with sensitive keys masked', async () => {

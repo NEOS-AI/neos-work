@@ -329,6 +329,20 @@ describe('session routes', () => {
     });
     expect(controlTitle.status).toBe(400);
     expect(((await controlTitle.json()) as { error: string }).error).toMatch(/title/i);
+
+    // Control-char provider / model / thinkingMode before trim
+    for (const body of [
+      { workspaceId: 'default', provider: 'anthropic\n' },
+      { workspaceId: 'default', model: '\nclaude-sonnet-4-5-20250929' },
+      { workspaceId: 'default', thinkingMode: 'high\n' },
+    ]) {
+      const res = await session.request('/', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+    }
   });
 });
 

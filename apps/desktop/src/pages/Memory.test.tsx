@@ -138,6 +138,21 @@ describe('Memory page', () => {
     await waitFor(() => expect(deleteMemory).toHaveBeenCalledWith('m1'));
   });
 
+  it('cancels delete when confirm is false and shows no-match filter', async () => {
+    const user = userEvent.setup();
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]!);
+    expect(deleteMemory).not.toHaveBeenCalled();
+
+    await user.type(screen.getByPlaceholderText('Search memory…'), 'zzzz-none');
+    expect(screen.queryByText('User Pref')).not.toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
+
   it('Escape closes modal and clears search', async () => {
     const user = userEvent.setup();
     listMemories.mockResolvedValue({ ok: true, data: items });

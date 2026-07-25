@@ -81,15 +81,21 @@ artifacts.post('/', async (c) => {
   const workflowId = safeId(
     typeof body.workflowId === 'string' ? body.workflowId : '',
   );
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const contentType = typeof body.contentType === 'string' ? body.contentType.trim() : '';
+  if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  if (typeof body.contentType !== 'string' || /[\0\r\n]/.test(body.contentType)) {
+    return c.json({ ok: false, error: 'Invalid contentType' }, 400);
+  }
+  const name = body.name.trim();
+  const contentType = body.contentType.trim();
   if (!workflowId || !name || !contentType) {
     return c.json({ ok: false, error: 'workflowId, name, contentType required' }, 400);
   }
-  if (name.length > 200 || /[\0\r\n]/.test(name)) {
+  if (name.length > 200) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
-  if (contentType.length > 200 || /[\0\r\n]/.test(contentType)) {
+  if (contentType.length > 200) {
     return c.json({ ok: false, error: 'Invalid contentType' }, 400);
   }
 
@@ -99,17 +105,20 @@ artifacts.post('/', async (c) => {
   }
 
   try {
-    const runIdRaw =
-      typeof body.runId === 'string' ? body.runId.trim() : '';
-    const runId = runIdRaw ? safeId(runIdRaw) || undefined : undefined;
-    if (runIdRaw && !runId) {
+    // safeId checks control chars before trim
+    const runId =
+      typeof body.runId === 'string' && body.runId
+        ? safeId(body.runId) || undefined
+        : undefined;
+    if (typeof body.runId === 'string' && body.runId.trim() && !runId) {
       return c.json({ ok: false, error: 'Invalid runId' }, 400);
     }
-    const nodeIdRaw =
-      typeof body.nodeId === 'string' ? body.nodeId.trim() : '';
     // node ids may be slightly longer graph labels; reuse same hygiene
-    const nodeId = nodeIdRaw ? safeId(nodeIdRaw, 200) || undefined : undefined;
-    if (nodeIdRaw && !nodeId) {
+    const nodeId =
+      typeof body.nodeId === 'string' && body.nodeId
+        ? safeId(body.nodeId, 200) || undefined
+        : undefined;
+    if (typeof body.nodeId === 'string' && body.nodeId.trim() && !nodeId) {
       return c.json({ ok: false, error: 'Invalid nodeId' }, 400);
     }
     const artifact = db.createArtifact({
@@ -165,8 +174,11 @@ artifacts.patch('/:id', async (c) => {
   }
   let name: string | undefined;
   if (body.name !== undefined) {
-    name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+    name = body.name.trim();
+    if (!name || name.length > 200) {
       return c.json({ ok: false, error: 'Invalid name' }, 400);
     }
   }

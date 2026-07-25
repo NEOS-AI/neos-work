@@ -31,7 +31,7 @@ function paramId(c: { req: { param: (k: string) => string } }): string {
 }
 
 function parseMemoryType(raw: unknown): MemoryType | undefined {
-  if (typeof raw !== 'string') return undefined;
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return undefined;
   const t = raw.trim().toLowerCase() as MemoryType;
   return MEMORY_TYPES.has(t) ? t : undefined;
 }
@@ -51,13 +51,19 @@ memory.post('/', async (c) => {
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  const name = body.name.trim();
+  if (typeof body.content !== 'string' || /\0/.test(body.content)) {
+    return c.json({ ok: false, error: 'name, type, and content are required' }, 400);
+  }
+  const content = body.content.trim();
   const type = parseMemoryType(body.type);
   if (!name || !type || !content) {
     return c.json({ ok: false, error: 'name, type, and content are required' }, 400);
   }
-  if (/[\0\r\n]/.test(name) || name.length > 200) {
+  if (name.length > 200) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
   try {
@@ -91,14 +97,20 @@ memory.put('/:id', async (c) => {
   }
   const patch: UpdateMemoryInput = {};
   if (body.name !== undefined) {
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name || /[\0\r\n]/.test(name) || name.length > 200) {
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'name cannot be empty' }, 400);
+    }
+    const name = body.name.trim();
+    if (!name || name.length > 200) {
       return c.json({ ok: false, error: 'name cannot be empty' }, 400);
     }
     patch.name = name;
   }
   if (body.content !== undefined) {
-    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (typeof body.content !== 'string' || /\0/.test(body.content)) {
+      return c.json({ ok: false, error: 'content cannot be empty' }, 400);
+    }
+    const content = body.content.trim();
     if (!content) return c.json({ ok: false, error: 'content cannot be empty' }, 400);
     patch.content = content;
   }

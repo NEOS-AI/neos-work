@@ -32,13 +32,16 @@ function isProtectedPath(relativePath: string): boolean {
 
 /** Resolve a user-provided path within the workspace, preventing traversal and symlink escape. */
 function safePath(workspaceRoot: string, userPath: string): string {
-  const trimmed = typeof userPath === 'string' ? userPath.trim() : '';
-  if (!trimmed) {
+  if (typeof userPath !== 'string') {
     throw new Error('Path is required');
   }
-  // Reject null bytes and CR/LF that can confuse path resolution
-  if (/[\0\r\n]/.test(trimmed)) {
+  // Reject null bytes and CR/LF before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(userPath)) {
     throw new Error('Path contains invalid control characters');
+  }
+  const trimmed = userPath.trim();
+  if (!trimmed) {
+    throw new Error('Path is required');
   }
   if (trimmed.length > MAX_PATH_CHARS) {
     throw new Error(`Path exceeds max length (${MAX_PATH_CHARS})`);

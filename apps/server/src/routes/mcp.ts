@@ -226,29 +226,47 @@ mcp.post('/', async (c) => {
       return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
     }
 
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
+    const nameRaw = typeof body.name === 'string' ? body.name : '';
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(nameRaw) || nameRaw.trim().length > 200) {
+      return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
+    }
+    const name = nameRaw.trim();
+    if (!name) {
       return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
     }
     const transportRaw =
-      typeof body.transport === 'string' ? body.transport.trim().toLowerCase() : '';
+      typeof body.transport === 'string' && !/[\0\r\n]/.test(body.transport)
+        ? body.transport.trim().toLowerCase()
+        : '';
     if (transportRaw !== 'stdio' && transportRaw !== 'http') {
       return c.json({ ok: false, error: 'transport must be "stdio" or "http"' }, 400);
     }
     const transport = transportRaw as 'stdio' | 'http';
-    const command =
-      typeof body.command === 'string' ? body.command.trim() : body.command;
-    if (typeof command === 'string' && command && /[\0\r\n]/.test(command)) {
-      return c.json({ ok: false, error: 'command contains invalid control characters' }, 400);
+    let command: string | undefined =
+      typeof body.command === 'string' ? body.command : undefined;
+    if (typeof command === 'string') {
+      if (/[\0\r\n]/.test(command)) {
+        return c.json({ ok: false, error: 'command contains invalid control characters' }, 400);
+      }
+      command = command.trim();
+      if (command.length > 500) {
+        return c.json({ ok: false, error: 'command exceeds max length (500)' }, 400);
+      }
     }
-    if (typeof command === 'string' && command.length > 500) {
-      return c.json({ ok: false, error: 'command exceeds max length (500)' }, 400);
+    const urlRaw = typeof body.url === 'string' ? body.url : undefined;
+    if (typeof urlRaw === 'string' && /[\0\r\n]/.test(urlRaw)) {
+      return c.json({ ok: false, error: 'url must be http(s)' }, 400);
     }
-    const url = typeof body.url === 'string' ? body.url.trim() : body.url;
+    const url = typeof urlRaw === 'string' ? urlRaw.trim() : urlRaw;
     const args = Array.isArray(body.args)
       ? body.args
-          .map((a) => (typeof a === 'string' ? a.trim() : String(a ?? '').trim()))
-          .filter((a) => a.length > 0 && a.length <= 500 && !/[\0\r\n]/.test(a))
+          .map((a) => {
+            const raw = typeof a === 'string' ? a : String(a ?? '');
+            if (/[\0\r\n]/.test(raw)) return '';
+            return raw.trim();
+          })
+          .filter((a) => a.length > 0 && a.length <= 500)
           .slice(0, 50)
       : body.args;
     if (transport === 'stdio' && !command) {
@@ -324,14 +342,23 @@ mcp.post('/oauth/start', async (c) => {
       return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
     }
 
-    const serverId = typeof body.serverId === 'string' ? body.serverId.trim() : '';
-    const authorizationEndpoint =
-      typeof body.authorizationEndpoint === 'string' ? body.authorizationEndpoint.trim() : '';
-    const tokenEndpoint =
-      typeof body.tokenEndpoint === 'string' ? body.tokenEndpoint.trim() : '';
-    const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
-    const redirectUri = typeof body.redirectUri === 'string' ? body.redirectUri.trim() : '';
-    const scope = typeof body.scope === 'string' ? body.scope.trim() || undefined : undefined;
+    const safeField = (raw: unknown, max = 2_048): string => {
+      if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+      const s = raw.trim();
+      return s && s.length <= max ? s : '';
+    };
+    const serverId = safeField(body.serverId, 200);
+    const authorizationEndpoint = safeField(body.authorizationEndpoint);
+    const tokenEndpoint = safeField(body.tokenEndpoint);
+    const clientId = safeField(body.clientId, 500);
+    const redirectUri = safeField(body.redirectUri);
+    const scope =
+      typeof body.scope === 'string' && !/[\0\r\n]/.test(body.scope)
+        ? body.scope.trim() || undefined
+        : undefined;
+    if (scope && scope.length > 1_000) {
+      return c.json({ ok: false, error: 'scope too long' }, 400);
+    }
 
     if (!serverId || !authorizationEndpoint || !tokenEndpoint || !clientId || !redirectUri) {
       return c.json({ ok: false, error: 'Missing required fields' }, 400);

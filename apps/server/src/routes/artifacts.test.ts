@@ -45,6 +45,17 @@ describe('artifacts routes', () => {
       nodes: [],
       edges: [],
     });
+    const badName = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: '\nx.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+      }),
+    });
+    expect(badName.status).toBe(400);
     const badRun = await artifacts.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

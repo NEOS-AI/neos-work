@@ -35,14 +35,13 @@ export function createWebSearchTool(): Tool {
       required: ['query'],
     },
     async execute(input): Promise<ToolResult> {
-      let apiKey =
-        typeof process.env['TAVILY_API_KEY'] === 'string'
-          ? process.env['TAVILY_API_KEY'].trim()
-          : '';
+      const apiKeyRaw =
+        typeof process.env['TAVILY_API_KEY'] === 'string' ? process.env['TAVILY_API_KEY'] : '';
       // Reject control chars / pathological key lengths before calling Tavily
-      if (/[\0\r\n]/.test(apiKey) || apiKey.length > 8_192) {
+      if (/[\0\r\n]/.test(apiKeyRaw) || apiKeyRaw.length > 8_192) {
         return { success: false, output: null, error: 'TAVILY_API_KEY is invalid' };
       }
+      const apiKey = apiKeyRaw.trim();
       if (!apiKey) {
         return { success: false, output: null, error: 'TAVILY_API_KEY is not set' };
       }
@@ -52,17 +51,19 @@ export function createWebSearchTool(): Tool {
         const SEARCH_QUERY_MAX = 2_000;
         const SNIPPET_MAX = 2_000;
         const TITLE_MAX = 500;
-        let query =
-          typeof input.query === 'string' ? input.query.trim() : String(input.query ?? '').trim();
-        if (!query) {
-          return { success: false, output: null, error: 'query is required' };
-        }
-        if (/[\0\r\n]/.test(query)) {
+        const queryRaw =
+          typeof input.query === 'string' ? input.query : String(input.query ?? '');
+        // Control-char check before trim
+        if (/[\0\r\n]/.test(queryRaw)) {
           return {
             success: false,
             output: null,
             error: 'query contains invalid control characters',
           };
+        }
+        let query = queryRaw.trim();
+        if (!query) {
+          return { success: false, output: null, error: 'query is required' };
         }
         if (query.length > SEARCH_QUERY_MAX) {
           query = query.slice(0, SEARCH_QUERY_MAX);
@@ -74,7 +75,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.111',
+            'User-Agent': 'neos-work/0.3.112',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
