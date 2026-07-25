@@ -4,6 +4,12 @@ import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowBlock } from '../../lib/engine.js';
 import { SelectField } from './fields.js';
 
+/** Safe block id for select value / config: control-char rejected, trimmed. */
+export function safeBlockId(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  return raw.trim();
+}
+
 export function defaultsForBlock(block: WorkflowBlock): Record<string, unknown> {
   return Object.fromEntries(
     block.paramDefs
@@ -47,23 +53,45 @@ export function BlockSelector(props: {
     };
   }, [client, onBlocksLoaded]);
 
-  const selected = useMemo(() => blocks.find((block) => block.id === props.value), [blocks, props.value]);
+  // Match by safe (trimmed) id so option values and padded server ids align
+  const valueId = safeBlockId(props.value);
+  const selected = useMemo(
+    () => blocks.find((block) => safeBlockId(block.id) === valueId && valueId.length > 0),
+    [blocks, valueId],
+  );
 
   return (
     <div className="space-y-2">
       <SelectField
         label="Block"
-        value={props.value}
-        onChange={(next) => props.onChange(blocks.find((block) => block.id === next) ?? null)}
+        value={valueId}
+        onChange={(next) => {
+          if (!next) {
+            props.onChange(null);
+            return;
+          }
+          const match = blocks.find((block) => safeBlockId(block.id) === next);
+          if (!match) {
+            props.onChange(null);
+            return;
+          }
+          // Emit normalized id so config never stores padded / control-adjacent values
+          const id = safeBlockId(match.id);
+          props.onChange(id ? { ...match, id } : null);
+        }}
         options={[
           { value: '', label: 'No block selected' },
           ...blocks
-            // Control-char block ids never selectable
-            .filter((block) => typeof block.id === 'string' && !/[\0\r\n]/.test(block.id) && block.id.trim())
-            .map((block) => ({
-              value: block.id.trim(),
-              label: `${block.domain} / ${block.category} / ${block.name}`,
-            })),
+            // Control-char / blank block ids never selectable
+            .map((block) => {
+              const id = safeBlockId(block.id);
+              if (!id) return null;
+              return {
+                value: id,
+                label: `${block.domain} / ${block.category} / ${block.name}`,
+              };
+            })
+            .filter((opt): opt is { value: string; label: string } => opt !== null),
         ]}
       />
       {selected && (

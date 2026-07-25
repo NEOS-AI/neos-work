@@ -7,7 +7,9 @@ export function BlockParamForm(props: {
   onChange: (value: Record<string, unknown>) => void;
 }) {
   const patchParam = (key: string, value: unknown) => {
-    props.onChange({ ...props.value, [key]: value });
+    // Drop control-char / blank param keys (align with BlockNode params normalize)
+    if (typeof key !== 'string' || /[\0\r\n]/.test(key) || !key.trim()) return;
+    props.onChange({ ...props.value, [key.trim()]: value });
   };
 
   if (props.block.paramDefs.length === 0) {
@@ -21,6 +23,10 @@ export function BlockParamForm(props: {
   return (
     <div className="space-y-3">
       {props.block.paramDefs.map((param) => {
+        // Skip control-char / blank param keys entirely
+        if (typeof param.key !== 'string' || /[\0\r\n]/.test(param.key) || !param.key.trim()) {
+          return null;
+        }
         const value = props.value[param.key];
         if (param.type === 'number') {
           return (
@@ -47,17 +53,25 @@ export function BlockParamForm(props: {
           );
         }
         if (param.type === 'select') {
+          const options = (param.options ?? [])
+            .filter((option) => typeof option === 'string' && !/[\0\r\n]/.test(option) && option.trim())
+            .map((option) => {
+              const v = option.trim();
+              return { value: v, label: v };
+            });
           return (
             <SelectField
               key={param.key}
               label={param.label}
-              value={typeof value === 'string' ? value : ''}
+              value={
+                typeof value === 'string' && !/[\0\r\n]/.test(value) ? value.trim() : ''
+              }
               description={param.description}
-              options={[
-                { value: '', label: 'Select...' },
-                ...(param.options ?? []).map((option) => ({ value: option, label: option })),
-              ]}
-              onChange={(next) => patchParam(param.key, next)}
+              options={[{ value: '', label: 'Select...' }, ...options]}
+              onChange={(next) => {
+                if (next && /[\0\r\n]/.test(next)) return;
+                patchParam(param.key, next);
+              }}
             />
           );
         }
@@ -67,7 +81,11 @@ export function BlockParamForm(props: {
             label={param.label}
             value={typeof value === 'string' ? value : ''}
             description={param.description}
-            onChange={(next) => patchParam(param.key, next)}
+            onChange={(next) => {
+              // Null-byte string params never applied (align with BlockNode)
+              if (/\0/.test(next)) return;
+              patchParam(param.key, next);
+            }}
           />
         );
       })}

@@ -13,7 +13,7 @@ import {
   MEDIA_VOICES,
 } from '../../lib/media-node-options.js';
 import { BlockParamForm } from './BlockParamForm.js';
-import { BlockSelector, defaultsForBlock } from './BlockSelector.js';
+import { BlockSelector, defaultsForBlock, safeBlockId } from './BlockSelector.js';
 import { CheckboxField, NumberField, TextAreaField, TextField } from './fields.js';
 import { HarnessSelector } from './HarnessSelector.js';
 import type { WorkflowValidationIssue } from './WorkflowValidation.js';
@@ -88,19 +88,25 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           <div className="mt-3 space-y-1">
             <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Design System</p>
             <select
-              value={designSystemId ?? ''}
+              value={
+                typeof designSystemId === 'string' && !/[\0\r\n]/.test(designSystemId)
+                  ? designSystemId.trim()
+                  : ''
+              }
               onChange={(e) => {
                 const id = e.target.value;
-                // Control-char design system id never applied (select values are server ids)
+                // Control-char design system id never applied; trim valid ids
                 if (id && /[\0\r\n]/.test(id)) return;
-                onUpdateDesignSystemId(id);
+                onUpdateDesignSystemId(id ? id.trim() : '');
               }}
               className="w-full rounded bg-black/20 border border-white/10 px-2 py-1.5 text-xs text-white/80 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">None</option>
-              {designSystems.map((ds) => (
-                <option key={ds.id} value={ds.id}>{ds.name}</option>
-              ))}
+              {designSystems
+                .filter((ds) => typeof ds.id === 'string' && !/[\0\r\n]/.test(ds.id) && ds.id.trim())
+                .map((ds) => (
+                  <option key={ds.id.trim()} value={ds.id.trim()}>{ds.name}</option>
+                ))}
             </select>
             {designSystemId && (
               <p className="text-[10px] text-white/30">
@@ -119,7 +125,8 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
   const patchConfig = (patch: Record<string, unknown>) => {
     onPatchNodeData(selectedNode.id, { config: { ...config, ...patch } });
   };
-  const selectedBlock = blocks.find((block) => block.id === config.blockId);
+  const blockId = safeBlockId(config.blockId);
+  const selectedBlock = blocks.find((block) => safeBlockId(block.id) === blockId && blockId.length > 0);
   const params = ((config.params ?? {}) as Record<string, unknown>) ?? {};
   const initialInputsText = jsonDrafts[selectedNode.id] ?? stringifyJson(config.initialInputs);
 
@@ -199,13 +206,21 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           <HarnessSelector
             nodeType={nodeType}
             value={typeof config.harnessId === 'string' ? config.harnessId : ''}
-            onChange={(harnessId) => patchConfig({ harnessId: harnessId || undefined })}
+            onChange={(harnessId) => {
+              // Control-char harnessId never applied (align with AgentNode / validation)
+              if (harnessId && /[\0\r\n]/.test(harnessId)) return;
+              patchConfig({ harnessId: harnessId || undefined });
+            }}
           />
           <TextAreaField
             label="Additional system prompt"
             value={typeof config.systemPrompt === 'string' ? config.systemPrompt : ''}
             rows={4}
-            onChange={(systemPrompt) => patchConfig({ systemPrompt })}
+            onChange={(systemPrompt) => {
+              // Null-byte system prompts rejected (multi-line OK; align with harness)
+              if (/\0/.test(systemPrompt)) return;
+              patchConfig({ systemPrompt });
+            }}
           />
           <NumberField
             label="Max steps"
@@ -220,14 +235,19 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
       {nodeType === 'block' && (
         <div className="space-y-3">
           <BlockSelector
-            value={typeof config.blockId === 'string' ? config.blockId : ''}
+            value={blockId}
             onBlocksLoaded={setBlocks}
             onChange={(block) => {
               if (!block) {
                 patchConfig({ blockId: undefined, params: {} });
                 return;
               }
-              patchConfig({ blockId: block.id, params: { ...defaultsForBlock(block), ...params } });
+              // block.id already normalized by BlockSelector (safe/trimmed)
+              const nextId = safeBlockId(block.id);
+              patchConfig({
+                blockId: nextId || undefined,
+                params: { ...defaultsForBlock(block), ...params },
+              });
             }}
           />
           {selectedBlock && (
@@ -271,7 +291,11 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           <TextField
             label="Query"
             value={typeof config.query === 'string' ? config.query : ''}
-            onChange={(query) => patchConfig({ query })}
+            onChange={(query) => {
+              // Control-char queries never applied (align with WorkflowValidation / resolveSearchQuery)
+              if (/[\0\r\n]/.test(query)) return;
+              patchConfig({ query });
+            }}
           />
           <NumberField
             label="Max results"
@@ -289,13 +313,21 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             label="Channel"
             value={typeof config.channel === 'string' ? config.channel : ''}
             placeholder="#alerts"
-            onChange={(channel) => patchConfig({ channel })}
+            onChange={(channel) => {
+              // Control-char channel never applied (align with SlackMessageNode)
+              if (/[\0\r\n]/.test(channel)) return;
+              patchConfig({ channel });
+            }}
           />
           <TextAreaField
             label="Text template"
             value={typeof config.textTemplate === 'string' ? config.textTemplate : ''}
             rows={4}
-            onChange={(textTemplate) => patchConfig({ textTemplate })}
+            onChange={(textTemplate) => {
+              // Null-byte templates rejected (multi-line OK)
+              if (/\0/.test(textTemplate)) return;
+              patchConfig({ textTemplate });
+            }}
           />
         </div>
       )}
@@ -305,7 +337,11 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           label="Text template"
           value={typeof config.textTemplate === 'string' ? config.textTemplate : ''}
           rows={4}
-          onChange={(textTemplate) => patchConfig({ textTemplate })}
+          onChange={(textTemplate) => {
+            // Null-byte templates rejected (multi-line OK)
+            if (/\0/.test(textTemplate)) return;
+            patchConfig({ textTemplate });
+          }}
         />
       )}
 
@@ -340,7 +376,11 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                 label="Prompt"
                 value={typeof config.prompt === 'string' ? config.prompt : ''}
                 rows={3}
-                onChange={(prompt) => patchConfig({ prompt })}
+                onChange={(prompt) => {
+                  // Image prompts reject null-byte / CR / LF (align with MediaNode + validation)
+                  if (/[\0\r\n]/.test(prompt)) return;
+                  patchConfig({ prompt });
+                }}
               />
               <div className="space-y-1">
                 <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Size</label>
@@ -376,7 +416,11 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                 label="Text"
                 value={typeof config.text === 'string' ? config.text : ''}
                 rows={3}
-                onChange={(text) => patchConfig({ text })}
+                onChange={(text) => {
+                  // TTS: null-byte only (multi-line OK; align with MediaNode)
+                  if (/\0/.test(text)) return;
+                  patchConfig({ text });
+                }}
               />
               <div className="space-y-1">
                 <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Voice</label>
@@ -430,14 +474,22 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             label="Project name"
             value={typeof config.projectName === 'string' ? config.projectName : ''}
             placeholder="neos-deploy"
-            onChange={(projectName) => patchConfig({ projectName })}
+            onChange={(projectName) => {
+              // Control-char projectName never applied (align with DeployNode)
+              if (/[\0\r\n]/.test(projectName)) return;
+              patchConfig({ projectName });
+            }}
           />
           <TextAreaField
             label="Content (HTML)"
             value={typeof config.content === 'string' ? config.content : ''}
             rows={4}
             description="Optional static content; otherwise uses upstream `content` input."
-            onChange={(content) => patchConfig({ content })}
+            onChange={(content) => {
+              // Null-byte deploy content rejected (align with DeployNode)
+              if (/\0/.test(content)) return;
+              patchConfig({ content });
+            }}
           />
           <button
             type="button"

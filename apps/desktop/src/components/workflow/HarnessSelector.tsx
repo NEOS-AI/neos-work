@@ -30,20 +30,45 @@ export function HarnessSelector(props: {
     () => filterAndSortHarnesses(harnesses, props.nodeType),
     [harnesses, props.nodeType],
   );
-  const selected = filtered.find((harness) => harness.id === props.value);
+  // Control-char harness ids never selectable / matchable (check before trim)
+  const valueId =
+    typeof props.value === 'string' && !/[\0\r\n]/.test(props.value) ? props.value.trim() : '';
+  const selected = filtered.find(
+    (harness) =>
+      typeof harness.id === 'string'
+      && !/[\0\r\n]/.test(harness.id)
+      && harness.id.trim() === valueId
+      && valueId.length > 0,
+  );
 
   return (
     <div className="space-y-2">
       <SelectField
         label="Harness"
-        value={props.value}
-        onChange={props.onChange}
+        value={valueId}
+        onChange={(next) => {
+          if (!next) {
+            props.onChange('');
+            return;
+          }
+          // Control-char selection never applied
+          if (/[\0\r\n]/.test(next)) return;
+          const id = next.trim();
+          props.onChange(id);
+        }}
         options={[
           { value: '', label: 'No harness selected' },
-          ...filtered.map((harness) => ({
-            value: harness.id,
-            label: `${harness.name} (${harness.domain})`,
-          })),
+          ...filtered
+            .map((harness) => {
+              if (typeof harness.id !== 'string' || /[\0\r\n]/.test(harness.id)) return null;
+              const id = harness.id.trim();
+              if (!id) return null;
+              return {
+                value: id,
+                label: `${harness.name} (${harness.domain})`,
+              };
+            })
+            .filter((opt): opt is { value: string; label: string } => opt !== null),
         ]}
       />
       {selected && (

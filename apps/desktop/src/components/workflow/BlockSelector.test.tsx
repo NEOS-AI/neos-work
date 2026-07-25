@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { BlockSelector, defaultsForBlock } from './BlockSelector.js';
+import { BlockSelector, defaultsForBlock, safeBlockId } from './BlockSelector.js';
 import type { WorkflowBlock } from '../../lib/engine.js';
 
 const listBlocks = vi.fn();
@@ -99,6 +99,17 @@ describe('defaultsForBlock', () => {
         }),
       ),
     ).toEqual({ n: 0, b: false, s: '' });
+  });
+});
+
+describe('safeBlockId', () => {
+  it('rejects control-char ids before trim and trims valid ids', () => {
+    expect(safeBlockId(`bad${'\0'}id`)).toBe('');
+    expect(safeBlockId('\nlead')).toBe('');
+    expect(safeBlockId('  pad-id  ')).toBe('pad-id');
+    expect(safeBlockId('')).toBe('');
+    expect(safeBlockId(null)).toBe('');
+    expect(safeBlockId(42)).toBe('');
   });
 });
 
@@ -223,5 +234,52 @@ describe('BlockSelector', () => {
     expect(values.some((v) => v.includes('\0') || v.includes('\n'))).toBe(false);
     expect(values).not.toContain('lead');
     expect(screen.queryByText(/Evil/)).not.toBeInTheDocument();
+  });
+
+  it('selects padded block ids via trimmed option value and emits normalized id', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        block({
+          id: '  pad-id  ',
+          name: 'Padded',
+          domain: 'general',
+          category: 'x',
+          description: 'Padded block',
+        }),
+      ],
+    });
+    render(<BlockSelector value="" onChange={onChange} />);
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => {
+      expect(select.querySelectorAll('option').length).toBeGreaterThan(1);
+    });
+    await user.selectOptions(select, 'pad-id');
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'pad-id', name: 'Padded' }),
+    );
+  });
+
+  it('shows details when value is padded but option id is trimmed', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        block({
+          id: '  pad-id  ',
+          name: 'Padded',
+          domain: 'general',
+          category: 'x',
+          description: 'Padded block',
+          inputDescription: 'in',
+          outputDescription: 'out',
+        }),
+      ],
+    });
+    render(<BlockSelector value="  pad-id  " onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText('Padded block')).toBeInTheDocument();
+    });
   });
 });

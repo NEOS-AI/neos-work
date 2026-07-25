@@ -124,6 +124,28 @@ body
     expect(parseSkillFile(content, '/skills/hello.md', 'local')).toBeNull();
   });
 
+  it('returns null for null-byte anywhere in skill file (frontmatter included)', () => {
+    const inName = [
+      '---',
+      `name: hel${'\0'}lo`,
+      'description: ok',
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    expect(parseSkillFile(inName, '/skills/hello.md', 'local')).toBeNull();
+
+    const inFrontmatterKey = [
+      '---',
+      'name: hello',
+      `descrip${'\0'}tion: ok`,
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    expect(parseSkillFile(inFrontmatterKey, '/skills/hello.md', 'local')).toBeNull();
+  });
+
   it('strips quoted values and defaults description', () => {
     const content = `---
 name: "quoted"

@@ -31,7 +31,14 @@ describe('agent_step CRUD', () => {
     expect(updateAgentStep('   ', { status: 'completed' })).toBe(false);
     expect(() =>
       createAgentStep({ sessionId: '  ', stepIndex: 0, type: 'plan' }),
-    ).toThrow(/sessionId/i);
+    ).toThrow(/sessionId is required/i);
+    // Non-string sessionId treated as blank (required), not a stripped valid id
+    expect(() =>
+      createAgentStep({ sessionId: null as unknown as string, stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId is required/i);
+    expect(() =>
+      createAgentStep({ sessionId: 42 as unknown as string, stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId is required/i);
     expect(getAgentStep('id\nbad')).toBeUndefined();
     expect(listAgentSteps('sess\nid')).toEqual([]);
     expect(updateAgentStep('x'.repeat(101), { status: 'completed' })).toBe(false);

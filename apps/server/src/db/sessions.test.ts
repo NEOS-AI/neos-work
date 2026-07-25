@@ -99,6 +99,18 @@ describe('sessions CRUD', () => {
     deleteWorkspace(ws.id);
   });
 
+  it('applies control-before-trim to non-string workspace paths', () => {
+    // Number/boolean coerce to string then share the same hygiene path
+    const wsNum = createWorkspace({ name: `${WS_NAME}-n`, path: 42 as unknown as string });
+    expect(wsNum.path).toBe('42');
+    deleteWorkspace(wsNum.id);
+
+    // Control-char after coerce (string with leading \n still invalid)
+    expect(() =>
+      createWorkspace({ name: `${WS_NAME}-c`, path: '\n/tmp/x' }),
+    ).toThrow(/control characters/i);
+  });
+
   it('rejects oversized message content; truncates huge metadata', () => {
     const s = createSession({ workspaceId: 'default', title: '_cov_msg' });
     const huge = 'm'.repeat(1 * 1024 * 1024 + 1);

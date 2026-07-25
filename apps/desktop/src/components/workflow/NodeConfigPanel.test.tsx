@@ -221,6 +221,61 @@ describe('NodeConfigPanel', () => {
     expect(onUpdateDescription).not.toHaveBeenCalled();
   });
 
+  it('rejects null-byte system prompt and control-char web_search query', async () => {
+    const onPatchNodeData = vi.fn();
+    const agentNode = {
+      id: 'a1',
+      type: 'agent_coding',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent_coding',
+        label: 'Agent',
+        config: { systemPrompt: 'base' },
+      },
+    } as unknown as Node;
+
+    const { rerender } = render(
+      <NodeConfigPanel
+        selectedNode={agentNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    const prompt = screen.getByDisplayValue('base');
+    fireEvent.change(prompt, { target: { value: `sys${'\0'}prompt` } });
+    expect(
+      onPatchNodeData.mock.calls.every(
+        (c) => !(c[1] as { config?: { systemPrompt?: string } })?.config?.systemPrompt?.includes('\0'),
+      ),
+    ).toBe(true);
+
+    onPatchNodeData.mockClear();
+    const searchNode = {
+      id: 's1',
+      type: 'web_search',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'web_search', label: 'Search', config: { query: 'neos' } },
+    } as unknown as Node;
+    rerender(
+      <NodeConfigPanel
+        selectedNode={searchNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    const query = screen.getByDisplayValue('neos');
+    // Null-byte only — single-line inputs may strip bare \n/\r in jsdom
+    fireEvent.change(query, { target: { value: `bad${'\0'}q` } });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
+    // Valid update still works
+    fireEvent.change(query, { target: { value: 'safe query' } });
+    expect(onPatchNodeData).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ config: expect.objectContaining({ query: 'safe query' }) }),
+    );
+  });
+
   it('shows CLI hint when agent provider is cli-*', async () => {
     const node = {
       id: 'a2',

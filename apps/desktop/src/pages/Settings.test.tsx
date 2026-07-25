@@ -60,6 +60,12 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+// Dynamic import in handleOAuthConnect; prevent unhandled Tauri invoke in tests
+const shellOpen = vi.fn().mockResolvedValue(undefined);
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: (...args: unknown[]) => shellOpen(...args),
+}));
+
 const { Settings } = await import('./Settings.js');
 
 describe('Settings page', () => {
@@ -92,6 +98,7 @@ describe('Settings page', () => {
     deleteMcpServer.mockReset().mockResolvedValue({ ok: true });
     revokeMcpOAuth.mockReset().mockResolvedValue({ ok: true });
     startMcpOAuth.mockReset().mockResolvedValue({ ok: true, data: { authUrl: 'https://auth.example' } });
+    shellOpen.mockReset().mockResolvedValue(undefined);
     listCliAgents.mockReset().mockResolvedValue({
       ok: true,
       data: [{ id: 'claude', name: 'Claude Code', path: '/usr/local/bin/claude', version: '1.0.0' }],
@@ -365,10 +372,6 @@ describe('Settings page', () => {
     getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
     startMcpOAuth.mockResolvedValue({ ok: true, data: { authUrl: 'https://auth.example/start' } });
 
-    // Settings uses dynamic Tauri shell open for authUrl
-    const openMock = vi.fn().mockResolvedValue(undefined);
-    vi.doMock('@tauri-apps/plugin-shell', () => ({ open: openMock }));
-
     render(<Settings />);
     await waitFor(() => expect(screen.getByText('OAuth Target')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
@@ -398,6 +401,9 @@ describe('Settings page', () => {
           scope: 'openid profile',
         }),
       );
+    });
+    await waitFor(() => {
+      expect(shellOpen).toHaveBeenCalledWith('https://auth.example/start');
     });
   });
 

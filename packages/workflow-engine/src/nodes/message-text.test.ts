@@ -50,6 +50,10 @@ describe('resolveMessageText', () => {
     expect(
       resolveMessageText({ textTemplate: 'hi {{name}}' }, { name: `Ada${'\0'}Lovelace` }),
     ).toBe('hi AdaLovelace');
+    // Nested object values stringify without raw nulls; string leaves still scrubbed
+    expect(
+      resolveMessageText({ textTemplate: 'x={{v}}' }, { v: `a${'\0'}b` }),
+    ).toBe('x=ab');
   });
 
   it('treats whitespace-only templates as missing and tries next config key', () => {
