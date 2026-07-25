@@ -187,30 +187,27 @@ describe('Deployments page', () => {
     });
   });
 
-  it('filters by workflow select and surfaces refresh failure', async () => {
+  it('surfaces refresh failure and filters by workflow select', async () => {
     const user = userEvent.setup();
     listDeployments.mockResolvedValue({ ok: true, data: deployments });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
     refreshDeployment.mockResolvedValue({ ok: false, error: 'provider timeout' });
     renderPage();
     await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
-
-    // Workflow filter reloads with workflowId query
-    const select = screen.getByDisplayValue('All workflows');
-    await user.selectOptions(select, 'wf-2');
-    await waitFor(() => {
-      expect(listDeployments).toHaveBeenCalledWith('wf-2');
-    });
-
-    // Back to all, then refresh first row fails
-    listDeployments.mockResolvedValue({ ok: true, data: deployments });
-    await user.selectOptions(screen.getByRole('combobox'), '');
-    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Loading…')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getAllByTitle('Poll provider for latest status')[0]!);
     await waitFor(() => {
       expect(refreshDeployment).toHaveBeenCalledWith('d1');
       expect(screen.getByText('provider timeout')).toBeInTheDocument();
+    });
+
+    // Client-side status filter already covered; workflow select reloads from API
+    listDeployments.mockClear();
+    listDeployments.mockResolvedValue({ ok: true, data: [deployments[1]!] });
+    await user.selectOptions(screen.getByRole('combobox'), 'wf-2');
+    await waitFor(() => {
+      expect(listDeployments).toHaveBeenCalledWith('wf-2');
     });
   });
 });

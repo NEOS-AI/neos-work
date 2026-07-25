@@ -150,27 +150,18 @@ describe('Blocks page', () => {
     expect(await screen.findByText('Name is required')).toBeInTheDocument();
     expect(createBlock).not.toHaveBeenCalled();
 
-    // fill name only → still need id
-    const inputs = Array.from(document.querySelectorAll('input, textarea')) as HTMLInputElement[];
-    for (const input of inputs) {
-      if (input.type === 'search' || input.tagName === 'TEXTAREA') continue;
-      if (!input.value) {
-        fireEvent.change(input, { target: { value: 'Named Only' } });
-        break;
-      }
-    }
-    // Name field may not be first empty - fill by finding empty inputs for id and name
+    // Fill id + name, leave prompt empty → prompt template required
     let filled = 0;
     for (const input of Array.from(document.querySelectorAll('input')) as HTMLInputElement[]) {
       if (input.type === 'search') continue;
-      if (!input.value && filled === 0) {
-        fireEvent.change(input, { target: { value: 'id_only' } });
-        filled++;
-      } else if (!input.value && filled === 1) {
-        fireEvent.change(input, { target: { value: 'Has Name' } });
+      if (!input.value && filled < 2) {
+        fireEvent.change(input, {
+          target: { value: filled === 0 ? 'id_only' : 'Has Name' },
+        });
         filled++;
       }
     }
+    expect(filled).toBe(2);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText('Prompt template is required')).toBeInTheDocument();
     expect(createBlock).not.toHaveBeenCalled();

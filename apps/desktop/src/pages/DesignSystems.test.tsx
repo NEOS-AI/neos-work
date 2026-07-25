@@ -173,5 +173,6 @@ describe('DesignSystems page', () => {
     await user.type(screen.getByPlaceholderText('Search design systems…'), 'zzzz-none');
     expect(screen.queryByText('Alpha Brand')).not.toBeInTheDocument();
     expect(screen.getByText('0/2')).toBeInTheDocument();
+    expect(screen.getByText(/No design systems match your search/)).toBeInTheDocument();
   });
 });
