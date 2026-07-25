@@ -103,11 +103,17 @@ describe('FixedWindowRateLimiter status after partial use', () => {
     const now = 1;
     expect(limiter.check('', now)).toBe(false);
     expect(limiter.check('bad\nkey', now)).toBe(false);
+    // Leading control char must NOT normalize to a valid key
+    expect(limiter.check('\nk', now)).toBe(false);
+    expect(limiter.check('k', now)).toBe(true);
+    expect(limiter.check('k', now)).toBe(true);
+    expect(limiter.check('k', now)).toBe(false);
     const long = 'k'.repeat(300);
-    expect(limiter.check(long, now)).toBe(true);
+    const lim2 = new FixedWindowRateLimiter(2, 1_000);
+    expect(lim2.check(long, now)).toBe(true);
     // Truncated keys share a bucket
-    expect(limiter.check(long + 'x', now)).toBe(true);
-    expect(limiter.check(long + 'y', now)).toBe(false);
+    expect(lim2.check(long + 'x', now)).toBe(true);
+    expect(lim2.check(long + 'y', now)).toBe(false);
   });
 });
 

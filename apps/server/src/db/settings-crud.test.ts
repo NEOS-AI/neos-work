@@ -130,7 +130,10 @@ describe('settings CRUD + encryption migration', () => {
   it('getSetting ignores control-char and overlong keys', () => {
     setSetting('theme', 'dark');
     expect(getSetting('bad\nkey')).toBeUndefined();
+    // Leading control char must not strip to a valid key
+    expect(getSetting('\ntheme')).toBeUndefined();
     expect(getSetting('k'.repeat(201))).toBeUndefined();
+    expect(deleteSetting('\ntheme')).toBe(false);
   });
 
   it('rejects control-char keys, overlong keys, and oversized values', () => {

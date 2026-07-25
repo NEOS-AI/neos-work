@@ -75,6 +75,15 @@ describe('memory tools', () => {
     expect(cb.save).toHaveBeenCalledWith('pref2', 'value', ['a', 'b']);
   });
 
+  it('remember rejects leading control-char keys before trim', async () => {
+    const cb = mockCallbacks();
+    const tool = createRememberTool(cb);
+    const bad = await tool.execute({ key: '\npref', content: 'x' });
+    expect(bad.success).toBe(false);
+    expect(bad.error).toMatch(/control characters/i);
+    expect(cb.save).not.toHaveBeenCalled();
+  });
+
   it('remember/forget reject control characters in key; filters bad tags', async () => {
     const cb = mockCallbacks();
     const remember = createRememberTool(cb);

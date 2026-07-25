@@ -289,4 +289,65 @@ describe('Settings page', () => {
       expect(screen.getByText(/No CLI agents detected/)).toBeInTheDocument();
     });
   });
+
+  it('shows invalid verify status and not-configured media', async () => {
+    const user = userEvent.setup();
+    verifyApiKey.mockResolvedValue({ ok: true, data: { valid: false } });
+    getMediaConfig.mockResolvedValue({
+      ok: true,
+      data: {
+        openaiConfigured: false,
+        openaiBaseUrl: null,
+        surfaces: [],
+        imageModels: [],
+        audioModels: [],
+      },
+    });
+    render(<Settings />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Not set')).toBeInTheDocument();
+    });
+
+    await waitFor(() => expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('sk-ant-...'), 'sk-bad');
+    const verifyButtons = screen.getAllByRole('button', { name: 'common:action.verify' });
+    fireEvent.click(verifyButtons[0]!);
+    await waitFor(() => {
+      expect(verifyApiKey).toHaveBeenCalledWith('anthropic', 'sk-bad');
+    });
+    await waitFor(() => {
+      expect(screen.getByText('settings:apiKeys.invalid')).toBeInTheDocument();
+    });
+  });
+
+  it('saves workflow deploy keys via simple key inputs', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Deploy')).toBeInTheDocument());
+
+    const vercel = screen.getByPlaceholderText('vercel_...');
+    await user.type(vercel, 'vercel_tok');
+    const vercelRow = vercel.closest('div')!.parentElement!;
+    const vercelSave = Array.from(vercelRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    expect(vercelSave).toBeTruthy();
+    fireEvent.click(vercelSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('VERCEL_API_TOKEN', 'vercel_tok');
+    });
+
+    const kis = screen.getByPlaceholderText('PSxxxxxx...');
+    await user.type(kis, 'PS-kis-key');
+    const kisRow = kis.closest('div')!.parentElement!;
+    const kisSave = Array.from(kisRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    expect(kisSave).toBeTruthy();
+    fireEvent.click(kisSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('KIS_APP_KEY', 'PS-kis-key');
+    });
+  });
 });

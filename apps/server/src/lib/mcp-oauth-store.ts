@@ -30,7 +30,10 @@ const SCOPE_MAX_CHARS = 1_000;
 const TOKEN_TYPE_MAX_CHARS = 64;
 
 function sanitizeServerId(serverId: string): string | null {
-  const trimmed = typeof serverId === 'string' ? serverId.trim() : '';
+  if (typeof serverId !== 'string') return null;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(serverId)) return null;
+  const trimmed = serverId.trim();
   if (!trimmed || trimmed.length > SERVER_ID_MAX_CHARS) return null;
   // Sanitize serverId to prevent path traversal
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -39,6 +42,8 @@ function sanitizeServerId(serverId: string): string | null {
 
 function capTokenField(raw: unknown, max: number): string | undefined {
   if (typeof raw !== 'string') return undefined;
+  // Drop control-char token fields rather than persist them
+  if (/[\0\r\n]/.test(raw)) return undefined;
   const s = raw.trim();
   if (!s) return undefined;
   return s.length > max ? s.slice(0, max) : s;
@@ -54,18 +59,27 @@ export async function saveToken(token: McpOAuthToken): Promise<void> {
   const file = tokenPath(token.serverId);
   if (!file) throw new Error('Invalid serverId');
   await ensureDir();
-  let accessToken =
-    typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
+  if (typeof token.accessToken !== 'string' || /[\0\r\n]/.test(token.accessToken)) {
+    throw new Error('accessToken is required');
+  }
+  let accessToken = token.accessToken.trim();
   if (!accessToken) throw new Error('accessToken is required');
   if (accessToken.length > ACCESS_TOKEN_MAX_CHARS) {
     accessToken = accessToken.slice(0, ACCESS_TOKEN_MAX_CHARS);
   }
+  let expiresAt: string | undefined;
+  if (typeof token.expiresAt === 'string') {
+    if (!/[\0\r\n]/.test(token.expiresAt)) {
+      const e = token.expiresAt.trim();
+      expiresAt = e || undefined;
+      if (expiresAt && expiresAt.length > 64) expiresAt = expiresAt.slice(0, 64);
+    }
+  }
   const payload: McpOAuthToken = {
-    serverId: sanitizeServerId(token.serverId) ?? token.serverId.trim().slice(0, SERVER_ID_MAX_CHARS),
+    serverId: sanitizeServerId(token.serverId)!,
     accessToken,
     refreshToken: capTokenField(token.refreshToken, REFRESH_TOKEN_MAX_CHARS),
-    expiresAt:
-      typeof token.expiresAt === 'string' ? token.expiresAt.trim() || undefined : token.expiresAt,
+    expiresAt,
     scope: capTokenField(token.scope, SCOPE_MAX_CHARS),
     tokenType: capTokenField(token.tokenType, TOKEN_TYPE_MAX_CHARS),
   };

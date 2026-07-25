@@ -161,6 +161,11 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
   return envVars;
 }
 
+/** Reject null bytes / CR / LF that confuse shell path APIs. */
+function hasUnsafeControlChars(value: string): boolean {
+  return /[\0\r\n]/.test(value);
+}
+
 /**
  * Build NEOS_* context env vars for CLI child processes (plan Task 3).
  * Exported for unit tests.
@@ -182,13 +187,21 @@ export function buildNeosCliEnv(opts: {
   authToken?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {};
-  const serverUrlRaw = typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() : '';
+  const safeField = (raw: unknown, max: number): string => {
+    if (typeof raw !== 'string') return '';
+    // Control-char check before trim
+    if (hasUnsafeControlChars(raw)) return '';
+    const s = raw.trim();
+    if (!s || s.length > max) return '';
+    return s;
+  };
+  const serverUrlRaw = safeField(opts.serverUrl, 2_048);
   // Only forward http(s) URLs to children (block file:/javascript: etc.)
   const serverUrl =
     serverUrlRaw && isHttpServerUrl(serverUrlRaw) ? serverUrlRaw.replace(/\/+$/, '') : '';
-  const authToken = typeof opts.authToken === 'string' ? opts.authToken.trim() : '';
-  const workflowId = typeof opts.workflowId === 'string' ? opts.workflowId.trim() : '';
-  const runId = typeof opts.runId === 'string' ? opts.runId.trim() : '';
+  const authToken = safeField(opts.authToken, 8_192);
+  const workflowId = safeField(opts.workflowId, 100);
+  const runId = safeField(opts.runId, 100);
   if (serverUrl) env.NEOS_SERVER_URL = serverUrl;
   if (authToken) env.NEOS_AUTH_TOKEN = authToken;
   if (workflowId) env.NEOS_WORKFLOW_ID = workflowId;
@@ -202,7 +215,11 @@ export function buildNeosCliEnv(opts: {
  * runId is sanitized to block path traversal.
  */
 export function ensureCliWorkspace(runId: string): string {
-  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  if (typeof runId !== 'string' || hasUnsafeControlChars(runId)) {
+    throw new Error('Invalid runId');
+  }
+  const trimmed = runId.trim();
+  if (!trimmed || trimmed.length > 100) throw new Error('Invalid runId');
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
   if (!safe) throw new Error('Invalid runId');
   const base = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
@@ -219,48 +236,36 @@ export function ensureCliWorkspace(runId: string): string {
 /** Cap CLI stream accumulation (plan Task 3 — runaway output defense). */
 const MAX_CLI_OUTPUT_CHARS = 2 * 1024 * 1024;
 
-/** Reject null bytes / CR / LF that confuse shell path APIs. */
-function hasUnsafeControlChars(value: string): boolean {
-  return /[\0\r\n]/.test(value);
-}
-
 /** Spawn a CLI agent and stream output via onChunk. Respects AbortSignal. */
 /** Cap CLI agent prompt size (system + inputs already bounded upstream). */
 export const CLI_PROMPT_MAX_CHARS = 400_000;
 
 export async function spawnCliAgent(opts: SpawnCliAgentOptions): Promise<SpawnCliAgentResult> {
   const cliId = opts.cliId;
+  // Control-char check before trim on prompt
+  if (typeof opts.prompt === 'string' && hasUnsafeControlChars(opts.prompt)) {
+    return Promise.reject(new Error('prompt contains invalid control characters'));
+  }
   let prompt = typeof opts.prompt === 'string' ? opts.prompt.trim() : '';
   if (!prompt) {
     return Promise.reject(new Error('prompt is required'));
-  }
-  if (hasUnsafeControlChars(prompt)) {
-    return Promise.reject(new Error('prompt contains invalid control characters'));
   }
   if (prompt.length > CLI_PROMPT_MAX_CHARS) {
     prompt = prompt.slice(0, CLI_PROMPT_MAX_CHARS) + '\n…[prompt truncated]';
   }
   const signal = opts.signal;
   const onChunk = opts.onChunk;
-  let workflowId =
-    typeof opts.workflowId === 'string' ? opts.workflowId.trim() || undefined : opts.workflowId;
-  if (workflowId && (workflowId.length > 100 || hasUnsafeControlChars(workflowId))) {
-    workflowId = undefined;
-  }
-  let runId = typeof opts.runId === 'string' ? opts.runId.trim() || undefined : opts.runId;
-  if (runId && (runId.length > 100 || hasUnsafeControlChars(runId))) {
-    runId = undefined;
-  }
-  let serverUrl =
-    typeof opts.serverUrl === 'string' ? opts.serverUrl.trim() || undefined : opts.serverUrl;
-  if (serverUrl && (serverUrl.length > 2_048 || hasUnsafeControlChars(serverUrl))) {
-    serverUrl = undefined;
-  }
-  let authToken =
-    typeof opts.authToken === 'string' ? opts.authToken.trim() || undefined : opts.authToken;
-  if (authToken && (authToken.length > 8_192 || hasUnsafeControlChars(authToken))) {
-    authToken = undefined;
-  }
+  const safeOpt = (raw: unknown, max: number): string | undefined => {
+    if (typeof raw !== 'string') return undefined;
+    if (hasUnsafeControlChars(raw)) return undefined;
+    const s = raw.trim();
+    if (!s || s.length > max) return undefined;
+    return s;
+  };
+  const workflowId = safeOpt(opts.workflowId, 100);
+  const runId = safeOpt(opts.runId, 100);
+  const serverUrl = safeOpt(opts.serverUrl, 2_048);
+  const authToken = safeOpt(opts.authToken, 8_192);
 
   // Resolve optional path override from settings (lazy import avoids circular deps in tests)
   let binOverride: string | undefined;

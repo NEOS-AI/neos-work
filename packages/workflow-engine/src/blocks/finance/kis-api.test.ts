@@ -1,5 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getKisToken, getStockChart, getStockPrice } from './kis-api.js';
+import { getKisToken, getStockChart, getStockPrice, normalizeSymbol } from './kis-api.js';
+
+describe('normalizeSymbol', () => {
+  it('trims valid symbols and rejects blank / control / invalid charset', () => {
+    expect(normalizeSymbol('  005930  ')).toBe('005930');
+    expect(normalizeSymbol('AAPL')).toBe('AAPL');
+    expect(normalizeSymbol('br.k.1-2')).toBe('br.k.1-2');
+    expect(normalizeSymbol('')).toBe('');
+    expect(normalizeSymbol('   ')).toBe('');
+    expect(normalizeSymbol('005\n930')).toBe('');
+    expect(normalizeSymbol('005\r930')).toBe('');
+    expect(normalizeSymbol(`005${'\0'}930`)).toBe('');
+    expect(normalizeSymbol('../etc')).toBe('');
+    expect(normalizeSymbol('a'.repeat(17))).toBe('');
+    expect(normalizeSymbol(null as unknown as string)).toBe('');
+    expect(normalizeSymbol(123 as unknown as string)).toBe('');
+  });
+});
 
 describe('kis-api', () => {
   afterEach(() => {

@@ -74,6 +74,7 @@ vi.mock('../db/artifacts.js', () => ({
 import {
   addOrUpdateSchedule,
   initScheduler,
+  isRoutineRunning,
   removeSchedule,
   runRoutine,
 } from './routine-scheduler.js';
@@ -304,11 +305,21 @@ describe('runRoutine', () => {
     // allow first to acquire lock
     await Promise.resolve();
     await Promise.resolve();
+    expect(isRoutineRunning('r1')).toBe(true);
+    expect(isRoutineRunning('  r1  ')).toBe(true);
     const second = await runRoutine('r1');
     expect(second).toBeNull();
     release();
     await first;
+    expect(isRoutineRunning('r1')).toBe(false);
     expect(mocks.executeWorkflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('isRoutineRunning rejects blank/control-char ids and unknown routines', () => {
+    expect(isRoutineRunning('')).toBe(false);
+    expect(isRoutineRunning('   ')).toBe(false);
+    expect(isRoutineRunning('bad\nid')).toBe(false);
+    expect(isRoutineRunning('no-such-routine')).toBe(false);
   });
 
   it('loads design system content when designSystemId set', async () => {

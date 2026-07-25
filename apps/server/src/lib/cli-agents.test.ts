@@ -397,6 +397,8 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
   it('sanitizes runId and rejects blank / traversal-like ids', () => {
     expect(() => ensureCliWorkspace('   ')).toThrow(/Invalid runId/i);
     expect(() => ensureCliWorkspace('')).toThrow(/Invalid runId/i);
+    expect(() => ensureCliWorkspace('bad\nid')).toThrow(/Invalid runId/i);
+    expect(() => ensureCliWorkspace('x'.repeat(101))).toThrow(/Invalid runId/i);
 
     const dirty = `../evil_${process.pid}`;
     const dir = ensureCliWorkspace(dirty);
@@ -408,5 +410,16 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     const padded = ensureCliWorkspace(`  run_${process.pid}  `);
     expect(path.basename(padded)).toBe(`run_${process.pid}`);
     try { fs.rmSync(padded, { recursive: true }); } catch { /* ignore */ }
+  });
+
+  it('drops control-char / overlong env fields', () => {
+    expect(
+      buildNeosCliEnv({
+        serverUrl: 'http://127.0.0.1:1\n',
+        authToken: 'tok\nid',
+        workflowId: 'wf\nid',
+        runId: 'r'.repeat(101),
+      }),
+    ).toEqual({});
   });
 });

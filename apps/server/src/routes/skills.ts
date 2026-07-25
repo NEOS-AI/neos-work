@@ -87,8 +87,20 @@ function upsertSkill(params: {
   return dbInst.prepare('SELECT * FROM skill WHERE name = ?').get(name) as SkillRow;
 }
 
+/** Practical bound for skill lookup ids. */
+const SKILL_LOOKUP_ID_MAX = 100;
+
+function safeSkillLookupId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > SKILL_LOOKUP_ID_MAX) return '';
+  return id;
+}
+
 function toggleSkill(id: string, enabled: boolean): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeSkillLookupId(id);
   if (!trimmed) return false;
   const result = getDb()
     .prepare('UPDATE skill SET enabled = ? WHERE id = ?')
@@ -97,7 +109,7 @@ function toggleSkill(id: string, enabled: boolean): boolean {
 }
 
 function deleteSkillById(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeSkillLookupId(id);
   if (!trimmed) return false;
   const result = getDb().prepare('DELETE FROM skill WHERE id = ?').run(trimmed);
   return result.changes > 0;

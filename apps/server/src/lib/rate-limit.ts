@@ -29,10 +29,11 @@ export class FixedWindowRateLimiter {
   private static readonly KEY_MAX_CHARS = 200;
 
   private normalizeKey(key: string): string {
-    const k = typeof key === 'string' ? key.trim() : '';
+    if (typeof key !== 'string') return '';
+    // Reject control chars before trim (trim strips leading/trailing \r\n)
+    if (/[\0\r\n]/.test(key)) return '';
+    const k = key.trim();
     if (!k) return '';
-    // Reject control chars; truncate overlong keys
-    if (/[\0\r\n]/.test(k)) return '';
     return k.length > FixedWindowRateLimiter.KEY_MAX_CHARS
       ? k.slice(0, FixedWindowRateLimiter.KEY_MAX_CHARS)
       : k;

@@ -99,6 +99,18 @@ describe('mcp routes', () => {
       }),
     });
     expect(badCmd.status).toBe(400);
+
+    const badUrl = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}-url`,
+        transport: 'http',
+        // Control char in the middle survives trim(); must be rejected
+        url: 'https://example.com/mcp\npath',
+      }),
+    });
+    expect(badUrl.status).toBe(400);
   });
 
   it('rejects create with invalid JSON body', async () => {

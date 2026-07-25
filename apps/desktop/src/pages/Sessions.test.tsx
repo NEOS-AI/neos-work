@@ -269,6 +269,25 @@ describe('Sessions page', () => {
     expect(screen.queryByText('old history')).not.toBeInTheDocument();
   });
 
+  it('does not send blank chat messages and cancels delete when confirm is false', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(chat).not.toHaveBeenCalled();
+    expect(runAgent).not.toHaveBeenCalled();
+
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getAllByTitle('Delete session')[0]!);
+    expect(deleteSession).not.toHaveBeenCalled();
+  });
+
   it('sends via agent mode when Agent toggle is on', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({ ok: true, data: [] });

@@ -44,6 +44,17 @@ describe('skills routes', () => {
     expect(found!.featured).toBe(true);
   });
 
+  it('rejects control-char path ids on toggle/delete', async () => {
+    const toggle = await skills.request('/%0abad/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(toggle.status).toBe(404);
+    const del = await skills.request('/%0abad', { method: 'DELETE' });
+    expect(del.status).toBe(404);
+  });
+
   it('toggles enabled and rejects bad body', async () => {
     const id = insertSkill();
     const bad = await skills.request(`/${id}/toggle`, {

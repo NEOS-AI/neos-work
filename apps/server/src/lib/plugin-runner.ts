@@ -96,15 +96,32 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
   return runId;
 }
 
+function safePluginRunId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > 100) return '';
+  return id;
+}
+
 export function resumeRun(runId: string, stageId: string, response: Record<string, unknown>): boolean {
-  const rid = typeof runId === 'string' ? runId.trim() : '';
-  const sid = typeof stageId === 'string' ? stageId.trim() : '';
-  if (!rid || !sid || rid.length > 100 || sid.length > 100 || /[\0\r\n]/.test(rid) || /[\0\r\n]/.test(sid)) {
+  const rid = safePluginRunId(runId);
+  const sid = safePluginRunId(stageId);
+  if (!rid || !sid) return false;
+  // Cap HITL response key count / payload (defense for resume API)
+  const resp =
+    response && typeof response === 'object' && !Array.isArray(response) ? response : {};
+  const keys = Object.keys(resp);
+  if (keys.length > 100) return false;
+  try {
+    if (JSON.stringify(resp).length > 256_000) return false;
+  } catch {
     return false;
   }
   const pending = pendingRuns.get(rid);
   if (!pending || pending.stageId !== sid) return false;
-  pending.resolve(response ?? {});
+  pending.resolve(resp);
   pendingRuns.delete(rid);
   return true;
 }

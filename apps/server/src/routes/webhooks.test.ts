@@ -162,4 +162,58 @@ describe('webhook routes', () => {
     expect(runs.length).toBeGreaterThanOrEqual(1);
     expect(runs[0]?.status === 'completed' || runs[0]?.status === 'failed' || runs[0]?.status === 'running').toBe(true);
   });
+
+  it('POST trigger accepts non-JSON body and arrays with valid HMAC', async () => {
+    const wf = makeWf();
+    const secret = workflows.getOrCreateWebhookSecret(wf.id);
+
+    const plain = 'not-json-body';
+    const plainSig = createHmac('sha256', secret).update(plain).digest('hex');
+    const plainRes = await webhooks.request(`/${wf.id}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain',
+        'x-neos-signature': `sha256=${plainSig}`,
+      },
+      body: plain,
+    });
+    expect(plainRes.status).toBe(200);
+    await plainRes.text().catch(() => '');
+
+    // JSON array is not a trigger bag — still accepted with empty inputs
+    const arr = JSON.stringify([1, 2, 3]);
+    const arrSig = createHmac('sha256', secret).update(arr).digest('hex');
+    const arrRes = await webhooks.request(`/${wf.id}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-neos-signature': `sha256=${arrSig}`,
+      },
+      body: arr,
+    });
+    expect(arrRes.status).toBe(200);
+    await arrRes.text().catch(() => '');
+
+    // Object keys with control chars / blanks are dropped before run (still 200)
+    const dirty = JSON.stringify({
+      ok: 1,
+      'bad\nkey': 2,
+      '  ': 3,
+      ['k'.repeat(201)]: 4,
+    });
+    const dirtySig = createHmac('sha256', secret).update(dirty).digest('hex');
+    const dirtyRes = await webhooks.request(`/${wf.id}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-neos-signature': `sha256=${dirtySig}`,
+      },
+      body: dirty,
+    });
+    expect(dirtyRes.status).toBe(200);
+    await dirtyRes.text().catch(() => '');
+
+    const runs = workflows.listRuns(wf.id, 10);
+    expect(runs.length).toBeGreaterThanOrEqual(3);
+  });
 });

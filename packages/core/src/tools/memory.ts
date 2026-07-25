@@ -55,19 +55,25 @@ export function createRememberTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const key =
-          typeof input.key === 'string' ? input.key.trim() : String(input.key ?? '').trim();
-        const content =
+        const keyRaw =
+          typeof input.key === 'string' ? input.key : String(input.key ?? '');
+        // Control-char check before trim
+        if (hasUnsafeKeyChars(keyRaw)) {
+          return { success: false, output: null, error: 'Key contains invalid control characters' };
+        }
+        const key = keyRaw.trim();
+        const contentRaw =
           typeof input.content === 'string'
-            ? input.content.trim()
-            : String(input.content ?? '').trim();
+            ? input.content
+            : String(input.content ?? '');
+        if (/\0/.test(contentRaw)) {
+          return { success: false, output: null, error: 'Content contains invalid control characters' };
+        }
+        const content = contentRaw.trim();
         const tags = normalizeTags(input.tags);
 
         if (!key || key.length > 200) {
           return { success: false, output: null, error: 'Key must be between 1 and 200 characters' };
-        }
-        if (hasUnsafeKeyChars(key)) {
-          return { success: false, output: null, error: 'Key contains invalid control characters' };
         }
         if (!content || content.length > 10_000) {
           return { success: false, output: null, error: 'Content must be between 1 and 10,000 characters' };
@@ -97,13 +103,15 @@ export function createRecallTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        let query =
-          typeof input.query === 'string' ? input.query.trim() : String(input.query ?? '').trim();
+        const queryRaw =
+          typeof input.query === 'string' ? input.query : String(input.query ?? '');
+        // Control-char check before trim
+        if (hasUnsafeKeyChars(queryRaw)) {
+          return { success: false, output: null, error: 'query contains invalid control characters' };
+        }
+        let query = queryRaw.trim();
         if (!query) {
           return { success: false, output: null, error: 'query is required' };
-        }
-        if (/[\0\r\n]/.test(query)) {
-          return { success: false, output: null, error: 'query contains invalid control characters' };
         }
         if (query.length > RECALL_QUERY_MAX_CHARS) {
           query = query.slice(0, RECALL_QUERY_MAX_CHARS);
@@ -133,13 +141,15 @@ export function createForgetTool(callbacks: MemoryCallbacks): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const key =
-          typeof input.key === 'string' ? input.key.trim() : String(input.key ?? '').trim();
-        if (!key) {
-          return { success: false, output: null, error: 'key is required' };
-        }
-        if (hasUnsafeKeyChars(key)) {
+        const keyRaw =
+          typeof input.key === 'string' ? input.key : String(input.key ?? '');
+        // Control-char check before trim
+        if (hasUnsafeKeyChars(keyRaw)) {
           return { success: false, output: null, error: 'Key contains invalid control characters' };
+        }
+        const key = keyRaw.trim();
+        if (!key || key.length > 200) {
+          return { success: false, output: null, error: 'key is required' };
         }
         await callbacks.remove(key);
         return { success: true, output: { removed: key } };

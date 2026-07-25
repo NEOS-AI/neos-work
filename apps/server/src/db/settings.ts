@@ -26,9 +26,18 @@ export function getAllSettings(): Record<string, string> {
   return result;
 }
 
+function safeSettingKey(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const k = raw.trim();
+  if (!k || k.length > 200) return '';
+  return k;
+}
+
 export function getSetting(key: string): string | undefined {
-  const k = typeof key === 'string' ? key.trim() : '';
-  if (!k || /[\0\r\n]/.test(k) || k.length > 200) return undefined;
+  const k = safeSettingKey(key);
+  if (!k) return undefined;
   const db = getDb();
   const row = db.prepare('SELECT value FROM setting WHERE key = ?').get(k) as
     | { value: string }
@@ -59,14 +68,15 @@ export function getSecretSetting(key: string): string | undefined {
 export const SETTING_VALUE_MAX_CHARS = 1 * 1024 * 1024;
 
 export function setSetting(key: string, value: string): void {
-  const k = typeof key === 'string' ? key.trim() : '';
-  if (!k) return;
-  // Reject control chars that confuse settings keys / env-style lookups
-  if (/[\0\r\n]/.test(k)) {
+  if (typeof key === 'string' && /[\0\r\n]/.test(key)) {
     throw new Error('setting key contains invalid control characters');
   }
-  if (k.length > 200) {
-    throw new Error('setting key exceeds max length (200)');
+  const k = safeSettingKey(key);
+  if (!k) {
+    if (typeof key === 'string' && key.trim().length > 200) {
+      throw new Error('setting key exceeds max length (200)');
+    }
+    return;
   }
   const db = getDb();
   // Trim secrets on write so `"  sk  "` never persists padded (align with getSecretSetting).
@@ -200,8 +210,8 @@ export function getExecutionSettings(runtime?: {
 }
 
 export function deleteSetting(key: string): boolean {
-  const k = typeof key === 'string' ? key.trim() : '';
-  if (!k || /[\0\r\n]/.test(k) || k.length > 200) return false;
+  const k = safeSettingKey(key);
+  if (!k) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM setting WHERE key = ?').run(k);
   return result.changes > 0;

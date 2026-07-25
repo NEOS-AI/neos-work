@@ -77,8 +77,20 @@ function listMcpServers(): McpServerRow[] {
   return getDb().prepare('SELECT * FROM mcp_server ORDER BY name ASC').all() as McpServerRow[];
 }
 
+/** Practical bound for MCP server lookup ids. */
+const MCP_LOOKUP_ID_MAX = 100;
+
+function safeMcpLookupId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > MCP_LOOKUP_ID_MAX) return '';
+  return id;
+}
+
 function getMcpServer(id: string): McpServerRow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeMcpLookupId(id);
   if (!trimmed) return undefined;
   return getDb().prepare('SELECT * FROM mcp_server WHERE id = ?').get(trimmed) as McpServerRow | undefined;
 }
@@ -114,8 +126,29 @@ function createMcpServer(params: {
       throw new Error(`command exceeds max length (${MCP_COMMAND_MAX_CHARS})`);
     }
   }
-  const url =
-    typeof params.url === 'string' ? params.url.trim() || null : (params.url ?? null);
+  let url: string | null = null;
+  if (typeof params.url === 'string') {
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(params.url)) {
+      throw new Error('url contains invalid control characters');
+    }
+    const u = params.url.trim();
+    if (u) {
+      if (u.length > 2_048) throw new Error('url exceeds max length (2048)');
+      try {
+        const parsed = new URL(u);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('url must be http(s)');
+        }
+        url = u;
+      } catch (err) {
+        if (err instanceof Error && /url must be|invalid control|max length/.test(err.message)) {
+          throw err;
+        }
+        throw new Error('url is invalid');
+      }
+    }
+  }
   const args = Array.isArray(params.args)
     ? params.args
         .map((a) => String(a).trim())
@@ -133,7 +166,7 @@ function createMcpServer(params: {
 }
 
 function toggleMcpServer(id: string, enabled: boolean): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeMcpLookupId(id);
   if (!trimmed) return false;
   const result = getDb()
     .prepare('UPDATE mcp_server SET enabled = ? WHERE id = ?')
@@ -142,7 +175,7 @@ function toggleMcpServer(id: string, enabled: boolean): boolean {
 }
 
 function deleteMcpServer(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeMcpLookupId(id);
   if (!trimmed) return false;
   const result = getDb().prepare('DELETE FROM mcp_server WHERE id = ?').run(trimmed);
   return result.changes > 0;
@@ -238,7 +271,7 @@ mcp.post('/', async (c) => {
     return c.json({ ok: true, data: rowToResponse(row) }, 201);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'mcp-create failed';
-    if (/control characters|max length|required|transport/i.test(msg)) {
+    if (/control characters|max length|required|transport|url|invalid/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
     return c.json({ ok: false, error: safeError(err, 'mcp-create') }, 500);

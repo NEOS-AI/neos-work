@@ -51,12 +51,12 @@ media.post('/image', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
+  if (typeof body.prompt === 'string' && /[\0\r\n]/.test(body.prompt)) {
+    return c.json({ ok: false, error: 'prompt contains invalid control characters' }, 400);
+  }
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) {
     return c.json({ ok: false, error: 'prompt is required' }, 400);
-  }
-  if (/[\0\r\n]/.test(prompt)) {
-    return c.json({ ok: false, error: 'prompt contains invalid control characters' }, 400);
   }
   if (prompt.length > 4000) {
     return c.json({ ok: false, error: 'prompt too long' }, 400);
@@ -96,12 +96,12 @@ media.post('/audio', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
+  if (typeof body.text === 'string' && /[\0]/.test(body.text)) {
+    return c.json({ ok: false, error: 'text contains invalid control characters' }, 400);
+  }
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) {
     return c.json({ ok: false, error: 'text is required' }, 400);
-  }
-  if (/[\0]/.test(text)) {
-    return c.json({ ok: false, error: 'text contains invalid control characters' }, 400);
   }
   if (text.length > 4096) {
     return c.json({ ok: false, error: 'text too long (max 4096 chars)' }, 400);

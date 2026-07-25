@@ -100,6 +100,12 @@ describe('mcp-oauth-store', () => {
       saveToken({ serverId: '   ', accessToken: 'tok' }),
     ).rejects.toThrow(/Invalid serverId/i);
     await expect(
+      saveToken({ serverId: 'bad\nid', accessToken: 'tok' }),
+    ).rejects.toThrow(/Invalid serverId/i);
+    await expect(
+      saveToken({ serverId: TEST_ID, accessToken: 'tok\nwith\nctrl' }),
+    ).rejects.toThrow(/accessToken/i);
+    await expect(
       saveToken({ serverId: TEST_ID, accessToken: '   ' }),
     ).rejects.toThrow(/accessToken/i);
 

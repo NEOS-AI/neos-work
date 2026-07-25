@@ -14,6 +14,16 @@ describe('plugin-runner', () => {
     expect(resumeRun('run', '  ', {})).toBe(false);
   });
 
+  it('resumeRun rejects control-char / overlong ids and oversized response', () => {
+    expect(resumeRun('bad\nid', 'stage', {})).toBe(false);
+    expect(resumeRun('\nrun', 'stage', {})).toBe(false);
+    expect(resumeRun('r'.repeat(101), 'stage', {})).toBe(false);
+    const huge: Record<string, unknown> = {};
+    for (let i = 0; i < 101; i++) huge[`k${i}`] = i;
+    expect(resumeRun('run', 'stage', huge)).toBe(false);
+    expect(resumeRun('run', 'stage', { blob: 'x'.repeat(300_000) })).toBe(false);
+  });
+
   it('runs human-only pipeline with resume', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',
