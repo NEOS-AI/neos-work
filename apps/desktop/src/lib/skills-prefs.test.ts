@@ -26,4 +26,14 @@ describe('skills-prefs', () => {
     localStorage.setItem('neos-skills-category', '  coding  ');
     expect(loadSkillsCategoryFilter()).toBe('coding');
   });
+
+  it('rejects control-char category filters', () => {
+    saveSkillsCategoryFilter('coding');
+    saveSkillsCategoryFilter('code\ning');
+    expect(loadSkillsCategoryFilter()).toBe('all');
+    saveSkillsCategoryFilter('\ncoding');
+    expect(loadSkillsCategoryFilter()).toBe('all');
+    localStorage.setItem('neos-skills-category', 'bad\ncat');
+    expect(loadSkillsCategoryFilter()).toBe('all');
+  });
 });

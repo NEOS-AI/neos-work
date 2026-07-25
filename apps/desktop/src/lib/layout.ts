@@ -32,11 +32,14 @@ export function autoLayout<T extends Record<string, unknown>>(
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: dir, ranksep: 80, nodesep: 50 });
 
-  // Map trimmed id → original React Flow id (layout positions stay on original ids)
+  // Map trimmed id → original React Flow id (layout positions stay on original ids).
+  // Control-char ids skipped before trim so "\nn1" cannot layout as "n1".
   const nodeIds = new Set<string>();
   const byTrimmed = new Map<string, string>();
   for (const node of nodeList) {
-    const id = typeof node?.id === 'string' ? node.id.trim() : '';
+    const raw = typeof node?.id === 'string' ? node.id : '';
+    if (!raw || /[\0\r\n]/.test(raw)) continue;
+    const id = raw.trim();
     if (!isSafeLayoutId(id)) continue;
     // Prefer original id for layout map (React Flow ids are not re-trimmed in output)
     nodeIds.add(node.id);
@@ -49,8 +52,13 @@ export function autoLayout<T extends Record<string, unknown>>(
   }
 
   for (const edge of edgeList) {
-    const source = typeof edge?.source === 'string' ? edge.source.trim() : '';
-    const target = typeof edge?.target === 'string' ? edge.target.trim() : '';
+    const sourceRaw = typeof edge?.source === 'string' ? edge.source : '';
+    const targetRaw = typeof edge?.target === 'string' ? edge.target : '';
+    if (!sourceRaw || !targetRaw || /[\0\r\n]/.test(sourceRaw) || /[\0\r\n]/.test(targetRaw)) {
+      continue;
+    }
+    const source = sourceRaw.trim();
+    const target = targetRaw.trim();
     if (!isSafeLayoutId(source) || !isSafeLayoutId(target)) continue;
     // Skip dangling edges so dagre does not throw on missing nodes
     // Match raw edge endpoints, then trimmed → original node id

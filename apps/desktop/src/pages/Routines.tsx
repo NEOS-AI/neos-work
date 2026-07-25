@@ -97,14 +97,24 @@ export function Routines() {
 
   const handleCreate = async () => {
     if (!client) return;
+    // Control-char name/schedule/timezone rejected before API (align with routines routes)
+    if (/[\0\r\n]/.test(formName)) { setFormError('Name is invalid'); return; }
     if (!formName.trim()) { setFormError('Name is required'); return; }
-    if (!formWorkflowId) { setFormError('Select a workflow'); return; }
+    if (!formWorkflowId || /[\0\r\n]/.test(formWorkflowId)) {
+      setFormError('Select a workflow');
+      return;
+    }
+    if (/[\0\r\n]/.test(formSchedule)) { setFormError('Schedule is invalid'); return; }
     if (!formSchedule.trim()) { setFormError('Schedule is required'); return; }
+    if (formTimezone && /[\0\r\n]/.test(formTimezone)) {
+      setFormError('Timezone is invalid');
+      return;
+    }
     setSubmitting(true);
     setFormError('');
     const res = await client.createRoutine({
       name: formName.trim(),
-      workflowId: formWorkflowId,
+      workflowId: formWorkflowId.trim(),
       schedule: formSchedule.trim(),
       timezone: formTimezone.trim() || 'UTC',
       enabled: formEnabled,
@@ -163,8 +173,16 @@ export function Routines() {
 
   const handleSaveSchedule = async () => {
     if (!client || !selectedId) return;
+    if (/[\0\r\n]/.test(editSchedule)) {
+      setEditError('Schedule is invalid');
+      return;
+    }
     if (!editSchedule.trim()) {
       setEditError('Schedule is required');
+      return;
+    }
+    if (editTimezone && /[\0\r\n]/.test(editTimezone)) {
+      setEditError('Timezone is invalid');
       return;
     }
     setEditSaving(true);

@@ -179,7 +179,17 @@ describe('Routines page', () => {
     expect(screen.getByText('Name is required')).toBeInTheDocument();
     expect(createRoutine).not.toHaveBeenCalled();
 
-    await user.type(screen.getByPlaceholderText('Daily digest'), 'Morning Digest');
+    // Control-char name rejected client-side (null byte survives controlled input events)
+    fireEvent.change(screen.getByPlaceholderText('Daily digest'), {
+      target: { value: `bad${'\0'}name` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(screen.getByText('Name is invalid')).toBeInTheDocument();
+    expect(createRoutine).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText('Daily digest'), {
+      target: { value: 'Morning Digest' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(screen.getByText('Select a workflow')).toBeInTheDocument();
 

@@ -122,7 +122,11 @@ export function Sessions() {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
-  const q = sessionSearch.trim().toLowerCase();
+  // Control-char search ignored (show all; align with list-filter hygiene)
+  const q =
+    typeof sessionSearch === 'string' && !/[\0\r\n]/.test(sessionSearch)
+      ? sessionSearch.trim().toLowerCase()
+      : '';
   const visibleSessions = (() => {
     const filtered = q
       ? sessions.filter((s) => {
@@ -412,6 +416,8 @@ function ChatArea({
   }, [client, session.id]);
 
   const handleSend = async () => {
+    // Null-byte content rejected (align with session message API)
+    if (/\0/.test(input)) return;
     if (!input.trim() || !client || isStreaming) return;
     if (isAgentMode) {
       await handleSendAgent();
@@ -543,6 +549,7 @@ function ChatArea({
   };
 
   const handleSendAgent = async () => {
+    if (/\0/.test(input)) return;
     if (!input.trim() || !client) return;
 
     const userInput = input.trim();

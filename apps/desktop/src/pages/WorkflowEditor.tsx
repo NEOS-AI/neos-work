@@ -290,6 +290,11 @@ export function WorkflowEditor() {
       return;
     }
     if (nameCommitInFlightRef.current) return;
+    // Control-char names rejected (check before trim; align with workflow API)
+    if (/[\0\r\n]/.test(nameInput)) {
+      setEditingName(false);
+      return;
+    }
     const trimmed = nameInput.trim().slice(0, 200);
     nameCommitInFlightRef.current = true;
     setEditingName(false);

@@ -73,6 +73,17 @@ describe('deployment-filter-prefs', () => {
     expect(localStorage.getItem('neos-deployments-workflow')).toBeNull();
   });
 
+  it('rejects control-char workflow filter ids', () => {
+    saveDeploymentWorkflowFilter('wf-ok');
+    saveDeploymentWorkflowFilter('wf\nbad');
+    expect(loadDeploymentWorkflowFilter()).toBe('');
+    saveDeploymentWorkflowFilter('wf-ok');
+    saveDeploymentWorkflowFilter('\nwf-ok');
+    expect(loadDeploymentWorkflowFilter()).toBe('');
+    localStorage.setItem('neos-deployments-workflow', 'bad\nid');
+    expect(loadDeploymentWorkflowFilter()).toBe('');
+  });
+
   it('load returns empty when localStorage throws', () => {
     const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('denied');

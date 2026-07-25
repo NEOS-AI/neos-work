@@ -78,8 +78,10 @@ export function saveDeploymentProviderFilter(provider: DeploymentProviderFilter)
 /** Persist Deployments workflow dropdown (empty string = all workflows). */
 export function loadDeploymentWorkflowFilter(): string {
   try {
-    const v = localStorage.getItem(WORKFLOW_KEY)?.trim() ?? '';
-    return v;
+    const raw = localStorage.getItem(WORKFLOW_KEY) ?? '';
+    // Control-char stored values ignored (check before trim)
+    if (!raw || /[\0\r\n]/.test(raw)) return '';
+    return raw.trim();
   } catch {
     return '';
   }
@@ -87,8 +89,13 @@ export function loadDeploymentWorkflowFilter(): string {
 
 export function saveDeploymentWorkflowFilter(workflowId: string): void {
   try {
+    // Control-char workflow ids never persisted
+    if (typeof workflowId !== 'string' || /[\0\r\n]/.test(workflowId)) {
+      localStorage.removeItem(WORKFLOW_KEY);
+      return;
+    }
     const id = workflowId.trim();
-    if (!id) {
+    if (!id || id.length > 100) {
       localStorage.removeItem(WORKFLOW_KEY);
     } else {
       localStorage.setItem(WORKFLOW_KEY, id);

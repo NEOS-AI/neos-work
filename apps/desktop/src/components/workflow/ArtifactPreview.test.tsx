@@ -253,4 +253,80 @@ describe('ArtifactPreview', () => {
     expect(updateArtifact).not.toHaveBeenCalled();
     promptSpy.mockRestore();
   });
+
+  it('rejects control-char rename with Invalid name status', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a6',
+      workflowId: 'wf-1',
+      name: 'safe.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('bad\nname.html');
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('safe.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(updateArtifact).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('Invalid name')).toBeInTheDocument();
+    });
+    promptSpy.mockRestore();
+  });
+
+  it('rejects overlong rename with Invalid name status', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a7',
+      workflowId: 'wf-1',
+      name: 'short.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(`${'n'.repeat(201)}.html`);
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('short.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(updateArtifact).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('Invalid name')).toBeInTheDocument();
+    });
+    promptSpy.mockRestore();
+  });
+
+  it('skips blank or unchanged rename without calling API', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a8',
+      workflowId: 'wf-1',
+      name: 'same.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const promptSpy = vi.spyOn(window, 'prompt');
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('same.html')).toBeInTheDocument());
+
+    promptSpy.mockReturnValue('   ');
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(updateArtifact).not.toHaveBeenCalled();
+    expect(screen.queryByText('Invalid name')).not.toBeInTheDocument();
+
+    promptSpy.mockReturnValue('  same.html  ');
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(updateArtifact).not.toHaveBeenCalled();
+    promptSpy.mockRestore();
+  });
 });

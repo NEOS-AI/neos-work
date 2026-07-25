@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PipelineRunner } from './PipelineRunner.js';
 import type { Plugin } from '../../lib/engine.js';
@@ -88,6 +88,47 @@ describe('PipelineRunner', () => {
     );
     await user.click(screen.getByRole('button', { name: /run pipeline/i }));
     expect(runPlugin).not.toHaveBeenCalled();
+  });
+
+  it('does not start pipeline for overlong plugin id', async () => {
+    const user = userEvent.setup();
+    render(
+      <PipelineRunner
+        plugin={{ ...plugin, id: 'p'.repeat(101) }}
+        onClose={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    expect(runPlugin).not.toHaveBeenCalled();
+  });
+
+  it('drops null-byte input values and control-char keys from run payload', async () => {
+    const user = userEvent.setup();
+    const dirtyPlugin: Plugin = {
+      ...plugin,
+      inputFields: [
+        { key: 'goal', label: 'Goal', type: 'text', placeholder: 'what to do' },
+        { key: 'bad\nkey', label: 'Bad', type: 'text', placeholder: 'bad' },
+        { key: 'note', label: 'Note', type: 'text', placeholder: 'note' },
+      ],
+    };
+    render(<PipelineRunner plugin={dirtyPlugin} onClose={() => {}} />);
+    await user.type(screen.getByPlaceholderText('what to do'), '  ship it  ');
+    fireEvent.change(screen.getByPlaceholderText('note'), {
+      target: { value: `tainted${'\0'}value` },
+    });
+    fireEvent.change(screen.getByPlaceholderText('bad'), {
+      target: { value: 'should-drop-key' },
+    });
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    expect(runPlugin).toHaveBeenCalledWith(
+      'plug-1',
+      { goal: 'ship it' },
+      expect.any(Function),
+    );
+    const payload = runPlugin.mock.calls[0][1] as Record<string, string>;
+    expect(payload).not.toHaveProperty('note');
+    expect(payload).not.toHaveProperty('bad\nkey');
   });
 
   it('starts pipeline and shows stages from events', async () => {

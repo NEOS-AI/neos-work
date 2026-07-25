@@ -70,4 +70,37 @@ describe('GenUIConfirmation', () => {
     expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
+
+  it('collapses multi-line prompts and caps prompt length', () => {
+    const { unmount: unmountMulti } = render(
+      <GenUIConfirmation
+        schema={{ prompt: 'line1\nline2\r\nline3' }}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.getByText('line1 line2 line3')).toBeInTheDocument();
+    unmountMulti();
+
+    const long = `P${'x'.repeat(600)}`;
+    const { unmount } = render(
+      <GenUIConfirmation schema={{ prompt: long }} onConfirm={() => {}} />,
+    );
+    const shown = screen.getByText(/^Px+/);
+    expect(shown.textContent?.length).toBe(500);
+    unmount();
+  });
+
+  it('falls back overlong button labels to defaults', () => {
+    render(
+      <GenUIConfirmation
+        schema={{
+          confirmLabel: 'Y'.repeat(101),
+          cancelLabel: 'N'.repeat(101),
+        }}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
 });
