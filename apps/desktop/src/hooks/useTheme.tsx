@@ -18,6 +18,7 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = 'neos-theme';
+const VALID_THEMES = new Set<string>(['dark', 'light', 'system']);
 
 function getSystemTheme(): ResolvedTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -27,11 +28,21 @@ function resolveTheme(theme: ThemeMode): ResolvedTheme {
   return theme === 'system' ? getSystemTheme() : theme;
 }
 
+/** Parse stored theme; control-char / unknown → null (caller uses dark default). */
+export function parseThemeMode(raw: unknown): ThemeMode | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  return VALID_THEMES.has(v) ? (v as ThemeMode) : null;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    const VALID_THEMES: ThemeMode[] = ['dark', 'light', 'system'];
-    return saved && VALID_THEMES.includes(saved as ThemeMode) ? (saved as ThemeMode) : 'dark';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return parseThemeMode(saved) ?? 'dark';
+    } catch {
+      return 'dark';
+    }
   });
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
     resolveTheme(theme),
@@ -60,8 +71,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const setTheme = useCallback((newTheme: ThemeMode) => {
-    setThemeState(newTheme);
-    localStorage.setItem(STORAGE_KEY, newTheme);
+    const parsed = parseThemeMode(newTheme) ?? 'dark';
+    setThemeState(parsed);
+    try {
+      localStorage.setItem(STORAGE_KEY, parsed);
+    } catch {
+      // ignore quota / private mode
+    }
   }, []);
 
   return (

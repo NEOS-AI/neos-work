@@ -193,4 +193,41 @@ describe('Media page', () => {
     await user.type(screen.getByPlaceholderText('Search files…'), 'nope');
     expect(screen.queryByText('notes.bin')).not.toBeInTheDocument();
   });
+
+  it('scrubs control chars from filename/kind and search haystack', async () => {
+    const user = userEvent.setup();
+    listMediaFiles.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          filename: `photo${'\0'}.png`,
+          kind: `image${'\n'}x`,
+          size: 512,
+          createdAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+          filename: 'clean.txt',
+          kind: 'other' as const,
+          size: 8,
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<Media />);
+    await waitFor(() => {
+      // null-byte stripped from list label
+      expect(screen.getByText('photo.png')).toBeInTheDocument();
+    });
+    // kind newlines collapsed
+    expect(screen.getByText(/image x/)).toBeInTheDocument();
+    expect(screen.getByText('clean.txt')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+
+    // Search matches scrubbed haystack (filename without null)
+    await user.type(screen.getByPlaceholderText('Search files…'), 'photo');
+    await waitFor(() => {
+      expect(screen.getByText('photo.png')).toBeInTheDocument();
+      expect(screen.queryByText('clean.txt')).not.toBeInTheDocument();
+    });
+  });
 });

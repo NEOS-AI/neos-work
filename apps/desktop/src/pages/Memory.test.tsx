@@ -259,4 +259,31 @@ describe('Memory page', () => {
       );
     });
   });
+
+  it('scrubs control chars from type, name, and content preview', async () => {
+    listMemories.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'm-scrub',
+          name: `Pref${'\0'}Name`,
+          type: `user${'\n'}x`,
+          content: `line1${'\n'}line2${'\0'}z`,
+          enabled: true,
+          updatedAt: '2026-02-01T00:00:00.000Z',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<Memory />);
+    await waitFor(() => {
+      expect(screen.getByText('PrefName')).toBeInTheDocument();
+    });
+    // type control collapsed → unknown type falls back to reference styling but label is scrubbed
+    expect(screen.getByText(/user x/)).toBeInTheDocument();
+    // content multi-line kept (maxChars only); null-byte stripped
+    expect(screen.getByText(/line1/)).toBeInTheDocument();
+    expect(screen.getByText(/line2z/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

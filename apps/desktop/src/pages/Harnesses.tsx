@@ -9,6 +9,7 @@ import {
   saveDomainFilter,
   type DomainFilterPref,
 } from '../lib/domain-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
@@ -184,7 +185,16 @@ function HarnessCard({
   onDelete: () => void;
 }) {
   const { t } = useTranslation('common');
-  const domainColor = DOMAIN_COLORS[h.domain] ?? '#8b5cf6';
+  const domainSafe =
+    scrubDisplayText(h.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+  const nameSafe =
+    scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || 'Harness';
+  const descSafe = scrubDisplayText(h.description, { collapseLines: true, maxChars: 500 });
+  const domainColor = DOMAIN_COLORS[domainSafe] ?? '#8b5cf6';
+  const tools = (h.allowedTools ?? [])
+    .filter((tool) => typeof tool === 'string' && !/[\0\r\n]/.test(tool) && tool.trim())
+    .map((tool) => tool.trim())
+    .slice(0, 4);
 
   return (
     <div
@@ -194,7 +204,7 @@ function HarnessCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{h.name}</span>
+            <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{nameSafe}</span>
             {h.isBuiltIn && (
               <span className="rounded-full px-1.5 py-0.5 text-[10px]"
                 style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
@@ -206,7 +216,7 @@ function HarnessCard({
             className="rounded-full px-2 py-0.5 text-[11px] font-medium w-fit"
             style={{ backgroundColor: `${domainColor}22`, color: domainColor }}
           >
-            {h.domain}
+            {domainSafe}
           </span>
         </div>
         <div className="flex gap-1">
@@ -229,11 +239,11 @@ function HarnessCard({
         </div>
       </div>
       <p className="text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>
-        {h.description}
+        {descSafe}
       </p>
-      {h.allowedTools.length > 0 && (
+      {tools.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
-          {h.allowedTools.slice(0, 4).map((tool) => (
+          {tools.map((tool) => (
             <span
               key={tool}
               className="rounded px-1.5 py-0.5 text-[10px]"

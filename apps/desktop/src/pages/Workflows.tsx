@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
@@ -313,7 +314,15 @@ export function Workflows() {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No workflows match your search.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredWorkflows.map((wf) => (
+            {filteredWorkflows.map((wf) => {
+              const domainSafe =
+                scrubDisplayText(wf.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+              const nameSafe =
+                scrubDisplayText(wf.name, { collapseLines: true, maxChars: 200 }) || 'Workflow';
+              const descSafe = wf.description
+                ? scrubDisplayText(wf.description, { collapseLines: true, maxChars: 500 })
+                : '';
+              return (
               <div
                 key={wf.id}
                 className="group relative cursor-pointer rounded-xl border p-5 transition-shadow hover:shadow-md"
@@ -323,18 +332,18 @@ export function Workflows() {
                 {/* Domain badge */}
                 <span
                   className="mb-3 inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white"
-                  style={{ backgroundColor: DOMAIN_COLORS[wf.domain] ?? '#8b5cf6' }}
+                  style={{ backgroundColor: DOMAIN_COLORS[domainSafe] ?? '#8b5cf6' }}
                 >
-                  {wf.domain}
+                  {domainSafe}
                 </span>
                 <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {wf.name}
+                  {nameSafe}
                 </h3>
-                {wf.description && (
+                {descSafe ? (
                   <p className="mt-1 text-xs line-clamp-2" style={{ color: 'var(--text-muted)' }}>
-                    {wf.description}
+                    {descSafe}
                   </p>
-                )}
+                ) : null}
                 <p
                   className="mt-3 text-xs"
                   style={{ color: 'var(--text-muted)' }}
@@ -375,7 +384,8 @@ export function Workflows() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

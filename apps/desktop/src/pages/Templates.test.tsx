@@ -223,4 +223,43 @@ describe('Templates page', () => {
     resolveCreate({ ok: true, data: { id: 'wf-late' } });
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/workflows/wf-late'));
   });
+
+  it('scrubs control-char template labels and skips control-char name on Use', async () => {
+    const user = userEvent.setup();
+    getTemplates.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          name: `Evil${'\0'}Tpl`,
+          description: `desc${'\n'}line`,
+          domain: `coding${'\n'}x`,
+          nodes: [{ id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} }],
+          edges: [],
+        },
+        {
+          name: 'Safe Tpl',
+          description: 'ok',
+          domain: 'general',
+          nodes: [{ id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} }],
+          edges: [],
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('EvilTpl')).toBeInTheDocument());
+    // domain collapsed for badge
+    expect(screen.getByText(/coding x/)).toBeInTheDocument();
+    // description collapsed
+    expect(screen.getByText(/desc line/)).toBeInTheDocument();
+
+    // Control-char name template: Use is a no-op
+    const useButtons = screen.getAllByRole('button', { name: 'Use Template' });
+    await user.click(useButtons[0]!);
+    expect(createWorkflow).not.toHaveBeenCalled();
+
+    createWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-safe' } });
+    await user.click(useButtons[1]!);
+    await waitFor(() => expect(createWorkflow).toHaveBeenCalled());
+    expect(createWorkflow.mock.calls[0]![0].name).toBe('Safe Tpl');
+  });
 });

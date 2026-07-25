@@ -10,6 +10,7 @@ import {
   saveDomainFilter,
   type DomainFilterPref,
 } from '../lib/domain-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { inferRequiredSettings } from '../lib/template-required-settings.js';
 import { filterWorkflowList } from '../lib/workflow-list-filter.js';
@@ -58,12 +59,29 @@ export function Templates() {
 
   const handleUse = async (tpl: TemplateWorkflow) => {
     if (!client || creating) return;
-    setCreating(tpl.name);
+    // Control-char template names never submitted (align with workflow create)
+    if (typeof tpl.name !== 'string' || /[\0\r\n]/.test(tpl.name)) return;
+    const name = tpl.name.trim();
+    if (!name) return;
+    let description: string | undefined;
+    if (typeof tpl.description === 'string' && !/\0/.test(tpl.description)) {
+      const d = tpl.description.trim();
+      if (d) description = d;
+    }
+    const domainRaw =
+      typeof tpl.domain === 'string' && !/[\0\r\n]/.test(tpl.domain)
+        ? tpl.domain.trim().toLowerCase()
+        : 'general';
+    const domain =
+      domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general'
+        ? domainRaw
+        : 'general';
+    setCreating(name);
     try {
       const res = await client.createWorkflow({
-        name: tpl.name,
-        description: tpl.description,
-        domain: tpl.domain,
+        name,
+        description,
+        domain,
         nodes: tpl.nodes,
         edges: tpl.edges,
       });
@@ -133,36 +151,45 @@ export function Templates() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((tpl) => {
-            const domainColor = DOMAIN_COLORS[tpl.domain] ?? '#8b5cf6';
-            const isCreating = creating === tpl.name;
-            const requiredSettings = inferRequiredSettings(tpl);
+            const domainSafe =
+              scrubDisplayText(tpl.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+            const nameSafe =
+              scrubDisplayText(tpl.name, { collapseLines: true, maxChars: 200 }) || 'Template';
+            const descSafe = tpl.description
+              ? scrubDisplayText(tpl.description, { collapseLines: true, maxChars: 500 })
+              : '';
+            const domainColor = DOMAIN_COLORS[domainSafe] ?? '#8b5cf6';
+            const isCreating = creating === (typeof tpl.name === 'string' ? tpl.name.trim() : tpl.name);
+            const requiredSettings = inferRequiredSettings(tpl).filter(
+              (key) => typeof key === 'string' && !/[\0\r\n]/.test(key) && key.trim(),
+            );
             return (
               <div
-                key={tpl.name}
+                key={nameSafe}
                 className="flex flex-col gap-3 rounded-xl border p-4"
                 style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{tpl.name}</span>
+                  <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{nameSafe}</span>
                   <span
                     className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
                     style={{ backgroundColor: `${domainColor}22`, color: domainColor }}
                   >
-                    {tpl.domain}
+                    {domainSafe}
                   </span>
                 </div>
                 <p className="flex-1 text-xs line-clamp-3" style={{ color: 'var(--text-muted)' }}>
-                  {tpl.description}
+                  {descSafe}
                 </p>
                 {requiredSettings.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {requiredSettings.map((key) => (
                       <span
-                        key={key}
+                        key={key.trim()}
                         className="rounded px-1.5 py-0.5 text-[10px]"
                         style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
                       >
-                        {key}
+                        {key.trim()}
                       </span>
                     ))}
                   </div>

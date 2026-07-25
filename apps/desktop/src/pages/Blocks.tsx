@@ -12,6 +12,7 @@ import {
   type BlocksSourceFilter,
   type DomainFilterPref,
 } from '../lib/domain-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
@@ -348,8 +349,19 @@ interface CardProps {
 }
 
 function BlockCard({ block, onEdit, onDelete }: CardProps) {
-  const domainColor = DOMAIN_COLORS[block.domain] ?? '#8b5cf6';
-  const implLabel = IMPL_TYPE_LABELS[block.implementationType] ?? block.implementationType;
+  const domainSafe =
+    scrubDisplayText(block.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+  const nameSafe =
+    scrubDisplayText(block.name, { collapseLines: true, maxChars: 200 }) || 'Block';
+  const idSafe = scrubDisplayText(block.id, { collapseLines: true, maxChars: 100 }) || '—';
+  const descSafe =
+    scrubDisplayText(block.description, { collapseLines: true, maxChars: 500 }) || '—';
+  const implRaw = scrubDisplayText(block.implementationType, {
+    collapseLines: true,
+    maxChars: 40,
+  });
+  const domainColor = DOMAIN_COLORS[domainSafe] ?? '#8b5cf6';
+  const implLabel = IMPL_TYPE_LABELS[implRaw] ?? (implRaw || '—');
 
   return (
     <div
@@ -357,7 +369,7 @@ function BlockCard({ block, onEdit, onDelete }: CardProps) {
       style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{block.name}</span>
+        <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{nameSafe}</span>
         <div className="flex shrink-0 gap-1">
           {block.isBuiltIn && (
             <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: '#f59e0b22', color: '#f59e0b' }}>
@@ -368,15 +380,15 @@ function BlockCard({ block, onEdit, onDelete }: CardProps) {
             className="rounded-full px-2 py-0.5 text-[10px] font-medium"
             style={{ backgroundColor: `${domainColor}22`, color: domainColor }}
           >
-            {block.domain}
+            {domainSafe}
           </span>
         </div>
       </div>
 
-      <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>{block.id}</span>
+      <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>{idSafe}</span>
 
       <p className="flex-1 text-xs line-clamp-2" style={{ color: 'var(--text-secondary)' }}>
-        {block.description || '—'}
+        {descSafe}
       </p>
 
       <div className="flex items-center justify-between">

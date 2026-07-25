@@ -8,6 +8,7 @@ import {
   saveEnabledFilter,
   type EnabledFilterPref,
 } from '../lib/enabled-filter-prefs.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -304,7 +305,7 @@ export function Routines() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                    {r.name}
+                    {scrubDisplayText(r.name, { collapseLines: true, maxChars: 200 }) || 'Routine'}
                   </span>
                   <span
                     className={`text-xs px-1.5 py-0.5 rounded ${r.enabled ? 'bg-green-900 text-green-300' : 'bg-gray-800 text-gray-400'}`}
@@ -313,10 +314,15 @@ export function Routines() {
                   </span>
                 </div>
                 <div className="text-xs mt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {r.schedule} · {r.timezone || 'UTC'}
+                  {scrubDisplayText(r.schedule, { collapseLines: true, maxChars: 80 }) || '—'}
+                  {' · '}
+                  {scrubDisplayText(r.timezone || 'UTC', { collapseLines: true, maxChars: 60 }) || 'UTC'}
                 </div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  {workflows.find((w) => w.id === r.workflowId)?.name ?? r.workflowId}
+                  {scrubDisplayText(
+                    workflows.find((w) => w.id === r.workflowId)?.name ?? r.workflowId,
+                    { collapseLines: true, maxChars: 100 },
+                  ) || '—'}
                 </div>
                 {r.lastRunAt && (
                   <div
@@ -517,11 +523,14 @@ export function Routines() {
                           Crystallize
                         </button>
                       )}
-                      {run.error && (
-                        <span className="text-red-400 truncate max-w-[160px]" title={run.error}>
-                          {run.error}
+                      {run.error ? (
+                        <span
+                          className="text-red-400 truncate max-w-[160px]"
+                          title={scrubDisplayText(run.error, { collapseLines: true, maxChars: 500 })}
+                        >
+                          {scrubDisplayText(run.error, { collapseLines: true, maxChars: 200 })}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   ))}
                 </div>

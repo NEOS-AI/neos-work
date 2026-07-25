@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, useTheme } from './useTheme.js';
+import { parseThemeMode, ThemeProvider, useTheme } from './useTheme.js';
 
 function Probe() {
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -82,5 +82,22 @@ describe('useTheme / ThemeProvider', () => {
     expect(screen.getByTestId('theme').textContent).toBe('system');
     expect(screen.getByTestId('resolved').textContent).toBe('dark');
     expect(localStorage.getItem('neos-theme')).toBe('system');
+  });
+
+  it('parseThemeMode rejects control-char and accepts padded values', () => {
+    expect(parseThemeMode(`dark${'\0'}`)).toBeNull();
+    expect(parseThemeMode('\nlight')).toBeNull();
+    expect(parseThemeMode('  system  ')).toBe('system');
+    expect(parseThemeMode('neon')).toBeNull();
+  });
+
+  it('ignores control-char stored theme and defaults to dark', () => {
+    localStorage.setItem('neos-theme', `light${'\0'}`);
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId('theme').textContent).toBe('dark');
   });
 });
