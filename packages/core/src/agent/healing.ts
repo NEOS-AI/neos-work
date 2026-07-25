@@ -63,7 +63,11 @@ export class ReflectionStrategy implements HealingStrategy {
 목표: ${String(step.description ?? '').slice(0, 1_000)}
 ${step.toolName ? `툴: ${String(step.toolName).slice(0, 100)}` : ''}
 ${inputStr ? `입력: ${inputStr}` : ''}
-에러: ${typeof error === 'string' ? error.trim().slice(0, 2000) : String(error ?? '').slice(0, 2000)}
+에러: ${(() => {
+  const e = typeof error === 'string' ? error : String(error ?? '');
+  // Scrub control chars for prompt injection / log hygiene
+  return e.replace(/[\0\r\n]/g, ' ').trim().slice(0, 2000);
+})()}
 
 완료된 이전 steps:
 ${historyStr || '(없음)'}

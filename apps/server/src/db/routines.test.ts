@@ -118,6 +118,10 @@ describe('routines CRUD', () => {
     expect(() =>
       createRoutine({ name: 'bad\nname', workflowId: wf.id, schedule: '0 9 * * *' }),
     ).toThrow(/control characters/i);
+    // Leading control char must not be stripped by trim
+    expect(() =>
+      createRoutine({ name: '\nDaily', workflowId: wf.id, schedule: '0 9 * * *' }),
+    ).toThrow(/control characters/i);
     expect(() =>
       createRoutine({
         name: 'x'.repeat(201),
@@ -133,6 +137,23 @@ describe('routines CRUD', () => {
         inputs: { blob: 'y'.repeat(300_000) },
       }),
     ).toThrow(/inputs exceeds/i);
+
+    const r = createRoutine({
+      name: 'Ok',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'UTC',
+    });
+    // Control-char timezone falls back to UTC rather than persisting
+    const withBadTz = createRoutine({
+      name: 'Tz',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'Asia/\nSeoul',
+    });
+    expect(withBadTz.timezone).toBe('UTC');
+    expect(updateRoutine(r.id, { name: '\nRenamed' })).toBeNull();
+    expect(getRoutine(r.id)?.name).toBe('Ok');
   });
 
   it('rejects invalid schedule arity/control chars on create/update', () => {

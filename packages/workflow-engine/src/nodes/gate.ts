@@ -35,15 +35,17 @@ export class TriggerNode implements ExecutableNode {
   type = 'trigger' as const;
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
-    // Cap trigger payload keys (runtime parameterisation hygiene)
+    // Cap trigger payload keys; drop control-char keys (runtime parameterisation hygiene)
     const inputs = ctx.inputs ?? {};
-    const keys = Object.keys(inputs);
-    if (keys.length > 200) {
-      const capped: Record<string, unknown> = {};
-      for (const k of keys.slice(0, 200)) capped[k] = inputs[k];
-      return { ok: true, output: capped, durationMs: 0 };
+    const clean: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(inputs)) {
+      if (Object.keys(clean).length >= 200) break;
+      if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
+      const key = k.trim();
+      if (!key || key.length > 200) continue;
+      clean[key] = v;
     }
-    return { ok: true, output: inputs, durationMs: 0 };
+    return { ok: true, output: clean, durationMs: 0 };
   }
 }
 

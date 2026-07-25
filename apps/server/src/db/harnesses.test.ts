@@ -140,6 +140,26 @@ describe('custom harnesses CRUD', () => {
     expect(() =>
       createCustomHarness({
         id: ID,
+        name: '\nLeading',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomHarness({
+        id: ID,
+        name: 'ok',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p\nbad',
+        allowedTools: [],
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomHarness({
+        id: ID,
         name: 'n'.repeat(201),
         domain: 'coding',
         description: 'd',

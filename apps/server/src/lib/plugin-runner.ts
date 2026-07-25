@@ -158,11 +158,19 @@ async function executeStage(
   settings: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<string> {
-  // Trim first so whitespace-only Anthropic does not block OpenAI fallback
-  const anthropicKey = String(settings['ANTHROPIC_API_KEY'] ?? '').trim();
-  const openaiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
-  // Trim stage name for user-facing placeholders
-  const stageName = typeof stage.name === 'string' ? stage.name.trim() || stage.id : stage.id;
+  // Sanitize API keys before Authorization / x-api-key headers
+  const sanitizeKey = (raw: unknown): string => {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const k = raw.trim();
+    return k.length > 0 && k.length <= 8_192 ? k : '';
+  };
+  const anthropicKey = sanitizeKey(settings['ANTHROPIC_API_KEY']);
+  const openaiKey = sanitizeKey(settings['OPENAI_API_KEY']);
+  // Stage name already normalized upstream; scrub residual control chars for log text
+  const stageName =
+    typeof stage.name === 'string' && !/[\0\r\n]/.test(stage.name)
+      ? stage.name.trim() || stage.id
+      : stage.id;
 
   if (!anthropicKey && !openaiKey) {
     return `[Stage ${stageName}: No LLM API key configured]`;
@@ -172,11 +180,13 @@ async function executeStage(
   const STAGE_PROMPT_MAX = 100_000;
   const STAGE_OUTPUT_MAX = 200_000;
 
-  // Interpolate {{key}} placeholders in prompt (trim so whitespace-only falls back)
-  let prompt =
-    typeof stage.prompt === 'string' && stage.prompt.trim()
-      ? stage.prompt.trim()
-      : `Perform the ${stageName} step.`;
+  // Interpolate {{key}} placeholders in prompt (null-byte reject; newlines allowed)
+  let prompt: string;
+  if (typeof stage.prompt === 'string' && !/\0/.test(stage.prompt) && stage.prompt.trim()) {
+    prompt = stage.prompt.trim();
+  } else {
+    prompt = `Perform the ${stageName} step.`;
+  }
   for (const [key, val] of Object.entries(previousOutputs)) {
     // Only interpolate safe placeholder keys (alnum/_/-)
     if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;

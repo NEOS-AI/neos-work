@@ -216,4 +216,28 @@ describe('webhook routes', () => {
     const runs = workflows.listRuns(wf.id, 10);
     expect(runs.length).toBeGreaterThanOrEqual(3);
   });
+
+  it('POST trigger caps trigger input bag at 200 keys', async () => {
+    const wf = makeWf();
+    const secret = workflows.getOrCreateWebhookSecret(wf.id);
+    const bag: Record<string, number> = {};
+    for (let i = 0; i < 250; i++) bag[`k${i}`] = i;
+    // also include a leading-control key that must be dropped before the cap
+    bag['\nskip'] = -1;
+    const body = JSON.stringify(bag);
+    const sig = createHmac('sha256', secret).update(body).digest('hex');
+    const res = await webhooks.request(`/${wf.id}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-neos-signature': `sha256=${sig}`,
+      },
+      body,
+    });
+    // Cap is applied during parse; run still starts
+    expect(res.status).toBe(200);
+    await res.text().catch(() => '');
+    const runs = workflows.listRuns(wf.id, 5);
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+  });
 });

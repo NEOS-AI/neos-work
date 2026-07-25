@@ -124,25 +124,30 @@ export async function listPlugins(): Promise<PluginManifest[]> {
         const manifest = JSON.parse(raw) as PluginManifest;
         if (manifest.schemaVersion !== 'od-plugin/v1') continue;
         // Normalize identity fields (dir name fallback when id blank)
-        const id =
-          typeof manifest.id === 'string' && manifest.id.trim()
-            ? manifest.id.trim()
-            : entry.name.trim();
-        if (!id) continue;
+        // Control-char check before trim on manifest id
+        let id = '';
+        if (typeof manifest.id === 'string' && !/[\0\r\n]/.test(manifest.id)) {
+          id = manifest.id.trim();
+        }
+        if (!id) id = entry.name.trim();
+        if (!id || /[\0\r\n]/.test(id) || id.length > 200) continue;
         manifest.id = id;
-        if (typeof manifest.name === 'string') {
+        if (typeof manifest.name === 'string' && !/[\0\r\n]/.test(manifest.name)) {
           manifest.name = manifest.name.trim() || id;
         } else {
           manifest.name = id;
         }
-        if (typeof manifest.description === 'string') {
-          let d = manifest.description.trim() || undefined;
+        if (typeof manifest.description === 'string' && !/[\0]/.test(manifest.description)) {
+          // Allow newlines in description body? Prefer single-line for UI cards
+          let d = manifest.description.replace(/[\r\n]+/g, ' ').trim() || undefined;
           if (d && d.length > PLUGIN_DESCRIPTION_MAX) d = d.slice(0, PLUGIN_DESCRIPTION_MAX);
           manifest.description = d;
         }
-        if (typeof manifest.version === 'string') {
+        if (typeof manifest.version === 'string' && !/[\0\r\n]/.test(manifest.version)) {
           const v = manifest.version.trim() || '0.0.0';
           manifest.version = v.length > 64 ? v.slice(0, 64) : v;
+        } else if (typeof manifest.version === 'string') {
+          manifest.version = '0.0.0';
         }
         // Normalize pipeline stages (kind allow-list, trim ids/names)
         if (manifest.pipeline !== undefined) {

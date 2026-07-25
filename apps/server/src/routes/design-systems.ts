@@ -21,9 +21,19 @@ designSystems.get('/', async (c) => {
 
 designSystems.post('/', async (c) => {
   const body = await c.req.json<{ name: string; description?: string }>().catch(() => null);
-  const name = typeof body?.name === 'string' ? body.name.trim() : '';
-  const description =
-    typeof body?.description === 'string' ? body.description.trim() || undefined : undefined;
+  const nameRaw = typeof body?.name === 'string' ? body.name : '';
+  // Control-char check before trim (store also enforces)
+  if (/[\0\r\n]/.test(nameRaw)) {
+    return c.json({ ok: false, error: 'name contains invalid control characters' }, 400);
+  }
+  const name = nameRaw.trim();
+  let description: string | undefined;
+  if (typeof body?.description === 'string') {
+    if (/[\0\r\n]/.test(body.description)) {
+      return c.json({ ok: false, error: 'description contains invalid control characters' }, 400);
+    }
+    description = body.description.trim() || undefined;
+  }
   if (!name) {
     return c.json({ ok: false, error: 'name is required (alphanumeric, - and _ only)' }, 400);
   }

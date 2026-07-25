@@ -37,6 +37,14 @@ describe('gate nodes', () => {
     expect(Object.keys(result.output as object).length).toBe(200);
   });
 
+  it('TriggerNode drops control-char keys before trim', async () => {
+    const result = await new TriggerNode().execute(
+      makeCtx({ good: 1, 'bad\nkey': 2, '\nlead': 3 }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.output).toEqual({ good: 1 });
+  });
+
   it('OutputNode truncates oversized merged JSON', async () => {
     const fat = { blob: 'x'.repeat(1_100_000) };
     const result = await new OutputNode().execute(makeCtx({ a: fat }));

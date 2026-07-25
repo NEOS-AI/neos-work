@@ -134,9 +134,18 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
     throw new Error('id contains invalid control characters');
   }
   const id = idRaw.trim();
-  const name = typeof input.name === 'string' ? input.name.trim() : '';
-  const systemPrompt =
-    typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '';
+  const nameRaw = typeof input.name === 'string' ? input.name : '';
+  // Control-char check before trim
+  if (/[\0\r\n]/.test(nameRaw)) {
+    throw new Error('name contains invalid control characters');
+  }
+  const name = nameRaw.trim();
+  const systemPromptRaw =
+    typeof input.systemPrompt === 'string' ? input.systemPrompt : '';
+  if (/[\0\r\n]/.test(systemPromptRaw)) {
+    throw new Error('systemPrompt contains invalid control characters');
+  }
+  const systemPrompt = systemPromptRaw.trim();
   if (!id || !name || !systemPrompt) {
     throw new Error('id, name, and systemPrompt are required');
   }
@@ -145,9 +154,6 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
-  }
-  if (/[\0\r\n]/.test(name)) {
-    throw new Error('name contains invalid control characters');
   }
   if (name.length > HARNESS_NAME_MAX_CHARS) {
     throw new Error(`name exceeds max length (${HARNESS_NAME_MAX_CHARS})`);

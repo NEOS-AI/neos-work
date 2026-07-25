@@ -40,6 +40,13 @@ describe('resolveMessageText', () => {
     expect(resolveMessageText({ content: '  padded content  ' }, {})).toBe('padded content');
   });
 
+  it('skips null-byte config/input text fields', () => {
+    expect(resolveMessageText({ content: 'bad\0text' }, { text: 'upstream' })).toBe('upstream');
+    // Null-byte input text is skipped; falls through to JSON of remaining inputs
+    expect(resolveMessageText({}, { text: 'hi\0there' })).toContain('text');
+    expect(resolveMessageText({ textTemplate: 'ok {{x}}' }, { x: 'y' })).toBe('ok y');
+  });
+
   it('treats whitespace-only templates as missing and tries next config key', () => {
     expect(resolveMessageText({ textTemplate: '   ' }, { text: 'upstream' })).toBe('upstream');
     expect(

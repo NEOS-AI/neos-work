@@ -16,6 +16,8 @@ function pickConfigMessage(config: Record<string, unknown> | undefined): string 
   for (const key of MESSAGE_CONFIG_KEYS) {
     const v = config[key];
     if (typeof v === 'string') {
+      // Null bytes break messaging JSON payloads; allow other whitespace in templates
+      if (/\0/.test(v)) continue;
       const trimmed = v.trim();
       if (trimmed.length > 0) return trimmed;
     }
@@ -52,7 +54,7 @@ export function resolveMessageText(
       // Early stop if body already past cap (avoid further growth)
       if (text.length > MESSAGE_TEXT_MAX_CHARS * 2) break;
     }
-  } else if (typeof inputs['text'] === 'string') {
+  } else if (typeof inputs['text'] === 'string' && !/\0/.test(inputs['text'])) {
     text = inputs['text'].trim();
   } else if (Object.keys(inputs).length === 0) {
     text = '';

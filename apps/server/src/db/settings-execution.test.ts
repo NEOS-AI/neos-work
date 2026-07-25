@@ -133,6 +133,19 @@ describe('getExecutionSettings', () => {
     ).toBe('http://127.0.0.1:9');
   });
 
+  it('drops control-char runtime serverUrl and authToken', () => {
+    expect(
+      getExecutionSettings({ serverUrl: '\nhttp://127.0.0.1:9' }).SERVER_URL,
+    ).toBeUndefined();
+    const badTok = getExecutionSettings({
+      serverUrl: 'http://127.0.0.1:9',
+      authToken: 'tok\nbad',
+    });
+    expect(badTok.SERVER_URL).toBe('http://127.0.0.1:9');
+    expect(badTok.SERVER_TOKEN).toBeUndefined();
+    expect(badTok.AUTH_TOKEN).toBeUndefined();
+  });
+
   it('merges secrets with runtime without dropping keys', () => {
     setSetting('OPENAI_API_KEY', 'sk-merge');
     const s = getExecutionSettings({
@@ -218,6 +231,8 @@ describe('isSafeHttpBaseUrl', () => {
 
   it('rejects control-char and overlong base urls', () => {
     expect(isSafeHttpBaseUrl('https://api.openai.com/\npath')).toBe(false);
+    // Leading control char must not be accepted after trim
+    expect(isSafeHttpBaseUrl('\nhttps://api.openai.com/v1')).toBe(false);
     expect(isSafeHttpBaseUrl('https://' + 'a'.repeat(2_100) + '.test')).toBe(false);
   });
 });

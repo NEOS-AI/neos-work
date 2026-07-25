@@ -145,7 +145,12 @@ export function createRoutine(input: {
   enabled?: boolean;
   inputs?: Record<string, unknown>;
 }): Routine {
-  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const nameRaw = typeof input.name === 'string' ? input.name : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(nameRaw)) {
+    throw new Error('name contains invalid control characters');
+  }
+  const name = nameRaw.trim();
   const rawWf = typeof input.workflowId === 'string' ? input.workflowId : '';
   if (!rawWf.trim()) {
     throw new Error('name, workflowId, and schedule are required');
@@ -159,9 +164,6 @@ export function createRoutine(input: {
   if (!name || !schedule) {
     throw new Error('name, workflowId, and schedule are required');
   }
-  if (/[\0\r\n]/.test(name)) {
-    throw new Error('name contains invalid control characters');
-  }
   if (name.length > ROUTINE_NAME_MAX_CHARS) {
     throw new Error(`name exceeds max length (${ROUTINE_NAME_MAX_CHARS})`);
   }
@@ -172,9 +174,14 @@ export function createRoutine(input: {
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const timezoneRaw =
-    typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : (input.timezone || 'UTC');
-  const timezone = isValidTimeZone(timezoneRaw) ? timezoneRaw : 'UTC';
+  let timezone = 'UTC';
+  if (typeof input.timezone === 'string') {
+    // Control-char timezone → UTC fallback (isValidTimeZone also rejects)
+    if (!/[\0\r\n]/.test(input.timezone)) {
+      const timezoneRaw = input.timezone.trim() || 'UTC';
+      timezone = isValidTimeZone(timezoneRaw) ? timezoneRaw : 'UTC';
+    }
+  }
   const inputs =
     input.inputs && typeof input.inputs === 'object' && !Array.isArray(input.inputs)
       ? input.inputs
@@ -212,11 +219,12 @@ export function updateRoutine(
   const existing = getRoutine(trimmed);
   if (!existing) return null;
 
-  const name =
-    input.name !== undefined
-      ? (typeof input.name === 'string' ? input.name.trim() : '')
-      : existing.name;
-  if (!name || /[\0\r\n]/.test(name) || name.length > ROUTINE_NAME_MAX_CHARS) return null;
+  let name = existing.name;
+  if (input.name !== undefined) {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name)) return null;
+    name = input.name.trim();
+  }
+  if (!name || name.length > ROUTINE_NAME_MAX_CHARS) return null;
   if (input.schedule !== undefined) {
     if (typeof input.schedule !== 'string' || !isValidSchedule(input.schedule)) return null;
   }
@@ -225,14 +233,15 @@ export function updateRoutine(
       ? input.schedule.trim()
       : existing.schedule;
   if (!schedule) return null;
-  const timezone =
-    input.timezone !== undefined
-      ? (() => {
-          const raw =
-            typeof input.timezone === 'string' ? input.timezone.trim() || 'UTC' : 'UTC';
-          return isValidTimeZone(raw) ? raw : 'UTC';
-        })()
-      : existing.timezone;
+  let timezone = existing.timezone;
+  if (input.timezone !== undefined) {
+    if (typeof input.timezone !== 'string' || /[\0\r\n]/.test(input.timezone)) {
+      timezone = 'UTC';
+    } else {
+      const raw = input.timezone.trim() || 'UTC';
+      timezone = isValidTimeZone(raw) ? raw : 'UTC';
+    }
+  }
 
   const now = new Date().toISOString();
   // Non-object inputs (arrays/primitives) → {} — matches webhook trigger hygiene

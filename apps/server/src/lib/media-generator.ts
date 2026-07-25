@@ -116,13 +116,17 @@ export async function generateImage(options: {
   if (prompt.length > IMAGE_PROMPT_MAX) {
     throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
   }
-  const rawSize =
-    typeof options.size === 'string' ? options.size.trim().toLowerCase() : '1024x1024';
-  const size = (IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024') as
+  const sizeRaw =
+    typeof options.size === 'string' && !/[\0\r\n]/.test(options.size)
+      ? options.size.trim().toLowerCase()
+      : '1024x1024';
+  const size = (IMAGE_SIZES.has(sizeRaw) ? sizeRaw : '1024x1024') as
     '1024x1024' | '1792x1024' | '1024x1792';
-  const rawQuality =
-    typeof options.quality === 'string' ? options.quality.trim().toLowerCase() : 'standard';
-  const quality = (IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard') as 'standard' | 'hd';
+  const qualityRaw =
+    typeof options.quality === 'string' && !/[\0\r\n]/.test(options.quality)
+      ? options.quality.trim().toLowerCase()
+      : 'standard';
+  const quality = (IMAGE_QUALITIES.has(qualityRaw) ? qualityRaw : 'standard') as 'standard' | 'hd';
   const apiKey = sanitizeApiKey(options.apiKey);
   if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);
@@ -197,13 +201,17 @@ export async function generateAudio(options: {
   if (text.length > AUDIO_TEXT_MAX) {
     throw new Error(`text too long (max ${AUDIO_TEXT_MAX})`);
   }
-  const rawVoice =
-    typeof options.voice === 'string' ? options.voice.trim().toLowerCase() : 'alloy';
-  const voice = (TTS_VOICES.has(rawVoice) ? rawVoice : 'alloy') as
+  const voiceRaw =
+    typeof options.voice === 'string' && !/[\0\r\n]/.test(options.voice)
+      ? options.voice.trim().toLowerCase()
+      : 'alloy';
+  const voice = (TTS_VOICES.has(voiceRaw) ? voiceRaw : 'alloy') as
     'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
-  const rawModel =
-    typeof options.model === 'string' ? options.model.trim().toLowerCase() : 'tts-1';
-  const model = (TTS_MODELS.has(rawModel) ? rawModel : 'tts-1') as 'tts-1' | 'tts-1-hd';
+  const modelRaw =
+    typeof options.model === 'string' && !/[\0\r\n]/.test(options.model)
+      ? options.model.trim().toLowerCase()
+      : 'tts-1';
+  const model = (TTS_MODELS.has(modelRaw) ? modelRaw : 'tts-1') as 'tts-1' | 'tts-1-hd';
   const apiKey = sanitizeApiKey(options.apiKey);
   if (!apiKey) throw new Error('apiKey is required');
   const client = getClient(apiKey);

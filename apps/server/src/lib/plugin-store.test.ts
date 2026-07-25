@@ -136,6 +136,26 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(p?.pipeline?.map((s) => s.id)).toEqual(['good']);
   });
 
+  it('listPlugins falls back control-char manifest id to dir name; scrubs description', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: 'bad\nid',
+        name: 'bad\nname',
+        description: 'line1\nline2',
+        version: '1.0.0',
+      }),
+      'utf8',
+    );
+    const list = await listPlugins();
+    const p = list.find((x) => x.id === DIR_NAME);
+    expect(p).toBeTruthy();
+    expect(p!.name).toBe(DIR_NAME);
+    expect(p!.description).toBe('line1 line2');
+  });
+
   it('listPlugins skips hidden skill directories', async () => {
     const hiddenName = `.hidden_plugin_${process.pid}`;
     const hiddenDir = path.join(SKILLS_DIR, hiddenName);

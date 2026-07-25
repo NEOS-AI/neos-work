@@ -223,9 +223,10 @@ export async function deployToVercel(options: {
   const url = safeDeployHostUrl(data.url) ?? safeDeployHostUrl(`https://${data.url}`);
   if (!url) throw new Error('Invalid deployment URL returned');
 
+  const deploymentId = sanitizeDeployId(data.id) || undefined;
   return {
     url,
-    deploymentId: typeof data.id === 'string' ? data.id.trim() || undefined : data.id,
+    deploymentId,
   };
 }
 
@@ -291,8 +292,7 @@ export async function deployToCloudflare(options: {
   const data = await deployRes.json() as { result?: { url?: string; id?: string } };
   const rawUrl = data.result?.url ?? `https://${projectName}.pages.dev`;
   const url = safeDeployHostUrl(rawUrl) ?? `https://${projectName}.pages.dev`;
-  const deploymentId =
-    typeof data.result?.id === 'string' ? data.result.id.trim() || undefined : data.result?.id;
+  const deploymentId = sanitizeDeployId(data.result?.id) || undefined;
   return { url, deploymentId };
 }
 

@@ -147,6 +147,14 @@ describe('mcp-oauth-store', () => {
       'utf8',
     );
     expect(await loadToken(TEST_ID)).toBeNull();
+
+    // Control-char accessToken on disk → treat as missing
+    await fs.writeFile(
+      file,
+      JSON.stringify({ serverId: TEST_ID, accessToken: 'tok\nwith\nctrl' }),
+      'utf8',
+    );
+    expect(await loadToken(TEST_ID)).toBeNull();
     const status = await getTokenStatus(TEST_ID);
     expect(status.connected).toBe(false);
   });

@@ -153,9 +153,11 @@ export function getWorkflowSecrets(): Record<string, string> {
  * Exported for unit tests.
  */
 export function isSafeHttpBaseUrl(url: string): boolean {
-  const trimmed = typeof url === 'string' ? url.trim() : '';
-  if (!trimmed) return false;
-  if (trimmed.length > 2_048 || /[\0\r\n]/.test(trimmed)) return false;
+  if (typeof url !== 'string') return false;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(url)) return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.length > 2_048) return false;
   try {
     const u = new URL(trimmed);
     return u.protocol === 'http:' || u.protocol === 'https:';
@@ -194,16 +196,19 @@ export function getExecutionSettings(runtime?: {
 
   if (runtime?.serverUrl) {
     // Only inject http(s) callback URLs (matches node safeServerUrl defense-in-depth)
-    const url = typeof runtime.serverUrl === 'string' ? runtime.serverUrl.trim().replace(/\/+$/, '') : '';
-    if (url && isSafeHttpBaseUrl(url)) {
-      result.SERVER_URL = url;
+    // isSafeHttpBaseUrl rejects control chars before trim
+    if (typeof runtime.serverUrl === 'string' && isSafeHttpBaseUrl(runtime.serverUrl)) {
+      result.SERVER_URL = runtime.serverUrl.trim().replace(/\/+$/, '');
     }
   }
-  if (runtime?.authToken) {
-    const token = runtime.authToken.trim();
-    if (token) {
-      result.SERVER_TOKEN = token;
-      result.AUTH_TOKEN = token;
+  if (runtime?.authToken && typeof runtime.authToken === 'string') {
+    // Control-char / overlong tokens dropped (header hygiene)
+    if (!/[\0\r\n]/.test(runtime.authToken) && runtime.authToken.length <= 8_192) {
+      const token = runtime.authToken.trim();
+      if (token) {
+        result.SERVER_TOKEN = token;
+        result.AUTH_TOKEN = token;
+      }
     }
   }
   return result;

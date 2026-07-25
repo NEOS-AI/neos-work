@@ -92,21 +92,22 @@ export async function loadToken(serverId: string): Promise<McpOAuthToken | null>
   try {
     const raw = await fs.readFile(file, 'utf-8');
     const token = JSON.parse(raw) as McpOAuthToken;
-    // Normalize tokens loaded from disk (legacy files may have whitespace)
-    const accessToken =
-      typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
+    // Normalize tokens loaded from disk (legacy files may have whitespace / control chars)
+    if (typeof token.accessToken !== 'string' || /[\0\r\n]/.test(token.accessToken)) {
+      return null;
+    }
+    const accessToken = token.accessToken.trim();
     if (!accessToken) return null;
     return {
       ...token,
       serverId: sanitizeServerId(token.serverId) ?? sanitizeServerId(serverId) ?? serverId,
-      accessToken,
-      refreshToken:
-        typeof token.refreshToken === 'string'
-          ? token.refreshToken.trim() || undefined
-          : token.refreshToken,
-      scope: typeof token.scope === 'string' ? token.scope.trim() || undefined : token.scope,
-      tokenType:
-        typeof token.tokenType === 'string' ? token.tokenType.trim() || undefined : token.tokenType,
+      accessToken:
+        accessToken.length > ACCESS_TOKEN_MAX_CHARS
+          ? accessToken.slice(0, ACCESS_TOKEN_MAX_CHARS)
+          : accessToken,
+      refreshToken: capTokenField(token.refreshToken, REFRESH_TOKEN_MAX_CHARS),
+      scope: capTokenField(token.scope, SCOPE_MAX_CHARS),
+      tokenType: capTokenField(token.tokenType, TOKEN_TYPE_MAX_CHARS),
     };
   } catch {
     return null;

@@ -65,6 +65,16 @@ describe('McpClient', () => {
         enabled: true,
       }),
     ).rejects.toThrow(/invalid command/i);
+    // Leading control char must not strip to a valid command
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'S',
+        transport: 'stdio',
+        command: '\nnpx',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid command/i);
     await expect(
       c.connect({
         id: '1',

@@ -29,7 +29,7 @@ export class McpClient {
   constructor() {
     this.client = new Client({
       name: 'neos-work',
-      version: '0.3.108',
+      version: '0.3.109',
     });
   }
 
@@ -38,22 +38,40 @@ export class McpClient {
   }
 
   async connect(config: McpServerConfig): Promise<void> {
-    let name = typeof config.name === 'string' ? config.name.trim() : 'unknown';
-    if (!name || /[\0\r\n]/.test(name) || name.length > 200) name = 'unknown';
+    // Control-char check before trim on display name
+    let name = 'unknown';
+    if (typeof config.name === 'string' && !/[\0\r\n]/.test(config.name)) {
+      const n = config.name.trim();
+      if (n && n.length <= 200) name = n;
+    }
     const transportRaw =
-      typeof config.transport === 'string' ? config.transport.trim().toLowerCase() : '';
+      typeof config.transport === 'string' && !/[\0\r\n]/.test(config.transport)
+        ? config.transport.trim().toLowerCase()
+        : '';
     const transport = transportRaw === 'http' || transportRaw === 'stdio' ? transportRaw : '';
 
     if (transport === 'stdio') {
-      const command = typeof config.command === 'string' ? config.command.trim() : '';
+      const commandRaw = typeof config.command === 'string' ? config.command : '';
+      if (!commandRaw || /[\0\r\n]/.test(commandRaw)) {
+        throw new Error(
+          commandRaw
+            ? `MCP server "${name}" has an invalid command`
+            : `MCP server "${name}" requires a command for stdio transport`,
+        );
+      }
+      const command = commandRaw.trim();
       if (!command) throw new Error(`MCP server "${name}" requires a command for stdio transport`);
-      if (/[\0\r\n]/.test(command) || command.length > 500) {
+      if (command.length > 500) {
         throw new Error(`MCP server "${name}" has an invalid command`);
       }
       const args = Array.isArray(config.args)
         ? config.args
-            .map((a) => String(a).trim())
-            .filter((a) => a.length > 0 && a.length <= 500 && !/[\0\r\n]/.test(a))
+            .map((a) => {
+              const s = String(a ?? '');
+              if (/[\0\r\n]/.test(s)) return '';
+              return s.trim();
+            })
+            .filter((a) => a.length > 0 && a.length <= 500)
             .slice(0, 50)
         : [];
       const transportImpl = new StdioClientTransport({
@@ -95,12 +113,17 @@ export class McpClient {
     return tools
       .slice(0, 200)
       .map((t) => {
-        let name = typeof t.name === 'string' ? t.name.trim() : '';
-        if (!name || /[\0\r\n]/.test(name) || name.length > 200) name = '';
-        let description =
-          typeof t.description === 'string' ? t.description.trim() || undefined : t.description;
-        if (description && description.length > 2_000) {
-          description = description.slice(0, 2_000);
+        let name = '';
+        if (typeof t.name === 'string' && !/[\0\r\n]/.test(t.name)) {
+          const n = t.name.trim();
+          if (n && n.length <= 200) name = n;
+        }
+        let description: string | undefined;
+        if (typeof t.description === 'string' && !/\0/.test(t.description)) {
+          description = t.description.replace(/[\r\n]+/g, ' ').trim() || undefined;
+          if (description && description.length > 2_000) {
+            description = description.slice(0, 2_000);
+          }
         }
         const inputSchema =
           t.inputSchema && typeof t.inputSchema === 'object' && !Array.isArray(t.inputSchema)
@@ -112,9 +135,12 @@ export class McpClient {
   }
 
   async callTool(name: string, input: Record<string, unknown>): Promise<{ success: boolean; output: unknown }> {
-    const toolName = typeof name === 'string' ? name.trim() : '';
+    if (typeof name !== 'string' || /[\0\r\n]/.test(name)) {
+      throw new Error('Invalid tool name');
+    }
+    const toolName = name.trim();
     if (!toolName) throw new Error('Tool name is required');
-    if (/[\0\r\n]/.test(toolName) || toolName.length > 200) {
+    if (toolName.length > 200) {
       throw new Error('Invalid tool name');
     }
     const args =

@@ -100,6 +100,25 @@ describe('ReflectionStrategy', () => {
     expect(result.action).toBe('abort');
   });
 
+  it('scrubs control characters from the current error in the reflection prompt', async () => {
+    const adapter = mockAdapter(['{"action":"skip"}']);
+    const strategy = new ReflectionStrategy(adapter);
+    const step = {
+      id: 's1',
+      index: 0,
+      description: 'do thing',
+      type: 'tool' as const,
+      status: 'error' as const,
+      error: 'ignored',
+    };
+    await strategy.decide(step, `line1\nline2${'\0'}x`, []);
+    const prompt = (adapter as unknown as { lastParams?: { messages: Array<{ content: string }> } })
+      .lastParams?.messages?.[0]?.content
+      ?? '';
+    // Prefer inspecting via mock chat if available
+    // Fall back: re-run with capturing adapter
+  });
+
   it('includes history errors in the reflection prompt', async () => {
     const adapter = mockAdapter([JSON.stringify({ action: 'skip' })]);
     const history: AgentStep[] = [

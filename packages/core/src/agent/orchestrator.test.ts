@@ -85,6 +85,14 @@ describe('AgentOrchestrator options', () => {
 
     const blankModel = new AgentOrchestrator(adapter, reg, { model: '   ' });
     expect((blankModel as unknown as { model: string }).model).toBe('mock-model');
+
+    // Control-char model ids fall back to adapter default
+    const badModel = new AgentOrchestrator(adapter, reg, { model: 'gpt\n4' });
+    expect((badModel as unknown as { model: string }).model).toBe('mock-model');
+    const leadNl = new AgentOrchestrator(adapter, reg, { model: '\nok-model' });
+    expect((leadNl as unknown as { model: string }).model).toBe('mock-model');
+    const overlong = new AgentOrchestrator(adapter, reg, { model: 'm'.repeat(250) });
+    expect((overlong as unknown as { model: string }).model.length).toBe(200);
   });
 });
 
@@ -105,6 +113,22 @@ describe('AgentOrchestrator', () => {
     const events = await collectEvents(orch.run('   '));
     expect(events.map((e) => e.type)).toEqual(['error']);
     expect((events[0] as { error: string }).error).toMatch(/Goal is required/i);
+  });
+
+  it('strips null bytes from goals and rejects null-only goals', async () => {
+    const registry = new ToolRegistry();
+    const adapter = mockAdapter(['[]']);
+    const orch = new AgentOrchestrator(adapter, registry);
+    injectPlan(orch, []);
+
+    // Null-only → empty after strip → required error
+    const empty = await collectEvents(orch.run(`\0\0\0`));
+    expect(empty.map((e) => e.type)).toEqual(['error']);
+    expect((empty[0] as { error: string }).error).toMatch(/Goal is required/i);
+
+    // Null bytes stripped mid-goal; remaining text still plans/runs (empty plan → direct)
+    const ok = await collectEvents(orch.run(`do${'\0'}stuff`));
+    expect(ok.some((e) => e.type === 'done' || e.type === 'plan')).toBe(true);
   });
 
   it('plans, executes a tool step with input, synthesizes, and completes', async () => {

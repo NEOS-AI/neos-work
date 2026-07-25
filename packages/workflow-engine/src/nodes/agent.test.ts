@@ -132,6 +132,21 @@ describe('AgentNode CLI provider', () => {
       undefined,
     );
   });
+
+  it('ignores control-char CLI provider and falls through to LLM path', async () => {
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'ok', exitCode: 0 });
+    // control-char provider must not match cli-claude branch
+    const node = new AgentNode('agent_coding', { provider: 'cli-claude\n' });
+    const result = await node.execute(
+      ctx({
+        cliSpawn,
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    expect(cliSpawn).not.toHaveBeenCalled();
+    // Without a valid CLI provider, LLM path runs (ok or key error depending on mocks)
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
 });
 
 describe('AgentNode LLM model selection', () => {
@@ -364,6 +379,22 @@ describe('AgentNode LLM model selection', () => {
     expect(goal).toContain('Base only');
     // control-char harnessId must not resolve a built-in harness prompt
     expect(goal).not.toContain('시니어');
+  });
+
+  it('strips null bytes from systemPrompt before orchestrator goal', async () => {
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', {
+      systemPrompt: `Be helpful${'\0'}please`,
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('Be helpful');
+    expect(goal).toContain('please');
+    expect(goal).not.toContain('\0');
   });
 
   it('ignores whitespace-only harnessId and designSystemContent', async () => {

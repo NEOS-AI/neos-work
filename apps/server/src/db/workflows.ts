@@ -138,20 +138,27 @@ export function createWorkflow(input: {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }): Workflow {
-  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const nameRaw = typeof input.name === 'string' ? input.name : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(nameRaw)) {
+    throw new Error('name contains invalid control characters');
+  }
+  const name = nameRaw.trim();
   if (!name) {
     throw new Error('name is required');
-  }
-  if (/[\0\r\n]/.test(name)) {
-    throw new Error('name contains invalid control characters');
   }
   if (name.length > WORKFLOW_NAME_MAX_CHARS) {
     throw new Error(`name exceeds max length (${WORKFLOW_NAME_MAX_CHARS})`);
   }
-  let description: string | null =
-    input.description !== undefined
-      ? (typeof input.description === 'string' ? input.description.trim() || null : null)
-      : null;
+  let description: string | null = null;
+  if (input.description !== undefined) {
+    if (typeof input.description === 'string') {
+      if (/[\0\r\n]/.test(input.description)) {
+        throw new Error('description contains invalid control characters');
+      }
+      description = input.description.trim() || null;
+    }
+  }
   if (description && description.length > WORKFLOW_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
   }
@@ -197,18 +204,26 @@ export function updateWorkflow(
   const existing = db.prepare('SELECT * FROM workflow WHERE id = ?').get(trimmed) as WorkflowRow | undefined;
   if (!existing) return undefined;
 
-  let name =
-    input.name !== undefined
-      ? (typeof input.name === 'string' ? input.name.trim() || existing.name : existing.name)
-      : existing.name;
-  if (/[\0\r\n]/.test(name) || name.length > WORKFLOW_NAME_MAX_CHARS) {
-    // Invalid rename leaves row unchanged
+  let name = existing.name;
+  if (input.name !== undefined) {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name)) {
+      // Invalid rename leaves row unchanged
+      return undefined;
+    }
+    name = input.name.trim() || existing.name;
+  }
+  if (name.length > WORKFLOW_NAME_MAX_CHARS) {
     return undefined;
   }
-  let description =
-    input.description !== undefined
-      ? (typeof input.description === 'string' ? input.description.trim() || null : null)
-      : existing.description;
+  let description = existing.description;
+  if (input.description !== undefined) {
+    if (typeof input.description === 'string') {
+      if (/[\0\r\n]/.test(input.description)) return undefined;
+      description = input.description.trim() || null;
+    } else {
+      description = null;
+    }
+  }
   if (description && description.length > WORKFLOW_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
   }

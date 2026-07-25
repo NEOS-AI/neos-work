@@ -321,6 +321,24 @@ describe('workflow runs CRUD', () => {
         edges: [],
       }),
     ).toThrow(/control characters/i);
+    // Leading control char must not be stripped by trim
+    expect(() =>
+      workflows.createWorkflow({
+        name: '\nValidName',
+        domain: 'general',
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      workflows.createWorkflow({
+        name: 'ok',
+        description: 'bad\ndesc',
+        domain: 'general',
+        nodes: [],
+        edges: [],
+      }),
+    ).toThrow(/control characters/i);
     expect(() =>
       workflows.createWorkflow({
         name: 'x'.repeat(201),
@@ -329,6 +347,17 @@ describe('workflow runs CRUD', () => {
         edges: [],
       }),
     ).toThrow(/max length/i);
+
+    const wf = workflows.createWorkflow({
+      name: NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    expect(workflows.updateWorkflow(wf.id, { name: '\nRenamed' })).toBeUndefined();
+    expect(workflows.getWorkflow(wf.id)?.name).toBe(NAME);
+    expect(workflows.updateWorkflow(wf.id, { description: 'line\nbreak' })).toBeUndefined();
+    workflows.deleteWorkflow(wf.id);
   });
 
   it('create/update reject graphs over WORKFLOW_GRAPH_JSON_MAX_CHARS', () => {

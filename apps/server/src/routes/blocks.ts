@@ -41,8 +41,17 @@ blocks.post('/', async (c) => {
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
-  const id = typeof body.id === 'string' ? body.id.trim() : '';
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const idRaw = typeof body.id === 'string' ? body.id : '';
+  const nameRaw = typeof body.name === 'string' ? body.name : '';
+  // Control-char check before trim (createCustomBlock also enforces)
+  if (/[\0\r\n]/.test(idRaw)) {
+    return c.json({ ok: false, error: 'id contains invalid control characters' }, 400);
+  }
+  if (/[\0\r\n]/.test(nameRaw)) {
+    return c.json({ ok: false, error: 'name contains invalid control characters' }, 400);
+  }
+  const id = idRaw.trim();
+  const name = nameRaw.trim();
   if (!id || !name) {
     return c.json({ ok: false, error: 'id and name are required' }, 400);
   }

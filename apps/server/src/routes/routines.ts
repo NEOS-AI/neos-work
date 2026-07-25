@@ -65,30 +65,39 @@ routines.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  const workflowId = typeof body.workflowId === 'string' ? body.workflowId.trim() : '';
-  const schedule = typeof body.schedule === 'string' ? body.schedule.trim() : '';
-  const timezone =
-    typeof body.timezone === 'string' ? body.timezone.trim() || undefined : undefined;
-
-  if (!name || name.length > 200 || /[\0\r\n]/.test(name)) {
+  const nameRaw = typeof body.name === 'string' ? body.name : '';
+  const workflowIdRaw = typeof body.workflowId === 'string' ? body.workflowId : '';
+  const scheduleRaw = typeof body.schedule === 'string' ? body.schedule : '';
+  const timezoneRaw = typeof body.timezone === 'string' ? body.timezone : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(nameRaw) || nameRaw.trim().length > 200) {
     return c.json({ ok: false, error: 'Invalid name' }, 400);
   }
-  if (!workflowId || workflowId.length > 100 || /[\0\r\n]/.test(workflowId)) {
+  if (/[\0\r\n]/.test(workflowIdRaw) || workflowIdRaw.trim().length > 100) {
+    return c.json({ ok: false, error: 'workflowId is required' }, 400);
+  }
+  if (/[\0\r\n]/.test(scheduleRaw) || scheduleRaw.trim().length > 200) {
+    return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
+  }
+  if (timezoneRaw && (/[\0\r\n]/.test(timezoneRaw) || timezoneRaw.trim().length > 100)) {
+    return c.json({ ok: false, error: 'Invalid timezone' }, 400);
+  }
+  const name = nameRaw.trim();
+  const workflowId = workflowIdRaw.trim();
+  const schedule = scheduleRaw.trim();
+  const timezone = timezoneRaw.trim() || undefined;
+
+  if (!name) {
+    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  }
+  if (!workflowId) {
     return c.json({ ok: false, error: 'workflowId is required' }, 400);
   }
   if (!schedule) {
     return c.json({ ok: false, error: 'schedule is required' }, 400);
   }
-  // Cron expression practical bound (5 fields + long tokens)
-  if (schedule.length > 200 || /[\0\r\n]/.test(schedule)) {
-    return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
-  }
   if (!cron.validate(schedule)) {
     return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
-  }
-  if (timezone && (timezone.length > 100 || /[\0\r\n]/.test(timezone))) {
-    return c.json({ ok: false, error: 'Invalid timezone' }, 400);
   }
 
   // Validate workflow exists
@@ -130,32 +139,38 @@ routines.put('/:id', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const name =
-    body.name !== undefined
-      ? (typeof body.name === 'string' ? body.name.trim() : '')
-      : undefined;
-  if (name !== undefined && (!name || name.length > 200 || /[\0\r\n]/.test(name))) {
-    return c.json({ ok: false, error: 'Invalid name' }, 400);
+  let name: string | undefined;
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || /[\0\r\n]/.test(body.name)) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
+    name = body.name.trim();
+    if (!name || name.length > 200) {
+      return c.json({ ok: false, error: 'Invalid name' }, 400);
+    }
   }
-  const schedule =
-    body.schedule !== undefined
-      ? (typeof body.schedule === 'string' ? body.schedule.trim() : '')
-      : undefined;
-  if (schedule !== undefined && !schedule) {
-    return c.json({ ok: false, error: 'schedule is required' }, 400);
+  let schedule: string | undefined;
+  if (body.schedule !== undefined) {
+    if (typeof body.schedule !== 'string' || /[\0\r\n]/.test(body.schedule)) {
+      return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
+    }
+    schedule = body.schedule.trim();
+    if (!schedule) {
+      return c.json({ ok: false, error: 'schedule is required' }, 400);
+    }
+    if (schedule.length > 200 || !cron.validate(schedule)) {
+      return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
+    }
   }
-  if (
-    schedule !== undefined
-    && (schedule.length > 200 || /[\0\r\n]/.test(schedule) || !cron.validate(schedule))
-  ) {
-    return c.json({ ok: false, error: 'Invalid cron schedule' }, 400);
-  }
-  const timezone =
-    body.timezone !== undefined
-      ? (typeof body.timezone === 'string' ? body.timezone.trim() || 'UTC' : 'UTC')
-      : undefined;
-  if (timezone !== undefined && (timezone.length > 100 || /[\0\r\n]/.test(timezone))) {
-    return c.json({ ok: false, error: 'Invalid timezone' }, 400);
+  let timezone: string | undefined;
+  if (body.timezone !== undefined) {
+    if (typeof body.timezone !== 'string' || /[\0\r\n]/.test(body.timezone)) {
+      return c.json({ ok: false, error: 'Invalid timezone' }, 400);
+    }
+    timezone = body.timezone.trim() || 'UTC';
+    if (timezone.length > 100) {
+      return c.json({ ok: false, error: 'Invalid timezone' }, 400);
+    }
   }
 
   const updated = db.updateRoutine(id, {
