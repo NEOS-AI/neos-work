@@ -382,8 +382,10 @@ describe('Settings page', () => {
 
     // HTTP transport: control-char URL rejected
     fireEvent.click(screen.getByRole('button', { name: 'http' }));
-    await waitFor(() => expect(screen.getByPlaceholderText(/https?:\/\//i)).toBeInTheDocument());
-    fireEvent.change(screen.getByPlaceholderText(/https?:\/\//i), {
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Server URL (e.g. http://localhost:3000/sse)')).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByPlaceholderText('Server URL (e.g. http://localhost:3000/sse)'), {
       target: { value: `http://x${'\0'}` },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));

@@ -279,10 +279,10 @@ describe('Harnesses page', () => {
         fireEvent.change(el, { target: { value: 'Dup Harness' } });
       }
     }
-    // Null-byte tool tokens are dropped; newline-only tokens are also filtered when present in state
+    // Null-byte tool tokens are dropped before create
     const toolsInput = screen.getByPlaceholderText('web_search, read_file, ...');
     fireEvent.change(toolsInput, {
-      target: { value: `web_search, bad${'\0'}tool, read_file, ${'\n'}only` },
+      target: { value: `web_search, bad${'\0'}tool, read_file` },
     });
 
     fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));

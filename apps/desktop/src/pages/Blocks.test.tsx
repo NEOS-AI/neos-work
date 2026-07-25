@@ -159,16 +159,18 @@ describe('Blocks page', () => {
     expect(await screen.findByText('Name or ID contains invalid control characters')).toBeInTheDocument();
     expect(createBlock).not.toHaveBeenCalled();
 
-    // Control-char id also rejected
+    // ID input sanitizes non [a-z0-9_] to underscores (control chars never reach validation)
     fireEvent.change(screen.getByPlaceholderText('my_custom_block'), {
       target: { value: `bad${'\0'}id` },
     });
+    expect((screen.getByPlaceholderText('my_custom_block') as HTMLInputElement).value).toBe('bad_id');
     fireEvent.change(screen.getByPlaceholderText('My Custom Block'), {
       target: { value: 'Valid Name' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByText('Name or ID contains invalid control characters')).toBeInTheDocument();
-    expect(createBlock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(createBlock).toHaveBeenCalledWith(expect.objectContaining({ id: 'bad_id', name: 'Valid Name' }));
+    });
   });
 
   it('requires id, name, and prompt template when creating a prompt block', async () => {
