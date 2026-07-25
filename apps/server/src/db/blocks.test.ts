@@ -346,6 +346,25 @@ describe('custom blocks CRUD', () => {
         description: 'd\0x',
       }),
     ).toThrow(/control characters/i);
+    // Create-path null-byte hygiene for prompt/template and IO fields
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock('_cov_blk_x'),
+        promptTemplate: `Hello {{q}}${'\0'}`,
+      }),
+    ).toThrow(/promptTemplate contains invalid control characters/i);
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock('_cov_blk_x'),
+        inputDescription: `in${'\0'}`,
+      }),
+    ).toThrow(/inputDescription contains invalid control characters/i);
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock('_cov_blk_x'),
+        outputDescription: `out${'\0'}`,
+      }),
+    ).toThrow(/outputDescription contains invalid control characters/i);
     expect(() =>
       createCustomBlock({
         ...sampleBlock('_cov_blk_x'),

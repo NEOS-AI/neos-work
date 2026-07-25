@@ -144,6 +144,14 @@ body
       '',
     ].join('\n');
     expect(parseSkillFile(inFrontmatterKey, '/skills/hello.md', 'local')).toBeNull();
+
+    // Non-string content is coerced then subject to the same null-byte gate
+    const bufferish = {
+      toString() {
+        return ['---', 'name: hello', '---', `body${'\0'}x`, ''].join('\n');
+      },
+    };
+    expect(parseSkillFile(bufferish as unknown as string, '/skills/hello.md', 'local')).toBeNull();
   });
 
   it('strips quoted values and defaults description', () => {

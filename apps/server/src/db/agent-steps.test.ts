@@ -60,6 +60,16 @@ describe('agent_step CRUD', () => {
     expect(() =>
       createAgentStep({ sessionId: `\n${session.id}`, stepIndex: 0, type: 'plan' }),
     ).toThrow(/sessionId is invalid/i);
+    // Control-only sessionId (blank after trim) is invalid — not "required" (check order)
+    expect(() =>
+      createAgentStep({ sessionId: '\n', stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId is invalid/i);
+    expect(() =>
+      createAgentStep({ sessionId: '\r\n', stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId is invalid/i);
+    expect(() =>
+      createAgentStep({ sessionId: `sid${'\0'}`, stepIndex: 0, type: 'plan' }),
+    ).toThrow(/sessionId is invalid/i);
     // Leading control-char type must not strip to a valid type
     expect(() =>
       createAgentStep({ sessionId: session.id, stepIndex: 0, type: '\nplan' as never }),

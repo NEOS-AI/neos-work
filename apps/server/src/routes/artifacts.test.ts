@@ -273,9 +273,12 @@ describe('artifacts routes', () => {
       body: JSON.stringify({ mode: 'rerun' }),
     });
     expect(rerun.status).toBe(200);
-    const rerunBody = await rerun.json() as { meta: { mode: string; workflowId: string } };
+    const rerunBody = await rerun.json() as {
+      meta: { mode: string; workflowId: string; message?: string; nodeId?: string | null };
+    };
     expect(rerunBody.meta.mode).toBe('rerun');
     expect(rerunBody.meta.workflowId).toBe(wf.id);
+    expect(rerunBody.meta.message).toMatch(/Re-run the workflow/i);
 
     const del = await artifacts.request(`/${id}`, { method: 'DELETE' });
     expect(del.status).toBe(200);

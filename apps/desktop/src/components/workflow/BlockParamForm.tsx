@@ -27,28 +27,30 @@ export function BlockParamForm(props: {
         if (typeof param.key !== 'string' || /[\0\r\n]/.test(param.key) || !param.key.trim()) {
           return null;
         }
-        const value = props.value[param.key];
+        // Prefer trimmed key (align with defaultsForBlock / BlockNode normalize)
+        const key = param.key.trim();
+        const value = props.value[key] ?? props.value[param.key];
         if (param.type === 'number') {
           return (
             <NumberField
-              key={param.key}
+              key={key}
               label={param.label}
               value={typeof value === 'number' ? value : undefined}
               min={param.min}
               max={param.max}
               description={param.description}
-              onChange={(next) => patchParam(param.key, next)}
+              onChange={(next) => patchParam(key, next)}
             />
           );
         }
         if (param.type === 'boolean') {
           return (
             <CheckboxField
-              key={param.key}
+              key={key}
               label={param.label}
               value={value === true}
               description={param.description}
-              onChange={(next) => patchParam(param.key, next)}
+              onChange={(next) => patchParam(key, next)}
             />
           );
         }
@@ -61,7 +63,7 @@ export function BlockParamForm(props: {
             });
           return (
             <SelectField
-              key={param.key}
+              key={key}
               label={param.label}
               value={
                 typeof value === 'string' && !/[\0\r\n]/.test(value) ? value.trim() : ''
@@ -70,21 +72,21 @@ export function BlockParamForm(props: {
               options={[{ value: '', label: 'Select...' }, ...options]}
               onChange={(next) => {
                 if (next && /[\0\r\n]/.test(next)) return;
-                patchParam(param.key, next);
+                patchParam(key, next ? next.trim() : next);
               }}
             />
           );
         }
         return (
           <TextField
-            key={param.key}
+            key={key}
             label={param.label}
             value={typeof value === 'string' ? value : ''}
             description={param.description}
             onChange={(next) => {
               // Null-byte string params never applied (align with BlockNode)
               if (/\0/.test(next)) return;
-              patchParam(param.key, next);
+              patchParam(key, next);
             }}
           />
         );

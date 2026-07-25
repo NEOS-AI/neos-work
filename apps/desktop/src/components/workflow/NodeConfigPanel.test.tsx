@@ -221,6 +221,90 @@ describe('NodeConfigPanel', () => {
     expect(onUpdateDescription).not.toHaveBeenCalled();
   });
 
+  it('omits control-char design system options and rejects control-char selection', async () => {
+    const onUpdateDesignSystemId = vi.fn();
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds-ok',
+          name: 'Safe DS',
+          path: '/x',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+        {
+          id: `bad${'\0'}ds`,
+          name: 'Evil DS',
+          path: '/y',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+        {
+          id: '\nds-lead',
+          name: 'Lead Ctrl',
+          path: '/z',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+        {
+          id: '  pad-ds  ',
+          name: 'Padded DS',
+          path: '/p',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    });
+
+    render(
+      <NodeConfigPanel
+        selectedNode={null}
+        validationIssues={[]}
+        onPatchNodeData={() => {}}
+        designSystemId=""
+        onUpdateDesignSystemId={onUpdateDesignSystemId}
+      />,
+    );
+
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+    const select = screen.getByRole('combobox');
+    const values = Array.from(select.querySelectorAll('option')).map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).toContain('ds-ok');
+    expect(values).toContain('pad-ds');
+    expect(values.some((v) => v.includes('\0') || v.includes('\n'))).toBe(false);
+    expect(values).not.toContain('ds-lead');
+    expect(screen.queryByText('Evil DS')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lead Ctrl')).not.toBeInTheDocument();
+
+    // Valid selection trims and applies
+    fireEvent.change(select, { target: { value: 'ds-ok' } });
+    expect(onUpdateDesignSystemId).toHaveBeenCalledWith('ds-ok');
+
+    onUpdateDesignSystemId.mockClear();
+    fireEvent.change(select, { target: { value: 'pad-ds' } });
+    expect(onUpdateDesignSystemId).toHaveBeenCalledWith('pad-ds');
+
+    // Clearing selection (None) is allowed
+    onUpdateDesignSystemId.mockClear();
+    fireEvent.change(select, { target: { value: '' } });
+    expect(onUpdateDesignSystemId).toHaveBeenCalledWith('');
+  });
+
   it('rejects null-byte system prompt and control-char web_search query', async () => {
     const onPatchNodeData = vi.fn();
     const agentNode = {
@@ -274,6 +358,83 @@ describe('NodeConfigPanel', () => {
       's1',
       expect.objectContaining({ config: expect.objectContaining({ query: 'safe query' }) }),
     );
+  });
+
+  it('rejects control-char slack channel and null-byte text templates / media / deploy', async () => {
+    const onPatchNodeData = vi.fn();
+    const slackNode = {
+      id: 'sl1',
+      type: 'slack_message',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'slack_message',
+        label: 'Slack',
+        config: { channel: '#ok', textTemplate: 'hi' },
+      },
+    } as unknown as Node;
+
+    const { rerender } = render(
+      <NodeConfigPanel
+        selectedNode={slackNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue('#ok'), {
+      target: { value: `ch${'\0'}x` },
+    });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByDisplayValue('hi'), {
+      target: { value: `tmpl${'\0'}x` },
+    });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
+
+    onPatchNodeData.mockClear();
+    const mediaNode = {
+      id: 'm1',
+      type: 'media',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'media', label: 'Img', config: { mediaType: 'image', prompt: 'cat' } },
+    } as unknown as Node;
+    rerender(
+      <NodeConfigPanel
+        selectedNode={mediaNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    fireEvent.change(screen.getByDisplayValue('cat'), {
+      target: { value: `p${'\0'}rompt` },
+    });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
+
+    onPatchNodeData.mockClear();
+    const deployNode = {
+      id: 'd1',
+      type: 'deploy',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'deploy',
+        label: 'Deploy',
+        config: { projectName: 'my-app', content: '<html/>' },
+      },
+    } as unknown as Node;
+    rerender(
+      <NodeConfigPanel
+        selectedNode={deployNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    fireEvent.change(screen.getByDisplayValue('my-app'), {
+      target: { value: `proj${'\0'}x` },
+    });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByDisplayValue('<html/>'), {
+      target: { value: `<html>${'\0'}</html>` },
+    });
+    expect(onPatchNodeData).not.toHaveBeenCalled();
   });
 
   it('shows CLI hint when agent provider is cli-*', async () => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BlockParamForm } from './BlockParamForm.js';
 import type { WorkflowBlock } from '../../lib/engine.js';
@@ -111,5 +111,55 @@ describe('BlockParamForm', () => {
     await user.clear(num);
     await user.type(num, '5');
     expect(onChange.mock.calls.some((c) => c[0].n === 5)).toBe(true);
+  });
+
+  it('rejects null-byte string params and skips control-char select options', async () => {
+    const onChange = vi.fn();
+    const block = makeBlock([
+      { key: 'query', type: 'string', label: 'Query' },
+      {
+        key: 'lang',
+        type: 'select',
+        label: 'Language',
+        options: ['en', `bad${'\0'}opt`, '\nlead', 'ko'],
+      },
+      { key: `bad${'\0'}key`, type: 'string', label: 'Hidden' },
+    ]);
+    render(
+      <BlockParamForm block={block} value={{ query: 'ok' }} onChange={onChange} />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue('ok'), {
+      target: { value: `q${'\0'}x` },
+    });
+    expect(onChange).not.toHaveBeenCalled();
+
+    expect(screen.queryByLabelText(/Hidden/i)).not.toBeInTheDocument();
+
+    const select = screen.getByLabelText(/Language/i);
+    const optionValues = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(optionValues).toContain('en');
+    expect(optionValues).toContain('ko');
+    expect(optionValues).not.toContain('lead');
+    expect(optionValues.some((v) => v.includes('\0'))).toBe(false);
+  });
+
+  it('reads/writes padded param keys via trimmed key (align defaultsForBlock)', async () => {
+    const onChange = vi.fn();
+    const block = makeBlock([{ key: '  url  ', type: 'string', label: 'URL' }]);
+    // Value stored under trimmed key (as defaultsForBlock / BlockNode would)
+    render(
+      <BlockParamForm block={block} value={{ url: 'https://example.com' }} onChange={onChange} />,
+    );
+    expect(screen.getByDisplayValue('https://example.com')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByDisplayValue('https://example.com'), {
+      target: { value: 'https://next.example' },
+    });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://next.example' }),
+    );
+    // Must not invent a padded key in the map
+    expect(onChange.mock.calls[0][0]).not.toHaveProperty('  url  ');
   });
 });

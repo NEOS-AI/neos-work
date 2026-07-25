@@ -125,4 +125,45 @@ describe('HarnessSelector', () => {
     await waitFor(() => expect(listHarnesses).toHaveBeenCalled());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
+
+  it('omits control-char harness ids from options and trims padded value match', async () => {
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        ...harnesses,
+        {
+          id: `\nbad-id`,
+          name: 'Evil',
+          domain: 'coding',
+          description: 'should not show',
+          systemPrompt: 'x',
+          allowedTools: [],
+          isBuiltIn: false,
+        },
+        {
+          id: '  pad-h  ',
+          name: 'Padded',
+          domain: 'coding',
+          description: 'Padded harness details',
+          systemPrompt: 'x',
+          allowedTools: ['read'],
+          isBuiltIn: false,
+        },
+      ],
+    });
+
+    render(
+      <HarnessSelector nodeType="agent_coding" value="  pad-h  " onChange={() => {}} />,
+    );
+
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => {
+      expect(screen.getByText('Padded harness details')).toBeInTheDocument();
+    });
+    const values = Array.from(select.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toContain('pad-h');
+    expect(values).not.toContain('bad-id');
+    expect(values).not.toContain('\nbad-id');
+    expect(screen.queryByText(/Evil/)).not.toBeInTheDocument();
+  });
 });

@@ -105,10 +105,32 @@ describe('sessions CRUD', () => {
     expect(wsNum.path).toBe('42');
     deleteWorkspace(wsNum.id);
 
+    const wsBool = createWorkspace({ name: `${WS_NAME}-b`, path: true as unknown as string });
+    expect(wsBool.path).toBe('true');
+    deleteWorkspace(wsBool.id);
+
     // Control-char after coerce (string with leading \n still invalid)
     expect(() =>
       createWorkspace({ name: `${WS_NAME}-c`, path: '\n/tmp/x' }),
     ).toThrow(/control characters/i);
+
+    // Non-string whose String() contains control chars is rejected
+    expect(() =>
+      createWorkspace({
+        name: `${WS_NAME}-o`,
+        path: { toString: () => '/tmp/\nbad' } as unknown as string,
+      }),
+    ).toThrow(/control characters/i);
+
+    // Blank after coerce/trim → null path
+    const wsBlank = createWorkspace({ name: `${WS_NAME}-z`, path: '   ' as unknown as string });
+    expect(wsBlank.path).toBeNull();
+    deleteWorkspace(wsBlank.id);
+
+    // null/undefined path stays null
+    const wsNull = createWorkspace({ name: `${WS_NAME}-null` });
+    expect(wsNull.path).toBeNull();
+    deleteWorkspace(wsNull.id);
   });
 
   it('rejects oversized message content; truncates huge metadata', () => {
