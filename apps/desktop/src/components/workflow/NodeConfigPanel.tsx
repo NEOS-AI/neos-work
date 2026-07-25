@@ -615,13 +615,17 @@ function WorkflowWebhookSection() {
   const webhookUrl = `${base}/api/webhook/${workflowId}`;
 
   const flashCopy = (label: string) => {
-    setCopyMsg(label);
+    setCopyMsg(
+      scrubDisplayText(label, { collapseLines: true, maxChars: 200 }) || 'Done',
+    );
     setTimeout(() => setCopyMsg(null), 1500);
   };
 
   const copyText = async (text: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      // Scrub secret/URL before clipboard (null-byte defense)
+      const safe = scrubDisplayText(text, { maxChars: 10_000 });
+      await navigator.clipboard.writeText(safe);
       flashCopy(label);
     } catch {
       flashCopy('Copy failed');
@@ -665,7 +669,16 @@ function WorkflowWebhookSection() {
             setBusy(true);
             try {
               const res = await client.testWebhookFire(workflowId, { source: 'config-test-fire' });
-              flashCopy(res.ok ? `Webhook fired (${res.status})` : (res.error ?? 'Fire failed'));
+              if (res.ok) {
+                flashCopy(`Webhook fired (${res.status})`);
+              } else {
+                const err =
+                  scrubDisplayText((res as { error?: string }).error, {
+                    collapseLines: true,
+                    maxChars: 200,
+                  }) || 'Fire failed';
+                flashCopy(err);
+              }
               // refresh rate limit remaining
               const again = await client.getWebhookSecret(workflowId);
               if (again.ok && again.data?.rateLimit) {
@@ -696,7 +709,10 @@ function WorkflowWebhookSection() {
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-mono truncate flex-1" style={{ color: 'var(--text-secondary)' }}>
           {secret
-            ? (showSecret ? secret : `${secret.slice(0, 8)}…${secret.slice(-4)}`)
+            ? (() => {
+                const s = scrubDisplayText(secret, { collapseLines: true, maxChars: 200 }) || '••••';
+                return showSecret ? s : `${s.slice(0, 8)}…${s.slice(-4)}`;
+              })()
             : 'Loading secret…'}
         </span>
         <button
@@ -733,7 +749,9 @@ function WorkflowWebhookSection() {
         </button>
       </div>
       {copyMsg && (
-        <p className="text-[10px]" style={{ color: '#10b981' }}>{copyMsg}</p>
+        <p className="text-[10px]" style={{ color: '#10b981' }}>
+          {scrubDisplayText(copyMsg, { collapseLines: true, maxChars: 200 }) || copyMsg}
+        </p>
       )}
     </div>
   );

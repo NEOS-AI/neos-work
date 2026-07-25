@@ -407,4 +407,46 @@ describe('ArtifactPreview', () => {
     await waitFor(() => expect(screen.getByText('Output.html')).toBeInTheDocument());
   });
 
+  it('scrubs control-char delete/rename API errors in status banner', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-err',
+      workflowId: 'wf-1',
+      name: 'x.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    deleteArtifact.mockResolvedValue({
+      ok: false,
+      error: `delete${'\n'}denied${'\0'}!`,
+    });
+    updateArtifact.mockResolvedValue({
+      ok: false,
+      error: `rename${'\0'}fail\nnow`,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('new-name.html');
+
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('x.html')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/delete denied!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    expect(promptSpy).toHaveBeenCalledWith('Rename artifact', 'x.html');
+    await waitFor(() => {
+      expect(screen.getByText(/renamefail now/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    promptSpy.mockRestore();
+  });
+
 });

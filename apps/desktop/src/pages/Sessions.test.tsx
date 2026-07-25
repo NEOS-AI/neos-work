@@ -460,6 +460,45 @@ describe('Sessions page', () => {
     });
   });
 
+  it('scrubs control chars in tool step name, input JSON, and output', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield {
+          type: 'tool_use',
+          toolName: `read${'\0'}_file`,
+          toolUseId: 'tu-scrub',
+          toolInput: { path: `a${'\0'}.ts` },
+        };
+        yield { type: 'tool_result', toolResult: `body${'\0'}line\nok` };
+        yield { type: 'text', content: 'done' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'scrub tools' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByText('read_file')).toBeInTheDocument();
+    });
+    // Expand tool step to show input/output (starts collapsed when not pending)
+    fireEvent.click(screen.getByText('read_file'));
+    await waitFor(() => {
+      // null-byte stripped from path before stringify (not left as \u0000 escape)
+      expect(document.body.textContent).toMatch(/"path": "a\.ts"/);
+      expect(document.body.textContent).toMatch(/bodyline/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    expect(document.body.textContent).not.toContain('\\u0000');
+  });
+
   it('approves pending tool use via confirmTool', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({ ok: true, data: [] });
@@ -697,6 +736,59 @@ describe('Sessions page', () => {
     await waitFor(() => {
       expect(chat).toHaveBeenCalled();
       expect(document.body.textContent).toMatch(/Error: boomerr line/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('scrubs control-char network exceptions and empty stream errors for chat/agent', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    // Chat: exception path with control-char message
+    chat.mockImplementation(() => {
+      throw new Error('net' + String.fromCharCode(0) + 'fail' + String.fromCharCode(10) + 'ed');
+    });
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'hi' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/Error: netfail ed/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    // Chat: empty-after-scrub stream error → unknown error
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'error', content: String.fromCharCode(0) + String.fromCharCode(10) };
+      })(),
+    );
+    fireEvent.change(input, { target: { value: 'again' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/Error: unknown error/);
+    });
+
+    // Agent: stream error field scrubbed
+    runAgent.mockImplementation(() =>
+      (async function* () {
+        yield {
+          type: 'error',
+          error: 'agent' + String.fromCharCode(0) + 'down' + String.fromCharCode(10) + 'x',
+        };
+      })(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Agent/i }));
+    fireEvent.change(input, { target: { value: 'plan' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(runAgent).toHaveBeenCalled();
+      expect(document.body.textContent).toMatch(/Error: agentdown x/);
     });
     expect(document.body.textContent).not.toContain('\0');
   });

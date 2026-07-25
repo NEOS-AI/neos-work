@@ -941,9 +941,42 @@ function ThinkingBlock({
 
 // --- Tool Step Card ---
 
+/** Scrub string leaves before JSON.stringify so `\0` never becomes a `\u0000` escape in the DOM. */
+function scrubJsonValue(v: unknown, depth = 0): unknown {
+  if (depth > 6) return '[…]';
+  if (typeof v === 'string') return scrubDisplayText(v, { maxChars: 10_000 });
+  if (Array.isArray(v)) return v.slice(0, 100).map((item) => scrubJsonValue(item, depth + 1));
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (Object.keys(out).length >= 100) break;
+      if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
+      const key = k.trim().slice(0, 200);
+      if (!key) continue;
+      out[key] = scrubJsonValue(val, depth + 1);
+    }
+    return out;
+  }
+  return v;
+}
+
+function serializeToolPayload(value: unknown, maxChars: number): string {
+  if (typeof value === 'string') return scrubDisplayText(value, { maxChars });
+  try {
+    return scrubDisplayText(JSON.stringify(scrubJsonValue(value), null, 2), { maxChars });
+  } catch {
+    return scrubDisplayText(String(value), { maxChars });
+  }
+}
+
 function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }) {
   const { client } = useEngine();
   const [isOpen, setIsOpen] = useState(step.status === 'pending');
+  const toolNameSafe =
+    scrubDisplayText(step.toolName, { collapseLines: true, maxChars: 120 }) || 'tool';
+  const inputSafe = serializeToolPayload(step.input ?? {}, 20_000);
+  const outputSafe =
+    step.output === undefined ? '' : serializeToolPayload(step.output, 50_000);
 
   const handleConfirm = async (approved: boolean) => {
     if (!client || !step.toolUseId) return;
@@ -983,7 +1016,7 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
         style={{ color: 'var(--text-secondary)' }}
       >
         {statusIcon}
-        <span className="font-mono">{step.toolName}</span>
+        <span className="font-mono">{toolNameSafe}</span>
         {step.status === 'pending' && (
           <span className="ml-1 text-amber-400">Awaiting approval</span>
         )}
@@ -1005,7 +1038,7 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
         <div className="border-t px-3 py-2 text-xs" style={{ borderColor: 'var(--border-primary)' }}>
           <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>Input:</div>
           <pre className="mb-2 overflow-x-auto rounded p-2" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-            {JSON.stringify(step.input, null, 2)}
+            {inputSafe}
           </pre>
 
           {/* Confirmation buttons for pending destructive tools */}
@@ -1032,9 +1065,7 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
             <>
               <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>Output:</div>
               <pre className="overflow-x-auto rounded p-2" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-                {typeof step.output === 'string'
-                  ? step.output
-                  : JSON.stringify(step.output, null, 2)}
+                {outputSafe}
               </pre>
             </>
           )}

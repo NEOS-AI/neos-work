@@ -183,12 +183,20 @@ export function ArtifactPreview({
     try {
       const res = await client.refreshArtifact(selectedId, 'rerun');
       if (res.ok && res.meta?.mode === 'rerun') {
-        setStatusMsg(res.meta.message ?? 'Re-running workflow…');
+        const meta =
+          scrubDisplayText(res.meta.message, { collapseLines: true, maxChars: 200 })
+          || 'Re-running workflow…';
+        setStatusMsg(meta);
         onRerunWorkflow?.();
       } else if (onRerunWorkflow) {
         onRerunWorkflow();
       } else {
-        setStatusMsg((res as { error?: string }).error ?? 'Re-run not available');
+        setStatusMsg(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Re-run not available',
+        );
       }
     } finally {
       setRefreshing(false);
@@ -209,7 +217,12 @@ export function ArtifactPreview({
         setStatusMsg('Artifact deleted');
         loadList();
       } else {
-        setStatusMsg((res as { error?: string }).error ?? 'Delete failed');
+        setStatusMsg(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed',
+        );
       }
     } finally {
       setRefreshing(false);
@@ -219,7 +232,9 @@ export function ArtifactPreview({
 
   const handleRename = async () => {
     if (!client || !selectedId || !selected) return;
-    const next = window.prompt('Rename artifact', selected.name);
+    const seedName =
+      scrubDisplayText(selected.name, { collapseLines: true, maxChars: 200 }) || 'artifact';
+    const next = window.prompt('Rename artifact', seedName);
     if (next === null) return;
     // Control-char / overlong names rejected (check before trim; align with artifacts API)
     if (/[\0\r\n]/.test(next)) {
@@ -242,7 +257,12 @@ export function ArtifactPreview({
         setStatusMsg('Renamed');
         loadList();
       } else {
-        setStatusMsg((res as { error?: string }).error ?? 'Rename failed');
+        setStatusMsg(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Rename failed',
+        );
       }
     } finally {
       setRefreshing(false);

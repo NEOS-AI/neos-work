@@ -76,8 +76,12 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
         if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
         const key = k.trim();
         if (!key || key.length > 200) continue;
-        // Null-byte string values never applied
-        if (typeof v === 'string' && /\0/.test(v)) continue;
+        // Null-byte string values never applied; cap string lengths
+        if (typeof v === 'string') {
+          if (/\0/.test(v)) continue;
+          clean[key] = v.length > 10_000 ? v.slice(0, 10_000) : v;
+          continue;
+        }
         clean[key] = v;
       }
       onConfirm(clean);
@@ -122,9 +126,11 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
           spellCheck={false}
         />
 
-        {parseError && (
-          <p className="text-xs text-red-400">{parseError}</p>
-        )}
+        {parseError ? (
+          <p className="text-xs text-red-400">
+            {scrubDisplayText(parseError, { collapseLines: true, maxChars: 200 }) || 'Invalid JSON.'}
+          </p>
+        ) : null}
 
         <div className="flex justify-end gap-2">
           <button

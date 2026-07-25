@@ -167,6 +167,34 @@ describe('Harnesses page', () => {
     expect(deleteHarness).not.toHaveBeenCalled();
   });
 
+  it('scrubs control-char harness name in delete confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'h-del',
+          name: 'Evil' + String.fromCharCode(0) + 'Harness' + String.fromCharCode(10) + 'X',
+          domain: 'coding',
+          description: 'd',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: false,
+        },
+      ],
+    });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText(/EvilHarness/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    expect(confirmSpy).toHaveBeenCalled();
+    const msg = String(confirmSpy.mock.calls[0]?.[0] ?? '');
+    // i18n mock formats as harness.confirmDelete:<name>
+    expect(msg).toContain('harness.confirmDelete:');
+    expect(msg).toContain('EvilHarness X');
+    expect(msg).not.toContain('\0');
+    expect(deleteHarness).not.toHaveBeenCalled();
+  });
+
   it('Escape closes modal and clears search', async () => {
     const user = userEvent.setup();
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });

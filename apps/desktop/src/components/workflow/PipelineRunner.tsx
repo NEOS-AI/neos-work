@@ -102,7 +102,9 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
             next.waiting = null;
             break;
           case 'pipeline.failed':
-            next.failed = e.error as string;
+            next.failed =
+              scrubDisplayText(e.error, { collapseLines: true, maxChars: 2_000 })
+              || 'Pipeline failed';
             break;
         }
         return next;

@@ -86,7 +86,9 @@ export function DesignSystems() {
 
   const handleDelete = async (id: string, name: string) => {
     if (!client) return;
-    if (!window.confirm(`Delete design system "${name}"? This cannot be undone.`)) return;
+    const nameSafe =
+      scrubDisplayText(name, { collapseLines: true, maxChars: 200 }) || id || 'design system';
+    if (!window.confirm(`Delete design system "${nameSafe}"? This cannot be undone.`)) return;
     const res = await client.deleteDesignSystem(id);
     if (res.ok) setSystems((prev) => prev.filter((s) => s.id !== id));
   };

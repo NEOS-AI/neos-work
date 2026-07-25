@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunInputsDialog } from './RunInputsDialog.js';
 
@@ -150,5 +150,21 @@ describe('RunInputsDialog', () => {
     await user.paste(JSON.stringify({ a: 'x', b: `y${'\0'}z` }));
     await user.click(screen.getByRole('button', { name: /^run$/i }));
     expect(onConfirm).toHaveBeenCalledWith({ a: 'x' });
+  });
+
+  it('strips null bytes and caps JSON editor length on change', () => {
+    render(
+      <RunInputsDialog defaultInputs={{}} onConfirm={() => {}} onCancel={() => {}} />,
+    );
+    const area = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    // Inject null via fireEvent so userEvent does not sanitize — onChange strips live
+    fireEvent.change(area, { target: { value: `{"a":1}${'\0'}tail` } });
+    expect(area.value).toBe('{"a":1}tail');
+    expect(area.value).not.toContain('\0');
+
+    // Cap at 50_000 chars
+    fireEvent.change(area, { target: { value: 'x'.repeat(60_000) } });
+    expect(area.value.length).toBe(50_000);
   });
 });

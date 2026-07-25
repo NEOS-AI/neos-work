@@ -618,6 +618,56 @@ describe('NodeConfigPanel', () => {
     alertSpy.mockRestore();
   });
 
+  it('falls back when deploy preflight error/check messages scrub empty; caps checks', async () => {
+    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    deployPreflight.mockResolvedValueOnce({
+      ok: false,
+      error: String.fromCharCode(0) + String.fromCharCode(10),
+    });
+
+    const deploy = {
+      id: 'd1',
+      type: 'deploy',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'deploy',
+        label: 'Deploy',
+        config: { provider: 'vercel', projectName: 'site' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel selectedNode={deploy} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Run deploy preflight/i }));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Preflight failed'));
+
+    // Empty check message → "check"; more than 40 checks truncated in alert body
+    const checks = Array.from({ length: 45 }, (_, i) => ({
+      ok: i % 2 === 0,
+      message:
+        i === 0
+          ? String.fromCharCode(0) + String.fromCharCode(10)
+          : `check-${i}`,
+    }));
+    deployPreflight.mockResolvedValueOnce({
+      ok: true,
+      data: { ready: true, provider: 'netlify', checks },
+    });
+    alertSpy.mockClear();
+    await user.click(screen.getByRole('button', { name: /Run deploy preflight/i }));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    const msg = String(alertSpy.mock.calls[0]?.[0] ?? '');
+    expect(msg).toMatch(/Ready for netlify/);
+    expect(msg).toContain('✓ check'); // empty message fallback
+    // Cap 40: last indices beyond 40 not all present
+    expect(msg).toContain('check-1');
+    expect(msg).not.toContain('check-44');
+    alertSpy.mockRestore();
+  });
+
   it('renders media audio fields when mediaType is audio', async () => {
     const audio = {
       id: 'm2',
@@ -847,6 +897,31 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
     expect(screen.getByText(/whsec_/)).toBeInTheDocument();
 
+    window.history.pushState({}, '', prev || '/');
+  });
+
+  it('scrubs control-char webhook fire error flash messages', async () => {
+    const user = userEvent.setup();
+    const prev = window.location.pathname + window.location.search;
+    window.history.pushState({}, '', '/workflows/wf-webhook-2');
+    testWebhookFire.mockResolvedValue({
+      ok: false,
+      error: `rate${'\n'}limited${'\0'}!`,
+    });
+
+    render(
+      <NodeConfigPanel
+        selectedNode={null}
+        validationIssues={[]}
+        onPatchNodeData={() => {}}
+      />,
+    );
+    await waitFor(() => expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-2'));
+    await user.click(screen.getByRole('button', { name: 'Test fire' }));
+    await waitFor(() => {
+      expect(screen.getByText(/rate limited!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
     window.history.pushState({}, '', prev || '/');
   });
 
