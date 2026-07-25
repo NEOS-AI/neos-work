@@ -86,6 +86,57 @@ describe('blocks routes', () => {
     expect([404, 405, 200]).toContain(res.status);
   });
 
+  it('POST rejects control-char domain/description and null-byte prompt', async () => {
+    const leadId = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: `\n${ID}`,
+        name: 'Cov',
+        domain: 'general',
+        implementationType: 'prompt',
+        promptTemplate: 'hi',
+      }),
+    });
+    expect(leadId.status).toBe(400);
+
+    // Control-char domain falls back to general (still creates when other fields ok)
+    const domainCtrl = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: ID,
+        name: 'Cov Block Route',
+        domain: '\ncoding',
+        category: '\ntest',
+        description: 'ok',
+        implementationType: 'prompt',
+        promptTemplate: 'Say hi',
+        paramDefs: [],
+        inputDescription: 'in',
+        outputDescription: 'out',
+      }),
+    });
+    expect(domainCtrl.status).toBe(201);
+    const created = await domainCtrl.json() as { data: { domain: string; category: string } };
+    expect(created.data.domain).toBe('general');
+    expect(created.data.category).toBe('custom');
+    deleteCustomBlock(ID);
+
+    const nullPrompt = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: ID,
+        name: 'Cov',
+        domain: 'general',
+        implementationType: 'prompt',
+        promptTemplate: `hi${'\0'}there`,
+      }),
+    });
+    expect(nullPrompt.status).toBe(400);
+  });
+
   it('GET/PUT/DELETE reject control-char, overlong, or non-alphanumeric path ids', async () => {
     expect((await blocks.request(`/${encodeURIComponent('bad\nid')}`)).status).toBe(404);
     expect((await blocks.request('/has.dot.id')).status).toBe(404);

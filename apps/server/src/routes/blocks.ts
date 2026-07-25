@@ -66,17 +66,44 @@ blocks.post('/', async (c) => {
   if (!['native', 'prompt', 'skill'].includes(body.implementationType)) {
     return c.json({ ok: false, error: 'implementationType must be native | prompt | skill' }, 400);
   }
-  const promptTemplate =
-    typeof body.promptTemplate === 'string' ? body.promptTemplate.trim() : body.promptTemplate;
+  // Multi-line prompt OK; reject null bytes before trim
+  let promptTemplate: string | undefined =
+    typeof body.promptTemplate === 'string' ? body.promptTemplate : undefined;
+  if (typeof promptTemplate === 'string') {
+    if (/\0/.test(promptTemplate)) {
+      return c.json({ ok: false, error: 'promptTemplate contains invalid control characters' }, 400);
+    }
+    promptTemplate = promptTemplate.trim();
+  }
   if (body.implementationType === 'prompt' && !promptTemplate) {
     return c.json({ ok: false, error: 'promptTemplate is required for prompt blocks' }, 400);
   }
 
+  // Control-char domain → general default (check before trim)
+  const domainRaw0 = typeof body.domain === 'string' ? body.domain : 'general';
   const domainRaw =
-    typeof body.domain === 'string' ? body.domain.trim().toLowerCase() : 'general';
+    domainRaw0 && !/[\0\r\n]/.test(domainRaw0)
+      ? domainRaw0.trim().toLowerCase() || 'general'
+      : 'general';
   const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? (domainRaw as WorkflowBlock['domain'])
     : 'general';
+
+  // Control-char category → custom default
+  const categoryRaw0 = typeof body.category === 'string' ? body.category : '';
+  const category =
+    categoryRaw0 && !/[\0\r\n]/.test(categoryRaw0)
+      ? categoryRaw0.trim() || 'custom'
+      : 'custom';
+
+  // Multi-line description OK; reject null bytes
+  let description = '';
+  if (typeof body.description === 'string') {
+    if (/\0/.test(body.description)) {
+      return c.json({ ok: false, error: 'description contains invalid control characters' }, 400);
+    }
+    description = body.description.trim();
+  }
 
   let block: WorkflowBlock;
   try {
@@ -88,9 +115,9 @@ blocks.post('/', async (c) => {
       paramDefs: body.paramDefs ?? [],
       inputDescription: body.inputDescription ?? '',
       outputDescription: body.outputDescription ?? '',
-      category: (typeof body.category === 'string' ? body.category.trim() : '') || 'custom',
+      category,
       domain,
-      description: typeof body.description === 'string' ? body.description.trim() : (body.description ?? ''),
+      description,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to create block';

@@ -89,6 +89,18 @@ describe('mcp routes', () => {
     });
     expect(badName.status).toBe(400);
 
+    // Leading control-char must not strip to a valid name
+    const leadingName = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `\n${NAME}`,
+        transport: 'stdio',
+        command: 'npx',
+      }),
+    });
+    expect(leadingName.status).toBe(400);
+
     const badCmd = await mcp.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -99,6 +111,30 @@ describe('mcp routes', () => {
       }),
     });
     expect(badCmd.status).toBe(400);
+
+    // Leading control-char command
+    const leadingCmd = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        transport: 'stdio',
+        command: '\nnpx',
+      }),
+    });
+    expect(leadingCmd.status).toBe(400);
+
+    // Control-char transport must not strip to stdio
+    const badTransport = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: NAME,
+        transport: '\nstdio',
+        command: 'npx',
+      }),
+    });
+    expect(badTransport.status).toBe(400);
 
     const badUrl = await mcp.request('/', {
       method: 'POST',

@@ -43,6 +43,24 @@ describe('BlockNode', () => {
     expect(long.error).toMatch(/blockId is invalid/);
   });
 
+  it('drops leading control-char skillId on register (before trim)', () => {
+    registerBlockMeta({
+      id: 'cov_skill_lead_ctrl',
+      name: 'Skill Lead Ctrl',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'skill',
+      skillId: '\nmy-skill',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const got = resolveBlock('cov_skill_lead_ctrl');
+    expect(got?.skillId).toBeUndefined();
+  });
+
   it('trims blockId before resolve', async () => {
     const meta: WorkflowBlock = {
       id: 'cov_trim_block',

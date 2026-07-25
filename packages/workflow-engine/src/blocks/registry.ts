@@ -63,12 +63,15 @@ function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
     promptTemplate = promptTemplate.slice(0, BLOCK_PROMPT_MAX);
   }
 
-  let skillId =
-    typeof meta.skillId === 'string' ? meta.skillId.trim() || undefined : meta.skillId;
-  if (
-    typeof skillId === 'string'
-    && (skillId.length > BLOCK_SKILL_ID_MAX || /[\0\r\n]/.test(skillId))
-  ) {
+  // Control-char before trim so leading \n cannot strip to a valid skill id
+  let skillId: string | undefined;
+  if (typeof meta.skillId === 'string') {
+    if (/[\0\r\n]/.test(meta.skillId) || meta.skillId.trim().length > BLOCK_SKILL_ID_MAX) {
+      skillId = undefined;
+    } else {
+      skillId = meta.skillId.trim() || undefined;
+    }
+  } else if (meta.skillId != null) {
     skillId = undefined;
   }
 

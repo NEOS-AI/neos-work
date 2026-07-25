@@ -22,6 +22,8 @@ function parseSimpleYaml(yaml: string): Record<string, string> {
 
 function optionalTrim(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
+  // Drop control-char optional fields rather than strip them (check before trim)
+  if (/[\0\r\n]/.test(raw)) return undefined;
   const t = raw.trim();
   return t.length > 0 ? t : undefined;
 }
@@ -59,7 +61,13 @@ export function parseSkillFile(
   const modeRaw = optionalTrim(raw.mode);
   const categoryRaw = optionalTrim(raw.category);
 
-  let description = typeof raw.description === 'string' ? raw.description.trim() : '';
+  // Description: multi-line OK in YAML values is rare; reject null-byte / CR-LF line injection
+  let description = '';
+  if (typeof raw.description === 'string') {
+    if (/\0/.test(raw.description)) return null;
+    // Collapse embedded newlines for single-line manifest field hygiene
+    description = raw.description.replace(/[\r\n]+/g, ' ').trim();
+  }
   if (description.length > SKILL_DESCRIPTION_MAX) {
     description = description.slice(0, SKILL_DESCRIPTION_MAX);
   }
@@ -72,8 +80,11 @@ export function parseSkillFile(
   let triggers = raw.triggers
     ? raw.triggers
         .split(',')
+        // Control-char check before trim so leading \n cannot strip to a valid trigger
+        .map((s) => s)
+        .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t))
         .map((s) => s.trim())
-        .filter((t) => t.length > 0 && t.length <= 100 && !/[\0\r\n]/.test(t))
+        .filter((t) => t.length > 0 && t.length <= 100)
         .slice(0, SKILL_TRIGGERS_MAX)
     : undefined;
   if (triggers && triggers.length === 0) triggers = undefined;
@@ -100,9 +111,11 @@ export function parseSkillFile(
     skillBody = skillBody.slice(0, SKILL_BODY_MAX) + '\n…[skill truncated]';
   }
 
-  let pathVal =
-    typeof filePath === 'string' ? filePath.trim() || filePath : String(filePath ?? '');
-  if (/[\0\r\n]/.test(pathVal)) return null;
+  // Control-char path before trim
+  const pathRaw =
+    typeof filePath === 'string' ? filePath : String(filePath ?? '');
+  if (/[\0\r\n]/.test(pathRaw)) return null;
+  const pathVal = pathRaw.trim() || pathRaw;
 
   return {
     manifest,

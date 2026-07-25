@@ -24,7 +24,9 @@ function slugify(name: string): string {
 const MEMORY_TYPES = new Set(['user', 'session', 'skill', 'reference']);
 
 function normalizeMemoryType(raw: unknown, fallback: MemoryType = 'user'): MemoryType {
-  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Control-char before trim so leading \n cannot strip to a known type
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return fallback;
+  const t = raw.trim().toLowerCase();
   return MEMORY_TYPES.has(t) ? (t as MemoryType) : fallback;
 }
 

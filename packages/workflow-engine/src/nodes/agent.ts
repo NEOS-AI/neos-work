@@ -238,9 +238,12 @@ export class AgentNode implements ExecutableNode {
 
     try {
       // Prefer node-level llmProvider (NodeConfigPanel), then execution settings
+      // Control-char before trim so leading \n cannot strip to a known provider
       const nodeProviderRaw = this.nodeConfig?.['llmProvider'] ?? this.nodeConfig?.['provider'];
       const nodeProvider =
-        typeof nodeProviderRaw === 'string' ? nodeProviderRaw.trim().toLowerCase() : '';
+        typeof nodeProviderRaw === 'string' && !/[\0\r\n]/.test(nodeProviderRaw)
+          ? nodeProviderRaw.trim().toLowerCase()
+          : '';
       const adapterSettings =
         nodeProvider && !nodeProvider.startsWith('cli-')
           ? { ...ctx.settings, llmProvider: nodeProvider }
@@ -248,10 +251,15 @@ export class AgentNode implements ExecutableNode {
       const adapter = buildAdapter(adapterSettings);
       const toolRegistry = buildToolRegistry(toolFilter, ctx.settings);
       // Prefer NodeConfig `llmModel` (panel field), then legacy `model`, then settings defaults
+      // Control-char model ids are ignored (check before trim)
+      const pickModel = (raw: unknown): string => {
+        if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+        return raw.trim();
+      };
       const rawModel =
-        (typeof this.nodeConfig?.['llmModel'] === 'string' && this.nodeConfig['llmModel'].trim())
-        || (typeof this.nodeConfig?.['model'] === 'string' && this.nodeConfig['model'].trim())
-        || (typeof ctx.settings['model'] === 'string' && ctx.settings['model'].trim())
+        pickModel(this.nodeConfig?.['llmModel'])
+        || pickModel(this.nodeConfig?.['model'])
+        || pickModel(ctx.settings['model'])
         || '';
       const model = rawModel || undefined;
       const orchestrator = new AgentOrchestrator(adapter, toolRegistry, {

@@ -61,6 +61,19 @@ describe('sessions CRUD', () => {
     expect(s.title!.length).toBe(200);
     expect(s.model).toContain('claude');
     deleteSession(s.id);
+
+    // Leading control-char provider/model/thinkingMode must not strip to valid values
+    const lead = createSession({
+      workspaceId: 'default',
+      title: '_cov_sess',
+      provider: '\nopenai',
+      model: '\ngpt-4o',
+      thinkingMode: '\nhigh',
+    });
+    expect(lead.provider).toBe('anthropic');
+    expect(lead.model).toContain('claude');
+    expect(lead.thinking_mode).toBe('none');
+    deleteSession(lead.id);
   });
 
   it('rejects control-char workspaceId/title; ignores control-char lookup ids', () => {
@@ -184,6 +197,10 @@ describe('sessions CRUD', () => {
     expect(() => addMessage({ sessionId: s.id, role: '  ', content: 'x' })).toThrow(/role/i);
     expect(() => addMessage({ sessionId: s.id, role: 'admin', content: 'x' })).toThrow(
       /user\|assistant\|system\|tool/i,
+    );
+    // Leading control-char role must not strip to user
+    expect(() => addMessage({ sessionId: s.id, role: '\nuser', content: 'x' })).toThrow(
+      /role/i,
     );
   });
 

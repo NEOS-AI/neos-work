@@ -91,23 +91,30 @@ export function createSession(params: {
   if (title && title.length > SESSION_TITLE_MAX) {
     title = title.slice(0, SESSION_TITLE_MAX);
   }
+  // Control-char before trim so leading \n cannot strip to a known provider
+  const providerRaw0 = typeof params.provider === 'string' ? params.provider : '';
   const providerRaw =
-    typeof params.provider === 'string' ? params.provider.trim().toLowerCase() : '';
+    providerRaw0 && !/[\0\r\n]/.test(providerRaw0)
+      ? providerRaw0.trim().toLowerCase()
+      : '';
   // Known chat providers; unknown/blank → anthropic default
   const provider =
     providerRaw === 'anthropic' || providerRaw === 'google' || providerRaw === 'openai'
       ? providerRaw
       : 'anthropic';
-  let model =
-    typeof params.model === 'string' ? params.model.trim() || 'claude-sonnet-4-5-20250929' : (params.model ?? 'claude-sonnet-4-5-20250929');
-  // Cap model id length; reject control chars
-  if (typeof model === 'string') {
-    if (/[\0\r\n]/.test(model) || model.length > 200) {
-      model = 'claude-sonnet-4-5-20250929';
+  // Cap model id length; reject control chars before trim
+  let model = 'claude-sonnet-4-5-20250929';
+  if (typeof params.model === 'string') {
+    if (!/[\0\r\n]/.test(params.model) && params.model.trim().length <= 200) {
+      model = params.model.trim() || 'claude-sonnet-4-5-20250929';
     }
   }
+  const thinkingRaw0 =
+    typeof params.thinkingMode === 'string' ? params.thinkingMode : '';
   const thinkingRaw =
-    typeof params.thinkingMode === 'string' ? params.thinkingMode.trim().toLowerCase() : '';
+    thinkingRaw0 && !/[\0\r\n]/.test(thinkingRaw0)
+      ? thinkingRaw0.trim().toLowerCase()
+      : '';
   const thinkingMode = THINKING_MODES.has(thinkingRaw) ? thinkingRaw : 'none';
   const db = getDb();
   const id = nanoid(12);
@@ -174,7 +181,12 @@ export function addMessage(params: {
 }): MessageRow {
   const sessionId = safeLookupId(params.sessionId);
   if (!sessionId) throw new Error('sessionId is required');
-  const roleRaw = typeof params.role === 'string' ? params.role.trim().toLowerCase() : '';
+  // Control-char before trim so leading \n cannot strip to a valid role
+  const roleRaw0 = typeof params.role === 'string' ? params.role : '';
+  if (/[\0\r\n]/.test(roleRaw0)) {
+    throw new Error('role must be user|assistant|system|tool');
+  }
+  const roleRaw = roleRaw0.trim().toLowerCase();
   if (!roleRaw || !MESSAGE_ROLES.has(roleRaw)) {
     throw new Error('role must be user|assistant|system|tool');
   }

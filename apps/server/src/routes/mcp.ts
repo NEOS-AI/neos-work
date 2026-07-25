@@ -107,24 +107,34 @@ function createMcpServer(params: {
   args?: string[];
   url?: string;
 }): McpServerRow {
-  const name = typeof params.name === 'string' ? params.name.trim() : '';
+  // Control-char check before trim (leading \r\n must not strip to a valid name)
+  const nameRaw = typeof params.name === 'string' ? params.name : '';
+  if (/[\0\r\n]/.test(nameRaw)) throw new Error('name contains invalid control characters');
+  const name = nameRaw.trim();
   if (!name) throw new Error('name is required');
-  if (/[\0\r\n]/.test(name)) throw new Error('name contains invalid control characters');
   if (name.length > MCP_NAME_MAX_CHARS) {
     throw new Error(`name exceeds max length (${MCP_NAME_MAX_CHARS})`);
   }
-  const transportRaw =
-    typeof params.transport === 'string' ? params.transport.trim().toLowerCase() : '';
+  const transportRaw0 =
+    typeof params.transport === 'string' ? params.transport : '';
+  if (transportRaw0 && /[\0\r\n]/.test(transportRaw0)) {
+    throw new Error('transport must be "stdio" or "http"');
+  }
+  const transportRaw = transportRaw0.trim().toLowerCase();
   if (transportRaw !== 'stdio' && transportRaw !== 'http') {
     throw new Error('transport must be "stdio" or "http"');
   }
-  let command =
-    typeof params.command === 'string' ? params.command.trim() || null : (params.command ?? null);
-  if (command) {
-    if (/[\0\r\n]/.test(command)) throw new Error('command contains invalid control characters');
-    if (command.length > MCP_COMMAND_MAX_CHARS) {
-      throw new Error(`command exceeds max length (${MCP_COMMAND_MAX_CHARS})`);
+  let command: string | null = null;
+  if (typeof params.command === 'string') {
+    if (/[\0\r\n]/.test(params.command)) {
+      throw new Error('command contains invalid control characters');
     }
+    command = params.command.trim() || null;
+  } else if (params.command != null) {
+    command = null;
+  }
+  if (command && command.length > MCP_COMMAND_MAX_CHARS) {
+    throw new Error(`command exceeds max length (${MCP_COMMAND_MAX_CHARS})`);
   }
   let url: string | null = null;
   if (typeof params.url === 'string') {
@@ -151,8 +161,11 @@ function createMcpServer(params: {
   }
   const args = Array.isArray(params.args)
     ? params.args
-        .map((a) => String(a).trim())
-        .filter((a) => a.length > 0 && a.length <= MCP_ARG_MAX_CHARS && !/[\0\r\n]/.test(a))
+        .map((a) => String(a))
+        // Drop control-char args before trim (leading \n must not strip to a valid arg)
+        .filter((a) => a.length > 0 && !/[\0\r\n]/.test(a))
+        .map((a) => a.trim())
+        .filter((a) => a.length > 0 && a.length <= MCP_ARG_MAX_CHARS)
         .slice(0, MCP_ARGS_MAX)
     : null;
   const argsStr = args && args.length > 0 ? JSON.stringify(args) : null;
@@ -186,7 +199,12 @@ function safeParseArgs(raw: string | null): string[] | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return null;
-    const args = parsed.map((a) => String(a).trim()).filter(Boolean);
+    // Control-char check before trim
+    const args = parsed
+      .map((a) => String(a))
+      .filter((a) => a.length > 0 && !/[\0\r\n]/.test(a))
+      .map((a) => a.trim())
+      .filter(Boolean);
     return args.length > 0 ? args : null;
   } catch {
     return null;

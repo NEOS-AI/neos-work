@@ -126,21 +126,23 @@ export class BlockNode implements ExecutableNode {
     }
 
     if (implType === 'skill') {
-      let skillId =
-        typeof block.skillId === 'string' ? block.skillId.trim() : String(block.skillId ?? '').trim();
+      // Control-char before trim so leading \n cannot strip to a valid skill id
+      const skillIdRaw =
+        typeof block.skillId === 'string' ? block.skillId : String(block.skillId ?? '');
+      if (/[\0\r\n]/.test(skillIdRaw) || skillIdRaw.trim().length > BLOCK_ID_MAX) {
+        return {
+          ok: false,
+          output: null,
+          error: 'skillId is invalid',
+          durationMs: Date.now() - start,
+        };
+      }
+      const skillId = skillIdRaw.trim();
       if (!skillId) {
         return {
           ok: false,
           output: null,
           error: 'skillId is required for skill blocks',
-          durationMs: Date.now() - start,
-        };
-      }
-      if (/[\0\r\n]/.test(skillId) || skillId.length > BLOCK_ID_MAX) {
-        return {
-          ok: false,
-          output: null,
-          error: 'skillId is invalid',
           durationMs: Date.now() - start,
         };
       }

@@ -65,6 +65,25 @@ body
     expect(parseSkillFile(cr, '/x.md', 'local')).toBeNull();
   });
 
+  it('returns null for control-char path and null-byte description', () => {
+    const content = `---
+name: hello
+description: ok
+---
+body
+`;
+    expect(parseSkillFile(content, `/skills/${'\n'}hello.md`, 'local')).toBeNull();
+    const nulDesc = [
+      '---',
+      'name: hello',
+      `description: bad${'\0'}desc`,
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    expect(parseSkillFile(nulDesc, '/skills/hello.md', 'local')).toBeNull();
+  });
+
   it('strips quoted values and defaults description', () => {
     const content = `---
 name: "quoted"

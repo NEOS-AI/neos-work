@@ -169,5 +169,21 @@ describe('block registry', () => {
     expect(got?.description!.length).toBe(2_000);
     expect(got?.skillId).toBeUndefined();
     expect(got?.promptTemplate!.length).toBe(50_000);
+
+    // Leading control-char skillId must not strip to a valid id
+    registerBlockMeta({
+      id: 'meta_skill_lead',
+      name: 'Lead Skill',
+      domain: 'general',
+      category: 'test',
+      description: 'd',
+      isBuiltIn: true,
+      implementationType: 'skill',
+      skillId: '\nvalid-skill',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    expect(resolveBlock('meta_skill_lead')?.skillId).toBeUndefined();
   });
 });
