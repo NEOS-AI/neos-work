@@ -31,6 +31,14 @@ describe('mode-prefs', () => {
     expect(loadRemoteUrl()).toBe('');
     saveRemoteUrl('javascript:alert(1)');
     expect(loadRemoteUrl()).toBe('');
+
+    // Corrupted storage: control-char / non-http ignored on load
+    localStorage.setItem('neos-remote-url', `http://ok:1${'\0'}`);
+    expect(loadRemoteUrl()).toBe('');
+    localStorage.setItem('neos-remote-url', 'file:///etc/passwd');
+    expect(loadRemoteUrl()).toBe('');
+    localStorage.setItem('neos-remote-url', '  http://good:2  ');
+    expect(loadRemoteUrl()).toBe('http://good:2');
   });
 
   it('load returns empty when localStorage throws', () => {

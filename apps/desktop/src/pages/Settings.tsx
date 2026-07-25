@@ -396,16 +396,18 @@ function ApiKeyInput({
   }, [loadSavedKey]);
 
   const handleVerify = async () => {
-    if (!client || !value) return;
-    // Control-char secrets rejected before API (align with settings verify-key)
+    if (!client) return;
+    // Control-char secrets rejected before trim (align with settings verify-key)
     if (/[\0\r\n]/.test(value)) {
       setVerifyStatus('invalid');
       setTimeout(() => setVerifyStatus('idle'), 3000);
       return;
     }
+    const next = value.trim();
+    if (!next) return;
     setVerifyStatus('verifying');
     try {
-      const res = await client.verifyApiKey(provider, value.trim());
+      const res = await client.verifyApiKey(provider, next);
       setVerifyStatus(res.ok && res.data?.valid ? 'valid' : 'invalid');
     } catch {
       setVerifyStatus('invalid');
@@ -415,15 +417,17 @@ function ApiKeyInput({
   };
 
   const handleSave = async () => {
-    if (!client || !value) return;
-    // Control-char secrets rejected before API (align with settings PUT)
+    if (!client) return;
+    // Control-char secrets rejected before trim (align with settings PUT)
     if (/[\0\r\n]/.test(value)) {
       setSaveStatus('idle');
       return;
     }
+    const next = value.trim();
+    if (!next) return;
     setSaveStatus('saving');
     try {
-      await client.saveSetting(settingKey, value.trim());
+      await client.saveSetting(settingKey, next);
       setSaveStatus('saved');
       setHasSavedKey(true);
       setValue('');
@@ -559,11 +563,13 @@ function SimpleKeyInput({
   }, [client, settingKey]);
 
   const handleSave = async () => {
-    if (!client || !value) return;
-    // Control-char secrets/paths rejected before API (align with settings PUT)
+    if (!client) return;
+    // Control-char secrets/paths rejected before trim (align with settings PUT)
     if (/[\0\r\n]/.test(value)) return;
+    const next = value.trim();
+    if (!next) return;
     setSaving(true);
-    await client.saveSetting(settingKey, value.trim());
+    await client.saveSetting(settingKey, next);
     setSaving(false);
     setHasSaved(true);
     setValue('');

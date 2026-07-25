@@ -4,7 +4,18 @@ const REMOTE_URL_KEY = 'neos-remote-url';
 
 export function loadRemoteUrl(): string {
   try {
-    return localStorage.getItem(REMOTE_URL_KEY) ?? '';
+    const raw = localStorage.getItem(REMOTE_URL_KEY) ?? '';
+    // Control-char / non-http stored values ignored (align with save)
+    if (!raw || /[\0\r\n]/.test(raw)) return '';
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    try {
+      const u = new URL(trimmed);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    } catch {
+      return '';
+    }
+    return trimmed;
   } catch {
     return '';
   }
