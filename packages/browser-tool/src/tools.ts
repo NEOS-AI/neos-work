@@ -9,9 +9,11 @@ const BROWSER_URL_MAX_CHARS = 2_048;
  * Only http(s) navigation — blocks file:/javascript:/data: style SSRF vectors.
  */
 export function isSafeBrowserUrl(raw: unknown): string | null {
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s) return null;
-  if (s.length > BROWSER_URL_MAX_CHARS || /[\0\r\n]/.test(s)) return null;
+  if (typeof raw !== 'string') return null;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return null;
+  const s = raw.trim();
+  if (!s || s.length > BROWSER_URL_MAX_CHARS) return null;
   try {
     const u = new URL(s);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
@@ -22,9 +24,11 @@ export function isSafeBrowserUrl(raw: unknown): string | null {
 }
 
 function trimSelector(raw: unknown): string {
-  const s = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
-  // Cap CSS selector length; reject control chars
-  if (!s || /[\0\r\n]/.test(s) || s.length > 1_000) return '';
+  const sRaw = typeof raw === 'string' ? raw : String(raw ?? '');
+  // Cap CSS selector length; reject control chars before trim
+  if (!sRaw || /[\0\r\n]/.test(sRaw)) return '';
+  const s = sRaw.trim();
+  if (!s || s.length > 1_000) return '';
   return s;
 }
 

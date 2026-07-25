@@ -71,10 +71,13 @@ export class ContextManager {
     const SUMMARY_MAX = 8_000;
     let transcript = messages
       .map((m) => {
-        const role = typeof m.role === 'string' ? m.role.trim() || 'unknown' : 'unknown';
+        let role = 'unknown';
+        if (typeof m.role === 'string' && !/[\0\r\n]/.test(m.role)) {
+          role = m.role.trim() || 'unknown';
+        }
         let text =
           typeof m.content === 'string'
-            ? m.content
+            ? m.content.replace(/\0/g, '')
             : JSON.stringify(m.content);
         if (text.length > 4_000) text = text.slice(0, 4_000) + '…';
         return `${role}: ${text}`;

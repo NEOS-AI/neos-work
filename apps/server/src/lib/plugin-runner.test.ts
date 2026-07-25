@@ -166,6 +166,36 @@ describe('plugin-runner', () => {
     expect(String(completed?.output ?? '')).toMatch(/Plan Stage/);
   });
 
+  it('treats control-char or overlong API keys as missing', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'ctrl-keys',
+      name: 'Ctrl Keys',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          prompt: 'Do work',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: {
+        ANTHROPIC_API_KEY: 'sk\nant',
+        OPENAI_API_KEY: 'sk'.repeat(5_000),
+      },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const completed = events.find((e) => e.type === 'stage.completed');
+    expect(String(completed?.output ?? '')).toMatch(/No LLM API key/i);
+  });
+
   it('treats whitespace-only API keys as missing', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',

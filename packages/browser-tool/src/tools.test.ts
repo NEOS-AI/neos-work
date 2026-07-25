@@ -28,6 +28,8 @@ describe('createBrowserTools', () => {
     expect(isSafeBrowserUrl('https://example.com')).toBe('https://example.com');
     expect(isSafeBrowserUrl(`https://example.com/${'a'.repeat(3_000)}`)).toBeNull();
     expect(isSafeBrowserUrl('https://example.com/\npath')).toBeNull();
+    // Leading control char must not strip to a valid URL
+    expect(isSafeBrowserUrl('\nhttps://example.com')).toBeNull();
     expect(isSafeBrowserUrl('file:///etc/passwd')).toBeNull();
   });
 

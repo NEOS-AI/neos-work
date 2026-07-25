@@ -127,6 +127,14 @@ describe('OpenAIAdapter', () => {
     await expect(adapter.validateApiKey('bad')).resolves.toBe(false);
   });
 
+  it('validateApiKey rejects leading control-char keys before trim', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    await expect(adapter.validateApiKey('\nsk-ok')).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('validateApiKey rejects control-char or overlong keys without calling fetch', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);

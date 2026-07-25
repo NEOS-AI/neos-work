@@ -143,6 +143,9 @@ describe('Settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings:appearance.light' }));
     expect(setTheme).toHaveBeenCalledWith('light');
 
+    fireEvent.click(screen.getByRole('button', { name: 'settings:appearance.system' }));
+    expect(setTheme).toHaveBeenCalledWith('system');
+
     fireEvent.change(screen.getByDisplayValue('English'), { target: { value: 'ko' } });
     expect(changeLanguage).toHaveBeenCalledWith('ko');
   });

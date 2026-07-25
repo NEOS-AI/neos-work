@@ -56,7 +56,10 @@ export function createFirstHtmlArtifact(options: {
 
   for (const [nodeId, result] of Object.entries(options.nodeResults ?? {})) {
     const r = result as { output?: unknown; status?: string };
-    const status = typeof r.status === 'string' ? r.status.trim().toLowerCase() : '';
+    const statusRaw = typeof r.status === 'string' ? r.status : '';
+    // Control-char status is never "completed"
+    if (/[\0\r\n]/.test(statusRaw)) continue;
+    const status = statusRaw.trim().toLowerCase();
     if (status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
     const nidRaw = typeof nodeId === 'string' ? nodeId : String(nodeId);
     if (!nidRaw || /[\0\r\n]/.test(nidRaw)) continue;

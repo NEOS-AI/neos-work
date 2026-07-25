@@ -143,6 +143,21 @@ describe('generateImage', () => {
         quality: 'standard',
       }),
     );
+
+    // Control-char size/quality fall back to defaults (not thrown)
+    generateMock.mockClear();
+    const ctrl = await generateImage({
+      prompt: 'cat',
+      // @ts-expect-error intentional control-char options
+      size: '1024x1024\n',
+      // @ts-expect-error intentional control-char options
+      quality: 'hd\r',
+      apiKey: 'sk',
+    });
+    created.push(ctrl.filePath);
+    expect(generateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ size: '1024x1024', quality: 'standard' }),
+    );
   });
 
   it('rejects non-http(s) image URLs before download', async () => {
@@ -160,6 +175,16 @@ describe('generateImage', () => {
     });
     await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Invalid image URL/i);
     expect(fetchMock).not.toHaveBeenCalled();
+
+    generateMock.mockResolvedValue({
+      data: [{ url: `https://cdn.example/${'\n'}evil.png` }],
+    });
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Invalid image URL/i);
+
+    generateMock.mockResolvedValue({
+      data: [{ url: `https://cdn.example/${'p'.repeat(2_100)}` }],
+    });
+    await expect(generateImage({ prompt: 'x', apiKey: 'sk' })).rejects.toThrow(/Invalid image URL/i);
   });
 
   it('rejects oversized image downloads via Content-Length and body size', async () => {
@@ -225,6 +250,24 @@ describe('generateAudio', () => {
     await expect(
       generateAudio({ text: 'hello', apiKey: 'sk' }),
     ).rejects.toThrow(/Audio exceeds max size/i);
+  });
+
+  it('falls back when voice/model contain control chars', async () => {
+    speechCreateMock.mockResolvedValue({
+      arrayBuffer: async () => new Uint8Array([1, 2]).buffer,
+    });
+    const result = await generateAudio({
+      text: 'hi',
+      // @ts-expect-error intentional control-char options
+      voice: 'nova\n',
+      // @ts-expect-error intentional control-char options
+      model: 'tts-1\r',
+      apiKey: 'sk',
+    });
+    created.push(result.filePath);
+    expect(speechCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ voice: 'alloy', model: 'tts-1' }),
+    );
   });
 
   it('clamps invalid voice/model and rejects blank text', async () => {

@@ -159,8 +159,8 @@ async function loadBrowserTools(
 // --- Session CRUD ---
 
 session.get('/', (c) => {
-  const workspaceIdRaw = (c.req.query('workspaceId') ?? '').trim();
-  // Drop unsafe filter (list all when invalid)
+  const workspaceIdRaw = c.req.query('workspaceId') ?? '';
+  // Drop unsafe filter (list all when invalid); control-char before trim via safeRouteId
   const workspaceId = workspaceIdRaw
     ? safeRouteId(workspaceIdRaw) || undefined
     : undefined;
@@ -180,34 +180,51 @@ session.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  // Input validation
-  const workspaceIdRaw = typeof body.workspaceId === 'string' ? body.workspaceId.trim() : '';
-  const workspaceId = safeRouteId(workspaceIdRaw);
+  // Input validation (control-char checks before trim)
+  const workspaceId =
+    typeof body.workspaceId === 'string' ? safeRouteId(body.workspaceId) : '';
   if (!workspaceId) {
     return c.json({ ok: false, error: 'Invalid or missing workspaceId' }, 400);
   }
-  const provider =
-    typeof body.provider === 'string' ? body.provider.trim().toLowerCase() : body.provider;
+  let provider: string | undefined;
+  if (typeof body.provider === 'string') {
+    if (/[\0\r\n]/.test(body.provider)) {
+      return c.json({ ok: false, error: 'Invalid provider' }, 400);
+    }
+    provider = body.provider.trim().toLowerCase();
+  }
   if (provider && !['anthropic', 'google'].includes(provider)) {
     return c.json({ ok: false, error: 'Invalid provider' }, 400);
   }
-  const model = typeof body.model === 'string' ? body.model.trim() : body.model;
+  let model: string | undefined;
+  if (typeof body.model === 'string') {
+    if (/[\0\r\n]/.test(body.model)) {
+      return c.json({ ok: false, error: 'Invalid model' }, 400);
+    }
+    model = body.model.trim();
+  }
   if (model && !ALL_MODELS.some((m) => m.id === model)) {
     return c.json({ ok: false, error: 'Invalid model' }, 400);
   }
-  const thinkingMode =
-    typeof body.thinkingMode === 'string'
-      ? body.thinkingMode.trim().toLowerCase()
-      : body.thinkingMode;
+  let thinkingMode: string | undefined;
+  if (typeof body.thinkingMode === 'string') {
+    if (/[\0\r\n]/.test(body.thinkingMode)) {
+      return c.json({ ok: false, error: 'Invalid thinkingMode' }, 400);
+    }
+    thinkingMode = body.thinkingMode.trim().toLowerCase();
+  }
   if (thinkingMode && !THINKING_MODES.includes(thinkingMode as ThinkingMode)) {
     return c.json({ ok: false, error: 'Invalid thinkingMode' }, 400);
   }
-  const title =
-    body.title !== undefined
-      ? (typeof body.title === 'string' ? body.title.trim() : '')
-      : undefined;
-  if (title !== undefined && (!title || title.length > 200 || /[\0\r\n]/.test(title))) {
-    return c.json({ ok: false, error: 'Invalid title' }, 400);
+  let title: string | undefined;
+  if (body.title !== undefined) {
+    if (typeof body.title !== 'string' || /[\0\r\n]/.test(body.title)) {
+      return c.json({ ok: false, error: 'Invalid title' }, 400);
+    }
+    title = body.title.trim();
+    if (!title || title.length > 200) {
+      return c.json({ ok: false, error: 'Invalid title' }, 400);
+    }
   }
 
   const created = db.createSession({

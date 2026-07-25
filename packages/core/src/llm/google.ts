@@ -14,8 +14,12 @@ export class GoogleAdapter implements LLMProviderAdapter {
   private client: GoogleGenAI;
 
   constructor(apiKey: string) {
-    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
-    if (!key || key.length > 8_192 || /[\0\r\n]/.test(key)) {
+    // Control-char check before trim
+    if (typeof apiKey !== 'string' || /[\0\r\n]/.test(apiKey)) {
+      throw new Error('GOOGLE_API_KEY is required');
+    }
+    const key = apiKey.trim();
+    if (!key || key.length > 8_192) {
       throw new Error('GOOGLE_API_KEY is required');
     }
     this.client = new GoogleGenAI({ apiKey: key });
@@ -27,9 +31,13 @@ export class GoogleAdapter implements LLMProviderAdapter {
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
     const { tools, thinkingMode = 'none', signal } = params;
-    // Clamp model id (control chars / overlong → first known model)
-    let model = typeof params.model === 'string' ? params.model.trim() : '';
-    if (!model || /[\0\r\n]/.test(model) || model.length > 200) {
+    // Clamp model id (control chars before trim / overlong → first known model)
+    let model = '';
+    if (typeof params.model === 'string' && !/[\0\r\n]/.test(params.model)) {
+      const m = params.model.trim();
+      if (m && m.length <= 200) model = m;
+    }
+    if (!model) {
       model = this.getModels()[0]?.id ?? 'gemini-2.0-flash';
     }
     // Clamp maxTokens (invalid → 4096; hard cap 128k)
@@ -118,8 +126,9 @@ export class GoogleAdapter implements LLMProviderAdapter {
   }
 
   async validateApiKey(apiKey: string): Promise<boolean> {
-    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
-    if (!key || key.length > 8_192 || /[\0\r\n]/.test(key)) return false;
+    if (typeof apiKey !== 'string' || /[\0\r\n]/.test(apiKey)) return false;
+    const key = apiKey.trim();
+    if (!key || key.length > 8_192) return false;
     try {
       const client = new GoogleGenAI({ apiKey: key });
       await client.models.generateContent({

@@ -353,4 +353,30 @@ describe('McpClient', () => {
     expect(String(result.output)).toContain('line1');
     expect(String(result.output)).toContain('uri');
   });
+
+  it('listTools drops control-char names and collapses description newlines', async () => {
+    listToolsMock.mockResolvedValue({
+      tools: [
+        { name: 'bad\nname', description: 'd', inputSchema: {} },
+        { name: '\nlead', description: 'd2', inputSchema: {} },
+        { name: 'ok', description: `line1\nline2${'\0'}x`, inputSchema: {} },
+        { name: 'x'.repeat(201), description: 'overlong name', inputSchema: {} },
+        { name: 'desc-cap', description: 'D'.repeat(3_000), inputSchema: {} },
+      ],
+    });
+    const c = new McpClient();
+    const tools = await c.listTools();
+    expect(tools.map((t) => t.name)).toEqual(['ok', 'desc-cap']);
+    // null bytes drop description entirely; CRLF collapsed when no null
+    expect(tools.find((t) => t.name === 'ok')?.description).toBeUndefined();
+    expect(tools.find((t) => t.name === 'desc-cap')?.description?.length).toBe(2_000);
+  });
+
+  it('callTool rejects control-char or overlong tool names', async () => {
+    const c = new McpClient();
+    await expect(c.callTool('bad\nname', {})).rejects.toThrow(/Invalid tool name/i);
+    await expect(c.callTool('\nlead', {})).rejects.toThrow(/Invalid tool name/i);
+    await expect(c.callTool('t'.repeat(201), {})).rejects.toThrow(/Invalid tool name/i);
+    await expect(c.callTool(null as unknown as string, {})).rejects.toThrow(/Invalid tool name/i);
+  });
 });

@@ -24,23 +24,25 @@ export class OpenAIAdapter implements LLMProviderAdapter {
   }) {
     this.id = options.provider;
     this.name = options.provider === 'openai' ? 'OpenAI' : 'Ollama';
-    let apiKey = typeof options.apiKey === 'string' ? options.apiKey.trim() : '';
-    if (apiKey && (apiKey.length > 8_192 || /[\0\r\n]/.test(apiKey))) {
-      apiKey = '';
+    let apiKey = '';
+    if (typeof options.apiKey === 'string' && !/[\0\r\n]/.test(options.apiKey)) {
+      const k = options.apiKey.trim();
+      if (k && k.length <= 8_192) apiKey = k;
     }
     this.apiKey = apiKey;
-    const baseRaw =
-      typeof options.baseUrl === 'string' ? options.baseUrl.trim() : '';
-    // Only accept http(s) custom base URLs; invalid/non-http falls back to provider default
+    // Only accept http(s) custom base URLs; control-char check before trim
     let base = '';
-    if (baseRaw && baseRaw.length <= 2_048 && !/[\0\r\n]/.test(baseRaw)) {
-      try {
-        const u = new URL(baseRaw);
-        if (u.protocol === 'http:' || u.protocol === 'https:') {
-          base = baseRaw.replace(/\/+$/, '');
+    if (typeof options.baseUrl === 'string' && !/[\0\r\n]/.test(options.baseUrl)) {
+      const baseRaw = options.baseUrl.trim();
+      if (baseRaw && baseRaw.length <= 2_048) {
+        try {
+          const u = new URL(baseRaw);
+          if (u.protocol === 'http:' || u.protocol === 'https:') {
+            base = baseRaw.replace(/\/+$/, '');
+          }
+        } catch {
+          // ignore invalid URL
         }
-      } catch {
-        // ignore invalid URL
       }
     }
     this.baseUrl =
@@ -58,8 +60,9 @@ export class OpenAIAdapter implements LLMProviderAdapter {
 
   async validateApiKey(apiKey: string): Promise<boolean> {
     if (this.id === 'ollama') return true; // Ollama runs locally, no key needed
-    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
-    if (!key || key.length > 8_192 || /[\0\r\n]/.test(key)) return false;
+    if (typeof apiKey !== 'string' || /[\0\r\n]/.test(apiKey)) return false;
+    const key = apiKey.trim();
+    if (!key || key.length > 8_192) return false;
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
         headers: { Authorization: `Bearer ${key}` },
@@ -73,9 +76,13 @@ export class OpenAIAdapter implements LLMProviderAdapter {
 
   async *chat(params: ChatParams): AsyncGenerator<ChatChunk, void, unknown> {
     const { tools, signal } = params;
-    // Clamp model id (control chars / overlong ids → first known model)
-    let model = typeof params.model === 'string' ? params.model.trim() : '';
-    if (!model || /[\0\r\n]/.test(model) || model.length > 200) {
+    // Clamp model id (control chars before trim / overlong → first known model)
+    let model = '';
+    if (typeof params.model === 'string' && !/[\0\r\n]/.test(params.model)) {
+      const m = params.model.trim();
+      if (m && m.length <= 200) model = m;
+    }
+    if (!model) {
       model = this.getModels()[0]?.id ?? 'gpt-4o';
     }
     // Clamp maxTokens (invalid → 4096; hard cap 128k for compatible providers)

@@ -96,6 +96,8 @@ describe('buildMcpTools', () => {
   it('drops control-char / overlong names and caps description; limits tool count', async () => {
     const { MCP_TOOL_DESCRIPTION_MAX_CHARS, MCP_TOOLS_MAX } = await import('./tool-bridge.js');
     expect(mcpToolToTool(makeClient(), { name: 'bad\nname', inputSchema: {} }).name).toBe('');
+    // Leading control char must not strip to a valid name
+    expect(mcpToolToTool(makeClient(), { name: '\nsearch', inputSchema: {} }).name).toBe('');
     expect(mcpToolToTool(makeClient(), { name: 'n'.repeat(201), inputSchema: {} }).name).toBe('');
     const longDesc = mcpToolToTool(makeClient(), {
       name: 'ok',

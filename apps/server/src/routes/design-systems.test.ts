@@ -55,6 +55,31 @@ describe('design-systems routes', () => {
     expect(badJson.status).toBe(400);
   });
 
+  it('rejects control-char names and descriptions on create', async () => {
+    const ctrlName = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'bad\nname' }),
+    });
+    expect(ctrlName.status).toBe(400);
+    expect(((await ctrlName.json()) as { error: string }).error).toMatch(/control characters/i);
+
+    const lead = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '\nBrand' }),
+    });
+    expect(lead.status).toBe(400);
+
+    const ctrlDesc = await designSystems.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: NAME, description: 'bad\ndesc' }),
+    });
+    expect(ctrlDesc.status).toBe(400);
+    expect(((await ctrlDesc.json()) as { error: string }).error).toMatch(/control characters/i);
+  });
+
   it('trims name/description and rejects whitespace-only name', async () => {
     const blank = await designSystems.request('/', {
       method: 'POST',

@@ -48,6 +48,19 @@ describe('createFirstHtmlArtifact', () => {
     expect(created).toEqual(['b']);
   });
 
+  it('skips control-char status before completed check', () => {
+    const id = createFirstHtmlArtifact({
+      workflowId: 'wf',
+      runId: 'run',
+      nodeResults: {
+        a: { status: 'completed\n', output: '<html>nope</html>' },
+        b: { status: 'completed', output: '<html>yes</html>' },
+      },
+      create: (input) => ({ id: `art-${input.nodeId}` }),
+    });
+    expect(id).toBe('art-b');
+  });
+
   it('returns undefined when no completed HTML outputs', () => {
     const id = createFirstHtmlArtifact({
       workflowId: 'wf',

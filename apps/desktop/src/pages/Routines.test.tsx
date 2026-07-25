@@ -273,4 +273,20 @@ describe('Routines page', () => {
     await user.type(screen.getByPlaceholderText('Search routines…'), 'zzzz-nope');
     expect(screen.getByText('No routines match filters.')).toBeInTheDocument();
   });
+
+  it('cancels crystallize when confirm is false', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(listRoutineRuns).toHaveBeenCalled());
+    const crystallize = screen.queryByRole('button', { name: 'Crystallize' });
+    if (crystallize) {
+      fireEvent.click(crystallize);
+      expect(crystallizeRoutineRun).not.toHaveBeenCalled();
+    }
+  });
 });

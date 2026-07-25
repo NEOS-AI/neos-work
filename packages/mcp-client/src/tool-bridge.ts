@@ -13,15 +13,16 @@ export const MCP_TOOL_DESCRIPTION_MAX_CHARS = 2_000;
 export const MCP_TOOLS_MAX = 200;
 
 export function mcpToolToTool(mcpClient: McpClient, mcpTool: McpToolDefinition): Tool {
-  let name = typeof mcpTool.name === 'string' ? mcpTool.name.trim() : '';
-  // Drop control chars / overlong names (unusable in registry keys)
-  if (!name || /[\0\r\n]/.test(name) || name.length > MCP_TOOL_NAME_MAX_CHARS) {
-    name = '';
+  let name = '';
+  if (typeof mcpTool.name === 'string' && !/[\0\r\n]/.test(mcpTool.name)) {
+    const n = mcpTool.name.trim();
+    if (n && n.length <= MCP_TOOL_NAME_MAX_CHARS) name = n;
   }
-  let description =
-    typeof mcpTool.description === 'string'
-      ? mcpTool.description.trim() || `MCP tool: ${name}`
-      : `MCP tool: ${name}`;
+  let description = `MCP tool: ${name || 'unknown'}`;
+  if (typeof mcpTool.description === 'string' && !/\0/.test(mcpTool.description)) {
+    const d = mcpTool.description.replace(/[\r\n]+/g, ' ').trim();
+    if (d) description = d;
+  }
   if (description.length > MCP_TOOL_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, MCP_TOOL_DESCRIPTION_MAX_CHARS);
   }

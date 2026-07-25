@@ -317,6 +317,18 @@ describe('session routes', () => {
       }),
     });
     expect(longTitle.status).toBe(400);
+
+    // Leading control-char title must not strip to a valid title
+    const controlTitle = await session.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: 'default',
+        title: `\n${TITLE}`,
+      }),
+    });
+    expect(controlTitle.status).toBe(400);
+    expect(((await controlTitle.json()) as { error: string }).error).toMatch(/title/i);
   });
 });
 
