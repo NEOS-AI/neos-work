@@ -60,6 +60,14 @@ describe('SlackMessageNode', () => {
     expect(ctrl.error).toMatch(/control characters/i);
     expect(postMessage).not.toHaveBeenCalled();
 
+    // Leading control-char must not strip to a valid token
+    const leading = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: '\nxoxb-test' }, { channel: '#general' }, { text: 'hi' }),
+    );
+    expect(leading.ok).toBe(false);
+    expect(leading.error).toMatch(/control characters/i);
+    expect(postMessage).not.toHaveBeenCalled();
+
     const long = await node.execute(
       ctx({ SLACK_BOT_TOKEN: 'x'.repeat(9_000) }, { channel: '#general' }, { text: 'hi' }),
     );
@@ -80,6 +88,14 @@ describe('SlackMessageNode', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/control characters/i);
+    expect(postMessage).not.toHaveBeenCalled();
+
+    // Leading control-char must not strip to a valid channel
+    const leading = await node.execute(
+      ctx({ SLACK_BOT_TOKEN: 'xoxb-test' }, { channel: '\n#general' }, { text: 'hi' }),
+    );
+    expect(leading.ok).toBe(false);
+    expect(leading.error).toMatch(/control characters/i);
     expect(postMessage).not.toHaveBeenCalled();
   });
 

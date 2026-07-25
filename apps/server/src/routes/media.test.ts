@@ -145,6 +145,32 @@ describe('media routes', () => {
     expect(nul.status).toBe(400);
   });
 
+  it('POST /generate rejects control-char surface and prompt before trim', async () => {
+    setSetting('OPENAI_API_KEY', SECRET);
+    const surface = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: '\nimage', prompt: 'a cat' }),
+    });
+    expect(surface.status).toBe(400);
+    expect(((await surface.json()) as { error: string }).error).toMatch(/control characters/i);
+
+    const prompt = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'image', prompt: '\nok-looking' }),
+    });
+    expect(prompt.status).toBe(400);
+    expect(((await prompt.json()) as { error: string }).error).toMatch(/control characters/i);
+  });
+
+  it('GET/DELETE /file rejects control-char filename before trim', async () => {
+    const getRes = await media.request('/file/%0Aok.png');
+    expect(getRes.status).toBe(400);
+    const delRes = await media.request('/file/%0Aok.png', { method: 'DELETE' });
+    expect(delRes.status).toBe(400);
+  });
+
   it('POST /audio rejects text with null bytes before trim', async () => {
     setSetting('OPENAI_API_KEY', SECRET);
     const res = await media.request('/audio', {

@@ -54,6 +54,16 @@ describe('DeployNode', () => {
     expect(result.error).toMatch(/control characters/i);
   });
 
+  it('rejects projectName with control characters before trim', async () => {
+    const result = await DeployNode.execute(
+      ctx({
+        config: { provider: 'vercel', projectName: '\nok-name', content: '<html/>' },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/control characters|projectName/i);
+  });
+
   it('posts deploy payload with workflow metadata', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { url: 'https://demo.vercel.app', deploymentId: 'd1' } }),

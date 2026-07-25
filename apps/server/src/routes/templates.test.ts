@@ -38,6 +38,12 @@ describe('templates routes', () => {
     expect(unknown.status).toBe(200);
     const unknownBody = await unknown.json() as { data: unknown[] };
     expect(unknownBody.data.length).toBe(TEMPLATES.length);
+
+    // Control-char domain must not strip to a valid filter (return all)
+    const ctrl = await templates.request('/?domain=%0Acoding');
+    expect(ctrl.status).toBe(200);
+    const ctrlBody = await ctrl.json() as { data: unknown[] };
+    expect(ctrlBody.data.length).toBe(TEMPLATES.length);
   });
 });
 

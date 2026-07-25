@@ -14,7 +14,10 @@ export const DeployNode: ExecutableNode = {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
     const { config, settings, inputs } = ctx;
-    const rawProvider = String(config?.provider ?? 'vercel').trim().toLowerCase();
+    // Control-char before trim so leading \n cannot strip to a known provider
+    const providerRaw0 = String(config?.provider ?? 'vercel');
+    const rawProvider =
+      /[\0\r\n]/.test(providerRaw0) ? 'vercel' : providerRaw0.trim().toLowerCase() || 'vercel';
     const provider = rawProvider === 'cloudflare' ? 'cloudflare' : 'vercel';
     const serverUrl = safeServerUrl(settings['SERVER_URL']);
     const rawServerToken = String(settings['SERVER_TOKEN'] ?? '');
@@ -26,17 +29,20 @@ export const DeployNode: ExecutableNode = {
 
     const DEPLOY_CONTENT_MAX = 2 * 1024 * 1024;
     const rawContent = inputs['content'] ?? config?.content ?? '';
-    const content = typeof rawContent === 'string' ? rawContent.trim() : String(rawContent).trim();
-    if (!content) {
-      return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
-    }
-    if (/[\0]/.test(content)) {
+    // Null-byte check before trim (trim does not strip \0)
+    const contentUntrimmed =
+      typeof rawContent === 'string' ? rawContent : String(rawContent);
+    if (/[\0]/.test(contentUntrimmed)) {
       return {
         ok: false,
         output: null,
         error: 'content contains invalid control characters',
         durationMs: Date.now() - start,
       };
+    }
+    const content = contentUntrimmed.trim();
+    if (!content) {
+      return { ok: false, output: null, error: 'No content to deploy', durationMs: Date.now() - start };
     }
     if (content.length > DEPLOY_CONTENT_MAX) {
       return {
@@ -47,9 +53,19 @@ export const DeployNode: ExecutableNode = {
       };
     }
 
-    const projectName = String(
+    const projectRaw = String(
       config?.projectName ?? inputs['projectName'] ?? 'neos-deploy',
-    ).trim() || 'neos-deploy';
+    );
+    // Control-char before trim — reject rather than strip to a valid name
+    if (/[\0\r\n]/.test(projectRaw)) {
+      return {
+        ok: false,
+        output: null,
+        error: 'projectName contains invalid control characters',
+        durationMs: Date.now() - start,
+      };
+    }
+    const projectName = projectRaw.trim() || 'neos-deploy';
     if (!isValidDeployProjectName(projectName)) {
       return {
         ok: false,

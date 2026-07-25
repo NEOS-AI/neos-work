@@ -60,7 +60,12 @@ export function createAgentStep(params: {
   // Distinguish control-char / overlong for clearer API errors
   const sessionId = safeLookupId(params.sessionId);
   if (!sessionId) throw new Error('sessionId is invalid');
-  const typeRaw = typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
+  // Control-char check before trim (leading \n must not strip to a valid type)
+  const typeRaw0 = typeof params.type === 'string' ? params.type : '';
+  if (/[\0\r\n]/.test(typeRaw0)) {
+    throw new Error('type must be plan|tool_use|tool_result|reasoning|error');
+  }
+  const typeRaw = typeRaw0.trim().toLowerCase();
   if (!STEP_TYPES.has(typeRaw as AgentStepType)) {
     throw new Error('type must be plan|tool_use|tool_result|reasoning|error');
   }
@@ -106,8 +111,10 @@ export function updateAgentStep(
   const values: unknown[] = [];
 
   if (updates.status !== undefined) {
-    const status =
-      typeof updates.status === 'string' ? updates.status.trim().toLowerCase() : '';
+    const statusRaw = typeof updates.status === 'string' ? updates.status : '';
+    // Control-char before trim so leading \n cannot strip to a valid status
+    if (/[\0\r\n]/.test(statusRaw)) return false;
+    const status = statusRaw.trim().toLowerCase();
     if (!status || !STEP_STATUSES.has(status as AgentStepStatus)) return false;
     fields.push('status = ?');
     values.push(status);
@@ -117,14 +124,21 @@ export function updateAgentStep(
     values.push(serializeStepData(updates.data));
   }
   if (updates.error !== undefined) {
-    // Cap error text (runaway tool dump defense)
+    // Cap error text (runaway tool dump defense); scrub log-unsafe control chars
     const ERROR_MAX = 4_000;
-    let error: string | null =
-      typeof updates.error === 'string'
-        ? updates.error.trim() || null
-        : updates.error == null
-          ? null
-          : String(updates.error);
+    let error: string | null = null;
+    if (typeof updates.error === 'string') {
+      // Null-byte only reject; collapse CR/LF for single-line storage
+      if (/\0/.test(updates.error)) {
+        error = updates.error.replace(/\0/g, '').replace(/[\r\n]+/g, ' ').trim() || null;
+      } else {
+        error = updates.error.replace(/[\r\n]+/g, ' ').trim() || null;
+      }
+    } else if (updates.error == null) {
+      error = null;
+    } else {
+      error = String(updates.error).replace(/[\r\n]+/g, ' ').trim() || null;
+    }
     if (error && error.length > ERROR_MAX) {
       error = error.slice(0, ERROR_MAX) + '…[truncated]';
     }

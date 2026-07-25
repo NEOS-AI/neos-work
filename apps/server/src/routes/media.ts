@@ -132,11 +132,12 @@ media.post('/audio', async (c) => {
 
 // Serve a saved media file by filename (path traversal safe)
 media.get('/file/:filename', (c) => {
-  const filename = c.req.param('filename').trim();
-  // Reject any path traversal
-  if (!isSafeMediaFilename(filename)) {
+  // Pass raw param — isSafeMediaFilename checks control chars before trim
+  const filenameRaw = c.req.param('filename');
+  if (!isSafeMediaFilename(filenameRaw)) {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
+  const filename = filenameRaw.trim();
   const filePath = path.join(MEDIA_DIR, filename);
   if (!fs.existsSync(filePath)) {
     return c.json({ ok: false, error: 'Not found' }, 404);
@@ -175,8 +176,12 @@ media.post('/generate', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
 
-  const surface =
-    typeof body.surface === 'string' ? body.surface.trim().toLowerCase() : '';
+  // Control-char check before trim (leading \r\n must not strip to "image")
+  const surfaceRaw = typeof body.surface === 'string' ? body.surface : '';
+  if (surfaceRaw && /[\0\r\n]/.test(surfaceRaw)) {
+    return c.json({ ok: false, error: 'surface contains invalid control characters' }, 400);
+  }
+  const surface = surfaceRaw.trim().toLowerCase();
   if (surface !== 'image' && surface !== 'audio') {
     return c.json({ ok: false, error: 'surface must be image or audio' }, 400);
   }
@@ -187,6 +192,9 @@ media.post('/generate', async (c) => {
   try {
     if (surface === 'image') {
       const rawPrompt = body.prompt ?? body.text;
+      if (typeof rawPrompt === 'string' && /[\0\r\n]/.test(rawPrompt)) {
+        return c.json({ ok: false, error: 'prompt contains invalid control characters' }, 400);
+      }
       const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
       if (!prompt) {
         return c.json({ ok: false, error: 'prompt is required for image' }, 400);
@@ -212,6 +220,10 @@ media.post('/generate', async (c) => {
     }
 
     const rawText = body.text ?? body.prompt;
+    // TTS allows newlines; only null-byte is rejected
+    if (typeof rawText === 'string' && /[\0]/.test(rawText)) {
+      return c.json({ ok: false, error: 'text contains invalid control characters' }, 400);
+    }
     const text = typeof rawText === 'string' ? rawText.trim() : '';
     if (!text) {
       return c.json({ ok: false, error: 'text is required for audio' }, 400);
@@ -241,10 +253,12 @@ media.post('/generate', async (c) => {
 
 /** Delete a generated media file */
 media.delete('/file/:filename', (c) => {
-  const filename = c.req.param('filename').trim();
-  if (!isSafeMediaFilename(filename)) {
+  // Pass raw param — isSafeMediaFilename checks control chars before trim
+  const filenameRaw = c.req.param('filename');
+  if (!isSafeMediaFilename(filenameRaw)) {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
+  const filename = filenameRaw.trim();
   const filePath = path.join(MEDIA_DIR, filename);
   if (!fs.existsSync(filePath)) {
     return c.json({ ok: false, error: 'Not found' }, 404);

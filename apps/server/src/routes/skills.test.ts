@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from '../db/schema.js';
-import { skills } from './skills.js';
+import { skills, upsertSkill } from './skills.js';
 
 const SKILL_NAME = `_cov_skill_route_${process.pid}`;
 
@@ -53,6 +53,50 @@ describe('skills routes', () => {
     expect(toggle.status).toBe(404);
     const del = await skills.request('/%0abad', { method: 'DELETE' });
     expect(del.status).toBe(404);
+  });
+
+  it('upsertSkill rejects control-char name/source/path/version before trim', () => {
+    expect(() =>
+      upsertSkill({
+        name: `\n${SKILL_NAME}`,
+        source: 'local',
+        path: `/tmp/${SKILL_NAME}`,
+      }),
+    ).toThrow(/invalid skill name/i);
+
+    expect(() =>
+      upsertSkill({
+        name: SKILL_NAME,
+        source: 'local\nbad',
+        path: `/tmp/${SKILL_NAME}`,
+      }),
+    ).toThrow(/invalid skill source/i);
+
+    expect(() =>
+      upsertSkill({
+        name: SKILL_NAME,
+        source: 'local',
+        path: `/tmp/${SKILL_NAME}\n`,
+      }),
+    ).toThrow(/invalid skill path/i);
+
+    expect(() =>
+      upsertSkill({
+        name: SKILL_NAME,
+        source: 'local',
+        path: `/tmp/${SKILL_NAME}`,
+        version: '1.0\n0',
+      }),
+    ).toThrow(/invalid skill version/i);
+
+    expect(() =>
+      upsertSkill({
+        name: SKILL_NAME,
+        source: 'local',
+        path: `/tmp/${SKILL_NAME}`,
+        description: `ok${'\0'}bad`,
+      }),
+    ).toThrow(/invalid skill description/i);
   });
 
   it('toggles enabled and rejects bad body', async () => {

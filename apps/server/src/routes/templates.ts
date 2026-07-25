@@ -209,7 +209,12 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
 
 // GET /api/templates
 templates.get('/', (c) => {
-  const domainRaw = (c.req.query('domain') ?? '').trim().toLowerCase();
+  const domainQuery = c.req.query('domain') ?? '';
+  // Ignore control-char domain filter (check before trim)
+  const domainRaw =
+    domainQuery && !/[\0\r\n]/.test(domainQuery)
+      ? domainQuery.trim().toLowerCase()
+      : '';
   // Only known domains filter; unknown → return all (avoid empty false-negatives)
   const domain =
     domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general'

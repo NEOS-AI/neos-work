@@ -49,6 +49,10 @@ describe('agent_step CRUD', () => {
     expect(() =>
       createAgentStep({ sessionId: 'bad\nid', stepIndex: 0, type: 'plan' }),
     ).toThrow(/sessionId is invalid/i);
+    // Leading control-char type must not strip to a valid type
+    expect(() =>
+      createAgentStep({ sessionId: session.id, stepIndex: 0, type: '\nplan' as never }),
+    ).toThrow(/type must be/i);
     expect(() =>
       createAgentStep({ sessionId: session.id, stepIndex: 10_001, type: 'plan' }),
     ).toThrow(/stepIndex/i);
@@ -62,6 +66,8 @@ describe('agent_step CRUD', () => {
     expect(updateAgentStep(s.id, { status: '  COMPLETED  ' as never })).toBe(true);
     expect(getAgentStep(s.id)?.status).toBe('completed');
     expect(updateAgentStep(s.id, { status: 'pendingish' as never })).toBe(false);
+    // Leading control-char status must not strip to completed
+    expect(updateAgentStep(s.id, { status: '\ncompleted' as never })).toBe(false);
   });
 
   it('accepts all step types and ignores blank session delete', () => {

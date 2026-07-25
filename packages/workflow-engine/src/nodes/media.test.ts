@@ -31,6 +31,13 @@ describe('MediaNode', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/control characters/i);
+
+    // Leading control-char must not strip to a valid prompt
+    const leading = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: '\nok-looking' } }),
+    );
+    expect(leading.ok).toBe(false);
+    expect(leading.error).toMatch(/control characters/i);
   });
 
   it('requires audio text', async () => {

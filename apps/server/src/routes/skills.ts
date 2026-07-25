@@ -42,30 +42,47 @@ function upsertSkill(params: {
   version?: string;
   manifestJson?: string;
 }): SkillRow {
-  const name = typeof params.name === 'string' ? params.name.trim() : '';
-  if (!name) throw new Error('name is required');
-  if (/[\0\r\n]/.test(name) || name.length > 200) {
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  const nameRaw = typeof params.name === 'string' ? params.name : '';
+  if (/[\0\r\n]/.test(nameRaw) || nameRaw.trim().length > 200) {
     throw new Error('invalid skill name');
   }
-  let description =
-    typeof params.description === 'string' ? params.description.trim() || null : (params.description ?? null);
+  const name = nameRaw.trim();
+  if (!name) throw new Error('name is required');
+  let description: string | null = null;
+  if (typeof params.description === 'string') {
+    // Multi-line OK; reject null bytes only
+    if (/\0/.test(params.description)) {
+      throw new Error('invalid skill description');
+    }
+    description = params.description.trim() || null;
+  }
   if (description && description.length > 4_000) {
     description = description.slice(0, 4_000);
   }
-  let source = typeof params.source === 'string' ? params.source.trim() : String(params.source ?? '');
-  if (/[\0\r\n]/.test(source) || source.length > 200) {
+  const sourceRaw =
+    typeof params.source === 'string' ? params.source : String(params.source ?? '');
+  if (/[\0\r\n]/.test(sourceRaw) || sourceRaw.trim().length > 200) {
     throw new Error('invalid skill source');
   }
+  let source = sourceRaw.trim();
   if (!source) source = 'local';
-  const pathVal = typeof params.path === 'string' ? params.path.trim() : String(params.path ?? '');
-  if (pathVal && /[\0\r\n]/.test(pathVal)) {
+  const pathRaw =
+    typeof params.path === 'string' ? params.path : String(params.path ?? '');
+  if (pathRaw && /[\0\r\n]/.test(pathRaw)) {
     throw new Error('invalid skill path');
   }
+  const pathVal = pathRaw.trim();
   if (pathVal.length > 1_000) {
     throw new Error('invalid skill path');
   }
-  let version =
-    typeof params.version === 'string' ? params.version.trim() || null : (params.version ?? null);
+  let version: string | null = null;
+  if (typeof params.version === 'string') {
+    if (/[\0\r\n]/.test(params.version)) {
+      throw new Error('invalid skill version');
+    }
+    version = params.version.trim() || null;
+  }
   if (version && version.length > 64) version = version.slice(0, 64);
   let manifestJson =
     typeof params.manifestJson === 'string' ? params.manifestJson : (params.manifestJson ?? null);
@@ -191,4 +208,5 @@ skills.delete('/:id', (c) => {
   return c.json({ ok: true });
 });
 
-export { skills };
+/** Exported for unit tests (scan path hygiene). */
+export { skills, upsertSkill };

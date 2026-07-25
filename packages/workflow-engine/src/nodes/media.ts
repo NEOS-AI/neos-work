@@ -14,14 +14,20 @@ const TTS_MODELS = new Set(['tts-1', 'tts-1-hd']);
 const IMAGE_PROMPT_MAX = 4000;
 const AUDIO_TEXT_MAX = 4096;
 
-function resolvePrompt(config: Record<string, unknown> | undefined, inputs: Record<string, unknown>): string {
+function resolvePromptRaw(
+  config: Record<string, unknown> | undefined,
+  inputs: Record<string, unknown>,
+): string {
   const raw = config?.['prompt'] ?? inputs['prompt'] ?? '';
-  return typeof raw === 'string' ? raw.trim() : String(raw).trim();
+  return typeof raw === 'string' ? raw : String(raw);
 }
 
-function resolveAudioText(config: Record<string, unknown> | undefined, inputs: Record<string, unknown>): string {
+function resolveAudioTextRaw(
+  config: Record<string, unknown> | undefined,
+  inputs: Record<string, unknown>,
+): string {
   const raw = config?.['text'] ?? inputs['text'] ?? '';
-  return typeof raw === 'string' ? raw.trim() : String(raw).trim();
+  return typeof raw === 'string' ? raw : String(raw);
 }
 
 export const MediaNode: ExecutableNode = {
@@ -30,8 +36,12 @@ export const MediaNode: ExecutableNode = {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
     const { config, settings, inputs } = ctx;
-    // Normalize case/whitespace so "Image" / " AUDIO " work like the panel options
-    const mediaType = String(config?.mediaType ?? 'image').trim().toLowerCase() || 'image';
+    // Control-char before trim so leading \n cannot strip to "image"/"audio"
+    const mediaTypeRaw = String(config?.mediaType ?? 'image');
+    const mediaType =
+      /[\0\r\n]/.test(mediaTypeRaw)
+        ? 'image'
+        : mediaTypeRaw.trim().toLowerCase() || 'image';
     const serverUrl = safeServerUrl(settings['SERVER_URL']);
     const rawServerToken = String(settings['SERVER_TOKEN'] ?? '');
     // Drop tokens that would break Authorization headers (check before trim)
@@ -41,20 +51,21 @@ export const MediaNode: ExecutableNode = {
         : rawServerToken.trim();
 
     if (mediaType === 'image') {
-      const prompt = resolvePrompt(config, inputs);
+      const promptRaw = resolvePromptRaw(config, inputs);
+      if (/[\0\r\n]/.test(promptRaw)) {
+        return {
+          ok: false,
+          output: null,
+          error: 'Image prompt contains invalid control characters',
+          durationMs: Date.now() - start,
+        };
+      }
+      const prompt = promptRaw.trim();
       if (!prompt) {
         return {
           ok: false,
           output: null,
           error: 'No prompt provided for image generation',
-          durationMs: Date.now() - start,
-        };
-      }
-      if (/[\0\r\n]/.test(prompt)) {
-        return {
-          ok: false,
-          output: null,
-          error: 'Image prompt contains invalid control characters',
           durationMs: Date.now() - start,
         };
       }
@@ -67,11 +78,16 @@ export const MediaNode: ExecutableNode = {
         };
       }
 
+      // Control-char size/quality → fall back to defaults (check before trim)
+      const sizeRaw0 = typeof config?.size === 'string' ? config.size : '1024x1024';
       const rawSize =
-        typeof config?.size === 'string' ? config.size.trim().toLowerCase() : '1024x1024';
+        /[\0\r\n]/.test(sizeRaw0) ? '1024x1024' : sizeRaw0.trim().toLowerCase() || '1024x1024';
       const size = IMAGE_SIZES.has(rawSize) ? rawSize : '1024x1024';
+      const qualityRaw0 = typeof config?.quality === 'string' ? config.quality : 'standard';
       const rawQuality =
-        typeof config?.quality === 'string' ? config.quality.trim().toLowerCase() : 'standard';
+        /[\0\r\n]/.test(qualityRaw0)
+          ? 'standard'
+          : qualityRaw0.trim().toLowerCase() || 'standard';
       const quality = IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard';
 
       try {
@@ -132,20 +148,22 @@ export const MediaNode: ExecutableNode = {
     }
 
     if (mediaType === 'audio') {
-      const text = resolveAudioText(config, inputs);
+      const textRaw = resolveAudioTextRaw(config, inputs);
+      // Node-level: reject \0/\r/\n before trim (stricter than route TTS null-byte-only)
+      if (/[\0\r\n]/.test(textRaw)) {
+        return {
+          ok: false,
+          output: null,
+          error: 'Audio text contains invalid control characters',
+          durationMs: Date.now() - start,
+        };
+      }
+      const text = textRaw.trim();
       if (!text) {
         return {
           ok: false,
           output: null,
           error: 'No text provided for audio generation',
-          durationMs: Date.now() - start,
-        };
-      }
-      if (/[\0\r\n]/.test(text)) {
-        return {
-          ok: false,
-          output: null,
-          error: 'Audio text contains invalid control characters',
           durationMs: Date.now() - start,
         };
       }
@@ -158,11 +176,14 @@ export const MediaNode: ExecutableNode = {
         };
       }
 
+      // Control-char voice/model → defaults (check before trim)
+      const voiceRaw0 = typeof config?.voice === 'string' ? config.voice : 'alloy';
       const rawVoice =
-        typeof config?.voice === 'string' ? config.voice.trim().toLowerCase() : 'alloy';
+        /[\0\r\n]/.test(voiceRaw0) ? 'alloy' : voiceRaw0.trim().toLowerCase() || 'alloy';
       const voice = TTS_VOICES.has(rawVoice) ? rawVoice : 'alloy';
+      const modelRaw0 = typeof config?.model === 'string' ? config.model : 'tts-1';
       const rawModel =
-        typeof config?.model === 'string' ? config.model.trim().toLowerCase() : 'tts-1';
+        /[\0\r\n]/.test(modelRaw0) ? 'tts-1' : modelRaw0.trim().toLowerCase() || 'tts-1';
       const model = TTS_MODELS.has(rawModel) ? rawModel : 'tts-1';
 
       try {

@@ -12,19 +12,20 @@ export class SlackMessageNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const token = String(ctx.settings['SLACK_BOT_TOKEN'] ?? '').trim();
-    if (!token) {
-      return { ok: false, output: null, error: 'SLACK_BOT_TOKEN not set', durationMs: 0 };
-    }
-    // Reject control chars / pathological token lengths before calling Slack API
+    const tokenRaw = String(ctx.settings['SLACK_BOT_TOKEN'] ?? '');
+    // Reject control chars before trim (leading \r\n must not strip to a valid token)
     const TOKEN_MAX = 8_192;
-    if (/[\0\r\n]/.test(token)) {
+    if (/[\0\r\n]/.test(tokenRaw)) {
       return {
         ok: false,
         output: null,
         error: 'SLACK_BOT_TOKEN contains invalid control characters',
         durationMs: 0,
       };
+    }
+    const token = tokenRaw.trim();
+    if (!token) {
+      return { ok: false, output: null, error: 'SLACK_BOT_TOKEN not set', durationMs: 0 };
     }
     if (token.length > TOKEN_MAX) {
       return {
@@ -35,22 +36,23 @@ export class SlackMessageNode implements ExecutableNode {
       };
     }
 
-    const channel = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '').trim();
+    const channelRaw = String(ctx.config?.['channel'] ?? ctx.inputs['channel'] ?? '');
     const text = resolveMessageText(ctx.config, ctx.inputs);
     /** Slack channel / conversation id practical bound. */
     const CHANNEL_MAX = 200;
 
-    if (!channel) {
-      return { ok: false, output: null, error: 'Slack channel not specified', durationMs: 0 };
-    }
-    // Reject control chars that can confuse Slack API / logging
-    if (/[\0\r\n]/.test(channel)) {
+    // Reject control chars before trim (log injection / API confusion)
+    if (/[\0\r\n]/.test(channelRaw)) {
       return {
         ok: false,
         output: null,
         error: 'Slack channel contains invalid control characters',
         durationMs: 0,
       };
+    }
+    const channel = channelRaw.trim();
+    if (!channel) {
+      return { ok: false, output: null, error: 'Slack channel not specified', durationMs: 0 };
     }
     if (channel.length > CHANNEL_MAX) {
       return {
