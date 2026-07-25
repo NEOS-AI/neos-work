@@ -37,6 +37,17 @@ describe('WebSearchNode', () => {
     expect(result.error).toMatch(/TAVILY_API_KEY/);
   });
 
+  it('rejects control-char or overlong TAVILY_API_KEY', async () => {
+    const ctrl = await node.execute(ctx({ TAVILY_API_KEY: 'tv\nly' }, { query: 'hello' }));
+    expect(ctrl.ok).toBe(false);
+    expect(ctrl.error).toMatch(/invalid/i);
+    const long = await node.execute(
+      ctx({ TAVILY_API_KEY: 'k'.repeat(9_000) }, { query: 'hello' }),
+    );
+    expect(long.ok).toBe(false);
+    expect(long.error).toMatch(/invalid/i);
+  });
+
   it('requires a query', async () => {
     const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, {}));
     expect(result.ok).toBe(false);

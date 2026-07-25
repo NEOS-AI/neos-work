@@ -13,8 +13,9 @@ import crypto from 'node:crypto';
 const API_KEY_MAX_CHARS = 8_192;
 
 function sanitizeApiKey(raw: unknown): string {
-  const key = typeof raw === 'string' ? raw.trim() : '';
-  if (!key || key.length > API_KEY_MAX_CHARS || /[\0\r\n]/.test(key)) return '';
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const key = raw.trim();
+  if (!key || key.length > API_KEY_MAX_CHARS) return '';
   return key;
 }
 

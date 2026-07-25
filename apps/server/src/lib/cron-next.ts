@@ -58,7 +58,11 @@ export function estimateNextCronRun(
 
   const from = options?.from ?? new Date();
   const tz = options?.timezone?.trim() || 'UTC';
-  const horizonDays = options?.horizonDays ?? 366;
+  // Clamp horizon (1–3660 days) so pathological options cannot spin forever
+  const horizonRaw = Number(options?.horizonDays ?? 366);
+  const horizonDays = Number.isFinite(horizonRaw)
+    ? Math.min(3_660, Math.max(1, Math.floor(horizonRaw)))
+    : 366;
 
   // Invalid IANA timezone → null (callers treat as unknown next run)
   if (!isValidTimeZone(tz)) return null;

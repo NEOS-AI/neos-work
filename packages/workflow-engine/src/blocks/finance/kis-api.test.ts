@@ -35,6 +35,10 @@ describe('kis-api', () => {
 
   it('rejects blank credentials and network failures', async () => {
     await expect(getKisToken({ appKey: '  ', appSecret: 'sec' })).rejects.toThrow(/required/i);
+    await expect(getKisToken({ appKey: 'k\ney', appSecret: 'sec' })).rejects.toThrow(/required/i);
+    await expect(getKisToken({ appKey: 'k', appSecret: 's'.repeat(9_000) })).rejects.toThrow(
+      /required/i,
+    );
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNRESET')));
     await expect(getKisToken({ appKey: 'net-k', appSecret: 'net-s' })).rejects.toThrow(/network/i);
   });

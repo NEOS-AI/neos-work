@@ -32,6 +32,9 @@ describe('agent_step CRUD', () => {
     expect(() =>
       createAgentStep({ sessionId: '  ', stepIndex: 0, type: 'plan' }),
     ).toThrow(/sessionId/i);
+    expect(getAgentStep('id\nbad')).toBeUndefined();
+    expect(listAgentSteps('sess\nid')).toEqual([]);
+    expect(updateAgentStep('x'.repeat(101), { status: 'completed' })).toBe(false);
   });
 
   it('rejects invalid type/stepIndex and normalizes type case', () => {

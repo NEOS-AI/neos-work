@@ -88,7 +88,12 @@ export function assessWorkflowPreflight(
   for (const edge of edges) {
     const source = typeof edge.source === 'string' ? edge.source.trim() : '';
     const target = typeof edge.target === 'string' ? edge.target.trim() : '';
-    if (!source || !target || !nodeIds.has(source) || !nodeIds.has(target)) {
+    // Invalid edge endpoints (control-char / overlong) count as dangling
+    const sourceOk =
+      !!source && source.length <= 200 && !/[\0\r\n]/.test(source) && nodeIds.has(source);
+    const targetOk =
+      !!target && target.length <= 200 && !/[\0\r\n]/.test(target) && nodeIds.has(target);
+    if (!sourceOk || !targetOk) {
       // Also treat blank endpoints as dangling (executor skips them, but graph is invalid)
       issues.push({
         code: 'dangling_edge',

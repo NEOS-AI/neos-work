@@ -92,6 +92,24 @@ describe('resolveMessageText', () => {
       ),
     ).toBe(`{{${longKey}}}`);
   });
+
+  it('interpolates at most 100 placeholder keys (fan-out cap)', () => {
+    const inputs: Record<string, unknown> = {};
+    const parts: string[] = [];
+    for (let i = 0; i < 120; i++) {
+      const k = `k${i}`;
+      inputs[k] = `v${i}`;
+      parts.push(`{{${k}}}`);
+    }
+    const out = resolveMessageText({ textTemplate: parts.join(' ') }, inputs);
+    // First 100 keys replaced
+    expect(out).toContain('v0');
+    expect(out).toContain('v99');
+    // Keys beyond the cap remain as placeholders
+    expect(out).toContain('{{k100}}');
+    expect(out).toContain('{{k119}}');
+    expect(out).not.toContain('v100');
+  });
 });
 
 describe('resolveMaxResults', () => {

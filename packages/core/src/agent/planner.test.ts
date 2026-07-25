@@ -45,6 +45,21 @@ describe('Planner', () => {
     expect(steps[1]!.toolName).toBe('read_file');
   });
 
+  it('caps multi-chunk raw LLM output and still returns a plan', async () => {
+    // RAW_OUTPUT_MAX is 500_000 — stream past that without hanging parseSteps
+    const adapter = mockAdapter(['']);
+    adapter.chat = async function* () {
+      // Valid prefix so parse can still find a small array if slice cuts mid-stream
+      yield { type: 'text' as const, content: '[{"description":"kept"}]' };
+      yield { type: 'text' as const, content: 'x'.repeat(600_000) };
+      yield { type: 'done' as const };
+    };
+    const steps = await new Planner(adapter).plan('goal');
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+    expect(steps[0]!.description.length).toBeGreaterThan(0);
+    expect(steps[0]!.description.length).toBeLessThanOrEqual(2_000);
+  });
+
   it('strips null bytes and caps oversized goal/context without failing', async () => {
     const adapter = mockAdapter([JSON.stringify([{ description: 'ok' }])]);
     const steps = await new Planner(adapter).plan(

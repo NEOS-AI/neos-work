@@ -130,13 +130,13 @@ export class Planner {
             typeof item['description'] === 'string'
               ? item['description'].trim()
               : String(item ?? '').trim();
-          let toolRaw =
-            typeof item['toolName'] === 'string' ? item['toolName'].trim() : '';
-          // Drop control-char tool names; truncate overlong names
-          if (toolRaw && /[\0\r\n]/.test(toolRaw)) {
-            toolRaw = '';
-          } else if (toolRaw.length > 100) {
-            toolRaw = toolRaw.slice(0, 100);
+          let toolRaw = '';
+          if (typeof item['toolName'] === 'string') {
+            // Drop control-char tool names before trim; truncate overlong names
+            if (!/[\0\r\n]/.test(item['toolName'])) {
+              toolRaw = item['toolName'].trim();
+              if (toolRaw.length > 100) toolRaw = toolRaw.slice(0, 100);
+            }
           }
           // Cap description length
           const description = (descriptionRaw || 'Execute the goal directly').slice(0, 2_000);

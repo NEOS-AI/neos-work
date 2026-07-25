@@ -24,14 +24,29 @@ const STEP_TYPES = new Set<AgentStepType>(['plan', 'tool_use', 'tool_result', 'r
 const STEP_STATUSES = new Set<AgentStepStatus>(['pending', 'running', 'completed', 'error']);
 /** Cap serialized step data (runaway tool output defense). */
 const AGENT_STEP_DATA_MAX_CHARS = 512 * 1024;
+/** Practical bound for session / step ids. */
+const LOOKUP_ID_MAX = 100;
+
+function safeLookupId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > LOOKUP_ID_MAX) return '';
+  return id;
+}
 
 function serializeStepData(data: unknown): string | null {
   if (data === undefined) return null;
-  const dataStr = JSON.stringify(data);
-  if (dataStr.length > AGENT_STEP_DATA_MAX_CHARS) {
-    return JSON.stringify({ truncated: true, preview: dataStr.slice(0, 256) });
+  try {
+    const dataStr = JSON.stringify(data);
+    if (dataStr.length > AGENT_STEP_DATA_MAX_CHARS) {
+      return JSON.stringify({ truncated: true, preview: dataStr.slice(0, 256) });
+    }
+    return dataStr;
+  } catch {
+    return JSON.stringify({ truncated: true, note: 'unserializable' });
   }
-  return dataStr;
 }
 
 export function createAgentStep(params: {
@@ -40,11 +55,11 @@ export function createAgentStep(params: {
   type: AgentStepType;
   data?: unknown;
 }): AgentStepRow {
-  const sessionId = typeof params.sessionId === 'string' ? params.sessionId.trim() : '';
-  if (!sessionId) throw new Error('sessionId is required');
-  if (sessionId.length > 100 || /[\0\r\n]/.test(sessionId)) {
-    throw new Error('sessionId is invalid');
-  }
+  const rawSid = typeof params.sessionId === 'string' ? params.sessionId : '';
+  if (!rawSid.trim()) throw new Error('sessionId is required');
+  // Distinguish control-char / overlong for clearer API errors
+  const sessionId = safeLookupId(params.sessionId);
+  if (!sessionId) throw new Error('sessionId is invalid');
   const typeRaw = typeof params.type === 'string' ? params.type.trim().toLowerCase() : '';
   if (!STEP_TYPES.has(typeRaw as AgentStepType)) {
     throw new Error('type must be plan|tool_use|tool_result|reasoning|error');
@@ -65,14 +80,14 @@ export function createAgentStep(params: {
 }
 
 export function getAgentStep(id: string): AgentStepRow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   return db.prepare('SELECT * FROM agent_step WHERE id = ?').get(trimmed) as AgentStepRow | undefined;
 }
 
 export function listAgentSteps(sessionId: string): AgentStepRow[] {
-  const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
+  const sid = safeLookupId(sessionId);
   if (!sid) return [];
   const db = getDb();
   return db
@@ -84,7 +99,7 @@ export function updateAgentStep(
   id: string,
   updates: { status?: AgentStepStatus; data?: unknown; error?: string },
 ): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const fields: string[] = ["updated_at = datetime('now')"];
@@ -125,7 +140,7 @@ export function updateAgentStep(
 }
 
 export function deleteAgentSteps(sessionId: string): void {
-  const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
+  const sid = safeLookupId(sessionId);
   if (!sid) return;
   const db = getDb();
   db.prepare('DELETE FROM agent_step WHERE session_id = ?').run(sid);

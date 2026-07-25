@@ -35,10 +35,14 @@ export function createWebSearchTool(): Tool {
       required: ['query'],
     },
     async execute(input): Promise<ToolResult> {
-      const apiKey =
+      let apiKey =
         typeof process.env['TAVILY_API_KEY'] === 'string'
           ? process.env['TAVILY_API_KEY'].trim()
           : '';
+      // Reject control chars / pathological key lengths before calling Tavily
+      if (/[\0\r\n]/.test(apiKey) || apiKey.length > 8_192) {
+        return { success: false, output: null, error: 'TAVILY_API_KEY is invalid' };
+      }
       if (!apiKey) {
         return { success: false, output: null, error: 'TAVILY_API_KEY is not set' };
       }
@@ -70,7 +74,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.103',
+            'User-Agent': 'neos-work/0.3.104',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
@@ -95,11 +99,13 @@ export function createWebSearchTool(): Tool {
             const url = typeof r.url === 'string' ? r.url.trim() : '';
             // Only keep http(s) result URLs (drop javascript:/file: noise)
             let safeUrl = '';
-            try {
-              const u = new URL(url);
-              if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
-            } catch {
-              safeUrl = '';
+            if (url && url.length <= 2_048 && !/[\0\r\n]/.test(url)) {
+              try {
+                const u = new URL(url);
+                if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
+              } catch {
+                safeUrl = '';
+              }
             }
             const snippet =
               typeof r.content === 'string' ? r.content.trim().slice(0, SNIPPET_MAX) : '';

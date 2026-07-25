@@ -40,6 +40,18 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
+  it('flags control-char edge endpoints as dangling', () => {
+    const r = assessWorkflowPreflight(
+      {
+        nodes: base.nodes,
+        edges: [{ id: 'e1', source: 't\nx', target: 'o' }],
+      },
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+
   it('flags blank node ids', () => {
     const r = assessWorkflowPreflight(
       {

@@ -143,6 +143,29 @@ describe('memory CRUD', () => {
       }),
     ).toThrow(/max size/i);
   });
+
+  it('drops overlong workspaceId lookups and caps search query length', () => {
+    const overlongWs = 'w'.repeat(101);
+    expect(() =>
+      createMemory({ workspaceId: overlongWs, key: KEYS[0]!, content: 'x' }),
+    ).toThrow(/workspaceId and key/i);
+    expect(getMemory(overlongWs, KEYS[0]!)).toBeUndefined();
+    expect(listMemories(overlongWs)).toEqual([]);
+    expect(searchMemory(overlongWs, 'x')).toEqual([]);
+    expect(deleteMemory(overlongWs, KEYS[0]!)).toBe(false);
+
+    // Content matches the first 2k of an overlong query (post-cap LIKE still hits)
+    const prefix = 'q'.repeat(2_000);
+    createMemory({
+      workspaceId: WS,
+      key: KEYS[0]!,
+      content: `marker ${prefix}`,
+    });
+    const hits = searchMemory(WS, prefix + 'extra'.repeat(500));
+    expect(hits.some((r) => r.key === KEYS[0]!)).toBe(true);
+    // Control-char query still empty (not truncated into something searchable)
+    expect(searchMemory(WS, `ok\n${prefix}`)).toEqual([]);
+  });
 });
 
 

@@ -141,4 +141,33 @@ describe('block registry', () => {
     expect(getNativeExecutor('')).toBeUndefined();
     expect(resolveBlock('')).toBeUndefined();
   });
+
+  it('rejects unsafe block ids and caps metadata fields', () => {
+    registerNativeBlock({
+      blockId: 'bad id!',
+      execute: async () => ({ ok: true, output: 1, durationMs: 0 }),
+    });
+    expect(getNativeExecutor('bad id!')).toBeUndefined();
+
+    registerBlockMeta({
+      id: 'meta_cap_cov',
+      name: `N${'\n'}ame`,
+      domain: 'general',
+      category: 'c'.repeat(200),
+      description: 'd'.repeat(5_000),
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      skillId: 'sk\nid',
+      promptTemplate: 'p'.repeat(60_000),
+    });
+    const got = resolveBlock('meta_cap_cov');
+    expect(got?.name).toBe('meta_cap_cov'); // control-char name → id
+    expect(got?.category).toBe('custom');
+    expect(got?.description!.length).toBe(2_000);
+    expect(got?.skillId).toBeUndefined();
+    expect(got?.promptTemplate!.length).toBe(50_000);
+  });
 });

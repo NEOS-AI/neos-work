@@ -17,7 +17,17 @@ export class WebSearchNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const apiKey = String(ctx.settings['TAVILY_API_KEY'] ?? '').trim();
+    let apiKey = String(ctx.settings['TAVILY_API_KEY'] ?? '').trim();
+    // Reject control chars / pathological key lengths before calling Tavily
+    const API_KEY_MAX = 8_192;
+    if (/[\0\r\n]/.test(apiKey) || apiKey.length > API_KEY_MAX) {
+      return {
+        ok: false,
+        output: null,
+        error: 'TAVILY_API_KEY is invalid',
+        durationMs: 0,
+      };
+    }
     if (!apiKey) {
       return { ok: false, output: null, error: 'TAVILY_API_KEY not set', durationMs: 0 };
     }
@@ -34,7 +44,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.103',
+          'User-Agent': 'neos-work/0.3.104',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
@@ -64,11 +74,13 @@ export class WebSearchNode implements ExecutableNode {
             typeof r.content === 'string' ? r.content.trim().slice(0, 2_000) : '';
           const url = typeof r.url === 'string' ? r.url.trim() : '';
           let safeUrl = '';
-          try {
-            const u = new URL(url);
-            if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
-          } catch {
-            safeUrl = '';
+          if (url && url.length <= 2_048 && !/[\0\r\n]/.test(url)) {
+            try {
+              const u = new URL(url);
+              if (u.protocol === 'http:' || u.protocol === 'https:') safeUrl = url;
+            } catch {
+              safeUrl = '';
+            }
           }
           return {
             title,

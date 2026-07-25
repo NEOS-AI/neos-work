@@ -35,8 +35,11 @@ const SESSION_TITLE_MAX = 200;
 
 /** Trim + reject blank / control-char / overlong lookup ids. */
 function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
-  const id = typeof raw === 'string' ? raw.trim() : '';
-  if (!id || id.length > max || /[\0\r\n]/.test(id)) return '';
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim — trim() strips leading/trailing \r\n
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
   return id;
 }
 
@@ -44,10 +47,11 @@ function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
 
 export function listSessions(workspaceId?: string): SessionRow[] {
   const db = getDb();
-  const wsRaw =
-    typeof workspaceId === 'string' ? workspaceId.trim() || undefined : undefined;
   // Drop unsafe filter (list all when invalid) — matches route safeRouteId
-  const ws = wsRaw ? safeLookupId(wsRaw) || undefined : undefined;
+  const ws =
+    workspaceId !== undefined && workspaceId !== null && workspaceId !== ''
+      ? safeLookupId(workspaceId) || undefined
+      : undefined;
   if (ws) {
     return db
       .prepare('SELECT * FROM session WHERE workspace_id = ? ORDER BY updated_at DESC')
@@ -74,13 +78,15 @@ export function createSession(params: {
   if (!workspaceId) {
     throw new Error('workspaceId is required');
   }
-  let title =
-    params.title !== undefined
-      ? (typeof params.title === 'string' ? params.title.trim() || null : null)
-      : null;
-  // Reject control chars in titles (list/UI hygiene)
-  if (title && /[\0\r\n]/.test(title)) {
-    throw new Error('title contains invalid control characters');
+  let title: string | null = null;
+  if (params.title !== undefined) {
+    if (typeof params.title === 'string') {
+      // Reject control chars before trim (list/UI hygiene)
+      if (/[\0\r\n]/.test(params.title)) {
+        throw new Error('title contains invalid control characters');
+      }
+      title = params.title.trim() || null;
+    }
   }
   if (title && title.length > SESSION_TITLE_MAX) {
     title = title.slice(0, SESSION_TITLE_MAX);
@@ -124,9 +130,11 @@ export function updateSessionTitle(id: string, title: string): void {
   const trimmed = safeLookupId(id);
   if (!trimmed) return;
   const db = getDb();
-  let name = typeof title === 'string' ? title.trim() : '';
-  // Drop control-char titles rather than persisting them
-  if (/[\0\r\n]/.test(name)) name = '';
+  // Drop control-char titles rather than persisting them (check before trim)
+  let name = '';
+  if (typeof title === 'string' && !/[\0\r\n]/.test(title)) {
+    name = title.trim();
+  }
   if (name.length > SESSION_TITLE_MAX) name = name.slice(0, SESSION_TITLE_MAX);
   db.prepare("UPDATE session SET title = ?, updated_at = datetime('now') WHERE id = ?").run(
     name || null,

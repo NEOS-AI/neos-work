@@ -34,8 +34,11 @@ const MEMORY_WORKSPACE_ID_MAX = 100;
 const MEMORY_SEARCH_QUERY_MAX = 2_000;
 
 function safeWorkspaceId(raw: unknown): string {
-  const ws = typeof raw === 'string' ? raw.trim() : '';
-  if (!ws || ws.length > MEMORY_WORKSPACE_ID_MAX || hasUnsafeKeyChars(ws)) return '';
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (hasUnsafeKeyChars(raw)) return '';
+  const ws = raw.trim();
+  if (!ws || ws.length > MEMORY_WORKSPACE_ID_MAX) return '';
   return ws;
 }
 
@@ -45,17 +48,15 @@ export function createMemory(params: {
   content: string;
   tags?: string[];
 }): MemoryRow {
-  const workspaceIdRaw =
-    typeof params.workspaceId === 'string' ? params.workspaceId.trim() : '';
-  const key = typeof params.key === 'string' ? params.key.trim() : '';
-  if (workspaceIdRaw && hasUnsafeKeyChars(workspaceIdRaw)) {
+  const keyRaw = typeof params.key === 'string' ? params.key : '';
+  const wsRaw = typeof params.workspaceId === 'string' ? params.workspaceId : '';
+  // Control-char check before trim
+  if (hasUnsafeKeyChars(keyRaw) || hasUnsafeKeyChars(wsRaw)) {
     throw new Error('key/workspaceId contains invalid control characters');
   }
+  const key = keyRaw.trim();
   const workspaceId = safeWorkspaceId(params.workspaceId);
   if (!workspaceId || !key) throw new Error('workspaceId and key are required');
-  if (hasUnsafeKeyChars(key)) {
-    throw new Error('key/workspaceId contains invalid control characters');
-  }
   if (key.length > MEMORY_DB_KEY_MAX_CHARS) {
     throw new Error(`key exceeds max length (${MEMORY_DB_KEY_MAX_CHARS})`);
   }
@@ -72,8 +73,10 @@ export function createMemory(params: {
   let tagsStr: string | null = null;
   if (Array.isArray(params.tags)) {
     const tags = params.tags
-      .map((t) => String(t).trim())
+      .map((t) => String(t))
       .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t))
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
       .slice(0, MEMORY_DB_TAGS_MAX);
     const json = JSON.stringify(tags);
     tagsStr = json.length > MEMORY_DB_TAGS_JSON_MAX_CHARS ? JSON.stringify(tags.slice(0, 10)) : json;
@@ -93,8 +96,9 @@ export function createMemory(params: {
 
 export function getMemory(workspaceId: string, key: string): MemoryRow | undefined {
   const ws = safeWorkspaceId(workspaceId);
-  const k = typeof key === 'string' ? key.trim() : '';
-  if (!ws || !k || hasUnsafeKeyChars(k) || k.length > MEMORY_DB_KEY_MAX_CHARS) {
+  if (typeof key !== 'string' || hasUnsafeKeyChars(key)) return undefined;
+  const k = key.trim();
+  if (!ws || !k || k.length > MEMORY_DB_KEY_MAX_CHARS) {
     return undefined;
   }
   const db = getDb();
@@ -112,9 +116,10 @@ export function searchMemory(
   const ws = safeWorkspaceId(workspaceId);
   if (!ws) return [];
   const db = getDb();
-  let q = typeof query === 'string' ? query.trim() : String(query ?? '').trim();
-  // Drop control-char queries; cap length (LIKE runaway defense)
-  if (hasUnsafeKeyChars(q)) return [];
+  const qRaw = typeof query === 'string' ? query : String(query ?? '');
+  // Drop control-char queries before trim; cap length (LIKE runaway defense)
+  if (hasUnsafeKeyChars(qRaw)) return [];
+  let q = qRaw.trim();
   if (q.length > MEMORY_SEARCH_QUERY_MAX) q = q.slice(0, MEMORY_SEARCH_QUERY_MAX);
   const like = `%${q}%`;
   const capped = Math.min(Math.max(Number(limit) || 10, 1), 100);
@@ -159,8 +164,9 @@ export function listMemories(workspaceId: string, limit = 20): MemoryRow[] {
 
 export function deleteMemory(workspaceId: string, key: string): boolean {
   const ws = safeWorkspaceId(workspaceId);
-  const k = typeof key === 'string' ? key.trim() : '';
-  if (!ws || !k || hasUnsafeKeyChars(k) || k.length > MEMORY_DB_KEY_MAX_CHARS) return false;
+  if (typeof key !== 'string' || hasUnsafeKeyChars(key)) return false;
+  const k = key.trim();
+  if (!ws || !k || k.length > MEMORY_DB_KEY_MAX_CHARS) return false;
   const db = getDb();
   const result = db
     .prepare('DELETE FROM memory WHERE workspace_id = ? AND key = ?')

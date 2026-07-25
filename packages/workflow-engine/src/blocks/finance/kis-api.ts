@@ -23,18 +23,29 @@ interface TokenCache {
 // Module-level token cache (per process lifetime)
 const tokenCache = new Map<string, TokenCache>();
 
+/** Cap KIS credential length (header hygiene). */
+const KIS_CREDENTIAL_MAX = 8_192;
+
+function sanitizeKisCredential(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const v = raw.trim();
+  if (!v || v.length > KIS_CREDENTIAL_MAX) return '';
+  return v;
+}
+
 function normalizeConfig(config: KisConfig): KisConfig {
   return {
-    appKey: typeof config.appKey === 'string' ? config.appKey.trim() : '',
-    appSecret: typeof config.appSecret === 'string' ? config.appSecret.trim() : '',
+    appKey: sanitizeKisCredential(config.appKey),
+    appSecret: sanitizeKisCredential(config.appSecret),
   };
 }
 
 /** Normalize stock symbol for KIS API (exported for finance blocks). */
 export function normalizeSymbol(symbol: string): string {
-  const s = typeof symbol === 'string' ? symbol.trim() : '';
-  // Reject control chars / path-like garbage in stock codes
-  if (!s || /[\0\r\n]/.test(s)) return '';
+  if (typeof symbol !== 'string' || /[\0\r\n]/.test(symbol)) return '';
+  const s = symbol.trim();
+  // Reject blank / path-like garbage in stock codes
+  if (!s) return '';
   // KIS domestic symbols are typically 6 digits; allow alnum up to 16 for flexibility
   if (s.length > 16 || !/^[A-Za-z0-9._-]+$/.test(s)) return '';
   return s;

@@ -37,17 +37,20 @@ export function createFirstHtmlArtifact(options: {
     nodeId: string;
   }) => { id: string };
 }): string | undefined {
-  const workflowId = typeof options.workflowId === 'string' ? options.workflowId.trim() : '';
-  const runId = typeof options.runId === 'string' ? options.runId.trim() : '';
-  // Cap path/DB ids; reject control chars (align with artifact route safeId)
+  const workflowIdRaw = typeof options.workflowId === 'string' ? options.workflowId : '';
+  const runIdRaw = typeof options.runId === 'string' ? options.runId : '';
+  // Cap path/DB ids; reject control chars before trim (align with artifact route safeId)
   if (
-    !workflowId
-    || !runId
-    || workflowId.length > 100
-    || runId.length > 100
-    || /[\0\r\n]/.test(workflowId)
-    || /[\0\r\n]/.test(runId)
+    !workflowIdRaw
+    || !runIdRaw
+    || /[\0\r\n]/.test(workflowIdRaw)
+    || /[\0\r\n]/.test(runIdRaw)
   ) {
+    return undefined;
+  }
+  const workflowId = workflowIdRaw.trim();
+  const runId = runIdRaw.trim();
+  if (!workflowId || !runId || workflowId.length > 100 || runId.length > 100) {
     return undefined;
   }
 
@@ -55,8 +58,10 @@ export function createFirstHtmlArtifact(options: {
     const r = result as { output?: unknown; status?: string };
     const status = typeof r.status === 'string' ? r.status.trim().toLowerCase() : '';
     if (status !== 'completed' || !isHtmlArtifactOutput(r.output)) continue;
-    let nid = typeof nodeId === 'string' ? nodeId.trim() : String(nodeId);
-    if (!nid || /[\0\r\n]/.test(nid) || nid.length > 200) continue;
+    const nidRaw = typeof nodeId === 'string' ? nodeId : String(nodeId);
+    if (!nidRaw || /[\0\r\n]/.test(nidRaw)) continue;
+    const nid = nidRaw.trim();
+    if (!nid || nid.length > 200) continue;
     const content = r.output.trim();
     // Skip pathological oversized HTML rather than failing the whole run
     if (content.length > HTML_ARTIFACT_MAX_CHARS) continue;

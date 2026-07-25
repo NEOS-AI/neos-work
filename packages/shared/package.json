@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/shared",
-  "version": "0.3.103",
+  "version": "0.3.104",
   "private": true,
   "license": "MIT",
   "type": "module",
