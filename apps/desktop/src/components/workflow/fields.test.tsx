@@ -79,4 +79,39 @@ describe('form fields', () => {
     await user.click(screen.getByRole('checkbox'));
     expect(onChange).toHaveBeenCalledWith(true);
   });
+
+  it('honors disabled on text, number, select, and checkbox fields', async () => {
+    const user = userEvent.setup();
+    const onText = vi.fn();
+    const onNum = vi.fn();
+    const onSelect = vi.fn();
+    const onCheck = vi.fn();
+
+    render(
+      <>
+        <TextField label="T" value="x" onChange={onText} disabled description="locked text" />
+        <NumberField label="N" value={3} onChange={onNum} disabled />
+        <SelectField
+          label="S"
+          value="a"
+          onChange={onSelect}
+          disabled
+          options={[
+            { value: 'a', label: 'A' },
+            { value: 'b', label: 'B' },
+          ]}
+        />
+        <CheckboxField label="C" value={false} onChange={onCheck} disabled />
+      </>,
+    );
+
+    expect(screen.getByText('locked text')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('x')).toBeDisabled();
+    expect(screen.getByDisplayValue('3')).toBeDisabled();
+    expect(screen.getByRole('combobox')).toBeDisabled();
+    expect(screen.getByRole('checkbox')).toBeDisabled();
+
+    await user.click(screen.getByRole('checkbox'));
+    expect(onCheck).not.toHaveBeenCalled();
+  });
 });

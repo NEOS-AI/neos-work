@@ -175,8 +175,11 @@ export function assessWorkflowPreflight(
 
     if (node.type === 'deploy') {
       // Match DeployNode runtime: trim/lower-case; unknown/missing defaults to vercel
+      // Control-char provider → treat as default vercel
       const providerRaw =
-        typeof config.provider === 'string' ? config.provider.trim().toLowerCase() : '';
+        typeof config.provider === 'string' && !/[\0\r\n]/.test(config.provider)
+          ? config.provider.trim().toLowerCase()
+          : '';
       const provider = providerRaw === 'cloudflare' ? 'cloudflare' : 'vercel';
       if (provider === 'vercel' && !secret(secrets, 'VERCEL_API_TOKEN')) {
         issues.push({
@@ -197,8 +200,21 @@ export function assessWorkflowPreflight(
           message: 'Deploy (Cloudflare) requires API token and account id in settings.',
         });
       }
-      const projectName =
-        typeof config.projectName === 'string' ? config.projectName.trim() : '';
+      let projectName = '';
+      if (typeof config.projectName === 'string') {
+        // Control-char project names are invalid (check before trim)
+        if (/[\0\r\n]/.test(config.projectName)) {
+          issues.push({
+            code: 'invalid_deploy_project',
+            severity: 'error',
+            nodeId: node.id,
+            message:
+              'Deploy project name must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63).',
+          });
+        } else {
+          projectName = config.projectName.trim();
+        }
+      }
       // Blank projectName falls back to neos-deploy at runtime — only flag non-empty invalid names
       if (projectName && !isValidDeployProjectName(projectName)) {
         issues.push({
@@ -212,10 +228,11 @@ export function assessWorkflowPreflight(
     }
 
     if (node.type === 'agent_finance' || node.type === 'agent_coding') {
-      // Align with AgentNode: trim + lower-case so " OpenAI " / " CLI-Claude " match
+      // Align with AgentNode: trim + lower-case so " OpenAI " / " CLI-Claude " match.
+      // Control-char provider → anthropic default (check before trim).
       const rawProvider = config.provider ?? config.llmProvider ?? secrets.llmProvider ?? 'anthropic';
       const provider =
-        typeof rawProvider === 'string'
+        typeof rawProvider === 'string' && !/[\0\r\n]/.test(rawProvider)
           ? rawProvider.trim().toLowerCase() || 'anthropic'
           : 'anthropic';
       if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {

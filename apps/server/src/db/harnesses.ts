@@ -21,7 +21,12 @@ function safeParseJsonArray(raw: string): string[] {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((t) => String(t).trim()).filter(Boolean);
+    // Control-char check before trim (align with normalizeAllowedTools)
+    return parsed
+      .map((t) => String(t ?? ''))
+      .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t))
+      .map((t) => t.trim())
+      .filter(Boolean);
   } catch {
     return [];
   }
@@ -83,8 +88,9 @@ export function getCustomHarness(id: string): AgentHarness | undefined {
 }
 
 function normalizeHarnessDomain(raw: unknown, fallback: AgentHarness['domain'] = 'general'): AgentHarness['domain'] {
-  const domainRaw =
-    typeof raw === 'string' ? raw.trim().toLowerCase() || fallback : fallback;
+  // Control-char domain → fallback (check before trim)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return fallback;
+  const domainRaw = raw.trim().toLowerCase() || fallback;
   return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? (domainRaw as AgentHarness['domain'])
     : 'general';
@@ -104,9 +110,12 @@ export const HARNESS_TOOL_NAME_MAX_CHARS = 100;
 export const HARNESS_CONSTRAINTS_JSON_MAX_CHARS = 16 * 1024;
 
 function normalizeAllowedTools(raw: unknown): string[] {
+  // Control-char check before trim so "\nread" is dropped, not accepted as "read"
   const list = (Array.isArray(raw) ? raw : [])
-    .map((t) => String(t).trim())
-    .filter((t) => t.length > 0 && t.length <= HARNESS_TOOL_NAME_MAX_CHARS && !/[\0\r\n]/.test(t));
+    .map((t) => String(t ?? ''))
+    .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t))
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.length <= HARNESS_TOOL_NAME_MAX_CHARS);
   return list.slice(0, HARNESS_ALLOWED_TOOLS_MAX);
 }
 
@@ -164,13 +173,14 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
     );
   }
   const domain = normalizeHarnessDomain(input.domain);
-  let description =
-    typeof input.description === 'string' ? input.description.trim() : (input.description ?? '');
-  // Drop control chars in description (log/UI hygiene)
-  if (typeof description === 'string' && /[\0\r\n]/.test(description)) {
-    description = description.replace(/[\0\r\n]/g, ' ').trim();
+  // Collapse control chars before trim so leading/trailing \r\n are not silently stripped
+  let description = '';
+  if (typeof input.description === 'string') {
+    description = input.description.replace(/[\0\r\n]/g, ' ').trim();
+  } else if (input.description != null) {
+    description = String(input.description ?? '');
   }
-  if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
+  if (description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);
   }
   const allowedTools = normalizeAllowedTools(input.allowedTools);
@@ -224,10 +234,8 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
   let description = existing.description;
   if (input.description !== undefined) {
     if (typeof input.description === 'string') {
-      // Collapse control chars rather than reject whole update
-      description = /[\0\r\n]/.test(input.description)
-        ? input.description.replace(/[\0\r\n]/g, ' ').trim()
-        : input.description.trim();
+      // Always collapse control chars before trim (leading \n must not be stripped silently)
+      description = input.description.replace(/[\0\r\n]/g, ' ').trim();
     } else {
       description = '';
     }

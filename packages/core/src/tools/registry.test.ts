@@ -94,4 +94,29 @@ describe('ToolRegistry', () => {
     expect(nonErr.success).toBe(false);
     expect(nonErr.error).toBe('Tool execution failed');
   });
+
+  it('caps registry size and still allows re-register of existing names', async () => {
+    const { TOOL_REGISTRY_MAX } = await import('./registry.js');
+    const reg = new ToolRegistry();
+    for (let i = 0; i < TOOL_REGISTRY_MAX; i++) {
+      reg.register(makeTool(`t${i}`));
+    }
+    expect(reg.getAll()).toHaveLength(TOOL_REGISTRY_MAX);
+
+    // New name beyond cap is dropped
+    reg.register(makeTool('overflow'));
+    expect(reg.get('overflow')).toBeUndefined();
+    expect(reg.getAll()).toHaveLength(TOOL_REGISTRY_MAX);
+
+    // Re-register existing name still updates (does not grow)
+    const updated = makeTool('t0', async () => ({ success: true, output: { v: 2 } }));
+    reg.register(updated);
+    expect(reg.getAll()).toHaveLength(TOOL_REGISTRY_MAX);
+    expect((await reg.execute('t0', {})).output).toEqual({ v: 2 });
+
+    // Overlong execute name
+    const long = await reg.execute('n'.repeat(201), {});
+    expect(long.success).toBe(false);
+    expect(long.error).toMatch(/Invalid tool name/i);
+  });
 });

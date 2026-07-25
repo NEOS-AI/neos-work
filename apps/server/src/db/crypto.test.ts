@@ -43,6 +43,9 @@ describe('crypto helpers', () => {
     expect(isEncrypted('aa:bb:cc')).toBe(false);
     expect(isEncrypted('')).toBe(false);
     expect(isEncrypted('   ')).toBe(false);
+    // Leading control char must not strip to a valid ciphertext
+    expect(isEncrypted(`\n${enc}`)).toBe(false);
+    expect(isEncrypted(`${enc}\n`)).toBe(false);
   });
 
   it('round-trips encrypt/decrypt', () => {
@@ -76,6 +79,8 @@ describe('crypto helpers', () => {
     expect(() => decrypt('not-encrypted')).toThrow(/Invalid encrypted/i);
     expect(() => decrypt('   ')).toThrow(/Invalid encrypted/i);
     expect(() => decrypt('')).toThrow(/Invalid encrypted/i);
+    const enc = encrypt('secret');
+    expect(() => decrypt(`\n${enc}`)).toThrow(/Invalid encrypted/i);
   });
 
   it('rejects oversized plaintext on encrypt', () => {

@@ -103,24 +103,32 @@ ${historyStr || '(없음)'}
       };
 
       const actionRaw =
-        typeof parsed.action === 'string' ? parsed.action.trim().toLowerCase() : '';
+        typeof parsed.action === 'string' && !/[\0\r\n]/.test(parsed.action)
+          ? parsed.action.trim().toLowerCase()
+          : '';
       const action: HealingResult['action'] =
         actionRaw === 'retry' || actionRaw === 'abort' ? actionRaw : 'skip';
 
       const result: HealingResult = { action };
       if (action === 'retry') {
-        let desc =
-          typeof parsed.revisedDescription === 'string'
-            ? parsed.revisedDescription.trim()
-            : '';
+        let desc = '';
+        if (typeof parsed.revisedDescription === 'string') {
+          // Multi-line OK; null-byte drop
+          if (!/\0/.test(parsed.revisedDescription)) {
+            desc = parsed.revisedDescription.trim();
+          }
+        }
         // Cap revised description (align with orchestrator step text bounds)
         if (desc.length > 2_000) desc = desc.slice(0, 2_000);
-        let tool =
-          typeof parsed.revisedToolName === 'string'
-            ? parsed.revisedToolName.trim()
-            : '';
-        // Drop unsafe / overlong tool names → fall back to original
-        if (tool && (tool.length > 100 || /[\0\r\n]/.test(tool))) {
+        let tool = '';
+        if (typeof parsed.revisedToolName === 'string') {
+          // Control-char check before trim
+          if (!/[\0\r\n]/.test(parsed.revisedToolName)) {
+            tool = parsed.revisedToolName.trim();
+          }
+        }
+        // Drop overlong tool names → fall back to original
+        if (tool && tool.length > 100) {
           tool = '';
         }
         let input: Record<string, unknown> | undefined =

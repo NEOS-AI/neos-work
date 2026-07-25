@@ -161,4 +161,46 @@ describe('Harnesses page', () => {
       expect((screen.getByPlaceholderText('Search harnesses…') as HTMLInputElement).value).toBe('');
     });
   });
+
+  it('edits a custom harness via updateHarness and views built-in read-only', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    updateHarness.mockResolvedValue({ ok: true });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Custom Analyst')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
+    await waitFor(() => expect(screen.getByText('harness.editTitle')).toBeInTheDocument());
+
+    const nameInput = screen.getByDisplayValue('Custom Analyst') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Custom Analyst v2' } });
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|Save/i }));
+    await waitFor(() => {
+      expect(updateHarness).toHaveBeenCalledWith(
+        'h-custom',
+        expect.objectContaining({
+          name: 'Custom Analyst v2',
+          systemPrompt: 'You analyze finance',
+        }),
+      );
+    });
+
+    // Built-in view is read-only (no save path for updateHarness)
+    updateHarness.mockClear();
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Code Reviewer')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.view' }));
+    await waitFor(() => expect(screen.getByText('harness.viewTitle')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /common\.save|Save/i })).not.toBeInTheDocument();
+  });
+
+  it('shows no-match filter empty state', async () => {
+    const user = userEvent.setup();
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Custom Analyst')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Search harnesses…'), 'zzzz-none');
+    expect(screen.queryByText('Custom Analyst')).not.toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
 });

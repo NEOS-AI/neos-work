@@ -201,27 +201,50 @@ workflow.post('/import', async (c) => {
   }
 
   const wf = body.workflow;
-  const trimmedName =
-    typeof wf.name === 'string' ? wf.name.trim().slice(0, 200) : '';
-  const rawName = trimmedName.length > 0 ? trimmedName : 'Imported Workflow';
+  // Control-char check before trim; scrub unsafe names to a safe default
+  let rawName = 'Imported Workflow';
+  if (typeof wf.name === 'string') {
+    if (/[\0\r\n]/.test(wf.name)) {
+      // Drop control chars rather than reject the whole import
+      rawName = wf.name.replace(/[\0\r\n]/g, ' ').trim().slice(0, 200) || 'Imported Workflow';
+    } else {
+      const trimmedName = wf.name.trim().slice(0, 200);
+      if (trimmedName) rawName = trimmedName;
+    }
+  }
   const existing = db.listWorkflows().find((w) => w.name === rawName);
   const finalName = existing ? `${rawName} (imported)` : rawName;
-  const description =
-    typeof wf.description === 'string' ? wf.description.trim() || undefined : undefined;
-  const domainRaw = typeof wf.domain === 'string' ? wf.domain.trim().toLowerCase() : '';
+  let description: string | undefined;
+  if (typeof wf.description === 'string') {
+    // Multi-line OK; null-byte reject → drop description
+    if (!/\0/.test(wf.description)) {
+      description = wf.description.trim() || undefined;
+    }
+  }
+  const domainRaw =
+    typeof wf.domain === 'string' && !/[\0\r\n]/.test(wf.domain)
+      ? wf.domain.trim().toLowerCase()
+      : '';
   const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? (domainRaw as 'finance' | 'coding' | 'general')
     : 'general';
 
-  const created = db.createWorkflow({
-    name: finalName,
-    description,
-    domain,
-    nodes: (wf.nodes as never) ?? [],
-    edges: (wf.edges as never) ?? [],
-  });
-
-  return c.json({ ok: true, data: created }, 201);
+  try {
+    const created = db.createWorkflow({
+      name: finalName,
+      description,
+      domain,
+      nodes: (wf.nodes as never) ?? [],
+      edges: (wf.edges as never) ?? [],
+    });
+    return c.json({ ok: true, data: created }, 201);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to import workflow';
+    if (/name|graph|control|max/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
+    throw err;
+  }
 });
 
 workflow.post('/:id/duplicate', (c) => {

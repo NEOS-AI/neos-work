@@ -64,12 +64,16 @@ function rowToDeployment(row: DeploymentRow): Deployment {
 const DEPLOY_STATUSES = new Set(['pending', 'deploying', 'success', 'failed']);
 
 function normalizeDeployStatus(raw: unknown, fallback: Deployment['status'] = 'pending'): Deployment['status'] {
-  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return fallback;
+  const s = raw.trim().toLowerCase();
   return DEPLOY_STATUSES.has(s) ? (s as Deployment['status']) : fallback;
 }
 
 function normalizeDeployProvider(raw: unknown): string {
-  const p = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Control-char check before trim so "\nvercel" is not accepted
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const p = raw.trim().toLowerCase();
   // Only vercel | cloudflare are supported (defense-in-depth for direct DB callers)
   if (p === 'cloudflare' || p === 'vercel') return p;
   return '';

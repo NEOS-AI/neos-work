@@ -39,7 +39,10 @@ export function isSensitiveKey(key: string): boolean {
 
 /** Check whether a value looks like our encrypted format (hex:hex:hex). */
 export function isEncrypted(value: string): boolean {
-  const v = typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string') return false;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(value)) return false;
+  const v = value.trim();
   if (!v) return false;
   return /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]*$/.test(v);
 }
@@ -62,7 +65,10 @@ export function encrypt(plaintext: string): string {
 }
 
 export function decrypt(encoded: string): string {
-  const raw = typeof encoded === 'string' ? encoded.trim() : '';
+  if (typeof encoded !== 'string' || /[\0\r\n]/.test(encoded)) {
+    throw new Error('Invalid encrypted value');
+  }
+  const raw = encoded.trim();
   if (!raw || !isEncrypted(raw)) {
     throw new Error('Invalid encrypted value');
   }

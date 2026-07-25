@@ -60,11 +60,13 @@ export function createMemory(params: {
   if (key.length > MEMORY_DB_KEY_MAX_CHARS) {
     throw new Error(`key exceeds max length (${MEMORY_DB_KEY_MAX_CHARS})`);
   }
-  const content =
-    typeof params.content === 'string' ? params.content.trim() : String(params.content ?? '');
-  if (/\0/.test(content)) {
+  const contentRaw =
+    typeof params.content === 'string' ? params.content : String(params.content ?? '');
+  // Null-byte check before trim
+  if (/\0/.test(contentRaw)) {
     throw new Error('content contains invalid control characters');
   }
+  const content = contentRaw.trim();
   if (content.length > MEMORY_DB_CONTENT_MAX_CHARS) {
     throw new Error(
       `content exceeds max size (${MEMORY_DB_CONTENT_MAX_CHARS} characters)`,
@@ -132,9 +134,12 @@ export function searchMemory(
     .all(ws, like, like, capped) as MemoryRow[];
 
   if (tags && tags.length > 0) {
+    // Control-char check before trim so "\ntag" is not accepted as "tag"
     const want = tags
-      .map((t) => String(t).trim())
-      .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t));
+      .map((t) => String(t ?? ''))
+      .filter((t) => t.length > 0 && !hasUnsafeKeyChars(t))
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
     if (want.length === 0) return [];
     rows = rows.filter((r) => {
       if (!r.tags) return false;

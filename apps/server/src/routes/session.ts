@@ -112,7 +112,12 @@ async function loadMcpTools(toolRegistry: ToolRegistry): Promise<void> {
       try {
         const parsed = JSON.parse(row.args) as unknown;
         if (Array.isArray(parsed)) {
-          const cleaned = parsed.map((a) => String(a).trim()).filter(Boolean);
+          // Drop control-char args before trim (align with MCP create hygiene)
+          const cleaned = parsed
+            .map((a) => String(a ?? ''))
+            .filter((a) => a.length > 0 && !/[\0\r\n]/.test(a))
+            .map((a) => a.trim())
+            .filter(Boolean);
           args = cleaned.length > 0 ? cleaned : undefined;
         }
       } catch {

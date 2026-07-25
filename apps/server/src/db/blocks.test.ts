@@ -247,6 +247,20 @@ describe('custom blocks CRUD', () => {
     expect(getCustomBlock(IDS[0]!)?.paramDefs).toEqual([]);
   });
 
+  it('update rejects leading control-char name/skillId and null description', () => {
+    createCustomBlock(sampleBlock(IDS[0]!));
+    expect(updateCustomBlock(IDS[0]!, { name: '\nRenamed' })).toBeNull();
+    expect(updateCustomBlock(IDS[0]!, { skillId: '\nskill' })).toBeNull();
+    expect(updateCustomBlock(IDS[0]!, { description: `bad${'\0'}x` })).toBeNull();
+    // Multi-line description OK
+    const multi = updateCustomBlock(IDS[0]!, { description: 'line1\nline2' });
+    expect(multi?.description).toBe('line1\nline2');
+    // Control-char category falls back to custom
+    const cat = updateCustomBlock(IDS[0]!, { category: 'bad\ncat' });
+    expect(cat?.category).toBe('custom');
+    deleteCustomBlock(IDS[0]!);
+  });
+
   it('caps description and rejects oversized promptTemplate / name', () => {
     const created = createCustomBlock({
       ...sampleBlock(IDS[0]!),

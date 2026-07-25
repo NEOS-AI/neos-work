@@ -13,6 +13,8 @@ const getMcpOAuthStatus = vi.fn();
 const createMcpServer = vi.fn();
 const toggleMcpServer = vi.fn();
 const deleteMcpServer = vi.fn();
+const revokeMcpOAuth = vi.fn();
+const startMcpOAuth = vi.fn();
 const listCliAgents = vi.fn();
 const setAuthToken = vi.fn();
 const setTheme = vi.fn();
@@ -35,6 +37,8 @@ vi.mock('../hooks/useEngine.js', () => ({
       createMcpServer,
       toggleMcpServer,
       deleteMcpServer,
+      revokeMcpOAuth,
+      startMcpOAuth,
       listCliAgents,
       setAuthToken,
     },
@@ -82,6 +86,8 @@ describe('Settings page', () => {
     createMcpServer.mockReset().mockResolvedValue({ ok: true });
     toggleMcpServer.mockReset().mockResolvedValue({ ok: true });
     deleteMcpServer.mockReset().mockResolvedValue({ ok: true });
+    revokeMcpOAuth.mockReset().mockResolvedValue({ ok: true });
+    startMcpOAuth.mockReset().mockResolvedValue({ ok: true, data: { authUrl: 'https://auth.example' } });
     listCliAgents.mockReset().mockResolvedValue({
       ok: true,
       data: [{ id: 'claude', name: 'Claude Code', path: '/usr/local/bin/claude', version: '1.0.0' }],
@@ -351,6 +357,57 @@ describe('Settings page', () => {
     fireEvent.click(kisSave!);
     await waitFor(() => {
       expect(saveSetting).toHaveBeenCalledWith('KIS_APP_KEY', 'PS-kis-key');
+    });
+  });
+
+  it('revokes connected MCP OAuth and saves OpenAI/Ollama base URLs', async () => {
+    const user = userEvent.setup();
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-oauth-1',
+          name: 'OAuth MCP',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({
+      ok: true,
+      data: { connected: true, expiresAt: '2099-01-01T00:00:00.000Z' },
+    });
+    render(<Settings />);
+
+    await waitFor(() => expect(screen.getByText('OAuth MCP')).toBeInTheDocument());
+    expect(screen.getByText('● OAuth')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    await waitFor(() => expect(revokeMcpOAuth).toHaveBeenCalledWith('mcp-oauth-1'));
+
+    const oaiBase = screen.getByPlaceholderText('https://api.openai.com/v1');
+    await user.type(oaiBase, 'https://openai.example/v1');
+    const oaiRow = oaiBase.closest('div')!.parentElement!;
+    const oaiSave = Array.from(oaiRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    fireEvent.click(oaiSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('OPENAI_BASE_URL', 'https://openai.example/v1');
+    });
+
+    const ollama = screen.getByPlaceholderText('http://localhost:11434');
+    await user.type(ollama, 'http://127.0.0.1:11434');
+    const ollamaRow = ollama.closest('div')!.parentElement!;
+    const ollamaSave = Array.from(ollamaRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    fireEvent.click(ollamaSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('OLLAMA_BASE_URL', 'http://127.0.0.1:11434');
     });
   });
 });

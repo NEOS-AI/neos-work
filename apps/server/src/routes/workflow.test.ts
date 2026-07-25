@@ -149,6 +149,30 @@ describe('workflow routes CRUD', () => {
     expect(imported.data.description).toBe('from import');
     expect(imported.data.domain).toBe('finance');
     await workflow.request(`/${imported.data.id}`, { method: 'DELETE' });
+
+    // Control-char in import name is scrubbed rather than rejecting the whole payload
+    const scrub = await workflow.request('/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        version: '1',
+        workflow: {
+          name: `${WF_NAME}_scrub\nname`,
+          description: `line1\nline2`,
+          domain: '\nfinance',
+          ...minimalGraph,
+        },
+      }),
+    });
+    expect(scrub.status).toBe(201);
+    const scrubbed = await scrub.json() as {
+      data: { id: string; name: string; description?: string; domain: string };
+    };
+    expect(scrubbed.data.name).not.toMatch(/[\r\n]/);
+    expect(scrubbed.data.name).toContain(`${WF_NAME}_scrub`);
+    expect(scrubbed.data.description).toBe('line1\nline2');
+    expect(scrubbed.data.domain).toBe('general'); // control-char domain → general
+    await workflow.request(`/${scrubbed.data.id}`, { method: 'DELETE' });
   });
 
   it('creates, lists, gets, updates, duplicates, deletes', async () => {

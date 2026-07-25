@@ -352,4 +352,52 @@ describe('Sessions page', () => {
     // Page remains mounted
     expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
   });
+
+  it('aborts an in-flight chat stream via the stop control', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    let capturedSignal: AbortSignal | undefined;
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    chat.mockImplementation((_id: string, _msg: string, signal: AbortSignal) => {
+      capturedSignal = signal;
+      return (async function* () {
+        yield { type: 'text', content: 'partial…' };
+        await gate;
+        if (signal.aborted) return;
+        yield { type: 'text', content: ' never' };
+      })();
+    });
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'stream me' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(screen.getByText('partial…')).toBeInTheDocument());
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal!.aborted).toBe(false);
+
+    // While streaming the send button becomes stop (square icon) — click all enabled toolbar buttons
+    const toolbarButtons = Array.from(document.querySelectorAll('button')).filter(
+      (b) => !(b as HTMLButtonElement).disabled,
+    );
+    // Prefer the button next to the input area that is not Agent
+    const stopCandidates = toolbarButtons.filter((b) => !/Agent/i.test(b.textContent ?? ''));
+    for (const btn of stopCandidates) {
+      fireEvent.click(btn);
+      if (capturedSignal?.aborted) break;
+    }
+
+    await waitFor(() => expect(capturedSignal!.aborted).toBe(true));
+    release?.();
+  });
 });

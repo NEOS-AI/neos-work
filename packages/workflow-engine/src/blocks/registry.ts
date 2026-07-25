@@ -99,36 +99,45 @@ function isSafeBlockId(id: string): boolean {
 }
 
 export function registerNativeBlock(executor: NativeBlockExecutor, meta?: WorkflowBlock): void {
-  const blockId = typeof executor.blockId === 'string' ? executor.blockId.trim() : '';
+  if (typeof executor.blockId !== 'string' || /[\0\r\n]/.test(executor.blockId)) return;
+  const blockId = executor.blockId.trim();
   if (!isSafeBlockId(blockId)) return;
   builtInRegistry.set(blockId, { ...executor, blockId });
   if (meta) {
-    const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
+    if (typeof meta.id !== 'string' || /[\0\r\n]/.test(meta.id)) return;
+    const metaId = meta.id.trim();
     if (isSafeBlockId(metaId)) metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
   }
 }
 
 /** Register block metadata without a native executor (prompt/skill blocks, tests). */
 export function registerBlockMeta(meta: WorkflowBlock): void {
-  const metaId = typeof meta.id === 'string' ? meta.id.trim() : '';
+  if (typeof meta.id !== 'string' || /[\0\r\n]/.test(meta.id)) return;
+  const metaId = meta.id.trim();
   if (!isSafeBlockId(metaId)) return;
   metaRegistry.set(metaId, normalizeBlockMeta(meta, metaId));
 }
 
 export function resolveBlock(id: string): WorkflowBlock | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return undefined;
+  const trimmed = id.trim();
   if (!isSafeBlockId(trimmed)) return undefined;
   return metaRegistry.get(trimmed);
 }
 
 export function getNativeExecutor(id: string): NativeBlockExecutor | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return undefined;
+  const trimmed = id.trim();
   if (!isSafeBlockId(trimmed)) return undefined;
   return builtInRegistry.get(trimmed);
 }
 
 export function listBlocks(domain?: string): WorkflowBlock[] {
-  const domainRaw = typeof domain === 'string' ? domain.trim().toLowerCase() || undefined : undefined;
+  const domainRaw =
+    typeof domain === 'string' && !/[\0\r\n]/.test(domain)
+      ? domain.trim().toLowerCase() || undefined
+      : undefined;
   const all = [...metaRegistry.values()];
   if (!domainRaw) return all;
   return all.filter((b) => b.domain === domainRaw);

@@ -12,9 +12,11 @@ const listDeployments = vi.fn();
 const listMediaFiles = vi.fn();
 const health = vi.fn();
 
+let engineMode: 'host' | 'client' | null = 'host';
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    mode: 'host',
+    mode: engineMode,
     serverUrl: 'http://127.0.0.1:57286',
     client: {
       listSessions,
@@ -48,6 +50,7 @@ function renderPage() {
 
 describe('Dashboard page', () => {
   beforeEach(() => {
+    engineMode = 'host';
     listSessions.mockReset().mockResolvedValue({ ok: true, data: [{ id: 's1' }] });
     listWorkflows.mockReset().mockResolvedValue({
       ok: true,
@@ -178,5 +181,13 @@ describe('Dashboard page', () => {
     // Counts fall back to "—" when responses are not ok
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.queryByText(/v0\./)).not.toBeInTheDocument();
+  });
+
+  it('shows Remote engine label in client mode', async () => {
+    engineMode = 'client';
+    renderPage();
+    await waitFor(() => expect(health).toHaveBeenCalled());
+    expect(screen.getByText('Remote')).toBeInTheDocument();
+    expect(screen.queryByText('Local')).not.toBeInTheDocument();
   });
 });

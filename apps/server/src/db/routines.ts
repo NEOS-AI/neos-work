@@ -311,10 +311,19 @@ export function createRoutineRun(input: { routineId: string; runId?: string }): 
 export function completeRoutineRun(id: string, status: 'completed' | 'failed', error?: string): void {
   const trimmed = safeLookupId(id);
   if (!trimmed) return;
-  const statusRaw = typeof status === 'string' ? status.trim().toLowerCase() : '';
+  // Control-char status → completed fallback (check before trim)
+  const statusRaw =
+    typeof status === 'string' && !/[\0\r\n]/.test(status)
+      ? status.trim().toLowerCase()
+      : '';
   const normalized: 'completed' | 'failed' = statusRaw === 'failed' ? 'failed' : 'completed';
-  let errorVal =
-    typeof error === 'string' ? error.trim() || null : (error ?? null);
+  // Scrub control chars from error text before trim (align with agent-steps)
+  let errorVal: string | null = null;
+  if (typeof error === 'string') {
+    errorVal = error.replace(/\0/g, '').replace(/[\r\n]+/g, ' ').trim() || null;
+  } else if (error != null) {
+    errorVal = String(error).replace(/[\r\n]+/g, ' ').trim() || null;
+  }
   if (errorVal && errorVal.length > ROUTINE_RUN_ERROR_MAX_CHARS) {
     errorVal = errorVal.slice(0, ROUTINE_RUN_ERROR_MAX_CHARS);
   }

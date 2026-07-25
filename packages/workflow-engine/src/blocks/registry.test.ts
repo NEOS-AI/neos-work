@@ -185,5 +185,23 @@ describe('block registry', () => {
       outputDescription: '',
     });
     expect(resolveBlock('meta_skill_lead')?.skillId).toBeUndefined();
+
+    // Leading control-char block id must not register or resolve
+    registerBlockMeta({
+      id: '\nvalid_id',
+      name: 'Lead Id',
+      domain: 'general',
+      category: 'test',
+      description: 'd',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    expect(resolveBlock('\nvalid_id')).toBeUndefined();
+    expect(resolveBlock('valid_id')).toBeUndefined();
+    expect(getNativeExecutor('\ncode_eval')).toBeUndefined();
+    expect(listBlocks('\nfinance')).toEqual(listBlocks()); // filter ignored
   });
 });

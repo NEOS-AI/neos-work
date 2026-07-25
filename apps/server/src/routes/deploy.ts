@@ -106,9 +106,12 @@ deploy.get('/', (c) => {
   // safeRouteId checks control chars before trim
   const workflowIdRaw = c.req.query('workflowId') ?? '';
   const workflowId = workflowIdRaw ? safeRouteId(workflowIdRaw) || undefined : undefined;
-  const limitRaw = c.req.query('limit') ?? '';
-  const limit = limitRaw.trim()
-    ? Math.min(Math.max(parseInt(limitRaw.trim(), 10) || 100, 1), 500)
+  // Ignore control-char / non-numeric limit → default 100 (align with media list)
+  const limitQuery = c.req.query('limit') ?? '';
+  const limitRaw =
+    limitQuery && !/[\0\r\n]/.test(limitQuery) ? limitQuery.trim() : '';
+  const limit = limitRaw
+    ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500)
     : 100;
   const rows = listDeployments({ workflowId, limit });
   return c.json({ ok: true, data: rows });

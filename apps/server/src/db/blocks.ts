@@ -27,15 +27,17 @@ const IMPLEMENTATION_TYPES = new Set(['native', 'prompt', 'skill']);
 export function normalizeImplementationType(
   raw: unknown,
 ): WorkflowBlock['implementationType'] {
-  const t = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'native';
+  const t = raw.trim().toLowerCase();
   return IMPLEMENTATION_TYPES.has(t)
     ? (t as WorkflowBlock['implementationType'])
     : 'native';
 }
 
 function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
-  const domainRaw =
-    typeof raw === 'string' ? raw.trim().toLowerCase() || 'general' : 'general';
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
+  const domainRaw = raw.trim().toLowerCase() || 'general';
   return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
     ? (domainRaw as WorkflowBlock['domain'])
     : 'general';
@@ -69,9 +71,11 @@ function rowToBlock(row: BlockRow): WorkflowBlock {
 
 export function listCustomBlocks(domain?: string): WorkflowBlock[] {
   const db = getDb();
-  // Normalize domain filter so " CODING " matches stored lower-case domain
+  // Normalize domain filter so " CODING " matches stored lower-case domain.
+  // Control-char domain is ignored (list all) via normalizeDomain → general would
+  // incorrectly filter; treat any control-char / blank as no filter.
   const domainFilter =
-    typeof domain === 'string' && domain.trim()
+    typeof domain === 'string' && domain.trim() && !/[\0\r\n]/.test(domain)
       ? normalizeDomain(domain)
       : undefined;
   const rows = domainFilter
@@ -136,20 +140,39 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
     throw new Error('name exceeds max length (200)');
   }
   const domain = normalizeDomain(block.domain);
-  let category =
-    (typeof block.category === 'string' ? block.category.trim() : '') || 'custom';
-  if (typeof block.category === 'string' && /[\0\r\n]/.test(block.category)) {
-    category = 'custom';
-  } else if (category.length > BLOCK_CATEGORY_MAX_CHARS) {
-    category = 'custom';
+  let category = 'custom';
+  if (typeof block.category === 'string') {
+    // Control-char category → custom (check before trim)
+    if (!/[\0\r\n]/.test(block.category)) {
+      category = block.category.trim() || 'custom';
+    }
+    if (category.length > BLOCK_CATEGORY_MAX_CHARS) {
+      category = 'custom';
+    }
   }
-  let description =
-    typeof block.description === 'string' ? block.description.trim() : (block.description ?? '');
-  if (typeof description === 'string' && description.length > BLOCK_DESCRIPTION_MAX_CHARS) {
+  let description = '';
+  if (typeof block.description === 'string') {
+    // Null-byte reject; newlines allowed in multi-line descriptions
+    if (/\0/.test(block.description)) {
+      throw new Error('description contains invalid control characters');
+    }
+    description = block.description.trim();
+  } else if (block.description != null) {
+    description = String(block.description ?? '');
+  }
+  if (description.length > BLOCK_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, BLOCK_DESCRIPTION_MAX_CHARS);
   }
-  let promptTemplate =
-    typeof block.promptTemplate === 'string' ? block.promptTemplate.trim() || undefined : block.promptTemplate;
+  let promptTemplate: string | undefined;
+  if (typeof block.promptTemplate === 'string') {
+    // Null-byte reject (newlines OK in templates)
+    if (/\0/.test(block.promptTemplate)) {
+      throw new Error('promptTemplate contains invalid control characters');
+    }
+    promptTemplate = block.promptTemplate.trim() || undefined;
+  } else {
+    promptTemplate = block.promptTemplate;
+  }
   if (typeof promptTemplate === 'string' && promptTemplate.length > BLOCK_PROMPT_TEMPLATE_MAX_CHARS) {
     throw new Error(
       `promptTemplate exceeds max size (${BLOCK_PROMPT_TEMPLATE_MAX_CHARS} characters)`,
@@ -157,6 +180,7 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
   }
   let skillId: string | undefined;
   if (typeof block.skillId === 'string') {
+    // Control-char check before trim
     if (/[\0\r\n]/.test(block.skillId)) {
       throw new Error('skillId is invalid');
     }
@@ -165,17 +189,28 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
       throw new Error('skillId is invalid');
     }
   }
-  let inputDescription =
-    typeof block.inputDescription === 'string'
-      ? block.inputDescription.trim()
-      : (block.inputDescription ?? '');
+  let inputDescription = '';
+  if (typeof block.inputDescription === 'string') {
+    // Null-byte reject; allow multi-line IO notes
+    if (/\0/.test(block.inputDescription)) {
+      throw new Error('inputDescription contains invalid control characters');
+    }
+    inputDescription = block.inputDescription.trim();
+  } else if (block.inputDescription != null) {
+    inputDescription = String(block.inputDescription ?? '');
+  }
   if (inputDescription.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) {
     inputDescription = inputDescription.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
   }
-  let outputDescription =
-    typeof block.outputDescription === 'string'
-      ? block.outputDescription.trim()
-      : (block.outputDescription ?? '');
+  let outputDescription = '';
+  if (typeof block.outputDescription === 'string') {
+    if (/\0/.test(block.outputDescription)) {
+      throw new Error('outputDescription contains invalid control characters');
+    }
+    outputDescription = block.outputDescription.trim();
+  } else if (block.outputDescription != null) {
+    outputDescription = String(block.outputDescription ?? '');
+  }
   if (outputDescription.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) {
     outputDescription = outputDescription.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
   }
@@ -237,19 +272,25 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
 
   // Normalize string fields the same way as create (defense-in-depth for direct DB callers)
   if (patch.name !== undefined) {
-    const name = typeof patch.name === 'string' ? patch.name.trim() : '';
-    if (!name || name.length > 200 || /[\0\r\n]/.test(name)) return null;
+    if (typeof patch.name !== 'string' || /[\0\r\n]/.test(patch.name)) return null;
+    const name = patch.name.trim();
+    if (!name || name.length > 200) return null;
     updated.name = name;
   }
   if (patch.domain !== undefined) {
     updated.domain = normalizeDomain(patch.domain);
   }
   if (typeof patch.category === 'string') {
-    let cat = patch.category.trim() || 'custom';
-    if (/[\0\r\n]/.test(cat) || cat.length > BLOCK_CATEGORY_MAX_CHARS) cat = 'custom';
+    // Control-char category → custom
+    let cat = /[\0\r\n]/.test(patch.category)
+      ? 'custom'
+      : patch.category.trim() || 'custom';
+    if (cat.length > BLOCK_CATEGORY_MAX_CHARS) cat = 'custom';
     updated.category = cat;
   }
   if (typeof patch.description === 'string') {
+    // Multi-line OK; null-byte → leave existing
+    if (/\0/.test(patch.description)) return null;
     const d = patch.description.trim();
     updated.description =
       d.length > BLOCK_DESCRIPTION_MAX_CHARS
@@ -257,21 +298,26 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
         : d;
   }
   if (typeof patch.promptTemplate === 'string') {
+    if (/\0/.test(patch.promptTemplate)) return null;
     const pt = patch.promptTemplate.trim() || undefined;
     if (pt && pt.length > BLOCK_PROMPT_TEMPLATE_MAX_CHARS) return null;
     updated.promptTemplate = pt;
   }
   if (typeof patch.skillId === 'string') {
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(patch.skillId)) return null;
     const sid = patch.skillId.trim() || undefined;
-    if (sid && (/[\0\r\n]/.test(sid) || sid.length > BLOCK_SKILL_ID_MAX_CHARS)) return null;
+    if (sid && sid.length > BLOCK_SKILL_ID_MAX_CHARS) return null;
     updated.skillId = sid;
   }
   if (typeof patch.inputDescription === 'string') {
+    if (/\0/.test(patch.inputDescription)) return null;
     let d = patch.inputDescription.trim();
     if (d.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) d = d.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
     updated.inputDescription = d;
   }
   if (typeof patch.outputDescription === 'string') {
+    if (/\0/.test(patch.outputDescription)) return null;
     let d = patch.outputDescription.trim();
     if (d.length > BLOCK_IO_DESCRIPTION_MAX_CHARS) d = d.slice(0, BLOCK_IO_DESCRIPTION_MAX_CHARS);
     updated.outputDescription = d;
