@@ -401,4 +401,33 @@ describe('Harnesses page', () => {
     expect(screen.queryByText('write')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('seeds edit modal with scrubbed name/id and filtered tools', async () => {
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `h${'\0'}x`,
+          name: `Evil${'\0'}Harness`,
+          domain: 'coding' as const,
+          description: `desc${'\0'}line`,
+          systemPrompt: `You${'\0'} analyze`,
+          allowedTools: ['read_file', `bad${'\0'}tool`, 'shell'],
+          isBuiltIn: false,
+        },
+      ],
+    });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('EvilHarness')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
+    await waitFor(() => expect(screen.getByText('harness.editTitle')).toBeInTheDocument());
+    const nameInput = screen.getByDisplayValue('EvilHarness') as HTMLInputElement;
+    expect(nameInput.value).not.toContain('\0');
+    // Tools input drops control-char tokens
+    const toolsInput = screen.getByDisplayValue(/read_file/) as HTMLInputElement;
+    expect(toolsInput.value).toContain('read_file');
+    expect(toolsInput.value).toContain('shell');
+    expect(toolsInput.value).not.toContain('bad');
+    expect(toolsInput.value).not.toContain('\0');
+  });
 });

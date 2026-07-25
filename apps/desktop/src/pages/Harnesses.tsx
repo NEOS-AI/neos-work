@@ -278,12 +278,28 @@ function HarnessModal({
   const { client } = useEngine();
   const readOnly = existing?.isBuiltIn ?? false;
 
-  const [id, setId] = useState(existing?.id ?? '');
-  const [name, setName] = useState(existing?.name ?? '');
+  // Seed edit form with scrubbed fields (control chars never re-enter inputs)
+  const [id, setId] = useState(
+    () => scrubDisplayText(existing?.id, { collapseLines: true, maxChars: 100 }),
+  );
+  const [name, setName] = useState(
+    () => scrubDisplayText(existing?.name, { collapseLines: true, maxChars: 200 }),
+  );
   const [domain, setDomain] = useState<'finance' | 'coding' | 'general'>(existing?.domain ?? 'general');
-  const [description, setDescription] = useState(existing?.description ?? '');
-  const [systemPrompt, setSystemPrompt] = useState(existing?.systemPrompt ?? '');
-  const [allowedTools, setAllowedTools] = useState((existing?.allowedTools ?? []).join(', '));
+  const [description, setDescription] = useState(() => {
+    const raw = typeof existing?.description === 'string' ? existing.description : '';
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
+  const [systemPrompt, setSystemPrompt] = useState(() => {
+    const raw = typeof existing?.systemPrompt === 'string' ? existing.systemPrompt : '';
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
+  const [allowedTools, setAllowedTools] = useState(() =>
+    (existing?.allowedTools ?? [])
+      .filter((t): t is string => typeof t === 'string' && !/[\0\r\n]/.test(t) && t.trim().length > 0)
+      .map((t) => t.trim())
+      .join(', '),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 

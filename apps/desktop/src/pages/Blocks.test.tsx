@@ -403,4 +403,43 @@ describe('Blocks page', () => {
     expect(screen.getByText(/prompt x/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('seeds edit modal with scrubbed name/id/category and null-stripped fields', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `my${'\0'}blk`,
+          name: `Custom${'\0'}Block`,
+          domain: 'general' as const,
+          category: `cat${'\n'}x`,
+          description: `desc${'\0'}ok`,
+          isBuiltIn: false,
+          implementationType: 'prompt' as const,
+          promptTemplate: `Hello${'\0'} {{x}}`,
+          paramDefs: [
+            {
+              key: `k${'\0'}1`,
+              label: `L${'\n'}1`,
+              type: 'string' as const,
+              description: `d${'\0'}`,
+              options: ['a', `b${'\0'}`, 'c'],
+            },
+          ],
+          inputDescription: `in${'\0'}`,
+          outputDescription: `out${'\0'}`,
+        },
+      ],
+    });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('CustomBlock')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() => expect(screen.getByText('Edit Block')).toBeInTheDocument());
+    // ID field hidden in edit mode; name/category seeds are scrubbed
+    expect((screen.getByDisplayValue('CustomBlock') as HTMLInputElement).value).not.toContain('\0');
+    expect((screen.getByDisplayValue('cat x') as HTMLInputElement).value).toBe('cat x');
+    // Param label scrubbed in draft
+    expect(screen.getByDisplayValue('L 1')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

@@ -221,4 +221,45 @@ describe('built-in coding and finance harness catalogs', () => {
     const ids = all.map((h) => h.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('caps description/systemPrompt and maps invalid domains to general', () => {
+    registerHarness({
+      id: 'cov_harness_caps',
+      name: 'Caps',
+      domain: 'quantum' as never,
+      description: 'D'.repeat(10_000),
+      systemPrompt: 'S'.repeat(120_000),
+      allowedTools: ['read_file', ...Array.from({ length: 50 }, (_, i) => `tool_${i}`)],
+    });
+    const h = resolveHarness('cov_harness_caps');
+    expect(h).toBeDefined();
+    expect(h!.domain).toBe('general');
+    expect(h!.description!.length).toBe(2_000);
+    expect(h!.systemPrompt.length).toBe(100_000);
+    expect(h!.allowedTools.length).toBeLessThanOrEqual(100);
+
+    // Control-char description collapsed; non-string description preserved as-is path
+    registerHarness({
+      id: 'cov_harness_desc_ctrl',
+      name: 'DescCtrl',
+      domain: 'coding',
+      description: `line1\nline2${'\0'}x`,
+      systemPrompt: 'ok prompt',
+      allowedTools: [],
+    });
+    const d = resolveHarness('cov_harness_desc_ctrl');
+    expect(d?.description).toBe('line1 line2 x');
+    expect(d?.description).not.toMatch(/[\r\n\0]/);
+
+    // Reject control-char systemPrompt entirely
+    registerHarness({
+      id: 'cov_harness_bad_prompt',
+      name: 'Bad',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'bad\nprompt',
+      allowedTools: [],
+    });
+    expect(resolveHarness('cov_harness_bad_prompt')).toBeUndefined();
+  });
 });

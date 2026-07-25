@@ -838,5 +838,69 @@ describe('AgentNode LLM model selection', () => {
     expect(goal).toBe(JSON.stringify({ q: 1 }));
     expect(goal).not.toContain('---');
   });
+
+  it('coerces non-string harnessId and caps oversized node systemPrompt', async () => {
+    const { registerHarness, resolveHarness } = await import('../harness/index.js');
+    registerHarness({
+      id: 'cov_agent_harness_num',
+      name: 'Num Harness',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'Harness prompt body',
+      allowedTools: ['read_file'],
+    });
+    expect(resolveHarness('cov_agent_harness_num')).toBeDefined();
+
+    orchestratorRun.mockClear();
+    // Non-string harnessId coerced via String()
+    const node = new AgentNode('agent_coding', {
+      harnessId: { toString: () => 'cov_agent_harness_num' } as never,
+      systemPrompt: 'N'.repeat(120_000),
+    });
+    const result = await node.execute(
+      ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }),
+    );
+    expect(result.ok).toBe(true);
+    expect(orchestratorRun).toHaveBeenCalled();
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goal).toContain('Harness prompt body');
+    // Node system prompt capped at 100k before merge
+    expect(goal.length).toBeLessThan(120_000 + 50_000);
+  });
+
+  it('truncates oversized CLI inputs JSON before spawn', async () => {
+    let capturedPrompt = '';
+    const cliSpawn = vi.fn(async (_id: string, prompt: string) => {
+      capturedPrompt = prompt;
+      return { output: 'ok', exitCode: 0 };
+    });
+    const node = new AgentNode('agent_coding', {
+      provider: 'cli-claude',
+      systemPrompt: 'sys',
+    });
+    const fatInputs = { blob: 'X'.repeat(300_000) };
+    const result = await node.execute(ctx({ cliSpawn, inputs: fatInputs }));
+    expect(result.ok).toBe(true);
+    expect(cliSpawn).toHaveBeenCalled();
+    expect(capturedPrompt).toMatch(/…\[inputs truncated\]/);
+    // Prompt itself is also hard-capped
+    expect(capturedPrompt.length).toBeLessThanOrEqual(100_000 + 256 * 1024);
+  });
+
+  it('truncates oversized inputs on the LLM path as well', async () => {
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', { systemPrompt: 'base' });
+    const fatInputs = { blob: 'Y'.repeat(300_000) };
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        inputs: fatInputs,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(orchestratorRun).toHaveBeenCalled();
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goal).toMatch(/…\[inputs truncated\]/);
+  });
 });
 

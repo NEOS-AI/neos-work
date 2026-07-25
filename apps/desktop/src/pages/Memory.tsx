@@ -38,9 +38,16 @@ interface MemoryModalProps {
 function MemoryModal({ item, onSave, onClose }: MemoryModalProps) {
   const { t } = useTranslation('common');
   const isEdit = !!item;
-  const [name, setName] = useState(item?.name ?? '');
+  // Seed edit form with scrubbed fields (control-char names never re-enter inputs)
+  const [name, setName] = useState(
+    () => scrubDisplayText(item?.name, { collapseLines: true, maxChars: 200 }),
+  );
   const [type, setType] = useState<MemoryType>(item?.type ?? 'user');
-  const [content, setContent] = useState(item?.content ?? '');
+  const [content, setContent] = useState(() => {
+    const raw = typeof item?.content === 'string' ? item.content : '';
+    // Multi-line OK; strip null bytes only
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 

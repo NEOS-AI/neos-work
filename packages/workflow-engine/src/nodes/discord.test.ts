@@ -222,4 +222,38 @@ describe('DiscordMessageNode', () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][0]).toBe(url);
   });
+
+  it('uses status-only error when webhook body is empty after scrub', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => '\n\r\0  ',
+      }),
+    );
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, { text: 'x' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Discord webhook error: 503');
+  });
+
+  it('surfaces network failures from fetch', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, { text: 'x' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('network down');
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue('not-an-error'));
+    const result2 = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, { text: 'x' }),
+    );
+    expect(result2.ok).toBe(false);
+    expect(result2.error).toBe('Discord send failed');
+  });
 });

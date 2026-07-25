@@ -1002,8 +1002,12 @@ export class EngineClient {
     });
     if (!res.ok) return;
     const blob = await res.blob();
-    const safeName = workflowName.replace(/[^a-z0-9_-]/gi, '_');
-    const filename = `${safeName}.neos.json`;
+    // Drop control chars then collapse non-filename alphabet; never empty download base
+    let raw = typeof workflowName === 'string' ? workflowName : '';
+    if (/\0/.test(raw)) raw = raw.replace(/\0/g, '');
+    raw = raw.replace(/[\r\n]+/g, ' ').trim();
+    const safeName = raw.replace(/[^a-z0-9_-]/gi, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'workflow';
+    const filename = `${safeName.slice(0, 120)}.neos.json`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1067,9 +1071,13 @@ export class EngineClient {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    // Align with exportWorkflow: strip control / non-filename chars before download
-    const raw = typeof filename === 'string' ? filename : 'workflow';
-    const base = raw.replace(/\.zip$/i, '').replace(/[^a-z0-9_-]/gi, '_') || 'workflow';
+    // Align with exportWorkflow: scrub control chars then filename-safe alphabet
+    let raw = typeof filename === 'string' ? filename : '';
+    if (/\0/.test(raw)) raw = raw.replace(/\0/g, '');
+    raw = raw.replace(/[\r\n]+/g, ' ').trim().replace(/\.zip$/i, '');
+    const base =
+      raw.replace(/[^a-z0-9_-]/gi, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 120)
+      || 'workflow';
     a.download = `${base}.zip`;
     a.click();
     URL.revokeObjectURL(url);

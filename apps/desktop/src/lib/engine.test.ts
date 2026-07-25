@@ -184,12 +184,17 @@ describe('EngineClient', () => {
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
   });
 
-  it('exportWorkflow triggers download when ok', async () => {
+  it('exportWorkflow triggers download when ok and scrubs download basename', async () => {
     const client = new EngineClient('http://engine.test');
-    const blob = new Blob(['{}'], { type: 'application/json' });
-    fetchMock.mockResolvedValueOnce(
-      new Response(blob, { status: 200, headers: { 'Content-Type': 'application/json' } }),
-    );
+    const okJson = () =>
+      new Response(new Blob(['{}'], { type: 'application/json' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    fetchMock
+      .mockResolvedValueOnce(okJson())
+      .mockResolvedValueOnce(okJson())
+      .mockResolvedValueOnce(okJson());
 
     const click = vi.fn();
     const createElement = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
@@ -214,6 +219,19 @@ describe('EngineClient', () => {
     expect(click).toHaveBeenCalled();
     expect(createObjectURL).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalled();
+    const anchors = () =>
+      createElement.mock.results
+        .map((r) => r.value as { download?: string })
+        .filter((el) => typeof el?.download === 'string');
+    expect(anchors().at(-1)?.download).toBe('My_Workflow.neos.json');
+
+    // Control chars / empty → safe fallback basename
+    await client.exportWorkflow('w1', `bad${'\0'} name${'\n'}x`);
+    expect(anchors().at(-1)?.download).toBe('bad_name_x.neos.json');
+    expect(anchors().at(-1)?.download).not.toMatch(/[\0\r\n]/);
+
+    await client.exportWorkflow('w1', `\0\n!!!`);
+    expect(anchors().at(-1)?.download).toBe('workflow.neos.json');
 
     createElement.mockRestore();
     urlProto.createObjectURL = prevCreate;
@@ -875,9 +893,11 @@ describe('EngineClient', () => {
     await expect(ctrlRun.runIdPromise).resolves.toBe('run-clean');
 
     // export zip download
-    fetchMock.mockResolvedValueOnce(
-      new Response(new Blob(['zip']), { status: 200 }),
-    );
+    const zipOk = () => new Response(new Blob(['zip']), { status: 200 });
+    fetchMock
+      .mockResolvedValueOnce(zipOk())
+      .mockResolvedValueOnce(zipOk())
+      .mockResolvedValueOnce(zipOk());
     const click = vi.fn();
     const createElement = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
       if (tag === 'a') {
@@ -899,12 +919,15 @@ describe('EngineClient', () => {
     expect(click).toHaveBeenCalled();
     // Control / spaces sanitized to download-safe basename
     await client.exportWorkflowZip('w1', `bad${'\n'} name.zip`);
-    const lastAnchor = createElement.mock.results
-      .map((r) => r.value as { download?: string })
-      .filter((el) => typeof el?.download === 'string')
-      .at(-1);
-    expect(lastAnchor?.download).toMatch(/\.zip$/);
-    expect(lastAnchor?.download).not.toMatch(/[\0\r\n]/);
+    const anchors = () =>
+      createElement.mock.results
+        .map((r) => r.value as { download?: string })
+        .filter((el) => typeof el?.download === 'string');
+    expect(anchors().at(-1)?.download).toBe('bad_name.zip');
+    expect(anchors().at(-1)?.download).not.toMatch(/[\0\r\n]/);
+    await client.exportWorkflowZip('w1', `\0\n`);
+    expect(anchors().at(-1)?.download).toBe('workflow.zip');
+
     createElement.mockRestore();
     urlProto.createObjectURL = prevCreate;
     urlProto.revokeObjectURL = prevRevoke;

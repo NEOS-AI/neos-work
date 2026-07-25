@@ -105,9 +105,14 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               <option value="">None</option>
               {designSystems
                 .filter((ds) => typeof ds.id === 'string' && !/[\0\r\n]/.test(ds.id) && ds.id.trim())
-                .map((ds) => (
-                  <option key={ds.id.trim()} value={ds.id.trim()}>{ds.name}</option>
-                ))}
+                .map((ds) => {
+                  const id = ds.id.trim();
+                  const name =
+                    scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 }) || id;
+                  return (
+                    <option key={id} value={id}>{name}</option>
+                  );
+                })}
             </select>
             {designSystemId && (
               <p className="text-[10px] text-white/30">

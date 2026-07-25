@@ -293,6 +293,9 @@ describe('NodeConfigPanel', () => {
     expect(values).not.toContain('ds-lead');
     expect(screen.queryByText('Evil DS')).not.toBeInTheDocument();
     expect(screen.queryByText('Lead Ctrl')).not.toBeInTheDocument();
+    // Safe option labels present
+    expect(screen.getByText('Safe DS')).toBeInTheDocument();
+    expect(screen.getByText('Padded DS')).toBeInTheDocument();
 
     // Valid selection trims and applies
     fireEvent.change(select, { target: { value: 'ds-ok' } });
@@ -306,6 +309,39 @@ describe('NodeConfigPanel', () => {
     onUpdateDesignSystemId.mockClear();
     fireEvent.change(select, { target: { value: '' } });
     expect(onUpdateDesignSystemId).toHaveBeenCalledWith('');
+  });
+
+  it('scrubs control-char design system option labels', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds-1',
+          name: `Brand${'\0'}X${'\n'}Y`,
+          path: '/x',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    });
+
+    render(
+      <NodeConfigPanel
+        selectedNode={null}
+        validationIssues={[]}
+        onPatchNodeData={() => {}}
+        designSystemId=""
+        onUpdateDesignSystemId={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+    // null stripped; newline collapsed
+    expect(screen.getByRole('option', { name: 'BrandX Y' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('rejects null-byte system prompt and control-char web_search query', async () => {

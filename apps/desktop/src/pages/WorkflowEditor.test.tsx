@@ -697,4 +697,47 @@ describe('WorkflowEditor page', () => {
       expect(renameInput.value).not.toContain('\0');
     });
   });
+
+  it('falls back rename seed to Workflow and scrubs export filenames', async () => {
+    getWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ...sampleWorkflow,
+        name: `\0\n`,
+      },
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Workflow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle('workflow.rename'));
+    await waitFor(() => {
+      const renameInput = screen.getByDisplayValue('Workflow') as HTMLInputElement;
+      expect(renameInput.value).toBe('Workflow');
+      expect(renameInput.value).not.toMatch(/[\0\r\n]/);
+    });
+
+    // cancel rename
+    fireEvent.keyDown(screen.getByDisplayValue('Workflow'), { key: 'Escape' });
+
+    fireEvent.click(screen.getByRole('button', { name: /workflow\.export.*JSON/i }));
+    expect(exportWorkflow).toHaveBeenCalledWith('wf-1', 'workflow');
+    fireEvent.click(screen.getByRole('button', { name: 'Export (ZIP)' }));
+    expect(exportWorkflowZip).toHaveBeenCalledWith('wf-1', 'workflow');
+  });
+
+  it('scrubs control-char name when exporting JSON/ZIP', async () => {
+    getWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ...sampleWorkflow,
+        name: `Evil${'\0'}Flow${'\n'}X`,
+      },
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText(/EvilFlow X/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /workflow\.export.*JSON/i }));
+    expect(exportWorkflow).toHaveBeenCalledWith('wf-1', 'EvilFlow X');
+    fireEvent.click(screen.getByRole('button', { name: 'Export (ZIP)' }));
+    expect(exportWorkflowZip).toHaveBeenCalledWith('wf-1', 'EvilFlow X');
+  });
 });

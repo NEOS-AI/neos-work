@@ -168,13 +168,19 @@ export function WorkflowEditor() {
     const res = await client.getWorkflow(id);
     if (res.ok && res.data) {
       setWorkflow(res.data);
-      setWorkflowDescription(res.data.description ?? '');
-      setDesignSystemId(res.data.designSystemId ?? '');
+      // Multi-line description OK; strip null bytes. Control-char designSystemId dropped.
+      const descRaw = typeof res.data.description === 'string' ? res.data.description : '';
+      const descSafe = /\0/.test(descRaw) ? descRaw.replace(/\0/g, '') : descRaw;
+      const dsRaw = typeof res.data.designSystemId === 'string' ? res.data.designSystemId : '';
+      const dsSafe =
+        dsRaw && !/[\0\r\n]/.test(dsRaw) ? dsRaw.trim() : '';
+      setWorkflowDescription(descSafe);
+      setDesignSystemId(dsSafe);
       const rfNodes = toReactFlowNodes(res.data, {});
       const rfEdges = toReactFlowEdges(res.data);
       setNodes(rfNodes);
       setEdges(rfEdges);
-      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, res.data.description ?? '', res.data.designSystemId ?? ''));
+      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, descSafe, dsSafe));
       // Fit graph after positions apply
       setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 50);
     }
@@ -517,9 +523,10 @@ export function WorkflowEditor() {
               className="cursor-text hover:opacity-80"
               onClick={() => {
                 skipNameBlurCommitRef.current = false;
-                // Seed editor with scrubbed name (control-char names never re-enter the input)
+                // Seed editor with scrubbed name (control-char / empty never re-enter the input)
                 setNameInput(
-                  scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 }),
+                  scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 })
+                  || 'Workflow',
                 );
                 setEditingName(true);
               }}
@@ -638,7 +645,13 @@ export function WorkflowEditor() {
           🕐 History
         </button>
         <button
-          onClick={() => client?.exportWorkflow(workflow.id, workflow.name)}
+          onClick={() => {
+            // Scrub before download filename sanitization (control-char names never reach download attr)
+            const name =
+              scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 })
+              || 'workflow';
+            void client?.exportWorkflow(workflow.id, name);
+          }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
           title={t('workflow.export')}
@@ -646,7 +659,12 @@ export function WorkflowEditor() {
           {t('workflow.export')} (JSON)
         </button>
         <button
-          onClick={() => client?.exportWorkflowZip(workflow.id, workflow.name)}
+          onClick={() => {
+            const name =
+              scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 })
+              || 'workflow';
+            void client?.exportWorkflowZip(workflow.id, name);
+          }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
           title="Export as ZIP"
@@ -830,9 +848,16 @@ export function WorkflowEditor() {
               });
               setNodes(rfNodes);
               setEdges(rfEdges);
-              if (typeof snap.description === 'string') setWorkflowDescription(snap.description);
-              if (typeof snap.designSystemId === 'string') setDesignSystemId(snap.designSystemId);
-              else if (snap.designSystemId === undefined || snap.designSystemId === null) setDesignSystemId('');
+              if (typeof snap.description === 'string') {
+                const d = snap.description;
+                setWorkflowDescription(/\0/.test(d) ? d.replace(/\0/g, '') : d);
+              }
+              if (typeof snap.designSystemId === 'string') {
+                const id = snap.designSystemId;
+                setDesignSystemId(id && !/[\0\r\n]/.test(id) ? id.trim() : '');
+              } else if (snap.designSystemId === undefined || snap.designSystemId === null) {
+                setDesignSystemId('');
+              }
             }
           }}
         />

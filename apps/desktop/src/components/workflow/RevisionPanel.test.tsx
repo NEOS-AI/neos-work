@@ -543,4 +543,33 @@ describe('RevisionPanel', () => {
     await waitFor(() => expect(screen.getByText('v1x')).toBeInTheDocument());
   });
 
+  it('seeds label edit input with scrubbed revision label', async () => {
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'r1',
+          workflowId: 'wf',
+          label: `Snap${'\0'}A${'\n'}B`,
+          createdAt: '2020-01-01T00:00:00.000Z',
+          nodeCount: 1,
+          edgeCount: 0,
+        },
+      ],
+    });
+    render(
+      <RevisionPanel
+        workflowId="wf"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText(/SnapA B/)).toBeInTheDocument());
+    fireEvent.click(screen.getByTitle('Click to add label'));
+    const input = await screen.findByDisplayValue('SnapA B');
+    expect((input as HTMLInputElement).value).not.toContain('\0');
+    expect((input as HTMLInputElement).value).not.toMatch(/[\r\n]/);
+  });
+
 });

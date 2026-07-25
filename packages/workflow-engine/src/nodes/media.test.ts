@@ -548,4 +548,80 @@ describe('MediaNode', () => {
     expect(String(result.output)).toBe('Image generated: plain.png');
     expect(String(result.output)).not.toContain('Revised prompt');
   });
+
+  it('treats control-char mediaType as image default', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'ctrl.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio\n', prompt: 'p' } }),
+    );
+    expect(result.ok).toBe(true);
+    expect(String(result.output)).toMatch(/Image generated/);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.prompt).toBe('p');
+  });
+
+  it('falls back control-char quality to standard on image requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { filename: 'q.png' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await MediaNode.execute(
+      ctx({
+        config: { mediaType: 'image', prompt: 'p', size: '1024x1024', quality: 'hd\n' },
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.quality).toBe('standard');
+  });
+
+  it('uses status-only audio error when HTTP body is empty after scrub', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => '\n\0',
+      }),
+    );
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hello world' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Audio generation failed: 502');
+  });
+
+  it('includes audio HTTP error body detail when present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => '  rate limited  ',
+      }),
+    );
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hello world' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Audio generation failed: 429: rate limited');
+  });
+
+  it('uses status-only image error when HTTP body is empty after scrub', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 418,
+        text: async () => '',
+      }),
+    );
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'image', prompt: 'teapot' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Image generation failed: 418');
+  });
 });

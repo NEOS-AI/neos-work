@@ -38,27 +38,54 @@ interface ModalProps {
 
 function BlockModal({ block, onSave, onClose }: ModalProps) {
   const isEdit = !!block;
-  const [id, setId] = useState(block?.id ?? '');
-  const [name, setName] = useState(block?.name ?? '');
+  // Seed edit form with scrubbed line fields (control chars never re-enter inputs)
+  const [id, setId] = useState(
+    () => scrubDisplayText(block?.id, { collapseLines: true, maxChars: 100 }),
+  );
+  const [name, setName] = useState(
+    () => scrubDisplayText(block?.name, { collapseLines: true, maxChars: 200 }),
+  );
   const [domain, setDomain] = useState<WorkflowBlock['domain']>(block?.domain ?? 'general');
-  const [category, setCategory] = useState(block?.category ?? 'custom');
-  const [description, setDescription] = useState(block?.description ?? '');
+  const [category, setCategory] = useState(
+    () => scrubDisplayText(block?.category, { collapseLines: true, maxChars: 80 }) || 'custom',
+  );
+  const [description, setDescription] = useState(() => {
+    const raw = typeof block?.description === 'string' ? block.description : '';
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
   const [implType, setImplType] = useState<WorkflowBlock['implementationType']>(block?.implementationType ?? 'prompt');
-  const [promptTemplate, setPromptTemplate] = useState(block?.promptTemplate ?? '');
-  const [inputDesc, setInputDesc] = useState(block?.inputDescription ?? '');
-  const [outputDesc, setOutputDesc] = useState(block?.outputDescription ?? '');
+  const [promptTemplate, setPromptTemplate] = useState(() => {
+    const raw = typeof block?.promptTemplate === 'string' ? block.promptTemplate : '';
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
+  const [inputDesc, setInputDesc] = useState(() => {
+    const raw = typeof block?.inputDescription === 'string' ? block.inputDescription : '';
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
+  const [outputDesc, setOutputDesc] = useState(() => {
+    const raw = typeof block?.outputDescription === 'string' ? block.outputDescription : '';
+    return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   type ParamDraft = { key: string; label: string; type: string; description: string; default: string; options: string };
   const blankDraft = (): ParamDraft => ({ key: '', label: '', type: 'string', description: '', default: '', options: '' });
   const toParamDraft = (p: WorkflowBlock['paramDefs'][number]): ParamDraft => ({
-    key: p.key,
-    label: p.label,
+    key: scrubDisplayText(p.key, { collapseLines: true, maxChars: 100 }),
+    label: scrubDisplayText(p.label, { collapseLines: true, maxChars: 100 }),
     type: p.type,
-    description: p.description ?? '',
-    default: p.default !== undefined ? String(p.default) : '',
-    options: p.options?.join(', ') ?? '',
+    description: (() => {
+      const raw = typeof p.description === 'string' ? p.description : '';
+      return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+    })(),
+    default: p.default !== undefined
+      ? scrubDisplayText(String(p.default), { collapseLines: true, maxChars: 200 })
+      : '',
+    options: (p.options ?? [])
+      .filter((o): o is string => typeof o === 'string' && !/[\0\r\n]/.test(o) && o.trim().length > 0)
+      .map((o) => o.trim())
+      .join(', '),
   });
   const [paramDrafts, setParamDrafts] = useState<ParamDraft[]>(
     (block?.paramDefs ?? []).map(toParamDraft),

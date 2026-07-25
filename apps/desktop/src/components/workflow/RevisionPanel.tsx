@@ -205,7 +205,10 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
                     // Clear any leftover Escape-cancel flag so the next blur can save
                     skipBlurSaveRef.current = false;
                     setEditingId(rev.id);
-                    setLabelInput(rev.label ?? '');
+                    // Seed with scrubbed label so control chars never re-enter the input
+                    setLabelInput(
+                      scrubDisplayText(rev.label, { collapseLines: true, maxChars: 200 }),
+                    );
                   }}
                   title="Click to add label"
                 >

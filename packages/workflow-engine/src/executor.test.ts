@@ -840,4 +840,69 @@ describe('executeWorkflow graph failure and skip paths', () => {
     ).toBe(true);
     expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
   });
+
+  it('runs parallel_start/end via runNode and completes AND success paths', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-ps-pe-path',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'pstart',
+            type: 'parallel_start',
+            label: 'PS',
+            position: { x: 1, y: 0 },
+            config: {},
+          },
+          { id: 'branch', type: 'output', label: 'B', position: { x: 2, y: 0 }, config: {} },
+          {
+            id: 'pend',
+            type: 'parallel_end',
+            label: 'PE',
+            position: { x: 3, y: 0 },
+            config: {},
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'pstart' },
+          { id: 'e2', source: 'pstart', target: 'branch' },
+          { id: 'e3', source: 'branch', target: 'pend' },
+        ],
+      }),
+      settings: {},
+      onEvent: (e) => events.push(e),
+    });
+    const completed = events
+      .filter((e) => e.type === 'node.completed')
+      .map((e) => (e as { nodeId: string }).nodeId);
+    expect(completed).toEqual(expect.arrayContaining(['pstart', 'branch', 'pend']));
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+  });
+
+  it('AND gate succeeds when all upstream succeed', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-and-ok',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          { id: 'a', type: 'output', label: 'A', position: { x: 1, y: 0 }, config: {} },
+          { id: 'b', type: 'output', label: 'B', position: { x: 1, y: 1 }, config: {} },
+          { id: 'and', type: 'gate_and', label: 'AND', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'a' },
+          { id: 'e2', source: 'trigger', target: 'b' },
+          { id: 'e3', source: 'a', target: 'and' },
+          { id: 'e4', source: 'b', target: 'and' },
+        ],
+      }),
+      settings: {},
+      onEvent: (e) => events.push(e),
+    });
+    expect(
+      events.some((e) => e.type === 'node.completed' && (e as { nodeId: string }).nodeId === 'and'),
+    ).toBe(true);
+  });
 });

@@ -260,6 +260,34 @@ describe('Memory page', () => {
     });
   });
 
+  it('seeds edit modal with scrubbed name and null-stripped content', async () => {
+    listMemories.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'm-seed',
+          name: `Pref${'\0'}Name`,
+          type: 'user' as const,
+          content: `likes${'\0'} dark\nmode`,
+          enabled: true,
+          updatedAt: '2026-02-01T00:00:00.000Z',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('PrefName')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.edit' })[0]!);
+    await waitFor(() => {
+      const nameInput = screen.getByDisplayValue('PrefName') as HTMLInputElement;
+      expect(nameInput.value).not.toContain('\0');
+    });
+    const content = screen.getByDisplayValue(/likes dark/) as HTMLTextAreaElement;
+    expect(content.value).toContain('likes dark');
+    expect(content.value).toContain('\n');
+    expect(content.value).not.toContain('\0');
+  });
+
   it('scrubs control chars from type, name, and content preview', async () => {
     listMemories.mockResolvedValue({
       ok: true,
