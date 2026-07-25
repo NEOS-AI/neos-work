@@ -79,6 +79,11 @@ describe('createBrowserTools', () => {
     expect(big.error).toMatch(/max size/i);
     expect(page.fill).not.toHaveBeenCalled();
 
+    const nullByte = await fill.execute({ selector: '#x', value: 'a\0b' });
+    expect(nullByte.success).toBe(false);
+    expect(nullByte.error).toMatch(/control characters/i);
+    expect(page.fill).not.toHaveBeenCalled();
+
     const textRes = await extract.execute({});
     expect(textRes.success).toBe(true);
     const text = (textRes.output as { text: string }).text;

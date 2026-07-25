@@ -45,7 +45,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.122',
+          'User-Agent': 'neos-work/0.3.123',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
@@ -53,7 +53,8 @@ export class WebSearchNode implements ExecutableNode {
 
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        const detail = body.trim().slice(0, 500);
+        // Scrub control chars from upstream error bodies
+        const detail = body.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
         return {
           ok: false,
           output: null,

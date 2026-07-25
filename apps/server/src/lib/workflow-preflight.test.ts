@@ -40,6 +40,28 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
+  it('does not resolve control-char node ids as trimmed edge targets', () => {
+    // Node id "\nnode" must not make edge source/target "node" valid
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: '\nnode', type: 'web_search', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 'node' },
+          { id: 'e2', source: 'node', target: 'o' },
+        ],
+      },
+      { TAVILY_API_KEY: 'k' },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'invalid_node_id')).toBe(true);
+    // Edges to "node" must be dangling — trimmed form of "\nnode" is not indexed
+    expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+
   it('flags control-char edge endpoints as dangling', () => {
     const r = assessWorkflowPreflight(
       {
@@ -60,6 +82,19 @@ describe('assessWorkflowPreflight', () => {
       {},
     );
     expect(leading.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+
+    // Control-char node id must not be in the id set for padded-edge matching
+    const ctrlNode = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: '\nt', type: 'trigger', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [{ id: 'e1', source: 't', target: 'o' }],
+      },
+      {},
+    );
+    expect(ctrlNode.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
   it('flags blank node ids', () => {

@@ -98,7 +98,8 @@ export const DeployNode: ExecutableNode = {
         || (typeof res.status === 'number' && res.status >= 400);
       if (httpFailed) {
         const body = await res.text().catch(() => '');
-        const detail = body.trim().slice(0, 500);
+        // Scrub control chars from deploy API error bodies
+        const detail = body.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
         const status = typeof res.status === 'number' ? res.status : 0;
         return {
           ok: false,

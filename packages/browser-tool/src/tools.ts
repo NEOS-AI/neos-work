@@ -123,6 +123,14 @@ export function createBrowserTools(manager: BrowserManager): Tool[] {
           }
           const valueRaw = (input as { value?: unknown }).value;
           let value = typeof valueRaw === 'string' ? valueRaw : String(valueRaw ?? '');
+          // Null bytes break Playwright fill / form inputs
+          if (/\0/.test(value)) {
+            return {
+              success: false,
+              output: null,
+              error: 'value contains invalid control characters',
+            };
+          }
           if (value.length > BROWSER_FILL_MAX_CHARS) {
             return {
               success: false,

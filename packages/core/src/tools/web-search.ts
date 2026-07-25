@@ -76,17 +76,21 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.122',
+            'User-Agent': 'neos-work/0.3.123',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
 
         if (!response.ok) {
           const text = await response.text().catch(() => '');
+          // Scrub control chars from upstream error bodies
+          const detail = text.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
           return {
             success: false,
             output: null,
-            error: `Tavily API returned ${response.status}: ${text.slice(0, 500)}`,
+            error: detail
+              ? `Tavily API returned ${response.status}: ${detail}`
+              : `Tavily API returned ${response.status}`,
           };
         }
 

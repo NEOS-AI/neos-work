@@ -8,10 +8,19 @@ const deleteSession = vi.fn();
 const listMessages = vi.fn();
 const chat = vi.fn();
 const runAgent = vi.fn();
+const confirmTool = vi.fn();
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listSessions, createSession, deleteSession, listMessages, chat, runAgent },
+    client: {
+      listSessions,
+      createSession,
+      deleteSession,
+      listMessages,
+      chat,
+      runAgent,
+      confirmTool,
+    },
   }),
 }));
 
@@ -70,7 +79,9 @@ describe('Sessions page', () => {
     listMessages.mockReset();
     chat.mockReset();
     runAgent.mockReset();
+    confirmTool.mockReset();
     listMessages.mockResolvedValue({ ok: true, data: [] });
+    confirmTool.mockResolvedValue({ ok: true });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -396,5 +407,205 @@ describe('Sessions page', () => {
 
     await waitFor(() => expect(capturedSignal!.aborted).toBe(true));
     release?.();
+  });
+
+  it('renders thinking chunks, tool steps, and context compression markers', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'thinking', content: 'consider options' };
+        yield {
+          type: 'tool_use',
+          toolName: 'read_file',
+          toolUseId: 'tu-1',
+          toolInput: { path: 'a.ts' },
+        };
+        yield { type: 'tool_pending', toolUseId: 'tu-1' };
+        yield { type: 'tool_result', toolResult: 'file body' };
+        yield { type: 'context_compressed' };
+        yield { type: 'text', content: 'done' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'analyze' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(chat).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('analyze')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('done')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Thought process')).toBeInTheDocument();
+    expect(screen.getByText('read_file')).toBeInTheDocument();
+    expect(screen.getByText('이전 대화 요약됨')).toBeInTheDocument();
+  });
+
+  it('approves pending tool use via confirmTool', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield {
+          type: 'tool_use',
+          toolName: 'shell',
+          toolUseId: 'tu-approve',
+          toolInput: { cmd: 'ls' },
+        };
+        yield { type: 'tool_pending', toolUseId: 'tu-approve' };
+        await gate;
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'run shell' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Awaiting approval')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => {
+      expect(confirmTool).toHaveBeenCalledWith('s1', 'tu-approve', true);
+    });
+    release?.();
+  });
+
+  it('streams agent plan steps including healing and errors', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    const stepA = {
+      id: 'step-a',
+      description: 'Inspect repo',
+      toolName: 'list_directory',
+      status: 'pending' as const,
+      type: 'plan' as const,
+      index: 0,
+    };
+    const stepB = {
+      id: 'step-b',
+      description: 'Fix bug',
+      toolName: 'write_file',
+      status: 'pending' as const,
+      type: 'plan' as const,
+      index: 1,
+    };
+
+    runAgent.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'plan', steps: [stepA, stepB] };
+        yield { type: 'step_start', step: { ...stepA, status: 'running' } };
+        yield {
+          type: 'step_healing',
+          step: stepA,
+          strategy: 'retry',
+        };
+        yield {
+          type: 'step_complete',
+          step: {
+            ...stepA,
+            status: 'completed',
+            output: { screenshot: 'abc123' },
+          },
+        };
+        yield {
+          type: 'step_error',
+          step: { ...stepB, status: 'error', error: 'write failed' },
+        };
+        yield { type: 'text', content: 'agent finished' };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Agent/i }));
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'plan it' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Agent Plan')).toBeInTheDocument();
+      expect(screen.getByText(/1\/2 steps/)).toBeInTheDocument();
+      expect(screen.getByText('Inspect repo')).toBeInTheDocument();
+      expect(screen.getByText('write failed')).toBeInTheDocument();
+      expect(screen.getByText('agent finished')).toBeInTheDocument();
+      expect(screen.getByText('스크린샷 보기 ▼')).toBeInTheDocument();
+    });
+  });
+
+  it('creates session with selected thinking mode and does not send on Shift+Enter', async () => {
+    const user = userEvent.setup();
+    listSessions
+      .mockResolvedValueOnce({ ok: true, data: [] })
+      .mockResolvedValue({ ok: true, data: sessions });
+    createSession.mockResolvedValue({ ok: true, data: sessions[0] });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('emptyState')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument());
+
+    // Pick a non-default thinking mode if available
+    const extended = screen.queryByRole('button', { name: 'Extended' })
+      ?? screen.queryByRole('button', { name: 'High' })
+      ?? screen.queryByRole('button', { name: 'Medium' });
+    if (extended) {
+      await user.click(extended);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+
+    await waitFor(() => {
+      expect(createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId: 'default',
+          thinkingMode: expect.any(String),
+        }),
+      );
+    });
+    const thinkingMode = createSession.mock.calls[0]![0].thinkingMode as string;
+    if (extended) {
+      expect(thinkingMode).not.toBe('none');
+    }
+
+    // Select session and ensure Shift+Enter keeps the draft
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'keep me' } });
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
+    expect(chat).not.toHaveBeenCalled();
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(input.value).toBe('keep me');
   });
 });

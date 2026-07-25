@@ -71,7 +71,8 @@ export class DiscordMessageNode implements ExecutableNode {
 
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        const detail = body.trim().slice(0, 500);
+        // Scrub control chars from webhook error bodies
+        const detail = body.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
         return {
           ok: false,
           output: null,

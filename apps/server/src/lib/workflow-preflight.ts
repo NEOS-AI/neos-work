@@ -35,11 +35,13 @@ export function assessWorkflowPreflight(
   const issues: PreflightIssue[] = [];
   const nodes = workflow.nodes ?? [];
   const edges = workflow.edges ?? [];
-  // Accept raw + trimmed ids so padded edge endpoints still resolve (matches desktop validation)
+  // Accept raw + trimmed ids so padded edge endpoints still resolve (matches desktop validation).
+  // Skip control-char ids so "\nnode" cannot resolve as "node".
   const nodeIds = new Set<string>();
   for (const n of nodes) {
-    if (typeof n.id === 'string' && n.id) nodeIds.add(n.id);
-    const trimmed = typeof n.id === 'string' ? n.id.trim() : '';
+    if (typeof n.id !== 'string' || !n.id || /[\0\r\n]/.test(n.id)) continue;
+    nodeIds.add(n.id);
+    const trimmed = n.id.trim();
     if (trimmed) nodeIds.add(trimmed);
   }
 

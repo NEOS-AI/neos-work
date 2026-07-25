@@ -21,7 +21,12 @@ export interface CliAgentInfo {
 async function which(cmd: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync('which', [cmd], { timeout: 3000 });
-    return stdout.trim() || null;
+    // which should return a single path line; drop control-char paths
+    const line = stdout.replace(/\0/g, '').split('\n')[0] ?? '';
+    if (!line || /[\r\n]/.test(line)) return null;
+    const p = line.trim();
+    if (!p || /[\0\r\n]/.test(p)) return null;
+    return p;
   } catch {
     return null;
   }
@@ -30,7 +35,10 @@ async function which(cmd: string): Promise<string | null> {
 async function getVersion(binPath: string, versionFlag = '--version'): Promise<string | undefined> {
   try {
     const { stdout } = await execFileAsync(binPath, [versionFlag], { timeout: 3000 });
-    return stdout.trim().split('\n')[0];
+    // First line only; scrub null bytes for UI/list hygiene
+    const line = (stdout.replace(/\0/g, '').split('\n')[0] ?? '').trim();
+    if (!line || line.length > 200) return undefined;
+    return line;
   } catch {
     return undefined;
   }

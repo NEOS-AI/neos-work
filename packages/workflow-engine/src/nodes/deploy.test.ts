@@ -110,6 +110,21 @@ describe('DeployNode', () => {
     expect(result.error).toContain('service unavailable');
   });
 
+  it('scrubs control chars from HTTP error bodies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'line1\nline2\0x',
+      }),
+    );
+    const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('line1 line2 x');
+    expect(result.error).not.toMatch(/\n/);
+  });
+
   it('catches network errors instead of throwing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
     const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));

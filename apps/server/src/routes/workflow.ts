@@ -385,16 +385,28 @@ async function readZipBuffer(c: {
     arrayBuffer: () => Promise<ArrayBuffer>;
   };
 }): Promise<ZipBufferResult> {
-  const contentType = c.req.header('content-type') ?? '';
-  if (!contentType.includes('multipart/form-data') && !contentType.includes('application/octet-stream') && !contentType.includes('application/zip')) {
+  const contentTypeRaw = c.req.header('content-type') ?? '';
+  // Control-char content-type is unusable for multipart detection
+  if (/[\0\r\n]/.test(contentTypeRaw)) {
+    return { ok: false, error: 'Expected multipart/form-data or application/zip', status: 400 };
+  }
+  const contentType = contentTypeRaw.trim().toLowerCase();
+  if (
+    !contentType.includes('multipart/form-data')
+    && !contentType.includes('application/octet-stream')
+    && !contentType.includes('application/zip')
+  ) {
     return { ok: false, error: 'Expected multipart/form-data or application/zip', status: 400 };
   }
   // Early reject via Content-Length when present
-  const clHeader = c.req.header('content-length');
-  if (clHeader) {
-    const cl = Number(clHeader);
-    if (Number.isFinite(cl) && cl > ZIP_IMPORT_MAX_BYTES) {
-      return { ok: false, error: `ZIP exceeds max size (${ZIP_IMPORT_MAX_BYTES} bytes)`, status: 400 };
+  const clHeaderRaw = c.req.header('content-length');
+  if (clHeaderRaw) {
+    // Ignore control-char / non-numeric length headers
+    if (!/[\0\r\n]/.test(clHeaderRaw)) {
+      const cl = Number(clHeaderRaw.trim());
+      if (Number.isFinite(cl) && cl > ZIP_IMPORT_MAX_BYTES) {
+        return { ok: false, error: `ZIP exceeds max size (${ZIP_IMPORT_MAX_BYTES} bytes)`, status: 400 };
+      }
     }
   }
   if (contentType.includes('multipart/form-data')) {

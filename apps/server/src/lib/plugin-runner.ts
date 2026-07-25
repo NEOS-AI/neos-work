@@ -224,7 +224,8 @@ async function executeStage(
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        const detail = body.trim().slice(0, 500);
+        // Scrub control chars from error bodies (log/UI injection defense)
+        const detail = body.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
         return `[Stage ${stageName}: Anthropic API error ${res.status}${detail ? `: ${detail}` : ''}]`;
       }
       const data = await res.json() as { content?: { text?: string }[] };
@@ -253,7 +254,8 @@ async function executeStage(
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      const detail = body.trim().slice(0, 500);
+      // Scrub control chars from error bodies (log/UI injection defense)
+      const detail = body.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
       return `[Stage ${stageName}: OpenAI API error ${res.status}${detail ? `: ${detail}` : ''}]`;
     }
     const data = await res.json() as { choices?: { message?: { content?: string } }[] };
