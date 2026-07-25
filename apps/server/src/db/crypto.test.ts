@@ -27,6 +27,13 @@ describe('crypto helpers', () => {
     expect(isSensitiveKey('apiKeyNotPrefix')).toBe(false);
     expect(isSensitiveKey('  ANTHROPIC_API_KEY  ')).toBe(true);
     expect(isSensitiveKey('   ')).toBe(false);
+    expect(isSensitiveKey('apiKey.\nbad')).toBe(false);
+    expect(isSensitiveKey(`apiKey.${'\0'}bad`)).toBe(false);
+    expect(isSensitiveKey('x'.repeat(201))).toBe(false);
+    // Non-string keys are never sensitive
+    expect(isSensitiveKey(null as unknown as string)).toBe(false);
+    expect(isSensitiveKey(undefined as unknown as string)).toBe(false);
+    expect(isSensitiveKey(42 as unknown as string)).toBe(false);
   });
 
   it('detects encrypted payload shape', () => {

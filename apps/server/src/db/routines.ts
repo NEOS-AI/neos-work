@@ -105,6 +105,18 @@ function rowToRun(row: RoutineRunRow): RoutineRun {
   };
 }
 
+/** Practical bound for routine / run / workflow lookup ids. */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 export function listRoutines(): Routine[] {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM routine ORDER BY created_at DESC').all() as RoutineRow[];
@@ -112,7 +124,7 @@ export function listRoutines(): Routine[] {
 }
 
 export function getRoutine(id: string): Routine | null {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return null;
   const db = getDb();
   const row = db.prepare('SELECT * FROM routine WHERE id = ?').get(trimmed) as RoutineRow | undefined;
@@ -134,10 +146,17 @@ export function createRoutine(input: {
   inputs?: Record<string, unknown>;
 }): Routine {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
-  const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
+  const rawWf = typeof input.workflowId === 'string' ? input.workflowId : '';
+  if (!rawWf.trim()) {
+    throw new Error('name, workflowId, and schedule are required');
+  }
+  const workflowId = safeLookupId(input.workflowId);
+  if (!workflowId) {
+    throw new Error('workflowId is invalid');
+  }
   const scheduleRaw = typeof input.schedule === 'string' ? input.schedule : '';
   const schedule = scheduleRaw.trim();
-  if (!name || !workflowId || !schedule) {
+  if (!name || !schedule) {
     throw new Error('name, workflowId, and schedule are required');
   }
   if (/[\0\r\n]/.test(name)) {
@@ -187,7 +206,7 @@ export function updateRoutine(
   id: string,
   input: Partial<{ name: string; schedule: string; timezone: string; enabled: boolean; inputs: Record<string, unknown> }>,
 ): Routine | null {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return null;
   const db = getDb();
   const existing = getRoutine(trimmed);
@@ -242,7 +261,7 @@ export function updateRoutine(
 }
 
 export function deleteRoutine(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM routine WHERE id = ?').run(trimmed);
@@ -250,7 +269,7 @@ export function deleteRoutine(id: string): boolean {
 }
 
 export function setLastRunAt(id: string): void {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return;
   const db = getDb();
   db.prepare("UPDATE routine SET last_run_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(trimmed);
@@ -258,10 +277,17 @@ export function setLastRunAt(id: string): void {
 
 // Routine run records
 export function createRoutineRun(input: { routineId: string; runId?: string }): RoutineRun {
-  const routineId = typeof input.routineId === 'string' ? input.routineId.trim() : '';
-  if (!routineId) throw new Error('routineId is required');
-  const runId =
-    typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
+  const rawRid = typeof input.routineId === 'string' ? input.routineId : '';
+  if (!rawRid.trim()) throw new Error('routineId is required');
+  const routineId = safeLookupId(input.routineId);
+  if (!routineId) throw new Error('routineId is invalid');
+  let runId: string | null = null;
+  if (input.runId !== undefined && input.runId !== null) {
+    if (typeof input.runId === 'string') {
+      // Drop unsafe linked workflow run ids rather than persisting them
+      runId = safeLookupId(input.runId) || null;
+    }
+  }
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -274,7 +300,7 @@ export function createRoutineRun(input: { routineId: string; runId?: string }): 
 }
 
 export function completeRoutineRun(id: string, status: 'completed' | 'failed', error?: string): void {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return;
   const statusRaw = typeof status === 'string' ? status.trim().toLowerCase() : '';
   const normalized: 'completed' | 'failed' = statusRaw === 'failed' ? 'failed' : 'completed';
@@ -292,7 +318,7 @@ export function completeRoutineRun(id: string, status: 'completed' | 'failed', e
 }
 
 export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {
-  const rid = typeof routineId === 'string' ? routineId.trim() : '';
+  const rid = safeLookupId(routineId);
   if (!rid) return [];
   const capped = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const db = getDb();
@@ -303,8 +329,8 @@ export function listRoutineRuns(routineId: string, limit = 20): RoutineRun[] {
 }
 
 export function getRoutineRun(routineId: string, runId: string): RoutineRun | null {
-  const rid = typeof routineId === 'string' ? routineId.trim() : '';
-  const run = typeof runId === 'string' ? runId.trim() : '';
+  const rid = safeLookupId(routineId);
+  const run = safeLookupId(runId);
   if (!rid || !run) return null;
   const db = getDb();
   // `runId` may be the routine_run primary key or the linked workflow_run id

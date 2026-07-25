@@ -111,4 +111,72 @@ describe('Dashboard page', () => {
     expect(screen.getByText('nav.dashboard')).toBeInTheDocument();
     expect(screen.getByText('Local')).toBeInTheDocument();
   });
+
+  it('renders resource counts and recent routines/deployments', async () => {
+    listPlugins.mockResolvedValue({ ok: true, data: [{ id: 'p1' }, { id: 'p2' }] });
+    listRoutines.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'r1',
+          name: 'Nightly Report',
+          workflowId: 'w1',
+          schedule: '0 9 * * *',
+          enabled: true,
+          updatedAt: '2026-01-03T00:00:00.000Z',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'd1',
+          provider: 'vercel',
+          projectName: 'neos-preview',
+          status: 'success',
+          createdAt: '2026-01-04T00:00:00.000Z',
+          updatedAt: '2026-01-04T00:00:00.000Z',
+        },
+      ],
+    });
+    listMediaFiles.mockResolvedValue({ ok: true, data: [{ id: 'm1' }, { id: 'm2' }] });
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [{ id: 'ds1' }, { id: 'ds2' }, { id: 'ds3' }],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Nightly Report')).toBeInTheDocument();
+    });
+    expect(screen.getByText('neos-preview')).toBeInTheDocument();
+    // Status cards show counts from list lengths (plugins=2, media=2, designSystems=3)
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(listDeployments).toHaveBeenCalled();
+    expect(listRoutines).toHaveBeenCalled();
+  });
+
+  it('shows em-dash counts when API returns non-ok payloads', async () => {
+    listSessions.mockResolvedValue({ ok: false, error: 'nope' });
+    listWorkflows.mockResolvedValue({ ok: false, error: 'nope' });
+    listSkills.mockResolvedValue({ ok: false });
+    listPlugins.mockResolvedValue({ ok: false });
+    listRoutines.mockResolvedValue({ ok: false });
+    listDesignSystems.mockResolvedValue({ ok: false });
+    listDeployments.mockResolvedValue({ ok: false });
+    listMediaFiles.mockResolvedValue({ ok: false });
+    health.mockResolvedValue({ status: 'error' });
+
+    renderPage();
+    await waitFor(() => {
+      expect(health).toHaveBeenCalled();
+    });
+    // Counts fall back to "—" when responses are not ok
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/v0\./)).not.toBeInTheDocument();
+  });
 });

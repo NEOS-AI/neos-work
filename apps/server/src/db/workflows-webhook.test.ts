@@ -72,6 +72,21 @@ describe('verifyWebhookSignature', () => {
   it('rejects non-hex signature material via constant-time path', () => {
     expect(verifyWebhookSignature(secret, body, 'sha256=not-hex!!!')).toBe(false);
   });
+
+  it('rejects control-char secret/header and overlong body/header', () => {
+    const sig = createHmac('sha256', secret).update(body).digest('hex');
+    expect(verifyWebhookSignature('bad\nsecret', body, `sha256=${sig}`)).toBe(false);
+    expect(verifyWebhookSignature(secret, body, `sha256=${sig}\n`)).toBe(false);
+    expect(verifyWebhookSignature(secret, body, `sha256=${'a'.repeat(600)}`)).toBe(false);
+    expect(
+      verifyWebhookSignature(secret, 'x'.repeat(1 * 1024 * 1024 + 1), `sha256=${sig}`),
+    ).toBe(false);
+  });
+
+  it('rejects control-char workflowId on webhook secret helpers', () => {
+    expect(() => getOrCreateWebhookSecret('bad\nid')).toThrow(/not found/i);
+    expect(() => regenerateWebhookSecret('x'.repeat(101))).toThrow(/not found/i);
+  });
 });
 
 describe('getOrCreateWebhookSecret / regenerateWebhookSecret', () => {

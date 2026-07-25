@@ -171,8 +171,20 @@ export async function listPlugins(): Promise<PluginManifest[]> {
   }
 }
 
+/** Practical bound for plugin id lookups. */
+const PLUGIN_LOOKUP_ID_MAX = 100;
+
+function safePluginLookupId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > PLUGIN_LOOKUP_ID_MAX) return '';
+  return id;
+}
+
 export async function getPlugin(id: string): Promise<PluginManifest | null> {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safePluginLookupId(id);
   if (!trimmed) return null;
   const plugins = await listPlugins();
   return plugins.find((p) => p.id === trimmed) ?? null;

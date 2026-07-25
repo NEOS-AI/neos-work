@@ -34,6 +34,14 @@ describe('design-system-store', () => {
     expect(st.isDirectory()).toBe(true);
   });
 
+  it('rejects control-char / overlong design system ids', async () => {
+    expect(await getDesignSystem('bad\nid')).toBeNull();
+    expect(await getDesignSystem('x'.repeat(65))).toBeNull();
+    expect(await getDesignSystemContent('id\nbad')).toBeNull();
+    expect(await updateDesignSystemContent('id\nbad', '# x')).toBe(false);
+    expect(await deleteDesignSystem('id\nbad')).toBe(false);
+  });
+
   it('creates, lists, reads, updates, deletes a design system', async () => {
     const created = await createDesignSystem(NAME, 'Test brand');
     expect(created).not.toBeNull();

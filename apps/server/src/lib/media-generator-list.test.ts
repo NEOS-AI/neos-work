@@ -1,7 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { listMediaFiles, MEDIA_DIR } from './media-generator.js';
+import {
+  IMAGE_QUALITIES,
+  IMAGE_SIZES,
+  listMediaFiles,
+  MEDIA_DIR,
+  TTS_MODELS,
+  TTS_VOICES,
+} from './media-generator.js';
 
 const PREFIX = `_cov_media_${process.pid}_`;
 
@@ -32,21 +39,56 @@ describe('listMediaFiles', () => {
     await write(`${PREFIX}a.png`, 'png');
     await write(`${PREFIX}b.mp3`, 'mp3');
     await write(`${PREFIX}c.txt`, 'txt');
+    await write(`${PREFIX}d.webp`, 'webp');
+    await write(`${PREFIX}e.jpeg`, 'jpeg');
+    await write(`${PREFIX}f.gif`, 'gif');
+    await write(`${PREFIX}g.wav`, 'wav');
     // Dotfiles are ignored by listMediaFiles
     await write(`.${PREFIX}hidden`, 'x');
 
     const files = await listMediaFiles(50);
     const ours = files.filter((f) => f.filename.startsWith(PREFIX));
-    expect(ours.length).toBeGreaterThanOrEqual(3);
+    expect(ours.length).toBeGreaterThanOrEqual(7);
 
     const png = ours.find((f) => f.filename.endsWith('.png'));
     const mp3 = ours.find((f) => f.filename.endsWith('.mp3'));
     const txt = ours.find((f) => f.filename.endsWith('.txt'));
+    const webp = ours.find((f) => f.filename.endsWith('.webp'));
+    const jpeg = ours.find((f) => f.filename.endsWith('.jpeg'));
+    const gif = ours.find((f) => f.filename.endsWith('.gif'));
+    const wav = ours.find((f) => f.filename.endsWith('.wav'));
     expect(png?.kind).toBe('image');
     expect(png?.mimeType).toBe('image/png');
     expect(mp3?.kind).toBe('audio');
+    expect(mp3?.mimeType).toBe('audio/mpeg');
     expect(txt?.kind).toBe('other');
+    expect(txt?.mimeType).toBe('application/octet-stream');
+    expect(webp?.kind).toBe('image');
+    expect(webp?.mimeType).toBe('image/webp');
+    expect(jpeg?.kind).toBe('image');
+    expect(jpeg?.mimeType).toBe('image/jpeg');
+    expect(gif?.kind).toBe('image');
+    expect(gif?.mimeType).toBe('image/gif');
+    expect(wav?.kind).toBe('audio');
+    expect(wav?.mimeType).toBe('audio/wav');
     expect(png?.urlPath).toContain('/api/media/file/');
+  });
+
+  it('exports media option allow-lists used by generate paths', () => {
+    expect(IMAGE_SIZES.has('1024x1024')).toBe(true);
+    expect(IMAGE_SIZES.has('1792x1024')).toBe(true);
+    expect(IMAGE_SIZES.has('1024x1792')).toBe(true);
+    expect(IMAGE_SIZES.has('512x512')).toBe(false);
+    expect(IMAGE_QUALITIES.has('standard')).toBe(true);
+    expect(IMAGE_QUALITIES.has('hd')).toBe(true);
+    expect(IMAGE_QUALITIES.has('ultra')).toBe(false);
+    expect([...TTS_VOICES]).toEqual(
+      expect.arrayContaining(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']),
+    );
+    expect(TTS_VOICES.size).toBe(6);
+    expect(TTS_MODELS.has('tts-1')).toBe(true);
+    expect(TTS_MODELS.has('tts-1-hd')).toBe(true);
+    expect(TTS_MODELS.has('tts-2')).toBe(false);
   });
 
   it('respects limit and sorts newest first', async () => {

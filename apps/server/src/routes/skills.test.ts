@@ -115,6 +115,24 @@ describe('skills routes', () => {
     expect(del.status).toBe(404);
   });
 
+  it('returns 404 for control-char or overlong path ids', async () => {
+    const ctrlToggle = await skills.request(`/${encodeURIComponent('bad\nid')}/toggle`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(ctrlToggle.status).toBe(404);
+
+    const longId = 's'.repeat(201);
+    const longDel = await skills.request(`/${longId}`, { method: 'DELETE' });
+    expect(longDel.status).toBe(404);
+
+    const ctrlDel = await skills.request(`/${encodeURIComponent('id\rbad')}`, {
+      method: 'DELETE',
+    });
+    expect(ctrlDel.status).toBe(404);
+  });
+
   it('scan returns scanned/total shape', async () => {
     const res = await skills.request('/scan', { method: 'POST' });
     // filesystem scan may succeed or fail depending on env; accept both structured outcomes

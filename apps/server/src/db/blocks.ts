@@ -80,8 +80,20 @@ export function listCustomBlocks(domain?: string): WorkflowBlock[] {
   return rows.map(rowToBlock);
 }
 
+/** Practical bound for custom block lookup ids. */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 export function getCustomBlock(id: string): WorkflowBlock | null {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return null;
   const db = getDb();
   const row = db.prepare('SELECT * FROM custom_block WHERE id = ?').get(trimmed) as BlockRow | undefined;
@@ -197,7 +209,7 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
 }
 
 export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock, 'id' | 'isBuiltIn'>>): WorkflowBlock | null {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return null;
   const db = getDb();
   const existing = getCustomBlock(trimmed);
@@ -289,7 +301,7 @@ export function updateCustomBlock(id: string, patch: Partial<Omit<WorkflowBlock,
 }
 
 export function deleteCustomBlock(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM custom_block WHERE id = ?').run(trimmed);

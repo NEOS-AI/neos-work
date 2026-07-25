@@ -55,15 +55,29 @@ export const REVISION_LABEL_MAX_CHARS = 200;
 
 function normalizeRevisionLabel(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
+  // Control-char check before trim (trim would strip leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return null;
   const label = raw.trim();
-  if (!label || /[\0\r\n]/.test(label)) return null;
+  if (!label) return null;
   return label.length > REVISION_LABEL_MAX_CHARS
     ? label.slice(0, REVISION_LABEL_MAX_CHARS)
     : label;
 }
 
+/** Practical bound for workflow / revision lookup ids. */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snapshot'>[] {
-  const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const wfId = safeLookupId(workflowId);
   if (!wfId) return [];
   const db = getDb();
   // Include snapshot only to derive node/edge counts for History panel (not returned to client as raw blob).
@@ -86,7 +100,7 @@ export function listRevisions(workflowId: string): Omit<WorkflowRevision, 'snaps
 }
 
 export function getRevision(revisionId: string): WorkflowRevision | undefined {
-  const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
+  const trimmed = safeLookupId(revisionId);
   if (!trimmed) return undefined;
   const db = getDb();
   const row = db.prepare('SELECT * FROM workflow_revisions WHERE id = ?').get(trimmed) as RevisionRow | undefined;
@@ -102,7 +116,7 @@ export function createRevision(
   snapshot: string,
   label?: string,
 ): WorkflowRevision | null {
-  const wfId = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const wfId = safeLookupId(workflowId);
   if (!wfId || typeof snapshot !== 'string') return null;
   // Reject oversized snapshots rather than bloating SQLite
   if (snapshot.length > REVISION_SNAPSHOT_MAX_CHARS) return null;
@@ -140,7 +154,7 @@ export function createRevision(
 }
 
 export function updateRevisionLabel(revisionId: string, label: string): boolean {
-  const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
+  const trimmed = safeLookupId(revisionId);
   if (!trimmed) return false;
   const labelVal = normalizeRevisionLabel(label);
   if (!labelVal) return false;
@@ -150,7 +164,7 @@ export function updateRevisionLabel(revisionId: string, label: string): boolean 
 }
 
 export function deleteRevision(revisionId: string): boolean {
-  const trimmed = typeof revisionId === 'string' ? revisionId.trim() : '';
+  const trimmed = safeLookupId(revisionId);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM workflow_revisions WHERE id = ?').run(trimmed);

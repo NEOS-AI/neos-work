@@ -29,8 +29,11 @@ const SENSITIVE_PREFIXES = [
 ];
 
 export function isSensitiveKey(key: string): boolean {
-  const k = typeof key === 'string' ? key.trim() : '';
-  if (!k) return false;
+  if (typeof key !== 'string') return false;
+  // Control-char keys are never treated as sensitive prefixes
+  if (/[\0\r\n]/.test(key)) return false;
+  const k = key.trim();
+  if (!k || k.length > 200) return false;
   return SENSITIVE_PREFIXES.some((prefix) => k.startsWith(prefix));
 }
 

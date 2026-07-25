@@ -80,8 +80,22 @@ export const DEPLOY_ID_MAX_CHARS = 200;
 export const DEPLOY_STATUS_MESSAGE_MAX_CHARS = 4_000;
 export const DEPLOY_PROJECT_NAME_MAX_CHARS = 63;
 
+/** Practical bound for deployment / workflow / run lookup ids. */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 function capOptionalString(raw: unknown, max: number): string | null {
   if (typeof raw !== 'string') return raw == null ? null : null;
+  // Reject control chars before trim
+  if (/[\0\r\n]/.test(raw)) return null;
   const s = raw.trim();
   if (!s) return null;
   return s.length > max ? s.slice(0, max) : s;
@@ -90,20 +104,15 @@ function capOptionalString(raw: unknown, max: number): string | null {
 export function createDeployment(input: CreateDeploymentInput): Deployment {
   const provider = normalizeDeployProvider(input.provider);
   if (!provider) throw new Error('provider is required');
-  let workflowId =
-    typeof input.workflowId === 'string' ? input.workflowId.trim() || null : (input.workflowId ?? null);
-  if (workflowId && (workflowId.length > 100 || /[\0\r\n]/.test(workflowId))) {
-    workflowId = null;
+  const workflowId = safeLookupId(input.workflowId) || null;
+  const runId = safeLookupId(input.runId) || null;
+  let projectName: string | null = null;
+  if (typeof input.projectName === 'string') {
+    // Drop control-char project names rather than persist them (check before trim)
+    if (!/[\0\r\n]/.test(input.projectName)) {
+      projectName = input.projectName.trim() || null;
+    }
   }
-  let runId =
-    typeof input.runId === 'string' ? input.runId.trim() || null : (input.runId ?? null);
-  if (runId && (runId.length > 100 || /[\0\r\n]/.test(runId))) {
-    runId = null;
-  }
-  let projectName =
-    typeof input.projectName === 'string'
-      ? input.projectName.trim() || null
-      : (input.projectName ?? null);
   if (projectName && projectName.length > DEPLOY_PROJECT_NAME_MAX_CHARS) {
     projectName = projectName.slice(0, DEPLOY_PROJECT_NAME_MAX_CHARS);
   }
@@ -134,7 +143,7 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
 }
 
 export function getDeployment(id: string): Deployment | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(trimmed) as DeploymentRow | undefined;
@@ -144,8 +153,7 @@ export function getDeployment(id: string): Deployment | undefined {
 export function listDeployments(opts?: { workflowId?: string; limit?: number }): Deployment[] {
   const db = getDb();
   const limit = Math.min(Math.max(Number(opts?.limit) || 100, 1), 500);
-  const workflowId =
-    typeof opts?.workflowId === 'string' ? opts.workflowId.trim() || undefined : undefined;
+  const workflowId = safeLookupId(opts?.workflowId) || undefined;
   if (workflowId) {
     const rows = db.prepare(
       'SELECT * FROM deployments WHERE workflow_id = ? ORDER BY created_at DESC LIMIT ?',
@@ -162,7 +170,7 @@ export function updateDeployment(
   id: string,
   patch: Partial<Pick<CreateDeploymentInput, 'url' | 'deploymentId' | 'status' | 'statusMessage'>>,
 ): Deployment | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const existing = getDeployment(trimmed);
@@ -204,7 +212,7 @@ export function updateDeployment(
 }
 
 export function deleteDeployment(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM deployments WHERE id = ?').run(trimmed);

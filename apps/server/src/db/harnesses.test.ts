@@ -100,6 +100,32 @@ describe('custom harnesses CRUD', () => {
     ).toThrow(/systemPrompt exceeds/i);
   });
 
+  it('rejects control-char / overlong lookup ids', () => {
+    expect(getCustomHarness('bad\nid')).toBeUndefined();
+    expect(updateCustomHarness('id\nbad', { name: 'x' })).toBeUndefined();
+    expect(deleteCustomHarness('x'.repeat(101))).toBe(false);
+    expect(() =>
+      createCustomHarness({
+        id: 'bad\nid',
+        name: 'x',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomHarness({
+        id: 'a'.repeat(101),
+        name: 'x',
+        domain: 'coding',
+        description: 'd',
+        systemPrompt: 'p',
+        allowedTools: [],
+      }),
+    ).toThrow(/max length/i);
+  });
+
   it('rejects control-char / overlong name; filters bad allowed tools', () => {
     expect(() =>
       createCustomHarness({

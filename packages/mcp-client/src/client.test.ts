@@ -88,6 +88,37 @@ describe('McpClient', () => {
     ).rejects.toThrow(/requires a URL/);
   });
 
+  it('rejects control-char or overlong HTTP URLs', async () => {
+    const c = new McpClient();
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'H',
+        transport: 'http',
+        url: 'https://mcp.example/\npath',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid URL/i);
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'H',
+        transport: 'http',
+        url: `https://mcp.example/${'\0'}x`,
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid URL/i);
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'H',
+        transport: 'http',
+        url: `https://mcp.example/${'p'.repeat(2_100)}`,
+        enabled: true,
+      }),
+    ).rejects.toThrow(/invalid URL/i);
+  });
+
   it('rejects non-http MCP URLs', async () => {
     const c = new McpClient();
     await expect(

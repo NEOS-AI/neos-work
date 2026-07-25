@@ -89,6 +89,18 @@ function rowToRun(row: WorkflowRunRow): WorkflowRun {
   };
 }
 
+/** Practical bound for workflow / run ids (align with session safeLookupId). */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 export function listWorkflows(): Workflow[] {
   const db = getDb();
   const rows = db
@@ -98,7 +110,7 @@ export function listWorkflows(): Workflow[] {
 }
 
 export function getWorkflow(id: string): Workflow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const row = db.prepare('SELECT * FROM workflow WHERE id = ?').get(trimmed) as WorkflowRow | undefined;
@@ -179,7 +191,7 @@ export function updateWorkflow(
     edges?: WorkflowEdge[];
   },
 ): Workflow | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const existing = db.prepare('SELECT * FROM workflow WHERE id = ?').get(trimmed) as WorkflowRow | undefined;
@@ -200,17 +212,16 @@ export function updateWorkflow(
   if (description && description.length > WORKFLOW_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
   }
-  let designSystemId = input.designSystemId !== undefined
-    ? (typeof input.designSystemId === 'string'
-        ? input.designSystemId.trim() || null
-        : (input.designSystemId ?? '').toString().trim() || null)
-    : existing.design_system_id;
-  // designSystemId is a short hash/id — reject control chars / overlong
-  if (
-    designSystemId
-    && (designSystemId.length > 64 || /[\0\r\n]/.test(designSystemId))
-  ) {
-    return undefined;
+  let designSystemId: string | null = existing.design_system_id;
+  if (input.designSystemId !== undefined) {
+    const rawDs =
+      typeof input.designSystemId === 'string'
+        ? input.designSystemId
+        : (input.designSystemId ?? '').toString();
+    // Control-char check before trim (trim would strip leading/trailing \r\n)
+    if (/[\0\r\n]/.test(rawDs)) return undefined;
+    designSystemId = rawDs.trim() || null;
+    if (designSystemId && designSystemId.length > 64) return undefined;
   }
   const nodes =
     input.nodes !== undefined
@@ -233,7 +244,7 @@ export function updateWorkflow(
 }
 
 export function deleteWorkflow(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM workflow WHERE id = ?').run(trimmed);
@@ -267,8 +278,8 @@ export const WORKFLOW_RUN_ERROR_MAX_CHARS = 4_000;
 export const WORKFLOW_RUN_RESULTS_MAX_CHARS = 1_048_576;
 
 export function saveRun(run: WorkflowRun): void {
-  const id = typeof run.id === 'string' ? run.id.trim() : '';
-  const workflowId = typeof run.workflowId === 'string' ? run.workflowId.trim() : '';
+  const id = safeLookupId(run.id);
+  const workflowId = safeLookupId(run.workflowId);
   if (!id || !workflowId) {
     throw new Error('saveRun requires non-blank id and workflowId');
   }
@@ -305,7 +316,7 @@ export function saveRun(run: WorkflowRun): void {
 }
 
 export function getRun(runId: string): WorkflowRun | undefined {
-  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  const trimmed = safeLookupId(runId);
   if (!trimmed) return undefined;
   const db = getDb();
   const row = db
@@ -315,7 +326,7 @@ export function getRun(runId: string): WorkflowRun | undefined {
 }
 
 export function listRuns(workflowId: string, limit = 20, offset = 0): WorkflowRun[] {
-  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const trimmed = safeLookupId(workflowId);
   if (!trimmed) return [];
   const cappedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const cappedOffset = Math.max(Number(offset) || 0, 0);
@@ -327,7 +338,7 @@ export function listRuns(workflowId: string, limit = 20, offset = 0): WorkflowRu
 }
 
 export function deleteRun(runId: string): boolean {
-  const trimmed = typeof runId === 'string' ? runId.trim() : '';
+  const trimmed = safeLookupId(runId);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM workflow_run WHERE id = ?').run(trimmed);
@@ -339,7 +350,7 @@ export function deleteRun(runId: string): boolean {
  * Returns number of deleted rows.
  */
 export function deleteRuns(workflowId: string, status?: string): number {
-  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const trimmed = safeLookupId(workflowId);
   if (!trimmed) return 0;
   const statusRaw =
     typeof status === 'string' ? status.trim().toLowerCase() || undefined : undefined;
@@ -360,7 +371,7 @@ export function deleteRuns(workflowId: string, status?: string): number {
 // ── Webhook ────────────────────────────────────────────────
 
 export function getOrCreateWebhookSecret(workflowId: string): string {
-  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const trimmed = safeLookupId(workflowId);
   if (!trimmed) throw new Error('Workflow not found');
   const db = getDb();
   const row = db.prepare('SELECT webhook_secret FROM workflow WHERE id = ?').get(trimmed) as { webhook_secret: string | null } | undefined;
@@ -374,7 +385,7 @@ export function getOrCreateWebhookSecret(workflowId: string): string {
 }
 
 export function regenerateWebhookSecret(workflowId: string): string {
-  const trimmed = typeof workflowId === 'string' ? workflowId.trim() : '';
+  const trimmed = safeLookupId(workflowId);
   if (!trimmed) throw new Error('Workflow not found');
   const db = getDb();
   const secret = randomBytes(32).toString('hex');
@@ -383,9 +394,22 @@ export function regenerateWebhookSecret(workflowId: string): string {
   return secret;
 }
 
+/** Cap webhook HMAC inputs (runaway body / header defense). */
+export const WEBHOOK_BODY_MAX_CHARS = 1 * 1024 * 1024;
+export const WEBHOOK_SIGNATURE_HEADER_MAX_CHARS = 512;
+export const WEBHOOK_SECRET_MAX_CHARS = 8_192;
+
 /** Constant-time HMAC-SHA256 signature verification. */
 export function verifyWebhookSignature(secret: string, body: string, signatureHeader: string): boolean {
   try {
+    if (typeof secret !== 'string' || typeof body !== 'string' || typeof signatureHeader !== 'string') {
+      return false;
+    }
+    // Reject control-char secrets / headers before trim
+    if (/[\0\r\n]/.test(secret) || /[\0\r\n]/.test(signatureHeader)) return false;
+    if (secret.length > WEBHOOK_SECRET_MAX_CHARS) return false;
+    if (signatureHeader.length > WEBHOOK_SIGNATURE_HEADER_MAX_CHARS) return false;
+    if (body.length > WEBHOOK_BODY_MAX_CHARS) return false;
     const key = secret.trim();
     if (!key) return false;
     const header = signatureHeader.trim();

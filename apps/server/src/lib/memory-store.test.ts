@@ -59,6 +59,13 @@ describe('memory-store', () => {
     expect(toggleMemory('missing-id')).toBeNull();
   });
 
+  it('rejects control-char / overlong lookup ids', () => {
+    expect(getMemory('bad\nid')).toBeNull();
+    expect(getMemory('x'.repeat(101))).toBeNull();
+    expect(updateMemory('id\nbad', { content: 'x' })).toBeNull();
+    expect(deleteMemory('id\nbad')).toBe(false);
+  });
+
   it('rejects blank name on create and normalizes unknown type to user', () => {
     expect(() =>
       createMemory({ name: '   ', type: 'user', content: 'x' }),

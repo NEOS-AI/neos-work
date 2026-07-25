@@ -29,7 +29,10 @@ function isSafeId(id: string): boolean {
 }
 
 export function resolveHarness(id: string): AgentHarness | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  if (typeof id !== 'string') return undefined;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(id)) return undefined;
+  const trimmed = id.trim();
   if (!isSafeId(trimmed)) return undefined;
   return registry.get(trimmed);
 }

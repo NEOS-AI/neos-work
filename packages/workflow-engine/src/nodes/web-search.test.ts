@@ -211,4 +211,31 @@ describe('WebSearchNode', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.api_key).toBe('tvly-key');
   });
+
+  it('drops overlong or control-char result URLs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            { title: 'ok', url: 'https://good.example', content: 'a', score: 1 },
+            { title: 'ctrl', url: `https://bad.example/${'\r'}x`, content: 'b', score: 0.5 },
+            {
+              title: 'long',
+              url: `https://x.example/${'p'.repeat(2_100)}`,
+              content: 'c',
+              score: 0.2,
+            },
+          ],
+        }),
+      }),
+    );
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'q' }));
+    expect(result.ok).toBe(true);
+    const out = result.output as Array<{ url: string; title: string }>;
+    expect(out).toEqual([
+      expect.objectContaining({ title: 'ok', url: 'https://good.example' }),
+    ]);
+  });
 });

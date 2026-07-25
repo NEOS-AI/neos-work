@@ -256,6 +256,25 @@ describe('session routes', () => {
     });
     expect(agentOver.status).toBe(400);
 
+    // Null bytes are rejected when content validation runs (or API-key gate fires first).
+    const chatNul = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: `hello${'\0'}world` }),
+    });
+    expect(chatNul.status).toBe(400);
+    const chatNulBody = await chatNul.json() as { error: string };
+    expect(chatNulBody.error).toMatch(/control characters|API key/i);
+
+    const agentNul = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: `hi${'\0'}` }),
+    });
+    expect(agentNul.status).toBe(400);
+    const agentNulBody = await agentNul.json() as { error: string };
+    expect(agentNulBody.error).toMatch(/control characters|API key/i);
+
     const blankToolId = await session.request(`/${id}/tool-confirm/%20%20`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

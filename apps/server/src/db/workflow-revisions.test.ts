@@ -34,6 +34,15 @@ describe('createRevision input hygiene', () => {
     expect(deleteRevision('   ')).toBe(false);
   });
 
+  it('rejects control-char / overlong lookup ids', () => {
+    expect(createRevision('bad\nid', '{}')).toBeNull();
+    expect(createRevision('x'.repeat(101), '{}')).toBeNull();
+    expect(getRevision('id\nbad')).toBeUndefined();
+    expect(listRevisions('wf\nid')).toEqual([]);
+    expect(updateRevisionLabel('id\nbad', 'ok')).toBe(false);
+    expect(deleteRevision('id\nbad')).toBe(false);
+  });
+
   it('returns null for oversized snapshots', () => {
     const wf = workflows.createWorkflow({
       name: WF_NAME,

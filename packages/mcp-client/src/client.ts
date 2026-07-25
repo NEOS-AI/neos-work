@@ -29,7 +29,7 @@ export class McpClient {
   constructor() {
     this.client = new Client({
       name: 'neos-work',
-      version: '0.3.104',
+      version: '0.3.105',
     });
   }
 
@@ -62,7 +62,12 @@ export class McpClient {
       });
       await this.client.connect(transportImpl);
     } else if (transport === 'http') {
-      const url = typeof config.url === 'string' ? config.url.trim() : '';
+      const urlRaw = typeof config.url === 'string' ? config.url : '';
+      // Control-char check before trim (trim strips leading/trailing \r\n)
+      if (/[\0\r\n]/.test(urlRaw)) {
+        throw new Error(`MCP server "${name}" has an invalid URL`);
+      }
+      const url = urlRaw.trim();
       if (!url) throw new Error(`MCP server "${name}" requires a URL for HTTP transport`);
       if (url.length > 2_000) {
         throw new Error(`MCP server "${name}" has an invalid URL`);

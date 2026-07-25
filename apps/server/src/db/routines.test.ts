@@ -175,6 +175,19 @@ describe('routines CRUD', () => {
     ).toThrow(/name, workflowId, and schedule/i);
   });
 
+  it('rejects control-char / overlong lookup ids', () => {
+    expect(getRoutine('bad\nid')).toBeNull();
+    expect(getRoutine('x'.repeat(101))).toBeNull();
+    expect(updateRoutine('id\nbad', { name: 'x' })).toBeNull();
+    expect(deleteRoutine('id\nbad')).toBe(false);
+    expect(listRoutineRuns('id\nbad')).toEqual([]);
+    expect(getRoutineRun('r\nid', 'run')).toBeNull();
+    expect(() =>
+      createRoutine({ name: 'BadWf', workflowId: 'bad\nid', schedule: '0 9 * * *' }),
+    ).toThrow(/workflowId is invalid/i);
+    expect(() => createRoutineRun({ routineId: 'bad\nid' })).toThrow(/routineId is invalid/i);
+  });
+
   it('rejects blank routineId on createRoutineRun', () => {
     expect(() => createRoutineRun({ routineId: '   ' })).toThrow(/routineId/i);
   });

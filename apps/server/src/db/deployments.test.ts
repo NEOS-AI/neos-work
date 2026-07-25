@@ -62,6 +62,32 @@ describe('deployments CRUD', () => {
     expect(row.runId).toBeUndefined();
   });
 
+  it('rejects control-char / overlong lookup ids on get/list/update/delete', () => {
+    expect(getDeployment('bad\nid')).toBeUndefined();
+    expect(getDeployment('x'.repeat(101))).toBeUndefined();
+    expect(updateDeployment('id\nbad', { status: 'failed' })).toBeUndefined();
+    expect(deleteDeployment('id\nbad')).toBe(false);
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-ctrl`,
+      status: 'pending',
+      workflowId: '  wf-ok  ',
+    });
+    expect(row.workflowId).toBe('wf-ok');
+    // Unsafe workflowId filter is dropped → list-all (includes our row)
+    expect(listDeployments({ workflowId: 'wf\nid' }).some((d) => d.id === row.id)).toBe(true);
+    expect(listDeployments({ workflowId: '  wf-ok  ' }).some((d) => d.id === row.id)).toBe(true);
+    // control-char project name is dropped
+    const dropped = createDeployment({
+      provider: 'vercel',
+      projectName: 'bad\nname',
+      status: 'pending',
+    });
+    expect(dropped.projectName).toBeUndefined();
+    deleteDeployment(row.id);
+    deleteDeployment(dropped.id);
+  });
+
   it('caps projectName, deploymentId, and statusMessage lengths', () => {
     const row = createDeployment({
       provider: 'vercel',

@@ -52,6 +52,18 @@ function rowToHarness(row: HarnessRow): AgentHarness {
   };
 }
 
+/** Practical bound for harness lookup ids. */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 export function listCustomHarnesses(): AgentHarness[] {
   const db = getDb();
   const rows = db
@@ -61,7 +73,7 @@ export function listCustomHarnesses(): AgentHarness[] {
 }
 
 export function getCustomHarness(id: string): AgentHarness | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const row = db
@@ -116,12 +128,20 @@ function serializeConstraints(constraints: AgentHarness['constraints']): string 
 }
 
 export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): AgentHarness {
-  const id = typeof input.id === 'string' ? input.id.trim() : '';
+  const idRaw = typeof input.id === 'string' ? input.id : '';
+  // Control-char check before trim
+  if (/[\0\r\n]/.test(idRaw)) {
+    throw new Error('id contains invalid control characters');
+  }
+  const id = idRaw.trim();
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const systemPrompt =
     typeof input.systemPrompt === 'string' ? input.systemPrompt.trim() : '';
   if (!id || !name || !systemPrompt) {
     throw new Error('id, name, and systemPrompt are required');
+  }
+  if (id.length > LOOKUP_ID_MAX_CHARS) {
+    throw new Error(`id exceeds max length (${LOOKUP_ID_MAX_CHARS})`);
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
@@ -140,6 +160,10 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
   const domain = normalizeHarnessDomain(input.domain);
   let description =
     typeof input.description === 'string' ? input.description.trim() : (input.description ?? '');
+  // Drop control chars in description (log/UI hygiene)
+  if (typeof description === 'string' && /[\0\r\n]/.test(description)) {
+    description = description.replace(/[\0\r\n]/g, ' ').trim();
+  }
   if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);
   }
@@ -163,7 +187,7 @@ export function createCustomHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Age
 }
 
 export function updateCustomHarness(id: string, input: Partial<AgentHarness>): AgentHarness | undefined {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return undefined;
   const db = getDb();
   const existing = db
@@ -192,6 +216,9 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
     input.description !== undefined
       ? (typeof input.description === 'string' ? input.description.trim() : '')
       : existing.description;
+  if (typeof description === 'string' && /[\0\r\n]/.test(description)) {
+    description = description.replace(/[\0\r\n]/g, ' ').trim();
+  }
   if (typeof description === 'string' && description.length > HARNESS_DESCRIPTION_MAX_CHARS) {
     description = description.slice(0, HARNESS_DESCRIPTION_MAX_CHARS);
   }
@@ -219,7 +246,7 @@ export function updateCustomHarness(id: string, input: Partial<AgentHarness>): A
 }
 
 export function deleteCustomHarness(id: string): boolean {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return false;
   const db = getDb();
   const result = db.prepare('DELETE FROM custom_harness WHERE id = ?').run(trimmed);

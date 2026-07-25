@@ -124,6 +124,48 @@ describe('estimateNextCronRun', () => {
     expect(next).toBeNull();
   });
 
+  it('clamps horizonDays to 1–3660 and defaults non-finite values', () => {
+    const from = new Date('2026-01-01T10:15:00.000Z');
+    // zero / negative → floor to 1 day; still finds next hour within that window
+    const zero = estimateNextCronRun('0 * * * *', {
+      from,
+      timezone: 'UTC',
+      horizonDays: 0,
+    });
+    expect(zero!.toISOString()).toBe('2026-01-01T11:00:00.000Z');
+
+    const neg = estimateNextCronRun('0 * * * *', {
+      from,
+      timezone: 'UTC',
+      horizonDays: -10,
+    });
+    expect(neg!.toISOString()).toBe('2026-01-01T11:00:00.000Z');
+
+    // NaN / Infinity → default 366 days
+    const nan = estimateNextCronRun('0 * * * *', {
+      from,
+      timezone: 'UTC',
+      horizonDays: Number.NaN,
+    });
+    expect(nan!.toISOString()).toBe('2026-01-01T11:00:00.000Z');
+
+    // Pathological large horizon is clamped (must not hang); nearby match still works
+    const huge = estimateNextCronRun('0 * * * *', {
+      from,
+      timezone: 'UTC',
+      horizonDays: 99_999,
+    });
+    expect(huge!.toISOString()).toBe('2026-01-01T11:00:00.000Z');
+
+    // Fractional days floor before clamp
+    const frac = estimateNextCronRun('0 * * * *', {
+      from,
+      timezone: 'UTC',
+      horizonDays: 1.9,
+    });
+    expect(frac!.toISOString()).toBe('2026-01-01T11:00:00.000Z');
+  });
+
   it('matches month-restricted schedules', () => {
     // only June, day 15 at 00:00 — from May
     const from = new Date('2026-05-01T00:00:00.000Z');

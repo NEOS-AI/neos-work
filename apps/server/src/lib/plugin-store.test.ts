@@ -28,6 +28,15 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(await getPlugin('')).toBeNull();
   });
 
+  it('getPlugin rejects control-char / overlong / non-string lookup ids', async () => {
+    expect(await getPlugin('bad\nid')).toBeNull();
+    expect(await getPlugin('id\rbad')).toBeNull();
+    expect(await getPlugin(`id${'\0'}bad`)).toBeNull();
+    expect(await getPlugin('x'.repeat(101))).toBeNull();
+    expect(await getPlugin(null as unknown as string)).toBeNull();
+    expect(await getPlugin(undefined as unknown as string)).toBeNull();
+  });
+
   it('rejects missing skill directory', async () => {
     await expect(upgradeSkillToPlugin({ skillDirName: 'no-such-skill-dir-xyz' })).rejects.toThrow(/not found/i);
   });

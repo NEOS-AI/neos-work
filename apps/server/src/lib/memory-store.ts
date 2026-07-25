@@ -79,8 +79,20 @@ export function listMemories(): MemoryItem[] {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Practical bound for memory id lookups. */
+const LOOKUP_ID_MAX_CHARS = 100;
+
+function safeLookupId(raw: unknown, max = LOOKUP_ID_MAX_CHARS): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > max) return '';
+  return id;
+}
+
 export function getMemory(id: string): MemoryItem | null {
-  const trimmed = typeof id === 'string' ? id.trim() : '';
+  const trimmed = safeLookupId(id);
   if (!trimmed) return null;
   return listMemories().find((m) => m.id === trimmed) ?? null;
 }

@@ -107,8 +107,20 @@ export async function listDesignSystems(): Promise<DesignSystem[]> {
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Practical bound for design-system id lookups (sha1-12). */
+const DESIGN_SYSTEM_ID_MAX = 64;
+
+function safeDesignSystemId(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > DESIGN_SYSTEM_ID_MAX) return '';
+  return id;
+}
+
 export async function getDesignSystem(id: string): Promise<DesignSystem | null> {
-  const trimmed = id.trim();
+  const trimmed = safeDesignSystemId(id);
   if (!trimmed) return null;
   const all = await listDesignSystems();
   return all.find((ds) => ds.id === trimmed) ?? null;

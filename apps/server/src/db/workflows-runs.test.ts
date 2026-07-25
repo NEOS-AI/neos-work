@@ -36,6 +36,25 @@ describe('workflow runs CRUD', () => {
     ).toThrow(/non-blank/i);
   });
 
+  it('rejects control-char / overlong lookup ids on get/list/delete/saveRun', () => {
+    expect(workflows.getWorkflow('bad\nid')).toBeUndefined();
+    expect(workflows.getRun('run\nid')).toBeUndefined();
+    expect(workflows.listRuns('wf\nid')).toEqual([]);
+    expect(workflows.deleteWorkflow('x'.repeat(101))).toBe(false);
+    expect(workflows.deleteRun('id\nbad')).toBe(false);
+    expect(workflows.deleteRuns('wf\nid')).toBe(0);
+    expect(workflows.updateWorkflow('wf\nid', { name: 'x' })).toBeUndefined();
+    expect(() =>
+      workflows.saveRun({
+        id: 'run\nid',
+        workflowId: 'wf-ok',
+        status: 'running',
+        nodeResults: {},
+        startedAt: new Date().toISOString(),
+      }),
+    ).toThrow(/non-blank/i);
+  });
+
   it('saveRun truncates overlong error strings', () => {
     const wf = workflows.createWorkflow({
       name: NAME,

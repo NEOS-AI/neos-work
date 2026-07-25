@@ -104,6 +104,13 @@ describe('custom blocks CRUD', () => {
     expect(listCustomBlocks('  CODING  ').every((b) => b.domain === 'coding')).toBe(true);
   });
 
+  it('rejects control-char / overlong lookup ids', () => {
+    expect(getCustomBlock('bad\nid')).toBeNull();
+    expect(getCustomBlock('x'.repeat(101))).toBeNull();
+    expect(updateCustomBlock('id\nbad', { name: 'x' })).toBeNull();
+    expect(deleteCustomBlock('id\nbad')).toBe(false);
+  });
+
   it('creates, gets, lists by domain, updates, deletes', () => {
     const created = createCustomBlock(sampleBlock(IDS[0]!));
     expect(created.isBuiltIn).toBe(false);

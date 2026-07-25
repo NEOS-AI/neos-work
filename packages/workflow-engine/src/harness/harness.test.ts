@@ -28,6 +28,16 @@ describe('harness registry', () => {
     expect(resolveHarness('does-not-exist-xyz')).toBeUndefined();
   });
 
+  it('rejects control-char ids before trim', () => {
+    expect(resolveHarness('bad\nid')).toBeUndefined();
+    expect(resolveHarness('\nfinance_analyst')).toBeUndefined();
+    expect(resolveHarness(`finance_analyst${'\0'}`)).toBeUndefined();
+    // Non-string ids short-circuit
+    expect(resolveHarness(null as unknown as string)).toBeUndefined();
+    expect(resolveHarness(undefined as unknown as string)).toBeUndefined();
+    expect(resolveHarness(123 as unknown as string)).toBeUndefined();
+  });
+
   it('trims id/domain and ignores blank register id', () => {
     const first = listHarnesses()[0]!;
     expect(resolveHarness(`  ${first.id}  `)?.id).toBe(first.id);

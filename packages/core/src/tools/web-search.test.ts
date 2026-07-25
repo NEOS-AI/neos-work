@@ -200,4 +200,60 @@ describe('createWebSearchTool', () => {
     expect(body.query).toBe('99');
     expect(body.max_results).toBe(5);
   });
+
+  it('rejects control-char or overlong TAVILY_API_KEY before fetch', async () => {
+    process.env['TAVILY_API_KEY'] = `tv${'\n'}ly`;
+    const ctrl = await createWebSearchTool().execute({ query: 'q' });
+    expect(ctrl.success).toBe(false);
+    expect(ctrl.error).toMatch(/invalid/i);
+
+    process.env['TAVILY_API_KEY'] = `tv${'\0'}ly`;
+    const nul = await createWebSearchTool().execute({ query: 'q' });
+    expect(nul.success).toBe(false);
+    expect(nul.error).toMatch(/invalid/i);
+
+    process.env['TAVILY_API_KEY'] = 'k'.repeat(9_000);
+    const long = await createWebSearchTool().execute({ query: 'q' });
+    expect(long.success).toBe(false);
+    expect(long.error).toMatch(/invalid/i);
+  });
+
+  it('drops overlong / control-char result URLs and sends User-Agent', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            { title: 'ok', url: 'https://good.example/path', content: 'a' },
+            { title: 'ctrl', url: `https://bad.example/${'\n'}x`, content: 'b' },
+            { title: 'long', url: `https://x.example/${'p'.repeat(2_100)}`, content: 'c' },
+            { title: 'empty', url: '   ', content: 'd' },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(true);
+    const out = result.output as { results: Array<{ url: string; title: string }> };
+    expect(out.results).toEqual([{ title: 'ok', url: 'https://good.example/path', snippet: 'a' }]);
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      unknown,
+      RequestInit,
+    ];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['User-Agent']).toMatch(/^neos-work\//);
+  });
+
+  it('stringifies non-Error throwables from fetch', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () => {
+      throw 'network-down';
+    }) as typeof fetch;
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('network-down');
+  });
 });
