@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 
 export function DesignSystemEditor() {
   const { id } = useParams<{ id: string }>();
@@ -126,13 +127,15 @@ export function DesignSystemEditor() {
             ← Design Systems
           </button>
           <span className="text-white/20">/</span>
-          <span className="text-white font-medium text-sm">{ds.name}</span>
+          <span className="text-white font-medium text-sm">
+            {scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 }) || 'Design System'}
+          </span>
           {isDirty && <span className="text-xs text-amber-400">●</span>}
         </div>
         <div className="flex items-center gap-3">
           {saveMessage && (
             <span className={`text-xs ${saveMessage.startsWith('Save failed') ? 'text-red-400' : 'text-emerald-400'}`}>
-              {saveMessage}
+              {scrubDisplayText(saveMessage, { collapseLines: true, maxChars: 200 })}
             </span>
           )}
           <button

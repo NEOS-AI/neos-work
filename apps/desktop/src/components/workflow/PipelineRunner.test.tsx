@@ -113,12 +113,11 @@ describe('PipelineRunner', () => {
       ],
     };
     render(<PipelineRunner plugin={dirtyPlugin} onClose={() => {}} />);
+    // Control-char keys are not rendered (display filter)
+    expect(screen.queryByPlaceholderText('bad')).not.toBeInTheDocument();
     await user.type(screen.getByPlaceholderText('what to do'), '  ship it  ');
     fireEvent.change(screen.getByPlaceholderText('note'), {
       target: { value: `tainted${'\0'}value` },
-    });
-    fireEvent.change(screen.getByPlaceholderText('bad'), {
-      target: { value: 'should-drop-key' },
     });
     await user.click(screen.getByRole('button', { name: /run pipeline/i }));
     expect(runPlugin).toHaveBeenCalledWith(
@@ -309,5 +308,34 @@ describe('PipelineRunner', () => {
       expect(resumePlugin).toHaveBeenCalledWith('plug-1', 'run-conf', 'plan', { confirmed: true });
     });
   });
-});
 
+  it('scrubs control-char plugin name and stage labels', async () => {
+    const user = userEvent.setup();
+    const dirtyPlugin = {
+      id: 'p1',
+      name: 'Plug' + String.fromCharCode(0) + 'in',
+      version: '1',
+      description: 'd',
+      skillDirName: 'p',
+      pipeline: [{ id: 's1', name: 'Stage' + String.fromCharCode(10) + 'One', kind: 'execute' }],
+      inputFields: [],
+    };
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-1') };
+    });
+    render(<PipelineRunner plugin={dirtyPlugin as never} onClose={() => {}} />);
+    expect(screen.getByRole('heading', { name: 'Plugin' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-1' });
+      onEvent?.({ type: 'stage.started', stageId: 's1', stageName: 'Stage\nOne' });
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Stage One')).toBeInTheDocument();
+    });
+  });
+
+
+});

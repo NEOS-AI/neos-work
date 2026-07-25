@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
@@ -189,9 +190,11 @@ export function DesignSystems() {
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-white text-sm">{ds.name}</span>
+                  <span className="font-medium text-white text-sm">
+                    {scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 }) || 'Design system'}
+                  </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50 font-mono">
-                    {ds.id}
+                    {scrubDisplayText(ds.id, { collapseLines: true, maxChars: 80 }) || '—'}
                   </span>
                   {ds.hasTokens && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">
@@ -204,9 +207,11 @@ export function DesignSystems() {
                     </span>
                   )}
                 </div>
-                {ds.description && (
-                  <p className="text-xs text-white/40 mt-0.5 truncate">{ds.description}</p>
-                )}
+                {ds.description ? (
+                  <p className="text-xs text-white/40 mt-0.5 truncate">
+                    {scrubDisplayText(ds.description, { collapseLines: true, maxChars: 300 })}
+                  </p>
+                ) : null}
                 <p className="text-xs text-white/30 mt-0.5" title={formatAbsoluteTime(ds.updatedAt)}>
                   Updated {formatRelativeTime(ds.updatedAt)}
                 </p>
@@ -219,7 +224,12 @@ export function DesignSystems() {
                   Edit
                 </button>
                 <button
-                  onClick={() => handleDelete(ds.id, ds.name)}
+                  onClick={() =>
+                    handleDelete(
+                      ds.id,
+                      scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 }) || ds.name,
+                    )
+                  }
                   className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors"
                 >
                   Delete

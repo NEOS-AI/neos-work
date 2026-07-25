@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { Plugin } from '../../lib/engine.js';
+import { scrubDisplayText } from '../../lib/format-duration.js';
 import { GenUIForm } from './GenUIForm.js';
 import { GenUIChoice } from './GenUIChoice.js';
 import { GenUIConfirmation } from './GenUIConfirmation.js';
@@ -134,7 +135,7 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border-primary)' }}>
           <h2 className="font-semibold text-base" style={{ color: 'var(--text-primary)' }}>
-            {plugin.name}
+            {scrubDisplayText(plugin.name, { collapseLines: true, maxChars: 200 }) || 'Plugin'}
           </h2>
           <button onClick={onClose} style={{ color: 'var(--text-muted)' }}>✕</button>
         </div>
@@ -143,9 +144,17 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
           {!run && (plugin.inputFields ?? []).length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Inputs</p>
-              {(plugin.inputFields ?? []).map((f) => (
-                <div key={f.key}>
-                  <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>{f.label}</label>
+              {(plugin.inputFields ?? [])
+                .filter((f) => typeof f.key === 'string' && !/[\0\r\n]/.test(f.key) && f.key.trim())
+                .map((f) => {
+                  const key = f.key.trim();
+                  const label = scrubDisplayText(f.label, { collapseLines: true, maxChars: 100 }) || key;
+                  const placeholder = f.placeholder
+                    ? scrubDisplayText(f.placeholder, { collapseLines: true, maxChars: 200 })
+                    : undefined;
+                  return (
+                <div key={key}>
+                  <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>{label}</label>
                   <input
                     className="w-full rounded px-3 py-1.5 text-sm border"
                     style={{
@@ -153,12 +162,13 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
                       borderColor: 'var(--border-primary)',
                       color: 'var(--text-primary)',
                     }}
-                    placeholder={f.placeholder}
-                    value={inputs[f.key] ?? ''}
-                    onChange={(e) => setInputs((v) => ({ ...v, [f.key]: e.target.value }))}
+                    placeholder={placeholder}
+                    value={inputs[key] ?? inputs[f.key] ?? ''}
+                    onChange={(e) => setInputs((v) => ({ ...v, [key]: e.target.value }))}
                   />
                 </div>
-              ))}
+                  );
+                })}
             </div>
           )}
 
@@ -167,6 +177,12 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
               {(plugin.pipeline ?? []).map((stage, i) => {
                 const log = run.stages.find((s) => s.stageId === stage.id);
                 const statusColor = log?.status === 'done' ? '#10b981' : log?.status === 'waiting' ? '#f59e0b' : log?.status === 'running' ? '#3b82f6' : 'var(--text-muted)';
+                const stageName = scrubDisplayText(stage.name, { collapseLines: true, maxChars: 120 })
+                  || scrubDisplayText(stage.id, { collapseLines: true, maxChars: 80 })
+                  || `Stage ${i + 1}`;
+                const outSafe = log?.output
+                  ? scrubDisplayText(log.output, { maxChars: 220 })
+                  : '';
                 return (
                   <div key={stage.id} className="flex items-start gap-3">
                     <div
@@ -176,12 +192,12 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
                       {i + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{stage.name}</p>
-                      {log?.output && (
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{stageName}</p>
+                      {outSafe ? (
                         <p className="text-xs mt-1 whitespace-pre-wrap truncate" style={{ color: 'var(--text-muted)' }}>
-                          {log.output.slice(0, 200)}{log.output.length > 200 ? '…' : ''}
+                          {outSafe.slice(0, 200)}{outSafe.length > 200 ? '…' : ''}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -216,9 +232,11 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
           {run?.completed && (
             <p className="text-sm text-green-400">Pipeline completed successfully.</p>
           )}
-          {run?.failed && (
-            <p className="text-sm text-red-400">Error: {run.failed}</p>
-          )}
+          {run?.failed ? (
+            <p className="text-sm text-red-400">
+              Error: {scrubDisplayText(run.failed, { collapseLines: true, maxChars: 500 })}
+            </p>
+          ) : null}
         </div>
 
         <div className="px-5 py-3 border-t flex justify-end gap-2" style={{ borderColor: 'var(--border-primary)' }}>

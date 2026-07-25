@@ -350,6 +350,45 @@ describe('Routines page', () => {
     expect(screen.getByText('No routines match filters.')).toBeInTheDocument();
   });
 
+  it('scrubs control chars from list name, schedule, timezone, and workflow label', async () => {
+    listRoutines.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'r-scrub',
+          name: `Rtn${'\0'}X`,
+          workflowId: 'wf-1',
+          schedule: `0 9 * * *${'\n'}extra`,
+          timezone: `UTC${'\n'}x`,
+          enabled: true,
+          inputs: {},
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'wf-1',
+          name: `Daily${'\0'}Digest`,
+          domain: 'general' as const,
+          nodes: [],
+          edges: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('RtnX')).toBeInTheDocument());
+    expect(screen.getByText(/0 9 \* \* \* extra/)).toBeInTheDocument();
+    expect(screen.getByText(/UTC x/)).toBeInTheDocument();
+    expect(screen.getByText('DailyDigest')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('run-now failure does not show success alert; crystallize failure alerts', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });

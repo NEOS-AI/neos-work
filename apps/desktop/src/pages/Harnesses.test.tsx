@@ -318,4 +318,31 @@ describe('Harnesses page', () => {
     expect(screen.getByText('a')).toBeInTheDocument();
     expect(screen.queryByText('e')).not.toBeInTheDocument();
   });
+
+  it('scrubs control-char labels and omits control-char tools from chips', async () => {
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'h-scrub',
+          name: `Evil${'\0'}Harness`,
+          domain: `coding${'\n'}x`,
+          description: `desc${'\n'}line`,
+          systemPrompt: 'p',
+          allowedTools: ['read_file', `bad${'\0'}tool`, '\nwrite', 'shell'],
+          isBuiltIn: false,
+        },
+      ],
+    });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('EvilHarness')).toBeInTheDocument());
+    expect(screen.getByText(/coding x/)).toBeInTheDocument();
+    expect(screen.getByText(/desc line/)).toBeInTheDocument();
+    expect(screen.getByText('read_file')).toBeInTheDocument();
+    expect(screen.getByText('shell')).toBeInTheDocument();
+    // control-char tools never become chips
+    expect(screen.queryByText(/bad/)).not.toBeInTheDocument();
+    expect(screen.queryByText('write')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

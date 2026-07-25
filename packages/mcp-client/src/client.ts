@@ -29,7 +29,7 @@ export class McpClient {
   constructor() {
     this.client = new Client({
       name: 'neos-work',
-      version: '0.3.137',
+      version: '0.3.138',
     });
   }
 

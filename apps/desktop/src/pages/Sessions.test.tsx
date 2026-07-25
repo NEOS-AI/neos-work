@@ -653,4 +653,26 @@ describe('Sessions page', () => {
     expect(runAgent).not.toHaveBeenCalled();
     expect(input.value).toBe('keep me');
   });
+
+  it('scrubs control-char session titles in sidebar list', async () => {
+    listSessions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 's1',
+          workspace_id: 'default',
+          title: `Chat${'\0'}X`,
+          provider: 'anthropic',
+          model: 'claude',
+          thinking_mode: 'none',
+          created_at: '2020-01-01T00:00:00.000Z',
+          updated_at: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('ChatX')).toBeInTheDocument());
+  });
+
 });

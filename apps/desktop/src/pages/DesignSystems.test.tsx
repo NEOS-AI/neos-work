@@ -203,4 +203,31 @@ describe('DesignSystems page', () => {
       expect(screen.getByText(/No design systems match your search/)).toBeInTheDocument();
     });
   });
+
+  it('scrubs control-char design system name/description in list', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds1',
+          name: `Brand${'\0'}X`,
+          description: `desc${'\n'}line`,
+          path: '/x',
+          hasManifest: false,
+          hasTokens: true,
+          hasComponents: false,
+          createdAt: '2020-01-01T00:00:00.000Z',
+          updatedAt: '2020-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <DesignSystems />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText('BrandX')).toBeInTheDocument());
+    expect(screen.getByText(/desc line/)).toBeInTheDocument();
+  });
+
 });

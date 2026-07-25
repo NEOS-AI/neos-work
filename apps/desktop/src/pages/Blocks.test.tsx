@@ -355,4 +355,31 @@ describe('Blocks page', () => {
     expect(payload.paramDefs.some((p) => p.key === 'x')).toBe(true);
     expect(payload.paramDefs.some((p) => p.key.includes('bad'))).toBe(false);
   });
+
+  it('scrubs control chars from block card name, domain, id, description, and type', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `blk${'\0'}id`,
+          name: `Evil${'\0'}Block`,
+          domain: `coding${'\n'}x`,
+          category: 'custom',
+          description: `does${'\n'}things`,
+          isBuiltIn: false,
+          implementationType: `prompt${'\n'}x`,
+          paramDefs: [],
+          inputDescription: '',
+          outputDescription: '',
+        },
+      ],
+    });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('EvilBlock')).toBeInTheDocument());
+    expect(screen.getByText(/coding x/)).toBeInTheDocument();
+    expect(screen.getByText(/blkid/)).toBeInTheDocument();
+    expect(screen.getByText(/does things/)).toBeInTheDocument();
+    expect(screen.getByText(/prompt x/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

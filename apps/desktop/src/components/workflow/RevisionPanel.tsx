@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowRevision } from '../../lib/engine.js';
 import type { EngineClient } from '../../lib/engine.js';
+import { scrubDisplayText } from '../../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../../lib/format-relative-time.js';
 
 interface RevisionPanelProps {
@@ -208,7 +209,11 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
                   }}
                   title="Click to add label"
                 >
-                  {rev.label || <span style={{ color: 'var(--text-muted)' }}>Auto-save</span>}
+                  {rev.label
+                    ? scrubDisplayText(rev.label, { collapseLines: true, maxChars: 200 }) || (
+                        <span style={{ color: 'var(--text-muted)' }}>Auto-save</span>
+                      )
+                    : <span style={{ color: 'var(--text-muted)' }}>Auto-save</span>}
                 </span>
               )}
             </div>

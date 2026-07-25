@@ -285,4 +285,27 @@ describe('Workflows page', () => {
       expect(navigate).not.toHaveBeenCalled();
     });
   });
+
+  it('scrubs control chars from workflow domain, name, and description', async () => {
+    listWorkflows.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'wf-scrub',
+          name: `Evil${'\0'}Flow`,
+          domain: `coding${'\n'}x`,
+          description: `line1${'\n'}line2`,
+          nodes: [],
+          edges: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('EvilFlow')).toBeInTheDocument());
+    expect(screen.getByText(/coding x/)).toBeInTheDocument();
+    expect(screen.getByText(/line1 line2/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

@@ -497,7 +497,13 @@ export function Routines() {
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No runs yet</p>
               ) : (
                 <div className="space-y-1">
-                  {runs.map((run) => (
+                  {runs.map((run) => {
+                    const statusSafe =
+                      scrubDisplayText(run.status, { collapseLines: true, maxChars: 40 }) || 'pending';
+                    const errSafe = run.error
+                      ? scrubDisplayText(run.error, { collapseLines: true, maxChars: 500 })
+                      : '';
+                    return (
                     <div
                       key={run.id}
                       className="flex items-center justify-between gap-2 rounded px-3 py-2 text-xs"
@@ -507,12 +513,12 @@ export function Routines() {
                         {formatRelativeTime(run.startedAt)}
                       </span>
                       <span className={
-                        run.status === 'completed' ? 'text-green-400' :
-                        run.status === 'failed' ? 'text-red-400' : 'text-yellow-400'
+                        statusSafe === 'completed' ? 'text-green-400' :
+                        statusSafe === 'failed' ? 'text-red-400' : 'text-yellow-400'
                       }>
-                        {run.status}
+                        {statusSafe}
                       </span>
-                      {run.status === 'completed' && (
+                      {statusSafe === 'completed' && (
                         <button
                           type="button"
                           onClick={() => void handleCrystallize(run)}
@@ -523,16 +529,17 @@ export function Routines() {
                           Crystallize
                         </button>
                       )}
-                      {run.error ? (
+                      {errSafe ? (
                         <span
                           className="text-red-400 truncate max-w-[160px]"
-                          title={scrubDisplayText(run.error, { collapseLines: true, maxChars: 500 })}
+                          title={errSafe}
                         >
-                          {scrubDisplayText(run.error, { collapseLines: true, maxChars: 200 })}
+                          {errSafe.length > 200 ? `${errSafe.slice(0, 200)}…` : errSafe}
                         </span>
                       ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -21,6 +21,7 @@ import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/s
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentStep, MessageData, SessionData } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -196,7 +197,10 @@ export function Sessions() {
                     color: activeSessionId === session.id ? 'var(--text-primary)' : 'var(--text-secondary)',
                   }}
                 >
-                  <span className="block truncate">{session.title || 'New session'}</span>
+                  <span className="block truncate">
+                    {scrubDisplayText(session.title, { collapseLines: true, maxChars: 120 })
+                      || 'New session'}
+                  </span>
                   <span
                     className="block truncate text-[10px] opacity-70"
                     title={formatAbsoluteTime(session.updated_at)}
@@ -1109,20 +1113,22 @@ function AgentPlanCard({ plan, isStreaming }: { plan: AgentStep[]; isStreaming?:
               </span>
               <span className="flex-1">
                 <span style={{ color: 'var(--text-muted)' }}>{i + 1}.</span>{' '}
-                {step.description}
-                {step.toolName && (
+                {scrubDisplayText(step.description, { collapseLines: true, maxChars: 300 }) || 'Step'}
+                {step.toolName ? (
                   <span className="ml-1 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                    [{step.toolName}]
+                    [{scrubDisplayText(step.toolName, { collapseLines: true, maxChars: 80 })}]
                   </span>
-                )}
-                {step.healingStatus && (
+                ) : null}
+                {step.healingStatus ? (
                   <span className="ml-1 italic" style={{ color: 'var(--text-muted)' }}>
-                    {step.healingStatus}
+                    {scrubDisplayText(step.healingStatus, { collapseLines: true, maxChars: 200 })}
                   </span>
-                )}
-                {step.error && (
-                  <span className="ml-1 text-red-400">{step.error}</span>
-                )}
+                ) : null}
+                {step.error ? (
+                  <span className="ml-1 text-red-400">
+                    {scrubDisplayText(step.error, { collapseLines: true, maxChars: 300 })}
+                  </span>
+                ) : null}
                 {step.screenshot && <ScreenshotToggle screenshot={step.screenshot} />}
               </span>
             </div>

@@ -517,4 +517,30 @@ describe('RevisionPanel', () => {
     });
   });
 
+
+    it('scrubs control-char revision labels', async () => {
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'r1',
+          workflowId: 'wf',
+          label: 'v1' + String.fromCharCode(0) + 'x',
+          createdAt: '2020-01-01T00:00:00.000Z',
+          nodeCount: 2,
+          edgeCount: 1,
+        },
+      ],
+    });
+    render(
+      <RevisionPanel
+        workflowId="wf"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('v1x')).toBeInTheDocument());
+  });
+
 });

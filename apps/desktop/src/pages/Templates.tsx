@@ -159,13 +159,18 @@ export function Templates() {
               ? scrubDisplayText(tpl.description, { collapseLines: true, maxChars: 500 })
               : '';
             const domainColor = DOMAIN_COLORS[domainSafe] ?? '#8b5cf6';
-            const isCreating = creating === (typeof tpl.name === 'string' ? tpl.name.trim() : tpl.name);
+            const nameKey =
+              typeof tpl.name === 'string' && !/[\0\r\n]/.test(tpl.name)
+                ? tpl.name.trim()
+                : nameSafe;
+            const isCreating = creating === nameKey;
             const requiredSettings = inferRequiredSettings(tpl).filter(
               (key) => typeof key === 'string' && !/[\0\r\n]/.test(key) && key.trim(),
             );
             return (
               <div
-                key={nameSafe}
+                // Prefer raw identity (domain+name); scrubbed-only keys can collide
+                key={`${domainSafe}::${nameKey}`}
                 className="flex flex-col gap-3 rounded-xl border p-4"
                 style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
               >
