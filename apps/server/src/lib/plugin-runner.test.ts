@@ -596,6 +596,40 @@ describe('plugin-runner resume / abort / LLM paths', () => {
     expect(oaiOut).toMatch(/OpenAI API error 503/i);
     expect(oaiOut).toContain('unavailable');
   });
+
+  it('scrubs control characters from LLM HTTP error bodies', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'llm-ctrl-err',
+      name: 'LLM Ctrl',
+      version: '0.0.1',
+      pipeline: [
+        { id: 'plan', name: 'Plan', kind: 'plan', prompt: 'x', outputKey: 'plan' },
+      ],
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => `line1\nline2${'\0'}x`,
+        json: async () => ({}),
+      }),
+    );
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { ANTHROPIC_API_KEY: 'sk-ant' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const out = String(events.find((e) => e.type === 'stage.completed')?.output ?? '');
+    expect(out).toMatch(/Anthropic API error 500/i);
+    expect(out).toContain('line1 line2');
+    expect(out).not.toMatch(/\n/);
+    expect(out).not.toContain('\0');
+  });
 });
 
 describe('plugin-runner multi-stage human-in-loop', () => {

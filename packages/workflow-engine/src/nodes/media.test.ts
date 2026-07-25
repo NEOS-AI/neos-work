@@ -232,6 +232,23 @@ describe('MediaNode', () => {
     expect(result.error).toContain('bad gateway detail');
   });
 
+  it('scrubs control characters from media HTTP error bodies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => `upstream\nfail${'\0'}ed`,
+      }),
+    );
+    const result = await MediaNode.execute(ctx({ config: { mediaType: 'image', prompt: 'x' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/500/);
+    expect(result.error).toContain('upstream fail');
+    expect(result.error).not.toMatch(/\n/);
+    expect(result.error).not.toContain('\0');
+  });
+
   it('uses upstream inputs.prompt when config prompt missing', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { filename: 'from-input.png' } }),

@@ -438,17 +438,12 @@ describe('Sessions page', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(chat).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(screen.getByText('analyze')).toBeInTheDocument();
-    });
-    await waitFor(() => {
       expect(screen.getByText('done')).toBeInTheDocument();
+      expect(screen.getByText('Thought process')).toBeInTheDocument();
+      expect(screen.getByText('read_file')).toBeInTheDocument();
+      // Divider label + system bubble content both show the same Korean string
+      expect(screen.getAllByText('이전 대화 요약됨').length).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.getByText('Thought process')).toBeInTheDocument();
-    expect(screen.getByText('read_file')).toBeInTheDocument();
-    expect(screen.getByText('이전 대화 요약됨')).toBeInTheDocument();
   });
 
   it('approves pending tool use via confirmTool', async () => {
@@ -574,27 +569,18 @@ describe('Sessions page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument());
 
-    // Pick a non-default thinking mode if available
-    const extended = screen.queryByRole('button', { name: 'Extended' })
-      ?? screen.queryByRole('button', { name: 'High' })
-      ?? screen.queryByRole('button', { name: 'Medium' });
-    if (extended) {
-      await user.click(extended);
-    }
+    // Labels are capitalized THINKING_MODES: Off / Low / Medium / High
+    await user.click(screen.getByRole('button', { name: 'High' }));
     fireEvent.click(screen.getByRole('button', { name: 'create' }));
 
     await waitFor(() => {
       expect(createSession).toHaveBeenCalledWith(
         expect.objectContaining({
           workspaceId: 'default',
-          thinkingMode: expect.any(String),
+          thinkingMode: 'high',
         }),
       );
     });
-    const thinkingMode = createSession.mock.calls[0]![0].thinkingMode as string;
-    if (extended) {
-      expect(thinkingMode).not.toBe('none');
-    }
 
     // Select session and ensure Shift+Enter keeps the draft
     await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());

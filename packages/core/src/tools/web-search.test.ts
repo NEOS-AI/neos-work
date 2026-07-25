@@ -93,6 +93,19 @@ describe('createWebSearchTool', () => {
     expect(result.error).toMatch(/429/);
   });
 
+  it('scrubs control characters from Tavily error bodies', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(
+      async () => new Response(`bad\nline${'\0'}x`, { status: 502 }),
+    ) as typeof fetch;
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/502/);
+    expect(result.error).toContain('bad line');
+    expect(result.error).not.toMatch(/\n/);
+    expect(result.error).not.toContain('\0');
+  });
+
   it('defaults maxResults to 5 and tolerates missing results array', async () => {
     process.env['TAVILY_API_KEY'] = 'k';
     globalThis.fetch = vi.fn(async () =>

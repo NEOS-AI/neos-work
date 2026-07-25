@@ -101,6 +101,26 @@ describe('DiscordMessageNode', () => {
     expect(result.error).toMatch(/internal boom/);
   });
 
+  it('scrubs control characters from webhook error bodies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => `invalid\nrequest${'\0'}`,
+      }),
+    );
+    const node = new DiscordMessageNode();
+    const result = await node.execute(
+      makeCtx({ DISCORD_WEBHOOK_URL: 'https://discord.com/api/webhooks/1/abc' }, { text: 'x' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/400/);
+    expect(result.error).toContain('invalid request');
+    expect(result.error).not.toMatch(/\n/);
+    expect(result.error).not.toContain('\0');
+  });
+
   it('truncates long Discord error bodies to 500 chars', async () => {
     const long = 'z'.repeat(800);
     vi.stubGlobal(
