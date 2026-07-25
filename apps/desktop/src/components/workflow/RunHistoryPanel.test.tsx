@@ -159,4 +159,32 @@ describe('RunHistoryPanel', () => {
     // first page request uses PAGE_SIZE + 1
     expect(listWorkflowRuns).toHaveBeenCalledWith('wf-1', 21, 0);
   });
+
+  it('loads next page when Load more is clicked', async () => {
+    const user = userEvent.setup();
+    const page1 = Array.from({ length: 21 }, (_, i) =>
+      makeRun(`run-a${String(i).padStart(3, '0')}`, 'completed'),
+    );
+    const page2 = Array.from({ length: 5 }, (_, i) =>
+      makeRun(`run-b${String(i).padStart(3, '0')}`, 'failed'),
+    );
+    listWorkflowRuns.mockImplementation(async (_wf: string, _limit: number, offset = 0) => {
+      if (offset === 0) return { ok: true, data: page1 };
+      return { ok: true, data: page2 };
+    });
+
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /load more|common.loadMore/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /load more|common.loadMore/i }));
+    await waitFor(() => {
+      expect(listWorkflowRuns).toHaveBeenCalledWith('wf-1', 21, 20);
+    });
+    // Second page has only 5 items → no further "load more"
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /load more|common.loadMore/i })).not.toBeInTheDocument();
+    });
+  });
 });

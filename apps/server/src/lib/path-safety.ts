@@ -28,10 +28,10 @@ export function safeRouteId(raw: unknown, max = ROUTE_ID_MAX_CHARS): string {
 /** Validate that a workspace path is within the user's home directory. */
 export function validateWorkspacePath(path: string): boolean {
   if (!path || typeof path !== 'string') return false;
+  // Reject control chars before trim so "\n/home/..." is not accepted as home
+  if (/[\0\r\n]/.test(path)) return false;
   const trimmed = path.trim();
   if (!trimmed) return false;
-  // Reject null bytes and other control characters that can confuse path APIs
-  if (/[\0\r\n]/.test(trimmed)) return false;
   if (trimmed.length > WORKSPACE_PATH_MAX_CHARS) return false;
   try {
     const resolved = resolve(trimmed);

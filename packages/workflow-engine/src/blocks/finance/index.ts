@@ -19,8 +19,14 @@ import { getStockPrice, getStockChart, normalizeSymbol } from './kis-api.js';
 import type { KisConfig } from './kis-api.js';
 
 function getKisConfig(settings: Record<string, string>): KisConfig {
-  const appKey = String(settings['KIS_APP_KEY'] ?? '').trim();
-  const appSecret = String(settings['KIS_APP_SECRET'] ?? '').trim();
+  // Control-char check before trim (header hygiene; align with kis-api sanitize)
+  const keyRaw = String(settings['KIS_APP_KEY'] ?? '');
+  const secretRaw = String(settings['KIS_APP_SECRET'] ?? '');
+  if (/[\0\r\n]/.test(keyRaw) || /[\0\r\n]/.test(secretRaw)) {
+    throw new Error('KIS_APP_KEY and KIS_APP_SECRET are required');
+  }
+  const appKey = keyRaw.trim();
+  const appSecret = secretRaw.trim();
   if (!appKey || !appSecret) {
     throw new Error('KIS_APP_KEY and KIS_APP_SECRET are required');
   }
@@ -106,7 +112,10 @@ registerNativeBlock({
       const symbol = resolveSymbol(ctx);
       if (!symbol) throw new Error('symbol is required');
       const period = clampPeriod(ctx.params['period'] ?? 20, 20, 1, 500);
-      const maTypeRaw = String(ctx.params['type'] ?? 'SMA').trim().toUpperCase();
+      // Control-char type → SMA default (check before trim)
+      const typeRaw = String(ctx.params['type'] ?? 'SMA');
+      const maTypeRaw =
+        /[\0\r\n]/.test(typeRaw) ? 'SMA' : typeRaw.trim().toUpperCase();
       const maType = maTypeRaw === 'EMA' ? 'EMA' : 'SMA';
       const count = Math.max(period + 5, 60);
 

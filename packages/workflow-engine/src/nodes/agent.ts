@@ -141,8 +141,14 @@ export class AgentNode implements ExecutableNode {
     if (nodeSystemPrompt.length > SYSTEM_PROMPT_MAX_CHARS) {
       nodeSystemPrompt = nodeSystemPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS);
     }
-    let harnessPrompt =
-      typeof harness?.systemPrompt === 'string' ? harness.systemPrompt.trim() : '';
+    // Null-byte strip on harness prompt (multi-line OK)
+    let harnessPrompt = '';
+    if (typeof harness?.systemPrompt === 'string') {
+      const hp = /\0/.test(harness.systemPrompt)
+        ? harness.systemPrompt.replace(/\0/g, '')
+        : harness.systemPrompt;
+      harnessPrompt = hp.trim();
+    }
     if (harnessPrompt.length > SYSTEM_PROMPT_MAX_CHARS) {
       harnessPrompt = harnessPrompt.slice(0, SYSTEM_PROMPT_MAX_CHARS);
     }
@@ -161,9 +167,11 @@ export class AgentNode implements ExecutableNode {
       || '';
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
-    // Prepend Design System context if injected (skip whitespace-only payloads; cap size)
-    let designCtx =
-      typeof ctx.designSystemContent === 'string' ? ctx.designSystemContent.trim() : '';
+    // Prepend Design System context if injected (skip whitespace-only / null-byte payloads; cap size)
+    let designCtx = '';
+    if (typeof ctx.designSystemContent === 'string' && !/\0/.test(ctx.designSystemContent)) {
+      designCtx = ctx.designSystemContent.trim();
+    }
     if (designCtx) {
       if (designCtx.length > DESIGN_CONTEXT_MAX_CHARS) {
         designCtx =
@@ -185,8 +193,11 @@ export class AgentNode implements ExecutableNode {
         ? Math.min(200, Math.floor(rawHarnessSteps))
         : undefined;
     const maxIterations = harnessSteps ?? configSteps;
+    // Control-char tool names dropped before trim (align with harness DB normalize)
     const toolFilter = harness?.allowedTools
-      ?.map((t) => String(t).trim())
+      ?.map((t) => String(t ?? ''))
+      .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t))
+      .map((t) => t.trim())
       .filter(Boolean);
 
     // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig)

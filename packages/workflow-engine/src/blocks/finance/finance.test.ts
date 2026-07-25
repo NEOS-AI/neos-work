@@ -156,6 +156,16 @@ describe('price_lookup', () => {
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/KIS_APP_KEY/);
+
+    // Leading control-char credentials must not strip to a valid key
+    const ctrl = await exec().execute(
+      ctx(
+        { symbol: '005930' },
+        { settings: { KIS_APP_KEY: '\ntest-key', KIS_APP_SECRET: 'test-secret' } },
+      ),
+    );
+    expect(ctrl.ok).toBe(false);
+    expect(ctrl.error).toMatch(/KIS_APP_KEY/);
   });
 
   it('surfaces API errors', async () => {
@@ -199,6 +209,13 @@ describe('moving_average', () => {
     const out = result.output as { type: string; period: number };
     expect(out.type).toBe('SMA');
     expect(out.period).toBe(20);
+
+    // Leading control-char type must not strip to EMA
+    const ctrlType = await exec().execute(
+      ctx({ symbol: '005930', period: 20, type: '\nEMA' }),
+    );
+    expect(ctrlType.ok).toBe(true);
+    expect((ctrlType.output as { type: string }).type).toBe('SMA');
 
     // Above max (500) clamps to 500
     const high = await exec().execute(

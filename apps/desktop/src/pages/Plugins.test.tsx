@@ -124,4 +124,31 @@ describe('Plugins page', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect((screen.getByPlaceholderText('Search plugins…') as HTMLInputElement).value).toBe('Alpha');
   });
+
+  it('shows zero stages and description for empty pipeline plugins', async () => {
+    listPlugins.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'p-empty',
+          name: 'Empty Pipe',
+          version: '0.1.0',
+          description: 'No stages configured',
+          pipeline: [],
+        },
+      ],
+    });
+    render(<Plugins />);
+    await waitFor(() => expect(screen.getByText('Empty Pipe')).toBeInTheDocument());
+    expect(screen.getByText(/v0\.1\.0 · 0 stages/)).toBeInTheDocument();
+    expect(screen.getByText('No stages configured')).toBeInTheDocument();
+  });
+
+  it('settles to empty state when listPlugins is non-ok', async () => {
+    listPlugins.mockResolvedValue({ ok: false, error: 'down' });
+    render(<Plugins />);
+    await waitFor(() => {
+      expect(screen.getByText(/No plugins found/)).toBeInTheDocument();
+    });
+  });
 });

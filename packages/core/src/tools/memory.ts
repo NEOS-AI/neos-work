@@ -17,9 +17,12 @@ const RECALL_QUERY_MAX_CHARS = 2_000;
 
 function normalizeTags(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
+  // Control-char check before trim so "\ntag" is not accepted as "tag"
   const tags = raw
-    .map((t) => String(t).trim())
-    .filter((t) => t.length > 0 && t.length <= TAG_MAX_CHARS && !/[\0\r\n]/.test(t))
+    .map((t) => String(t ?? ''))
+    .filter((t) => t.length > 0 && !/[\0\r\n]/.test(t))
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.length <= TAG_MAX_CHARS)
     .slice(0, TAGS_MAX);
   return tags.length > 0 ? tags : undefined;
 }
@@ -30,11 +33,12 @@ function hasUnsafeKeyChars(value: string): boolean {
 }
 
 function clampLimit(raw: unknown, fallback = 5): number {
+  // Control-char numeric strings are invalid (check before trim)
   const n =
     typeof raw === 'number'
       ? raw
-      : typeof raw === 'string' && raw.trim()
-        ? Number(raw)
+      : typeof raw === 'string' && !/[\0\r\n]/.test(raw) && raw.trim()
+        ? Number(raw.trim())
         : fallback;
   if (!Number.isFinite(n)) return fallback;
   return Math.min(100, Math.max(1, Math.floor(n)));

@@ -35,11 +35,16 @@ describe('createWebSearchTool', () => {
     expect(result.output).toEqual({
       results: [{ title: 'T', url: 'https://example.com', snippet: 'snippet' }],
     });
-    expect(globalThis.fetch).toHaveBeenCalledOnce();
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.max_results).toBe(3);
     expect(body.api_key).toBe('test-key');
+
+    // Control-char maxResults falls back to default 5
+    await createWebSearchTool().execute({ query: 'q2', maxResults: '\n9' });
+    const [, init2] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[1];
+    const body2 = JSON.parse((init2 as RequestInit).body as string);
+    expect(body2.max_results).toBe(5);
   });
 
   it('filters non-http result URLs', async () => {
@@ -249,6 +254,46 @@ describe('createWebSearchTool', () => {
     ];
     const headers = init.headers as Record<string, string>;
     expect(headers['User-Agent']).toMatch(/^neos-work\//);
+  });
+
+  it('scrubs control-char titles and collapses CR/LF in snippets', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'good title',
+              url: 'https://a.example',
+              content: 'line1\nline2\r\nline3',
+            },
+            {
+              // Leading control-char title must not strip to a usable title
+              title: '\nbad title',
+              url: 'https://b.example',
+              content: 'ok',
+            },
+            {
+              title: 'null content',
+              url: 'https://c.example',
+              content: `has${'\0'}null`,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(true);
+    const out = result.output as {
+      results: Array<{ title: string; url: string; snippet: string }>;
+    };
+    expect(out.results).toEqual([
+      { title: 'good title', url: 'https://a.example', snippet: 'line1 line2 line3' },
+      { title: '', url: 'https://b.example', snippet: 'ok' },
+      { title: 'null content', url: 'https://c.example', snippet: '' },
+    ]);
   });
 
   it('stringifies non-Error throwables from fetch', async () => {

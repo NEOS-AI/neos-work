@@ -110,6 +110,24 @@ describe('BlockNode', () => {
     expect(promptRes.ok).toBe(false);
     expect(promptRes.error).toMatch(/promptTemplate/i);
 
+    // Null-byte promptTemplate is rejected (not used as a template)
+    registerBlockMeta({
+      id: 'cov_prompt_null',
+      name: 'Null Prompt',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      promptTemplate: 'hello\0world',
+    });
+    const nullRes = await node.execute(ctx({ blockId: 'cov_prompt_null' }));
+    expect(nullRes.ok).toBe(false);
+    expect(nullRes.error).toMatch(/promptTemplate/i);
+
     registerBlockMeta({
       id: 'cov_skill_empty',
       name: 'Empty Skill',

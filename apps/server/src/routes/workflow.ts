@@ -508,25 +508,37 @@ workflow.post('/import.zip', async (c) => {
   }
 
   const wf = manifest.workflow;
-  let rawName =
-    typeof wf.name === 'string' && wf.name.trim().length > 0
-      ? wf.name.trim().slice(0, 200)
-      : 'Imported Workflow';
-  // Drop control chars from imported names (createWorkflow would reject them)
-  if (/[\0\r\n]/.test(rawName)) {
-    rawName = rawName.replace(/[\0\r\n]/g, ' ').trim() || 'Imported Workflow';
+  // Control-char check before trim so "\nMyFlow" is scrubbed, not accepted as MyFlow
+  let rawName = 'Imported Workflow';
+  if (typeof wf.name === 'string') {
+    if (/[\0\r\n]/.test(wf.name)) {
+      rawName = wf.name.replace(/[\0\r\n]/g, ' ').trim().slice(0, 200) || 'Imported Workflow';
+    } else {
+      const n = wf.name.trim().slice(0, 200);
+      if (n) rawName = n;
+    }
   }
   const existing = db.listWorkflows().find((w) => w.name === rawName);
   const finalName = existing ? `Copy of ${rawName}` : rawName;
+
+  let description: string | undefined;
+  if (typeof wf.description === 'string' && !/\0/.test(wf.description)) {
+    description = wf.description.trim() || undefined;
+  }
+  const domainRaw =
+    typeof wf.domain === 'string' && !/[\0\r\n]/.test(wf.domain)
+      ? wf.domain.trim().toLowerCase()
+      : '';
+  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    ? (domainRaw as 'finance' | 'coding' | 'general')
+    : 'general';
 
   let created;
   try {
     created = db.createWorkflow({
       name: finalName,
-      description: typeof wf.description === 'string' ? wf.description : undefined,
-      domain: (['finance', 'coding', 'general'] as const).includes(wf.domain as never)
-        ? (wf.domain as 'finance' | 'coding' | 'general')
-        : 'general',
+      description,
+      domain,
       nodes: (wf.nodes as never) ?? [],
       edges: (wf.edges as never) ?? [],
     });

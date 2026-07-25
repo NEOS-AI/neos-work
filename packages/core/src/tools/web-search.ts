@@ -8,11 +8,12 @@ import type { Tool, ToolResult } from './base.js';
 const TAVILY_ENDPOINT = 'https://api.tavily.com/search';
 
 function clampMaxResults(raw: unknown, fallback = 5): number {
+  // Control-char numeric strings are invalid (check before trim)
   const n =
     typeof raw === 'number'
       ? raw
-      : typeof raw === 'string' && raw.trim()
-        ? Number(raw)
+      : typeof raw === 'string' && !/[\0\r\n]/.test(raw) && raw.trim()
+        ? Number(raw.trim())
         : fallback;
   if (!Number.isFinite(n)) return fallback;
   return Math.min(10, Math.max(1, Math.floor(n)));
@@ -75,7 +76,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.119',
+            'User-Agent': 'neos-work/0.3.120',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });

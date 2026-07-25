@@ -59,4 +59,19 @@ describe('cli-agents routes', () => {
     const body = await res.json() as { meta: { pathOverrides: Record<string, string> } };
     expect(body.meta.pathOverrides['cli-gemini']).toBeUndefined();
   });
+
+  it('ignores control-char path override settings before trim', async () => {
+    fs.writeFileSync(TMP, '#!/bin/sh\necho mock\n', { mode: 0o755 });
+    // Leading control char must not strip to a valid path
+    setSetting(CLI_PATH_SETTING_KEYS['cli-claude'], `\n${TMP}`);
+    setSetting(CLI_PATH_SETTING_KEYS['cli-codex'], `${TMP}\n`);
+    setSetting(CLI_PATH_SETTING_KEYS['cli-gemini'], `path\0evil`);
+
+    const res = await cliAgents.request('/');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { meta: { pathOverrides: Record<string, string> } };
+    expect(body.meta.pathOverrides['cli-claude']).toBeUndefined();
+    expect(body.meta.pathOverrides['cli-codex']).toBeUndefined();
+    expect(body.meta.pathOverrides['cli-gemini']).toBeUndefined();
+  });
 });

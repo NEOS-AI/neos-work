@@ -237,14 +237,20 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
 
       // Run pending branches concurrently and race
       const branchNodes = sorted.filter((n) => {
-        const id = typeof n.id === 'string' ? n.id.trim() : n.id;
-        return pendingPredecessors.includes(id);
+        const rawId = typeof n.id === 'string' ? n.id : '';
+        if (!rawId || /[\0\r\n]/.test(rawId)) return false;
+        const id = rawId.trim();
+        return !!id && pendingPredecessors.includes(id);
       });
       const abortControllers = branchNodes.map(() => new AbortController());
 
       const branchPromises = branchNodes.map(async (branchNode, i) => {
-        const branchId =
-          typeof branchNode.id === 'string' ? branchNode.id.trim() : String(branchNode.id ?? '');
+        const branchIdRaw =
+          typeof branchNode.id === 'string' ? branchNode.id : String(branchNode.id ?? '');
+        if (!branchIdRaw || /[\0\r\n]/.test(branchIdRaw)) {
+          return { nodeId: '', ok: false };
+        }
+        const branchId = branchIdRaw.trim();
         const branchSignal = abortControllers[i].signal;
         const combined = signal
           ? AbortSignal.any([signal, branchSignal])
@@ -253,8 +259,10 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         for (const edge of workflow.edges.filter(
           (e) =>
             typeof e.target === 'string'
+            && !/[\0\r\n]/.test(e.target)
             && e.target.trim() === branchId
             && typeof e.source === 'string'
+            && !/[\0\r\n]/.test(e.source)
             && e.source.trim().length > 0,
         )) {
           const source = edge.source.trim();

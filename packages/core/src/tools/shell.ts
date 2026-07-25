@@ -134,11 +134,16 @@ export function createShellTool(workspaceRoot: string): Tool {
             error: `command exceeds max length (${MAX_COMMAND_CHARS} characters)`,
           };
         }
+        // Control-char timeout strings are invalid (check before trim)
+        const timeoutStr =
+          typeof input.timeout === 'string' && !/[\0\r\n]/.test(input.timeout)
+            ? input.timeout.trim()
+            : '';
         const timeoutRaw =
           typeof input.timeout === 'number'
             ? input.timeout
-            : typeof input.timeout === 'string' && String(input.timeout).trim()
-              ? Number(input.timeout)
+            : timeoutStr
+              ? Number(timeoutStr)
               : DEFAULT_TIMEOUT_MS;
         const timeoutMs = Math.min(
           Math.max(Number.isFinite(timeoutRaw) ? Math.floor(timeoutRaw) : DEFAULT_TIMEOUT_MS, 1),

@@ -53,9 +53,14 @@ describe('memory tools', () => {
 
     await tool.execute({
       query: 'ok',
-      tags: ['good', 'bad\ntag', '', 'x'.repeat(101), 'also'],
+      tags: ['good', 'bad\ntag', '', 'x'.repeat(101), 'also', '\nlead'],
     });
+    // Leading control-char tags dropped before trim
     expect(cb.search).toHaveBeenCalledWith('ok', ['good', 'also'], 5);
+
+    // Control-char limit string → fallback 5
+    await tool.execute({ query: 'ok', limit: '\n10' });
+    expect(cb.search).toHaveBeenLastCalledWith('ok', undefined, 5);
   });
 
   it('remember saves and returns key', async () => {

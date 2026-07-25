@@ -100,8 +100,11 @@ export class BlockNode implements ExecutableNode {
     }
 
     if (implType === 'prompt') {
-      const template =
-        typeof block.promptTemplate === 'string' ? block.promptTemplate.trim() : '';
+      // Null-byte reject; multi-line templates OK
+      let template = '';
+      if (typeof block.promptTemplate === 'string' && !/\0/.test(block.promptTemplate)) {
+        template = block.promptTemplate.trim();
+      }
       if (!template) {
         return {
           ok: false,

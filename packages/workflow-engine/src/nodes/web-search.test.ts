@@ -75,6 +75,50 @@ describe('WebSearchNode', () => {
     expect(result.output).toEqual(results);
   });
 
+  it('scrubs control-char titles and collapses CR/LF in content', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: 'ok',
+                url: 'https://a.example',
+                content: 'line1\nline2',
+                score: 1,
+              },
+              {
+                title: '\nbad',
+                url: 'https://b.example',
+                content: 'x',
+                score: 0.5,
+              },
+              {
+                title: 'nul',
+                url: 'https://c.example',
+                content: `has${'\0'}null`,
+                score: 0.1,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const result = await node.execute(
+      ctx({ TAVILY_API_KEY: 'k' }, { query: 'q' }),
+    );
+    expect(result.ok).toBe(true);
+    const out = result.output as Array<{ title: string; url: string; content: string }>;
+    expect(out).toEqual([
+      expect.objectContaining({ title: 'ok', url: 'https://a.example', content: 'line1 line2' }),
+      expect.objectContaining({ title: '', url: 'https://b.example', content: 'x' }),
+      expect.objectContaining({ title: 'nul', url: 'https://c.example', content: '' }),
+    ]);
+  });
+
   it('clips title/content fields from oversized Tavily payloads', async () => {
     vi.stubGlobal(
       'fetch',

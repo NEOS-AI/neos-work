@@ -557,6 +557,36 @@ describe('assessWorkflowPreflight', () => {
     expect(r.issues.some((i) => i.code === 'missing_slack_token')).toBe(true);
   });
 
+  it('treats control-char secrets as missing before trim', () => {
+    // Leading \n must not strip to a usable key/token
+    const r = assessWorkflowPreflight(
+      {
+        nodes: [
+          { id: 't', type: 'trigger', config: {} },
+          { id: 's', type: 'web_search', config: {} },
+          { id: 'sl', type: 'slack_message', config: { channel: '#x' } },
+          { id: 'a', type: 'agent_coding', config: {} },
+          { id: 'o', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 't', target: 's' },
+          { id: 'e2', source: 's', target: 'sl' },
+          { id: 'e3', source: 'sl', target: 'a' },
+          { id: 'e4', source: 'a', target: 'o' },
+        ],
+      },
+      {
+        TAVILY_API_KEY: '\ntvly-secret',
+        SLACK_BOT_TOKEN: 'xoxb\n-token',
+        ANTHROPIC_API_KEY: `sk${'\0'}ant`,
+      },
+    );
+    expect(r.ok).toBe(false);
+    expect(r.issues.some((i) => i.code === 'missing_tavily_key')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'missing_slack_token')).toBe(true);
+    expect(r.issues.some((i) => i.code === 'missing_anthropic_key')).toBe(true);
+  });
+
   it('flags invalid Discord webhook URLs (SSRF allow-list)', () => {
     const r = assessWorkflowPreflight(
       {

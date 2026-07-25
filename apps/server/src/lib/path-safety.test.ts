@@ -51,6 +51,9 @@ describe('validateWorkspacePath', () => {
     expect(validateWorkspacePath(home + '\0evil')).toBe(false);
     expect(validateWorkspacePath(home + '\n/evil')).toBe(false);
     expect(validateWorkspacePath(home + '\r/evil')).toBe(false);
+    // Leading control must not strip to a valid home path
+    expect(validateWorkspacePath('\n' + home)).toBe(false);
+    expect(validateWorkspacePath('\r' + home)).toBe(false);
   });
 
   it('rejects non-string inputs', () => {
