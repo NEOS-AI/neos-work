@@ -1440,6 +1440,83 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
     expect(padded.some((i) => i.code === 'missing_harness_id')).toBe(false);
   });
 
+  it('control-char provider/blockId/channel/edge do not strip to valid values', () => {
+    // Leading control provider must not count as cli-claude
+    const cli = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: { provider: '\ncli-claude' },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(cli.some((i) => i.code === 'missing_harness_id')).toBe(true);
+
+    const block = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'b',
+          type: 'block',
+          label: 'Block',
+          config: { blockId: '\ncode_eval' },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'b' },
+        { id: 'e2', source: 'b', target: 'o' },
+      ],
+      blocks: [{ id: 'code_eval', paramDefs: [] }],
+    });
+    expect(block.some((i) => i.code === 'missing_block_id')).toBe(true);
+
+    const slack = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 's',
+          type: 'slack_message',
+          label: 'Slack',
+          config: { channel: '\n#general', text: 'hi' },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(slack.some((i) => i.code === 'missing_slack_channel')).toBe(true);
+
+    // Leading control edge endpoint is dangling
+    const edge = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e1', source: '\nt', target: 'o' }],
+      blocks: [],
+    });
+    expect(edge.some((i) => i.code === 'dangling_edge')).toBe(true);
+
+    // Control-char edge id → missing_edge_id
+    const edgeId = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e\n1', source: 't', target: 'o' }],
+      blocks: [],
+    });
+    expect(edgeId.some((i) => i.code === 'missing_edge_id')).toBe(true);
+  });
+
   it('also recognizes llmProvider for CLI harness skip', () => {
     const issues = validateWorkflowDraft({
       nodes: [

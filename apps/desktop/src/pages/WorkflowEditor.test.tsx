@@ -241,6 +241,24 @@ describe('WorkflowEditor page', () => {
     });
   });
 
+  it('alerts schedule create failure and keeps modal open', async () => {
+    createRoutine.mockResolvedValueOnce({ ok: false, error: 'invalid cron' });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Schedule/i }));
+    await waitFor(() => expect(screen.getByText('Create routine')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+
+    await waitFor(() => {
+      expect(createRoutine).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('invalid cron');
+    });
+    // Modal stays open for correction
+    expect(screen.getByText('Create routine')).toBeInTheDocument();
+    expect(screen.getByText('Schedule this workflow')).toBeInTheDocument();
+  });
+
   it('opens shortcuts help, history panel, and run dialog', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());

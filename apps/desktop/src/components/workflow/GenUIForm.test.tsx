@@ -92,4 +92,23 @@ describe('GenUIForm', () => {
     await user.click(screen.getByRole('button', { name: /submit/i }));
     expect(onSubmit).toHaveBeenCalledWith({ x: '' });
   });
+
+  it('drops control-char field keys from submit payload', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <GenUIForm
+        schema={{
+          fields: [
+            { key: 'ok', label: 'Ok', type: 'text', placeholder: 'ok-ph' },
+            { key: 'bad\nkey', label: 'Bad', type: 'text', placeholder: 'bad-ph' },
+          ],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+    await user.type(screen.getByPlaceholderText('ok-ph'), 'yes');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    expect(onSubmit).toHaveBeenCalledWith({ ok: 'yes' });
+  });
 });

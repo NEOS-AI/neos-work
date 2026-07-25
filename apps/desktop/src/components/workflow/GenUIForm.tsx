@@ -21,12 +21,16 @@ export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Trim submitted values so GenUI resume payloads stay clean (plan Task 6)
+    // Trim submitted values so GenUI resume payloads stay clean (plan Task 6).
+    // Control-char keys dropped (check before trim).
     const trimmed: Record<string, string> = {};
     for (const field of fields) {
-      const key = typeof field.key === 'string' ? field.key.trim() : '';
-      if (!key) continue;
+      if (typeof field.key !== 'string' || /[\0\r\n]/.test(field.key)) continue;
+      const key = field.key.trim();
+      if (!key || key.length > 200) continue;
       const raw = values[field.key] ?? values[key] ?? '';
+      // Null-byte values dropped from resume payload
+      if (typeof raw === 'string' && /\0/.test(raw)) continue;
       trimmed[key] = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim();
     }
     onSubmit(trimmed);

@@ -200,6 +200,68 @@ describe('detectCLIs', () => {
     const found = await detectCLIs({ 'cli-gemini': '/no/such/binary-xyz' });
     expect(found.find((a) => a.id === 'cli-gemini')?.path).toBe('/bin/gemini');
   });
+
+  it('drops null-only which paths and scrubs/caps version stdout', async () => {
+    execFileMock.mockImplementation((cmd: string, args: string[], ...rest: unknown[]) => {
+      const cb = rest.find((a) => typeof a === 'function') as
+        | ((err: Error | null, stdout?: string, stderr?: string) => void)
+        | undefined;
+      // which: null-only line → no path (detectCLIs skips agent)
+      if (cmd === 'which' && args[0] === 'claude') {
+        cb?.(null, `\0\0\n`, '');
+        return;
+      }
+      if (cmd === 'which' && args[0] === 'gemini') {
+        cb?.(null, '/bin/gemini\n', '');
+        return;
+      }
+      // Version: scrub nulls; take first line only
+      if (cmd === '/bin/gemini' && args[0] === '--version') {
+        cb?.(null, `gemini 2.0${'\0'}x\nsecond line\n`, '');
+        return;
+      }
+      if (cmd === 'which' && args[0] === 'codex') {
+        cb?.(null, '/bin/codex\n', '');
+        return;
+      }
+      // Overlong version → undefined
+      if (cmd === '/bin/codex' && args[0] === '--version') {
+        cb?.(null, `${'v'.repeat(250)}\n`, '');
+        return;
+      }
+      cb?.(new Error('not found'));
+    });
+
+    const found = await detectCLIs();
+    expect(found.find((a) => a.id === 'cli-claude')).toBeUndefined();
+    const gemini = found.find((a) => a.id === 'cli-gemini');
+    expect(gemini?.path).toBe('/bin/gemini');
+    expect(gemini?.version).toBe('gemini 2.0x');
+    expect(gemini?.version).not.toContain('\0');
+    const codex = found.find((a) => a.id === 'cli-codex');
+    expect(codex?.path).toBe('/bin/codex');
+    expect(codex?.version).toBeUndefined();
+  });
+
+  it('ignores control-char path overrides before PATH fallback', async () => {
+    execFileMock.mockImplementation((cmd: string, args: string[], ...rest: unknown[]) => {
+      const cb = rest.find((a) => typeof a === 'function') as
+        | ((err: Error | null, stdout?: string, stderr?: string) => void)
+        | undefined;
+      if (cmd === 'which' && args[0] === 'claude') {
+        cb?.(null, '/usr/bin/claude\n', '');
+        return;
+      }
+      if (cmd === '/usr/bin/claude' && args[0] === '--version') {
+        cb?.(null, 'claude 1.0\n', '');
+        return;
+      }
+      cb?.(new Error('not found'));
+    });
+    // Leading control override must not be used even if a real path would strip to it
+    const found = await detectCLIs({ 'cli-claude': '\n/usr/bin/claude' });
+    expect(found.find((a) => a.id === 'cli-claude')?.path).toBe('/usr/bin/claude');
+  });
 });
 
 describe('loadMcpTokenEnvVars', () => {

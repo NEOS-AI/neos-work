@@ -59,4 +59,35 @@ describe('GenUIChoice', () => {
     const img = screen.getByRole('img', { name: 'With Preview' });
     expect(img).toHaveAttribute('src', 'https://example.com/p.png');
   });
+
+  it('skips control-char values and non-http preview urls', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <GenUIChoice
+        schema={{
+          options: [
+            { label: 'Ok', value: 'ok' },
+            // Both label and value control-char → hidden
+            { label: 'bad\nlabel', value: 'bad\nval' },
+            { label: '\nLead', value: '\nok' },
+            {
+              label: 'Js Preview',
+              value: 'js',
+              previewUrl: 'javascript:alert(1)',
+            },
+          ],
+        }}
+        onSelect={onSelect}
+      />,
+    );
+    expect(screen.getByText('Ok')).toBeInTheDocument();
+    expect(screen.getByText('Js Preview')).toBeInTheDocument();
+    // Fully control-char options hidden
+    expect(screen.queryByText('Lead')).not.toBeInTheDocument();
+    // Non-http preview not rendered as img
+    expect(screen.queryByRole('img', { name: 'Js Preview' })).not.toBeInTheDocument();
+    await user.click(screen.getByText('Ok'));
+    expect(onSelect).toHaveBeenCalledWith('ok');
+  });
 });

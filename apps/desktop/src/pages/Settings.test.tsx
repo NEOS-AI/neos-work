@@ -299,6 +299,50 @@ describe('Settings page', () => {
     });
   });
 
+  it('shows CLI agents load error and recovers on Refresh', async () => {
+    listCliAgents
+      .mockResolvedValueOnce({ ok: false, error: 'boom' })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          {
+            id: 'cli-claude',
+            name: 'Claude Code',
+            path: '/usr/bin/claude',
+            version: '1.0',
+          },
+        ],
+      });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load CLI agents')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '↺ Refresh' }));
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code')).toBeInTheDocument();
+      expect(screen.queryByText('Failed to load CLI agents')).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps MCP add form open when createMcpServer fails', async () => {
+    const user = userEvent.setup();
+    listMcpServers.mockResolvedValue({ ok: true, data: [] });
+    createMcpServer.mockResolvedValue({ ok: false, error: 'name taken' });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText(/No MCP servers configured/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('Server name')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Server name'), 'Dup');
+    await user.type(screen.getByPlaceholderText('Command (e.g. npx)'), 'npx');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
+    await waitFor(() => expect(createMcpServer).toHaveBeenCalled());
+    // Form stays open for correction
+    expect(screen.getByPlaceholderText('Server name')).toBeInTheDocument();
+    expect(screen.queryByText('Dup')).not.toBeInTheDocument();
+  });
+
   it('shows invalid verify status and not-configured media', async () => {
     const user = userEvent.setup();
     verifyApiKey.mockResolvedValue({ ok: true, data: { valid: false } });

@@ -53,7 +53,9 @@ interface DraftEdge {
 
 /** Trim edge/node endpoint for matching (aligns with graph topologicalSort). */
 function endpoint(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  // Control-char check before trim so "\nnode" cannot match "node"
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return '';
+  return value.trim();
 }
 
 function hasCycle(nodes: Array<{ id: string }>, edges: Array<{ source: string; target: string }>): boolean {
@@ -114,13 +116,15 @@ export function validateWorkflowDraft(input: {
   blocks: Pick<WorkflowBlock, 'id' | 'paramDefs'>[];
 }): WorkflowValidationIssue[] {
   const issues: WorkflowValidationIssue[] = [];
-  // Edge matching accepts both raw and trimmed ids; duplicates compare trimmed keys
+  // Edge matching accepts both raw and trimmed ids; duplicates compare trimmed keys.
+  // Skip control-char ids so they cannot resolve edges as stripped forms.
   const nodeIds = new Set<string>();
   const seenTrimmed = new Set<string>();
   for (const node of input.nodes) {
     const raw = typeof node.id === 'string' ? node.id : '';
+    if (!raw || /[\0\r\n]/.test(raw)) continue;
     const trimmed = raw.trim();
-    if (raw) nodeIds.add(raw);
+    nodeIds.add(raw);
     if (trimmed) {
       nodeIds.add(trimmed);
       if (seenTrimmed.has(trimmed)) {
@@ -171,7 +175,11 @@ export function validateWorkflowDraft(input: {
 
     if (node.type === 'block') {
       const rawBlockId = config.blockId;
-      const blockId = typeof rawBlockId === 'string' ? rawBlockId.trim() : '';
+      // Control-char blockId → treat as missing (check before trim)
+      const blockId =
+        typeof rawBlockId === 'string' && !/[\0\r\n]/.test(rawBlockId)
+          ? rawBlockId.trim()
+          : '';
       if (!blockId) {
         issues.push({
           code: 'missing_block_id',
@@ -207,16 +215,21 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'agent_finance' || node.type === 'agent_coding') {
-      // Align with AgentNode: trim + lower-case so " CLI-Claude " counts as CLI
+      // Align with AgentNode: trim + lower-case so " CLI-Claude " counts as CLI.
+      // Control-char provider → empty (not strip to cli-claude).
       const rawProvider = config.provider ?? config.llmProvider;
       const provider =
-        typeof rawProvider === 'string' ? rawProvider.trim().toLowerCase() : '';
+        typeof rawProvider === 'string' && !/[\0\r\n]/.test(rawProvider)
+          ? rawProvider.trim().toLowerCase()
+          : '';
       const isCli =
         provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
       // CLI agents do not require a harness (plan Task 3)
-      // Treat empty / whitespace harnessId as missing (HarnessSelector can clear selection)
+      // Treat empty / whitespace / control-char harnessId as missing
       const harnessId =
-        typeof config.harnessId === 'string' ? config.harnessId.trim() : '';
+        typeof config.harnessId === 'string' && !/[\0\r\n]/.test(config.harnessId)
+          ? config.harnessId.trim()
+          : '';
       if (!isCli && !harnessId) {
         issues.push({
           code: 'missing_harness_id',
@@ -227,9 +240,9 @@ export function validateWorkflowDraft(input: {
       }
       // Non-CLI agents should pick a model (NodeConfig model select)
       const llmModel =
-        typeof config.llmModel === 'string'
+        typeof config.llmModel === 'string' && !/[\0\r\n]/.test(config.llmModel)
           ? config.llmModel.trim()
-          : typeof config.model === 'string'
+          : typeof config.model === 'string' && !/[\0\r\n]/.test(config.model)
             ? config.model.trim()
             : '';
       if (!isCli && !llmModel) {
@@ -292,7 +305,12 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'slack_message') {
-      if (typeof config.channel !== 'string' || config.channel.trim().length === 0) {
+      // Control-char channel → missing (check before trim)
+      const channel =
+        typeof config.channel === 'string' && !/[\0\r\n]/.test(config.channel)
+          ? config.channel.trim()
+          : '';
+      if (!channel) {
         issues.push({
           code: 'missing_slack_channel',
           severity: 'error',
@@ -354,10 +372,13 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'media') {
-      // Align with MediaNode: trim + lower-case so " Image " / " AUDIO " are valid
+      // Align with MediaNode: trim + lower-case so " Image " / " AUDIO " are valid.
+      // Control-char mediaType → invalid (not strip to image/audio).
       const mediaTypeRaw = config.mediaType;
       const mediaType =
-        typeof mediaTypeRaw === 'string' ? mediaTypeRaw.trim().toLowerCase() : mediaTypeRaw;
+        typeof mediaTypeRaw === 'string' && !/[\0\r\n]/.test(mediaTypeRaw)
+          ? mediaTypeRaw.trim().toLowerCase()
+          : mediaTypeRaw;
       if (
         mediaType !== undefined
         && mediaType !== null
@@ -449,9 +470,11 @@ export function validateWorkflowDraft(input: {
     }
 
     if (node.type === 'deploy') {
-      // Align with DeployNode: trim + lower-case; blank falls through to missing_deploy_provider
+      // Align with DeployNode: trim + lower-case; control-char provider → missing
       const provider =
-        typeof config.provider === 'string' ? config.provider.trim().toLowerCase() : config.provider;
+        typeof config.provider === 'string' && !/[\0\r\n]/.test(config.provider)
+          ? config.provider.trim().toLowerCase()
+          : config.provider;
       if (provider !== 'vercel' && provider !== 'cloudflare') {
         issues.push({
           code: 'missing_deploy_provider',
@@ -460,8 +483,11 @@ export function validateWorkflowDraft(input: {
           message: 'Deploy node requires provider (vercel or cloudflare).',
         });
       }
+      // Control-char projectName → blank (runtime rejects control names)
       const projectName =
-        typeof config.projectName === 'string' ? config.projectName.trim() : '';
+        typeof config.projectName === 'string' && !/[\0\r\n]/.test(config.projectName)
+          ? config.projectName.trim()
+          : '';
       if (!projectName) {
         issues.push({
           code: 'missing_deploy_project',
@@ -588,7 +614,9 @@ export function validateWorkflowDraft(input: {
   if (input.edges.length > 0) {
     const seenEdgeIds = new Set<string>();
     for (const edge of input.edges) {
-      const edgeId = typeof edge.id === 'string' ? edge.id.trim() : '';
+      // Control-char edge ids are invalid (check before trim)
+      const edgeId =
+        typeof edge.id === 'string' && !/[\0\r\n]/.test(edge.id) ? edge.id.trim() : '';
       if (!edgeId) {
         issues.push({
           code: 'missing_edge_id',

@@ -9,9 +9,32 @@ interface GenUIChoiceProps {
   onSelect: (value: string) => void;
 }
 
+function safeChoiceText(raw: unknown): string {
+  // Control-char labels/values dropped (check before trim)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  return raw.trim();
+}
+
+function safePreviewUrl(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const s = raw.trim();
+  if (!s || s.length > 2_048) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return s;
+  } catch {
+    return '';
+  }
+}
+
 export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
   const options = Array.isArray(schema?.options) ? schema.options : [];
-  const prompt = typeof schema?.prompt === 'string' ? schema.prompt.trim() : '';
+  // Null-byte prompt hidden; multi-line OK after collapse
+  let prompt = '';
+  if (typeof schema?.prompt === 'string' && !/\0/.test(schema.prompt)) {
+    prompt = schema.prompt.replace(/[\r\n]+/g, ' ').trim();
+  }
 
   if (options.length === 0) {
     return (
@@ -28,13 +51,12 @@ export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
       )}
       <div className="grid grid-cols-2 gap-2">
         {options.map((opt, i) => {
-          const label =
-            (typeof opt.label === 'string' ? opt.label.trim() : String(opt.label ?? '').trim())
-            || (typeof opt.value === 'string' ? opt.value.trim() : '');
-          const valueRaw = opt.value ?? opt.label;
-          const value =
-            typeof valueRaw === 'string' ? valueRaw.trim() : String(valueRaw ?? '').trim();
-          if (!value && !label) return null;
+          const label = safeChoiceText(opt.label) || safeChoiceText(opt.value);
+          // Prefer value; fall back to label only when value is absent/control-char
+          const value = safeChoiceText(opt.value) || safeChoiceText(opt.label);
+          // Skip options with no selectable value (control-char only)
+          if (!value) return null;
+          const previewUrl = safePreviewUrl(opt.previewUrl);
           return (
             <button
               key={i}
@@ -49,9 +71,9 @@ export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
                 backgroundColor: 'var(--bg-secondary)',
               }}
             >
-              {opt.previewUrl && typeof opt.previewUrl === 'string' && opt.previewUrl.trim() && (
+              {previewUrl && (
                 <img
-                  src={opt.previewUrl.trim()}
+                  src={previewUrl}
                   alt={label || value}
                   className="w-full h-24 object-cover rounded mb-2"
                 />
