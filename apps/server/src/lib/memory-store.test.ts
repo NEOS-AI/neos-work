@@ -88,6 +88,23 @@ describe('memory-store', () => {
     expect(m.type).toBe('user');
     expect(m.content).toBe('body');
     deleteMemory(m.id);
+
+    // Leading control-char type must not strip to a known type
+    const lead = createMemory({
+      name: NAME,
+      type: '\nsession' as never,
+      content: 'ctrl-type',
+    });
+    expect(lead.type).toBe('user');
+    deleteMemory(lead.id);
+
+    const nul = createMemory({
+      name: NAME,
+      type: 'skill\0' as never,
+      content: 'nul-type',
+    });
+    expect(nul.type).toBe('user');
+    deleteMemory(nul.id);
   });
 
   it('rejects oversized content/name control chars; caps export size', () => {

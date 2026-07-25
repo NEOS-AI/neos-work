@@ -454,4 +454,36 @@ describe('mcp routes', () => {
     expect(body.data.command).toBe('npx');
     expect(body.data.args).toEqual(['-y', 'fake']);
   });
+
+  it('oauth status and delete validate serverId and revoke tokens', async () => {
+    const blankStatus = await mcp.request('/oauth/%20/status');
+    expect(blankStatus.status).toBe(400);
+    expect(((await blankStatus.json()) as { error: string }).error).toMatch(/serverId/i);
+
+    const blankDelete = await mcp.request('/oauth/%20', { method: 'DELETE' });
+    expect(blankDelete.status).toBe(400);
+
+    // Control-char serverId must not strip to a valid id
+    const ctrlStatus = await mcp.request(`/oauth/${encodeURIComponent('\ns1')}/status`);
+    expect(ctrlStatus.status).toBe(400);
+    const ctrlDelete = await mcp.request(`/oauth/${encodeURIComponent('s1\n')}`, {
+      method: 'DELETE',
+    });
+    expect(ctrlDelete.status).toBe(400);
+
+    // Missing token → status ok with disconnected
+    const status = await mcp.request('/oauth/no-token-yet/status');
+    expect(status.status).toBe(200);
+    const statusBody = await status.json() as {
+      ok: boolean;
+      data: { connected: boolean };
+    };
+    expect(statusBody.ok).toBe(true);
+    expect(statusBody.data.connected).toBe(false);
+
+    // DELETE is idempotent when no token is stored
+    const del = await mcp.request('/oauth/no-token-yet', { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    expect(((await del.json()) as { ok: boolean }).ok).toBe(true);
+  });
 });

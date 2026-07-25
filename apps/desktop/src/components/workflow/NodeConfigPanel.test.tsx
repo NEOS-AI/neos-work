@@ -7,13 +7,20 @@ import { NodeConfigPanel } from './NodeConfigPanel.js';
 const listDesignSystems = vi.fn();
 const listBlocks = vi.fn();
 const listHarnesses = vi.fn();
+const getWebhookSecret = vi.fn();
+const regenerateWebhookSecret = vi.fn();
+const testWebhookFire = vi.fn();
 
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
+    serverUrl: 'http://127.0.0.1:57286',
     client: {
       listDesignSystems,
       listBlocks,
       listHarnesses,
+      getWebhookSecret,
+      regenerateWebhookSecret,
+      testWebhookFire,
     },
   }),
 }));
@@ -29,9 +36,24 @@ describe('NodeConfigPanel', () => {
     listDesignSystems.mockReset();
     listBlocks.mockReset();
     listHarnesses.mockReset();
+    getWebhookSecret.mockReset();
+    regenerateWebhookSecret.mockReset();
+    testWebhookFire.mockReset();
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     listBlocks.mockResolvedValue({ ok: true, data: [] });
     listHarnesses.mockResolvedValue({ ok: true, data: [] });
+    getWebhookSecret.mockResolvedValue({
+      ok: true,
+      data: {
+        secret: 'whsec_test_secret_value',
+        rateLimit: { limit: 60, remaining: 59, resetAt: Date.now() + 60_000 },
+      },
+    });
+    regenerateWebhookSecret.mockResolvedValue({
+      ok: true,
+      data: { secret: 'whsec_regenerated' },
+    });
+    testWebhookFire.mockResolvedValue({ ok: true, status: 200 });
   });
 
   it('shows empty-state copy and workflow validation when no node selected', async () => {
@@ -430,5 +452,68 @@ describe('NodeConfigPanel', () => {
     await waitFor(() => expect(listBlocks).toHaveBeenCalled());
     // Label and/or block-related UI should appear
     expect(screen.getByDisplayValue('Price')).toBeInTheDocument();
+  });
+
+  it('shows gate helper copy for parallel_end, or_gate, and output', () => {
+    for (const [nodeType, copy] of [
+      ['parallel_end', /Fan-in: waits for all upstream/i],
+      ['or_gate', /first completed upstream/i],
+      ['output', /no required settings/i],
+      ['gate_or', /no required settings/i],
+    ] as const) {
+      const node = {
+        id: `${nodeType}-1`,
+        type: nodeType,
+        position: { x: 0, y: 0 },
+        data: { nodeType, label: nodeType, config: {} },
+      } as unknown as Node;
+      const { unmount } = render(
+        <NodeConfigPanel selectedNode={node} validationIssues={[]} onPatchNodeData={() => {}} />,
+      );
+      expect(screen.getByText(copy)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('renders webhook section when no node selected under /workflows/:id', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    const prev = window.location.pathname;
+    window.history.pushState({}, '', '/workflows/wf-webhook-1');
+
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+
+    await waitFor(() => expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-1'));
+    expect(screen.getByText('Webhook')).toBeInTheDocument();
+    expect(screen.getByText(/POST http:\/\/127\.0\.0\.1:57286\/api\/webhook\/wf-webhook-1/)).toBeInTheDocument();
+    expect(screen.getByText(/Rate limit: 59\/60 remaining/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Copy URL' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(screen.getByText('URL copied')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show' }));
+    expect(screen.getByText('whsec_test_secret_value')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Test fire' }));
+    await waitFor(() => expect(testWebhookFire).toHaveBeenCalledWith('wf-webhook-1', { source: 'config-test-fire' }));
+    await waitFor(() => expect(screen.getByText(/Webhook fired/)).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await waitFor(() => {
+      expect(regenerateWebhookSecret).toHaveBeenCalledWith('wf-webhook-1');
+    });
+    // After regenerate, masked or full secret should still be present
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    expect(screen.getByText(/whsec_/)).toBeInTheDocument();
+
+    window.history.pushState({}, '', prev || '/');
   });
 });

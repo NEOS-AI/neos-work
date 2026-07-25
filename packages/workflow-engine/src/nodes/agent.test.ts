@@ -608,6 +608,31 @@ describe('AgentNode LLM model selection', () => {
     expect(opts?.model).toBe('from-settings');
   });
 
+  it('ignores leading control-char llmModel/llmProvider before trim', async () => {
+    const node = new AgentNode('agent_coding', {
+      // Leading \n must not strip to openai / panel-model
+      llmProvider: '\nopenai',
+      llmModel: '\npanel-model',
+      model: '\nlegacy-model',
+    });
+    await node.execute(
+      ctx({
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          OPENAI_API_KEY: 'sk-openai',
+          llmProvider: 'anthropic',
+          model: 'settings-model',
+        },
+      }),
+    );
+    expect(orchestratorCtor).toHaveBeenCalled();
+    const adapter = orchestratorCtor.mock.calls[0]?.[0] as { id?: string };
+    // Control-char llmProvider ignored → settings anthropic adapter
+    expect(adapter?.id).toBe('anthropic');
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { model?: string };
+    expect(opts?.model).toBe('settings-model');
+  });
+
   it('forwards text progress and returns done output', async () => {
     const onProgress = vi.fn();
     orchestratorRun.mockImplementation(async function* () {

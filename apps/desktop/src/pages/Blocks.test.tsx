@@ -185,4 +185,31 @@ describe('Blocks page', () => {
       expect((search as HTMLInputElement).value).toBe('');
     });
   });
+
+  it('edits a custom block via updateBlock and validates required name', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: blocks });
+    updateBlock.mockResolvedValue({ ok: true });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('Custom Block')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+    expect(screen.getByText('Edit Block')).toBeInTheDocument();
+
+    // Clear name → validation error, no API call
+    const nameInput = screen.getByDisplayValue('Custom Block') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(updateBlock).not.toHaveBeenCalled();
+
+    fireEvent.change(nameInput, { target: { value: 'Custom Block Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(updateBlock).toHaveBeenCalledWith(
+        'my_custom',
+        expect.objectContaining({ name: 'Custom Block Renamed' }),
+      );
+    });
+  });
 });

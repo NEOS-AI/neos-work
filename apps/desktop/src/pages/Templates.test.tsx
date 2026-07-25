@@ -128,4 +128,23 @@ describe('Templates page', () => {
       expect(navigate).toHaveBeenCalledWith('/workflows/wf-new');
     });
   });
+
+  it('shows no-match search and does not navigate when create fails', async () => {
+    const user = userEvent.setup();
+    getTemplates.mockResolvedValue({ ok: true, data: templates });
+    createWorkflow.mockResolvedValue({ ok: false, error: 'boom' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
+
+    await user.type(screen.getByPlaceholderText('Search templates…'), 'zzzz-none');
+    expect(screen.queryByText('Finance Brief')).not.toBeInTheDocument();
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+
+    await user.clear(screen.getByPlaceholderText('Search templates…'));
+    await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
+
+    await user.click(screen.getAllByRole('button', { name: 'Use Template' })[0]!);
+    await waitFor(() => expect(createWorkflow).toHaveBeenCalled());
+    expect(navigate).not.toHaveBeenCalled();
+  });
 });
