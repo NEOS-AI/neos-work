@@ -64,9 +64,13 @@ export function BlockParamForm(props: {
           const options = (param.options ?? [])
             .filter((option) => typeof option === 'string' && !/[\0\r\n]/.test(option) && option.trim())
             .map((option) => {
-              const v = option.trim();
-              return { value: v, label: v };
-            });
+              const v = option.trim().slice(0, 200);
+              // Scrub option labels for display (value stays raw trimmed token)
+              const lab =
+                scrubDisplayText(v, { collapseLines: true, maxChars: 200 }) || v;
+              return { value: v, label: lab };
+            })
+            .slice(0, 100);
           return (
             <SelectField
               key={key}

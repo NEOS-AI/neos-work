@@ -297,6 +297,34 @@ describe('Harnesses page', () => {
     expect(await screen.findByText('id already exists')).toBeInTheDocument();
   });
 
+  it('scrubs control chars from createHarness error banner', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: [] });
+    createHarness.mockRejectedValue(new Error(`id${'\n'}exists${'\0'}already`));
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('harness.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'harness.new' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('my_harness_id')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_harness_id'), { target: { value: 'dup_h2' } });
+    for (const input of screen.getAllByRole('textbox')) {
+      const el = input as HTMLInputElement | HTMLTextAreaElement;
+      if (el.placeholder === 'my_harness_id') continue;
+      if (el.tagName === 'TEXTAREA') {
+        fireEvent.change(el, { target: { value: 'A valid system prompt' } });
+      } else if (!el.value && el.placeholder !== 'web_search, read_file, ...') {
+        fireEvent.change(el, { target: { value: 'Dup Harness 2' } });
+      }
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
+    await waitFor(() => {
+      // null-byte stripped without inserting space; newline → space
+      expect(screen.getByText(/id existsalready/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('shows overflow tool count when more than four tools', async () => {
     listHarnesses.mockResolvedValue({
       ok: true,

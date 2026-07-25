@@ -83,15 +83,21 @@ const NODE_TYPES_LIST = [
 
 // ── Custom node component ─────────────────────────────────
 
-function WorkflowNodeComponent({ data }: { data: { label: string; nodeType: string; isRunning?: boolean; isDone?: boolean; isFailed?: boolean } }) {
+/** Canvas node chrome — exported for unit tests (label scrub). */
+export function WorkflowNodeComponent({ data }: { data: { label: string; nodeType: string; isRunning?: boolean; isDone?: boolean; isFailed?: boolean } }) {
   const color = NODE_COLORS[data.nodeType] ?? '#6b7280';
   const borderColor = data.isFailed ? '#ef4444' : data.isDone ? '#22c55e' : data.isRunning ? '#facc15' : color;
+  // Scrub hostile / multi-line labels for canvas chrome (fall back to node type)
+  const label =
+    scrubDisplayText(data.label, { collapseLines: true, maxChars: 80 })
+    || scrubDisplayText(data.nodeType, { collapseLines: true, maxChars: 40 })
+    || 'node';
   return (
     <div
       className="min-w-[130px] rounded-xl border-2 px-3 py-2 text-center text-xs font-medium text-white shadow-md"
       style={{ backgroundColor: color + 'cc', borderColor }}
     >
-      {data.label}
+      {label}
       {data.isRunning && <span className="ml-1 animate-pulse">⏳</span>}
       {data.isDone && <span className="ml-1">✓</span>}
       {data.isFailed && <span className="ml-1">✗</span>}
@@ -253,7 +259,12 @@ export function WorkflowEditor() {
   const nodeLabelMap = useMemo(() => {
     const map: Record<string, string> = {};
     for (const n of nodes) {
-      map[n.id] = String(n.data.label ?? n.id);
+      const id = String(n.id ?? '');
+      const raw = n.data.label ?? id;
+      map[id] =
+        scrubDisplayText(raw, { collapseLines: true, maxChars: 200 })
+        || scrubDisplayText(id, { collapseLines: true, maxChars: 80 })
+        || 'node';
     }
     return map;
   }, [nodes]);
@@ -337,9 +348,19 @@ export function WorkflowEditor() {
       if (pf.ok && pf.data && !pf.data.ok) {
         const errs = pf.data.issues.filter((i) => i.severity === 'error');
         if (errs.length > 0) {
-          const msg = errs.map((i) => `• ${i.message}`).join('\n');
+          const msg = errs
+            .slice(0, 20)
+            .map((i) => {
+              const line =
+                scrubDisplayText(i.message, { collapseLines: true, maxChars: 200 })
+                || scrubDisplayText(i.code, { collapseLines: true, maxChars: 80 })
+                || 'issue';
+              return `• ${line}`;
+            })
+            .join('\n');
+          const more = errs.length > 20 ? `\n…and ${errs.length - 20} more` : '';
           const proceed = window.confirm(
-            `Preflight found ${errs.length} issue(s):\n\n${msg}\n\nRun anyway?`,
+            `Preflight found ${errs.length} issue(s):\n\n${msg}${more}\n\nRun anyway?`,
           );
           if (!proceed) {
             showRightPanelTab('config');
@@ -578,15 +599,22 @@ export function WorkflowEditor() {
               window.alert('Preflight OK — ready to run.');
               return;
             }
-            const lines = issues.map((i) => {
+            const lines = issues.slice(0, 40).map((i) => {
               const sev = scrubDisplayText(i.severity, { collapseLines: true, maxChars: 20 }) || 'info';
-              const msg = scrubDisplayText(i.message, { collapseLines: true, maxChars: 300 }) || i.code || 'issue';
+              const msg =
+                scrubDisplayText(i.message, { collapseLines: true, maxChars: 300 })
+                || scrubDisplayText(i.code, { collapseLines: true, maxChars: 80 })
+                || 'issue';
               const nid = i.nodeId
                 ? scrubDisplayText(i.nodeId, { collapseLines: true, maxChars: 80 })
                 : '';
               return `[${sev}] ${msg}${nid ? ` (${nid})` : ''}`;
             });
-            window.alert(`${ok ? 'Preflight warnings' : 'Preflight blocked'}:\n\n${lines.join('\n')}`);
+            const more =
+              issues.length > 40 ? `\n…and ${issues.length - 40} more` : '';
+            window.alert(
+              `${ok ? 'Preflight warnings' : 'Preflight blocked'}:\n\n${lines.join('\n')}${more}`,
+            );
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { scrubDisplayText } from '../../lib/format-duration.js';
+
 interface FieldShellProps {
   label: string;
   description?: string;
@@ -7,17 +9,21 @@ interface FieldShellProps {
 }
 
 function FieldShell({ label, description, children }: FieldShellProps) {
+  const labelSafe = scrubDisplayText(label, { collapseLines: true, maxChars: 100 }) || label;
+  const descSafe = description
+    ? scrubDisplayText(description, { collapseLines: true, maxChars: 300 })
+    : '';
   return (
     <label className="block space-y-1.5">
       <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-        {label}
+        {labelSafe}
       </span>
       {children}
-      {description && (
+      {descSafe ? (
         <span className="block text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          {description}
+          {descSafe}
         </span>
-      )}
+      ) : null}
     </label>
   );
 }
@@ -38,6 +44,9 @@ export function TextField(props: {
   description?: string;
   placeholder?: string;
 }) {
+  const placeholder = props.placeholder
+    ? scrubDisplayText(props.placeholder, { collapseLines: true, maxChars: 200 }) || undefined
+    : undefined;
   return (
     <FieldShell label={props.label} description={props.description}>
       <input
@@ -45,7 +54,7 @@ export function TextField(props: {
         style={inputStyle}
         value={props.value}
         disabled={props.disabled}
-        placeholder={props.placeholder}
+        placeholder={placeholder}
         onChange={(event) => props.onChange(event.target.value)}
       />
     </FieldShell>
@@ -61,6 +70,9 @@ export function TextAreaField(props: {
   placeholder?: string;
   rows?: number;
 }) {
+  const placeholder = props.placeholder
+    ? scrubDisplayText(props.placeholder, { collapseLines: true, maxChars: 200 }) || undefined
+    : undefined;
   return (
     <FieldShell label={props.label} description={props.description}>
       <textarea
@@ -69,7 +81,7 @@ export function TextAreaField(props: {
         value={props.value}
         rows={props.rows ?? 3}
         disabled={props.disabled}
-        placeholder={props.placeholder}
+        placeholder={placeholder}
         onChange={(event) => props.onChange(event.target.value)}
       />
     </FieldShell>
@@ -109,6 +121,16 @@ export function SelectField(props: {
   disabled?: boolean;
   description?: string;
 }) {
+  const options = props.options
+    .map((option) => {
+      // Drop control-char option values; scrub labels for display
+      if (typeof option.value !== 'string' || /[\0\r\n]/.test(option.value)) return null;
+      const value = option.value;
+      const label =
+        scrubDisplayText(option.label, { collapseLines: true, maxChars: 200 }) || value;
+      return { value, label };
+    })
+    .filter((o): o is { value: string; label: string } => o != null);
   return (
     <FieldShell label={props.label} description={props.description}>
       <select
@@ -118,7 +140,7 @@ export function SelectField(props: {
         disabled={props.disabled}
         onChange={(event) => props.onChange(event.target.value)}
       >
-        {props.options.map((option) => (
+        {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
@@ -135,6 +157,10 @@ export function CheckboxField(props: {
   disabled?: boolean;
   description?: string;
 }) {
+  const labelSafe = scrubDisplayText(props.label, { collapseLines: true, maxChars: 100 }) || props.label;
+  const descSafe = props.description
+    ? scrubDisplayText(props.description, { collapseLines: true, maxChars: 300 })
+    : '';
   return (
     <label className="flex items-start gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
       <input
@@ -145,12 +171,12 @@ export function CheckboxField(props: {
         onChange={(event) => props.onChange(event.target.checked)}
       />
       <span>
-        <span className="block font-medium">{props.label}</span>
-        {props.description && (
+        <span className="block font-medium">{labelSafe}</span>
+        {descSafe ? (
           <span className="block text-[11px]" style={{ color: 'var(--text-muted)' }}>
-            {props.description}
+            {descSafe}
           </span>
-        )}
+        ) : null}
       </span>
     </label>
   );

@@ -73,7 +73,8 @@ function MemoryModal({ item, onSave, onClose }: MemoryModalProps) {
     try {
       await onSave({ name: name.trim(), type, content: content.trim() });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      const msg = e instanceof Error ? e.message : 'Save failed';
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -110,7 +111,7 @@ function MemoryModal({ item, onSave, onClose }: MemoryModalProps) {
         <div className="flex flex-col gap-3 p-5">
           {error && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-              {error}
+              {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
             </div>
           )}
 

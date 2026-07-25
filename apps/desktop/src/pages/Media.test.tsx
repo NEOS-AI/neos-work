@@ -230,4 +230,13 @@ describe('Media page', () => {
       expect(screen.queryByText('clean.txt')).not.toBeInTheDocument();
     });
   });
+
+  it('scrubs control chars from load error banner', async () => {
+    listMediaFiles.mockResolvedValue({ ok: false, error: `load${'\n'}failed${'\0'}` });
+    render(<Media />);
+    await waitFor(() => {
+      expect(screen.getByText(/load failed/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

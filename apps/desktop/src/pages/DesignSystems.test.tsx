@@ -230,4 +230,19 @@ describe('DesignSystems page', () => {
     expect(screen.getByText(/desc line/)).toBeInTheDocument();
   });
 
+  it('scrubs control chars from create error banner', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: [] });
+    createDesignSystem.mockResolvedValue({ ok: false, error: `invalid${'\n'}name${'\0'}` });
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
+    fireEvent.change(screen.getByPlaceholderText('my-design-system'), { target: { value: 'ok-name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(screen.getByText(/invalid name/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

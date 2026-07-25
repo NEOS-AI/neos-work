@@ -329,7 +329,8 @@ function HarnessModal({
       }
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed');
       setSaving(false);
     }
   };
@@ -418,7 +419,11 @@ function HarnessModal({
             </p>
           </ModalField>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && (
+            <p className="text-xs text-red-400">
+              {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
+            </p>
+          )}
         </div>
 
         <div className="mt-5 flex justify-end gap-2">

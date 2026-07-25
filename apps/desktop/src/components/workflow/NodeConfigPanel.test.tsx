@@ -805,4 +805,29 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByText(/badmsg line/)).toBeInTheDocument();
   });
 
+  it('falls back to issue code when message scrubs empty', () => {
+    const node = {
+      id: 't1',
+      type: 'trigger',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'trigger', label: 'Start', config: {} },
+    } as unknown as import('@xyflow/react').Node;
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[
+          {
+            code: 'MISSING_TRIGGER',
+            severity: 'error',
+            nodeId: 't1',
+            message: String.fromCharCode(0) + String.fromCharCode(10) + String.fromCharCode(13),
+          },
+        ]}
+        onPatchNodeData={() => {}}
+      />,
+    );
+    expect(screen.getByText('MISSING_TRIGGER')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

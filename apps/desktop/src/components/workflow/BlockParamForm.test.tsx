@@ -171,4 +171,21 @@ describe('BlockParamForm', () => {
     expect(screen.getByText('Query X')).toBeInTheDocument();
   });
 
+  it('scrubs control-char param descriptions and falls back label to key', () => {
+    const block = makeBlock([
+      {
+        key: 'timeout',
+        type: 'number',
+        // Control-only label → falls back to key
+        label: String.fromCharCode(0) + String.fromCharCode(10),
+        description: 'ms' + String.fromCharCode(10) + 'limit' + String.fromCharCode(0) + '!',
+      },
+    ]);
+    render(<BlockParamForm block={block} value={{}} onChange={() => {}} />);
+    expect(screen.getByText('timeout')).toBeInTheDocument();
+    // description: LF collapsed to space; null-byte stripped
+    expect(screen.getByText('ms limit!')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

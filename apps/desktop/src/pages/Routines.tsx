@@ -148,7 +148,10 @@ export function Routines() {
     if (!client) return;
     const res = await client.runRoutineNow(id);
     if (res.ok) {
-      alert(`Triggered! runId: ${res.data?.runId?.slice(0, 8)}`);
+      const runId =
+        scrubDisplayText(res.data?.runId, { collapseLines: true, maxChars: 64 }).slice(0, 8)
+        || '—';
+      alert(`Triggered! runId: ${runId}`);
       await load();
       if (selectedId === id) {
         const runsRes = await client.listRoutineRuns(id);
@@ -166,9 +169,18 @@ export function Routines() {
     if (!confirm('Save this successful run as a skill candidate?')) return;
     const res = await client.crystallizeRoutineRun(selectedId, run.id);
     if (res.ok && res.data) {
-      alert(`Crystallized skill: ${res.data.name}\n${res.data.path}`);
+      const name =
+        scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'skill';
+      const path =
+        scrubDisplayText(res.data.path, { collapseLines: true, maxChars: 300 }) || '';
+      alert(`Crystallized skill: ${name}${path ? `\n${path}` : ''}`);
     } else {
-      alert((res as { error?: string }).error ?? 'Crystallize failed');
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Crystallize failed';
+      alert(err);
     }
   };
 

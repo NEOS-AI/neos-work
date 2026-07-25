@@ -540,9 +540,18 @@ function ValidationList({ issues }: { issues: WorkflowValidationIssue[] }) {
 
   return (
     <div className="space-y-1">
-      {issues.map((issue, index) => (
+      {issues.slice(0, 50).map((issue, index) => {
+        const codeSafe =
+          scrubDisplayText(issue.code, { collapseLines: true, maxChars: 80 }) || 'issue';
+        const msgSafe =
+          scrubDisplayText(issue.message, { collapseLines: true, maxChars: 500 }) || codeSafe;
+        const keyId = scrubDisplayText(issue.nodeId ?? issue.edgeId ?? '', {
+          collapseLines: true,
+          maxChars: 80,
+        });
+        return (
         <div
-          key={`${issue.code}-${issue.nodeId ?? issue.edgeId ?? index}`}
+          key={`${codeSafe}-${keyId || index}`}
           className="rounded-md border px-2 py-1.5 text-[11px]"
           style={{
             borderColor: issue.severity === 'error' ? '#ef4444' : '#f59e0b',
@@ -550,9 +559,10 @@ function ValidationList({ issues }: { issues: WorkflowValidationIssue[] }) {
             backgroundColor: issue.severity === 'error' ? '#450a0a33' : '#451a0333',
           }}
         >
-          {scrubDisplayText(issue.message, { collapseLines: true, maxChars: 500 }) || issue.code}
+          {msgSafe}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

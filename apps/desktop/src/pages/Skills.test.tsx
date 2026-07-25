@@ -334,4 +334,33 @@ describe('Skills page', () => {
     expect(screen.queryByText('Evil Skill')).not.toBeInTheDocument();
     expect(screen.queryByText('Alpha Skill')).not.toBeInTheDocument();
   });
+
+  it('scrubs control chars from scan failure and upgrade alert messages', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    scanSkills.mockResolvedValue({ ok: false, error: `disk${'\n'}full${'\0'}!` });
+    upgradeSkillToPlugin.mockResolvedValue({
+      ok: false,
+      error: `upgrade${'\0'}denied\nnow`,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Scan/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Scan/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Scan failed: disk full!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle(/open-design\.json|Plugin/i)[0]!);
+    await waitFor(() => expect(upgradeSkillToPlugin).toHaveBeenCalled());
+    expect(alertSpy).toHaveBeenCalled();
+    const msg = String(alertSpy.mock.calls.at(-1)?.[0] ?? '');
+    // null-byte stripped (no space inserted); newlines collapsed to spaces
+    expect(msg).toBe('upgradedenied now');
+    expect(msg).not.toContain('\0');
+  });
 });

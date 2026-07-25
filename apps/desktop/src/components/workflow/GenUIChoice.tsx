@@ -31,12 +31,29 @@ function safePreviewUrl(raw: unknown): string {
 }
 
 export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
-  const options = Array.isArray(schema?.options) ? schema.options : [];
+  const rawOptions = Array.isArray(schema?.options) ? schema.options : [];
   // Null-byte prompt hidden; multi-line collapsed; length capped
   let prompt = '';
   if (typeof schema?.prompt === 'string' && !/\0/.test(schema.prompt)) {
     prompt = schema.prompt.replace(/[\r\n]+/g, ' ').trim().slice(0, 500);
   }
+
+  // Normalize options first so control-only lists show empty state
+  const CHOICE_MAX = 50;
+  const options = rawOptions
+    .map((opt, i) => {
+      const label = safeChoiceText(opt.label) || safeChoiceText(opt.value);
+      const value = safeChoiceText(opt.value) || safeChoiceText(opt.label);
+      if (!value) return null;
+      return {
+        key: `${i}:${value}`,
+        label: label || value,
+        value,
+        previewUrl: safePreviewUrl(opt.previewUrl),
+      };
+    })
+    .filter((o): o is { key: string; label: string; value: string; previewUrl: string } => o != null)
+    .slice(0, CHOICE_MAX);
 
   if (options.length === 0) {
     return (
@@ -52,40 +69,29 @@ export function GenUIChoice({ schema, onSelect }: GenUIChoiceProps) {
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{prompt}</p>
       )}
       <div className="grid grid-cols-2 gap-2">
-        {options.map((opt, i) => {
-          const label = safeChoiceText(opt.label) || safeChoiceText(opt.value);
-          // Prefer value; fall back to label only when value is absent/control-char
-          const value = safeChoiceText(opt.value) || safeChoiceText(opt.label);
-          // Skip options with no selectable value (control-char only)
-          if (!value) return null;
-          const previewUrl = safePreviewUrl(opt.previewUrl);
-          return (
+        {options.map((opt) => (
             <button
-              key={i}
+              key={opt.key}
               type="button"
-              onClick={() => {
-                if (value) onSelect(value);
-              }}
-              disabled={!value}
-              className="rounded-lg border p-3 text-left transition-colors hover:border-blue-500 disabled:opacity-50"
+              onClick={() => onSelect(opt.value)}
+              className="rounded-lg border p-3 text-left transition-colors hover:border-blue-500"
               style={{
                 borderColor: 'var(--border-primary)',
                 backgroundColor: 'var(--bg-secondary)',
               }}
             >
-              {previewUrl && (
+              {opt.previewUrl && (
                 <img
-                  src={previewUrl}
-                  alt={label || value}
+                  src={opt.previewUrl}
+                  alt={opt.label}
                   className="w-full h-24 object-cover rounded mb-2"
                 />
               )}
               <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                {label || value}
+                {opt.label}
               </span>
             </button>
-          );
-        })}
+        ))}
       </div>
     </div>
   );

@@ -46,7 +46,14 @@ export function Media() {
     setError(null);
     const res = await client.listMediaFiles(200);
     if (res.ok && res.data) setFiles(res.data);
-    else setError((res as { error?: string }).error ?? 'Failed to load media');
+    else {
+      setError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Failed to load media',
+      );
+    }
     setLoading(false);
   }, [client]);
 
@@ -77,7 +84,12 @@ export function Media() {
       // Clear selection only; blob effect cleanup revokes the object URL
       if (selected?.filename === filename) setSelected(null);
     } else {
-      setError((res as { error?: string }).error ?? 'Delete failed');
+      setError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed',
+      );
     }
   };
 
@@ -97,7 +109,10 @@ export function Media() {
       } catch (err) {
         if (!cancelled) {
           setBlobUrl(null);
-          setError(err instanceof Error ? err.message : 'Preview failed');
+          const msg = err instanceof Error ? err.message : 'Preview failed';
+          setError(
+            scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Preview failed',
+          );
         }
       }
     })();
@@ -143,7 +158,11 @@ export function Media() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
+        </p>
+      )}
 
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1">

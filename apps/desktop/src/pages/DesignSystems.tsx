@@ -77,7 +77,10 @@ export function DesignSystems() {
       setNewDescription('');
       setIsCreating(false);
     } else {
-      setCreateError(res.error ?? 'Failed to create design system');
+      setCreateError(
+        scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+          || 'Failed to create design system',
+      );
     }
   };
 
@@ -126,7 +129,9 @@ export function DesignSystems() {
         <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
           <h2 className="text-base font-semibold text-white">New Design System</h2>
           {createError && (
-            <p className="text-sm text-red-400">{createError}</p>
+            <p className="text-sm text-red-400">
+              {scrubDisplayText(createError, { collapseLines: true, maxChars: 300 }) || createError}
+            </p>
           )}
           <div className="space-y-3">
             <div>

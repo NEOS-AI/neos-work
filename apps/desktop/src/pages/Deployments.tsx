@@ -88,7 +88,14 @@ export function Deployments() {
       client.listWorkflows(),
     ]);
     if (dRes.ok && dRes.data) setDeployments(dRes.data);
-    else setError((dRes as { error?: string }).error ?? 'Failed to load deployments');
+    else {
+      setError(
+        scrubDisplayText((dRes as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Failed to load deployments',
+      );
+    }
     if (wRes.ok && wRes.data) {
       const map: Record<string, Workflow> = {};
       for (const w of wRes.data) map[w.id] = w;
@@ -136,7 +143,12 @@ export function Deployments() {
     if (res.ok && res.data) {
       setDeployments((prev) => prev.map((d) => (d.id === id ? res.data! : d)));
     } else {
-      setError((res as { error?: string }).error ?? 'Status refresh failed');
+      setError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Status refresh failed',
+      );
     }
   };
 
@@ -259,7 +271,9 @@ export function Deployments() {
       </div>
 
       {error && (
-        <p className="text-sm text-red-400">{error}</p>
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
+        </p>
       )}
 
       {loading ? (

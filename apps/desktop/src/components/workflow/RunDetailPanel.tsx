@@ -103,7 +103,11 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
       </div>
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>Loading…</p>}
-      {error && <p className="text-red-400">{error}</p>}
+      {error && (
+        <p className="text-red-400">
+          {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
+        </p>
+      )}
 
       {!loading && !error && nodeResults.length === 0 && (
         <p style={{ color: 'var(--text-muted)' }}>No node results recorded.</p>

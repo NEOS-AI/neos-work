@@ -114,4 +114,45 @@ describe('form fields', () => {
     await user.click(screen.getByRole('checkbox'));
     expect(onCheck).not.toHaveBeenCalled();
   });
+
+  it('scrubs control-char labels, descriptions, placeholders, and select options', () => {
+    render(
+      <>
+        <TextField
+          label={`Name${'\0'}X`}
+          value=""
+          onChange={() => {}}
+          description={`help${'\n'}text`}
+          placeholder={`type${'\0'}here`}
+        />
+        <SelectField
+          label={`Mode${'\n'}Y`}
+          value="a"
+          onChange={() => {}}
+          options={[
+            { value: 'a', label: `Alpha${'\0'}` },
+            { value: `bad${'\n'}key`, label: 'Evil' },
+            { value: 'b', label: 'Beta' },
+          ]}
+        />
+        <CheckboxField
+          label={`Enable${'\0'}`}
+          value={false}
+          onChange={() => {}}
+          description={`flag${'\n'}line`}
+        />
+      </>,
+    );
+
+    expect(screen.getByText('NameX')).toBeInTheDocument();
+    expect(screen.getByText(/help text/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('typehere')).toBeInTheDocument();
+    expect(screen.getByText(/Mode Y/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Alpha' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Beta' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Evil' })).not.toBeInTheDocument();
+    expect(screen.getByText('Enable')).toBeInTheDocument();
+    expect(screen.getByText(/flag line/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

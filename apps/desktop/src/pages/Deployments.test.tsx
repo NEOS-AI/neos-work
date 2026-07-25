@@ -375,4 +375,15 @@ describe('Deployments page', () => {
     expect(table.textContent).not.toContain('\0');
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('scrubs control chars from load error banner', async () => {
+    listDeployments.mockResolvedValue({ ok: false, error: `deploy${'\n'}api${'\0'}down` });
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => {
+      // newline → space; null-byte stripped without inserting space
+      expect(screen.getByText(/deploy apidown/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

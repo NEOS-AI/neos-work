@@ -116,7 +116,7 @@ vi.mock('../lib/layout.js', () => ({
   autoLayout: (nodes: unknown[]) => nodes,
 }));
 
-const { WorkflowEditor } = await import('./WorkflowEditor.js');
+const { WorkflowEditor, WorkflowNodeComponent } = await import('./WorkflowEditor.js');
 
 const sampleWorkflow = {
   id: 'wf-1',
@@ -181,6 +181,23 @@ describe('WorkflowEditor page', () => {
     expect(screen.getByText('Finance Agent')).toBeInTheDocument();
     expect(screen.getByText('common.save')).toBeInTheDocument();
     expect(getWorkflow).toHaveBeenCalledWith('wf-1');
+  });
+
+  it('scrubs control-char canvas node labels', () => {
+    const { container, unmount } = render(
+      <WorkflowNodeComponent
+        data={{ label: `Start${'\0'}Node\nX`, nodeType: 'trigger' }}
+      />,
+    );
+    expect(container.textContent).toMatch(/StartNode X/);
+    expect(container.textContent).not.toContain('\0');
+    unmount();
+
+    // Empty-after-scrub falls back to node type
+    const { container: c2 } = render(
+      <WorkflowNodeComponent data={{ label: `\0\n`, nodeType: 'output' }} />,
+    );
+    expect(c2.textContent).toMatch(/output/);
   });
 
   it('navigates back to workflows', async () => {
@@ -419,6 +436,84 @@ describe('WorkflowEditor page', () => {
     await waitFor(() => {
       expect(window.alert).toHaveBeenCalledWith('preflight down');
     });
+  });
+
+  it('scrubs control-char preflight API errors and issue fields', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    // API-level failure with control chars → scrubbed alert; empty scrub → fallback
+    preflightWorkflow.mockResolvedValueOnce({
+      ok: false,
+      error: 'down' + String.fromCharCode(0) + 'err' + String.fromCharCode(10) + 'next',
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('downerr next');
+    });
+
+    preflightWorkflow.mockResolvedValueOnce({
+      ok: false,
+      error: String.fromCharCode(0) + String.fromCharCode(10),
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Preflight failed');
+    });
+
+    // Issue severity / message / nodeId scrubbed in blocked alert
+    preflightWorkflow.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        ok: false,
+        issues: [
+          {
+            severity: 'err' + String.fromCharCode(0) + 'or',
+            message: 'Missing' + String.fromCharCode(10) + 'trigger',
+            nodeId: 'n' + String.fromCharCode(0) + '1',
+            code: 'NO_TRIGGER',
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      const calls = (window.alert as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+      const blocked = calls.find((c) => c.includes('Preflight blocked'));
+      expect(blocked).toBeTruthy();
+      expect(blocked).toContain('[error]');
+      expect(blocked).toContain('Missing trigger');
+      expect(blocked).toContain('(n1)');
+      expect(blocked).not.toContain('\0');
+    });
+  });
+
+  it('scrubs control-char schedule create failure errors', async () => {
+    createRoutine.mockResolvedValueOnce({
+      ok: false,
+      error: 'bad' + String.fromCharCode(0) + 'cron' + String.fromCharCode(10) + 'x',
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Schedule/i }));
+    await waitFor(() => expect(screen.getByText('Create routine')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('badcron x');
+    });
+
+    // Empty-after-scrub falls back
+    createRoutine.mockResolvedValueOnce({
+      ok: false,
+      error: String.fromCharCode(0) + String.fromCharCode(13),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Failed to create routine');
+    });
+    expect(screen.getByText('Schedule this workflow')).toBeInTheDocument();
   });
 
   it('cancels run dialog without invoking runWorkflow', async () => {

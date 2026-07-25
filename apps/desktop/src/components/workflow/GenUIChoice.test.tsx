@@ -27,6 +27,22 @@ describe('GenUIChoice', () => {
     expect(screen.getByText(/No choices available/i)).toBeInTheDocument();
   });
 
+  it('shows empty state when all options are control-char only', () => {
+    render(
+      <GenUIChoice
+        schema={{
+          options: [
+            { label: 'bad\nlabel', value: 'bad\nval' },
+            { label: `x${'\0'}y`, value: `a${'\0'}b` },
+          ],
+        }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText(/No choices available/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
   it('calls onSelect with value or label', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
@@ -159,6 +175,37 @@ describe('GenUIChoice', () => {
     );
     const shown = screen.getByRole('button').textContent ?? '';
     expect(shown.length).toBeLessThanOrEqual(200);
+  });
+
+  it('caps prompt length after multi-line collapse and caps overlong values on select', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const longPrompt = ('line\n'.repeat(40) + 'tail').repeat(2); // multi-line, >500 after collapse
+    const longValue = 'v'.repeat(250);
+    render(
+      <GenUIChoice
+        schema={{
+          prompt: longPrompt,
+          options: [{ label: 'Pick', value: longValue }],
+        }}
+        onSelect={onSelect}
+      />,
+    );
+    // Prompt collapsed + capped at 500
+    const body = document.body.textContent ?? '';
+    expect(body).not.toContain('\nline\n');
+    // The prompt paragraph itself is capped
+    const promptEl = screen.getByText((_, el) => {
+      if (!el || el.tagName !== 'P') return false;
+      const t = el.textContent ?? '';
+      return t.includes('line') && t.includes('tail') && t.length <= 500;
+    });
+    expect(promptEl).toBeTruthy();
+    expect((promptEl.textContent ?? '').length).toBeLessThanOrEqual(500);
+
+    await user.click(screen.getByRole('button', { name: 'Pick' }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect.mock.calls[0]![0]).toHaveLength(200);
   });
 
 });

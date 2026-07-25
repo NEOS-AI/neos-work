@@ -72,7 +72,9 @@ export function Skills() {
         setScanResult(`Scanned ${res.data.scanned} skills (${res.data.total} total)`);
         await loadSkills();
       } else {
-        setScanResult('Scan failed: ' + (res.error ?? 'unknown error'));
+        const detail =
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown error';
+        setScanResult('Scan failed: ' + detail);
       }
     } finally {
       setIsScanning(false);
@@ -97,9 +99,16 @@ export function Skills() {
     if (!confirm('Create open-design.json plugin sidecar for this skill?')) return;
     const res = await client.upgradeSkillToPlugin(id);
     if (res.ok && res.data) {
-      alert(`Upgraded to plugin: ${res.data.name}\nOpen the Plugins page to run it.`);
+      const name =
+        scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'plugin';
+      alert(`Upgraded to plugin: ${name}\nOpen the Plugins page to run it.`);
     } else {
-      alert((res as { error?: string }).error ?? 'Upgrade failed');
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Upgrade failed';
+      alert(err);
     }
   };
 
@@ -197,7 +206,9 @@ export function Skills() {
       </div>
 
       {scanResult && (
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{scanResult}</p>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {scrubDisplayText(scanResult, { collapseLines: true, maxChars: 300 }) || scanResult}
+        </p>
       )}
 
       {/* Skill directories info */}

@@ -170,7 +170,12 @@ export function Workflows() {
       if (res.ok && res.data) {
         navigate(`/workflows/${res.data.id}`);
       } else {
-        alert((res as { error?: string }).error ?? 'ZIP import failed');
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'ZIP import failed';
+        alert(err);
       }
     } catch {
       alert('ZIP import failed');
@@ -187,7 +192,12 @@ export function Workflows() {
       if (res.ok && res.data) {
         navigate(`/workflows/${res.data.id}`);
       } else {
-        alert((res as { error?: string }).error ?? 'Claude Design import failed');
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Claude Design import failed';
+        alert(err);
       }
     } catch {
       alert('Claude Design import failed');
