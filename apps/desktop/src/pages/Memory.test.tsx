@@ -286,4 +286,26 @@ describe('Memory page', () => {
     expect(screen.getByText(/line2z/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('scrubs control-char save error messages in modal', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    createMemory.mockRejectedValue(
+      new Error('save' + String.fromCharCode(0) + 'fail' + String.fromCharCode(10) + 'ed'),
+    );
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ memory\.new/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('My context')).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText('My context'), { target: { value: 'Ok Name' } });
+    fireEvent.change(screen.getByPlaceholderText('Markdown content...'), {
+      target: { value: 'Ok content' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('savefail ed')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

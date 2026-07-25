@@ -412,6 +412,65 @@ describe('Routines page', () => {
     });
   });
 
+  it('scrubs control-char runId / crystallize name+path / error alerts', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    runRoutineNow.mockResolvedValue({
+      ok: true,
+      data: { runId: 'ab' + String.fromCharCode(0) + 'cd' + String.fromCharCode(10) + 'efghijkl' },
+    });
+    crystallizeRoutineRun
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          name: 'sk' + String.fromCharCode(0) + 'ill' + String.fromCharCode(10) + 'x',
+          path: '/p' + String.fromCharCode(0) + 'ath',
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: 'disk' + String.fromCharCode(0) + 'full' + String.fromCharCode(10) + 'now',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        error: String.fromCharCode(0) + String.fromCharCode(10),
+      });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Run Now' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '▶ Run Now' }));
+    await waitFor(() => {
+      // scrubbed runId collapsed then sliced to 8
+      expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/Triggered! runId: abcd ef/));
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith(
+        expect.stringMatching(/Crystallized skill: skill x[\s\S]*\/path/),
+      );
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('diskfull now');
+    });
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Crystallize failed');
+    });
+  });
+
   it('cancels crystallize when confirm is false', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });

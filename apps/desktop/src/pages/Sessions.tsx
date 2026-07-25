@@ -511,10 +511,13 @@ function ChatArea({
             ),
           );
         } else if (chunk.type === 'error') {
+          const errDetail =
+            scrubDisplayText(chunk.content, { collapseLines: true, maxChars: 2_000 })
+            || 'unknown error';
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
-                ? { ...m, content: m.content || `Error: ${chunk.content}` }
+                ? { ...m, content: m.content || `Error: ${errDetail}` }
                 : m,
             ),
           );
@@ -538,10 +541,13 @@ function ChatArea({
       onSessionUpdate();
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
+        const errDetail =
+          scrubDisplayText((error as Error).message, { collapseLines: true, maxChars: 2_000 })
+          || 'request failed';
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: m.content || `Error: ${(error as Error).message}`, isStreaming: false }
+              ? { ...m, content: m.content || `Error: ${errDetail}`, isStreaming: false }
               : m,
           ),
         );
@@ -640,9 +646,12 @@ function ChatArea({
             prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk.content } : m)),
           );
         } else if (chunk.type === 'error') {
+          const errDetail =
+            scrubDisplayText(chunk.error, { collapseLines: true, maxChars: 2_000 })
+            || 'unknown error';
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === assistantId ? { ...m, content: m.content || `Error: ${chunk.error}` } : m,
+              m.id === assistantId ? { ...m, content: m.content || `Error: ${errDetail}` } : m,
             ),
           );
         }
@@ -652,10 +661,13 @@ function ChatArea({
       onSessionUpdate();
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
+        const errDetail =
+          scrubDisplayText((error as Error).message, { collapseLines: true, maxChars: 2_000 })
+          || 'request failed';
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: m.content || `Error: ${(error as Error).message}`, isStreaming: false }
+              ? { ...m, content: m.content || `Error: ${errDetail}`, isStreaming: false }
               : m,
           ),
         );
@@ -733,7 +745,9 @@ function ChatArea({
                   {msg.role === 'assistant' ? (
                     <MarkdownContent content={msg.content || '...'} isStreaming={msg.isStreaming} />
                   ) : (
-                    <p className="whitespace-pre-wrap">{msg.content || '...'}</p>
+                    <p className="whitespace-pre-wrap">
+                      {scrubDisplayText(msg.content, { maxChars: 50_000 }) || '...'}
+                    </p>
                   )}
                 </div>
               )}
@@ -815,8 +829,10 @@ const MarkdownContent = memo(function MarkdownContent({
   content: string;
   isStreaming?: boolean;
 }) {
+  // Strip null bytes from streamed / stored assistant content (multi-line OK)
+  const safe = scrubDisplayText(content, { maxChars: 200_000 });
   if (isStreaming) {
-    return <pre className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: 'inherit' }}>{content}</pre>;
+    return <pre className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: 'inherit' }}>{safe}</pre>;
   }
   return (
     <div className="markdown-content">
@@ -827,7 +843,7 @@ const MarkdownContent = memo(function MarkdownContent({
           code: CodeBlock,
         }}
       >
-        {content}
+        {safe}
       </ReactMarkdown>
     </div>
   );
@@ -878,6 +894,7 @@ function ThinkingBlock({
   isStreaming?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(true);
+  const safe = scrubDisplayText(content, { maxChars: 50_000 });
 
   // Auto-collapse when streaming ends
   useEffect(() => {
@@ -915,7 +932,7 @@ function ThinkingBlock({
       </button>
       {isOpen && (
         <div className="border-t px-3 py-2 text-xs leading-relaxed" style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}>
-          <MarkdownContent content={content} />
+          <MarkdownContent content={safe} />
         </div>
       )}
     </div>

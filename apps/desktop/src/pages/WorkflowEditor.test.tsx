@@ -581,6 +581,46 @@ describe('WorkflowEditor page', () => {
     await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
   });
 
+  it('scrubs control-char soft preflight confirm messages and code fallback', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    runWorkflow.mockClear();
+
+    preflightWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ok: false,
+        issues: [
+          {
+            severity: 'error',
+            message: 'Missing' + String.fromCharCode(10) + 'trigger' + String.fromCharCode(0),
+            nodeId: 'n1',
+            code: 'NO_TRIGGER',
+          },
+          {
+            severity: 'error',
+            // Empty-after-scrub message → code fallback
+            message: String.fromCharCode(0) + String.fromCharCode(10),
+            code: 'EMPTY_MSG_CODE',
+          },
+        ],
+      },
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+
+    const msg = String(confirmSpy.mock.calls[0]![0]);
+    expect(msg).toMatch(/Preflight found 2 issue/);
+    expect(msg).toContain('Missing trigger');
+    expect(msg).toContain('EMPTY_MSG_CODE');
+    expect(msg).not.toContain('\0');
+    expect(runWorkflow).not.toHaveBeenCalled();
+  });
+
   it('shows stop control while running and stops on click', async () => {
     let stopFn = vi.fn();
     runWorkflow.mockImplementation(() => stopFn);

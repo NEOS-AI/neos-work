@@ -208,4 +208,26 @@ describe('GenUIChoice', () => {
     expect(onSelect.mock.calls[0]![0]).toHaveLength(200);
   });
 
+  it('shows empty state for control-only options and caps at 50 choices', () => {
+    render(
+      <GenUIChoice
+        schema={{
+          options: [
+            { label: 'bad\nlabel', value: 'bad\nval' },
+            { label: String.fromCharCode(0), value: String.fromCharCode(10) },
+          ],
+        }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText(/No choices available/i)).toBeInTheDocument();
+
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      label: `Choice ${i}`,
+      value: `v${i}`,
+    }));
+    render(<GenUIChoice schema={{ options: many }} onSelect={() => {}} />);
+    expect(screen.getAllByRole('button')).toHaveLength(50);
+  });
+
 });

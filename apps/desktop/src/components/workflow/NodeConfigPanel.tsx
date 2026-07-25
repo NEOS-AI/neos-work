@@ -504,10 +504,26 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                 typeof config.projectName === 'string' ? config.projectName : undefined,
               );
               if (res.ok && res.data) {
-                const lines = res.data.checks.map((ch) => `${ch.ok ? '✓' : '✗'} ${ch.message}`).join('\n');
-                alert(`${res.data.ready ? 'Ready' : 'Not ready'} for ${res.data.provider}\n\n${lines}`);
+                const providerSafe =
+                  scrubDisplayText(res.data.provider, { collapseLines: true, maxChars: 40 })
+                  || provider;
+                const lines = (res.data.checks ?? [])
+                  .slice(0, 40)
+                  .map((ch) => {
+                    const msg =
+                      scrubDisplayText(ch.message, { collapseLines: true, maxChars: 200 })
+                      || 'check';
+                    return `${ch.ok ? '✓' : '✗'} ${msg}`;
+                  })
+                  .join('\n');
+                alert(`${res.data.ready ? 'Ready' : 'Not ready'} for ${providerSafe}\n\n${lines}`);
               } else {
-                alert((res as { error?: string }).error ?? 'Preflight failed');
+                const err =
+                  scrubDisplayText((res as { error?: string }).error, {
+                    collapseLines: true,
+                    maxChars: 300,
+                  }) || 'Preflight failed';
+                alert(err);
               }
             }}
           >

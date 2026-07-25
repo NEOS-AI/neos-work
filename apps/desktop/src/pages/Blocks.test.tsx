@@ -323,6 +323,27 @@ describe('Blocks page', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 
+  it('scrubs control-char createBlock error messages in the modal', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: [] });
+    createBlock.mockRejectedValue(
+      new Error('dup' + String.fromCharCode(0) + 'id' + String.fromCharCode(10) + 'x'),
+    );
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Block' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New Block' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_custom_block'), { target: { value: 'ctrl_err' } });
+    fireEvent.change(screen.getByPlaceholderText('My Custom Block'), { target: { value: 'Ctrl' } });
+    fireEvent.change(screen.getByPlaceholderText(/You are a helpful assistant/), {
+      target: { value: 'Prompt {{x}}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(createBlock).toHaveBeenCalled());
+    expect(await screen.findByText('dupid x')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('filters built-in vs custom source and drops control-char param keys on save', async () => {
     const user = userEvent.setup();
     listBlocks.mockResolvedValue({ ok: true, data: blocks });

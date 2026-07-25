@@ -188,4 +188,27 @@ describe('BlockParamForm', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('caps select options at 100 and option labels at 200 chars', () => {
+    const many = Array.from({ length: 120 }, (_, i) => `opt${i}`);
+    const long = 'L'.repeat(250);
+    const block = makeBlock([
+      {
+        key: 'mode',
+        type: 'select',
+        label: 'Mode',
+        options: [long, ...many],
+      },
+    ]);
+    render(<BlockParamForm block={block} value={{}} onChange={() => {}} />);
+    const select = screen.getByLabelText(/Mode/i);
+    // placeholder "Select..." + max 100 real options
+    const options = Array.from(select.querySelectorAll('option'));
+    expect(options.length).toBeLessThanOrEqual(101);
+    // Long option value is sliced to 200; label scrub uses same cap
+    const longOpt = options.find((o) => (o as HTMLOptionElement).value.startsWith('L'));
+    expect(longOpt).toBeTruthy();
+    expect((longOpt as HTMLOptionElement).value.length).toBeLessThanOrEqual(200);
+    expect((longOpt?.textContent ?? '').length).toBeLessThanOrEqual(200);
+  });
+
 });

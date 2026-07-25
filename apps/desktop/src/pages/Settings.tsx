@@ -1124,7 +1124,9 @@ function CliAgentsSection() {
       {loading ? (
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Detecting CLI agents...</p>
       ) : error ? (
-        <p className="text-xs text-red-400">{error}</p>
+        <p className="text-xs text-red-400">
+          {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
+        </p>
       ) : agents.length === 0 ? (
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
           No CLI agents detected. Install{' '}

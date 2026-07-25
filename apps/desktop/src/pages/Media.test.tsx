@@ -239,4 +239,26 @@ describe('Media page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('scrubs control chars in delete confirm filename', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    listMediaFiles.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          filename: `photo${'\0'}.png`,
+          kind: 'image' as const,
+          size: 10,
+          createdAt: '2026-01-03T00:00:00.000Z',
+        },
+      ],
+    });
+    render(<Media />);
+    await waitFor(() => expect(screen.getByText('photo.png')).toBeInTheDocument());
+    await user.click(screen.getAllByTitle('Delete file')[0]!);
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('photo.png'));
+    const msg = String(confirmSpy.mock.calls[0]?.[0] ?? '');
+    expect(msg).not.toContain('\0');
+  });
 });

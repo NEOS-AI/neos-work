@@ -675,6 +675,32 @@ describe('Sessions page', () => {
     await waitFor(() => expect(screen.getByText('ChatX')).toBeInTheDocument());
   });
 
+  it('scrubs control chars from chat stream error messages', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield { type: 'error', content: `boom${'\0'}err\nline` };
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(listMessages).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'hello' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(chat).toHaveBeenCalled();
+      expect(document.body.textContent).toMatch(/Error: boomerr line/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('scrubs control chars from agent step description, toolName, healing, and error', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({ ok: true, data: [] });

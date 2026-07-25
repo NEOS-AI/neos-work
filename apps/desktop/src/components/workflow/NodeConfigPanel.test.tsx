@@ -10,6 +10,7 @@ const listHarnesses = vi.fn();
 const getWebhookSecret = vi.fn();
 const regenerateWebhookSecret = vi.fn();
 const testWebhookFire = vi.fn();
+const deployPreflight = vi.fn();
 
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
@@ -21,6 +22,7 @@ vi.mock('../../hooks/useEngine.js', () => ({
       getWebhookSecret,
       regenerateWebhookSecret,
       testWebhookFire,
+      deployPreflight,
     },
   }),
 }));
@@ -38,6 +40,7 @@ describe('NodeConfigPanel', () => {
     listHarnesses.mockReset();
     getWebhookSecret.mockReset();
     regenerateWebhookSecret.mockReset();
+    deployPreflight.mockReset();
     testWebhookFire.mockReset();
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     listBlocks.mockResolvedValue({ ok: true, data: [] });
@@ -547,6 +550,72 @@ describe('NodeConfigPanel', () => {
     );
     expect(screen.getByText('Provider')).toBeInTheDocument();
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
+  });
+
+  it('scrubs control chars in deploy preflight alert messages', async () => {
+    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    deployPreflight.mockResolvedValue({
+      ok: true,
+      data: {
+        ready: false,
+        provider: `vercel${'\0'}x`,
+        checks: [
+          { ok: false, message: `token${'\n'}missing${'\0'}!` },
+          { ok: true, message: 'project ok' },
+        ],
+      },
+    });
+
+    const deploy = {
+      id: 'd1',
+      type: 'deploy',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'deploy',
+        label: 'Deploy',
+        config: { provider: 'vercel', projectName: 'site' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel selectedNode={deploy} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Run deploy preflight/i }));
+    await waitFor(() => expect(deployPreflight).toHaveBeenCalled());
+    expect(alertSpy).toHaveBeenCalled();
+    const msg = String(alertSpy.mock.calls[0]?.[0] ?? '');
+    expect(msg).toContain('vercelx');
+    expect(msg).toContain('token missing!');
+    expect(msg).not.toContain('\0');
+    alertSpy.mockRestore();
+  });
+
+  it('scrubs control-char deploy preflight API errors', async () => {
+    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    deployPreflight.mockResolvedValue({
+      ok: false,
+      error: `down${'\0'}err\nnext`,
+    });
+
+    const deploy = {
+      id: 'd1',
+      type: 'deploy',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'deploy',
+        label: 'Deploy',
+        config: { provider: 'vercel', projectName: 'site' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel selectedNode={deploy} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Run deploy preflight/i }));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('downerr next'));
+    alertSpy.mockRestore();
   });
 
   it('renders media audio fields when mediaType is audio', async () => {

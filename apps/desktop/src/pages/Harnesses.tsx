@@ -70,7 +70,9 @@ export function Harnesses() {
 
   const handleDelete = async (h: AgentHarness) => {
     if (!client || h.isBuiltIn) return;
-    if (!window.confirm(t('harness.confirmDelete', { name: h.name }))) return;
+    const nameSafe =
+      scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || h.id || 'harness';
+    if (!window.confirm(t('harness.confirmDelete', { name: nameSafe }))) return;
     await client.deleteHarness(h.id);
     await load();
   };

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { scrubDisplayText } from '../../lib/format-duration.js';
+
 interface RunInputsDialogProps {
   /** Initial values from the trigger node's config.initialInputs */
   defaultInputs?: Record<string, unknown>;
@@ -7,12 +9,39 @@ interface RunInputsDialogProps {
   onCancel: () => void;
 }
 
+const JSON_TEXT_MAX = 50_000;
+
+/** Sanitize trigger default inputs for the JSON editor (control keys dropped). */
+function sanitizeDefaultInputs(raw: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object') return {};
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (Object.keys(clean).length >= 200) break;
+    if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
+    const key = k.trim();
+    if (!key || key.length > 200) continue;
+    // Scrub null bytes from string values in the editor seed
+    if (typeof v === 'string') {
+      clean[key] = scrubDisplayText(v, { maxChars: 10_000 });
+    } else {
+      clean[key] = v;
+    }
+  }
+  return clean;
+}
+
+function seedJsonText(defaultInputs?: Record<string, unknown>): string {
+  const clean = sanitizeDefaultInputs(defaultInputs);
+  if (Object.keys(clean).length === 0) return '{}';
+  try {
+    return scrubDisplayText(JSON.stringify(clean, null, 2), { maxChars: JSON_TEXT_MAX }) || '{}';
+  } catch {
+    return '{}';
+  }
+}
+
 export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInputsDialogProps) {
-  const [jsonText, setJsonText] = useState(() =>
-    defaultInputs && Object.keys(defaultInputs).length > 0
-      ? JSON.stringify(defaultInputs, null, 2)
-      : '{}',
-  );
+  const [jsonText, setJsonText] = useState(() => seedJsonText(defaultInputs));
   const [parseError, setParseError] = useState('');
 
   // Escape cancels the run-with-inputs dialog
@@ -28,7 +57,14 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
 
   const handleConfirm = () => {
     try {
-      const parsed = JSON.parse(jsonText) as unknown;
+      // Reject null-byte JSON text before parse (hostile seed / paste)
+      if (/\0/.test(jsonText)) {
+        setParseError('Invalid JSON.');
+        return;
+      }
+      const capped =
+        jsonText.length > JSON_TEXT_MAX ? jsonText.slice(0, JSON_TEXT_MAX) : jsonText;
+      const parsed = JSON.parse(capped) as unknown;
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         setParseError('Must be a JSON object.');
         return;
@@ -40,6 +76,8 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
         if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
         const key = k.trim();
         if (!key || key.length > 200) continue;
+        // Null-byte string values never applied
+        if (typeof v === 'string' && /\0/.test(v)) continue;
         clean[key] = v;
       }
       onConfirm(clean);
@@ -61,7 +99,7 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
           Run with inputs
         </h2>
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Enter a JSON object to pass as trigger inputs. These will override the node's saved initial
+          Enter a JSON object to pass as trigger inputs. These will override the node&apos;s saved initial
           inputs for this run only.
         </p>
 
@@ -76,7 +114,9 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
           }}
           value={jsonText}
           onChange={(e) => {
-            setJsonText(e.target.value);
+            // Drop null bytes from live editor input
+            const next = e.target.value.replace(/\0/g, '');
+            setJsonText(next.length > JSON_TEXT_MAX ? next.slice(0, JSON_TEXT_MAX) : next);
             setParseError('');
           }}
           spellCheck={false}

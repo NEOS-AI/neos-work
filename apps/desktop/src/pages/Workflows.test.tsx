@@ -286,6 +286,39 @@ describe('Workflows page', () => {
     });
   });
 
+  it('scrubs control-char ZIP / Claude Design import alert errors', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    importWorkflowZip.mockResolvedValue({
+      ok: false,
+      error: 'zip' + String.fromCharCode(0) + 'bad' + String.fromCharCode(10) + 'x',
+    });
+    importClaudeDesignZip.mockResolvedValue({
+      ok: false,
+      error: String.fromCharCode(0) + String.fromCharCode(10),
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+
+    const zipInputs = Array.from(document.querySelectorAll('input[accept=".zip"]')) as HTMLInputElement[];
+    expect(zipInputs.length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.change(zipInputs[0]!, {
+      target: { files: [new File([new Uint8Array([1])], 'a.zip', { type: 'application/zip' })] },
+    });
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('zipbad x');
+    });
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.change(zipInputs[1]!, {
+      target: { files: [new File([new Uint8Array([2])], 'd.zip', { type: 'application/zip' })] },
+    });
+    await waitFor(() => {
+      // Empty-after-scrub falls back
+      expect(window.alert).toHaveBeenCalledWith('Claude Design import failed');
+    });
+  });
+
   it('scrubs control chars from workflow domain, name, and description', async () => {
     listWorkflows.mockResolvedValue({
       ok: true,

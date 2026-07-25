@@ -77,7 +77,9 @@ export function Media() {
 
   const handleDelete = async (filename: string) => {
     if (!client) return;
-    if (!window.confirm(`Delete ${filename}?`)) return;
+    const nameSafe =
+      scrubDisplayText(filename, { collapseLines: true, maxChars: 200 }) || 'file';
+    if (!window.confirm(`Delete ${nameSafe}?`)) return;
     const res = await client.deleteMediaFile(filename);
     if (res.ok) {
       setFiles((prev) => prev.filter((f) => f.filename !== filename));

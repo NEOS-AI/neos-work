@@ -124,4 +124,31 @@ describe('RunInputsDialog', () => {
     expect(payload).not.toHaveProperty('bad\nkey');
     expect(payload).not.toHaveProperty(longKey);
   });
+
+  it('sanitizes defaultInputs seed and drops null-byte string values on confirm', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <RunInputsDialog
+        defaultInputs={{
+          ok: 'safe',
+          'bad\nkey': 1,
+          dirty: `hi${'\0'}there`,
+        }}
+        onConfirm={onConfirm}
+        onCancel={() => {}}
+      />,
+    );
+    const area = screen.getByRole('textbox') as HTMLTextAreaElement;
+    // Control-char key omitted from seed; null stripped from string value
+    expect(area.value).toContain('ok');
+    expect(area.value).toContain('hithere');
+    expect(area.value).not.toContain('\0');
+    expect(area.value).not.toContain('bad');
+
+    await user.clear(area);
+    await user.paste(JSON.stringify({ a: 'x', b: `y${'\0'}z` }));
+    await user.click(screen.getByRole('button', { name: /^run$/i }));
+    expect(onConfirm).toHaveBeenCalledWith({ a: 'x' });
+  });
 });
