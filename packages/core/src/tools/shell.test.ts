@@ -48,6 +48,11 @@ describe('createShellTool', () => {
     const ctrl = await tool.execute({ command: 'pwd', cwd: 'sub\npath' });
     expect(ctrl.success).toBe(false);
     expect(ctrl.error).toMatch(/control characters/i);
+
+    // Leading control char must not strip to a valid command
+    const leading = await tool.execute({ command: '\necho hi' });
+    expect(leading.success).toBe(false);
+    expect(leading.error).toMatch(/control characters/i);
   });
 
   it('accepts relative cwd inside workspace', async () => {
@@ -129,6 +134,15 @@ describe('createShellTool', () => {
     const cwd = await tool.execute({ command: 'echo hi', cwd: `sub${'\n'}dir` });
     expect(cwd.success).toBe(false);
     expect(cwd.error).toMatch(/control characters/i);
+
+    // Leading control chars must fail before trim (would otherwise become a valid command)
+    const leading = await tool.execute({ command: '\necho hi' });
+    expect(leading.success).toBe(false);
+    expect(leading.error).toMatch(/control characters/i);
+
+    const leadingCwd = await tool.execute({ command: 'echo hi', cwd: '\nsub' });
+    expect(leadingCwd.success).toBe(false);
+    expect(leadingCwd.error).toMatch(/control characters/i);
   });
 
   it('rejects blank command and blank cwd when provided', async () => {

@@ -22,6 +22,12 @@ describe('media filename safety', () => {
     expect(isSafeMediaFilename('..')).toBe(false);
   });
 
+  it('rejects control chars before trim (leading CR/LF must not become valid)', () => {
+    expect(isSafeMediaFilename('\nimg_ok.png')).toBe(false);
+    expect(isSafeMediaFilename('img_ok.png\r')).toBe(false);
+    expect(isSafeMediaFilename(`img${'\0'}.png`)).toBe(false);
+  });
+
   it('rejects non-string and spaced filenames', () => {
     expect(isSafeMediaFilename(null as unknown as string)).toBe(false);
     expect(isSafeMediaFilename(undefined as unknown as string)).toBe(false);
@@ -33,6 +39,11 @@ describe('media filename safety', () => {
   it('rejects overlong filenames', () => {
     expect(isSafeMediaFilename(`${'a'.repeat(201)}.png`)).toBe(false);
     expect(isSafeMediaFilename(`${'a'.repeat(190)}.png`)).toBe(true);
+  });
+
+  it('rejects control-char filenames before trim', () => {
+    expect(isSafeMediaFilename('bad\nname.png')).toBe(false);
+    expect(isSafeMediaFilename('\nimg_ok.png')).toBe(false);
   });
 });
 

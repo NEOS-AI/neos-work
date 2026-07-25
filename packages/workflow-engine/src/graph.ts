@@ -29,8 +29,11 @@ export function topologicalSort(
   const nodeMap = new Map<string, WorkflowNode>();
 
   for (const node of nodeList) {
-    const id = typeof node?.id === 'string' ? node.id.trim() : '';
-    if (!id || id.length > GRAPH_ID_MAX_CHARS || /[\0\r\n]/.test(id) || nodeMap.has(id)) {
+    const rawId = typeof node?.id === 'string' ? node.id : '';
+    // Control-char check before trim
+    if (!rawId || /[\0\r\n]/.test(rawId)) continue;
+    const id = rawId.trim();
+    if (!id || id.length > GRAPH_ID_MAX_CHARS || nodeMap.has(id)) {
       continue;
     }
     inDegree.set(id, 0);
@@ -39,16 +42,24 @@ export function topologicalSort(
   }
 
   for (const edge of edgeList) {
-    const source = typeof edge?.source === 'string' ? edge.source.trim() : '';
-    const target = typeof edge?.target === 'string' ? edge.target.trim() : '';
-    // Skip dangling / overlong / control-char endpoints
+    const sourceRaw = typeof edge?.source === 'string' ? edge.source : '';
+    const targetRaw = typeof edge?.target === 'string' ? edge.target : '';
+    // Skip dangling / overlong / control-char endpoints (before trim)
+    if (
+      !sourceRaw
+      || !targetRaw
+      || /[\0\r\n]/.test(sourceRaw)
+      || /[\0\r\n]/.test(targetRaw)
+    ) {
+      continue;
+    }
+    const source = sourceRaw.trim();
+    const target = targetRaw.trim();
     if (
       !source
       || !target
       || source.length > GRAPH_ID_MAX_CHARS
       || target.length > GRAPH_ID_MAX_CHARS
-      || /[\0\r\n]/.test(source)
-      || /[\0\r\n]/.test(target)
       || !nodeMap.has(source)
       || !nodeMap.has(target)
     ) {

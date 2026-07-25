@@ -57,8 +57,11 @@ function sanitizeProjectName(raw: unknown): string {
  * Bare hosts become https://host; file:/javascript: rejected.
  */
 export function safeDeployHostUrl(raw: unknown): string | undefined {
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  if (!s || s.length > 2_048 || /[\0\r\n]/.test(s)) return undefined;
+  if (typeof raw !== 'string') return undefined;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw)) return undefined;
+  const s = raw.trim();
+  if (!s || s.length > 2_048) return undefined;
   try {
     const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s) ? s : `https://${s}`;
     const u = new URL(withScheme);

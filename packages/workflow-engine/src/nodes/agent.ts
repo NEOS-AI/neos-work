@@ -10,32 +10,44 @@ import { resolveHarness } from '../harness/index.js';
 import { safeServerUrl } from './server-url.js';
 
 
+/** Cap API keys / auth tokens (header hygiene). */
+const API_KEY_MAX = 8_192;
+
+function sanitizeSettingKey(raw: unknown, max = API_KEY_MAX): string {
+  if (typeof raw !== 'string') return '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(raw) || raw.length > max) return '';
+  return raw.trim();
+}
+
 function buildAdapter(settings: Record<string, string>) {
-  const provider = String(settings['llmProvider'] ?? 'anthropic').trim().toLowerCase() || 'anthropic';
+  const providerRaw = String(settings['llmProvider'] ?? 'anthropic');
+  const provider =
+    /[\0\r\n]/.test(providerRaw) ? 'anthropic' : providerRaw.trim().toLowerCase() || 'anthropic';
 
   if (provider === 'openai') {
-    const apiKey = String(settings['OPENAI_API_KEY'] ?? '').trim();
+    const apiKey = sanitizeSettingKey(settings['OPENAI_API_KEY']);
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY is not configured');
     }
-    const baseUrl = String(settings['OPENAI_BASE_URL'] ?? '').trim() || undefined;
+    const baseUrl = sanitizeSettingKey(settings['OPENAI_BASE_URL'], 2_048) || undefined;
     return new OpenAIAdapter({ provider: 'openai', apiKey, baseUrl });
   }
 
   if (provider === 'ollama') {
-    const baseUrl = String(settings['OLLAMA_BASE_URL'] ?? '').trim() || undefined;
+    const baseUrl = sanitizeSettingKey(settings['OLLAMA_BASE_URL'], 2_048) || undefined;
     return new OpenAIAdapter({ provider: 'ollama', baseUrl });
   }
 
   if (provider === 'google') {
-    const apiKey = String(settings['GOOGLE_API_KEY'] ?? '').trim();
+    const apiKey = sanitizeSettingKey(settings['GOOGLE_API_KEY']);
     if (!apiKey) {
       throw new Error('GOOGLE_API_KEY is not configured');
     }
     return new GoogleAdapter(apiKey);
   }
 
-  const apiKey = String(settings['ANTHROPIC_API_KEY'] ?? '').trim();
+  const apiKey = sanitizeSettingKey(settings['ANTHROPIC_API_KEY']);
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured');
   }
@@ -107,10 +119,16 @@ export class AgentNode implements ExecutableNode {
     const start = Date.now();
 
     const rawHarnessId = this.nodeConfig?.['harnessId'];
-    const harnessId =
-      typeof rawHarnessId === 'string' ? rawHarnessId.trim()
-        : rawHarnessId != null && rawHarnessId !== '' ? String(rawHarnessId).trim()
-          : '';
+    let harnessId = '';
+    if (typeof rawHarnessId === 'string') {
+      // Control-char / overlong → ignore harness (resolveHarness also guards)
+      if (!/[\0\r\n]/.test(rawHarnessId) && rawHarnessId.length <= 200) {
+        harnessId = rawHarnessId.trim();
+      }
+    } else if (rawHarnessId != null && rawHarnessId !== '') {
+      const s = String(rawHarnessId);
+      if (!/[\0\r\n]/.test(s) && s.length <= 200) harnessId = s.trim();
+    }
     const harness = harnessId ? resolveHarness(harnessId) : undefined;
 
     let nodeSystemPrompt =
@@ -134,9 +152,10 @@ export class AgentNode implements ExecutableNode {
 
     const serverUrl = safeServerUrl(ctx.settings['SERVER_URL'], 'http://localhost:3579');
     // Prefer AUTH_TOKEN; fall back to SERVER_TOKEN (Media/Deploy share the runtime token)
-    const authToken = String(
-      ctx.settings['AUTH_TOKEN'] ?? ctx.settings['SERVER_TOKEN'] ?? '',
-    ).trim();
+    const authToken =
+      sanitizeSettingKey(ctx.settings['AUTH_TOKEN'])
+      || sanitizeSettingKey(ctx.settings['SERVER_TOKEN'])
+      || '';
     let systemPrompt = await buildSystemPromptWithMemory(baseSystemPrompt, serverUrl, authToken);
 
     // Prepend Design System context if injected (skip whitespace-only payloads; cap size)

@@ -65,7 +65,18 @@ export function assessWorkflowPreflight(
 
   // Blank / whitespace-only node ids are unusable at runtime
   for (const n of nodes) {
-    const id = typeof n.id === 'string' ? n.id.trim() : '';
+    const rawId = typeof n.id === 'string' ? n.id : '';
+    // Control-char check before trim (trim strips leading/trailing \r\n)
+    if (rawId && /[\0\r\n]/.test(rawId)) {
+      issues.push({
+        code: 'invalid_node_id',
+        severity: 'error',
+        nodeId: rawId.replace(/[\0\r\n]/g, '?').slice(0, 80),
+        message: 'Workflow has a node with an invalid id.',
+      });
+      break;
+    }
+    const id = rawId.trim();
     if (!id) {
       issues.push({
         code: 'blank_node_id',
@@ -74,7 +85,7 @@ export function assessWorkflowPreflight(
       });
       break;
     }
-    if (id.length > 200 || /[\0\r\n]/.test(id)) {
+    if (id.length > 200) {
       issues.push({
         code: 'invalid_node_id',
         severity: 'error',
@@ -86,13 +97,22 @@ export function assessWorkflowPreflight(
   }
 
   for (const edge of edges) {
-    const source = typeof edge.source === 'string' ? edge.source.trim() : '';
-    const target = typeof edge.target === 'string' ? edge.target.trim() : '';
-    // Invalid edge endpoints (control-char / overlong) count as dangling
-    const sourceOk =
-      !!source && source.length <= 200 && !/[\0\r\n]/.test(source) && nodeIds.has(source);
-    const targetOk =
-      !!target && target.length <= 200 && !/[\0\r\n]/.test(target) && nodeIds.has(target);
+    const sourceRaw = typeof edge.source === 'string' ? edge.source : '';
+    const targetRaw = typeof edge.target === 'string' ? edge.target : '';
+    // Control-char check before trim
+    if (/[\0\r\n]/.test(sourceRaw) || /[\0\r\n]/.test(targetRaw)) {
+      issues.push({
+        code: 'dangling_edge',
+        severity: 'error',
+        message: 'Edge points to a missing node.',
+      });
+      continue;
+    }
+    const source = sourceRaw.trim();
+    const target = targetRaw.trim();
+    // Invalid edge endpoints (overlong / missing) count as dangling
+    const sourceOk = !!source && source.length <= 200 && nodeIds.has(source);
+    const targetOk = !!target && target.length <= 200 && nodeIds.has(target);
     if (!sourceOk || !targetOk) {
       // Also treat blank endpoints as dangling (executor skips them, but graph is invalid)
       issues.push({

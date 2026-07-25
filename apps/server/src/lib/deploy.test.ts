@@ -40,6 +40,8 @@ describe('safeDeployHostUrl', () => {
 
   it('rejects control-char and overlong host urls', () => {
     expect(safeDeployHostUrl('https://x.test/\npath')).toBeUndefined();
+    // Leading control char must not strip to a valid host
+    expect(safeDeployHostUrl('\nhttps://x.test')).toBeUndefined();
     expect(safeDeployHostUrl('https://' + 'a'.repeat(2_100) + '.test')).toBeUndefined();
   });
 });

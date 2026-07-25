@@ -136,4 +136,43 @@ describe('Media page', () => {
       expect(screen.getByText('boom')).toBeInTheDocument();
     });
   });
+
+  it('previews audio files and cancels delete when confirm is false', async () => {
+    const user = userEvent.setup();
+    listMediaFiles.mockResolvedValue({ ok: true, data: files });
+    fetchMediaBlob.mockResolvedValue(new Blob(['audio'], { type: 'audio/mpeg' }));
+    render(<Media />);
+    await waitFor(() => expect(screen.getByText('clip.mp3')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'audio' }));
+    expect(screen.getByText('clip.mp3')).toBeInTheDocument();
+    expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /clip\.mp3/i }));
+    await waitFor(() => {
+      expect(fetchMediaBlob).toHaveBeenCalledWith('clip.mp3');
+    });
+    // audio element should be present
+    expect(document.querySelector('audio')).toBeTruthy();
+
+    deleteMediaFile.mockClear();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await user.click(screen.getAllByTitle('Delete file')[0]!);
+    expect(deleteMediaFile).not.toHaveBeenCalled();
+  });
+
+  it('filters other kind and shows empty filter message', async () => {
+    const user = userEvent.setup();
+    listMediaFiles.mockResolvedValue({ ok: true, data: files });
+    render(<Media />);
+    await waitFor(() => expect(screen.getByText('notes.bin')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'other' }));
+    expect(screen.getByText('notes.bin')).toBeInTheDocument();
+    expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
+    expect(screen.getByText('1/3')).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText('Search files…'), 'nope');
+    expect(screen.queryByText('notes.bin')).not.toBeInTheDocument();
+  });
 });

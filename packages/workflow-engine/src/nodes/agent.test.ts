@@ -340,6 +340,32 @@ describe('AgentNode LLM model selection', () => {
     expect(result.error).toMatch(/OPENAI_API_KEY/);
   });
 
+  it('rejects control-char API keys as missing and ignores control-char harnessId', async () => {
+    const openai = new AgentNode('agent_coding', { llmProvider: 'openai' });
+    const badKey = await openai.execute(
+      ctx({
+        settings: { OPENAI_API_KEY: `sk${'\n'}bad` },
+      }),
+    );
+    expect(badKey.ok).toBe(false);
+    expect(badKey.error).toMatch(/OPENAI_API_KEY/);
+
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', {
+      harnessId: `coding_reviewer${'\n'}`,
+      systemPrompt: 'Base only',
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('Base only');
+    // control-char harnessId must not resolve a built-in harness prompt
+    expect(goal).not.toContain('시니어');
+  });
+
   it('ignores whitespace-only harnessId and designSystemContent', async () => {
     const node = new AgentNode('agent_coding', {
       harnessId: '   ',

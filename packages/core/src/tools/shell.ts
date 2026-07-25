@@ -117,14 +117,15 @@ export function createShellTool(workspaceRoot: string): Tool {
     },
     async execute(input): Promise<ToolResult> {
       try {
-        const command =
-          typeof input.command === 'string' ? input.command.trim() : String(input.command ?? '').trim();
+        const commandRaw =
+          typeof input.command === 'string' ? input.command : String(input.command ?? '');
+        // Reject null bytes / CR / LF before trim (trim strips leading/trailing \r\n)
+        if (/[\0\r\n]/.test(commandRaw)) {
+          return { success: false, output: null, error: 'command contains invalid control characters' };
+        }
+        const command = commandRaw.trim();
         if (!command) {
           return { success: false, output: null, error: 'command is required' };
-        }
-        // Reject null bytes / CR / LF that confuse shell and path APIs
-        if (/[\0\r\n]/.test(command)) {
-          return { success: false, output: null, error: 'command contains invalid control characters' };
         }
         if (command.length > MAX_COMMAND_CHARS) {
           return {
@@ -155,13 +156,15 @@ export function createShellTool(workspaceRoot: string): Tool {
         let cwdPath = absoluteRoot;
 
         if (input.cwd) {
-          const cwdRel =
-            typeof input.cwd === 'string' ? input.cwd.trim() : String(input.cwd ?? '').trim();
+          const cwdRaw =
+            typeof input.cwd === 'string' ? input.cwd : String(input.cwd ?? '');
+          // Control-char check before trim
+          if (/[\0\r\n]/.test(cwdRaw)) {
+            return { success: false, output: null, error: 'cwd contains invalid control characters' };
+          }
+          const cwdRel = cwdRaw.trim();
           if (!cwdRel) {
             return { success: false, output: null, error: 'cwd is required when provided' };
-          }
-          if (/[\0\r\n]/.test(cwdRel)) {
-            return { success: false, output: null, error: 'cwd contains invalid control characters' };
           }
           if (cwdRel.length > MAX_CWD_CHARS) {
             return {

@@ -144,9 +144,15 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
       try {
         const raw = fs.readFileSync(path.join(tokenDir, file), 'utf-8');
         const token = JSON.parse(raw) as { serverId: string; accessToken: string; expiresAt?: string };
-        const serverId = typeof token.serverId === 'string' ? token.serverId.trim() : '';
-        const accessToken = typeof token.accessToken === 'string' ? token.accessToken.trim() : '';
-        if (!serverId || !accessToken) continue;
+        const serverIdRaw = typeof token.serverId === 'string' ? token.serverId : '';
+        const accessTokenRaw = typeof token.accessToken === 'string' ? token.accessToken : '';
+        // Control-char check before trim
+        if (!serverIdRaw || !accessTokenRaw || /[\0\r\n]/.test(serverIdRaw) || /[\0\r\n]/.test(accessTokenRaw)) {
+          continue;
+        }
+        const serverId = serverIdRaw.trim();
+        const accessToken = accessTokenRaw.trim();
+        if (!serverId || !accessToken || serverId.length > 200 || accessToken.length > 16_384) continue;
         // Skip expired tokens
         if (token.expiresAt && new Date(token.expiresAt) <= new Date()) continue;
         const key = `NEOS_MCP_TOKEN_${serverId.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;

@@ -199,11 +199,14 @@ export async function upgradeSkillToPlugin(options: {
   name?: string;
   description?: string;
 }): Promise<PluginManifest> {
-  const trimmed =
-    typeof options.skillDirName === 'string' ? options.skillDirName.trim() : '';
-  if (/[\0\r\n]/.test(trimmed) || trimmed.length > 200) {
+  const rawName =
+    typeof options.skillDirName === 'string' ? options.skillDirName : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(rawName) || rawName.trim().length > 200) {
     throw new Error('Invalid skill directory name');
   }
+  const trimmed = rawName.trim();
+  if (!trimmed) throw new Error('Invalid skill directory name');
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
   if (!safe) throw new Error('Invalid skill directory name');
   const dir = path.join(SKILLS_DIR, safe);
@@ -232,10 +235,14 @@ export async function upgradeSkillToPlugin(options: {
   }
   const firstLine = skillBody.split('\n').find((l) => l.trim() && !l.startsWith('---') && !l.startsWith('name:')) ?? '';
   let title =
-    (typeof options.name === 'string' ? options.name.trim() : '') || safe;
+    (typeof options.name === 'string' && !/[\0\r\n]/.test(options.name)
+      ? options.name.trim()
+      : '') || safe;
   if (title.length > 200) title = title.slice(0, 200);
   let description =
-    (typeof options.description === 'string' ? options.description.trim() : '')
+    (typeof options.description === 'string' && !/[\0\r\n]/.test(options.description)
+      ? options.description.trim()
+      : '')
     || (firstLine.replace(/^#+\s*/, '').slice(0, 200) || `Plugin upgraded from skill ${safe}`);
   if (description.length > 2_000) description = description.slice(0, 2_000);
 

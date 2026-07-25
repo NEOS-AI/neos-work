@@ -39,6 +39,26 @@ describe('DiscordMessageNode', () => {
     expect(result.error).toMatch(/Invalid Discord webhook URL/);
   });
 
+  it('rejects control-char or overlong webhook URLs', async () => {
+    const node = new DiscordMessageNode();
+    const ctrl = await node.execute(
+      makeCtx(
+        { DISCORD_WEBHOOK_URL: `https://discord.com/api/webhooks/1/ab${'\n'}c` },
+        { text: 'hi' },
+      ),
+    );
+    expect(ctrl.ok).toBe(false);
+    expect(ctrl.error).toMatch(/Invalid Discord webhook URL/);
+    const long = await node.execute(
+      makeCtx(
+        { DISCORD_WEBHOOK_URL: `https://discord.com/api/webhooks/1/${'t'.repeat(2_100)}` },
+        { text: 'hi' },
+      ),
+    );
+    expect(long.ok).toBe(false);
+    expect(long.error).toMatch(/Invalid Discord webhook URL/);
+  });
+
   it('rejects null-byte content', async () => {
     const node = new DiscordMessageNode();
     const result = await node.execute(

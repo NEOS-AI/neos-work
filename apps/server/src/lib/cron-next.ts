@@ -57,7 +57,10 @@ export function estimateNextCronRun(
   if (!minutes || !hours || !daysOfMonth || !months || !daysOfWeek) return null;
 
   const from = options?.from ?? new Date();
-  const tz = options?.timezone?.trim() || 'UTC';
+  const tzRaw = typeof options?.timezone === 'string' ? options.timezone : '';
+  // Control-char timezone → fail closed (do not silently fall back to UTC)
+  if (tzRaw && /[\0\r\n]/.test(tzRaw)) return null;
+  const tz = tzRaw.trim() || 'UTC';
   // Clamp horizon (1–3660 days) so pathological options cannot spin forever
   const horizonRaw = Number(options?.horizonDays ?? 366);
   const horizonDays = Number.isFinite(horizonRaw)
@@ -92,9 +95,12 @@ export function estimateNextCronRun(
 }
 
 export function isValidTimeZone(timeZone: string): boolean {
-  const tz = typeof timeZone === 'string' ? timeZone.trim() : '';
-  // IANA names are short; reject control chars / pathological lengths
-  if (!tz || tz.length > 100 || /[\0\r\n]/.test(tz)) return false;
+  if (typeof timeZone !== 'string') return false;
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(timeZone)) return false;
+  const tz = timeZone.trim();
+  // IANA names are short; reject pathological lengths
+  if (!tz || tz.length > 100) return false;
   try {
     Intl.DateTimeFormat(undefined, { timeZone: tz });
     return true;
@@ -103,14 +109,12 @@ export function isValidTimeZone(timeZone: string): boolean {
   }
 }
 
-function getZonedParts(date: Date, timeZone: string): {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  weekday: number;
-} | null {
+/** Cache DateTimeFormat per timezone — minute-walk would otherwise re-create formatters. */
+const zonedDtfCache = new Map<string, Intl.DateTimeFormat>();
+
+function getZonedDtf(timeZone: string): Intl.DateTimeFormat | null {
+  const cached = zonedDtfCache.get(timeZone);
+  if (cached) return cached;
   try {
     const dtf = new Intl.DateTimeFormat('en-US', {
       timeZone,
@@ -122,19 +126,43 @@ function getZonedParts(date: Date, timeZone: string): {
       weekday: 'short',
       hourCycle: 'h23',
     });
+    // Bound cache size (pathological timezone churn defense)
+    if (zonedDtfCache.size >= 64) {
+      const first = zonedDtfCache.keys().next().value;
+      if (first !== undefined) zonedDtfCache.delete(first);
+    }
+    zonedDtfCache.set(timeZone, dtf);
+    return dtf;
+  } catch {
+    return null;
+  }
+}
+
+const WEEKDAY_MAP: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+function getZonedParts(date: Date, timeZone: string): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  weekday: number;
+} | null {
+  try {
+    const dtf = getZonedDtf(timeZone);
+    if (!dtf) return null;
     const map = Object.fromEntries(
       dtf.formatToParts(date).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
     );
-    const weekdayMap: Record<string, number> = {
-      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
-    };
     return {
       year: Number(map.year),
       month: Number(map.month),
       day: Number(map.day),
       hour: Number(map.hour),
       minute: Number(map.minute),
-      weekday: weekdayMap[map.weekday ?? 'Sun'] ?? 0,
+      weekday: WEEKDAY_MAP[map.weekday ?? 'Sun'] ?? 0,
     };
   } catch {
     return null;

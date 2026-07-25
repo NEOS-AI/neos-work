@@ -23,14 +23,24 @@ export class BlockNode implements ExecutableNode {
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
     const rawBlockId = ctx.config?.['blockId'];
-    const blockId =
-      typeof rawBlockId === 'string' ? rawBlockId.trim()
-        : rawBlockId != null && rawBlockId !== '' ? String(rawBlockId).trim()
-          : '';
+    let blockId = '';
+    if (typeof rawBlockId === 'string') {
+      // Control-char check before trim (trim strips leading/trailing \r\n)
+      if (/[\0\r\n]/.test(rawBlockId) || rawBlockId.length > BLOCK_ID_MAX) {
+        return { ok: false, output: null, error: 'blockId is invalid', durationMs: 0 };
+      }
+      blockId = rawBlockId.trim();
+    } else if (rawBlockId != null && rawBlockId !== '') {
+      const s = String(rawBlockId);
+      if (/[\0\r\n]/.test(s) || s.length > BLOCK_ID_MAX) {
+        return { ok: false, output: null, error: 'blockId is invalid', durationMs: 0 };
+      }
+      blockId = s.trim();
+    }
     if (!blockId) {
       return { ok: false, output: null, error: 'blockId is required for block nodes', durationMs: 0 };
     }
-    if (/[\0\r\n]/.test(blockId) || blockId.length > BLOCK_ID_MAX) {
+    if (blockId.length > BLOCK_ID_MAX) {
       return { ok: false, output: null, error: 'blockId is invalid', durationMs: 0 };
     }
 
@@ -47,8 +57,10 @@ export class BlockNode implements ExecutableNode {
     const params: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(rawParams)) {
       if (Object.keys(params).length >= PARAM_KEYS_MAX) break;
-      const key = typeof k === 'string' ? k.trim() : '';
-      if (!key || /[\0\r\n]/.test(key) || key.length > PARAM_KEY_MAX) continue;
+      // Control-char check before trim so "\nk" is not accepted as "k"
+      if (typeof k !== 'string' || /[\0\r\n]/.test(k) || k.length > PARAM_KEY_MAX) continue;
+      const key = k.trim();
+      if (!key || key.length > PARAM_KEY_MAX) continue;
       if (typeof v === 'string') {
         const trimmed = v.trim();
         params[key] =

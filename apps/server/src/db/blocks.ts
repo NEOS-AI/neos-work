@@ -112,16 +112,25 @@ export const BLOCK_PARAM_DEFS_MAX = 50;
 export const BLOCK_PARAM_DEFS_JSON_MAX_CHARS = 64 * 1024;
 
 export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): WorkflowBlock {
-  const id = typeof block.id === 'string' ? block.id.trim() : '';
-  const name = typeof block.name === 'string' ? block.name.trim() : '';
+  const idRaw = typeof block.id === 'string' ? block.id : '';
+  const nameRaw = typeof block.name === 'string' ? block.name : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (/[\0\r\n]/.test(idRaw)) {
+    throw new Error('id contains invalid control characters');
+  }
+  if (/[\0\r\n]/.test(nameRaw)) {
+    throw new Error('name contains invalid control characters');
+  }
+  const id = idRaw.trim();
+  const name = nameRaw.trim();
   if (!id || !name) {
     throw new Error('id and name are required');
   }
+  if (id.length > LOOKUP_ID_MAX_CHARS) {
+    throw new Error(`id exceeds max length (${LOOKUP_ID_MAX_CHARS})`);
+  }
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error('id must be alphanumeric (- and _ allowed)');
-  }
-  if (/[\0\r\n]/.test(name)) {
-    throw new Error('name contains invalid control characters');
   }
   if (name.length > 200) {
     throw new Error('name exceeds max length (200)');
@@ -129,7 +138,9 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
   const domain = normalizeDomain(block.domain);
   let category =
     (typeof block.category === 'string' ? block.category.trim() : '') || 'custom';
-  if (/[\0\r\n]/.test(category) || category.length > BLOCK_CATEGORY_MAX_CHARS) {
+  if (typeof block.category === 'string' && /[\0\r\n]/.test(block.category)) {
+    category = 'custom';
+  } else if (category.length > BLOCK_CATEGORY_MAX_CHARS) {
     category = 'custom';
   }
   let description =
@@ -144,10 +155,13 @@ export function createCustomBlock(block: Omit<WorkflowBlock, 'isBuiltIn'>): Work
       `promptTemplate exceeds max size (${BLOCK_PROMPT_TEMPLATE_MAX_CHARS} characters)`,
     );
   }
-  let skillId =
-    typeof block.skillId === 'string' ? block.skillId.trim() || undefined : block.skillId;
-  if (skillId) {
-    if (/[\0\r\n]/.test(skillId) || skillId.length > BLOCK_SKILL_ID_MAX_CHARS) {
+  let skillId: string | undefined;
+  if (typeof block.skillId === 'string') {
+    if (/[\0\r\n]/.test(block.skillId)) {
+      throw new Error('skillId is invalid');
+    }
+    skillId = block.skillId.trim() || undefined;
+    if (skillId && skillId.length > BLOCK_SKILL_ID_MAX_CHARS) {
       throw new Error('skillId is invalid');
     }
   }

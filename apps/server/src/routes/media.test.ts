@@ -127,6 +127,46 @@ describe('media routes', () => {
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toMatch(/control characters/i);
+
+    // Leading control chars must be rejected before trim (would otherwise become blank/valid)
+    const leading = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: '\nok-looking' }),
+    });
+    expect(leading.status).toBe(400);
+    expect(((await leading.json()) as { error: string }).error).toMatch(/control characters/i);
+
+    const nul = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: `cat${'\0'}dog` }),
+    });
+    expect(nul.status).toBe(400);
+  });
+
+  it('POST /audio rejects text with null bytes before trim', async () => {
+    setSetting('OPENAI_API_KEY', SECRET);
+    const res = await media.request('/audio', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: `hello${'\0'}world` }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/control characters/i);
+
+    // Newlines are allowed for TTS; only NUL is rejected
+    const withNl = await media.request('/audio', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'line1\nline2' }),
+    });
+    // May fail on missing key already set, or generation — must not be control-char error
+    if (withNl.status === 400) {
+      const err = ((await withNl.json()) as { error: string }).error;
+      expect(err).not.toMatch(/control characters/i);
+    }
   });
 
   it('POST /image and /audio reject invalid JSON body', async () => {

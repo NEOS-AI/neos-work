@@ -145,4 +145,38 @@ describe('Skills page', () => {
       expect((screen.getByPlaceholderText('Search skills…') as HTMLInputElement).value).toBe('');
     });
   });
+
+  it('upgrades skill to plugin after confirm and cancels when confirm is false', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    upgradeSkillToPlugin.mockResolvedValue({ ok: true, data: { name: 'Beta Plugin' } });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+
+    const upgradeBtns = screen.getAllByTitle(/open-design\.json|Plugin/i);
+    expect(upgradeBtns.length).toBeGreaterThan(0);
+    fireEvent.click(upgradeBtns[0]!);
+    await waitFor(() => {
+      expect(upgradeSkillToPlugin).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalled();
+    });
+
+    upgradeSkillToPlugin.mockClear();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(upgradeBtns[0]!);
+    expect(upgradeSkillToPlugin).not.toHaveBeenCalled();
+  });
+
+  it('alerts when upgrade to plugin fails', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    upgradeSkillToPlugin.mockResolvedValue({ ok: false, error: 'upgrade failed hard' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByTitle(/open-design\.json|Plugin/i)[0]!);
+    await waitFor(() => {
+      expect(upgradeSkillToPlugin).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('upgrade failed hard');
+    });
+  });
 });

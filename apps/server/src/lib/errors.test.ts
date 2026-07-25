@@ -19,6 +19,32 @@ describe('safeError', () => {
     expect(safeError('boom', 'ctx')).toBe('An internal error occurred');
     expect(spy).toHaveBeenCalled();
   });
+
+  it('trims safeError context labels', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    safeError('x', '  ctx  ');
+    expect(String(spy.mock.calls[0]?.[0])).toContain('ctx');
+  });
+
+  it('rejects control-char contexts and scrubs control chars from log messages', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    safeError(new Error('line1\nline2\rsecret'), 'bad\nctx');
+    // Control-char context falls back to "app"
+    expect(String(spy.mock.calls[0]?.[0])).toContain('[app]');
+    expect(String(spy.mock.calls[0]?.[0])).not.toContain('bad');
+    // Newlines in error message are replaced for log injection defense
+    const logged = String(spy.mock.calls[0]?.[1] ?? '');
+    expect(logged).not.toMatch(/[\r\n]/);
+    expect(logged).toContain('line1');
+    expect(logged).toContain('line2');
+  });
+
+  it('caps overlong safeError messages', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    safeError(new Error('e'.repeat(10_000)), 'c'.repeat(300));
+    const logged = String(spy.mock.calls[0]?.[1] ?? '');
+    expect(logged.length).toBeLessThanOrEqual(4_000);
+  });
 });
 
 describe('escapeHtml', () => {
@@ -43,17 +69,7 @@ describe('escapeHtml', () => {
     expect(escapeHtml(42 as never)).toBe('42');
   });
 
-  it('trims safeError context labels', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    safeError('x', '  ctx  ');
-    expect(String(spy.mock.calls[0]?.[0])).toContain('ctx');
-  });
-
-  it('caps overlong safeError messages and escapeHtml input', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    safeError(new Error('e'.repeat(10_000)), 'c'.repeat(300));
-    const logged = String(spy.mock.calls[0]?.[1] ?? '');
-    expect(logged.length).toBeLessThanOrEqual(4_000);
+  it('caps overlong escapeHtml input', () => {
     const escaped = escapeHtml('x'.repeat(60_000));
     expect(escaped.length).toBeLessThanOrEqual(50_000);
   });

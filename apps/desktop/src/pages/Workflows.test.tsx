@@ -174,4 +174,34 @@ describe('Workflows page', () => {
       expect(deleteWorkflow).toHaveBeenCalled();
     });
   });
+
+  it('duplicates a workflow and cancels delete when confirm is false', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    duplicateWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-copy' } });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+
+    const dup = screen.getAllByTitle('workflow.duplicate')[0]!;
+    fireEvent.click(dup);
+    await waitFor(() => {
+      expect(duplicateWorkflow).toHaveBeenCalled();
+    });
+
+    deleteWorkflow.mockClear();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getAllByTitle('common.delete')[0]!);
+    expect(deleteWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('shows no-match filter empty state', async () => {
+    const user = userEvent.setup();
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Search workflows…'), 'zzzz-no-match');
+    expect(screen.queryByText('Alpha Flow')).not.toBeInTheDocument();
+    expect(screen.queryByText('Beta Flow')).not.toBeInTheDocument();
+    // counter reflects filter
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+  });
 });

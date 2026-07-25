@@ -111,6 +111,21 @@ describe('custom blocks CRUD', () => {
     expect(deleteCustomBlock('id\nbad')).toBe(false);
   });
 
+  it('rejects control-char / overlong ids on create', () => {
+    expect(() =>
+      createCustomBlock({ ...sampleBlock(IDS[0]!), id: 'bad\nid' }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomBlock({ ...sampleBlock(IDS[0]!), id: `\n${IDS[0]!}` }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createCustomBlock({ ...sampleBlock(IDS[0]!), id: 'a'.repeat(101) }),
+    ).toThrow(/max length/i);
+    expect(() =>
+      createCustomBlock({ ...sampleBlock(IDS[0]!), skillId: 'skill\nid' }),
+    ).toThrow(/skillId is invalid/i);
+  });
+
   it('creates, gets, lists by domain, updates, deletes', () => {
     const created = createCustomBlock(sampleBlock(IDS[0]!));
     expect(created.isBuiltIn).toBe(false);

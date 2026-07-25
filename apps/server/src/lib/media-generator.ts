@@ -108,11 +108,11 @@ export async function generateImage(options: {
   quality?: 'standard' | 'hd';
   apiKey: string;
 }): Promise<GenerateImageResult> {
-  const prompt = typeof options.prompt === 'string' ? options.prompt.trim() : '';
-  if (!prompt) throw new Error('prompt is required');
-  if (/[\0\r\n]/.test(prompt)) {
+  if (typeof options.prompt === 'string' && /[\0\r\n]/.test(options.prompt)) {
     throw new Error('prompt contains invalid control characters');
   }
+  const prompt = typeof options.prompt === 'string' ? options.prompt.trim() : '';
+  if (!prompt) throw new Error('prompt is required');
   if (prompt.length > IMAGE_PROMPT_MAX) {
     throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
   }
@@ -140,7 +140,11 @@ export async function generateImage(options: {
   if (!item?.url) throw new Error('No image URL returned');
 
   // Download the image and save locally (http(s) only — defense against non-http redirects)
-  const imageUrl = typeof item.url === 'string' ? item.url.trim() : '';
+  const imageUrlRaw = typeof item.url === 'string' ? item.url : '';
+  if (!imageUrlRaw || /[\0\r\n]/.test(imageUrlRaw) || imageUrlRaw.length > 2_048) {
+    throw new Error('Invalid image URL returned');
+  }
+  const imageUrl = imageUrlRaw.trim();
   try {
     const u = new URL(imageUrl);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
@@ -184,11 +188,12 @@ export async function generateAudio(options: {
   model?: 'tts-1' | 'tts-1-hd';
   apiKey: string;
 }): Promise<GenerateAudioResult> {
-  const text = typeof options.text === 'string' ? options.text.trim() : '';
-  if (!text) throw new Error('text is required');
-  if (/\0/.test(text)) {
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (typeof options.text === 'string' && /[\0\r\n]/.test(options.text)) {
     throw new Error('text contains invalid control characters');
   }
+  const text = typeof options.text === 'string' ? options.text.trim() : '';
+  if (!text) throw new Error('text is required');
   if (text.length > AUDIO_TEXT_MAX) {
     throw new Error(`text too long (max ${AUDIO_TEXT_MAX})`);
   }

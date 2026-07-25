@@ -324,6 +324,23 @@ describe('updateArtifact PATCH semantics', () => {
         content: '<p>x</p>',
       }),
     ).toThrow(/control characters/i);
+    // Leading control chars must not be stripped by trim before reject
+    expect(() =>
+      createArtifact({
+        workflowId: `\n${wf.id}`,
+        name: 'ok.html',
+        contentType: 'text/html',
+        content: '<p>x</p>',
+      }),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      createArtifact({
+        workflowId: wf.id,
+        name: `\nok.html`,
+        contentType: 'text/html',
+        content: '<p>x</p>',
+      }),
+    ).toThrow(/control characters/i);
     expect(() =>
       createArtifact({
         workflowId: wf.id,
@@ -340,6 +357,7 @@ describe('updateArtifact PATCH semantics', () => {
       content: '<p>ok</p>',
     });
     expect(updateArtifact(art.id, { name: `bad${'\0'}x` })).toBeUndefined();
+    expect(updateArtifact(art.id, { name: `\nrenamed` })).toBeUndefined();
     expect(getArtifact(art.id)?.name).toBe('ok.html');
     deleteArtifact(art.id);
   });

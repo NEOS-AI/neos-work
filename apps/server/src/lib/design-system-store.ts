@@ -160,9 +160,16 @@ export async function updateDesignSystemContent(id: string, content: string): Pr
 }
 
 export async function createDesignSystem(name: string, description?: string): Promise<DesignSystem | null> {
-  const trimmedName = typeof name === 'string' ? name.trim() : '';
-  let trimmedDescription =
-    typeof description === 'string' ? description.trim() || undefined : description;
+  if (typeof name !== 'string' || /[\0\r\n]/.test(name)) return null;
+  const trimmedName = name.trim();
+  let trimmedDescription: string | undefined;
+  if (typeof description === 'string') {
+    // Drop control-char descriptions rather than persist them
+    if (!/[\0\r\n]/.test(description)) {
+      const d = description.trim();
+      trimmedDescription = d || undefined;
+    }
+  }
   if (trimmedDescription && trimmedDescription.length > DESIGN_DESCRIPTION_MAX_CHARS) {
     trimmedDescription = trimmedDescription.slice(0, DESIGN_DESCRIPTION_MAX_CHARS);
   }

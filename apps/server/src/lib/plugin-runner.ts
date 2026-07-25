@@ -45,20 +45,23 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
     for (const stage of stages) {
       if (signal?.aborted) break;
 
-      let stageId = typeof stage.id === 'string' ? stage.id.trim() : String(stage.id ?? '').trim();
-      // Skip malformed / unsafe stage ids
-      if (!stageId || stageId.length > 100 || /[\0\r\n]/.test(stageId)) continue;
+      const stageIdRaw =
+        typeof stage.id === 'string' ? stage.id : String(stage.id ?? '');
+      // Control-char check before trim; skip malformed / unsafe stage ids
+      if (!stageIdRaw || /[\0\r\n]/.test(stageIdRaw)) continue;
+      const stageId = stageIdRaw.trim();
+      if (!stageId || stageId.length > 100) continue;
       let stageName =
-        typeof stage.name === 'string' ? stage.name.trim() || stageId : (stage.name ?? stageId);
+        typeof stage.name === 'string' && !/[\0\r\n]/.test(stage.name)
+          ? stage.name.trim() || stageId
+          : stageId;
       if (typeof stageName !== 'string') stageName = stageId;
-      if (/[\0\r\n]/.test(stageName)) stageName = stageId;
       if (stageName.length > 200) stageName = stageName.slice(0, 200);
-      let outputKeyRaw =
-        typeof stage.outputKey === 'string' ? stage.outputKey.trim() : stage.outputKey;
-      if (
-        typeof outputKeyRaw === 'string'
-        && (outputKeyRaw.length > 100 || /[\0\r\n]/.test(outputKeyRaw))
-      ) {
+      let outputKeyRaw: string | undefined;
+      if (typeof stage.outputKey === 'string' && !/[\0\r\n]/.test(stage.outputKey)) {
+        const ok = stage.outputKey.trim();
+        outputKeyRaw = ok && ok.length <= 100 ? ok : stageId;
+      } else {
         outputKeyRaw = stageId;
       }
       const outputKey = (outputKeyRaw || stageId) as string;

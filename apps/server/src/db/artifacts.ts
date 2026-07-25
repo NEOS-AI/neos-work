@@ -101,16 +101,22 @@ function normalizeLookupId(raw: unknown, max = ARTIFACT_ID_FIELD_MAX): string {
 }
 
 export function createArtifact(input: CreateArtifactInput): Artifact {
-  const workflowId = typeof input.workflowId === 'string' ? input.workflowId.trim() : '';
-  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const rawWf = typeof input.workflowId === 'string' ? input.workflowId : '';
+  const rawName = typeof input.name === 'string' ? input.name : '';
+  const rawCt = typeof input.contentType === 'string' ? input.contentType : '';
+  // Control-char check before trim (trim strips leading/trailing \r\n)
+  if (hasUnsafeNameChars(rawWf) || hasUnsafeNameChars(rawName)) {
+    throw new Error('name/workflowId contains invalid control characters');
+  }
+  if (hasUnsafeNameChars(rawCt)) {
+    throw new Error('contentType is invalid');
+  }
+  const workflowId = rawWf.trim();
+  const name = rawName.trim();
   // MIME types are case-insensitive; normalize to lower-case for consistent matching
-  const contentType =
-    typeof input.contentType === 'string' ? input.contentType.trim().toLowerCase() : '';
+  const contentType = rawCt.trim().toLowerCase();
   if (!workflowId || !name || !contentType) {
     throw new Error('workflowId, name, and contentType are required');
-  }
-  if (hasUnsafeNameChars(name) || hasUnsafeNameChars(workflowId)) {
-    throw new Error('name/workflowId contains invalid control characters');
   }
   if (workflowId.length > ARTIFACT_ID_FIELD_MAX) {
     throw new Error(`workflowId exceeds max length (${ARTIFACT_ID_FIELD_MAX})`);
@@ -118,8 +124,8 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
   if (name.length > 500) {
     throw new Error('name exceeds max length (500)');
   }
-  // MIME type hygiene: no control chars; must look like type/subtype (optional params stripped)
-  if (hasUnsafeNameChars(contentType) || contentType.length > 200) {
+  // MIME type hygiene: length + must look like type/subtype (optional params stripped)
+  if (contentType.length > 200) {
     throw new Error('contentType is invalid');
   }
   const mimeBase = contentType.split(';')[0]?.trim() ?? '';
@@ -128,9 +134,14 @@ export function createArtifact(input: CreateArtifactInput): Artifact {
   }
   const runId = normalizeIdField(input.runId);
   const nodeId = normalizeIdField(input.nodeId, ARTIFACT_NODE_ID_MAX);
-  const filePath =
-    typeof input.filePath === 'string' ? input.filePath.trim() || null : null;
-  if (filePath && (hasUnsafeNameChars(filePath) || filePath.length > ARTIFACT_FILE_PATH_MAX)) {
+  let filePath: string | null = null;
+  if (typeof input.filePath === 'string') {
+    if (hasUnsafeNameChars(input.filePath)) {
+      throw new Error('filePath is invalid');
+    }
+    filePath = input.filePath.trim() || null;
+  }
+  if (filePath && filePath.length > ARTIFACT_FILE_PATH_MAX) {
     throw new Error('filePath is invalid');
   }
   const content = normalizeContent(input.content);
@@ -194,12 +205,14 @@ export function updateArtifact(
   const existing = getArtifact(trimmed);
   if (!existing) return undefined;
   const db = getDb();
-  const name =
-    input.name !== undefined
-      ? (typeof input.name === 'string' ? input.name.trim() : '')
-      : existing.name;
-  if (!name) return undefined;
-  if (hasUnsafeNameChars(name) || name.length > 500) return undefined;
+  let name = existing.name;
+  if (input.name !== undefined) {
+    const rawName = typeof input.name === 'string' ? input.name : '';
+    // Control-char check before trim
+    if (hasUnsafeNameChars(rawName)) return undefined;
+    name = rawName.trim();
+  }
+  if (!name || name.length > 500) return undefined;
   const content =
     input.content !== undefined
       ? normalizeContent(input.content)

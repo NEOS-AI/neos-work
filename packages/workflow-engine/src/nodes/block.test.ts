@@ -34,6 +34,10 @@ describe('BlockNode', () => {
     const ctrl = await node.execute(ctx({ blockId: 'bad\nid' }));
     expect(ctrl.ok).toBe(false);
     expect(ctrl.error).toMatch(/blockId is invalid/);
+    // Leading control char must not be stripped to a valid id
+    const lead = await node.execute(ctx({ blockId: '\ncode_eval' }));
+    expect(lead.ok).toBe(false);
+    expect(lead.error).toMatch(/blockId is invalid/);
     const long = await node.execute(ctx({ blockId: 'b'.repeat(201) }));
     expect(long.ok).toBe(false);
     expect(long.error).toMatch(/blockId is invalid/);

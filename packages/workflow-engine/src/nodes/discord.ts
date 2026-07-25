@@ -13,7 +13,18 @@ export class DiscordMessageNode implements ExecutableNode {
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
-    const webhookUrl = String(ctx.settings['DISCORD_WEBHOOK_URL'] ?? '').trim();
+    const webhookRaw = String(ctx.settings['DISCORD_WEBHOOK_URL'] ?? '');
+    // Control-char / overlong reject before trim (header/SSRF hygiene)
+    const WEBHOOK_URL_MAX = 2_048;
+    if (/[\0\r\n]/.test(webhookRaw) || webhookRaw.length > WEBHOOK_URL_MAX) {
+      return {
+        ok: false,
+        output: null,
+        error: 'Invalid Discord webhook URL',
+        durationMs: 0,
+      };
+    }
+    const webhookUrl = webhookRaw.trim();
     if (!webhookUrl) {
       return { ok: false, output: null, error: 'DISCORD_WEBHOOK_URL not set', durationMs: 0 };
     }

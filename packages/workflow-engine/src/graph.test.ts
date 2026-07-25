@@ -98,6 +98,19 @@ describe('topologicalSort', () => {
     expect(topologicalSort(single, []).map((n) => n.id)).toEqual(['only']);
   });
 
+  it('skips control-char node/edge ids before trim', () => {
+    const nodes: WorkflowNode[] = [
+      { id: 'a', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: '\nb', type: 'output', label: 'bad', position: { x: 1, y: 0 }, config: {} },
+      { id: 'c', type: 'output', label: 'C', position: { x: 2, y: 0 }, config: {} },
+    ];
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: 'a', target: '\nc' },
+      { id: 'e2', source: 'a', target: 'c' },
+    ];
+    expect(topologicalSort(nodes, edges).map((n) => n.id)).toEqual(['a', 'c']);
+  });
+
   it('skips blank and duplicate node ids; trims padded ids', () => {
     const nodes: WorkflowNode[] = [
       { id: '  a  ', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
@@ -147,6 +160,20 @@ describe('topologicalSort', () => {
       target: 'b',
     }));
     expect(() => topologicalSort(two, tooManyEdges)).toThrow(/max edges/i);
+  });
+
+  it('skips leading control-char node/edge ids before trim', () => {
+    // "\nok" would become "ok" if trim ran first — must be skipped
+    const nodes = [
+      { id: '\nok', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+      { id: 'real', type: 'output', label: 'O', position: { x: 1, y: 0 }, config: {} },
+    ];
+    const edges = [
+      { id: 'e1', source: '\nok', target: 'real' },
+      { id: 'e2', source: 'real', target: 'real\n' },
+    ];
+    const sorted = topologicalSort(nodes as never, edges as never);
+    expect(sorted.map((n) => n.id)).toEqual(['real']);
   });
 
   it('skips control-char and overlong node ids', () => {

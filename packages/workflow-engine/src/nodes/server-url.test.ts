@@ -31,5 +31,8 @@ describe('safeServerUrl', () => {
   it('falls back for control-char or overlong URLs', () => {
     expect(safeServerUrl(`http://x.example/\0path`)).toBe('http://localhost:3001');
     expect(safeServerUrl(`http://x.example/${'a'.repeat(3_000)}`)).toBe('http://localhost:3001');
+    // Leading control char must not strip to a valid URL
+    expect(safeServerUrl('\nhttp://localhost:3001')).toBe('http://localhost:3001');
+    expect(safeServerUrl('http://x.example/\npath')).toBe('http://localhost:3001');
   });
 });

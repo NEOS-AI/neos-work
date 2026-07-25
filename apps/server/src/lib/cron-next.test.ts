@@ -14,7 +14,10 @@ describe('estimateNextCronRun', () => {
   it('rejects control-char or overlong timezones', () => {
     expect(isValidTimeZone('UTC')).toBe(true);
     expect(isValidTimeZone('bad\ntz')).toBe(false);
+    // Leading control char must not strip to a valid zone
+    expect(isValidTimeZone('\nUTC')).toBe(false);
     expect(isValidTimeZone('z'.repeat(101))).toBe(false);
+    expect(estimateNextCronRun('0 * * * *', { timezone: 'bad\ntz' })).toBeNull();
   });
 
   it('finds next hourly run at minute 0', () => {

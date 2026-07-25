@@ -50,6 +50,16 @@ describe('assessWorkflowPreflight', () => {
     );
     expect(r.ok).toBe(false);
     expect(r.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
+
+    // Leading control char must not strip to a valid endpoint
+    const leading = assessWorkflowPreflight(
+      {
+        nodes: base.nodes,
+        edges: [{ id: 'e1', source: '\nt', target: 'o' }],
+      },
+      {},
+    );
+    expect(leading.issues.some((i) => i.code === 'dangling_edge')).toBe(true);
   });
 
   it('flags blank node ids', () => {
