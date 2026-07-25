@@ -41,5 +41,13 @@ describe('isDiscordWebhookUrl', () => {
       isDiscordWebhookUrl(`https://discord.com/api/webhooks/1/${'a'.repeat(3_000)}`),
     ).toBe(false);
   });
+
+  it('rejects non-string URLs and unparseable values', () => {
+    expect(isDiscordWebhookUrl(null as unknown as string)).toBe(false);
+    expect(isDiscordWebhookUrl(undefined as unknown as string)).toBe(false);
+    expect(isDiscordWebhookUrl(123 as unknown as string)).toBe(false);
+    // URL constructor throws for some edge forms after length/control gates pass
+    expect(isDiscordWebhookUrl('https://')).toBe(false);
+  });
 });
 

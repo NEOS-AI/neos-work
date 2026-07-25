@@ -121,7 +121,15 @@ export function Routines() {
       enabled: formEnabled,
     });
     setSubmitting(false);
-    if (!res.ok) { setFormError((res as { error?: string }).error ?? 'Failed'); return; }
+    if (!res.ok) {
+      setFormError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Failed',
+      );
+      return;
+    }
     setCreateOpen(false);
     setFormName('');
     setFormWorkflowId('');
@@ -157,6 +165,13 @@ export function Routines() {
         const runsRes = await client.listRoutineRuns(id);
         if (runsRes.ok && runsRes.data) setRuns(runsRes.data);
       }
+    } else {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Run failed';
+      alert(err);
     }
   };
 
@@ -206,7 +221,12 @@ export function Routines() {
     });
     setEditSaving(false);
     if (!res.ok) {
-      setEditError((res as { error?: string }).error ?? 'Update failed');
+      setEditError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Update failed',
+      );
       return;
     }
     await load();
@@ -371,10 +391,20 @@ export function Routines() {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  {selectedRoutine.name}
+                  {scrubDisplayText(selectedRoutine.name, {
+                    collapseLines: true,
+                    maxChars: 200,
+                  }) || 'Routine'}
                 </h3>
                 <p className="text-sm mt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {selectedRoutine.schedule} ({selectedRoutine.timezone || 'UTC'})
+                  {scrubDisplayText(selectedRoutine.schedule, {
+                    collapseLines: true,
+                    maxChars: 80,
+                  }) || '—'}{' '}
+                  ({scrubDisplayText(selectedRoutine.timezone || 'UTC', {
+                    collapseLines: true,
+                    maxChars: 60,
+                  }) || 'UTC'})
                 </p>
               </div>
               <div className="flex gap-2">
@@ -406,7 +436,11 @@ export function Routines() {
               <div className="flex justify-between">
                 <span style={{ color: 'var(--text-muted)' }}>Workflow</span>
                 <span style={{ color: 'var(--text-primary)' }}>
-                  {workflows.find((w) => w.id === selectedRoutine.workflowId)?.name ?? selectedRoutine.workflowId}
+                  {scrubDisplayText(
+                    workflows.find((w) => w.id === selectedRoutine.workflowId)?.name
+                      ?? selectedRoutine.workflowId,
+                    { collapseLines: true, maxChars: 200 },
+                  ) || '—'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -488,7 +522,11 @@ export function Routines() {
                   </button>
                 ))}
               </div>
-              {editError && <p className="text-xs text-red-400">{editError}</p>}
+              {editError && (
+                <p className="text-xs text-red-400">
+                  {scrubDisplayText(editError, { collapseLines: true, maxChars: 300 }) || editError}
+                </p>
+              )}
               <button
                 type="button"
                 disabled={editSaving}
@@ -597,7 +635,9 @@ export function Routines() {
                 >
                   <option value="">— Select workflow —</option>
                   {workflows.map((w) => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
+                    <option key={w.id} value={w.id}>
+                      {scrubDisplayText(w.name, { collapseLines: true, maxChars: 200 }) || w.id || 'Workflow'}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -678,7 +718,11 @@ export function Routines() {
               </label>
             </div>
 
-            {formError && <p className="text-xs text-red-400">{formError}</p>}
+            {formError && (
+              <p className="text-xs text-red-400">
+                {scrubDisplayText(formError, { collapseLines: true, maxChars: 300 }) || formError}
+              </p>
+            )}
 
             <div className="flex gap-2 justify-end">
               <button

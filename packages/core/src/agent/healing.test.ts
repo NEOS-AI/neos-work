@@ -218,4 +218,106 @@ describe('ReflectionStrategy', () => {
     expect(result.revisedStep?.description).toBe('Use list');
     expect(result.revisedStep?.toolName).toBe('list_directory');
   });
+
+  it('treats control-char actions as skip and drops null-byte revisedDescription', async () => {
+    const badAction = await new ReflectionStrategy(
+      mockAdapter([JSON.stringify({ action: 'retry\n' })]),
+    ).heal(step, 'e', []);
+    expect(badAction.action).toBe('skip');
+    expect(badAction.revisedStep).toBeUndefined();
+
+    const nullDesc = await new ReflectionStrategy(
+      mockAdapter([
+        JSON.stringify({
+          action: 'retry',
+          revisedDescription: `fixed${'\0'}path`,
+          revisedToolName: 'read_file',
+        }),
+      ]),
+    ).heal(step, 'e', []);
+    expect(nullDesc.action).toBe('retry');
+    // Null-byte description dropped → fall back to original
+    expect(nullDesc.revisedStep?.description).toBe(step.description);
+    expect(nullDesc.revisedStep?.toolName).toBe('read_file');
+  });
+
+  it('drops overlong revised tool names and truncates oversized revisedInput', async () => {
+    const longTool = await new ReflectionStrategy(
+      mockAdapter([
+        JSON.stringify({
+          action: 'retry',
+          revisedToolName: 't'.repeat(101),
+          revisedInput: { path: 'ok' },
+        }),
+      ]),
+    ).heal(step, 'e', []);
+    expect(longTool.action).toBe('retry');
+    expect(longTool.revisedStep?.toolName).toBe(step.toolName);
+    expect(longTool.revisedStep?.input).toEqual({ path: 'ok' });
+
+    const fatInput = await new ReflectionStrategy(
+      mockAdapter([
+        JSON.stringify({
+          action: 'retry',
+          revisedInput: { blob: 'x'.repeat(20_000) },
+        }),
+      ]),
+    ).heal(step, 'e', []);
+    expect(fatInput.action).toBe('retry');
+    expect(fatInput.revisedStep?.input).toEqual({
+      _truncated: true,
+      note: 'revisedInput exceeded 16k',
+    });
+  });
+
+  it('omits input section when step has no input and coerces non-string errors', async () => {
+    let captured = '';
+    const adapter = {
+      id: 'openai' as const,
+      name: 'Cap',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai' as const,
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: { messages?: Array<{ content?: string }> }) {
+        captured = String(params.messages?.[0]?.content ?? '');
+        yield { type: 'text' as const, content: JSON.stringify({ action: 'skip' }) };
+        yield { type: 'done' as const };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const bare: AgentStep = {
+      id: 'bare',
+      index: 0,
+      description: 'No input step',
+      type: 'plan',
+      status: 'error',
+    };
+    await new ReflectionStrategy(adapter).heal(bare, { code: 42 } as unknown as string, []);
+    expect(captured).toContain('목표: No input step');
+    expect(captured).not.toMatch(/^입력:/m);
+    expect(captured).toMatch(/에러:.*\[object Object\]|에러:.*code/i);
+  });
+
+  it('falls back to original input when revisedInput is an array', async () => {
+    const result = await new ReflectionStrategy(
+      mockAdapter([
+        JSON.stringify({
+          action: 'retry',
+          revisedInput: ['not', 'an', 'object'],
+        }),
+      ]),
+    ).heal(step, 'e', []);
+    expect(result.action).toBe('retry');
+    expect(result.revisedStep?.input).toEqual(step.input);
+  });
 });

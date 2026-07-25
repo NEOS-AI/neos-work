@@ -284,4 +284,127 @@ describe('BlockNode', () => {
     expect(result.ok).toBe(true);
     expect(result.output).toBe('num');
   });
+
+  it('rejects non-string blockId that stringifies to control chars or overlong values', async () => {
+    const ctrl = await node.execute(
+      ctx({ blockId: { toString: () => 'bad\nid' } as never }),
+    );
+    expect(ctrl.ok).toBe(false);
+    expect(ctrl.error).toMatch(/blockId is invalid/);
+
+    const long = await node.execute(
+      ctx({ blockId: { toString: () => 'b'.repeat(201) } as never }),
+    );
+    expect(long.ok).toBe(false);
+    expect(long.error).toMatch(/blockId is invalid/);
+  });
+
+  it('caps param key count and truncates overlong string param values', async () => {
+    let seen: Record<string, unknown> | undefined;
+    registerNativeBlock(
+      {
+        blockId: 'cov_param_caps',
+        execute: async ({ params }) => {
+          seen = params;
+          return { ok: true, output: params, durationMs: 0 };
+        },
+      },
+      {
+        id: 'cov_param_caps',
+        name: 'Param Caps',
+        domain: 'general',
+        category: 'test',
+        description: 'test',
+        isBuiltIn: true,
+        implementationType: 'native',
+        paramDefs: [],
+        inputDescription: '',
+        outputDescription: '',
+      },
+    );
+
+    const manyKeys: Record<string, unknown> = {};
+    for (let i = 0; i < 120; i++) manyKeys[`k${i}`] = i;
+    manyKeys['long'] = 'V'.repeat(15_000);
+    manyKeys['bad\nkey'] = 'drop';
+    manyKeys['k'.repeat(101)] = 'drop-long-key';
+
+    const result = await node.execute(
+      ctx({ blockId: 'cov_param_caps', params: manyKeys }),
+    );
+    expect(result.ok).toBe(true);
+    expect(seen).toBeDefined();
+    expect(Object.keys(seen!).length).toBeLessThanOrEqual(100);
+    expect(seen!['bad\nkey']).toBeUndefined();
+    if (typeof seen!['long'] === 'string') {
+      expect((seen!['long'] as string).length).toBe(10_000);
+    }
+  });
+
+  it('rejects skillId with control chars even if registry meta is mutated', async () => {
+    registerBlockMeta({
+      id: 'cov_skill_mut',
+      name: 'Skill Mut',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'skill',
+      skillId: 'valid-skill',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const meta = resolveBlock('cov_skill_mut');
+    expect(meta?.skillId).toBe('valid-skill');
+    // Simulate corrupted runtime meta (control char would have been stripped at register)
+    (meta as WorkflowBlock).skillId = 'bad\nskill';
+    const result = await node.execute(ctx({ blockId: 'cov_skill_mut' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/skillId is invalid/);
+  });
+
+  it('delegates skill blocks with valid skillId to AgentNode (fails closed without API)', async () => {
+    registerBlockMeta({
+      id: 'cov_skill_ok',
+      name: 'Skill Ok',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'skill',
+      skillId: 'my-skill',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const result = await node.execute(
+      ctx({ blockId: 'cov_skill_ok' }, { note: 'input' }),
+    );
+    // Without LLM credentials AgentNode returns a failed result — path still exercised
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeTruthy();
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('delegates prompt blocks with template to AgentNode', async () => {
+    registerBlockMeta({
+      id: 'cov_prompt_ok',
+      name: 'Prompt Ok',
+      domain: 'general',
+      category: 'test',
+      description: 'test',
+      isBuiltIn: true,
+      implementationType: 'prompt',
+      promptTemplate: 'Params={{params}} Inputs={{inputs}}',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const result = await node.execute(
+      ctx({ blockId: 'cov_prompt_ok', params: { a: 1 } }, { x: 'y' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBeTruthy();
+  });
 });

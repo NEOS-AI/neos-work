@@ -180,7 +180,7 @@ describe('DesignSystemEditor page', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => {
-      // saveMessage is "Save failed: disk\nfull\0!" then scrub collapses newlines / strips null
+      // Store-time scrub collapses newlines / strips null before setSaveMessage
       expect(screen.getByText(/Save failed: disk full!/)).toBeInTheDocument();
     });
     expect(document.body.textContent).not.toContain('\0');

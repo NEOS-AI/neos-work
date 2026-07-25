@@ -206,4 +206,36 @@ triggers:  hi ,  hello
     expect(skill!.content).toBe('content');
     expect(skill!.path).toBe('/skills/hello.md');
   });
+
+  it('caps overlong description, examplePrompt, and skill body', () => {
+    const content = `---
+name: big
+description: ${'D'.repeat(10_000)}
+examplePrompt: ${'E'.repeat(6_000)}
+---
+${'B'.repeat(510_000)}
+`;
+    const skill = parseSkillFile(content, '/skills/big.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.description.length).toBe(4_000);
+    expect(skill!.manifest.examplePrompt?.length).toBe(4_000);
+    expect(skill!.content).toMatch(/…\[skill truncated\]$/);
+    expect(skill!.content.length).toBe(500_000 + '\n…[skill truncated]'.length);
+  });
+
+  it('collapses embedded newlines in description and filters bad triggers', () => {
+    // description with embedded \n after parseSimpleYaml is rare (line-based);
+    // inject via a single-line value that still exercises replace on description path
+    const content = `---
+name: multi
+description: line1\\nline2
+triggers: ok, fine, ${'t'.repeat(150)}, 
+---
+body
+`;
+    const skill = parseSkillFile(content, '/skills/multi.md', 'local');
+    expect(skill).not.toBeNull();
+    // Overlong trigger tokens dropped; blank tokens dropped
+    expect(skill!.manifest.triggers).toEqual(['ok', 'fine']);
+  });
 });

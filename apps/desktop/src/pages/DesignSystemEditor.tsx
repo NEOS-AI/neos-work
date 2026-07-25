@@ -55,7 +55,9 @@ export function DesignSystemEditor() {
       setSavedContent(content);
       setSaveMessage('Saved');
     } else {
-      setSaveMessage('Save failed: ' + (res.error ?? 'unknown'));
+      const detail =
+        scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown';
+      setSaveMessage(`Save failed: ${detail}`);
     }
     setSaving(false);
   }, [client, id, content, saving]);

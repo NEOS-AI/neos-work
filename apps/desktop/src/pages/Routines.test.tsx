@@ -229,6 +229,30 @@ describe('Routines page', () => {
     expect(screen.getByText('New Routine')).toBeInTheDocument();
   });
 
+  it('scrubs control-char create API error banner', async () => {
+    const user = userEvent.setup();
+    listRoutines.mockResolvedValue({ ok: true, data: [] });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    createRoutine.mockResolvedValue({
+      ok: false,
+      error: `invalid${'\n'}cron${'\0'}!`,
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText(/No routines/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    await waitFor(() => expect(screen.getByText('New Routine')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Daily digest'), 'Broken');
+    fireEvent.change(screen.getByDisplayValue('— Select workflow —'), { target: { value: 'wf-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(createRoutine).toHaveBeenCalled();
+      expect(screen.getByText('invalid cron!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('selects routine, loads runs, toggles, runs now, deletes', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
@@ -381,19 +405,55 @@ describe('Routines page', () => {
         },
       ],
     });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: [] });
     render(<Routines />);
     await waitFor(() => expect(screen.getByText('RtnX')).toBeInTheDocument());
     expect(screen.getByText(/0 9 \* \* \* extra/)).toBeInTheDocument();
     expect(screen.getByText(/UTC x/)).toBeInTheDocument();
     expect(screen.getByText('DailyDigest')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
+
+    // Detail panel also scrubs (was raw before v0.3.146)
+    fireEvent.click(screen.getByText('RtnX'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Run Now' })).toBeInTheDocument());
+    // Name appears in list + detail heading
+    expect(screen.getAllByText('RtnX').length).toBeGreaterThanOrEqual(2);
+    // Schedule/timezone line in detail (parenthesized timezone)
+    expect(screen.getByText(/0 9 \* \* \* extra \(UTC x\)/)).toBeInTheDocument();
+    // Workflow field in detail
+    expect(screen.getAllByText('DailyDigest').length).toBeGreaterThanOrEqual(1);
+    expect(document.body.textContent).not.toContain('\0');
   });
 
-  it('run-now failure does not show success alert; crystallize failure alerts', async () => {
+  it('scrubs control-char schedule update API error', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
     listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
-    runRoutineNow.mockResolvedValue({ ok: false, error: 'scheduler busy' });
+    updateRoutine.mockResolvedValue({
+      ok: false,
+      error: `bad${'\n'}cron${'\0'}!`,
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save schedule' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+    await waitFor(() => {
+      expect(updateRoutine).toHaveBeenCalled();
+      expect(screen.getByText('bad cron!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('run-now failure alerts scrubbed error; crystallize failure alerts', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    runRoutineNow.mockResolvedValue({
+      ok: false,
+      error: `scheduler${'\n'}busy${'\0'}!`,
+    });
     crystallizeRoutineRun.mockResolvedValue({ ok: false, error: 'disk full' });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<Routines />);
@@ -402,9 +462,14 @@ describe('Routines page', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '▶ Run Now' })).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '▶ Run Now' }));
-    await waitFor(() => expect(runRoutineNow).toHaveBeenCalledWith('r1'));
+    await waitFor(() => {
+      expect(runRoutineNow).toHaveBeenCalledWith('r1');
+      expect(window.alert).toHaveBeenCalledWith('scheduler busy!');
+    });
     expect(window.alert).not.toHaveBeenCalledWith(expect.stringContaining('Triggered'));
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
 
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
     await waitFor(() => {
       expect(crystallizeRoutineRun).toHaveBeenCalledWith('r1', 'run-1');
