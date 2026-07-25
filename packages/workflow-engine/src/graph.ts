@@ -70,16 +70,18 @@ export function topologicalSort(
     inDegree.set(target, (inDegree.get(target) ?? 0) + 1);
   }
 
+  // Nodes in nodeMap already have sanitized ids (control-char entries dropped above)
   const queue: WorkflowNode[] = [...nodeMap.values()].filter((n) => {
-    const id = typeof n.id === 'string' ? n.id.trim() : n.id;
-    return (inDegree.get(id) ?? 0) === 0;
+    const id = typeof n.id === 'string' ? n.id : '';
+    return id && (inDegree.get(id) ?? 0) === 0;
   });
   const sorted: WorkflowNode[] = [];
 
   while (queue.length > 0) {
     const node = queue.shift()!;
     sorted.push(node);
-    const nid = typeof node.id === 'string' ? node.id.trim() : node.id;
+    const nid = typeof node.id === 'string' ? node.id : '';
+    if (!nid) continue;
     for (const neighborId of adj.get(nid) ?? []) {
       const newDeg = (inDegree.get(neighborId) ?? 1) - 1;
       inDegree.set(neighborId, newDeg);

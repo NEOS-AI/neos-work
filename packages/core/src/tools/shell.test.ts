@@ -176,6 +176,23 @@ describe('createShellTool', () => {
     expect(zero.output).toBeTruthy();
   });
 
+  it('ignores control-char timeout strings and uses default timeout', async () => {
+    const tool = createShellTool(root);
+    // Leading \n must not strip to a numeric timeout
+    const lead = await tool.execute({
+      command: 'echo ok',
+      timeout: '\n5000' as unknown as number,
+    });
+    expect(lead.success).toBe(true);
+    expect((lead.output as { stdout: string }).stdout).toContain('ok');
+
+    const nul = await tool.execute({
+      command: 'echo ok',
+      timeout: `1${'\0'}000` as unknown as number,
+    });
+    expect(nul.success).toBe(true);
+  });
+
   it('blocks dd-to-root, iptables, and killall Finder patterns', async () => {
     const tool = createShellTool(root);
     for (const command of [

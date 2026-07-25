@@ -119,19 +119,30 @@ export const MediaNode: ExecutableNode = {
         }
         const data = await res.json() as { ok?: boolean; data?: { filename?: string; revisedPrompt?: string }; error?: string };
         if (data.ok === false) {
+          let errMsg = 'Image generation failed';
+          if (typeof data.error === 'string' && !/[\0\r\n]/.test(data.error)) {
+            const e = data.error.trim();
+            if (e) errMsg = e;
+          }
           return {
             ok: false,
             output: null,
-            error: typeof data.error === 'string' && data.error.trim()
-              ? data.error.trim()
-              : 'Image generation failed',
+            error: errMsg,
             durationMs: Date.now() - start,
           };
         }
-        const filename =
-          typeof data.data?.filename === 'string' ? data.data.filename.trim() : '';
-        const revised =
-          typeof data.data?.revisedPrompt === 'string' ? data.data.revisedPrompt.trim() : '';
+        // Control-char filename / revised prompt dropped (check before trim)
+        let filename = '';
+        if (typeof data.data?.filename === 'string' && !/[\0\r\n]/.test(data.data.filename)) {
+          filename = data.data.filename.trim();
+        }
+        let revised = '';
+        if (
+          typeof data.data?.revisedPrompt === 'string'
+          && !/\0/.test(data.data.revisedPrompt)
+        ) {
+          revised = data.data.revisedPrompt.replace(/[\r\n]+/g, ' ').trim();
+        }
         return {
           ok: true,
           output: `Image generated: ${filename}${revised ? `\nRevised prompt: ${revised}` : ''}`.trim(),
@@ -215,17 +226,22 @@ export const MediaNode: ExecutableNode = {
         }
         const data = await res.json() as { ok?: boolean; data?: { filename?: string }; error?: string };
         if (data.ok === false) {
+          let errMsg = 'Audio generation failed';
+          if (typeof data.error === 'string' && !/[\0\r\n]/.test(data.error)) {
+            const e = data.error.trim();
+            if (e) errMsg = e;
+          }
           return {
             ok: false,
             output: null,
-            error: typeof data.error === 'string' && data.error.trim()
-              ? data.error.trim()
-              : 'Audio generation failed',
+            error: errMsg,
             durationMs: Date.now() - start,
           };
         }
-        const filename =
-          typeof data.data?.filename === 'string' ? data.data.filename.trim() : '';
+        let filename = '';
+        if (typeof data.data?.filename === 'string' && !/[\0\r\n]/.test(data.data.filename)) {
+          filename = data.data.filename.trim();
+        }
         return {
           ok: true,
           output: `Audio generated: ${filename}`,

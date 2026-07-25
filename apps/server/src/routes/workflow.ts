@@ -437,32 +437,70 @@ async function importClaudeDesignZip(
     ?? htmlFiles.sort((a, b) => a.path.length - b.path.length)[0]!;
 
   const html = (await entry.buffer()).toString('utf-8');
-  const baseFromZip = preferredName
-    ?? entry.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.html?$/i, '')
-    ?? 'Claude Design Import';
+  // Null bytes break HTML artifacts / SQLite text
+  if (/\0/.test(html)) return null;
+  // Cap HTML payload (align with ARTIFACT_CONTENT_MAX_CHARS practical bound)
+  if (html.length > 2 * 1024 * 1024) return null;
+
+  // Prefer preferredName; scrub control chars from zip entry stem
+  const entryStem =
+    entry.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.html?$/i, '') ?? '';
+  let baseFromZip = 'Claude Design Import';
+  const nameCandidate = preferredName ?? entryStem;
+  if (typeof nameCandidate === 'string' && nameCandidate) {
+    if (/[\0\r\n]/.test(nameCandidate)) {
+      baseFromZip =
+        nameCandidate.replace(/[\0\r\n]/g, ' ').trim().slice(0, 200) || 'Claude Design Import';
+    } else {
+      const n = nameCandidate.trim().slice(0, 200);
+      if (n) baseFromZip = n;
+    }
+  }
   const rawName = baseFromZip.slice(0, 200) || 'Claude Design Import';
   const existing = db.listWorkflows().find((w) => w.name === rawName);
   const finalName = existing ? `Copy of ${rawName}` : rawName;
 
+  // Artifact filename: basename only, control-char scrub
+  let artifactName =
+    entry.path.replace(/\\/g, '/').split('/').pop() ?? 'index.html';
+  if (/[\0\r\n]/.test(artifactName)) {
+    artifactName = artifactName.replace(/[\0\r\n]/g, '_').trim() || 'index.html';
+  }
+  if (artifactName.length > 200) artifactName = artifactName.slice(0, 200);
+
+  // Entry path for description: scrub control chars
+  const entryPathSafe = entry.path.replace(/[\0\r\n]/g, '?').slice(0, 200);
+
   const triggerId = crypto.randomUUID();
   const outputId = crypto.randomUUID();
-  const created = db.createWorkflow({
-    name: finalName,
-    description: `Imported from Claude Design ZIP (entry: ${entry.path})`,
-    domain: 'general',
-    nodes: [
-      { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
-      { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
-    ],
-    edges: [{ id: crypto.randomUUID(), source: triggerId, target: outputId }],
-  });
+  let created;
+  try {
+    created = db.createWorkflow({
+      name: finalName,
+      description: `Imported from Claude Design ZIP (entry: ${entryPathSafe})`,
+      domain: 'general',
+      nodes: [
+        { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+        { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
+      ],
+      edges: [{ id: crypto.randomUUID(), source: triggerId, target: outputId }],
+    });
+  } catch {
+    return null;
+  }
 
-  const artifact = artifactDb.createArtifact({
-    workflowId: created.id,
-    name: entry.path.replace(/\\/g, '/').split('/').pop() ?? 'index.html',
-    contentType: 'text/html',
-    content: html,
-  });
+  let artifact;
+  try {
+    artifact = artifactDb.createArtifact({
+      workflowId: created.id,
+      name: artifactName,
+      contentType: 'text/html',
+      content: html,
+    });
+  } catch {
+    // Workflow was created; still return it without artifact id
+    return { workflow: created, artifactId: undefined, importKind: 'claude-design' as const };
+  }
 
   return { workflow: created, artifactId: artifact.id, importKind: 'claude-design' as const };
 }

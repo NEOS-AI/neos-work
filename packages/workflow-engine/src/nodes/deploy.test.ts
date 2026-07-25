@@ -126,6 +126,28 @@ describe('DeployNode', () => {
     expect(result.error).toBe('Deploy failed');
   });
 
+  it('drops control-char deploy URL and error strings from API response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: { url: '\nhttps://evil.example' },
+      }),
+    }));
+    const ok = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(ok.ok).toBe(true);
+    // Leading control URL must not strip to a valid URL
+    expect(String(ok.output)).toContain('unknown URL');
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: false, error: 'bad\nerror' }),
+    }));
+    const fail = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));
+    expect(fail.ok).toBe(false);
+    expect(fail.error).toBe('Deploy failed');
+  });
+
   it('stringifies non-Error network failures', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue('boom'));
     const result = await DeployNode.execute(ctx({ inputs: { content: 'x' } }));

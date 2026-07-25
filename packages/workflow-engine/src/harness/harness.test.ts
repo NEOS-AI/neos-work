@@ -93,6 +93,42 @@ describe('harness registry', () => {
       allowedTools: [],
     });
     expect(resolveHarness('bad\nid')).toBeUndefined();
+    // Leading control-char id must not register as stripped id
+    registerHarness({
+      id: '\nlead-id-h',
+      name: 'Lead',
+      domain: 'general',
+      description: '',
+      systemPrompt: 'p',
+      allowedTools: [],
+    });
+    expect(resolveHarness('lead-id-h')).toBeUndefined();
+    // Control-char domain → general; leading-control tools dropped
+    registerHarness({
+      id: 'ctrl-domain-h',
+      name: 'CD',
+      domain: '\ncoding' as never,
+      description: 'line1\nline2',
+      systemPrompt: 'p',
+      allowedTools: ['ok', '\nread', 'write'],
+    });
+    const cd = resolveHarness('ctrl-domain-h');
+    expect(cd?.domain).toBe('general');
+    expect(cd?.description).toBe('line1 line2');
+    expect(cd?.allowedTools).toEqual(['ok', 'write']);
+    // Control-char systemPrompt → no-op
+    registerHarness({
+      id: 'ctrl-prompt-h',
+      name: 'CP',
+      domain: 'general',
+      description: '',
+      systemPrompt: 'p\nbad',
+      allowedTools: [],
+    });
+    expect(resolveHarness('ctrl-prompt-h')).toBeUndefined();
+    // Control-char domain filter → list all
+    expect(listHarnesses('\ncoding').length).toBe(listHarnesses().length);
+
     registerHarness({
       id: 'tool-filter-h',
       name: 'TF',

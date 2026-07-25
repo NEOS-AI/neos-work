@@ -89,9 +89,12 @@ export class SlackMessageNode implements ExecutableNode {
       const result = await client.chat.postMessage({ channel, text });
 
       if (!result.ok) {
-        const apiError = typeof result.error === 'string' && result.error.trim()
-          ? result.error.trim()
-          : undefined;
+        // Control-char API error codes dropped (check before trim)
+        let apiError: string | undefined;
+        if (typeof result.error === 'string' && !/[\0\r\n]/.test(result.error)) {
+          const e = result.error.trim();
+          if (e) apiError = e;
+        }
         return {
           ok: false,
           output: null,

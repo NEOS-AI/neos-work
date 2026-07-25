@@ -102,6 +102,19 @@ describe('Skills page', () => {
     });
   });
 
+  it('shows scan failure message when scanSkills is non-ok', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    scanSkills.mockResolvedValue({ ok: false, error: 'disk full' });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Scan/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Scan/i }));
+    await waitFor(() => {
+      expect(scanSkills).toHaveBeenCalled();
+      expect(screen.getByText(/Scan failed: disk full/)).toBeInTheDocument();
+    });
+  });
+
   it('toggles and deletes a skill', async () => {
     listSkills.mockResolvedValue({ ok: true, data: skills });
     toggleSkill.mockResolvedValue({ ok: true });

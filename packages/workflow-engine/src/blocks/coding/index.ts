@@ -340,9 +340,7 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
   }
   const cwd = rawCwd || process.cwd();
 
-  if (!command.trim()) {
-    return { ok: false, output: null, error: 'No command provided', durationMs: Date.now() - start };
-  }
+  // Control-char check before empty trim so "\nnpm test" is rejected, not accepted
   if (hasUnsafeControlChars(command)) {
     return {
       ok: false,
@@ -350,6 +348,9 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
       error: 'Command contains invalid control characters',
       durationMs: Date.now() - start,
     };
+  }
+  if (!command.trim()) {
+    return { ok: false, output: null, error: 'No command provided', durationMs: Date.now() - start };
   }
   // Align with core shell command length bound
   if (command.length > 10_000) {

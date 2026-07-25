@@ -253,8 +253,11 @@ export class AgentOrchestrator {
         }
       } else if (chunk.type === 'tool_use' && chunk.toolName) {
         if (toolCalls.length >= TOOL_CALLS_MAX) continue;
-        let name = String(chunk.toolName).trim();
-        if (!name || name.length > 200 || /[\0\r\n]/.test(name)) continue;
+        // Control-char check before trim so "\nread" is not accepted as "read"
+        const nameRaw = String(chunk.toolName ?? '');
+        if (!nameRaw || /[\0\r\n]/.test(nameRaw)) continue;
+        const name = nameRaw.trim();
+        if (!name || name.length > 200) continue;
         toolCalls.push({
           name,
           id: chunk.toolUseId ?? crypto.randomUUID(),

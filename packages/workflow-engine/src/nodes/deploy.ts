@@ -115,16 +115,31 @@ export const DeployNode: ExecutableNode = {
         error?: string;
       };
       if (data.ok === false) {
+        let errMsg = 'Deploy failed';
+        if (typeof data.error === 'string' && !/[\0\r\n]/.test(data.error)) {
+          const e = data.error.trim();
+          if (e) errMsg = e;
+        }
         return {
           ok: false,
           output: null,
-          error: typeof data.error === 'string' && data.error.trim()
-            ? data.error.trim()
-            : 'Deploy failed',
+          error: errMsg,
           durationMs: Date.now() - start,
         };
       }
-      const url = typeof data.data?.url === 'string' ? data.data.url.trim() : '';
+      // Only keep http(s) deployment URLs (control-char / non-http → empty)
+      let url = '';
+      if (typeof data.data?.url === 'string' && !/[\0\r\n]/.test(data.data.url)) {
+        const u = data.data.url.trim();
+        if (u && u.length <= 2_048) {
+          try {
+            const parsed = new URL(/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(u) ? u : `https://${u}`);
+            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') url = u;
+          } catch {
+            url = '';
+          }
+        }
+      }
       return {
         ok: true,
         output: `Deployed to ${provider}: ${url || 'unknown URL'}`,

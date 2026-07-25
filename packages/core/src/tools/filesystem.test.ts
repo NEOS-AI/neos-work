@@ -300,6 +300,14 @@ describe('filesystem tools', () => {
     expect(missing.success).toBe(false);
     expect(missing.error).toMatch(/source and destination/i);
 
+    // Leading control-char paths must not strip to valid relative paths
+    const lead = await move.execute({ source: '\nfrom.txt', destination: 'to.txt' });
+    expect(lead.success).toBe(false);
+    expect(lead.error).toMatch(/control characters/i);
+    const destCtrl = await move.execute({ source: 'from.txt', destination: 'to\n.txt' });
+    expect(destCtrl.success).toBe(false);
+    expect(destCtrl.error).toMatch(/control characters/i);
+
     const blank = await move.execute({ source: 'a', destination: '   ' });
     expect(blank.success).toBe(false);
     expect(blank.error).toMatch(/source and destination/i);

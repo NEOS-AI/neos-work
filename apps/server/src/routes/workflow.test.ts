@@ -640,4 +640,58 @@ describe('workflow routes export/import/preflight/runs', () => {
     expect(badVerRes.status).toBe(400);
     expect(((await badVerRes.json()) as { error: string }).error).toMatch(/Unsupported version/i);
   });
+
+  it('import.zip scrubs control-char name/domain and drops null-byte description', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+
+    async function makeZip(files: Record<string, string>): Promise<Buffer> {
+      return new Promise((resolve, reject) => {
+        const archive = new ZipArchive({ zlib: { level: 1 } });
+        const chunks: Buffer[] = [];
+        const stream = new PassThrough();
+        stream.on('data', (c: Buffer) => chunks.push(c));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        archive.on('error', reject);
+        archive.pipe(stream);
+        for (const [name, content] of Object.entries(files)) {
+          archive.append(content, { name });
+        }
+        void archive.finalize();
+      });
+    }
+
+    const zipBuf = await makeZip({
+      'workflow.json': JSON.stringify({
+        version: 1,
+        workflow: {
+          // Leading control name is scrubbed (spaces) not accepted as coding domain name
+          name: `\n${WF_NAME}-zip-ctrl`,
+          description: `bad${'\0'}desc`,
+          domain: '\nfinance',
+          nodes: minimalGraph.nodes,
+          edges: minimalGraph.edges,
+        },
+      }),
+    });
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = await imp.json() as {
+      data: { id: string; name: string; domain: string; description?: string | null };
+    };
+    // Control chars in name → spaces, then trim
+    expect(body.data.name).toMatch(new RegExp(`${WF_NAME}-zip-ctrl`));
+    expect(body.data.name).not.toMatch(/[\0\r\n]/);
+    // Control-char domain → general
+    expect(body.data.domain).toBe('general');
+    // Null-byte description dropped
+    expect(body.data.description == null || body.data.description === '').toBe(true);
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
 });

@@ -347,26 +347,27 @@ export function createMoveFileTool(workspaceRoot: string): Tool {
           typeof input.destination === 'string'
             ? input.destination
             : String(input.destination ?? '');
-        if (!source.trim() || !destination.trim()) {
-          return { success: false, output: null, error: 'source and destination are required' };
-        }
-
-        const srcPath = safePath(workspaceRoot, source);
-        const srcRel = relative(absoluteRoot, srcPath);
-        if (isProtectedPath(srcRel)) {
-          return { success: false, output: null, error: `Cannot move protected path: ${source.trim()}` };
-        }
-
-        // Destination may not exist yet — validate via safePath (parent may not exist)
-        const destTrimmed = destination.trim();
-        // Control-char already rejected by safePath when dest exists path is validated
-        if (/[\0\r\n]/.test(destination)) {
+        // Control-char check before blank check / trim
+        if (/[\0\r\n]/.test(source) || /[\0\r\n]/.test(destination)) {
           return {
             success: false,
             output: null,
-            error: 'Destination contains invalid control characters',
+            error: 'source/destination contains invalid control characters',
           };
         }
+        const sourceTrimmed = source.trim();
+        const destTrimmed = destination.trim();
+        if (!sourceTrimmed || !destTrimmed) {
+          return { success: false, output: null, error: 'source and destination are required' };
+        }
+
+        const srcPath = safePath(workspaceRoot, sourceTrimmed);
+        const srcRel = relative(absoluteRoot, srcPath);
+        if (isProtectedPath(srcRel)) {
+          return { success: false, output: null, error: `Cannot move protected path: ${sourceTrimmed}` };
+        }
+
+        // Destination may not exist yet — validate via parent resolve
         const destResolved = resolve(absoluteRoot, destTrimmed);
         const destRel = relative(absoluteRoot, destResolved);
         if (destRel.startsWith('..')) {
