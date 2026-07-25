@@ -104,8 +104,13 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   };
 
   const handleSaveLabel = async (revId: string) => {
+    // Control-char labels rejected (check before trim; align with revisions API)
+    if (/[\0\r\n]/.test(labelInput)) {
+      setEditingId(null);
+      return;
+    }
     const next = labelInput.trim();
-    if (!next) {
+    if (!next || next.length > 200) {
       // Empty blur / Enter exits edit without writing
       setEditingId(null);
       return;

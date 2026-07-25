@@ -54,4 +54,20 @@ describe('GenUIConfirmation', () => {
     expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
+
+  it('falls back labels and hides prompt on control chars', () => {
+    render(
+      <GenUIConfirmation
+        schema={{
+          prompt: 'bad\0prompt',
+          confirmLabel: 'Yes\nNo',
+          cancelLabel: '\nCancel',
+        }}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/bad/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
 });

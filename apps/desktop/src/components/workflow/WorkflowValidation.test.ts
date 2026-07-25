@@ -1517,6 +1517,78 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
     expect(edgeId.some((i) => i.code === 'missing_edge_id')).toBe(true);
   });
 
+  it('control-char deploy/media/harness/model do not strip to valid values', () => {
+    const deploy = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'd',
+          type: 'deploy',
+          label: 'Deploy',
+          config: {
+            provider: '\nvercel',
+            projectName: '\nmy-app',
+            content: '<p/>',
+          },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(deploy.some((i) => i.code === 'missing_deploy_provider')).toBe(true);
+    expect(deploy.some((i) => i.code === 'missing_deploy_project')).toBe(true);
+
+    // Leading control mediaType must not strip to image
+    const media = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'm',
+          type: 'media',
+          label: 'Media',
+          config: { mediaType: '\nimage', prompt: 'hi' },
+        },
+      ],
+      edges: [],
+      blocks: [],
+    });
+    expect(media.some((i) => i.code === 'invalid_media_type')).toBe(true);
+
+    // Control-char harnessId / llmModel → missing for non-CLI agent
+    const agent = validateWorkflowDraft({
+      nodes: [
+        { id: 't', type: 'trigger', label: 'Start', config: {} },
+        {
+          id: 'a',
+          type: 'agent_coding',
+          label: 'Agent',
+          config: {
+            provider: 'anthropic',
+            harnessId: '\ncoding_reviewer',
+            llmModel: '\nclaude-sonnet-4-5-20250929',
+          },
+        },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't', target: 'a' },
+        { id: 'e2', source: 'a', target: 'o' },
+      ],
+      blocks: [],
+    });
+    expect(agent.some((i) => i.code === 'missing_harness_id')).toBe(true);
+    expect(agent.some((i) => i.code === 'missing_llm_model')).toBe(true);
+
+    // Control-char node id is not in the set; edge to stripped form is dangling
+    const nodeId = validateWorkflowDraft({
+      nodes: [
+        { id: '\nt', type: 'trigger', label: 'Start', config: {} },
+        { id: 'o', type: 'output', label: 'End', config: {} },
+      ],
+      edges: [{ id: 'e1', source: 't', target: 'o' }],
+      blocks: [],
+    });
+    expect(nodeId.some((i) => i.code === 'dangling_edge')).toBe(true);
+  });
+
   it('also recognizes llmProvider for CLI harness skip', () => {
     const issues = validateWorkflowDraft({
       nodes: [

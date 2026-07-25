@@ -11,20 +11,20 @@ export const MEDIA_IMAGE_QUALITIES = ['standard', 'hd'] as const;
 export type MediaImageQuality = (typeof MEDIA_IMAGE_QUALITIES)[number];
 
 export function isMediaImageSize(value: unknown): value is MediaImageSize {
-  if (typeof value !== 'string') return false;
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
   // Normalize case so "1024X1024" matches panel/server allow-lists
   const v = value.trim().toLowerCase();
   return (MEDIA_IMAGE_SIZES as readonly string[]).includes(v);
 }
 
 export function isMediaVoice(value: unknown): value is MediaVoice {
-  if (typeof value !== 'string') return false;
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
   const v = value.trim().toLowerCase();
   return (MEDIA_VOICES as readonly string[]).includes(v);
 }
 
 export function isMediaImageQuality(value: unknown): value is MediaImageQuality {
-  if (typeof value !== 'string') return false;
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
   const v = value.trim().toLowerCase();
   return (MEDIA_IMAGE_QUALITIES as readonly string[]).includes(v);
 }
@@ -34,7 +34,7 @@ export const MEDIA_TTS_MODELS = ['tts-1', 'tts-1-hd'] as const;
 export type MediaTtsModel = (typeof MEDIA_TTS_MODELS)[number];
 
 export function isMediaTtsModel(value: unknown): value is MediaTtsModel {
-  if (typeof value !== 'string') return false;
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
   const v = value.trim().toLowerCase();
   return (MEDIA_TTS_MODELS as readonly string[]).includes(v);
 }

@@ -33,7 +33,16 @@ export function RunInputsDialog({ defaultInputs, onConfirm, onCancel }: RunInput
         setParseError('Must be a JSON object.');
         return;
       }
-      onConfirm(parsed as Record<string, unknown>);
+      // Drop control-char / blank / overlong keys (align with TriggerNode runtime hygiene)
+      const clean: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (Object.keys(clean).length >= 200) break;
+        if (typeof k !== 'string' || /[\0\r\n]/.test(k)) continue;
+        const key = k.trim();
+        if (!key || key.length > 200) continue;
+        clean[key] = v;
+      }
+      onConfirm(clean);
     } catch {
       setParseError('Invalid JSON.');
     }

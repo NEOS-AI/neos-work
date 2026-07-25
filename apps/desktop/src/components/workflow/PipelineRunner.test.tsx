@@ -78,6 +78,18 @@ describe('PipelineRunner', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('does not start pipeline for control-char plugin id', async () => {
+    const user = userEvent.setup();
+    render(
+      <PipelineRunner
+        plugin={{ ...plugin, id: '\nplug-1' }}
+        onClose={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    expect(runPlugin).not.toHaveBeenCalled();
+  });
+
   it('starts pipeline and shows stages from events', async () => {
     const user = userEvent.setup();
     let onEvent: ((e: unknown) => void) | null = null;

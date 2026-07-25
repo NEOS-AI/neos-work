@@ -37,6 +37,17 @@ describe('filterWorkflowList', () => {
   it('treats domain all as no domain filter', () => {
     expect(filterWorkflowList(items, { domain: 'all', search: 'bot' })).toHaveLength(1);
   });
+
+  it('ignores control-char search and domain filters', () => {
+    // Control-char search → no text filter (all in domain)
+    expect(filterWorkflowList(items, { search: 'price\nbot' })).toHaveLength(3);
+    expect(filterWorkflowList(items, { search: '\nprice' })).toHaveLength(3);
+    // Control-char domain → no domain filter
+    expect(filterWorkflowList(items, { domain: '\ncoding' })).toHaveLength(3);
+    expect(filterBySearchText(items, '\ncode')).toHaveLength(3);
+    expect(filterByStatus([{ status: 'success' }], '\nsuccess')).toHaveLength(1);
+    expect(filterByKind([{ kind: 'image' }], 'image\n')).toHaveLength(1);
+  });
 });
 
 describe('filterBySearchText', () => {

@@ -51,16 +51,23 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
     const newRun: RunState = { runId: null, stages: [], waiting: null, completed: false, failed: null };
     setRun(newRun);
 
-    // Trim plugin run inputs so resume/stage context stays clean (plan Task 5/6)
+    // Trim plugin run inputs so resume/stage context stays clean (plan Task 5/6).
+    // Control-char keys dropped; null-byte values skipped (align with server resume hygiene).
     const trimmedInputs: Record<string, string> = {};
     for (const [key, value] of Object.entries(inputs)) {
-      const k = typeof key === 'string' ? key.trim() : '';
-      if (!k) continue;
-      trimmedInputs[k] = typeof value === 'string' ? value.trim() : String(value ?? '').trim();
+      if (Object.keys(trimmedInputs).length >= 200) break;
+      if (typeof key !== 'string' || /[\0\r\n]/.test(key)) continue;
+      const k = key.trim();
+      if (!k || k.length > 200) continue;
+      if (typeof value === 'string' && /\0/.test(value)) continue;
+      trimmedInputs[k] =
+        typeof value === 'string' ? value.trim() : String(value ?? '').trim();
     }
 
-    const pluginId = typeof plugin.id === 'string' ? plugin.id.trim() : '';
-    if (!pluginId) return;
+    // Control-char plugin id → no-op (check before trim)
+    if (typeof plugin.id !== 'string' || /[\0\r\n]/.test(plugin.id)) return;
+    const pluginId = plugin.id.trim();
+    if (!pluginId || pluginId.length > 100) return;
 
     const { stop, runIdPromise } = client.runPlugin(pluginId, trimmedInputs, (event: unknown) => {
       const e = event as Record<string, unknown>;

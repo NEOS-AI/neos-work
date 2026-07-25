@@ -33,6 +33,11 @@ describe('media-node-options', () => {
     expect(isMediaImageSize(1024)).toBe(false);
     expect(isMediaImageSize(null)).toBe(false);
     expect(isMediaImageSize(undefined)).toBe(false);
+    // Leading control-char must not strip to a valid size
+    expect(isMediaImageSize('\n1024x1024')).toBe(false);
+    expect(isMediaVoice('alloy\n')).toBe(false);
+    expect(isMediaImageQuality('\nhd')).toBe(false);
+    expect(isMediaTtsModel('tts-1\r')).toBe(false);
   });
 
   it('validates TTS voices', () => {

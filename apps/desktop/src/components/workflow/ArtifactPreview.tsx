@@ -196,8 +196,19 @@ export function ArtifactPreview({
     if (!client || !selectedId || !selected) return;
     const next = window.prompt('Rename artifact', selected.name);
     if (next === null) return;
+    // Control-char / overlong names rejected (check before trim; align with artifacts API)
+    if (/[\0\r\n]/.test(next)) {
+      setStatusMsg('Invalid name');
+      setTimeout(() => setStatusMsg(null), 2500);
+      return;
+    }
     const name = next.trim();
     if (!name || name === selected.name) return;
+    if (name.length > 200) {
+      setStatusMsg('Invalid name');
+      setTimeout(() => setStatusMsg(null), 2500);
+      return;
+    }
     setRefreshing(true);
     setStatusMsg(null);
     try {

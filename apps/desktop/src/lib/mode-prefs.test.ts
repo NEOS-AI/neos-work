@@ -22,6 +22,17 @@ describe('mode-prefs', () => {
     expect(localStorage.getItem('neos-remote-url')).toBeNull();
   });
 
+  it('rejects control-char and non-http remote URLs', () => {
+    saveRemoteUrl('http://ok:1');
+    saveRemoteUrl('\nhttp://evil:1');
+    expect(loadRemoteUrl()).toBe('');
+    saveRemoteUrl('http://ok:1');
+    saveRemoteUrl('file:///etc/passwd');
+    expect(loadRemoteUrl()).toBe('');
+    saveRemoteUrl('javascript:alert(1)');
+    expect(loadRemoteUrl()).toBe('');
+  });
+
   it('load returns empty when localStorage throws', () => {
     const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('denied');

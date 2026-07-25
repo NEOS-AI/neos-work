@@ -6,13 +6,23 @@ interface GenUIConfirmationProps {
 /**
  * Generative UI confirmation surface (plan Task 6 / OD §12).
  */
+function safeLabel(raw: unknown, fallback: string): string {
+  // Control-char labels fall back to defaults (check before trim)
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return fallback;
+  const label = raw.trim();
+  // Cap button label length so hostile schema cannot blow up the layout
+  if (!label || label.length > 100) return fallback;
+  return label;
+}
+
 export function GenUIConfirmation({ schema, onConfirm }: GenUIConfirmationProps) {
-  const prompt =
-    typeof schema?.prompt === 'string' ? schema.prompt.trim() : '';
-  const confirmLabel =
-    (typeof schema?.confirmLabel === 'string' && schema.confirmLabel.trim()) || 'Continue';
-  const cancelLabel =
-    (typeof schema?.cancelLabel === 'string' && schema.cancelLabel.trim()) || 'Cancel';
+  // Null-byte prompt hidden; multi-line collapsed for display; cap length for layout
+  let prompt = '';
+  if (typeof schema?.prompt === 'string' && !/\0/.test(schema.prompt)) {
+    prompt = schema.prompt.replace(/[\r\n]+/g, ' ').trim().slice(0, 500);
+  }
+  const confirmLabel = safeLabel(schema?.confirmLabel, 'Continue');
+  const cancelLabel = safeLabel(schema?.cancelLabel, 'Cancel');
 
   return (
     <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GenUIForm } from './GenUIForm.js';
 
@@ -110,5 +110,32 @@ describe('GenUIForm', () => {
     await user.type(screen.getByPlaceholderText('ok-ph'), 'yes');
     await user.click(screen.getByRole('button', { name: /submit/i }));
     expect(onSubmit).toHaveBeenCalledWith({ ok: 'yes' });
+  });
+
+  it('drops null-byte field values and overlong keys from submit payload', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const longKey = 'k'.repeat(201);
+    render(
+      <GenUIForm
+        schema={{
+          fields: [
+            { key: 'safe', label: 'Safe', type: 'text', placeholder: 'safe-ph' },
+            { key: 'tainted', label: 'Tainted', type: 'text', placeholder: 'tainted-ph' },
+            { key: longKey, label: 'Long', type: 'text', placeholder: 'long-ph' },
+          ],
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+    await user.type(screen.getByPlaceholderText('safe-ph'), 'keep');
+    // Inject null via fireEvent so userEvent does not sanitize
+    const tainted = screen.getByPlaceholderText('tainted-ph') as HTMLInputElement;
+    fireEvent.change(tainted, { target: { value: `bad${'\0'}val` } });
+    await user.type(screen.getByPlaceholderText('long-ph'), 'ignored');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+    expect(onSubmit).toHaveBeenCalledWith({ safe: 'keep' });
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('tainted');
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty(longKey);
   });
 });

@@ -99,4 +99,29 @@ describe('RunInputsDialog', () => {
     window.removeEventListener('keydown', stop, true);
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  it('drops control-char, blank, and overlong keys from confirm payload', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <RunInputsDialog defaultInputs={{}} onConfirm={onConfirm} onCancel={() => {}} />,
+    );
+    const area = screen.getByRole('textbox');
+    await user.clear(area);
+    const longKey = 'k'.repeat(201);
+    await user.paste(
+      JSON.stringify({
+        ok: 1,
+        'bad\nkey': 2,
+        '  ': 3,
+        [longKey]: 4,
+        good: 'yes',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: /^run$/i }));
+    expect(onConfirm).toHaveBeenCalledWith({ ok: 1, good: 'yes' });
+    const payload = onConfirm.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('bad\nkey');
+    expect(payload).not.toHaveProperty(longKey);
+  });
 });

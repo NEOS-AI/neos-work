@@ -8,12 +8,26 @@ export interface WorkflowListItem {
   domain: string;
 }
 
+/** Normalize free-text search; control-char queries are ignored (return all). */
+function normalizeSearchQuery(search?: string): string {
+  if (typeof search !== 'string' || /[\0\r\n]/.test(search)) return '';
+  return search.trim().toLowerCase();
+}
+
+/** Normalize domain/status chip; control-char filters ignored (return all). */
+function normalizeChipFilter(raw?: string): string | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const v = raw.trim();
+  if (!v || v === 'all') return null;
+  return v;
+}
+
 export function filterWorkflowList<T extends WorkflowListItem>(
   items: T[],
   options: { search?: string; domain?: string },
 ): T[] {
-  const domain = options.domain && options.domain !== 'all' ? options.domain : null;
-  const q = options.search?.trim().toLowerCase() ?? '';
+  const domain = normalizeChipFilter(options.domain);
+  const q = normalizeSearchQuery(options.search);
   return items.filter((wf) => {
     if (domain && wf.domain !== domain) return false;
     if (!q) return true;
@@ -29,7 +43,7 @@ export function filterBySearchText<T extends { name: string; description?: strin
   items: T[],
   search?: string,
 ): T[] {
-  const q = search?.trim().toLowerCase() ?? '';
+  const q = normalizeSearchQuery(search);
   if (!q) return items;
   return items.filter(
     (item) =>
@@ -43,8 +57,9 @@ export function filterByStatus<T extends { status: string }>(
   items: T[],
   status?: string,
 ): T[] {
-  if (!status || status === 'all') return items;
-  return items.filter((item) => item.status === status);
+  const s = normalizeChipFilter(status);
+  if (!s) return items;
+  return items.filter((item) => item.status === s);
 }
 
 /** Filter media files (or similar) by kind chip. */
@@ -52,8 +67,9 @@ export function filterByKind<T extends { kind: string }>(
   items: T[],
   kind?: string,
 ): T[] {
-  if (!kind || kind === 'all') return items;
-  return items.filter((item) => item.kind === kind);
+  const k = normalizeChipFilter(kind);
+  if (!k) return items;
+  return items.filter((item) => item.kind === k);
 }
 
 /**
@@ -76,7 +92,7 @@ export function filterByTextMatch<T>(
   search: string | undefined,
   getHaystack: (item: T) => string,
 ): T[] {
-  const q = search?.trim().toLowerCase() ?? '';
+  const q = normalizeSearchQuery(search);
   if (!q) return items;
   return items.filter((item) => getHaystack(item).toLowerCase().includes(q));
 }
@@ -87,6 +103,7 @@ export function filterByFieldValue<T>(
   field: keyof T & string,
   value?: string,
 ): T[] {
-  if (!value || value === 'all') return items;
-  return items.filter((item) => String(item[field] ?? '') === value);
+  const v = normalizeChipFilter(value);
+  if (!v) return items;
+  return items.filter((item) => String(item[field] ?? '') === v);
 }

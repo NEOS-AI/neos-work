@@ -90,4 +90,62 @@ describe('GenUIChoice', () => {
     await user.click(screen.getByText('Ok'));
     expect(onSelect).toHaveBeenCalledWith('ok');
   });
+
+  it('hides null-byte prompts and collapses multi-line prompts', () => {
+    const { rerender } = render(
+      <GenUIChoice
+        schema={{
+          prompt: 'line1\nline2',
+          options: [{ label: 'A', value: 'a' }],
+        }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText('line1 line2')).toBeInTheDocument();
+
+    rerender(
+      <GenUIChoice
+        schema={{
+          prompt: `bad${'\0'}prompt`,
+          options: [{ label: 'A', value: 'a' }],
+        }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/prompt/i)).not.toBeInTheDocument();
+    expect(screen.getByText('A')).toBeInTheDocument();
+  });
+
+  it('rejects file: and overlong preview urls', () => {
+    render(
+      <GenUIChoice
+        schema={{
+          options: [
+            {
+              label: 'File',
+              value: 'f',
+              previewUrl: 'file:///etc/passwd',
+            },
+            {
+              label: 'Long',
+              value: 'l',
+              previewUrl: `https://example.com/${'x'.repeat(3_000)}`,
+            },
+            {
+              label: 'Https',
+              value: 'h',
+              previewUrl: 'https://cdn.example/ok.png',
+            },
+          ],
+        }}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('img', { name: 'File' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Long' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Https' })).toHaveAttribute(
+      'src',
+      'https://cdn.example/ok.png',
+    );
+  });
 });
