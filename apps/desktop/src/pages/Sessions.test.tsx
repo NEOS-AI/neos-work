@@ -1159,4 +1159,40 @@ describe('Sessions CodeBlock copy', () => {
     expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
     expect(screen.getByText('inline')).toBeInTheDocument();
   });
+
+  it('rejects delete when session id has control chars', async () => {
+    listSessions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `s${'\0'}evil`,
+          workspace_id: 'default',
+          title: 'Evil Session',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-5-20250929',
+          thinking_mode: 'none',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Evil Session')).toBeInTheDocument());
+    // delete button on session row
+    const delBtns = screen.getAllByRole('button').filter((b) =>
+      /delete|remove|✕|×/i.test(b.getAttribute('aria-label') || b.textContent || ''),
+    );
+    // fall back: title attribute
+    const byTitle = screen.queryAllByTitle(/delete/i);
+    const target = delBtns[0] || byTitle[0];
+    if (target) fireEvent.click(target);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteSession).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Session id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
+
 });

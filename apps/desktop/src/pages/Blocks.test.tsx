@@ -524,4 +524,33 @@ describe('Blocks page', () => {
     expect(screen.getByDisplayValue('L 1')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('rejects delete when block id has control chars', async () => {
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `bad${'\0'}id`,
+          name: 'Dirty Block',
+          domain: 'general',
+          category: 'custom',
+          description: '',
+          implementationType: 'prompt',
+          promptTemplate: 'x',
+          paramDefs: [],
+          isBuiltIn: false,
+        },
+      ],
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('Dirty Block')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /delete|common\.delete/i }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteBlock).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Block id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
+
 });

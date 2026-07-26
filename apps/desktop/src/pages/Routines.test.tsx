@@ -709,4 +709,47 @@ describe('Routines page', () => {
     expect(screen.getByText('net wf!')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('rejects delete/toggle/run when routine id has control chars', async () => {
+    listRoutines.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `r${'\0'}evil`,
+          name: 'Evil Routine',
+          workflowId: 'wf-1',
+          schedule: '0 9 * * *',
+          timezone: 'UTC',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: [] });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Evil Routine')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Evil Routine'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteRoutine).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Routine id contains invalid control characters');
+
+    alertSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    expect(updateRoutine).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Routine id contains invalid control characters');
+
+    alertSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Run Now/i }));
+    expect(runRoutineNow).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Routine id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
+
 });
