@@ -114,22 +114,24 @@ function buildToolRegistry(
 
 export class AgentNode implements ExecutableNode {
   constructor(
-    public type: 'agent_finance' | 'agent_coding',
+    /** v2 canonical: `agent`. Legacy `agent_*` kept for pre-migrate graphs. */
+    public type: 'agent' | 'agent_finance' | 'agent_coding',
     private nodeConfig?: Record<string, unknown>,
   ) {}
 
   async execute(ctx: NodeContext): Promise<NodeResult> {
     const start = Date.now();
 
-    const rawHarnessId = this.nodeConfig?.['harnessId'];
+    // v2 workerId preferred; harnessId accepted until full migrate (BC-4)
+    const rawWorkerId = this.nodeConfig?.['workerId'] ?? this.nodeConfig?.['harnessId'];
     let harnessId = '';
-    if (typeof rawHarnessId === 'string') {
+    if (typeof rawWorkerId === 'string') {
       // Control-char / overlong → ignore harness (resolveHarness also guards)
-      if (!/[\0\r\n]/.test(rawHarnessId) && rawHarnessId.length <= 200) {
-        harnessId = rawHarnessId.trim();
+      if (!/[\0\r\n]/.test(rawWorkerId) && rawWorkerId.length <= 200) {
+        harnessId = rawWorkerId.trim();
       }
-    } else if (rawHarnessId != null && rawHarnessId !== '') {
-      const s = String(rawHarnessId);
+    } else if (rawWorkerId != null && rawWorkerId !== '') {
+      const s = String(rawWorkerId);
       if (!/[\0\r\n]/.test(s) && s.length <= 200) harnessId = s.trim();
     }
     const harness = harnessId ? resolveHarness(harnessId) : undefined;

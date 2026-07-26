@@ -393,6 +393,7 @@ function resolveNode(type: NodeType | string, nodeConfig?: Record<string, unknow
         : type;
   switch (normalized) {
     case 'trigger':         return new TriggerNode();
+    case 'agent':           return new AgentNode('agent', nodeConfig);
     case 'agent_finance':   return new AgentNode('agent_finance', nodeConfig);
     case 'agent_coding':    return new AgentNode('agent_coding', nodeConfig);
     case 'block':           return new BlockNode();

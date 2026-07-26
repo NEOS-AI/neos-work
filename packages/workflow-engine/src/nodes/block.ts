@@ -123,7 +123,7 @@ export class BlockNode implements ExecutableNode {
 
       // Delegate to a simple LLM call — import AgentNode lazily to avoid circular deps
       const { AgentNode } = await import('./agent.js');
-      const agentNode = new AgentNode('agent_finance', {
+      const agentNode = new AgentNode('agent', {
         systemPrompt: prompt,
         maxSteps: 3,
       });
@@ -153,7 +153,7 @@ export class BlockNode implements ExecutableNode {
       }
       // Skill-based execution: pass skillId in config and let AgentNode handle it
       const { AgentNode } = await import('./agent.js');
-      const agentNode = new AgentNode('agent_finance', {
+      const agentNode = new AgentNode('agent', {
         systemPrompt: `Use skill: ${skillId}\n\nInputs: ${JSON.stringify(ctx.inputs).slice(0, MAX_INPUT_LENGTH)}`,
         maxSteps: 10,
       });

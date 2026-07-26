@@ -7,3 +7,4 @@ export * from './types/memory.js';
 export * from './models.js';
 export * from './messaging.js';
 export * from './deploy.js';
+export * from './migrate-workflow.js';

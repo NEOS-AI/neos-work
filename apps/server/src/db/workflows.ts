@@ -4,12 +4,13 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getDb } from './schema.js';
-import type {
-  Workflow,
-  WorkflowNode,
-  WorkflowEdge,
-  WorkflowRun,
-  NodeRunResult,
+import {
+  migrateWorkflowV1ToV2,
+  type Workflow,
+  type WorkflowNode,
+  type WorkflowEdge,
+  type WorkflowRun,
+  type NodeRunResult,
 } from '@neos-work/shared';
 
 interface WorkflowRow {
@@ -60,18 +61,20 @@ function safeParseJsonObject<T extends Record<string, unknown>>(
 }
 
 function rowToWorkflow(row: WorkflowRow): Workflow {
-  return {
+  // Always surface schemaVersion 2 + unified agent nodes (PLAN_FOR_V0_4_0 Task 2)
+  const { workflow } = migrateWorkflowV1ToV2({
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
-    domain: row.domain as Workflow['domain'],
+    domain: row.domain,
     nodes: safeParseJsonArray<WorkflowNode>(row.nodes_json),
     edges: safeParseJsonArray<WorkflowEdge>(row.edges_json),
     webhookSecret: row.webhook_secret ?? undefined,
     designSystemId: row.design_system_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  });
+  return workflow;
 }
 
 function rowToRun(row: WorkflowRunRow): WorkflowRun {
@@ -165,10 +168,19 @@ export function createWorkflow(input: {
     description = description.slice(0, WORKFLOW_DESCRIPTION_MAX_CHARS);
   }
   const domain = normalizeWorkflowDomain(input.domain);
-  const nodes = Array.isArray(input.nodes) ? input.nodes : [];
-  const edges = Array.isArray(input.edges) ? input.edges : [];
-  const nodesJson = JSON.stringify(nodes);
-  const edgesJson = JSON.stringify(edges);
+  // Persist schemaVersion 2 graph (agent_* → agent, harnessId → workerId, …)
+  const { workflow: migrated } = migrateWorkflowV1ToV2({
+    id: 'pending',
+    name,
+    description: description ?? undefined,
+    domain,
+    nodes: Array.isArray(input.nodes) ? input.nodes : [],
+    edges: Array.isArray(input.edges) ? input.edges : [],
+    createdAt: '',
+    updatedAt: '',
+  });
+  const nodesJson = JSON.stringify(migrated.nodes);
+  const edgesJson = JSON.stringify(migrated.edges);
   if (nodesJson.length + edgesJson.length > WORKFLOW_GRAPH_JSON_MAX_CHARS) {
     throw new Error(
       `workflow graph exceeds max size (${WORKFLOW_GRAPH_JSON_MAX_CHARS} characters)`,
@@ -176,6 +188,8 @@ export function createWorkflow(input: {
   }
   const db = getDb();
   const id = crypto.randomUUID();
+  // Q2: DB column remains `domain` (stores primary pack id)
+  const primaryDomain = migrated.primaryDomain ?? domain;
   db.prepare(
     `INSERT INTO workflow (id, name, description, domain, nodes_json, edges_json)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -183,7 +197,7 @@ export function createWorkflow(input: {
     id,
     name,
     description,
-    domain,
+    primaryDomain,
     nodesJson,
     edgesJson,
   );
@@ -232,23 +246,39 @@ export function updateWorkflow(
   }
   let designSystemId: string | null = existing.design_system_id;
   if (input.designSystemId !== undefined) {
-    const rawDs =
-      typeof input.designSystemId === 'string'
-        ? input.designSystemId
-        : (input.designSystemId ?? '').toString();
-    // Control-char check before trim (trim would strip leading/trailing \r\n)
-    if (/[\0\r\n]/.test(rawDs)) return undefined;
-    designSystemId = rawDs.trim() || null;
-    if (designSystemId && designSystemId.length > 64) return undefined;
+    // Typed as string | undefined; non-string callers should not reach here
+    if (typeof input.designSystemId !== 'string') {
+      designSystemId = null;
+    } else {
+      const rawDs = input.designSystemId;
+      // Control-char check before trim (trim would strip leading/trailing \r\n)
+      if (/[\0\r\n]/.test(rawDs)) return undefined;
+      designSystemId = rawDs.trim() || null;
+      if (designSystemId && designSystemId.length > 64) return undefined;
+    }
   }
-  const nodes =
-    input.nodes !== undefined
-      ? JSON.stringify(Array.isArray(input.nodes) ? input.nodes : [])
-      : existing.nodes_json;
-  const edges =
-    input.edges !== undefined
-      ? JSON.stringify(Array.isArray(input.edges) ? input.edges : [])
-      : existing.edges_json;
+  let nodes = existing.nodes_json;
+  let edges = existing.edges_json;
+  if (input.nodes !== undefined || input.edges !== undefined) {
+    const nextNodes = input.nodes !== undefined
+      ? (Array.isArray(input.nodes) ? input.nodes : [])
+      : safeParseJsonArray<WorkflowNode>(existing.nodes_json);
+    const nextEdges = input.edges !== undefined
+      ? (Array.isArray(input.edges) ? input.edges : [])
+      : safeParseJsonArray<WorkflowEdge>(existing.edges_json);
+    const { workflow: migrated } = migrateWorkflowV1ToV2({
+      id: trimmed,
+      name,
+      description: description ?? undefined,
+      domain: existing.domain,
+      nodes: nextNodes,
+      edges: nextEdges,
+      createdAt: existing.created_at,
+      updatedAt: existing.updated_at,
+    });
+    nodes = JSON.stringify(migrated.nodes);
+    edges = JSON.stringify(migrated.edges);
+  }
   if (nodes.length + edges.length > WORKFLOW_GRAPH_JSON_MAX_CHARS) {
     return undefined;
   }

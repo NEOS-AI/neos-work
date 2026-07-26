@@ -63,6 +63,7 @@ function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
       description = meta.description.trim();
     }
   } else {
+    // Legacy pass-through (tests cast non-strings into WorkflowBlock.description)
     description = meta.description;
   }
   if (typeof description === 'string' && description.length > BLOCK_DESC_MAX) {
@@ -100,7 +101,8 @@ function normalizeBlockMeta(meta: WorkflowBlock, id: string): WorkflowBlock {
     name,
     domain: normalizeDomain(meta.domain),
     category,
-    description,
+    // Null-byte strings become undefined → surface as empty string for type safety
+    description: (description ?? '') as string,
     implementationType: normalizeImplementationType(meta.implementationType),
     promptTemplate,
     skillId,

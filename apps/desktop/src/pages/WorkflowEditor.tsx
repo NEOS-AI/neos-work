@@ -47,6 +47,7 @@ import { RunLogPanel } from '../components/workflow/RunLogPanel.js';
 
 const NODE_COLORS: Record<string, string> = {
   trigger:         '#6b7280',
+  agent:           '#8b5cf6',
   agent_finance:   '#10b981',
   agent_coding:    '#3b82f6',
   block:           '#f59e0b',
@@ -65,6 +66,7 @@ const NODE_COLORS: Record<string, string> = {
 
 const NODE_TYPES_LIST = [
   { type: 'trigger',         label: 'Trigger',         group: 'flow' },
+  { type: 'agent',           label: 'Agent',           group: 'agent' },
   { type: 'agent_finance',   label: 'Finance Agent',   group: 'agent' },
   { type: 'agent_coding',    label: 'Coding Agent',    group: 'agent' },
   { type: 'web_search',      label: 'Web Search',      group: 'tool' },

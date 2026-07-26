@@ -232,7 +232,7 @@ export function assessWorkflowPreflight(
       }
     }
 
-    if (node.type === 'agent_finance' || node.type === 'agent_coding') {
+    if (node.type === 'agent' || node.type === 'agent_finance' || node.type === 'agent_coding') {
       // Align with AgentNode: trim + lower-case so " OpenAI " / " CLI-Claude " match.
       // Control-char provider → anthropic default (check before trim).
       const rawProvider = config.provider ?? config.llmProvider ?? secrets.llmProvider ?? 'anthropic';

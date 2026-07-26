@@ -235,7 +235,7 @@ export function validateWorkflowDraft(input: {
       }
     }
 
-    if (node.type === 'agent_finance' || node.type === 'agent_coding') {
+    if (node.type === 'agent' || node.type === 'agent_finance' || node.type === 'agent_coding') {
       // Align with AgentNode: trim + lower-case so " CLI-Claude " counts as CLI.
       // Control-char provider → empty (not strip to cli-claude).
       const rawProvider = config.provider ?? config.llmProvider;
@@ -245,18 +245,20 @@ export function validateWorkflowDraft(input: {
           : '';
       const isCli =
         provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
-      // CLI agents do not require a harness (plan Task 3)
-      // Treat empty / whitespace / control-char harnessId as missing
-      const harnessId =
-        typeof config.harnessId === 'string' && !/[\0\r\n]/.test(config.harnessId)
-          ? config.harnessId.trim()
-          : '';
-      if (!isCli && !harnessId) {
+      // CLI agents do not require a harness/worker (plan Task 3)
+      // v2 workerId preferred; harnessId still accepted pre-migrate
+      const workerId =
+        typeof config.workerId === 'string' && !/[\0\r\n]/.test(config.workerId)
+          ? config.workerId.trim()
+          : typeof config.harnessId === 'string' && !/[\0\r\n]/.test(config.harnessId)
+            ? config.harnessId.trim()
+            : '';
+      if (!isCli && !workerId) {
         issues.push({
           code: 'missing_harness_id',
           severity: 'warning',
           nodeId: node.id,
-          message: 'Agent node has no harness selected.',
+          message: 'Agent node has no worker selected.',
         });
       }
       // Non-CLI agents should pick a model (NodeConfig model select)

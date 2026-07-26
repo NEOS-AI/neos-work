@@ -10,6 +10,15 @@ interface FormField {
   options?: string[];
 }
 
+/** Normalized field after control-char scrub (options always present). */
+interface VisibleField {
+  key: string;
+  label: string;
+  type: 'text' | 'select' | 'textarea';
+  placeholder?: string;
+  options: string[];
+}
+
 interface GenUIFormProps {
   schema: { fields: FormField[] };
   onSubmit: (values: Record<string, string>) => void;
@@ -25,29 +34,29 @@ function safeFieldKey(raw: unknown): string {
 export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
   const fields = Array.isArray(schema?.fields) ? schema.fields : [];
   // Skip control-char / blank keys for display (align with submit hygiene)
-  const visibleFields = useMemo(
-    () =>
-      fields
-        .map((field) => {
-          const key = safeFieldKey(field.key);
-          if (!key) return null;
-          const label =
-            scrubDisplayText(field.label, { collapseLines: true, maxChars: 100 }) || key;
-          const placeholder = field.placeholder
-            ? scrubDisplayText(field.placeholder, { collapseLines: true, maxChars: 200 })
-            : undefined;
-          const options = (field.options ?? [])
-            .filter((opt) => typeof opt === 'string' && !/[\0\r\n]/.test(opt) && opt.trim())
-            .map((opt) =>
-              scrubDisplayText(opt.trim(), { collapseLines: true, maxChars: 200 }) || opt.trim(),
-            )
-            .filter((opt) => opt.length > 0)
-            .slice(0, 100);
-          return { ...field, key, label, placeholder, options };
-        })
-        .filter((f): f is FormField & { key: string; label: string } => f != null),
-    [fields],
-  );
+  const visibleFields = useMemo((): VisibleField[] => {
+    const out: VisibleField[] = [];
+    for (const field of fields) {
+      const key = safeFieldKey(field.key);
+      if (!key) continue;
+      const label =
+        scrubDisplayText(field.label, { collapseLines: true, maxChars: 100 }) || key;
+      const placeholder = field.placeholder
+        ? scrubDisplayText(field.placeholder, { collapseLines: true, maxChars: 200 })
+        : undefined;
+      const options = (field.options ?? [])
+        .filter((opt) => typeof opt === 'string' && !/[\0\r\n]/.test(opt) && opt.trim())
+        .map((opt) =>
+          scrubDisplayText(opt.trim(), { collapseLines: true, maxChars: 200 }) || opt.trim(),
+        )
+        .filter((opt) => opt.length > 0)
+        .slice(0, 100);
+      const type: VisibleField['type'] =
+        field.type === 'select' || field.type === 'textarea' ? field.type : 'text';
+      out.push({ key, label, type, placeholder, options });
+    }
+    return out;
+  }, [fields]);
 
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(visibleFields.map((f) => [f.key, ''])),

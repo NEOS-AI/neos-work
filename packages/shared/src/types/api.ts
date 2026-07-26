@@ -3,7 +3,17 @@
  */
 
 import type { ChatMessage, Session, Workspace } from './session.js';
-import type { NodeType, WorkflowNode, WorkflowEdge, Workflow, WorkflowRun, AgentHarness, WorkflowBlock } from './workflow.js';
+import type {
+  NodeType,
+  WorkflowNode,
+  WorkflowEdge,
+  Workflow,
+  WorkflowRun,
+  AgentHarness,
+  DomainWorker,
+  DomainPack,
+  WorkflowBlock,
+} from './workflow.js';
 
 // --- REST API Types ---
 
@@ -76,7 +86,14 @@ export type { ChatMessage, Session, Workspace };
 export interface CreateWorkflowRequest {
   name: string;
   description?: string;
-  domain: 'finance' | 'coding' | 'general';
+  /**
+   * Primary pack id. Accepts legacy `domain` values (finance|coding|general)
+   * and future pack ids. Prefer aligning with Workflow.primaryDomain.
+   */
+  domain: string;
+  /** Optional v2 field; when set, preferred over domain for primary pack. */
+  primaryDomain?: string;
+  domainPackIds?: string[];
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }
@@ -84,6 +101,8 @@ export interface CreateWorkflowRequest {
 export interface UpdateWorkflowRequest {
   name?: string;
   description?: string;
+  primaryDomain?: string;
+  domainPackIds?: string[];
   nodes?: WorkflowNode[];
   edges?: WorkflowEdge[];
 }
@@ -94,20 +113,65 @@ export type WorkflowSSEEvent =
   | { type: 'node.progress'; nodeId: string; chunk: string; accumulated: string }
   | { type: 'node.completed'; nodeId: string; output: unknown; durationMs: number }
   | { type: 'node.failed'; nodeId: string; error: string }
+  /** Soft typed-ports / preflight warning (Task 9); does not fail the run by default. */
+  | { type: 'node.warning'; nodeId: string; message: string }
   | { type: 'run.completed'; runId: string; duration: number; artifactId?: string }
-  | { type: 'run.failed'; runId: string; error: string };
+  | { type: 'run.failed'; runId: string; error: string }
+  // BC-5: worker event stream (coordinator children + solo worker telemetry)
+  | {
+      type: 'worker.started';
+      nodeId: string;
+      workerId: string;
+      workerRunId: string;
+    }
+  | {
+      type: 'worker.progress';
+      nodeId: string;
+      workerRunId: string;
+      chunk: string;
+    }
+  | {
+      type: 'worker.completed';
+      nodeId: string;
+      workerRunId: string;
+      output: unknown;
+    }
+  | {
+      type: 'worker.failed';
+      nodeId: string;
+      workerRunId: string;
+      error: string;
+    };
 
-// ── 하네스 API 타입 ────────────────────────────────────────
+// ── Worker / Harness API 타입 ──────────────────────────────
 
+/** @deprecated Prefer CreateWorkerRequest */
 export interface CreateHarnessRequest {
   id: string;
   name: string;
-  domain: 'finance' | 'coding' | 'general';
+  domain: string;
   description: string;
   systemPrompt: string;
   allowedTools: string[];
-  constraints?: AgentHarness['constraints'];
+  constraints?: DomainWorker['constraints'];
 }
 
+export type CreateWorkerRequest = CreateHarnessRequest & {
+  permissionProfile?: DomainWorker['permissionProfile'];
+  workspace?: DomainWorker['workspace'];
+  defaultMode?: DomainWorker['defaultMode'];
+  preferredBlockIds?: string[];
+};
+
 // Re-export workflow types for convenience
-export type { NodeType, Workflow, WorkflowNode, WorkflowEdge, WorkflowRun, AgentHarness, WorkflowBlock };
+export type {
+  NodeType,
+  Workflow,
+  WorkflowNode,
+  WorkflowEdge,
+  WorkflowRun,
+  AgentHarness,
+  DomainWorker,
+  DomainPack,
+  WorkflowBlock,
+};
