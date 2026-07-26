@@ -548,6 +548,7 @@ describe('Settings page', () => {
       ],
     });
     getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<Settings />);
     await waitFor(() => expect(screen.getByText('Remote MCP')).toBeInTheDocument());
 
@@ -566,29 +567,38 @@ describe('Settings page', () => {
     fireEvent.change(clientId, { target: { value: 'client-id' } });
     open();
     expect(startMcpOAuth).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('OAuth fields contain invalid control characters');
 
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(authEp, { target: { value: 'https://auth.example/authorize' } });
     fireEvent.change(tokenEp, { target: { value: `https://auth.example/token${'\0'}` } });
     open();
     expect(startMcpOAuth).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('OAuth fields contain invalid control characters');
 
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(tokenEp, { target: { value: 'https://auth.example/token' } });
     fireEvent.change(clientId, { target: { value: `cid${'\0'}bad` } });
     open();
     expect(startMcpOAuth).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('OAuth fields contain invalid control characters');
 
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(clientId, { target: { value: 'client-id' } });
     fireEvent.change(scope, { target: { value: `openid${'\0'}profile` } });
     open();
     expect(startMcpOAuth).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('OAuth fields contain invalid control characters');
 
-    // Blank-after-trim required fields no-op
+    // Blank-after-trim required fields no-op (no control-char alert)
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(scope, { target: { value: '' } });
     fireEvent.change(authEp, { target: { value: '   ' } });
     fireEvent.change(tokenEp, { target: { value: 'https://auth.example/token' } });
     fireEvent.change(clientId, { target: { value: 'client-id' } });
     open();
     expect(startMcpOAuth).not.toHaveBeenCalled();
+    expect(window.alert).not.toHaveBeenCalled();
   });
 
   it('starts MCP OAuth with trimmed fields when connect succeeds', async () => {
