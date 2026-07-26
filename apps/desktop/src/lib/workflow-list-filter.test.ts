@@ -8,6 +8,7 @@ import {
   filterByTextMatch,
   filterWorkflowList,
   normalizeListDomain,
+  scrubSearchHaystack,
 } from './workflow-list-filter.js';
 
 const items = [
@@ -50,22 +51,27 @@ describe('filterWorkflowList', () => {
     expect(filterByKind([{ kind: 'image' }], 'image\n')).toHaveLength(1);
   });
 
-  it('excludes null-byte name/description from search haystack', () => {
+  it('scrubs null-byte / newline name/description for search haystack', () => {
     const dirty = [
       { name: `Stock${'\0'}Bot`, description: 'prices', domain: 'finance' },
       { name: 'Clean', description: `has${'\0'}secret`, domain: 'general' },
+      { name: `Line${'\n'}Break`, description: 'ok', domain: 'coding' },
       { name: 'Visible', description: 'ok', domain: 'coding' },
     ];
-    // null-byte name → empty haystack name; "stock" must not match
-    expect(filterWorkflowList(dirty, { search: 'stock' })).toHaveLength(0);
-    // null-byte description → empty desc haystack; "secret" must not match
-    expect(filterWorkflowList(dirty, { search: 'secret' })).toHaveLength(0);
-    // clean fields still match
+    // null stripped so visible letters still match (align with display scrub)
+    expect(filterWorkflowList(dirty, { search: 'stock' }).map((w) => w.name)).toEqual([
+      `Stock${'\0'}Bot`,
+    ]);
+    expect(filterWorkflowList(dirty, { search: 'secret' }).map((w) => w.name)).toEqual(['Clean']);
+    // newline collapsed → "line break" matches "line"
+    expect(filterWorkflowList(dirty, { search: 'line' }).map((w) => w.name)).toEqual([
+      `Line${'\n'}Break`,
+    ]);
     expect(filterWorkflowList(dirty, { search: 'visible' }).map((w) => w.name)).toEqual([
       'Visible',
     ]);
     // domain chip still matches clean domain
-    expect(filterWorkflowList(dirty, { domain: 'coding' })).toHaveLength(1);
+    expect(filterWorkflowList(dirty, { domain: 'coding' })).toHaveLength(2);
   });
 
   it('matches padded item domains via normalizeListDomain', () => {
@@ -92,18 +98,27 @@ describe('filterBySearchText', () => {
     expect(filterBySearchText(items, '')).toHaveLength(2);
   });
 
-  it('excludes null-byte name/description from search haystack', () => {
+  it('scrubs null-byte name/description for search haystack', () => {
     const items = [
       { name: `bad${'\0'}name`, description: 'clean' },
       { name: 'Good', description: `d${'\0'}esc` },
       { name: 'MatchMe', description: 'ok' },
     ];
-    // Null-byte name is not searchable by its visible letters
-    expect(filterBySearchText(items, 'bad')).toHaveLength(0);
-    expect(filterBySearchText(items, 'name')).toHaveLength(0);
-    // Description with null-byte excluded; name still matches
+    // Null stripped → "badname" / "desc" still match
+    expect(filterBySearchText(items, 'bad')).toHaveLength(1);
+    expect(filterBySearchText(items, 'name')).toHaveLength(1);
+    expect(filterBySearchText(items, 'desc')).toHaveLength(1);
     expect(filterBySearchText(items, 'good')).toHaveLength(1);
     expect(filterBySearchText(items, 'match')).toHaveLength(1);
+  });
+});
+
+describe('scrubSearchHaystack', () => {
+  it('strips nulls, collapses lines, caps length', () => {
+    expect(scrubSearchHaystack(`A${'\0'}B${'\n'}C`)).toBe('AB C');
+    expect(scrubSearchHaystack('\0\n')).toBe('');
+    expect(scrubSearchHaystack(null)).toBe('');
+    expect(scrubSearchHaystack('x'.repeat(10), 4)).toBe('xxxx');
   });
 });
 

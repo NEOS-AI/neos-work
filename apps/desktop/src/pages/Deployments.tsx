@@ -28,6 +28,24 @@ const STATUS_STYLES: Record<string, { bg: string; color: string }> = {
   pending: { bg: 'var(--bg-tertiary)', color: 'var(--text-muted)' },
 };
 
+/**
+ * Only allow http(s) deploy URLs for href / display.
+ * Control-char, non-http(s), and overlong values are rejected.
+ * Exported for unit tests.
+ */
+export function safeDeployUrl(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const s = raw.trim();
+  if (!s || s.length > 2_048) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return s;
+  } catch {
+    return '';
+  }
+}
+
 export function Deployments() {
   const { client } = useEngine();
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -362,19 +380,31 @@ export function Deployments() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {d.url ? (
-                        <a
-                          href={d.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="max-w-[14rem] truncate text-blue-400 hover:underline"
-                          title={d.url}
-                        >
-                          {d.url.replace(/^https?:\/\//, '')}
-                        </a>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>—</span>
-                      )}
+                      {(() => {
+                        const urlSafe = safeDeployUrl(d.url);
+                        if (!urlSafe) {
+                          return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+                        }
+                        const hostLabel =
+                          scrubDisplayText(urlSafe.replace(/^https?:\/\//, ''), {
+                            collapseLines: true,
+                            maxChars: 200,
+                          }) || 'link';
+                        const titleSafe =
+                          scrubDisplayText(urlSafe, { collapseLines: true, maxChars: 300 })
+                          || hostLabel;
+                        return (
+                          <a
+                            href={urlSafe}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="max-w-[14rem] truncate text-blue-400 hover:underline"
+                            title={titleSafe}
+                          >
+                            {hostLabel}
+                          </a>
+                        );
+                      })()}
                     </td>
                     <td
                       className="px-4 py-3 whitespace-nowrap"

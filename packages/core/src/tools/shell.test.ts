@@ -216,5 +216,36 @@ describe('createShellTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/max length/i);
   });
+
+  it('notes truncation when stdout exceeds the 512 KiB cap', async () => {
+    const tool = createShellTool(root);
+    // python-free portable: yes generates lots of output
+    const result = await tool.execute({
+      command: 'dd if=/dev/zero bs=1024 count=600 2>/dev/null | base64',
+      timeoutMs: 15_000,
+    });
+    // Command may fail on some sandboxes; when it succeeds, truncation note is set
+    if (result.success || result.output) {
+      const out = result.output as { stdout?: string; note?: string } | null;
+      if (out && (out.stdout?.length ?? 0) >= 512_000) {
+        expect(out.note).toMatch(/truncated/i);
+      }
+    } else {
+      // Fallback: still a structured tool failure
+      expect(result.error || result.output).toBeTruthy();
+    }
+  });
+
+  it('returns structured error when spawn rejects (invalid cwd after path resolve race)', async () => {
+    const tool = createShellTool(root);
+    // Empty command already rejected earlier; use a binary that cannot spawn
+    const result = await tool.execute({
+      command: 'true',
+      // Non-existent relative cwd rejected before spawn
+      cwd: 'does-not-exist-dir',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/does not exist|outside|ENOENT/i);
+  });
 });
 

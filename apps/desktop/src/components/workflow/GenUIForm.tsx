@@ -38,7 +38,10 @@ export function GenUIForm({ schema, onSubmit }: GenUIFormProps) {
             : undefined;
           const options = (field.options ?? [])
             .filter((opt) => typeof opt === 'string' && !/[\0\r\n]/.test(opt) && opt.trim())
-            .map((opt) => opt.trim())
+            .map((opt) =>
+              scrubDisplayText(opt.trim(), { collapseLines: true, maxChars: 200 }) || opt.trim(),
+            )
+            .filter((opt) => opt.length > 0)
             .slice(0, 100);
           return { ...field, key, label, placeholder, options };
         })

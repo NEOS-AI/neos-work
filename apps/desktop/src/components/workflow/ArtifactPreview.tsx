@@ -105,7 +105,9 @@ export function ArtifactPreview({
   const handleCopyContent = async () => {
     if (!selectedContent) return;
     try {
-      await navigator.clipboard.writeText(selectedContent);
+      // Strip null bytes before clipboard (DOM/clipboard injection defense)
+      const safe = scrubDisplayText(selectedContent, { maxChars: 500_000 });
+      await navigator.clipboard.writeText(safe);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -150,8 +152,11 @@ export function ArtifactPreview({
     setLoading(true);
     client.getArtifact(selectedId)
       .then((res) => {
-        if (res.ok && res.data?.content) setSelectedContent(res.data.content);
-        else setSelectedContent(null);
+        if (res.ok && typeof res.data?.content === 'string') {
+          // Strip null bytes before iframe/srcDoc / clipboard (injection defense)
+          const raw = res.data.content;
+          setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
+        } else setSelectedContent(null);
       })
       .finally(() => setLoading(false));
   }, [client, selectedId]);
@@ -162,12 +167,16 @@ export function ArtifactPreview({
     setStatusMsg(null);
     try {
       const res = await client.refreshArtifact(selectedId, 'reload');
-      if (res.ok && res.data?.content) {
-        setSelectedContent(res.data.content);
+      if (res.ok && typeof res.data?.content === 'string') {
+        const raw = res.data.content;
+        setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
         setStatusMsg('Content reloaded');
       } else {
         const again = await client.getArtifact(selectedId);
-        if (again.ok && again.data?.content) setSelectedContent(again.data.content);
+        if (again.ok && typeof again.data?.content === 'string') {
+          const raw = again.data.content;
+          setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
+        }
       }
       loadList();
     } finally {

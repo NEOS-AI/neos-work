@@ -155,5 +155,13 @@ describe('gate nodes', () => {
     expect(out.ok).toBe(true);
     expect(out.output).toMatchObject({ truncated: true });
   });
+
+  it('mergeInputs returns unserializable marker for circular input objects', async () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    const out = await new OutputNode().execute(makeCtx({ branch: circular }));
+    expect(out.ok).toBe(true);
+    expect(out.output).toEqual({ truncated: true, preview: '[unserializable]' });
+  });
 });
 

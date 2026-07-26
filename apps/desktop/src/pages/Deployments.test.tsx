@@ -386,4 +386,49 @@ describe('Deployments page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('gates deploy URL href to http(s) and hides control-char / javascript URLs', async () => {
+    const { safeDeployUrl } = await import('./Deployments.js');
+    expect(safeDeployUrl('https://ok.example/path')).toBe('https://ok.example/path');
+    expect(safeDeployUrl(`https://x.example/${'\0'}`)).toBe('');
+    expect(safeDeployUrl('javascript:alert(1)')).toBe('');
+    expect(safeDeployUrl('ftp://files.example')).toBe('');
+    expect(safeDeployUrl('not a url')).toBe('');
+
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'd-js',
+          workflowId: null,
+          provider: 'vercel',
+          status: 'success',
+          projectName: 'evil',
+          url: 'javascript:alert(1)',
+          deploymentId: null,
+          statusMessage: null,
+          createdAt: '2026-02-01T00:00:00.000Z',
+        },
+        {
+          id: 'd-ok',
+          workflowId: null,
+          provider: 'vercel',
+          status: 'success',
+          projectName: 'good',
+          url: 'https://good.example/app',
+          deploymentId: null,
+          statusMessage: null,
+          createdAt: '2026-02-02T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('good')).toBeInTheDocument());
+    // Safe URL rendered as link without scheme prefix
+    const link = screen.getByRole('link', { name: /good\.example\/app/ });
+    expect(link).toHaveAttribute('href', 'https://good.example/app');
+    // javascript: URL never becomes a link
+    expect(screen.queryByRole('link', { name: /javascript/i })).not.toBeInTheDocument();
+  });
 });

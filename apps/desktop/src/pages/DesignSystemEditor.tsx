@@ -30,8 +30,11 @@ export function DesignSystemEditor() {
       setDs(found ?? null);
     }
     if (contentRes.ok && contentRes.data) {
-      setContent(contentRes.data.content);
-      setSavedContent(contentRes.data.content);
+      // Multi-line DESIGN.md OK; strip null bytes so the editor never holds them
+      const raw = typeof contentRes.data.content === 'string' ? contentRes.data.content : '';
+      const safe = /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+      setContent(safe);
+      setSavedContent(safe);
     }
   }, [client, id]);
 

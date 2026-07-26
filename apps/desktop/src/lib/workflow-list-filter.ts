@@ -8,6 +8,22 @@ export interface WorkflowListItem {
   domain: string;
 }
 
+/**
+ * Scrub a list-search haystack field so matching aligns with display scrub:
+ * null bytes stripped, CR/LF collapsed to spaces, length-capped.
+ * Exported for unit tests.
+ */
+export function scrubSearchHaystack(raw: unknown, maxChars = 500): string {
+  if (typeof raw !== 'string' || !raw) return '';
+  let s = raw;
+  if (/\0/.test(s)) s = s.replace(/\0/g, '');
+  s = s.replace(/[\r\n]+/g, ' ').trim();
+  if (typeof maxChars === 'number' && maxChars > 0 && s.length > maxChars) {
+    s = s.slice(0, maxChars);
+  }
+  return s;
+}
+
 /** Normalize free-text search; control-char queries are ignored (return all). */
 function normalizeSearchQuery(search?: string): string {
   if (typeof search !== 'string' || /[\0\r\n]/.test(search)) return '';
@@ -32,12 +48,10 @@ export function filterWorkflowList<T extends WorkflowListItem>(
     // Control-char domain on item never matches a domain chip
     if (domain && normalizeItemChipValue(wf.domain) !== domain) return false;
     if (!q) return true;
-    const name = typeof wf.name === 'string' && !/\0/.test(wf.name) ? wf.name : '';
-    const desc =
-      typeof wf.description === 'string' && !/\0/.test(wf.description)
-        ? wf.description
-        : '';
-    return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
+    // Scrub so visible letters still match (align with list display scrub)
+    const name = scrubSearchHaystack(wf.name, 200).toLowerCase();
+    const desc = scrubSearchHaystack(wf.description, 500).toLowerCase();
+    return name.includes(q) || desc.includes(q);
   });
 }
 
@@ -49,13 +63,9 @@ export function filterBySearchText<T extends { name: string; description?: strin
   const q = normalizeSearchQuery(search);
   if (!q) return items;
   return items.filter((item) => {
-    // Null-byte name/desc excluded from haystack (align with filterWorkflowList)
-    const name = typeof item.name === 'string' && !/\0/.test(item.name) ? item.name : '';
-    const desc =
-      typeof item.description === 'string' && !/\0/.test(item.description)
-        ? item.description
-        : '';
-    return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
+    const name = scrubSearchHaystack(item.name, 200).toLowerCase();
+    const desc = scrubSearchHaystack(item.description, 500).toLowerCase();
+    return name.includes(q) || desc.includes(q);
   });
 }
 
@@ -111,11 +121,8 @@ export function filterByTextMatch<T>(
   const q = normalizeSearchQuery(search);
   if (!q) return items;
   return items.filter((item) => {
-    let hay = getHaystack(item);
-    if (typeof hay !== 'string') hay = String(hay ?? '');
-    // Drop null bytes from haystack before match
-    if (/\0/.test(hay)) hay = hay.replace(/\0/g, '');
-    return hay.toLowerCase().includes(q);
+    const hay = scrubSearchHaystack(getHaystack(item), 1_000).toLowerCase();
+    return hay.includes(q);
   });
 }
 

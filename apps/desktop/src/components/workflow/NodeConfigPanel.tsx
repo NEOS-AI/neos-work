@@ -588,6 +588,17 @@ function ValidationList({ issues }: { issues: WorkflowValidationIssue[] }) {
   );
 }
 
+/** Sanitize webhook secret for store/display/curl (strip control chars; cap length). */
+function sanitizeWebhookSecret(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  let s = raw;
+  if (/\0/.test(s)) s = s.replace(/\0/g, '');
+  // CR/LF never belong in HMAC secrets (header/curl injection)
+  if (/[\r\n]/.test(s)) s = s.replace(/[\r\n]+/g, '');
+  s = s.trim().slice(0, 512);
+  return s || null;
+}
+
 /** Webhook URL + secret for the open workflow (shown when no node is selected). */
 function WorkflowWebhookSection() {
   const { client, serverUrl } = useEngine();
@@ -602,7 +613,7 @@ function WorkflowWebhookSection() {
     if (!client || !workflowId) return;
     client.getWebhookSecret(workflowId).then((res) => {
       if (res.ok && res.data) {
-        setSecret(res.data.secret);
+        setSecret(sanitizeWebhookSecret(res.data.secret));
         if (res.data.rateLimit) {
           setRateLimit({
             limit: res.data.rateLimit.limit,
@@ -747,7 +758,9 @@ function WorkflowWebhookSection() {
             setBusy(true);
             const res = await client.regenerateWebhookSecret(workflowId);
             setBusy(false);
-            if (res.ok && res.data) setSecret(res.data.secret);
+            if (res.ok && res.data) {
+              setSecret(sanitizeWebhookSecret(res.data.secret));
+            }
           }}
         >
           Regenerate

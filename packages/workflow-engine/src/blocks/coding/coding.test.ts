@@ -258,6 +258,21 @@ describe('coding blocks', () => {
       expect(readResult.ok).toBe(true);
       expect(readResult.output).toBe('coverage-payload');
     });
+
+    it('surfaces filesystem errors when parent path is a file (write catch path)', async () => {
+      // Create a regular file, then try to write nested under it so mkdir fails
+      const blockerRel = `${testRel}/blocker`;
+      const blockerAbs = path.join(workspaces, blockerRel);
+      await fs.mkdir(path.dirname(blockerAbs), { recursive: true });
+      await fs.writeFile(blockerAbs, 'not-a-dir', 'utf8');
+
+      const result = await write().execute(
+        ctx({ path: `${blockerRel}/nested.txt`, content: 'nope' }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.output).toBe(false);
+      expect(result.error).toBeTruthy();
+    });
   });
 
   describe('test_runner allowlist', () => {

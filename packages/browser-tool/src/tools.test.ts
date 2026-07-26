@@ -424,4 +424,38 @@ describe('createBrowserTools', () => {
       timeout: 30_000,
     });
   });
+
+  it('browser_extract_text stringifies non-string DOM text and truncates', async () => {
+    const page = {
+      evaluate: vi.fn(async () => 12345 as unknown as string),
+      locator: vi.fn(),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const extract = tools.find((t) => t.name === 'browser_extract_text')!;
+    const result = await extract.execute({});
+    expect(result.success).toBe(true);
+    expect((result.output as { text: string }).text).toBe('12345');
+  });
+
+  it('browser_extract_links handles non-array evaluate results and evaluate failures', async () => {
+    const pageOk = {
+      evaluate: vi.fn(async () => ({ not: 'array' })),
+    };
+    const toolsOk = createBrowserTools(makeManager(pageOk));
+    const linksOk = await toolsOk.find((t) => t.name === 'browser_extract_links')!.execute({});
+    expect(linksOk.success).toBe(true);
+    expect((linksOk.output as { links: unknown[] }).links).toEqual([]);
+
+    const pageFail = {
+      evaluate: vi.fn(async () => {
+        throw new Error('evaluate boom');
+      }),
+    };
+    const toolsFail = createBrowserTools(makeManager(pageFail));
+    const linksFail = await toolsFail
+      .find((t) => t.name === 'browser_extract_links')!
+      .execute({});
+    expect(linksFail.success).toBe(false);
+    expect(linksFail.error).toMatch(/evaluate boom|browser_extract_links/i);
+  });
 });

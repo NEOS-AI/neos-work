@@ -988,10 +988,11 @@ describe('NodeConfigPanel', () => {
     );
     await waitFor(() => expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-3'));
 
-    // Masked secret display must not include raw null bytes
+    // Store-time sanitize drops null/CR/LF from secret
     expect(document.body.textContent).not.toContain('\0');
     await user.click(screen.getByRole('button', { name: /^Show$/i }));
-    expect(document.body.textContent).toMatch(/whsec_abc xyz/);
+    // Control chars stripped at store → continuous secret
+    expect(document.body.textContent).toMatch(/whsec_abcxyz/);
     expect(document.body.textContent).not.toContain('\0');
 
     await user.click(screen.getByRole('button', { name: 'Test fire' }));
@@ -1005,10 +1006,9 @@ describe('NodeConfigPanel', () => {
     await user.click(copyBtns[copyBtns.length - 1]!);
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     const copied = String(writeText.mock.calls[0]?.[0] ?? '');
-    // Clipboard scrub drops null bytes but keeps newlines (no collapseLines)
     expect(copied).not.toContain('\0');
-    expect(copied).toMatch(/whsec_abc/);
-    expect(copied).toContain('xyz');
+    expect(copied).not.toMatch(/[\r\n]/);
+    expect(copied).toBe('whsec_abcxyz');
 
     window.history.pushState({}, '', prev || '/');
   });

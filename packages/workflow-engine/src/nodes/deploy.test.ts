@@ -333,4 +333,34 @@ describe('DeployNode', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.content).toBe('12345');
   });
+
+  it('uses status-only deploy error when HTTP body is empty after scrub', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => '\n\r\0',
+      }),
+    );
+    const result = await DeployNode.execute(ctx({ inputs: { content: '<p/>' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Deploy failed: 502');
+  });
+
+  it('drops unparseable deploy URLs from API success payload', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: { url: 'http://[::1' }, // invalid URL → URL constructor throws
+        }),
+      }),
+    );
+    const result = await DeployNode.execute(ctx({ inputs: { content: '<p/>' } }));
+    expect(result.ok).toBe(true);
+    expect(String(result.output)).toContain('unknown URL');
+  });
 });

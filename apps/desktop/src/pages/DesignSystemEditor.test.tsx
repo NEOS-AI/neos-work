@@ -58,6 +58,18 @@ describe('DesignSystemEditor page', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
+  it('strips null bytes from loaded DESIGN.md content seed', async () => {
+    getDesignSystemContent.mockResolvedValue({
+      ok: true,
+      data: { content: `# Brand${'\0'}\ncolors` },
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(ta.value).toBe('# Brand\ncolors');
+    expect(ta.value).not.toContain('\0');
+  });
+
   it('saves dirty content via button and shows toast', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());

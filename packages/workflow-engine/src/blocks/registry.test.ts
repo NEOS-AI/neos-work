@@ -145,6 +145,23 @@ describe('block registry', () => {
     expect(resolveBlock('')).toBeUndefined();
   });
 
+  it('drops non-string skillId values at registration', () => {
+    registerBlockMeta({
+      id: 'cov_skill_non_string',
+      name: 'NonString Skill',
+      domain: 'general',
+      category: 'test',
+      description: 'd',
+      isBuiltIn: true,
+      implementationType: 'skill',
+      skillId: 12345 as never,
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    expect(resolveBlock('cov_skill_non_string')?.skillId).toBeUndefined();
+  });
+
   it('rejects unsafe block ids and caps metadata fields', () => {
     registerNativeBlock({
       blockId: 'bad id!',

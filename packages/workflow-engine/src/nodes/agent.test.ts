@@ -902,5 +902,30 @@ describe('AgentNode LLM model selection', () => {
     const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
     expect(goal).toMatch(/…\[inputs truncated\]/);
   });
+
+  it('caps oversized harness systemPrompt before merge', async () => {
+    const { registerHarness } = await import('../harness/index.js');
+    registerHarness({
+      id: 'cov_agent_harness_fat',
+      name: 'Fat Harness',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'H'.repeat(120_000),
+      allowedTools: [],
+    });
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', {
+      harnessId: 'cov_agent_harness_fat',
+      systemPrompt: 'node-bit',
+    });
+    const result = await node.execute(
+      ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }),
+    );
+    expect(result.ok).toBe(true);
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    // Registry + agent both cap at 100k; merged base prompt never exceeds that
+    expect(goal.length).toBeLessThanOrEqual(100_000 + 50_000);
+    expect(goal.startsWith('H')).toBe(true);
+  });
 });
 

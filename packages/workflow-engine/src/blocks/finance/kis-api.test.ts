@@ -302,6 +302,33 @@ describe('kis-api', () => {
     const weekUrl = String(fetchMock.mock.calls[2]![0]);
     expect(weekUrl).toContain('FID_PERIOD_DIV_CODE=W');
 
+    // control-char / non-string period → D
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ output2: [] }),
+    });
+    await getStockChart(
+      { appKey: 'chart-norm-k', appSecret: 'chart-norm-s' },
+      '005930',
+      'W\n' as 'D',
+      10,
+    );
+    const ctrlPeriodUrl = String(fetchMock.mock.calls.at(-1)![0]);
+    expect(ctrlPeriodUrl).toContain('FID_PERIOD_DIV_CODE=D');
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ output2: [] }),
+    });
+    await getStockChart(
+      { appKey: 'chart-norm-k', appSecret: 'chart-norm-s' },
+      '005930',
+      123 as unknown as 'D',
+      10,
+    );
+    const nonStrPeriodUrl = String(fetchMock.mock.calls.at(-1)![0]);
+    expect(nonStrPeriodUrl).toContain('FID_PERIOD_DIV_CODE=D');
+
     // huge count still succeeds (clamped server-side)
     fetchMock.mockResolvedValueOnce({
       ok: true,
