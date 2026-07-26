@@ -23,6 +23,7 @@ import {
   updateDeployment,
 } from '../db/deployments.js';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const deploy = new Hono();
 
@@ -173,7 +174,7 @@ deploy.post('/:id/refresh', async (c) => {
 
     return c.json({ ok: false, error: `Unsupported provider: ${row.provider}` }, 400);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Status refresh failed';
+    const msg = publicErrorMessage(err, 'Status refresh failed');
     return c.json({ ok: false, error: msg }, 500);
   }
 });
@@ -296,7 +297,7 @@ deploy.post('/', async (c) => {
       return c.json({ ok: true, data: { ...result, recordId: updated?.id ?? record.id } });
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Deploy failed';
+    const msg = publicErrorMessage(err, 'Deploy failed');
     updateDeployment(record.id, { status: 'failed', statusMessage: msg });
     return c.json({ ok: false, error: msg }, 500);
   }

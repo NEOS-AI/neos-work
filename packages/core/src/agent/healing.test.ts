@@ -59,8 +59,15 @@ describe('ReflectionStrategy', () => {
   });
 
   it('returns skip when JSON parse fails', async () => {
-    const result = await new ReflectionStrategy(mockAdapter(['{not-json'])).heal(step, 'e', []);
-    expect(result.action).toBe('skip');
+    // No closing brace → regex miss → skip without parse
+    const noClose = await new ReflectionStrategy(mockAdapter(['{not-json'])).heal(step, 'e', []);
+    expect(noClose.action).toBe('skip');
+
+    // Closing brace present but invalid JSON → parse throws → catch skip
+    const badJson = await new ReflectionStrategy(
+      mockAdapter(['here {not valid json} end']),
+    ).heal(step, 'e', []);
+    expect(badJson.action).toBe('skip');
   });
 
   it('fills revised fields from original step when omitted', async () => {

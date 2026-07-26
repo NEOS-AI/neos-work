@@ -2,9 +2,29 @@
  * Error sanitization — prevent internal details from leaking to clients.
  */
 
+import { scrubErrorMessage } from '@neos-work/core';
+
 const LOG_CONTEXT_MAX = 100;
 const LOG_MESSAGE_MAX = 4_000;
 const HTML_ESCAPE_MAX = 50_000;
+
+/**
+ * Scrub control chars from validation / 400-style error messages returned to clients.
+ * Prefer this over raw `err.message` on API error responses.
+ */
+export function publicErrorMessage(
+  error: unknown,
+  fallback: string,
+  maxChars = 500,
+): string {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : fallback;
+  return scrubErrorMessage(raw, maxChars) || fallback;
+}
 
 /** Log the full error server-side and return a safe generic message. */
 function hasLogUnsafeChars(value: string): boolean {

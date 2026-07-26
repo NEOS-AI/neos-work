@@ -133,6 +133,31 @@ describe('ToolRegistry', () => {
     expect(returned.success).toBe(false);
     expect(returned.error).toBe('baderr line');
     expect(returned.error).not.toContain('\0');
+
+    // Control-only failure error → generic fallback
+    reg.register(
+      makeTool('return-empty-err', async () => ({
+        success: false,
+        output: null,
+        error: `\0\n`,
+      })),
+    );
+    const emptyFail = await reg.execute('return-empty-err', {});
+    expect(emptyFail.success).toBe(false);
+    expect(emptyFail.error).toBe('Tool execution failed');
+
+    // Success with empty/control-only error must not invent a failure message
+    reg.register(
+      makeTool('ok-empty-err', async () => ({
+        success: true,
+        output: { ok: 1 },
+        error: `\0\n`,
+      })),
+    );
+    const okEmpty = await reg.execute('ok-empty-err', {});
+    expect(okEmpty.success).toBe(true);
+    expect(okEmpty.output).toEqual({ ok: 1 });
+    expect(okEmpty.error).toBeUndefined();
   });
 
   it('caps registry size and still allows re-register of existing names', async () => {

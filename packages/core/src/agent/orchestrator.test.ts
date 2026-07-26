@@ -565,7 +565,7 @@ describe('AgentOrchestrator', () => {
     expect(events.map((e) => e.type)).toContain('done');
   });
 
-  it('truncates oversized tool_use results and caps LLM step text accumulation', async () => {
+  it('truncates oversized tool_use results from LLM tool selection path', async () => {
     const registry = new ToolRegistry();
     registry.register({
       name: 'fat_read',
@@ -594,19 +594,14 @@ describe('AgentOrchestrator', () => {
       ],
       async *chat(): AsyncIterable<ChatChunk> {
         call += 1;
+        // injectPlan skips planner chat — first chat() is executeStep
         if (call === 1) {
-          // planning unused (injected)
-          yield { type: 'text', content: '[]' };
-        } else if (call === 2) {
-          // executeStep without toolName+input → LLM tool selection
           yield {
             type: 'tool_use',
             toolName: 'fat_read',
             toolUseId: 'tu-1',
-            toolInput: { path: 'x' },
+            toolInput: 'not-an-object' as unknown as Record<string, unknown>,
           };
-          // also stream a huge text blob to exercise fullText cap
-          yield { type: 'text', content: 'T'.repeat(300_000) };
         } else {
           yield { type: 'text', content: 'done-summary' };
         }
@@ -622,7 +617,6 @@ describe('AgentOrchestrator', () => {
       step({
         description: 'Figure it out via LLM tools',
         type: 'tool_use',
-        // no toolName/input → LLM path
       }),
     ]);
     const events = await collectEvents(orch.run('llm tools'));
@@ -631,10 +625,119 @@ describe('AgentOrchestrator', () => {
       step?: { input?: { results?: Array<{ content?: string }> } };
     };
     const content = complete?.step?.input?.results?.[0]?.content ?? '';
-    if (content) {
-      expect(content.length).toBeLessThanOrEqual(64_000 + 20);
-      expect(content).toMatch(/…\[truncated\]$/);
+    expect(content.length).toBeLessThanOrEqual(64_000 + 20);
+    expect(content).toMatch(/…\[truncated\]$/);
+  });
+
+  it('caps LLM step fullText accumulation at 256k when no tools are used', async () => {
+    let call = 0;
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(): AsyncIterable<ChatChunk> {
+        call += 1;
+        if (call === 1) {
+          yield { type: 'text', content: 'T'.repeat(300_000) };
+        } else {
+          yield { type: 'text', content: 'summary' };
+        }
+        yield { type: 'done' };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const orch = new AgentOrchestrator(adapter, new ToolRegistry());
+    injectPlan(orch, [step({ description: 'Just think', type: 'plan' })]);
+    const events = await collectEvents(orch.run('text cap'));
+    expect(events.some((e) => e.type === 'step_complete')).toBe(true);
+    const complete = events.find((e) => e.type === 'step_complete') as {
+      step?: { output?: string };
+    };
+    if (typeof complete?.step?.output === 'string') {
+      expect(complete.step.output.length).toBe(256_000);
     }
+  });
+
+  it('scrubs control characters in step_error and top-level agent errors', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'ctrl_fail',
+      description: 'fails with control chars',
+      inputSchema: { type: 'object' },
+      execute: async () => ({
+        success: false,
+        output: null,
+        error: `disk${'\n'}full${'\0'}!`,
+      }),
+    });
+    // Reflection returns skip so we hit step_error path
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
+        const content = String(params.messages?.[0]?.content ?? '');
+        if (content.includes('에이전트 step이 실패') || content.includes('"action"')) {
+          yield { type: 'text', content: JSON.stringify({ action: 'skip' }) };
+        } else {
+          yield { type: 'text', content: 'summary' };
+        }
+        yield { type: 'done' };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const orch = new AgentOrchestrator(adapter, registry);
+    injectPlan(orch, [
+      step({
+        description: 'Fail dirty',
+        toolName: 'ctrl_fail',
+        input: {},
+      }),
+    ]);
+    const events = await collectEvents(orch.run('scrub step'));
+    const stepErr = events.find((e) => e.type === 'step_error') as {
+      error?: string;
+    };
+    expect(stepErr?.error).toBeDefined();
+    expect(stepErr!.error).not.toMatch(/[\r\n\0]/);
+    expect(stepErr!.error).toMatch(/disk|full|Tool execution failed/i);
+
+    // Top-level planner throw with control chars → scrubbed, capped error
+    const orch2 = new AgentOrchestrator(mockAdapter(['[]']), new ToolRegistry());
+    (orch2 as unknown as { planner: { plan: () => Promise<AgentStep[]> } }).planner = {
+      plan: async () => {
+        throw new Error(`plan${'\n'}boom${'\0'}${'P'.repeat(5_000)}`);
+      },
+    };
+    const events2 = await collectEvents(orch2.run('boom plan'));
+    const err = events2.find((e) => e.type === 'error') as { error?: string } | undefined;
+    expect(err?.error).toBeDefined();
+    expect(err!.error).not.toMatch(/[\r\n\0]/);
+    expect(err!.error!.length).toBeLessThanOrEqual(4_000);
   });
 
   it('emits capped error when planning throws a long message', async () => {

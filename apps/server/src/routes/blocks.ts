@@ -12,6 +12,7 @@ import { listBlocks, getNativeExecutor, registerNativeBlock } from '@neos-work/w
 import { listCustomBlocks, getCustomBlock, createCustomBlock, updateCustomBlock, deleteCustomBlock } from '../db/blocks.js';
 import type { WorkflowBlock } from '@neos-work/shared';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const blocks = new Hono();
 
@@ -120,7 +121,7 @@ blocks.post('/', async (c) => {
       description,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create block';
+    const msg = publicErrorMessage(err, 'Failed to create block');
     return c.json({ ok: false, error: msg }, 400);
   }
 

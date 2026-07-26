@@ -3,6 +3,7 @@
  * Supports parallel fan-out/fan-in (parallel_start/parallel_end) and OR gate.
  */
 
+import { scrubErrorMessage } from '@neos-work/core';
 import type { Workflow, WorkflowSSEEvent } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeType } from './types.js';
 import { topologicalSort } from './graph.js';
@@ -22,6 +23,11 @@ const MAX_NODE_ERROR_CHARS = 4_000;
 /** Cap node.progress SSE payloads (streaming agent text). */
 const MAX_PROGRESS_CHUNK_CHARS = 32_000;
 const MAX_PROGRESS_ACCUMULATED_CHARS = 256_000;
+
+/** Scrub + cap node/run failure messages for SSE / DB (control injection defense). */
+function formatExecutorError(raw: unknown, fallback = 'Unknown error'): string {
+  return scrubErrorMessage(raw, MAX_NODE_ERROR_CHARS) || fallback;
+}
 
 export interface ExecutorOptions {
   workflow: Workflow;
@@ -77,10 +83,7 @@ async function runNode(
     return true;
   } else {
     failedNodes.add(nodeId);
-    let error = result.error ?? 'Unknown error';
-    if (error.length > MAX_NODE_ERROR_CHARS) {
-      error = error.slice(0, MAX_NODE_ERROR_CHARS);
-    }
+    const error = formatExecutorError(result.error, 'Unknown error');
     onEvent({ type: 'node.failed', nodeId, error });
     return false;
   }
@@ -98,10 +101,10 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
   try {
     sorted = topologicalSort(workflow.nodes, workflow.edges);
   } catch (err) {
-    let error = err instanceof Error ? err.message : 'Graph sort failed';
-    if (error.length > MAX_NODE_ERROR_CHARS) {
-      error = error.slice(0, MAX_NODE_ERROR_CHARS);
-    }
+    const error = formatExecutorError(
+      err instanceof Error ? err.message : 'Graph sort failed',
+      'Graph sort failed',
+    );
     onEvent({
       type: 'run.failed',
       runId,
@@ -371,10 +374,7 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
       onEvent({ type: 'node.completed', nodeId, output, durationMs: result.durationMs });
     } else {
       failedNodes.add(nodeId);
-      let error = result.error ?? 'Unknown error';
-      if (error.length > MAX_NODE_ERROR_CHARS) {
-        error = error.slice(0, MAX_NODE_ERROR_CHARS);
-      }
+      const error = formatExecutorError(result.error, 'Unknown error');
       onEvent({ type: 'node.failed', nodeId, error });
     }
   }

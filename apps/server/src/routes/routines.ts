@@ -22,6 +22,7 @@ import { getDb } from '../db/schema.js';
 import { addOrUpdateSchedule, removeSchedule, runRoutine } from '../lib/routine-scheduler.js';
 import { estimateNextCronRun } from '../lib/cron-next.js';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const routines = new Hono();
 
@@ -120,7 +121,7 @@ routines.post('/', async (c) => {
 
     return c.json({ ok: true, data: routine }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create routine';
+    const msg = publicErrorMessage(err, 'Failed to create routine');
     return c.json({ ok: false, error: msg }, 400);
   }
 });

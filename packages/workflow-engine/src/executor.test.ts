@@ -618,6 +618,59 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(completed!.output.preview!.length).toBe(256);
   });
 
+  it('scrubs control chars from node.failed error strings', async () => {
+    const { registerNativeBlock, registerBlockMeta } = await import('./blocks/registry.js');
+    registerNativeBlock({
+      blockId: 'ctrl_err_block',
+      execute: async () => ({
+        ok: false,
+        output: null,
+        error: `boom${'\n'}now${'\0'}!`,
+        durationMs: 0,
+      }),
+    });
+    registerBlockMeta({
+      id: 'ctrl_err_block',
+      name: 'Ctrl Err',
+      domain: 'general',
+      category: 'test',
+      description: 'd',
+      isBuiltIn: true,
+      implementationType: 'native',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-ctrl-error',
+      workflow: baseWorkflow({
+        nodes: [
+          {
+            id: 'block',
+            type: 'block',
+            label: 'CtrlErr',
+            position: { x: 0, y: 0 },
+            config: { blockId: 'ctrl_err_block' },
+          },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      onEvent: (event) => events.push(event),
+    });
+
+    const failed = events.find((e) => e.type === 'node.failed') as
+      | { error: string; nodeId: string }
+      | undefined;
+    expect(failed).toBeDefined();
+    expect(failed!.nodeId).toBe('block');
+    expect(failed!.error).toBe('boom now!');
+    expect(failed!.error).not.toContain('\0');
+    expect(failed!.error).not.toMatch(/[\r\n]/);
+  });
+
   it('truncates oversized node.failed error strings at 4000 chars', async () => {
     const { registerNativeBlock, registerBlockMeta } = await import('./blocks/registry.js');
     registerNativeBlock({

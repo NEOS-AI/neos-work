@@ -4,6 +4,9 @@
  */
 
 import crypto from 'node:crypto';
+
+import { scrubErrorMessage } from '@neos-work/core';
+
 import type { PluginManifest, PipelineStage } from './plugin-store.js';
 
 export type PluginSSEEvent =
@@ -91,8 +94,9 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
 
     onEvent({ type: 'pipeline.completed', runId, outputs: stageOutputs });
   } catch (err) {
-    let msg = err instanceof Error ? err.message : 'Pipeline error';
-    if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+    const msg =
+      scrubErrorMessage(err instanceof Error ? err.message : 'Pipeline error', 4_000)
+      || 'Pipeline error';
     onEvent({ type: 'pipeline.failed', runId, error: msg });
   }
 

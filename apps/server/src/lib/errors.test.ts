@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, safeError } from './errors.js';
+import { escapeHtml, publicErrorMessage, safeError } from './errors.js';
 
 describe('safeError', () => {
   afterEach(() => {
@@ -44,6 +44,22 @@ describe('safeError', () => {
     safeError(new Error('e'.repeat(10_000)), 'c'.repeat(300));
     const logged = String(spy.mock.calls[0]?.[1] ?? '');
     expect(logged.length).toBeLessThanOrEqual(4_000);
+  });
+});
+
+describe('publicErrorMessage', () => {
+  it('scrubs control chars and falls back when empty', () => {
+    expect(publicErrorMessage(new Error(`disk${'\n'}full${'\0'}!`), 'fallback')).toBe(
+      'disk full!',
+    );
+    expect(publicErrorMessage(new Error('\0\n'), 'fallback')).toBe('fallback');
+    expect(publicErrorMessage('plain', 'fallback')).toBe('plain');
+    expect(publicErrorMessage(null, 'fallback')).toBe('fallback');
+  });
+
+  it('caps overlong public error messages', () => {
+    const msg = publicErrorMessage(new Error('e'.repeat(10_000)), 'fb', 100);
+    expect(msg.length).toBeLessThanOrEqual(100);
   });
 });
 

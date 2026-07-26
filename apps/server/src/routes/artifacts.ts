@@ -13,6 +13,7 @@
 import { Hono } from 'hono';
 import * as db from '../db/artifacts.js';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const artifacts = new Hono();
 
@@ -131,7 +132,7 @@ artifacts.post('/', async (c) => {
     });
     return c.json({ ok: true, data: artifact }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create artifact';
+    const msg = publicErrorMessage(err, 'Failed to create artifact');
     // Size / validation errors from db layer → 400
     if (/max size|max length|required|invalid|control characters/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
@@ -156,7 +157,7 @@ artifacts.put('/:id', async (c) => {
     if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
     return c.json({ ok: true, data: updated });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to update artifact';
+    const msg = publicErrorMessage(err, 'Failed to update artifact');
     if (/max size|control characters/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
@@ -198,7 +199,7 @@ artifacts.patch('/:id', async (c) => {
     if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
     return c.json({ ok: true, data: updated });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to update artifact';
+    const msg = publicErrorMessage(err, 'Failed to update artifact');
     if (/max size|control characters/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
@@ -262,7 +263,7 @@ artifacts.post('/:id/refresh', async (c) => {
       const updated = db.updateArtifactContent(id, content);
       return c.json({ ok: true, data: updated, meta: { mode: 'reload' } });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to refresh file';
+      const msg = publicErrorMessage(err, 'Failed to refresh file');
       return c.json({ ok: false, error: msg }, 500);
     }
   }

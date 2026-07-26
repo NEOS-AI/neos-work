@@ -21,6 +21,7 @@ import {
   exportMemories,
 } from '../lib/memory-store.js';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const memory = new Hono();
 
@@ -75,7 +76,7 @@ memory.post('/', async (c) => {
     });
     return c.json({ ok: true, data: item }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create memory';
+    const msg = publicErrorMessage(err, 'Failed to create memory');
     return c.json({ ok: false, error: msg }, 400);
   }
 });

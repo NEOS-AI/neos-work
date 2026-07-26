@@ -24,7 +24,7 @@ import * as db from '../db/sessions.js';
 import * as agentStepsDb from '../db/agent-steps.js';
 import * as memoryDb from '../db/memory.js';
 import * as settingsDb from '../db/settings.js';
-import { safeError } from '../lib/errors.js';
+import { publicErrorMessage, safeError } from '../lib/errors.js';
 import { safeRouteId, validateWorkspacePath } from '../lib/path-safety.js';
 import { getDb } from '../db/schema.js';
 
@@ -508,7 +508,11 @@ session.post('/:id/chat', async (c) => {
                 ),
               ]);
             } catch (err) {
-              result = { success: false, output: null, error: (err as Error).message };
+              result = {
+                success: false,
+                output: null,
+                error: publicErrorMessage(err, 'Tool execution failed', 2_000),
+              };
             }
 
             const resultContent = result.success
@@ -828,7 +832,7 @@ workspace.post('/', async (c) => {
     });
     return c.json({ ok: true, data: created }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create workspace';
+    const msg = publicErrorMessage(err, 'Failed to create workspace');
     return c.json({ ok: false, error: msg }, 400);
   }
 });

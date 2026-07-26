@@ -10,8 +10,10 @@ import {
   createRoutineRun,
   completeRoutineRun,
 } from '../db/routines.js';
-import * as workflowDb from '../db/workflows.js';
+import { scrubErrorMessage } from '@neos-work/core';
 import { executeWorkflow } from '@neos-work/workflow-engine';
+
+import * as workflowDb from '../db/workflows.js';
 import { getExecutionSettings } from '../db/settings.js';
 import { spawnCliAgent } from './cli-agents.js';
 import { getDesignSystemContent } from './design-system-store.js';
@@ -168,7 +170,9 @@ export async function runRoutine(routineId: string): Promise<string | null> {
     console.log(`[Scheduler] Routine ${id} completed, runId: ${runId}`);
     return runId;
   } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Execution error';
+    const errorMsg =
+      scrubErrorMessage(err instanceof Error ? err.message : 'Execution error', 4_000)
+      || 'Execution error';
     // Persist failed workflow run so history does not leave rows stuck as "running"
     workflowDb.saveRun({
       id: runId,

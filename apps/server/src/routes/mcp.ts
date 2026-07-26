@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 
 import { getDb } from '../db/schema.js';
 import { isSafeHttpBaseUrl } from '../db/settings.js';
-import { escapeHtml, safeError } from '../lib/errors.js';
+import { escapeHtml, publicErrorMessage, safeError } from '../lib/errors.js';
 import {
   saveToken,
   loadToken,
@@ -306,7 +306,7 @@ mcp.post('/', async (c) => {
     });
     return c.json({ ok: true, data: rowToResponse(row) }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'mcp-create failed';
+    const msg = publicErrorMessage(err, 'mcp-create failed');
     if (/control characters|max length|required|transport|url|invalid/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
@@ -624,7 +624,7 @@ mcp.post('/oauth/:serverId/refresh', async (c) => {
         }).toString(),
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Token refresh network error';
+      const msg = publicErrorMessage(err, 'Token refresh network error');
       return c.json({ ok: false, error: msg }, 502);
     }
 

@@ -7,6 +7,7 @@
 
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
+import { scrubErrorMessage } from '@neos-work/core';
 import type { WorkflowSSEEvent } from '@neos-work/shared';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
@@ -204,7 +205,9 @@ webhooks.post('/:workflowId', async (c) => {
         completedAt: new Date().toISOString(),
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Execution error';
+      const errorMsg =
+        scrubErrorMessage(err instanceof Error ? err.message : 'Execution error', 4_000)
+        || 'Execution error';
       await sendEvent({ type: 'run.failed', runId, error: errorMsg });
       db.saveRun({
         id: runId,

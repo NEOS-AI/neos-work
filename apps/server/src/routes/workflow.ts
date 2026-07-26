@@ -14,6 +14,7 @@ import { stream } from 'hono/streaming';
 import { ZipArchive } from 'archiver';
 import unzipper from 'unzipper';
 import { Readable } from 'node:stream';
+import { scrubErrorMessage } from '@neos-work/core';
 import type { WorkflowSSEEvent } from '@neos-work/shared';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
@@ -30,6 +31,7 @@ import {
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 import { assessWorkflowPreflight } from '../lib/workflow-preflight.js';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const workflow = new Hono();
 
@@ -96,7 +98,7 @@ workflow.post('/', async (c) => {
     });
     return c.json({ ok: true, data: wf }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create workflow';
+    const msg = publicErrorMessage(err, 'Failed to create workflow');
     if (/name|graph|control|max/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
@@ -239,7 +241,7 @@ workflow.post('/import', async (c) => {
     });
     return c.json({ ok: true, data: created }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to import workflow';
+    const msg = publicErrorMessage(err, 'Failed to import workflow');
     if (/name|graph|control|max/i.test(msg)) {
       return c.json({ ok: false, error: msg }, 400);
     }
@@ -593,7 +595,7 @@ workflow.post('/import.zip', async (c) => {
       edges: (wf.edges as never) ?? [],
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to import workflow';
+    const msg = publicErrorMessage(err, 'Failed to import workflow');
     return c.json({ ok: false, error: msg }, 400);
   }
 
@@ -879,7 +881,9 @@ workflow.post('/:id/run', async (c) => {
         completedAt: new Date().toISOString(),
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Execution error';
+      const errorMsg =
+        scrubErrorMessage(err instanceof Error ? err.message : 'Execution error', 4_000)
+        || 'Execution error';
       await sendEvent({ type: 'run.failed', runId, error: errorMsg });
       db.saveRun({
         id: runId,

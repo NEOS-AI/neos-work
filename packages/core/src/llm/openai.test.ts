@@ -89,6 +89,18 @@ describe('OpenAIAdapter', () => {
     );
   });
 
+  it('ignores unparseable custom baseUrl values', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({
+      provider: 'openai',
+      apiKey: 'sk',
+      baseUrl: 'http://[::1', // URL constructor throws
+    });
+    await adapter.validateApiKey('sk');
+    expect(String(fetchMock.mock.calls[0]?.[0] ?? '')).toMatch(/api\.openai\.com/);
+  });
+
   it('uses Ollama identity, models, and default base URL', () => {
     const adapter = new OpenAIAdapter({ provider: 'ollama' });
     expect(adapter.id).toBe('ollama');
@@ -376,5 +388,39 @@ describe('OpenAIAdapter', () => {
       chunks.push(c);
     }
     expect(chunks).toEqual([{ type: 'error', content: 'Empty response body' }]);
+  });
+
+  it('skips invalid SSE JSON lines and yields empty toolInput for bad tool args', async () => {
+    const sse = [
+      'data: not-json-at-all',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c2","function":{"name":"echo","arguments":"{not-json"}}]}}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sse));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: stream }));
+
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    const chunks = [];
+    for await (const c of adapter.chat({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'run' }],
+    })) {
+      chunks.push(c);
+    }
+
+    const toolUse = chunks.find((c) => c.type === 'tool_use') as {
+      toolName?: string;
+      toolInput?: Record<string, unknown>;
+    };
+    expect(toolUse?.toolName).toBe('echo');
+    expect(toolUse?.toolInput).toEqual({});
   });
 });

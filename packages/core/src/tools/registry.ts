@@ -80,7 +80,13 @@ export class ToolRegistry {
       // Scrub control chars from tool-returned error strings (SSE / UI hygiene)
       if (result && typeof result.error === 'string') {
         const scrubbed = scrubErrorMessage(result.error);
-        return { ...result, error: scrubbed || 'Tool execution failed' };
+        if (scrubbed) return { ...result, error: scrubbed };
+        // Empty after scrub: keep success results clean; failed tools get a fallback
+        if (result.success === false) {
+          return { ...result, error: 'Tool execution failed' };
+        }
+        const { error: _drop, ...rest } = result;
+        return rest as ToolResult;
       }
       return result;
     } catch (err) {

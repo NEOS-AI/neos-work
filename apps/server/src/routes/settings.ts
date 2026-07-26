@@ -4,6 +4,7 @@ import { ProviderRegistry, AnthropicAdapter, GoogleAdapter } from '@neos-work/co
 
 import * as settingsDb from '../db/settings.js';
 import { isSensitiveKey } from '../db/crypto.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 /** Mask sensitive values so full secrets are never returned via API. */
 function maskValue(key: string, value: string): string {
@@ -87,7 +88,7 @@ settings.put('/:key', async (c) => {
   try {
     settingsDb.setSetting(key, body.value);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to save setting';
+    const msg = publicErrorMessage(err, 'Failed to save setting');
     return c.json({ ok: false, error: msg }, 400);
   }
   return c.json({ ok: true });
