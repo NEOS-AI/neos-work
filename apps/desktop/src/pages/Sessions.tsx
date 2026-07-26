@@ -943,9 +943,11 @@ const MarkdownContent = memo(function MarkdownContent({
   );
 });
 
-function CodeBlock({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) {
+/** Markdown fenced-code renderer (exported for unit tests). */
+export function CodeBlock({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) {
   const isBlock = className?.startsWith('hljs') || className?.startsWith('language-');
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   if (!isBlock) {
     return (
@@ -955,21 +957,34 @@ function CodeBlock({ className, children, ...props }: ComponentPropsWithoutRef<'
     );
   }
 
-  const handleCopy = () => {
-    const text = String(children).replace(/\n$/, '');
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    // Scrub before clipboard (null-byte / control-char defense)
+    const text = scrubDisplayText(String(children).replace(/\n$/, ''), { maxChars: 100_000 });
+    try {
+      const write = navigator.clipboard?.writeText;
+      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+      await write.call(navigator.clipboard, text);
+      setCopyFailed(false);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setCopyFailed(true);
+      setTimeout(() => setCopyFailed(false), 2000);
+    }
   };
 
   return (
     <div className="group relative">
       <button
-        onClick={handleCopy}
+        onClick={() => { void handleCopy(); }}
         className="absolute right-2 top-2 rounded-md px-2 py-1 text-[10px] opacity-0 transition-opacity group-hover:opacity-100"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 80%, transparent)', color: 'var(--text-secondary)' }}
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 80%, transparent)',
+          color: copyFailed ? '#f87171' : 'var(--text-secondary)',
+        }}
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? 'Copied!' : copyFailed ? 'Copy failed' : 'Copy'}
       </button>
       <code className={className} {...props}>
         {children}

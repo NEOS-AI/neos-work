@@ -347,6 +347,29 @@ describe('EngineClient', () => {
 
     await client.revokeMcpOAuth('m1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/DELETE|POST/);
+
+    await client.listMcpPresets();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp-servers\/presets/);
+
+    await client.createMcpServerFromPreset({
+      presetId: 'tradingview',
+      installPath: '/tmp/tv',
+      name: 'TradingView',
+    });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/from-preset/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      presetId: 'tradingview',
+      installPath: '/tmp/tv',
+      name: 'TradingView',
+    });
+
+    await client.checkTradingViewCdp(9222);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(
+      /tradingview\/cdp-health\?port=9222/,
+    );
+    await client.checkTradingViewCdp();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/tradingview\/cdp-health$/);
   });
 
   it('memory, blocks, harnesses, templates, workspaces', async () => {

@@ -435,4 +435,65 @@ describe('Skills page', () => {
     });
     expect(screen.getByText('Alpha Skill')).toBeInTheDocument();
   });
+
+  it('copies try-prompt text and shows Copied feedback', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'skill.tryPrompt' }));
+    await waitFor(() => expect(screen.getByText('Try beta')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('Try beta');
+      expect(screen.getByRole('button', { name: /Copied/i })).toBeInTheDocument();
+    });
+  });
+
+  it('shows Copy failed when try-prompt clipboard write rejects', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'skill.tryPrompt' }));
+    await waitFor(() => expect(screen.getByText('Try beta')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Copy failed/i })).toBeInTheDocument();
+    });
+  });
+
+  it('scrubs control chars from try-prompt before clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    listSkills.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          ...skills[0]!,
+          examplePrompt: `Try${'\0'}beta`,
+        },
+      ],
+    });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'skill.tryPrompt' }));
+    await waitFor(() => expect(screen.getByText('Trybeta')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('Trybeta'));
+  });
 });

@@ -271,6 +271,62 @@ describe('Settings page', () => {
     });
   });
 
+  it('alerts scrubbed error when TradingView from-preset fails', async () => {
+    createMcpServerFromPreset.mockResolvedValue({
+      ok: false,
+      error: `entry${'\n'}missing${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    listMcpServers.mockResolvedValue({ ok: true, data: [] });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('TradingView MCP')).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/Full path to tradingview-mcp/), {
+      target: { value: '/tmp/tv' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add TradingView' }));
+    await waitFor(() => {
+      expect(createMcpServerFromPreset).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('entry missing!');
+    });
+    expect(String((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] ?? '')).not.toContain(
+      '\0',
+    );
+  });
+
+  it('rejects control-char TradingView install path without calling API', async () => {
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    listMcpServers.mockResolvedValue({ ok: true, data: [] });
+    createMcpServerFromPreset.mockClear();
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('TradingView MCP')).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/Full path to tradingview-mcp/), {
+      target: { value: `/tmp/tv${'\0'}x` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add TradingView' }));
+    expect(createMcpServerFromPreset).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Install path contains invalid control characters');
+  });
+
+  it('shows scrubbed CDP unreachable status', async () => {
+    checkTradingViewCdp.mockResolvedValue({
+      ok: true,
+      data: {
+        ok: false,
+        cdpConnected: false,
+        port: 9222,
+        error: `CDP${'\n'}down${'\0'}!`,
+      },
+    });
+    listMcpServers.mockResolvedValue({ ok: true, data: [] });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('TradingView MCP')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Test CDP/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/CDP down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('changes theme and language', async () => {
     render(<Settings />);
     fireEvent.click(screen.getByRole('button', { name: 'settings:appearance.light' }));

@@ -25,6 +25,8 @@ export function Skills() {
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('skills'));
   const [search, setSearch] = useState('');
   const [tryPrompt, setTryPrompt] = useState<string | null>(null);
+  /** null | 'ok' | 'fail' — try-prompt Copy button feedback */
+  const [tryPromptCopyStatus, setTryPromptCopyStatus] = useState<'ok' | 'fail' | null>(null);
 
   const handleEnabledFilter = (value: EnabledFilterPref) => {
     setEnabledFilter(value);
@@ -74,6 +76,7 @@ export function Skills() {
       e.preventDefault();
       if (tryPrompt) {
         setTryPrompt(null);
+        setTryPromptCopyStatus(null);
         return;
       }
       if (search) setSearch('');
@@ -390,18 +393,42 @@ export function Skills() {
               className="rounded-lg p-3 text-xs whitespace-pre-wrap break-words"
               style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-primary)' }}
             >
-              {tryPrompt}
+              {scrubDisplayText(tryPrompt, { maxChars: 100_000 }) || tryPrompt}
             </pre>
             <div className="mt-4 flex justify-end gap-2">
               <button
-                onClick={() => { void navigator.clipboard.writeText(tryPrompt); }}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const write = navigator.clipboard?.writeText;
+                      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+                      const safe = scrubDisplayText(tryPrompt, { maxChars: 100_000 });
+                      await write.call(navigator.clipboard, safe);
+                      setTryPromptCopyStatus('ok');
+                      setTimeout(() => setTryPromptCopyStatus(null), 1500);
+                    } catch {
+                      setTryPromptCopyStatus('fail');
+                      setTimeout(() => setTryPromptCopyStatus(null), 2000);
+                    }
+                  })();
+                }}
                 className="rounded-lg border px-3 py-1.5 text-xs"
-                style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+                style={{
+                  borderColor: 'var(--border-secondary)',
+                  color: tryPromptCopyStatus === 'fail' ? '#f87171' : 'var(--text-secondary)',
+                }}
               >
-                Copy
+                {tryPromptCopyStatus === 'ok'
+                  ? 'Copied'
+                  : tryPromptCopyStatus === 'fail'
+                    ? 'Copy failed'
+                    : 'Copy'}
               </button>
               <button
-                onClick={() => setTryPrompt(null)}
+                onClick={() => {
+                  setTryPrompt(null);
+                  setTryPromptCopyStatus(null);
+                }}
                 className="rounded-lg px-3 py-1.5 text-xs"
                 style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
               >

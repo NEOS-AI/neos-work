@@ -489,4 +489,68 @@ describe('Workflows page', () => {
     expect(screen.getByText('Alpha Flow')).toBeInTheDocument();
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
+
+  it('copies workflow id and shows Copied feedback', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByTitle('Copy workflow ID')[0]!);
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalled();
+      expect(screen.getByTitle('Copied!')).toBeInTheDocument();
+    });
+    // Scrubbed id (no control chars)
+    const copied = String(writeText.mock.calls[0]?.[0] ?? '');
+    expect(copied).not.toContain('\0');
+    expect(copied.length).toBeGreaterThan(0);
+  });
+
+  it('shows Copy failed when workflow id clipboard write rejects', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByTitle('Copy workflow ID')[0]!);
+    await waitFor(() => {
+      expect(screen.getByTitle('Copy failed')).toBeInTheDocument();
+    });
+  });
+
+  it('scrubs control chars from workflow id before clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    listWorkflows.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `wf${'\0'}dirty`,
+          name: 'Dirty Id Flow',
+          domain: 'general' as const,
+          description: '',
+          nodes: [],
+          edges: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Dirty Id Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByTitle('Copy workflow ID'));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(writeText.mock.calls[0]?.[0]).toBe('wfdirty');
+  });
 });

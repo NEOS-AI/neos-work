@@ -95,6 +95,18 @@ describe('Sidebar', () => {
     expect(screen.getByText(/· host/)).toBeInTheDocument();
   });
 
+  it('scrubs control-char engine version from health', async () => {
+    health.mockResolvedValue({
+      status: 'ok',
+      version: `0.3.54${'\n'}x${'\0'}`,
+    });
+    renderSidebar();
+    await waitFor(() => {
+      expect(screen.getByText(/Engine v0\.3\.54 x/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('shows disconnected status without health fetch', () => {
     engine = {
       status: 'disconnected',

@@ -41,6 +41,7 @@ export function Workflows() {
   const [domainFilter, setDomainFilter] = useState<WorkflowListDomainFilter>(() => loadWorkflowListDomain());
   const [sortMode, setSortMode] = useState<SortMode>(() => loadWorkflowListSort());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copyFailedId, setCopyFailedId] = useState<string | null>(null);
 
   const closeCreateModal = useCallback(() => {
     setShowModal(false);
@@ -85,11 +86,18 @@ export function Workflows() {
 
   const handleCopyId = async (id: string) => {
     try {
-      await navigator.clipboard.writeText(id);
+      const write = navigator.clipboard?.writeText;
+      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+      // Scrub before clipboard (null-byte / control-char defense)
+      const safe = scrubDisplayText(id, { collapseLines: true, maxChars: 200 });
+      await write.call(navigator.clipboard, safe);
+      setCopyFailedId(null);
       setCopiedId(id);
       setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
     } catch {
-      // clipboard may be unavailable
+      setCopiedId(null);
+      setCopyFailedId(id);
+      setTimeout(() => setCopyFailedId((cur) => (cur === id ? null : cur)), 2000);
     }
   };
 
@@ -454,10 +462,16 @@ export function Workflows() {
                   <button
                     onClick={(e) => { e.stopPropagation(); void handleCopyId(wf.id); }}
                     className="rounded p-1 text-xs"
-                    style={{ color: 'var(--text-muted)' }}
-                    title={copiedId === wf.id ? 'Copied!' : 'Copy workflow ID'}
+                    style={{ color: copyFailedId === wf.id ? '#f87171' : 'var(--text-muted)' }}
+                    title={
+                      copiedId === wf.id
+                        ? 'Copied!'
+                        : copyFailedId === wf.id
+                          ? 'Copy failed'
+                          : 'Copy workflow ID'
+                    }
                   >
-                    {copiedId === wf.id ? '✓' : 'ID'}
+                    {copiedId === wf.id ? '✓' : copyFailedId === wf.id ? '!' : 'ID'}
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); void handleDuplicate(wf.id); }}

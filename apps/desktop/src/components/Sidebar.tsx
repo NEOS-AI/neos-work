@@ -33,9 +33,20 @@ export function Sidebar() {
       return;
     }
     let cancelled = false;
-    void client.health().then((h) => {
-      if (!cancelled && h.status === 'ok') setEngineVersion(h.version);
-    }).catch(() => {});
+    void client
+      .health()
+      .then((h) => {
+        if (cancelled || h.status !== 'ok') return;
+        // Store-time scrub so control-char versions never sit in state
+        const v =
+          typeof h.version === 'string'
+            ? scrubDisplayText(h.version, { collapseLines: true, maxChars: 40 })
+            : '';
+        setEngineVersion(v || null);
+      })
+      .catch(() => {
+        if (!cancelled) setEngineVersion(null);
+      });
     return () => { cancelled = true; };
   }, [client, status]);
 

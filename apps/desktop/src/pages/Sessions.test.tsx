@@ -46,7 +46,7 @@ vi.mock('rehype-highlight', () => ({ default: {} }));
 vi.mock('rehype-sanitize', () => ({ default: {}, defaultSchema: { attributes: {} } }));
 vi.mock('remark-gfm', () => ({ default: {} }));
 
-const { Sessions } = await import('./Sessions.js');
+const { Sessions, CodeBlock } = await import('./Sessions.js');
 
 const sessions = [
   {
@@ -1108,4 +1108,55 @@ describe('Sessions page', () => {
     }
   });
 
+});
+
+describe('Sessions CodeBlock copy', () => {
+  it('copies fenced code and shows Copied feedback', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <CodeBlock className="language-js">{'const x = 1;\n'}</CodeBlock>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('const x = 1;');
+      expect(screen.getByRole('button', { name: /Copied/i })).toBeInTheDocument();
+    });
+  });
+
+  it('shows Copy failed when clipboard write rejects', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    render(
+      <CodeBlock className="language-ts">{'let y = 2;'}</CodeBlock>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Copy failed/i })).toBeInTheDocument();
+    });
+  });
+
+  it('scrubs null bytes before clipboard write', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <CodeBlock className="hljs">{`a${'\0'}b`}</CodeBlock>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('ab'));
+  });
+
+  it('renders inline code without copy button', () => {
+    render(<CodeBlock className="not-a-block">inline</CodeBlock>);
+    expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
+    expect(screen.getByText('inline')).toBeInTheDocument();
+  });
 });

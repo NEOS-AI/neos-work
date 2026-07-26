@@ -825,7 +825,10 @@ function McpServersSection() {
 
   const handleAddTradingView = async () => {
     if (!client) return;
-    if (/[\0\r\n]/.test(tvInstallPath)) return;
+    if (/[\0\r\n]/.test(tvInstallPath)) {
+      window.alert('Install path contains invalid control characters');
+      return;
+    }
     const path = tvInstallPath.trim();
     if (!path) {
       window.alert('Enter the full path to the tradingview-mcp folder (contains package.json and src/).');
