@@ -163,5 +163,52 @@ describe('gate nodes', () => {
     expect(out.ok).toBe(true);
     expect(out.output).toEqual({ truncated: true, preview: '[unserializable]' });
   });
+
+  it('treats null/undefined inputs as empty for gates and trigger', async () => {
+    const base = {
+      workflowId: 'wf',
+      runId: 'run',
+      nodeId: 'n1',
+      settings: {},
+    };
+    for (const inputs of [undefined, null] as const) {
+      const ctx = { ...base, inputs: inputs as unknown as Record<string, unknown> };
+      await expect(new TriggerNode().execute(ctx)).resolves.toMatchObject({
+        ok: true,
+        output: {},
+      });
+      await expect(new AndGateNode().execute(ctx)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/no upstream/i),
+      });
+      await expect(new OrGateNode().execute(ctx)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/no upstream/i),
+      });
+      await expect(new ORGateNode().execute(ctx)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/no upstream/i),
+      });
+      await expect(new ParallelEndNode().execute(ctx)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/no upstream|branch/i),
+      });
+      await expect(new ParallelStartNode().execute(ctx)).resolves.toMatchObject({
+        ok: true,
+      });
+    }
+  });
+
+  it('TriggerNode drops blank and overlong keys after trim', async () => {
+    const result = await new TriggerNode().execute(
+      makeCtx({
+        '   ': 1,
+        ['k'.repeat(201)]: 2,
+        ok: 3,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.output).toEqual({ ok: 3 });
+  });
 });
 

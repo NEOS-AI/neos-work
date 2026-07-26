@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/workflow-engine",
-  "version": "0.3.164",
+  "version": "0.3.165",
   "private": true,
   "license": "MIT",
   "type": "module",

@@ -146,9 +146,18 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
       });
     });
 
-    runIdPromise.then((id) => {
+    void runIdPromise.then((id) => {
       const safe = safePipelineId(id, 100);
-      if (safe) setRun((prev) => (prev ? { ...prev, runId: safe } : prev));
+      if (safe) {
+        setRun((prev) => (prev ? { ...prev, runId: safe } : prev));
+        return;
+      }
+      // HTTP/stream died with no usable runId and no stage events → surface start failure
+      setRun((prev) => {
+        if (!prev) return prev;
+        if (prev.failed || prev.completed || prev.runId || prev.stages.length > 0) return prev;
+        return { ...prev, failed: 'Failed to start pipeline' };
+      });
     });
     setStopFn(() => stop);
   }, [client, plugin.id, inputs, run]);

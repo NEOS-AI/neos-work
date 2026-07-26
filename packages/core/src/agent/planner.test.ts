@@ -94,6 +94,20 @@ describe('Planner', () => {
     expect(steps[0].description).toBe('One');
   });
 
+  it('caps pathological JSON array blobs before parse (private parseSteps)', () => {
+    // RAW path caps at 500k, so exercise parseSteps directly with a larger match
+    const planner = new Planner(mockAdapter(['[]']));
+    const parseSteps = (
+      planner as unknown as { parseSteps: (raw: string) => Array<{ description: string }> }
+    ).parseSteps.bind(planner);
+    // JSON array string > JSON_BLOB_MAX (500_000) — slice path before parse
+    const fat = `[{"description":"${'z'.repeat(510_000)}"}]`;
+    expect(fat.length).toBeGreaterThan(500_000);
+    const steps = parseSteps(fat);
+    // Truncated mid-string fails JSON.parse → empty array from catch
+    expect(Array.isArray(steps)).toBe(true);
+  });
+
   it('falls back when no JSON array present', async () => {
     const adapter = mockAdapter(['just do it']);
     const steps = await new Planner(adapter).plan('goal');

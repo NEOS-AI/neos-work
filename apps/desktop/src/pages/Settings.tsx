@@ -238,6 +238,7 @@ function MediaStatusSection() {
   const [surfaces, setSurfaces] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [audioModels, setAudioModels] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client || status !== 'connected') {
@@ -246,26 +247,73 @@ function MediaStatusSection() {
       setSurfaces([]);
       setImageModels([]);
       setAudioModels([]);
+      setLoadError(null);
       return;
     }
     let cancelled = false;
+    setLoadError(null);
     void client
       .getMediaConfig()
       .then((res) => {
-        if (cancelled || !res.ok || !res.data) return;
+        if (cancelled) return;
+        if (!res.ok || !res.data) {
+          setConfigured(null);
+          setBaseUrl(null);
+          setSurfaces([]);
+          setImageModels([]);
+          setAudioModels([]);
+          setLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load media config',
+          );
+          return;
+        }
         setConfigured(res.data.openaiConfigured);
-        setBaseUrl(res.data.openaiBaseUrl);
-        setSurfaces(res.data.surfaces ?? []);
-        setImageModels(res.data.imageModels ?? []);
-        setAudioModels(res.data.audioModels ?? []);
+        const rawUrl = res.data.openaiBaseUrl;
+        setBaseUrl(
+          typeof rawUrl === 'string'
+            ? scrubDisplayText(rawUrl, { collapseLines: true, maxChars: 200 }) || null
+            : null,
+        );
+        setSurfaces(
+          (res.data.surfaces ?? [])
+            .map((s) => scrubDisplayText(s, { collapseLines: true, maxChars: 40 }))
+            .filter(Boolean) as string[],
+        );
+        setImageModels(
+          (res.data.imageModels ?? [])
+            .map((s) => scrubDisplayText(s, { collapseLines: true, maxChars: 80 }))
+            .filter(Boolean) as string[],
+        );
+        setAudioModels(
+          (res.data.audioModels ?? [])
+            .map((s) => scrubDisplayText(s, { collapseLines: true, maxChars: 80 }))
+            .filter(Boolean) as string[],
+        );
       })
-      .catch(() => {
-        if (!cancelled) setConfigured(null);
+      .catch((err) => {
+        if (cancelled) return;
+        setConfigured(null);
+        setBaseUrl(null);
+        setSurfaces([]);
+        setImageModels([]);
+        setAudioModels([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load media config';
+        setLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load media config',
+        );
       });
     return () => {
       cancelled = true;
     };
   }, [client, status]);
+
+  const baseUrlSafe = baseUrl
+    ? scrubDisplayText(baseUrl, { collapseLines: true, maxChars: 200 })
+    : '';
 
   return (
     <section
@@ -278,14 +326,19 @@ function MediaStatusSection() {
       <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
         Status for Media nodes (DALL·E / TTS). Keys are configured under API Keys above.
       </p>
+      {loadError && (
+        <p className="mb-3 text-xs text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
+      )}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <dt style={{ color: 'var(--text-muted)' }}>OpenAI key</dt>
         <dd style={{ color: configured ? '#34d399' : 'var(--text-primary)' }}>
           {configured == null ? '—' : configured ? 'Configured' : 'Not set'}
         </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Base URL</dt>
-        <dd className="truncate" style={{ color: 'var(--text-primary)' }} title={baseUrl ?? undefined}>
-          {baseUrl || 'default'}
+        <dd className="truncate" style={{ color: 'var(--text-primary)' }} title={baseUrlSafe || undefined}>
+          {baseUrlSafe || 'default'}
         </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Surfaces</dt>
         <dd style={{ color: 'var(--text-primary)' }}>

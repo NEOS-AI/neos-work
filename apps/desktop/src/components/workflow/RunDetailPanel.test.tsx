@@ -141,6 +141,30 @@ describe('RunDetailPanel', () => {
     });
   });
 
+  it('shows Copy failed when clipboard write rejects', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-copyfail01',
+        workflowId: 'wf',
+        status: 'completed',
+        nodeResults: {
+          n1: { nodeId: 'n1', status: 'completed', output: 'x' },
+        },
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+    render(<RunDetailPanel workflowId="wf" runId="run-copyfail01" onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Copy')).toBeInTheDocument());
+    await user.click(screen.getByText('Copy'));
+    await waitFor(() => expect(screen.getByText('Copy failed')).toBeInTheDocument());
+  });
+
   it('copies node output to clipboard', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);

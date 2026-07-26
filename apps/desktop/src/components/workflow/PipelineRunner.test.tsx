@@ -182,6 +182,19 @@ describe('PipelineRunner', () => {
     });
   });
 
+  it('shows start failure when runIdPromise resolves without run id or stages', async () => {
+    const user = userEvent.setup();
+    runPlugin.mockReturnValue({
+      stop,
+      runIdPromise: Promise.resolve(null),
+    });
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Error: Failed to start pipeline/)).toBeInTheDocument();
+    });
+  });
+
   it('surfaces scrubbed resume API error as pipeline failure', async () => {
     const user = userEvent.setup();
     let onEvent: ((e: unknown) => void) | null = null;

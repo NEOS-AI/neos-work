@@ -633,6 +633,38 @@ describe('Settings page', () => {
     expect(createMcpServer).not.toHaveBeenCalled();
   });
 
+  it('shows scrubbed media config load error', async () => {
+    getMediaConfig.mockResolvedValue({
+      ok: false,
+      error: `media${'\n'}down${'\0'}!`,
+    });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('media down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('scrubs control-char media base URL in status section', async () => {
+    getMediaConfig.mockResolvedValue({
+      ok: true,
+      data: {
+        openaiConfigured: true,
+        openaiBaseUrl: `https://api.example${'\n'}.com${'\0'}/v1`,
+        surfaces: [`image${'\0'}`],
+        imageModels: [`dall-e${'\n'}3`],
+        audioModels: [],
+      },
+    });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('Configured')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).toMatch(/https:\/\/api\.example/);
+    expect(document.body.textContent).not.toContain('\0');
+    expect(document.body.textContent).toMatch(/dall-e 3|dall-e3/);
+  });
+
   it('shows invalid verify status and not-configured media', async () => {
     const user = userEvent.setup();
     verifyApiKey.mockResolvedValue({ ok: true, data: { valid: false } });

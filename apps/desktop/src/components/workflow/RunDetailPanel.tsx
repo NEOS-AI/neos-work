@@ -39,6 +39,7 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
+  const [copyFailedNodeId, setCopyFailedNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client) return;
@@ -87,10 +88,13 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
   const handleCopyOutput = async (nodeId: string, output: unknown) => {
     try {
       await navigator.clipboard.writeText(serializeNodeOutput(output));
+      setCopyFailedNodeId(null);
       setCopiedNodeId(nodeId);
       setTimeout(() => setCopiedNodeId((cur) => (cur === nodeId ? null : cur)), 1500);
     } catch {
-      // clipboard may be unavailable
+      setCopiedNodeId(null);
+      setCopyFailedNodeId(nodeId);
+      setTimeout(() => setCopyFailedNodeId((cur) => (cur === nodeId ? null : cur)), 2000);
     }
   };
 
@@ -166,7 +170,11 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
                 title="Copy node output"
                 onClick={() => void handleCopyOutput(idSafe, nr.output)}
               >
-                {copiedNodeId === idSafe ? 'Copied' : 'Copy'}
+                {copiedNodeId === idSafe
+                  ? 'Copied'
+                  : copyFailedNodeId === idSafe
+                    ? 'Copy failed'
+                    : 'Copy'}
               </button>
             )}
           </div>
