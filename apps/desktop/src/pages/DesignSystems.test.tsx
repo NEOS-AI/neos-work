@@ -65,6 +65,29 @@ describe('DesignSystems page', () => {
     });
   });
 
+  it('shows scrubbed page error when list design systems fails', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: false,
+      error: `list${'\n'}down${'\0'}!`,
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('list down!').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    // Leaves empty list (not stuck on Loading)
+    expect(screen.queryByText('Loading')).not.toBeInTheDocument();
+  });
+
+  it('shows scrubbed page error when list design systems throws', async () => {
+    listDesignSystems.mockRejectedValue(new Error(`net${'\n'}err${'\0'}!`));
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText('net err!').length).toBeGreaterThanOrEqual(1);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists sorted systems and navigates to edit', async () => {
     const user = userEvent.setup();
     listDesignSystems.mockResolvedValue({ ok: true, data: systems });

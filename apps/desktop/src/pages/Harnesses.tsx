@@ -25,6 +25,7 @@ export function Harnesses() {
   const { client } = useEngine();
   const [harnesses, setHarnesses] = useState<AgentHarness[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<AgentHarness | null>(null);
   const [domainFilter, setDomainFilter] = useState<DomainFilterPref>(() => loadDomainFilter('harnesses'));
@@ -38,9 +39,29 @@ export function Harnesses() {
   const load = async () => {
     if (!client) return;
     setLoading(true);
-    const res = await client.listHarnesses();
-    if (res.ok && res.data) setHarnesses(res.data);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const res = await client.listHarnesses();
+      if (res.ok && res.data) {
+        setHarnesses(res.data);
+      } else {
+        setHarnesses([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load harnesses',
+        );
+      }
+    } catch (err) {
+      setHarnesses([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load harnesses';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load harnesses',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,6 +132,11 @@ export function Harnesses() {
 
   return (
     <div className="flex h-full flex-col gap-4 p-4">
+      {loadError && (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
+      )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>

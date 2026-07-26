@@ -177,6 +177,35 @@ x
     expect(parseSkillFile(content, '/n.md', 'local')!.manifest.examplePrompt).toBe('Try me');
   });
 
+  it('truncates oversized skill bodies and parses fidelity / designSystemRequired', () => {
+    const hugeBody = 'B'.repeat(500_100);
+    const content = `---
+name: fat
+description: big
+fidelity: high
+designSystemRequired: true
+---
+${hugeBody}
+`;
+    const skill = parseSkillFile(content, '/skills/fat.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.fidelity).toBe('high');
+    expect(skill!.manifest.designSystemRequired).toBe(true);
+    expect(skill!.content.length).toBeLessThan(hugeBody.length + 50);
+    expect(skill!.content).toContain('…[skill truncated]');
+  });
+
+  it('rejects control-char file paths', () => {
+    const content = `---
+name: ok
+description: d
+---
+body
+`;
+    expect(parseSkillFile(content, `/skills/bad${'\n'}.md`, 'local')).toBeNull();
+    expect(parseSkillFile(content, `/skills/bad${'\0'}.md`, 'global')).toBeNull();
+  });
+
   it('rejects whitespace-only name and trims fields', () => {
     const blankName = `---
 name: "   "

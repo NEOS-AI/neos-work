@@ -265,6 +265,26 @@ describe('WorkflowEditor page', () => {
     });
   });
 
+  it('alerts scrubbed error when export throws', async () => {
+    exportWorkflow.mockRejectedValue(new Error(`exp${'\n'}io${'\0'}!`));
+    exportWorkflowZip.mockRejectedValue(new Error(`zip${'\n'}io${'\0'}!`));
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /workflow\.export.*JSON/i }));
+    await waitFor(() => {
+      expect(exportWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('exp io!');
+    });
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export (ZIP)' }));
+    await waitFor(() => {
+      expect(exportWorkflowZip).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('zip io!');
+    });
+  });
+
   it('alerts scrubbed error when pre-run save fails and does not start run', async () => {
     updateWorkflow.mockResolvedValue({
       ok: false,

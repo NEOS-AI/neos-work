@@ -177,6 +177,7 @@ export default function Memory() {
   const { client } = useEngine();
   const [items, setItems] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: MemoryItem } | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<MemoryTypeFilter>(() => loadMemoryTypeFilter());
@@ -202,9 +203,29 @@ export default function Memory() {
   const load = useCallback(async () => {
     if (!client) return;
     setLoading(true);
-    const res = await client.listMemories();
-    if (res.ok) setItems(res.data ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const res = await client.listMemories();
+      if (res.ok) {
+        setItems(res.data ?? []);
+      } else {
+        setItems([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load memory',
+        );
+      }
+    } catch (err) {
+      setItems([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load memory';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load memory',
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [client]);
 
   useEffect(() => { void load(); }, [load]);
@@ -369,6 +390,10 @@ export default function Memory() {
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</p>
+        ) : loadError ? (
+          <p className="text-sm text-red-400">
+            {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+          </p>
         ) : items.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('memory.empty')}</p>
         ) : filteredItems.length === 0 ? (

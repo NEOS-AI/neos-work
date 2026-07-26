@@ -342,4 +342,68 @@ describe('kis-api', () => {
     );
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(4);
   });
+
+  it('defaults missing price/chart fields and tolerates text() failure on HTTP errors', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok-defaults', expires_in: 3600 }),
+      })
+      // price with empty/missing output fields → numeric defaults
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ output: {} }),
+      })
+      // chart bars with sparse fields
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          output2: [
+            { stck_bsop_date: '20240101' }, // only date — rest default 0/''
+            {},
+          ],
+        }),
+      })
+      // HTTP error whose body read throws
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => {
+          throw new Error('body unreadable');
+        },
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const price = await getStockPrice(
+      { appKey: 'def-key', appSecret: 'def-sec' },
+      '005930',
+    );
+    expect(price.symbol).toBe('005930');
+    expect(price.currentPrice).toBe(0);
+    expect(price.openPrice).toBe(0);
+    expect(price.volume).toBe(0);
+    expect(price.changePercent).toBe(0);
+    expect(price.name).toBeUndefined();
+
+    const bars = await getStockChart(
+      { appKey: 'def-key', appSecret: 'def-sec' },
+      '005930',
+      'D',
+      5,
+    );
+    expect(bars).toHaveLength(2);
+    expect(bars[0]).toEqual({
+      date: '20240101',
+      open: 0,
+      high: 0,
+      low: 0,
+      close: 0,
+      volume: 0,
+    });
+    expect(bars[1]!.date).toBe('');
+
+    await expect(
+      getStockPrice({ appKey: 'def-key', appSecret: 'def-sec' }, '000660'),
+    ).rejects.toThrow(/price request failed \(500\)/);
+  });
 });

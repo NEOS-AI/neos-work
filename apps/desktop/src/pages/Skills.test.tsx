@@ -302,11 +302,20 @@ describe('Skills page', () => {
     expect(screen.getByText('Beta Skill')).toBeInTheDocument();
     unmount();
 
-    // Non-ok listSkills leaves empty without crashing
+    // Non-ok listSkills surfaces scrubbed load error (not stuck empty state)
     render(<Skills />);
     await waitFor(() => {
-      expect(screen.getByText(/No skills installed/)).toBeInTheDocument();
+      expect(screen.getByText('boom')).toBeInTheDocument();
     });
+  });
+
+  it('shows scrubbed load error when listSkills throws', async () => {
+    listSkills.mockRejectedValue(new Error(`skills${'\n'}down${'\0'}!`));
+    render(<Skills />);
+    await waitFor(() => {
+      expect(screen.getByText('skills down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('alerts Upgrade failed when upgrade response has no error field', async () => {

@@ -210,6 +210,22 @@ describe('filesystem tools', () => {
     expect(missing.error).toBeTruthy();
   });
 
+  it('list_directory treats empty / whitespace path as workspace root', async () => {
+    await writeFile(join(root, 'root-file.txt'), 'r');
+    const list = createListDirectoryTool(root);
+
+    for (const path of ['', '   ', undefined as unknown as string]) {
+      const result = await list.execute(path === undefined ? {} : { path });
+      expect(result.success).toBe(true);
+      const entries = result.output as Array<{ name: string }>;
+      expect(entries.some((e) => e.name === 'root-file.txt')).toBe(true);
+    }
+
+    // Non-string path also falls back to workspace root
+    const coerced = await list.execute({ path: 123 as unknown as string });
+    expect(coerced.success).toBe(true);
+  });
+
   it('list_directory marks unreadable entries as type unknown', async () => {
     await mkdir(join(root, 'mixed'), { recursive: true });
     await writeFile(join(root, 'mixed', 'ok.txt'), 'x');

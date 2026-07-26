@@ -698,8 +698,15 @@ export function WorkflowEditor() {
               || 'workflow';
             void (async () => {
               if (!client) return;
-              const ok = await client.exportWorkflow(workflow.id, name);
-              if (!ok) window.alert('Export failed');
+              try {
+                const ok = await client.exportWorkflow(workflow.id, name);
+                if (!ok) window.alert('Export failed');
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Export failed';
+                window.alert(
+                  scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Export failed',
+                );
+              }
             })();
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
@@ -715,8 +722,15 @@ export function WorkflowEditor() {
               || 'workflow';
             void (async () => {
               if (!client) return;
-              const ok = await client.exportWorkflowZip(workflow.id, name);
-              if (!ok) window.alert('Export failed');
+              try {
+                const ok = await client.exportWorkflowZip(workflow.id, name);
+                if (!ok) window.alert('Export failed');
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Export failed';
+                window.alert(
+                  scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Export failed',
+                );
+              }
             })();
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"

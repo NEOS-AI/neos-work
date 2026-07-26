@@ -44,17 +44,27 @@ export function Media() {
     if (!client) return;
     setLoading(true);
     setError(null);
-    const res = await client.listMediaFiles(200);
-    if (res.ok && res.data) setFiles(res.data);
-    else {
+    try {
+      const res = await client.listMediaFiles(200);
+      if (res.ok && res.data) setFiles(res.data);
+      else {
+        setFiles([]);
+        setError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load media',
+        );
+      }
+    } catch (err) {
+      setFiles([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load media';
       setError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Failed to load media',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load media',
       );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [client]);
 
   useEffect(() => { void load(); }, [load]);

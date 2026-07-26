@@ -29,6 +29,7 @@ export function Templates() {
   const navigate = useNavigate();
   const [templateList, setTemplateList] = useState<TemplateWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
   const [filter, setFilter] = useState<DomainFilterPref>(() => loadDomainFilter('templates'));
   const [search, setSearch] = useState('');
@@ -40,9 +41,31 @@ export function Templates() {
 
   useEffect(() => {
     if (!client) return;
-    client.getTemplates().then((res) => {
-      if (res.ok && res.data) setTemplateList(res.data as TemplateWorkflow[]);
-    }).finally(() => setLoading(false));
+    setLoadError(null);
+    client
+      .getTemplates()
+      .then((res) => {
+        if (res.ok && res.data) {
+          setTemplateList(res.data as TemplateWorkflow[]);
+        } else {
+          setTemplateList([]);
+          setLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load templates',
+          );
+        }
+      })
+      .catch((err) => {
+        setTemplateList([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load templates';
+        setLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load templates',
+        );
+      })
+      .finally(() => setLoading(false));
   }, [client]);
 
   // Escape clears search (list filter hygiene).
@@ -156,6 +179,10 @@ export function Templates() {
         <div className="flex h-40 items-center justify-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</span>
         </div>
+      ) : loadError ? (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
       ) : filtered.length === 0 ? (
         <div className="flex h-40 items-center justify-center rounded-xl border" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No templates found.</span>

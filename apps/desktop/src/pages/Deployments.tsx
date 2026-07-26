@@ -101,26 +101,36 @@ export function Deployments() {
     if (!client) return;
     setLoading(true);
     setError(null);
-    const [dRes, wRes] = await Promise.all([
-      client.listDeployments(filterWorkflowId || undefined),
-      client.listWorkflows(),
-    ]);
-    if (dRes.ok && dRes.data) setDeployments(dRes.data);
-    else {
+    try {
+      const [dRes, wRes] = await Promise.all([
+        client.listDeployments(filterWorkflowId || undefined),
+        client.listWorkflows(),
+      ]);
+      if (dRes.ok && dRes.data) setDeployments(dRes.data);
+      else {
+        setDeployments([]);
+        setError(
+          scrubDisplayText((dRes as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load deployments',
+        );
+      }
+      if (wRes.ok && wRes.data) {
+        const map: Record<string, Workflow> = {};
+        for (const w of wRes.data) map[w.id] = w;
+        setWorkflows(map);
+        setWorkflowsLoaded(true);
+      }
+    } catch (err) {
+      setDeployments([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load deployments';
       setError(
-        scrubDisplayText((dRes as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Failed to load deployments',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load deployments',
       );
+    } finally {
+      setLoading(false);
     }
-    if (wRes.ok && wRes.data) {
-      const map: Record<string, Workflow> = {};
-      for (const w of wRes.data) map[w.id] = w;
-      setWorkflows(map);
-      setWorkflowsLoaded(true);
-    }
-    setLoading(false);
   }, [client, filterWorkflowId]);
 
   useEffect(() => {

@@ -28,9 +28,30 @@ export function DesignSystems() {
   const load = useCallback(async () => {
     if (!client) return;
     setLoading(true);
-    const res = await client.listDesignSystems();
-    if (res.ok && res.data) setSystems(res.data);
-    setLoading(false);
+    setPageError(null);
+    try {
+      const res = await client.listDesignSystems();
+      if (res.ok && res.data) {
+        setSystems(res.data);
+      } else {
+        setSystems([]);
+        setPageError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load design systems',
+        );
+      }
+    } catch (err) {
+      setSystems([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load design systems';
+      setPageError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load design systems',
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [client]);
 
   useEffect(() => { load(); }, [load]);
@@ -212,6 +233,10 @@ export function DesignSystems() {
       {/* List */}
       {loading ? (
         <p className="text-white/40 text-sm">Loading...</p>
+      ) : pageError && systems.length === 0 ? (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(pageError, { collapseLines: true, maxChars: 300 }) || pageError}
+        </p>
       ) : systems.length === 0 ? (
         <div className="text-center py-16 space-y-2">
           <p className="text-white/40 text-sm">No design systems found.</p>

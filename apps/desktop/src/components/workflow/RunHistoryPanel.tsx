@@ -236,25 +236,33 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                     onClick={async (e) => {
                       e.stopPropagation();
                       if (!client) return;
-                      const res = await client.getWorkflowRun(props.workflowId, run.id);
-                      if (!res.ok || !res.data) {
+                      try {
+                        const res = await client.getWorkflowRun(props.workflowId, run.id);
+                        if (!res.ok || !res.data) {
+                          window.alert(
+                            scrubDisplayText((res as { error?: string }).error, {
+                              collapseLines: true,
+                              maxChars: 300,
+                            }) || 'Export failed',
+                          );
+                          return;
+                        }
+                        const blob = new Blob([JSON.stringify(res.data, null, 2)], {
+                          type: 'application/json',
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `run-${runIdSafe.slice(0, 8)}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : 'Export failed';
                         window.alert(
-                          scrubDisplayText((res as { error?: string }).error, {
-                            collapseLines: true,
-                            maxChars: 300,
-                          }) || 'Export failed',
+                          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+                          || 'Export failed',
                         );
-                        return;
                       }
-                      const blob = new Blob([JSON.stringify(res.data, null, 2)], {
-                        type: 'application/json',
-                      });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `run-${runIdSafe.slice(0, 8)}.json`;
-                      a.click();
-                      URL.revokeObjectURL(url);
                     }}
                     className="rounded px-1 py-0.5 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
                     style={{ color: 'var(--text-muted)' }}

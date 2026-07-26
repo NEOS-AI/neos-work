@@ -137,6 +137,15 @@ describe('Media page', () => {
     });
   });
 
+  it('shows scrubbed load error when list media throws', async () => {
+    listMediaFiles.mockRejectedValue(new Error(`media${'\n'}down${'\0'}!`));
+    render(<Media />);
+    await waitFor(() => {
+      expect(screen.getByText(/media down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('offers download link for other-kind files', async () => {
     const user = userEvent.setup();
     listMediaFiles.mockResolvedValue({ ok: true, data: files });

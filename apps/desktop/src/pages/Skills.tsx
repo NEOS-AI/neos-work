@@ -20,6 +20,7 @@ export function Skills() {
   const [skills, setSkills] = useState<SkillData[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>(() => loadSkillsCategoryFilter());
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('skills'));
   const [search, setSearch] = useState('');
@@ -38,8 +39,27 @@ export function Skills() {
 
   const loadSkills = useCallback(async () => {
     if (!client) return;
-    const res = await client.listSkills();
-    if (res.ok && res.data) setSkills(res.data);
+    setLoadError(null);
+    try {
+      const res = await client.listSkills();
+      if (res.ok && res.data) {
+        setSkills(res.data);
+      } else {
+        setSkills([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load skills',
+        );
+      }
+    } catch (err) {
+      setSkills([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load skills';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load skills',
+      );
+    }
   }, [client]);
 
   useEffect(() => {
@@ -323,7 +343,11 @@ export function Skills() {
           </div>
         )}
 
-        {filtered.length === 0 ? (
+        {loadError ? (
+          <p className="text-sm text-red-400">
+            {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+          </p>
+        ) : filtered.length === 0 ? (
           <div className="rounded-lg border px-4 py-6 text-center" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               {skills.length === 0

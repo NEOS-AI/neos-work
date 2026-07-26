@@ -451,6 +451,7 @@ export function Blocks() {
   const { client } = useEngine();
   const [blockList, setBlockList] = useState<WorkflowBlock[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: 'create' | 'edit'; block?: WorkflowBlock } | null>(null);
   const [filter, setFilter] = useState<DomainFilterPref>(() => loadDomainFilter('blocks'));
   const [sourceFilter, setSourceFilter] = useState<BlocksSourceFilter>(() => loadBlocksSourceFilter());
@@ -467,9 +468,29 @@ export function Blocks() {
 
   const load = async () => {
     if (!client) return;
-    const res = await client.listBlocks();
-    if (res.ok && res.data) setBlockList(res.data);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const res = await client.listBlocks();
+      if (res.ok && res.data) {
+        setBlockList(res.data);
+      } else {
+        setBlockList([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load blocks',
+        );
+      }
+    } catch (err) {
+      setBlockList([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load blocks';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load blocks',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [client]);
@@ -626,6 +647,10 @@ export function Blocks() {
         <div className="flex h-40 items-center justify-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</span>
         </div>
+      ) : loadError ? (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
       ) : (
         <div className="flex flex-col gap-5">
           {builtIn.length > 0 && (

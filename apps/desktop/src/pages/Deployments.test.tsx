@@ -392,6 +392,17 @@ describe('Deployments page', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('surfaces scrubbed load throw and clears loading', async () => {
+    listDeployments.mockRejectedValue(new Error(`load${'\n'}boom${'\0'}!`));
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/load boom!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+  });
+
   it('gates deploy URL href to http(s) and hides control-char / javascript URLs', async () => {
     const { safeDeployUrl } = await import('./Deployments.js');
     expect(safeDeployUrl('https://ok.example/path')).toBe('https://ok.example/path');

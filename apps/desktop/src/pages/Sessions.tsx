@@ -70,8 +70,13 @@ export function Sessions() {
   // Load sessions from server
   const loadSessions = useCallback(async () => {
     if (!client) return;
-    const res = await client.listSessions();
-    if (res.ok) setSessions(res.data ?? []);
+    try {
+      const res = await client.listSessions();
+      if (res.ok) setSessions(res.data ?? []);
+      else setSessions([]);
+    } catch {
+      setSessions([]);
+    }
   }, [client]);
 
   useEffect(() => {

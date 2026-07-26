@@ -47,9 +47,16 @@ export function Routines() {
 
   const load = async () => {
     if (!client) return;
-    const [rRes, wRes] = await Promise.all([client.listRoutines(), client.listWorkflows()]);
-    if (rRes.ok && rRes.data) setRoutines(rRes.data);
-    if (wRes.ok && wRes.data) setWorkflows(wRes.data);
+    try {
+      const [rRes, wRes] = await Promise.all([client.listRoutines(), client.listWorkflows()]);
+      if (rRes.ok && rRes.data) setRoutines(rRes.data);
+      else setRoutines([]);
+      if (wRes.ok && wRes.data) setWorkflows(wRes.data);
+      else setWorkflows([]);
+    } catch {
+      setRoutines([]);
+      setWorkflows([]);
+    }
   };
 
   useEffect(() => { load(); }, [client]);

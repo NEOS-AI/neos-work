@@ -32,6 +32,7 @@ export function Workflows() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDomain, setNewDomain] = useState<'finance' | 'coding' | 'general'>('general');
@@ -95,9 +96,29 @@ export function Workflows() {
   const loadWorkflows = useCallback(async () => {
     if (!client) return;
     setLoading(true);
-    const res = await client.listWorkflows();
-    if (res.ok) setWorkflows(res.data ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const res = await client.listWorkflows();
+      if (res.ok) {
+        setWorkflows(res.data ?? []);
+      } else {
+        setWorkflows([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load workflows',
+        );
+      }
+    } catch (err) {
+      setWorkflows([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load workflows';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load workflows',
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [client]);
 
   useEffect(() => {
@@ -360,6 +381,10 @@ export function Workflows() {
         )}
         {loading ? (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</p>
+        ) : loadError ? (
+          <p className="text-sm text-red-400">
+            {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+          </p>
         ) : workflows.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('workflow.empty')}</p>
