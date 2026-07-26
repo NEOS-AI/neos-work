@@ -296,6 +296,42 @@ describe('RevisionPanel', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('alerts scrubbed error when revision restore throws', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getRevision.mockRejectedValue(new Error(`sock${'\n'}reset${'\0'}!`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+    await waitFor(() => {
+      expect(getRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(window.alert).toHaveBeenCalledWith('sock reset!');
+    });
+    expect(onRestore).not.toHaveBeenCalled();
+    // Restore button should not remain stuck as "…"
+    expect(screen.getByRole('button', { name: /restore/i })).toBeInTheDocument();
+  });
+
   it('alerts when revision snapshot is invalid JSON', async () => {
     const user = userEvent.setup();
     listRevisions.mockResolvedValue({

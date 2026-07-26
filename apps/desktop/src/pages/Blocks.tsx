@@ -492,35 +492,50 @@ export function Blocks() {
 
   const handleSave = async (data: Omit<WorkflowBlock, 'isBuiltIn'>) => {
     if (!client) return;
-    const res =
-      modal?.mode === 'edit' && modal.block
-        ? await client.updateBlock(modal.block.id, data)
-        : await client.createBlock(data);
-    if (!res.ok) {
+    try {
+      const res =
+        modal?.mode === 'edit' && modal.block
+          ? await client.updateBlock(modal.block.id, data)
+          : await client.createBlock(data);
+      if (!res.ok) {
+        throw new Error(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed',
+        );
+      }
+      setModal(null);
+      await load();
+    } catch (err) {
+      // Re-throw so BlockModal surfaces scrubbed error and stays open
+      const msg = err instanceof Error ? err.message : 'Save failed';
       throw new Error(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Save failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
       );
     }
-    setModal(null);
-    await load();
   };
 
   const handleDelete = async (id: string) => {
     if (!client || !window.confirm('Are you sure you want to delete this block?')) return;
-    const res = await client.deleteBlock(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.deleteBlock(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        window.alert(err);
+        return;
+      }
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
+      );
     }
-    await load();
   };
 
   const domains = DOMAIN_FILTER_OPTIONS;

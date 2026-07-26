@@ -100,41 +100,55 @@ export function Sessions() {
     thinkingMode: string;
   }) => {
     if (!client) return;
-    const res = await client.createSession({
-      workspaceId: 'default',
-      provider: params.provider,
-      model: params.model,
-      thinkingMode: params.thinkingMode,
-    });
-    if (!res.ok || !res.data) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Create session failed';
-      window.alert(err);
-      return;
+    try {
+      const res = await client.createSession({
+        workspaceId: 'default',
+        provider: params.provider,
+        model: params.model,
+        thinkingMode: params.thinkingMode,
+      });
+      if (!res.ok || !res.data) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Create session failed';
+        window.alert(err);
+        return;
+      }
+      await loadSessions();
+      setActiveSessionId(res.data.id);
+      setShowNewSessionModal(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Create session failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Create session failed',
+      );
     }
-    await loadSessions();
-    setActiveSessionId(res.data.id);
-    setShowNewSessionModal(false);
   };
 
   const handleDeleteSession = async (id: string) => {
     if (!client) return;
     if (!window.confirm('Delete this session and its messages?')) return;
-    const res = await client.deleteSession(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      window.alert(err);
-      return;
+    try {
+      const res = await client.deleteSession(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        window.alert(err);
+        return;
+      }
+      if (activeSessionId === id) setActiveSessionId(null);
+      await loadSessions();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
+      );
     }
-    if (activeSessionId === id) setActiveSessionId(null);
-    await loadSessions();
   };
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -1015,14 +1029,21 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
 
   const handleConfirm = async (approved: boolean) => {
     if (!client || !step.toolUseId) return;
-    const res = await client.confirmTool(sessionId, step.toolUseId, approved);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Confirmation failed';
-      window.alert(err);
+    try {
+      const res = await client.confirmTool(sessionId, step.toolUseId, approved);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Confirmation failed';
+        window.alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Confirmation failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Confirmation failed',
+      );
     }
   };
 

@@ -339,6 +339,23 @@ describe('WorkflowEditor page', () => {
     expect(screen.getByText('Schedule this workflow')).toBeInTheDocument();
   });
 
+  it('alerts scrubbed error when schedule create throws and re-enables button', async () => {
+    createRoutine.mockRejectedValueOnce(new Error(`sched${'\n'}down${'\0'}!`));
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Schedule/i }));
+    await waitFor(() => expect(screen.getByText('Create routine')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+
+    await waitFor(() => {
+      expect(createRoutine).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('sched down!');
+    });
+    expect(screen.getByRole('button', { name: 'Create routine' })).not.toBeDisabled();
+    expect(screen.getByText('Schedule this workflow')).toBeInTheDocument();
+  });
+
   it('rejects control-char schedule name/cron without calling API', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());

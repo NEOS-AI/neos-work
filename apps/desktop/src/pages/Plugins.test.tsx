@@ -57,6 +57,19 @@ describe('Plugins page', () => {
     });
   });
 
+  it('shows scrubbed load error when listPlugins fails', async () => {
+    listPlugins.mockResolvedValue({
+      ok: false,
+      error: `plugins${'\n'}down${'\0'}!`,
+    });
+    render(<Plugins />);
+    await waitFor(() => {
+      expect(screen.getByText('plugins down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/No plugins found/)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists plugins sorted by name and opens runner', async () => {
     const user = userEvent.setup();
     listPlugins.mockResolvedValue({ ok: true, data: samplePlugins });
@@ -144,12 +157,13 @@ describe('Plugins page', () => {
     expect(screen.getByText('No stages configured')).toBeInTheDocument();
   });
 
-  it('settles to empty state when listPlugins is non-ok', async () => {
+  it('shows load error when listPlugins is non-ok', async () => {
     listPlugins.mockResolvedValue({ ok: false, error: 'down' });
     render(<Plugins />);
     await waitFor(() => {
-      expect(screen.getByText(/No plugins found/)).toBeInTheDocument();
+      expect(screen.getByText('down')).toBeInTheDocument();
     });
+    expect(screen.queryByText(/No plugins found/)).not.toBeInTheDocument();
   });
 
   it('scrubs control chars from plugin name, description, and version', async () => {

@@ -174,6 +174,20 @@ describe('Harnesses page', () => {
     });
   });
 
+  it('alerts scrubbed error when harness delete throws', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    deleteHarness.mockRejectedValue(new Error(`io${'\n'}err${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Custom Analyst')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    await waitFor(() => {
+      expect(deleteHarness).toHaveBeenCalledWith('h-custom');
+      expect(window.alert).toHaveBeenCalledWith('io err!');
+    });
+    expect(screen.getByText('Custom Analyst')).toBeInTheDocument();
+  });
+
   it('keeps modal open and shows scrubbed create API error', async () => {
     listHarnesses.mockResolvedValue({ ok: true, data: [] });
     createHarness.mockResolvedValue({

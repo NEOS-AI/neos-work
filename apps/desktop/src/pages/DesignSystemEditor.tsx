@@ -15,30 +15,67 @@ export function DesignSystemEditor() {
   const [savedContent, setSavedContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isDirty = content !== savedContent;
 
   const load = useCallback(async () => {
     if (!client || !id) return;
-    const [dsRes, contentRes] = await Promise.all([
-      client.listDesignSystems(),
-      client.getDesignSystemContent(id),
-    ]);
-    if (dsRes.ok && dsRes.data) {
-      const found = dsRes.data.find((d) => d.id === id);
-      setDs(found ?? null);
-    }
-    if (contentRes.ok && contentRes.data) {
-      // Multi-line DESIGN.md OK; strip null bytes so the editor never holds them
-      const raw = typeof contentRes.data.content === 'string' ? contentRes.data.content : '';
-      const safe = /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
-      setContent(safe);
-      setSavedContent(safe);
+    // Do not re-enter full-page loading after first paint — parent re-renders
+    // (new client object identity) must not unmount the editor mid-edit.
+    setLoadError(null);
+    try {
+      const [dsRes, contentRes] = await Promise.all([
+        client.listDesignSystems(),
+        client.getDesignSystemContent(id),
+      ]);
+      if (!dsRes.ok) {
+        setDs(null);
+        setLoadError(
+          scrubDisplayText((dsRes as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load design systems',
+        );
+        return;
+      }
+      const found = (dsRes.data ?? []).find((d) => d.id === id) ?? null;
+      if (!found) {
+        setDs(null);
+        setLoadError('Design system not found');
+        return;
+      }
+      setDs(found);
+      if (contentRes.ok && contentRes.data) {
+        // Multi-line DESIGN.md OK; strip null bytes so the editor never holds them
+        const raw = typeof contentRes.data.content === 'string' ? contentRes.data.content : '';
+        const safe = /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+        setContent(safe);
+        setSavedContent(safe);
+      } else {
+        setContent('');
+        setSavedContent('');
+        setLoadError(
+          scrubDisplayText((contentRes as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load DESIGN.md content',
+        );
+      }
+    } catch (err) {
+      setDs(null);
+      const msg = err instanceof Error ? err.message : 'Load failed';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Load failed',
+      );
+    } finally {
+      setLoading(false);
     }
   }, [client, id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const handleSave = useCallback(async () => {
     if (!client || !id || saving) return;
@@ -122,9 +159,27 @@ export function DesignSystemEditor() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleBack, ds]);
 
-  if (!ds) {
+  if (loading) {
     return (
       <div className="p-6 text-white/40 text-sm">Loading...</div>
+    );
+  }
+
+  if (!ds) {
+    return (
+      <div className="flex flex-col gap-3 p-6">
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 })
+            || 'Design system not found'}
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/design-systems')}
+          className="self-start text-sm text-white/50 hover:text-white/80 transition-colors"
+        >
+          ← Design Systems
+        </button>
+      </div>
     );
   }
 
@@ -160,6 +215,11 @@ export function DesignSystemEditor() {
           </button>
         </div>
       </div>
+      {loadError && (
+        <div className="px-6 py-2 border-b border-red-500/20 bg-red-500/10 text-xs text-red-400 shrink-0">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </div>
+      )}
 
       {/* Hint */}
       <div className="px-6 py-2 bg-white/[0.02] border-b border-white/5 text-xs text-white/30 shrink-0">

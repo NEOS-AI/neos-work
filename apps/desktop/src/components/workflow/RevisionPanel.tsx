@@ -43,9 +43,12 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
 
   const loadRevisions = async () => {
     setLoading(true);
-    const res = await client.listRevisions(workflowId);
-    if (res.ok && res.data) setRevisions(res.data);
-    setLoading(false);
+    try {
+      const res = await client.listRevisions(workflowId);
+      if (res.ok && res.data) setRevisions(res.data);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -86,29 +89,37 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       if (!ok) return;
     }
     setRestoring(rev.id);
-    const full = await client.getRevision(workflowId, rev.id);
-    setRestoring(null);
-    if (!full.ok || !full.data?.snapshot) {
-      const err =
-        scrubDisplayText((full as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Restore failed';
-      window.alert(err);
-      return;
-    }
     try {
-      const snap = JSON.parse(full.data.snapshot) as {
-        nodes: unknown[];
-        edges: unknown[];
-        name?: string;
-        description?: string;
-        designSystemId?: string;
-      };
-      onRestore(snap);
-      onClose();
-    } catch {
-      window.alert('Invalid snapshot');
+      const full = await client.getRevision(workflowId, rev.id);
+      if (!full.ok || !full.data?.snapshot) {
+        const err =
+          scrubDisplayText((full as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Restore failed';
+        window.alert(err);
+        return;
+      }
+      try {
+        const snap = JSON.parse(full.data.snapshot) as {
+          nodes: unknown[];
+          edges: unknown[];
+          name?: string;
+          description?: string;
+          designSystemId?: string;
+        };
+        onRestore(snap);
+        onClose();
+      } catch {
+        window.alert('Invalid snapshot');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Restore failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Restore failed',
+      );
+    } finally {
+      setRestoring(null);
     }
   };
 
@@ -124,18 +135,25 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       setEditingId(null);
       return;
     }
-    const res = await client.updateRevisionLabel(workflowId, revId, next);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Update failed';
-      window.alert(err);
-      return;
+    try {
+      const res = await client.updateRevisionLabel(workflowId, revId, next);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed';
+        window.alert(err);
+        return;
+      }
+      setEditingId(null);
+      void loadRevisions();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed',
+      );
     }
-    setEditingId(null);
-    void loadRevisions();
   };
 
   const handleDelete = async (revId: string) => {
@@ -143,17 +161,24 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       t('workflow.deleteRevisionConfirm', 'Delete this revision permanently? This cannot be undone.'),
     );
     if (!ok) return;
-    const res = await client.deleteRevision(workflowId, revId);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      window.alert(err);
-      return;
+    try {
+      const res = await client.deleteRevision(workflowId, revId);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        window.alert(err);
+        return;
+      }
+      void loadRevisions();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
+      );
     }
-    void loadRevisions();
   };
 
   return (

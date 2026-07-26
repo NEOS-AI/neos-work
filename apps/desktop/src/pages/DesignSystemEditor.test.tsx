@@ -58,6 +58,39 @@ describe('DesignSystemEditor page', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
+  it('shows scrubbed load error when design system is missing', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: [] });
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText('Design system not found')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('shows scrubbed error when list design systems fails', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: false,
+      error: `list${'\n'}down${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText('list down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('shows scrubbed banner when DESIGN.md content fails to load', async () => {
+    getDesignSystemContent.mockResolvedValue({
+      ok: false,
+      error: `read${'\n'}fail${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    expect(screen.getByText('read fail!')).toBeInTheDocument();
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('');
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('strips null bytes from loaded DESIGN.md content seed', async () => {
     getDesignSystemContent.mockResolvedValue({
       ok: true,

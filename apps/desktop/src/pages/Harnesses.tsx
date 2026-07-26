@@ -73,17 +73,24 @@ export function Harnesses() {
     const nameSafe =
       scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || h.id || 'harness';
     if (!window.confirm(t('harness.confirmDelete', { name: nameSafe }))) return;
-    const res = await client.deleteHarness(h.id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.deleteHarness(h.id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        window.alert(err);
+        return;
+      }
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
+      );
     }
-    await load();
   };
   const onSaved = () => { closeModal(); load(); };
 
@@ -359,13 +366,13 @@ function HarnessModal({
             maxChars: 300,
           }) || 'Save failed',
         );
-        setSaving(false);
         return;
       }
       onSaved();
     } catch (e) {
-      const msg = (e as Error).message;
+      const msg = e instanceof Error ? e.message : 'Save failed';
       setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed');
+    } finally {
       setSaving(false);
     }
   };

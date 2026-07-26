@@ -50,32 +50,28 @@ describe('coding blocks spawn timeout / scrub paths', () => {
   });
 
   it('swallows kill errors on code_eval python timeout then settles', async () => {
-    const exec = getNativeExecutor('code_eval')!;
-    const run = exec.execute({
-      params: { code: 'print(1)', language: 'python' },
-      inputs: {},
-      settings: {},
-    });
-    // CODE_EVAL_TIMEOUT_MS is 5s — force faster by waiting less and closing after kill would fire
-    // We can't change the constant; instead resolve via exit after short wait if kill not yet called.
-    // Emit lots of stderr so append path runs, then exit.
-    await Promise.resolve();
-    const child = lastChildren.at(-1);
-    expect(child).toBeDefined();
-    child!.stderr.emit('data', Buffer.from('py-out\n'));
-    // Simulate timeout kill throw by calling kill ourselves (mirrors timer body)
+    vi.useFakeTimers();
     try {
-      child!.kill('SIGTERM');
-    } catch {
-      /* expected */
+      const exec = getNativeExecutor('code_eval')!;
+      const run = exec.execute({
+        params: { code: 'print(1)', language: 'python' },
+        inputs: {},
+        settings: {},
+      });
+      await Promise.resolve();
+      const child = lastChildren.at(-1);
+      expect(child).toBeDefined();
+      child!.stderr.emit('data', Buffer.from('py-out\n'));
+      // CODE_EVAL_TIMEOUT_MS = 5000 — timer calls kill which throws (ignored)
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(child!.kill).toHaveBeenCalled();
+      child!.emit('exit', 1);
+      const result = await run;
+      expect(result.ok).toBe(false);
+      expect(result.output !== undefined || result.error !== undefined).toBe(true);
+    } finally {
+      vi.useRealTimers();
     }
-    child!.emit('exit', 1);
-    const result = await run;
-    expect(result.meta === undefined || typeof result.meta?.exitCode === 'number' || result.ok === false || result.ok === true).toBe(
-      true,
-    );
-    // Python non-zero → structured failure or ok depending on exit
-    expect(result.output !== undefined || result.error !== undefined).toBe(true);
   });
 
   it('code_eval JS falls back to Operation failed when error scrubs empty', async () => {

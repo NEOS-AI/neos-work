@@ -11,15 +11,37 @@ export function Plugins() {
   const { client } = useEngine();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Plugin | null>(null);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!client) return;
-    client.listPlugins().then((res) => {
-      if (res.ok && res.data) setPlugins(res.data as Plugin[]);
-      setLoading(false);
-    });
+    setLoadError(null);
+    client
+      .listPlugins()
+      .then((res) => {
+        if (res.ok && res.data) {
+          setPlugins(res.data as Plugin[]);
+        } else {
+          setPlugins([]);
+          setLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load plugins',
+          );
+        }
+      })
+      .catch((err) => {
+        setPlugins([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load plugins';
+        setLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load plugins',
+        );
+      })
+      .finally(() => setLoading(false));
   }, [client]);
 
   // Escape clears search when the pipeline runner is not open (runner handles its own Escape).
@@ -66,6 +88,10 @@ export function Plugins() {
 
       {loading ? (
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</p>
+      ) : loadError ? (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
       ) : plugins.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>

@@ -279,6 +279,23 @@ describe('filesystem tools', () => {
     expect(missing.error).toBeTruthy();
   });
 
+  it('rejects write under parent that is a symlink escaping the workspace', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'neos-fs-out-'));
+    try {
+      // dir symlink → outside; write of new file under it fails parent realpath check
+      await symlink(outside, join(root, 'out-dir'));
+      const write = createWriteFileTool(root);
+      const result = await write.execute({
+        path: 'out-dir/fresh.txt',
+        content: 'leak',
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/outside the workspace|symlink|does not exist/i);
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('blocks symlink escape when reading through a link outside the workspace', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'neos-fs-out-'));
     try {

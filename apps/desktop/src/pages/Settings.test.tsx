@@ -512,7 +512,7 @@ describe('Settings page', () => {
 
   it('shows CLI agents load error and recovers on Refresh', async () => {
     listCliAgents
-      .mockResolvedValueOnce({ ok: false, error: 'boom' })
+      .mockResolvedValueOnce({ ok: false, error: `scan${'\n'}boom${'\0'}!` })
       .mockResolvedValueOnce({
         ok: true,
         data: [
@@ -526,12 +526,13 @@ describe('Settings page', () => {
       });
     render(<Settings />);
     await waitFor(() => {
-      expect(screen.getByText('Failed to load CLI agents')).toBeInTheDocument();
+      expect(screen.getByText('scan boom!')).toBeInTheDocument();
     });
+    expect(document.body.textContent).not.toContain('\0');
     fireEvent.click(screen.getByRole('button', { name: '↺ Refresh' }));
     await waitFor(() => {
       expect(screen.getByText('Claude Code')).toBeInTheDocument();
-      expect(screen.queryByText('Failed to load CLI agents')).not.toBeInTheDocument();
+      expect(screen.queryByText('scan boom!')).not.toBeInTheDocument();
     });
   });
 

@@ -187,6 +187,11 @@ export function ArtifactPreview({
         }
       }
       loadList();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Reload failed';
+      setStatusMsg(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Reload failed',
+      );
     } finally {
       setRefreshing(false);
       setTimeout(() => setStatusMsg(null), 2500);
@@ -215,6 +220,11 @@ export function ArtifactPreview({
           }) || 'Re-run not available',
         );
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Re-run not available';
+      setStatusMsg(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Re-run not available',
+      );
     } finally {
       setRefreshing(false);
       setTimeout(() => setStatusMsg(null), 3000);
@@ -241,6 +251,11 @@ export function ArtifactPreview({
           }) || 'Delete failed',
         );
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      setStatusMsg(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
+      );
     } finally {
       setRefreshing(false);
       setTimeout(() => setStatusMsg(null), 2500);
@@ -281,6 +296,11 @@ export function ArtifactPreview({
           }) || 'Rename failed',
         );
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Rename failed';
+      setStatusMsg(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Rename failed',
+      );
     } finally {
       setRefreshing(false);
       setTimeout(() => setStatusMsg(null), 2500);

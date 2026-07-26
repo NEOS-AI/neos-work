@@ -800,32 +800,46 @@ function McpServersSection() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
-    const res = await client.toggleMcpServer(id, enabled);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Update failed';
-      window.alert(err);
-      return;
+    try {
+      const res = await client.toggleMcpServer(id, enabled);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed';
+        window.alert(err);
+        return;
+      }
+      setServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed',
+      );
     }
-    setServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
   };
 
   const handleDelete = async (id: string) => {
     if (!client) return;
-    const res = await client.deleteMcpServer(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      window.alert(err);
-      return;
+    try {
+      const res = await client.deleteMcpServer(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        window.alert(err);
+        return;
+      }
+      setServers((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
+      );
     }
-    setServers((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleOAuthConnect = async () => {
@@ -1202,10 +1216,19 @@ function CliAgentsSection() {
       if (res.ok && res.data) {
         setAgents(res.data);
       } else {
-        setError('Failed to load CLI agents');
+        setError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load CLI agents',
+        );
       }
-    } catch {
-      setError('Failed to connect to server');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to connect to server';
+      setError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+        || 'Failed to connect to server',
+      );
     } finally {
       setLoading(false);
     }

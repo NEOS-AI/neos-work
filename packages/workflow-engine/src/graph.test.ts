@@ -184,4 +184,28 @@ describe('topologicalSort', () => {
     ];
     expect(topologicalSort(nodes, []).map((n) => n.id)).toEqual(['ok']);
   });
+
+  it('coerces non-array nodes/edges to empty and skips non-string node ids', () => {
+    expect(topologicalSort(null as never, null as never)).toEqual([]);
+    expect(topologicalSort(undefined as never, undefined as never)).toEqual([]);
+    const nodes = [
+      { id: 42 as unknown as string, type: 'trigger', label: 'N', position: { x: 0, y: 0 }, config: {} },
+      { id: 'ok', type: 'output', label: 'O', position: { x: 1, y: 0 }, config: {} },
+    ];
+    expect(topologicalSort(nodes as never, []).map((n) => n.id)).toEqual(['ok']);
+  });
+
+  it('skips overlong edge endpoints after trim', () => {
+    const long = 'e'.repeat(201);
+    const nodes: WorkflowNode[] = [
+      { id: 'a', type: 'trigger', label: 'A', position: { x: 0, y: 0 }, config: {} },
+      { id: 'b', type: 'output', label: 'B', position: { x: 1, y: 0 }, config: {} },
+    ];
+    const edges: WorkflowEdge[] = [
+      { id: 'e1', source: long, target: 'b' },
+      { id: 'e2', source: 'a', target: long },
+      { id: 'e3', source: 'a', target: 'b' },
+    ];
+    expect(topologicalSort(nodes, edges).map((n) => n.id)).toEqual(['a', 'b']);
+  });
 });

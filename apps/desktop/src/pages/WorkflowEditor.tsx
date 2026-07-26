@@ -981,29 +981,38 @@ export function WorkflowEditor() {
                   if (!client || !workflow) return;
                   // Control-char name/schedule rejected before trim (align with routines API)
                   if (/[\0\r\n]/.test(scheduleName) || /[\0\r\n]/.test(scheduleCron)) {
-                    alert('Name or schedule contains invalid control characters');
+                    window.alert('Name or schedule contains invalid control characters');
                     return;
                   }
                   if (!scheduleName.trim() || !scheduleCron.trim()) return;
                   setScheduleBusy(true);
-                  const res = await client.createRoutine({
-                    name: scheduleName.trim(),
-                    workflowId: workflow.id,
-                    schedule: scheduleCron.trim(),
-                    enabled: true,
-                  });
-                  setScheduleBusy(false);
-                  if (res.ok) {
-                    setScheduleOpen(false);
-                    if (confirm('Routine created. Open Routines page?')) {
-                      navigate('/routines');
+                  try {
+                    const res = await client.createRoutine({
+                      name: scheduleName.trim(),
+                      workflowId: workflow.id,
+                      schedule: scheduleCron.trim(),
+                      enabled: true,
+                    });
+                    if (res.ok) {
+                      setScheduleOpen(false);
+                      if (window.confirm('Routine created. Open Routines page?')) {
+                        navigate('/routines');
+                      }
+                    } else {
+                      const err = scrubDisplayText(
+                        (res as { error?: string }).error ?? 'Failed to create routine',
+                        { collapseLines: true, maxChars: 500 },
+                      );
+                      window.alert(err || 'Failed to create routine');
                     }
-                  } else {
-                    const err = scrubDisplayText(
-                      (res as { error?: string }).error ?? 'Failed to create routine',
-                      { collapseLines: true, maxChars: 500 },
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'Failed to create routine';
+                    window.alert(
+                      scrubDisplayText(msg, { collapseLines: true, maxChars: 500 })
+                      || 'Failed to create routine',
                     );
-                    alert(err || 'Failed to create routine');
+                  } finally {
+                    setScheduleBusy(false);
                   }
                 }}
               >

@@ -188,6 +188,22 @@ describe('Sessions page', () => {
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
+  it('alerts scrubbed error when session create throws and keeps modal open', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: [] });
+    createSession.mockRejectedValue(new Error(`auth${'\n'}down${'\0'}!`));
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('emptyState')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+    await waitFor(() => {
+      expect(createSession).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('auth down!');
+    });
+    expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument();
+  });
+
   it('selects a session, loads messages, and deletes it', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({
@@ -234,6 +250,20 @@ describe('Sessions page', () => {
     });
     expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
+  it('alerts scrubbed error when session delete throws', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    deleteSession.mockRejectedValue(new Error(`gone${'\n'}sess${'\0'}!`));
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('Delete session')[0]!);
+    await waitFor(() => {
+      expect(deleteSession).toHaveBeenCalledWith('s1');
+      expect(window.alert).toHaveBeenCalledWith('gone sess!');
+    });
+    expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
   });
 
   it('sends a chat message and streams assistant text', async () => {

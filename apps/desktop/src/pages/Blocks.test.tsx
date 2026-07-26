@@ -228,6 +228,20 @@ describe('Blocks page', () => {
     });
   });
 
+  it('alerts scrubbed error when block delete throws', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: blocks });
+    deleteBlock.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('Custom Block')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(deleteBlock).toHaveBeenCalledWith('my_custom');
+      expect(window.alert).toHaveBeenCalledWith('net down!');
+    });
+    expect(screen.getByText('Custom Block')).toBeInTheDocument();
+  });
+
   it('keeps modal open and shows scrubbed create API error', async () => {
     listBlocks.mockResolvedValue({ ok: true, data: [] });
     createBlock.mockResolvedValue({
