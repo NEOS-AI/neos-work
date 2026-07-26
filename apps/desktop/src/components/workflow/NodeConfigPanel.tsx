@@ -57,19 +57,35 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
   const [blocks, setBlocks] = useState<WorkflowBlock[]>([]);
   const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
   const [designSystems, setDesignSystems] = useState<DesignSystem[]>([]);
+  const [designSystemsError, setDesignSystemsError] = useState<string | null>(null);
   const { client } = useEngine();
   const { t } = useTranslation('common');
 
   useEffect(() => {
     if (!client) return;
+    setDesignSystemsError(null);
     client
       .listDesignSystems()
       .then((res) => {
-        if (res.ok && res.data) setDesignSystems(res.data);
-        else setDesignSystems([]);
+        if (res.ok && res.data) {
+          setDesignSystems(res.data);
+        } else {
+          setDesignSystems([]);
+          setDesignSystemsError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load design systems',
+          );
+        }
       })
-      .catch(() => {
+      .catch((err) => {
         setDesignSystems([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load design systems';
+        setDesignSystemsError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load design systems',
+        );
       });
   }, [client]);
 
@@ -131,7 +147,13 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
                   );
                 })}
             </select>
-            {designSystemId && (
+            {designSystemsError && (
+              <p className="text-[10px] text-red-400">
+                {scrubDisplayText(designSystemsError, { collapseLines: true, maxChars: 300 })
+                  || designSystemsError}
+              </p>
+            )}
+            {designSystemId && !designSystemsError && (
               <p className="text-[10px] text-white/30">
                 Selected DESIGN.md will be prepended to agent system prompts.
               </p>
@@ -636,21 +658,41 @@ function WorkflowWebhookSection() {
   const [showSecret, setShowSecret] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [secretError, setSecretError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client || !workflowId) return;
-    client.getWebhookSecret(workflowId).then((res) => {
-      if (res.ok && res.data) {
-        setSecret(sanitizeWebhookSecret(res.data.secret));
-        if (res.data.rateLimit) {
-          setRateLimit({
-            limit: res.data.rateLimit.limit,
-            remaining: res.data.rateLimit.remaining,
-            resetAt: res.data.rateLimit.resetAt,
-          });
+    setSecretError(null);
+    client
+      .getWebhookSecret(workflowId)
+      .then((res) => {
+        if (res.ok && res.data) {
+          setSecret(sanitizeWebhookSecret(res.data.secret));
+          if (res.data.rateLimit) {
+            setRateLimit({
+              limit: res.data.rateLimit.limit,
+              remaining: res.data.rateLimit.remaining,
+              resetAt: res.data.rateLimit.resetAt,
+            });
+          }
+        } else {
+          setSecret(null);
+          setSecretError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load webhook secret',
+          );
         }
-      }
-    });
+      })
+      .catch((err) => {
+        setSecret(null);
+        const msg = err instanceof Error ? err.message : 'Failed to load webhook secret';
+        setSecretError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load webhook secret',
+        );
+      });
   }, [client, workflowId]);
 
   if (!workflowId) return null;
@@ -756,13 +798,15 @@ function WorkflowWebhookSection() {
         </p>
       )}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono truncate flex-1" style={{ color: 'var(--text-secondary)' }}>
-          {secret
-            ? (() => {
-                const s = scrubDisplayText(secret, { collapseLines: true, maxChars: 200 }) || '••••';
-                return showSecret ? s : `${s.slice(0, 8)}…${s.slice(-4)}`;
-              })()
-            : 'Loading secret…'}
+        <span className="text-[10px] font-mono truncate flex-1" style={{ color: secretError ? '#f87171' : 'var(--text-secondary)' }}>
+          {secretError
+            ? scrubDisplayText(secretError, { collapseLines: true, maxChars: 200 }) || secretError
+            : secret
+              ? (() => {
+                  const s = scrubDisplayText(secret, { collapseLines: true, maxChars: 200 }) || '••••';
+                  return showSecret ? s : `${s.slice(0, 8)}…${s.slice(-4)}`;
+                })()
+              : 'Loading secret…'}
         </span>
         <button
           type="button"

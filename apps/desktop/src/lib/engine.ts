@@ -67,8 +67,17 @@ export function scrubApiErrorMessage(raw: unknown, fallback = 'Request failed'):
 export async function readApiResponse<T = unknown>(res: Response): Promise<ApiResponse<T>> {
   try {
     const body: unknown = await res.json();
-    if (body && typeof body === 'object') {
-      return body as ApiResponse<T>;
+    // Arrays / null are typeof object — only plain objects are ApiResponse envelopes
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const envelope = body as ApiResponse<T>;
+      // Defense-in-depth: scrub control-char error strings from any envelope
+      if (envelope.error != null) {
+        return {
+          ...envelope,
+          error: scrubApiErrorMessage(envelope.error, 'Request failed'),
+        };
+      }
+      return envelope;
     }
   } catch {
     /* invalid JSON */
@@ -89,7 +98,13 @@ export async function readApiResponse<T = unknown>(res: Response): Promise<ApiRe
 export async function readHealthResponse(res: Response): Promise<HealthResponse> {
   try {
     const body: unknown = await res.json();
-    if (body && typeof body === 'object' && body !== null && 'status' in body) {
+    if (
+      body
+      && typeof body === 'object'
+      && !Array.isArray(body)
+      && body !== null
+      && 'status' in body
+    ) {
       return body as HealthResponse;
     }
   } catch {

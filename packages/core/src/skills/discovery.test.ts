@@ -140,6 +140,25 @@ x
     expect(skills.filter((s) => s.source === 'local')).toEqual([]);
   });
 
+  it('caps discovered skills at 500 entries (ENTRY_MAX)', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(dir, { recursive: true });
+    // Create 505 valid skill files — only first 500 should be kept
+    for (let i = 0; i < 505; i++) {
+      await writeFile(
+        join(dir, `s${String(i).padStart(4, '0')}.md`),
+        `---
+name: s${i}
+description: d
+---
+x
+`,
+      );
+    }
+    const local = (await discoverSkills(workspace)).filter((s) => s.source === 'local');
+    expect(local.length).toBe(500);
+  }, 30_000);
+
   it('skips overlong workspace paths, oversized skill files, and overlong entry names', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });

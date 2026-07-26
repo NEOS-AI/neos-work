@@ -385,6 +385,13 @@ describe('portfolio_summary', () => {
     expect(result.error).toMatch(/Maximum 20/);
     expect(getStockPrice).not.toHaveBeenCalled();
   });
+
+  it('falls back to Operation failed when KIS error scrubs empty', async () => {
+    getStockPrice.mockRejectedValue(new Error('\n\r\0'));
+    const result = await exec().execute(ctx({ symbols: '005930' }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Operation failed');
+  });
 });
 
 describe('risk_report', () => {
@@ -463,5 +470,22 @@ describe('risk_report', () => {
     expect(result.ok).toBe(true);
     // clampPeriod(1, 60, 5, 500) → 1 < min 5 → fallback 60
     expect((result.output as { lookbackDays: number }).lookbackDays).toBeGreaterThanOrEqual(5);
+  });
+
+  it('falls back to Operation failed when chart error scrubs empty', async () => {
+    getStockChart.mockRejectedValue(new Error('\0\r\n'));
+    const result = await exec().execute(ctx({ symbol: '005930', lookback: 60 }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Operation failed');
+  });
+
+  it('returns null sharpe when daily volatility is zero (flat series)', async () => {
+    const flat = Array.from({ length: 60 }, () => 100);
+    getStockChart.mockResolvedValue(barsNewestFirst(flat));
+    const result = await exec().execute(ctx({ symbol: 'ZEROVOL', lookback: 60 }));
+    expect(result.ok).toBe(true);
+    const out = result.output as { sharpeRatio: number | null; dailyVolatility: number };
+    expect(out.dailyVolatility).toBe(0);
+    expect(out.sharpeRatio).toBeNull();
   });
 });

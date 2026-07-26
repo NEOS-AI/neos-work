@@ -738,6 +738,21 @@ describe('EngineClient', () => {
     const nonObject = new Response(JSON.stringify('plain'), { status: 200 });
     const plain = await readApiResponse(nonObject);
     expect(plain.ok).toBe(false);
+
+    // JSON arrays are typeof object — must not be treated as envelopes
+    const arr = new Response(JSON.stringify([{ ok: true }]), { status: 200 });
+    const arrRes = await readApiResponse(arr);
+    expect(arrRes.ok).toBe(false);
+    expect(arrRes.error).toBeTruthy();
+
+    // Control-char error on valid envelope is scrubbed at parse time
+    const dirty = new Response(
+      JSON.stringify({ ok: false, error: `quota${'\n'}full${'\0'}!` }),
+      { status: 400 },
+    );
+    const scrubbed = await readApiResponse(dirty);
+    expect(scrubbed.ok).toBe(false);
+    expect(scrubbed.error).toBe('quota full!');
   });
 
   it('readHealthResponse parses ok body and throws clean error on invalid JSON', async () => {
@@ -751,6 +766,10 @@ describe('EngineClient', () => {
       statusText: 'Service Unavailable',
     });
     await expect(readHealthResponse(bad)).rejects.toThrow(/HTTP 503/);
+
+    // Array body is not a health envelope
+    const arr = new Response(JSON.stringify([{ status: 'ok' }]), { status: 200 });
+    await expect(readHealthResponse(arr)).rejects.toThrow(/HTTP 200/);
   });
 
   it('harness and block CRUD with domain query', async () => {

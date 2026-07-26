@@ -126,6 +126,7 @@ export function ArtifactPreview({
   };
 
   const [listError, setListError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
 
   const loadList = () => {
     if (!client) return;
@@ -169,15 +170,37 @@ export function ArtifactPreview({
   }, [client, workflowId, runId, latestArtifactId]);
 
   useEffect(() => {
-    if (!client || !selectedId) { setSelectedContent(null); return; }
+    if (!client || !selectedId) {
+      setSelectedContent(null);
+      setContentError(null);
+      return;
+    }
     setLoading(true);
-    client.getArtifact(selectedId)
+    setContentError(null);
+    client
+      .getArtifact(selectedId)
       .then((res) => {
         if (res.ok && typeof res.data?.content === 'string') {
           // Strip null bytes before iframe/srcDoc / clipboard (injection defense)
           const raw = res.data.content;
           setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
-        } else setSelectedContent(null);
+        } else {
+          setSelectedContent(null);
+          setContentError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load content',
+          );
+        }
+      })
+      .catch((err) => {
+        setSelectedContent(null);
+        const msg = err instanceof Error ? err.message : 'Failed to load content';
+        setContentError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load content',
+        );
       })
       .finally(() => setLoading(false));
   }, [client, selectedId]);
@@ -496,8 +519,10 @@ export function ArtifactPreview({
             {selectedContent}
           </pre>
         ) : (
-          <div className="flex items-center justify-center h-full text-white/30 text-sm">
-            Select an artifact to preview
+          <div className={`flex items-center justify-center h-full text-sm ${contentError ? 'text-red-400' : 'text-white/30'}`}>
+            {contentError && !loading
+              ? scrubDisplayText(contentError, { collapseLines: true, maxChars: 300 }) || contentError
+              : 'Select an artifact to preview'}
           </div>
         )}
       </div>
