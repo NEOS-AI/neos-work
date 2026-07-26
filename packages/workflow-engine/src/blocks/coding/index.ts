@@ -178,8 +178,9 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
 
     return { ok: true, output, durationMs: Date.now() - start };
   } catch (err) {
-    let msg = scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed';
-    if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+    const msg =
+      scrubErrorMessage(err instanceof Error ? err.message : String(err), 4_000)
+      || 'Operation failed';
     return {
       ok: false,
       output: null,

@@ -818,6 +818,49 @@ describe('AgentOrchestrator', () => {
     expect(stepErr?.error).toBe('Tool execution failed');
   });
 
+  it('uses Step failed when LLM executeStep throws a control-only Error', async () => {
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
+        const content = String(params.messages?.[0]?.content ?? '');
+        // Reflection / healing chat
+        if (content.includes('에이전트 step이 실패') || content.includes('"action"')) {
+          yield { type: 'text', content: JSON.stringify({ action: 'skip' }) };
+          yield { type: 'done' };
+          return;
+        }
+        // synthesize
+        if (content.includes('요약') || content.includes('summary') || !content.includes('Execute this step')) {
+          yield { type: 'text', content: 'ok' };
+          yield { type: 'done' };
+          return;
+        }
+        // executeStep LLM path — control-only message so scrub → "Step failed"
+        throw new Error(`\0\n\r`);
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const orch = new AgentOrchestrator(adapter, new ToolRegistry());
+    injectPlan(orch, [step({ description: 'llm throw', type: 'plan' })]);
+    const events = await collectEvents(orch.run('llm throw'));
+    const stepErr = events.find((e) => e.type === 'step_error') as { error?: string };
+    expect(stepErr?.error).toBe('Step failed');
+  });
+
   it('records failed LLM tool_use results without throwing (Error: prefix path)', async () => {
     const registry = new ToolRegistry();
     registry.register({
