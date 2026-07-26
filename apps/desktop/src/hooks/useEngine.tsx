@@ -121,10 +121,11 @@ export function EngineProvider({ children }: { children: ReactNode }) {
         const ok = await client.checkConnection();
         if (ok) {
           // Set auth token: sessionStorage override takes priority over Tauri sidecar token
+          // Control-char tokens never applied (EngineClient.setAuthToken also rejects)
           const overrideToken = sessionStorage.getItem('devAuthToken');
           const tauriToken = await getAuthToken();
           const token = overrideToken ?? tauriToken;
-          if (token) {
+          if (typeof token === 'string' && token && !/[\0\r\n]/.test(token) && token.trim()) {
             client.setAuthToken(token);
           }
 

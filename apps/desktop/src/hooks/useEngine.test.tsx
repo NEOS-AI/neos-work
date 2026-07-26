@@ -140,6 +140,26 @@ describe('useEngine / EngineProvider', () => {
     expect(startEngine).not.toHaveBeenCalled();
   });
 
+  it('skips control-char auth tokens from sessionStorage and sidecar', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    sessionStorage.setItem('devAuthToken', `dev${'\0'}bad`);
+    checkConnection.mockResolvedValue(true);
+    getAuthToken.mockResolvedValue(`side${'\n'}car`);
+
+    render(
+      <EngineProvider>
+        <Probe />
+      </EngineProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'client' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('connected');
+    });
+    // Control-char override and sidecar tokens never applied
+    expect(setAuthToken).not.toHaveBeenCalled();
+  });
+
   it('sets error when client retries exhaust', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     checkConnection.mockResolvedValue(false);

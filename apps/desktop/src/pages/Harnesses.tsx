@@ -349,11 +349,11 @@ function HarnessModal({
     if (!client || readOnly) return;
     // Control-char id/name rejected before trim; null-byte prompt/description rejected
     if ((!existing && /[\0\r\n]/.test(id)) || /[\0\r\n]/.test(name)) {
-      setError(t('harness.validationError'));
+      setError('Name or ID contains invalid control characters');
       return;
     }
     if (/\0/.test(systemPrompt) || /\0/.test(description)) {
-      setError(t('harness.validationError'));
+      setError('Fields contain invalid control characters');
       return;
     }
     if (!id.trim() || !name.trim() || !systemPrompt.trim()) {

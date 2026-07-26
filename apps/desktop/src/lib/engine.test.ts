@@ -47,6 +47,46 @@ describe('EngineClient', () => {
     );
   });
 
+  it('rejects control-char / blank auth tokens (no Authorization header)', async () => {
+    const client = new EngineClient('http://engine.test');
+    client.setAuthToken(`sec${'\0'}ret`);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSessions();
+    const headers = fetchMock.mock.calls.at(-1)![1].headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+
+    client.setAuthToken(`tok${'\n'}bad`);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSessions();
+    expect(
+      (fetchMock.mock.calls.at(-1)![1].headers as Record<string, string>).Authorization,
+    ).toBeUndefined();
+
+    client.setAuthToken('   ');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSessions();
+    expect(
+      (fetchMock.mock.calls.at(-1)![1].headers as Record<string, string>).Authorization,
+    ).toBeUndefined();
+
+    // null clears prior good token
+    client.setAuthToken('good-token');
+    client.setAuthToken(null);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSessions();
+    expect(
+      (fetchMock.mock.calls.at(-1)![1].headers as Record<string, string>).Authorization,
+    ).toBeUndefined();
+
+    // trims valid tokens
+    client.setAuthToken('  trimmed  ');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSessions();
+    expect(
+      (fetchMock.mock.calls.at(-1)![1].headers as Record<string, string>).Authorization,
+    ).toBe('Bearer trimmed');
+  });
+
   it('health and checkConnection', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'ok', version: '0.3.29' }));

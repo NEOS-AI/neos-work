@@ -154,7 +154,7 @@ describe('Harnesses page', () => {
     }
     fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
     expect(createHarness).not.toHaveBeenCalled();
-    expect(screen.getByText('harness.validationError')).toBeInTheDocument();
+    expect(screen.getByText('Name or ID contains invalid control characters')).toBeInTheDocument();
   });
 
   it('deletes custom harness but not built-in', async () => {
@@ -362,7 +362,7 @@ describe('Harnesses page', () => {
     }
     fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
     expect(createHarness).not.toHaveBeenCalled();
-    expect(screen.getByText('harness.validationError')).toBeInTheDocument();
+    expect(screen.getByText('Fields contain invalid control characters')).toBeInTheDocument();
   });
 
   it('surfaces createHarness errors and filters control-char tool tokens', async () => {

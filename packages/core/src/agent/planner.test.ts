@@ -171,14 +171,21 @@ describe('Planner', () => {
         return true;
       },
     };
-    // nullish non-string goal → String(goal ?? '') → empty → default single step
+    // nullish non-string goal → String(goal ?? '') → empty → default single step (no LLM)
     const emptyGoal = await new Planner(adapter as never).plan(
       null as unknown as string,
       undefined as unknown as string,
     );
     expect(emptyGoal).toHaveLength(1);
     expect(emptyGoal[0]!.description).toBe('Execute the goal directly');
+    expect(modelUsed).toBe('unset'); // early return before chat
+
+    // Real goal with empty models → model id falls back to ''
+    const objectJson = await new Planner(adapter as never).plan('real goal');
     expect(modelUsed).toBe(''); // getModels()[0]?.id ?? ''
+    // Object JSON (no array match) → free-text fallback step
+    expect(objectJson).toHaveLength(1);
+    expect(objectJson[0]!.description).toContain('not');
 
     // Non-null non-string goal/context coerced
     const adapter2 = mockAdapter([JSON.stringify([{ description: 'from-num' }])]);
@@ -187,10 +194,6 @@ describe('Planner', () => {
       { note: 'ctx' } as unknown as string,
     );
     expect(coerced[0]!.description).toBe('from-num');
-
-    // Parsed non-array JSON → []
-    const nonArr = await new Planner(adapter as never).plan('real goal');
-    expect(nonArr).toEqual([]);
   });
 
   it('falls back to default step when model returns empty content', async () => {

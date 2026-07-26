@@ -304,13 +304,33 @@ export class EngineClient {
     return this.baseUrl;
   }
 
-  setAuthToken(token: string): void {
-    this.authToken = token;
+  /**
+   * Set Bearer token for API calls.
+   * Control-char / blank tokens are rejected (header injection defense) — clears auth.
+   */
+  setAuthToken(token: string | null | undefined): void {
+    if (token == null || typeof token !== 'string') {
+      this.authToken = null;
+      return;
+    }
+    // Reject control chars before trim (trim would strip CR/LF)
+    if (/[\0\r\n]/.test(token)) {
+      this.authToken = null;
+      return;
+    }
+    const next = token.trim();
+    this.authToken = next || null;
   }
 
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.authToken) {
+    // Defense-in-depth: never emit control-char Bearer tokens
+    if (
+      this.authToken
+      && typeof this.authToken === 'string'
+      && !/[\0\r\n]/.test(this.authToken)
+      && this.authToken.trim()
+    ) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
     }
     return headers;
