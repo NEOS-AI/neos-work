@@ -538,7 +538,11 @@ describe('Settings page', () => {
   it('keeps MCP add form open when createMcpServer fails', async () => {
     const user = userEvent.setup();
     listMcpServers.mockResolvedValue({ ok: true, data: [] });
-    createMcpServer.mockResolvedValue({ ok: false, error: 'name taken' });
+    createMcpServer.mockResolvedValue({
+      ok: false,
+      error: `name${'\n'}taken${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<Settings />);
     await waitFor(() => {
       expect(screen.getByText(/No MCP servers configured/)).toBeInTheDocument();
@@ -548,10 +552,32 @@ describe('Settings page', () => {
     await user.type(screen.getByPlaceholderText('Server name'), 'Dup');
     await user.type(screen.getByPlaceholderText('Command (e.g. npx)'), 'npx');
     fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
-    await waitFor(() => expect(createMcpServer).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(createMcpServer).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('name taken!');
+    });
     // Form stays open for correction
     expect(screen.getByPlaceholderText('Server name')).toBeInTheDocument();
     expect(screen.queryByText('Dup')).not.toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
+  it('alerts scrubbed error when API key save fails', async () => {
+    const user = userEvent.setup();
+    saveSetting.mockResolvedValue({
+      ok: false,
+      error: `quota${'\n'}hit${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByPlaceholderText('sk-ant-...')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('sk-ant-...'), 'sk-ant-fail');
+    fireEvent.click(screen.getAllByRole('button', { name: 'common:action.save' })[0]!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('apiKey.anthropic', 'sk-ant-fail');
+      expect(window.alert).toHaveBeenCalledWith('quota hit!');
+    });
+    expect(screen.queryByText('Saved!')).not.toBeInTheDocument();
   });
 
   it('rejects control-char MCP name/command/url without calling API', async () => {
@@ -675,12 +701,14 @@ describe('Settings page', () => {
       ok: true,
       data: { connected: true, expiresAt: '2099-01-01T00:00:00.000Z' },
     });
+    revokeMcpOAuth.mockResolvedValue({ ok: true });
     render(<Settings />);
 
     await waitFor(() => expect(screen.getByText('OAuth MCP')).toBeInTheDocument());
     expect(screen.getByText('● OAuth')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
     await waitFor(() => expect(revokeMcpOAuth).toHaveBeenCalledWith('mcp-oauth-1'));
+    expect(screen.queryByText('● OAuth')).not.toBeInTheDocument();
 
     const oaiBase = screen.getByPlaceholderText('https://api.openai.com/v1');
     await user.type(oaiBase, 'https://openai.example/v1');
@@ -703,6 +731,41 @@ describe('Settings page', () => {
     await waitFor(() => {
       expect(saveSetting).toHaveBeenCalledWith('OLLAMA_BASE_URL', 'http://127.0.0.1:11434');
     });
+  });
+
+  it('alerts scrubbed error when OAuth revoke fails and keeps connected badge', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-oauth-1',
+          name: 'OAuth MCP',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({
+      ok: true,
+      data: { connected: true, expiresAt: '2099-01-01T00:00:00.000Z' },
+    });
+    revokeMcpOAuth.mockResolvedValue({
+      ok: false,
+      error: `token${'\n'}busy${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('OAuth MCP')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    await waitFor(() => {
+      expect(revokeMcpOAuth).toHaveBeenCalledWith('mcp-oauth-1');
+      expect(window.alert).toHaveBeenCalledWith('token busy!');
+    });
+    expect(screen.getByText('● OAuth')).toBeInTheDocument();
   });
 
   it('shows disconnected and connecting engine status labels', async () => {

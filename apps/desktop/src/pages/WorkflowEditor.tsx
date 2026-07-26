@@ -319,7 +319,16 @@ export function WorkflowEditor() {
     try {
       if (!trimmed || !client || !workflow || trimmed === workflow.name) return;
       const res = await client.updateWorkflow(workflow.id, { ...draft, name: trimmed });
-      if (res.ok && res.data) setWorkflow(res.data);
+      if (res.ok && res.data) {
+        setWorkflow(res.data);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Rename failed';
+        window.alert(err);
+      }
     } finally {
       nameCommitInFlightRef.current = false;
     }
@@ -337,6 +346,13 @@ export function WorkflowEditor() {
     if (res.ok && res.data) {
       setWorkflow(res.data);
       setSavedDraft(draft);
+    } else {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Save failed';
+      window.alert(err);
     }
     setSaving(false);
     if (validationIssues.length > 0) showRightPanelTab('config');
@@ -381,6 +397,14 @@ export function WorkflowEditor() {
     if (saveRes.ok && saveRes.data) {
       setWorkflow(saveRes.data);
       setSavedDraft(draft);
+    } else {
+      const err =
+        scrubDisplayText((saveRes as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Save failed';
+      window.alert(err);
+      return;
     }
     setIsRunning(true);
     showRightPanelTab('run');

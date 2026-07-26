@@ -164,7 +164,23 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
           ? plugin.id.trim().slice(0, 100)
           : '';
       if (!sid || !rid || !pid) return;
-      await client.resumePlugin(pid, rid, sid, response);
+      const res = await client.resumePlugin(pid, rid, sid, response);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 500,
+          }) || 'Resume failed';
+        setRun((prev) =>
+          prev
+            ? {
+                ...prev,
+                waiting: null,
+                failed: err,
+              }
+            : prev,
+        );
+      }
     },
     [client, plugin.id, run],
   );

@@ -30,7 +30,15 @@ export function Settings() {
 
   const handleSaveDefault = async (key: string, value: string) => {
     if (!client) return;
-    await client.saveSetting(key, value);
+    const res = await client.saveSetting(key, value);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Save failed';
+      window.alert(err);
+    }
   };
 
   return (
@@ -440,12 +448,27 @@ function ApiKeyInput({
     if (!next) return;
     setSaveStatus('saving');
     try {
-      await client.saveSetting(settingKey, next);
+      const res = await client.saveSetting(settingKey, next);
+      if (!res.ok) {
+        setSaveStatus('idle');
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed',
+        );
+        return;
+      }
       setSaveStatus('saved');
       setHasSavedKey(true);
       setValue('');
-    } catch {
+    } catch (err) {
       setSaveStatus('idle');
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
+      );
+      return;
     }
     setTimeout(() => setSaveStatus('idle'), 2000);
   };
@@ -582,10 +605,22 @@ function SimpleKeyInput({
     const next = value.trim();
     if (!next) return;
     setSaving(true);
-    await client.saveSetting(settingKey, next);
-    setSaving(false);
-    setHasSaved(true);
-    setValue('');
+    try {
+      const res = await client.saveSetting(settingKey, next);
+      if (!res.ok) {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed',
+        );
+        return;
+      }
+      setHasSaved(true);
+      setValue('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -733,6 +768,13 @@ function McpServersSection() {
       if (res.ok) {
         closeAddForm();
         await loadServers();
+      } else {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to add MCP server',
+        );
       }
     } finally {
       setAdding(false);
@@ -808,6 +850,13 @@ function McpServersSection() {
             setOauthStatuses((prev) => ({ ...prev, [oauthModal.serverId]: st.data! }));
           }
         }, 3000);
+      } else {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'OAuth start failed',
+        );
       }
     } finally {
       setOauthConnecting(false);
@@ -816,7 +865,16 @@ function McpServersSection() {
 
   const handleOAuthRevoke = async (serverId: string) => {
     if (!client) return;
-    await client.revokeMcpOAuth(serverId);
+    const res = await client.revokeMcpOAuth(serverId);
+    if (!res.ok) {
+      window.alert(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Revoke failed',
+      );
+      return;
+    }
     setOauthStatuses((prev) => ({ ...prev, [serverId]: { connected: false } }));
   };
 
