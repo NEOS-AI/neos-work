@@ -786,4 +786,43 @@ describe('RevisionPanel', () => {
     expect((input as HTMLInputElement).value).not.toMatch(/[\r\n]/);
   });
 
+
+  it('rejects restore/delete when revision id has control chars', async () => {
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `rev${'\0'}evil`,
+          workflowId: 'wf-1',
+          label: 'Evil Rev',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Evil Rev')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /workflow\.restore|Restore/i }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(getRevision).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Revision id contains invalid control characters');
+
+    alertSpy.mockClear();
+    confirmSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /Delete|workflow\.delete/i }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteRevision).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Revision id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
+
 });

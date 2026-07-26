@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
-import { formatDuration, scrubDisplayText } from '../../lib/format-duration.js';
+import { formatDuration, safeEntityId, scrubDisplayText } from '../../lib/format-duration.js';
 import { formatListCount } from '../../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../../lib/format-relative-time.js';
 import {
@@ -319,8 +319,15 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                     onClick={async (e) => {
                       e.stopPropagation();
                       if (!client) return;
+                      // Control-char / blank / overlong ids never sent to delete API
+                      const wfId = safeEntityId(props.workflowId);
+                      const runEntityId = safeEntityId(run.id);
+                      if (!wfId || !runEntityId) {
+                        window.alert('Run id contains invalid control characters');
+                        return;
+                      }
                       try {
-                        const res = await client.deleteWorkflowRun(props.workflowId, run.id);
+                        const res = await client.deleteWorkflowRun(wfId, runEntityId);
                         if (!res.ok) {
                           window.alert(
                             scrubDisplayText((res as { error?: string }).error, {
@@ -338,8 +345,10 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                         );
                         return;
                       }
-                      setRuns((prev) => prev.filter((r) => r.id !== run.id));
-                      if (selectedRunId === run.id) setSelectedRunId(null);
+                      setRuns((prev) => prev.filter((r) => r.id !== run.id && r.id !== runEntityId));
+                      if (selectedRunId === run.id || selectedRunId === runEntityId) {
+                        setSelectedRunId(null);
+                      }
                     }}
                     className="rounded px-1 py-0.5 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
                     style={{ color: 'var(--text-muted)' }}

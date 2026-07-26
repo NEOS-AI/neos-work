@@ -8,7 +8,7 @@ import {
   saveArtifactViewport,
   type ArtifactViewportMode,
 } from '../../lib/artifact-preview-prefs.js';
-import { scrubDisplayText } from '../../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../../lib/format-duration.js';
 
 type ViewportMode = ArtifactViewportMode;
 
@@ -293,11 +293,18 @@ export function ArtifactPreview({
 
   const handleDelete = async () => {
     if (!client || !selectedId) return;
+    // Control-char / blank / overlong ids never sent to delete API
+    const artifactId = safeEntityId(selectedId);
+    if (!artifactId) {
+      setStatusMsg('Artifact id contains invalid control characters');
+      setTimeout(() => setStatusMsg(null), 2500);
+      return;
+    }
     if (!window.confirm('Delete this artifact?')) return;
     setRefreshing(true);
     setStatusMsg(null);
     try {
-      const res = await client.deleteArtifact(selectedId);
+      const res = await client.deleteArtifact(artifactId);
       if (res.ok) {
         setSelectedId(null);
         setSelectedContent(null);

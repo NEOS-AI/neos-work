@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { WorkflowRevision } from '../../lib/engine.js';
 import type { EngineClient } from '../../lib/engine.js';
-import { scrubDisplayText } from '../../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../../lib/format-relative-time.js';
 
 interface RevisionPanelProps {
@@ -92,6 +92,13 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   }, [editingId, onClose, cancelLabelEdit]);
 
   const handleRestore = async (rev: WorkflowRevision) => {
+    // Control-char / blank / overlong ids never sent to restore API
+    const wfId = safeEntityId(workflowId);
+    const revEntityId = safeEntityId(rev.id);
+    if (!wfId || !revEntityId) {
+      window.alert('Revision id contains invalid control characters');
+      return;
+    }
     if (isDirty) {
       const ok = window.confirm(
         t(
@@ -108,7 +115,7 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
     }
     setRestoring(rev.id);
     try {
-      const full = await client.getRevision(workflowId, rev.id);
+      const full = await client.getRevision(wfId, revEntityId);
       if (!full.ok || !full.data?.snapshot) {
         const err =
           scrubDisplayText((full as { error?: string }).error, {
@@ -154,8 +161,15 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       setEditingId(null);
       return;
     }
+    const wfId = safeEntityId(workflowId);
+    const revEntityId = safeEntityId(revId);
+    if (!wfId || !revEntityId) {
+      setEditingId(null);
+      window.alert('Revision id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.updateRevisionLabel(workflowId, revId, next);
+      const res = await client.updateRevisionLabel(wfId, revEntityId, next);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -176,12 +190,19 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   };
 
   const handleDelete = async (revId: string) => {
+    // Control-char / blank / overlong ids never sent to delete API
+    const wfId = safeEntityId(workflowId);
+    const revEntityId = safeEntityId(revId);
+    if (!wfId || !revEntityId) {
+      window.alert('Revision id contains invalid control characters');
+      return;
+    }
     const ok = window.confirm(
       t('workflow.deleteRevisionConfirm', 'Delete this revision permanently? This cannot be undone.'),
     );
     if (!ok) return;
     try {
-      const res = await client.deleteRevision(workflowId, revId);
+      const res = await client.deleteRevision(wfId, revEntityId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {

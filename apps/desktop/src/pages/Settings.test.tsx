@@ -1442,4 +1442,63 @@ describe('Settings page', () => {
     expect(screen.queryByText(/oauth status boom/i)).not.toBeInTheDocument();
   });
 
+  it('rejects MCP toggle/delete/revoke when server id has control chars', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `mcp${'\0'}evil`,
+          name: 'Evil MCP',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({
+      ok: true,
+      data: { connected: true, expiresAt: '2099-01-01T00:00:00.000Z' },
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Evil MCP')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument());
+
+    // Disconnect = revoke
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    expect(revokeMcpOAuth).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('MCP server id contains invalid control characters');
+
+    // Walk up from name to the card row that holds action buttons
+    let el: HTMLElement | null = screen.getByText('Evil MCP');
+    let actionButtons: HTMLButtonElement[] = [];
+    for (let i = 0; i < 8 && el; i++) {
+      const btns = Array.from(el.querySelectorAll('button')) as HTMLButtonElement[];
+      if (btns.length >= 3) {
+        actionButtons = btns;
+        break;
+      }
+      el = el.parentElement;
+    }
+    expect(actionButtons.length).toBeGreaterThanOrEqual(3);
+
+    alertSpy.mockClear();
+    // Toggle: switch-like button without text content
+    const toggleBtn =
+      actionButtons.find((b) => !(b.textContent || '').trim()) ?? actionButtons[1]!;
+    fireEvent.click(toggleBtn);
+    expect(toggleMcpServer).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('MCP server id contains invalid control characters');
+
+    alertSpy.mockClear();
+    // Delete is the last action button (X icon)
+    fireEvent.click(actionButtons[actionButtons.length - 1]!);
+    expect(deleteMcpServer).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('MCP server id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
+
 });

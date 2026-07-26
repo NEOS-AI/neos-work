@@ -1090,6 +1090,12 @@ function McpServersSection() {
 
   const handleOAuthConnect = async () => {
     if (!client || !oauthModal) return;
+    // Control-char / blank / overlong server ids never sent to OAuth start
+    const oauthServerId = safeEntityId(oauthModal.serverId);
+    if (!oauthServerId) {
+      window.alert('MCP server id contains invalid control characters');
+      return;
+    }
     // Control-char OAuth fields rejected before trim (endpoint/token injection defense)
     const { authorizationEndpoint, tokenEndpoint, clientId, scope } = oauthModal;
     if (
@@ -1109,7 +1115,7 @@ function McpServersSection() {
     try {
       const redirectUri = `http://localhost:3000/api/mcp/oauth/callback`;
       const res = await client.startMcpOAuth({
-        serverId: oauthModal.serverId,
+        serverId: oauthServerId,
         authorizationEndpoint: authEp,
         tokenEndpoint: tokenEp,
         clientId: cid,
@@ -1134,7 +1140,7 @@ function McpServersSection() {
           );
           return;
         }
-        const serverId = oauthModal.serverId;
+        const serverId = oauthServerId;
         setOauthModal(null);
         // Poll for token after 3s — best-effort; never surface unhandled rejection
         setTimeout(() => {
@@ -1169,8 +1175,14 @@ function McpServersSection() {
 
   const handleOAuthRevoke = async (serverId: string) => {
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to revoke API
+    const safeId = safeEntityId(serverId);
+    if (!safeId) {
+      window.alert('MCP server id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.revokeMcpOAuth(serverId);
+      const res = await client.revokeMcpOAuth(safeId);
       if (!res.ok) {
         window.alert(
           scrubDisplayText((res as { error?: string }).error, {
@@ -1180,7 +1192,7 @@ function McpServersSection() {
         );
         return;
       }
-      setOauthStatuses((prev) => ({ ...prev, [serverId]: { connected: false } }));
+      setOauthStatuses((prev) => ({ ...prev, [safeId]: { connected: false } }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Revoke failed';
       window.alert(

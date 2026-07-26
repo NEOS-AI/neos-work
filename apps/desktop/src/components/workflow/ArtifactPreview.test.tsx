@@ -657,4 +657,32 @@ describe('ArtifactPreview', () => {
     createSpy.mockRestore();
   });
 
+
+  it('rejects delete when selected artifact id has control chars', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: `a${'\0'}evil`,
+      workflowId: 'wf-1',
+      name: 'dirty-id.txt',
+      contentType: 'text/plain',
+      content: 'body',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('dirty-id.txt')).toBeInTheDocument());
+    // select is auto-selected; click Delete
+    const del = screen.getByRole('button', { name: /^Delete$/i });
+    await user.click(del);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteArtifact).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText('Artifact id contains invalid control characters')).toBeInTheDocument();
+    });
+    confirmSpy.mockRestore();
+  });
+
 });
