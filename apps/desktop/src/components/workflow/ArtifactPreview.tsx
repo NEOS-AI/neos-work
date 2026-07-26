@@ -221,17 +221,23 @@ export function ArtifactPreview({
 
   const handleReload = async () => {
     if (!client || !selectedId) return;
+    const artifactId = safeEntityId(selectedId);
+    if (!artifactId) {
+      setStatusMsg('Artifact id contains invalid control characters');
+      setTimeout(() => setStatusMsg(null), 2500);
+      return;
+    }
     setRefreshing(true);
     setStatusMsg(null);
     try {
-      const res = await client.refreshArtifact(selectedId, 'reload');
+      const res = await client.refreshArtifact(artifactId, 'reload');
       if (res.ok && typeof res.data?.content === 'string') {
         const raw = res.data.content;
         setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
         setContentError(null);
         setStatusMsg('Content reloaded');
       } else {
-        const again = await client.getArtifact(selectedId);
+        const again = await client.getArtifact(artifactId);
         if (again.ok && typeof again.data?.content === 'string') {
           const raw = again.data.content;
           setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
@@ -260,10 +266,16 @@ export function ArtifactPreview({
 
   const handleRerun = async () => {
     if (!client || !selectedId) return;
+    const artifactId = safeEntityId(selectedId);
+    if (!artifactId) {
+      setStatusMsg('Artifact id contains invalid control characters');
+      setTimeout(() => setStatusMsg(null), 2500);
+      return;
+    }
     setRefreshing(true);
     setStatusMsg(null);
     try {
-      const res = await client.refreshArtifact(selectedId, 'rerun');
+      const res = await client.refreshArtifact(artifactId, 'rerun');
       if (res.ok && res.meta?.mode === 'rerun') {
         const meta =
           scrubDisplayText(res.meta.message, { collapseLines: true, maxChars: 200 })
@@ -331,6 +343,12 @@ export function ArtifactPreview({
 
   const handleRename = async () => {
     if (!client || !selectedId || !selected) return;
+    const artifactId = safeEntityId(selectedId);
+    if (!artifactId) {
+      setStatusMsg('Artifact id contains invalid control characters');
+      setTimeout(() => setStatusMsg(null), 2500);
+      return;
+    }
     const seedName =
       scrubDisplayText(selected.name, { collapseLines: true, maxChars: 200 }) || 'artifact';
     const next = window.prompt('Rename artifact', seedName);
@@ -351,7 +369,7 @@ export function ArtifactPreview({
     setRefreshing(true);
     setStatusMsg(null);
     try {
-      const res = await client.updateArtifact(selectedId, { name });
+      const res = await client.updateArtifact(artifactId, { name });
       if (res.ok) {
         setStatusMsg('Renamed');
         loadList();

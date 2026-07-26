@@ -60,4 +60,17 @@ describe('mockAdapter', () => {
     }
     expect(chunks).toEqual([{ type: 'done' }]);
   });
+
+  it('handles empty responses list without throwing', async () => {
+    // responses[Math.min(call, -1)] is undefined → ?? '' path
+    const adapter = mockAdapter([]);
+    const chunks = [];
+    for await (const c of adapter.chat({
+      model: 'm',
+      messages: [{ role: 'user', content: 'x' }],
+    })) {
+      chunks.push(c);
+    }
+    expect(chunks).toEqual([{ type: 'done' }]);
+  });
 });

@@ -328,4 +328,25 @@ describe('RunDetailPanel', () => {
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('surfaces error and skips API when run id has control chars', async () => {
+    render(
+      <RunDetailPanel workflowId="wf-1" runId={`run${'\0'}evil`} onClose={() => {}} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Run id contains invalid control characters')).toBeInTheDocument();
+    });
+    expect(getWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it('surfaces error and skips API when workflow id has control chars', async () => {
+    render(
+      <RunDetailPanel workflowId={`wf${'\n'}x`} runId="run-1" onClose={() => {}} />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Run id contains invalid control characters')).toBeInTheDocument();
+    });
+    expect(getWorkflowRun).not.toHaveBeenCalled();
+  });
+
 });

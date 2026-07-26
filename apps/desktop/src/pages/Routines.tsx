@@ -352,6 +352,12 @@ export function Routines() {
 
   const handleSaveSchedule = async () => {
     if (!client || !selectedId) return;
+    // Control-char / blank / overlong ids never sent to update API
+    const safeId = safeEntityId(selectedId);
+    if (!safeId) {
+      setEditError('Routine id contains invalid control characters');
+      return;
+    }
     if (/[\0\r\n]/.test(editSchedule)) {
       setEditError('Schedule is invalid');
       return;
@@ -367,7 +373,7 @@ export function Routines() {
     setEditSaving(true);
     setEditError('');
     try {
-      const res = await client.updateRoutine(selectedId, {
+      const res = await client.updateRoutine(safeId, {
         schedule: editSchedule.trim(),
         timezone: editTimezone.trim() || 'UTC',
       });

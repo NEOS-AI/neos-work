@@ -12,7 +12,7 @@ import {
   MEDIA_TTS_MODELS,
   MEDIA_VOICES,
 } from '../../lib/media-node-options.js';
-import { scrubDisplayText } from '../../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../../lib/format-duration.js';
 import { BlockParamForm } from './BlockParamForm.js';
 import { BlockSelector, defaultsForBlock, safeBlockId } from './BlockSelector.js';
 import { CheckboxField, NumberField, TextAreaField, TextField } from './fields.js';
@@ -663,8 +663,15 @@ function WorkflowWebhookSection() {
   useEffect(() => {
     if (!client || !workflowId) return;
     setSecretError(null);
+    // Control-char / blank / overlong ids never sent to webhook secret API
+    const wfId = safeEntityId(workflowId);
+    if (!wfId) {
+      setSecret(null);
+      setSecretError('Workflow id contains invalid control characters');
+      return;
+    }
     client
-      .getWebhookSecret(workflowId)
+      .getWebhookSecret(wfId)
       .then((res) => {
         if (res.ok && res.data) {
           setSecret(sanitizeWebhookSecret(res.data.secret));
@@ -695,10 +702,18 @@ function WorkflowWebhookSection() {
       });
   }, [client, workflowId]);
 
-  if (!workflowId) return null;
+  const safeWorkflowId = safeEntityId(workflowId);
+  if (!workflowId || !safeWorkflowId) {
+    if (!workflowId) return null;
+    return (
+      <div className="mt-4 space-y-2 rounded-md border p-2" style={{ borderColor: 'var(--border-primary)' }}>
+        <p className="text-xs text-red-400">Workflow id contains invalid control characters</p>
+      </div>
+    );
+  }
 
   const base = serverUrl?.replace(/\/$/, '') || 'http://localhost:3000';
-  const webhookUrl = `${base}/api/webhook/${workflowId}`;
+  const webhookUrl = `${base}/api/webhook/${safeWorkflowId}`;
 
   const flashCopy = (label: string) => {
     setCopyMsg(
@@ -754,9 +769,14 @@ function WorkflowWebhookSection() {
           style={{ color: 'var(--text-muted)' }}
           onClick={async () => {
             if (!client) return;
+            const wfId = safeEntityId(workflowId);
+            if (!wfId) {
+              flashCopy('Workflow id contains invalid control characters');
+              return;
+            }
             setBusy(true);
             try {
-              const res = await client.testWebhookFire(workflowId, { source: 'config-test-fire' });
+              const res = await client.testWebhookFire(wfId, { source: 'config-test-fire' });
               if (res.ok) {
                 flashCopy(`Webhook fired (${res.status})`);
               } else {
@@ -768,7 +788,7 @@ function WorkflowWebhookSection() {
                 flashCopy(err);
               }
               // refresh rate limit remaining
-              const again = await client.getWebhookSecret(workflowId);
+              const again = await client.getWebhookSecret(wfId);
               if (again.ok && again.data?.rateLimit) {
                 setRateLimit({
                   limit: again.data.rateLimit.limit,
@@ -834,9 +854,14 @@ function WorkflowWebhookSection() {
           style={{ color: 'var(--text-muted)' }}
           onClick={async () => {
             if (!client) return;
+            const wfId = safeEntityId(workflowId);
+            if (!wfId) {
+              flashCopy('Workflow id contains invalid control characters');
+              return;
+            }
             setBusy(true);
             try {
-              const res = await client.regenerateWebhookSecret(workflowId);
+              const res = await client.regenerateWebhookSecret(wfId);
               if (res.ok && res.data) {
                 setSecret(sanitizeWebhookSecret(res.data.secret));
                 setSecretError(null);

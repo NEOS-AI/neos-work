@@ -195,6 +195,54 @@ describe('AnthropicAdapter', () => {
     expect((streamMock.mock.calls[2] as [Record<string, unknown>])[0].max_tokens).toBe(4096);
   });
 
+  it('tolerates non-array messages and non-string system content', async () => {
+    streamMock.mockReturnValue(events([]));
+    const adapter = new AnthropicAdapter('sk');
+    // Empty catalog → hard-coded fallback model id
+    vi.spyOn(adapter, 'getModels').mockReturnValue([]);
+
+    for await (const _ of adapter.chat({
+      model: '   ',
+      messages: null as unknown as [],
+    })) {
+      /* drain */
+    }
+    const params = streamMock.mock.calls[0] as [Record<string, unknown>];
+    expect(params[0].model).toBe('claude-sonnet-4-5-20250929');
+    expect(params[0].messages).toEqual([]);
+    expect(params[0].system).toBeUndefined();
+
+    streamMock.mockReturnValue(events([]));
+    for await (const _ of adapter.chat({
+      model: 'claude-haiku-4-5-20251001',
+      messages: [
+        { role: 'system', content: { not: 'string' } as unknown as string },
+        { role: 'user', content: 'hi' },
+      ],
+    })) {
+      /* drain */
+    }
+    const params2 = streamMock.mock.calls[1] as [Record<string, unknown>];
+    // Non-string system content maps to '' → system omitted
+    expect(params2[0].system).toBeUndefined();
+  });
+
+  it('yields scrubbed Unknown error when stream throws control-only Error', async () => {
+    streamMock.mockImplementation(() => {
+      throw new Error('   \n\0');
+    });
+    const adapter = new AnthropicAdapter('sk');
+    const chunks: Array<{ type: string; content?: string }> = [];
+    for await (const c of adapter.chat({
+      model: 'claude-haiku-4-5-20251001',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      chunks.push(c);
+    }
+    expect(chunks[0]?.type).toBe('error');
+    expect(chunks[0]?.content).toBe('Unknown error');
+  });
+
   it('chat wraps invalid tool JSON as _raw fallback', async () => {
     streamMock.mockReturnValue(
       events([

@@ -501,4 +501,53 @@ describe('OpenAIAdapter', () => {
     }
     expect(chunks.some((c) => c.type === 'text' && c.content === 'hi')).toBe(true);
   });
+
+  it('synthesizes tool call ids/names when SSE omits them', async () => {
+    const sse = [
+      // First delta creates pending entry without id/name → fallback call_${idx} / ''
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":3,"function":{"arguments":"{\\"a\\":"}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":3,"function":{"arguments":"1}"}}]}}]}',
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sse));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: stream }));
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    const chunks: Array<Record<string, unknown>> = [];
+    for await (const c of adapter.chat({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'run' }],
+    })) {
+      chunks.push(c as Record<string, unknown>);
+    }
+    const toolUse = chunks.find((c) => c.type === 'tool_use');
+    expect(toolUse).toBeDefined();
+    expect(toolUse?.toolUseId).toBe('call_3');
+    expect(toolUse?.toolName).toBe('');
+    expect(toolUse?.toolInput).toEqual({ a: 1 });
+  });
+
+  it('falls back to gpt-4o when model catalog is empty', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: null });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    vi.spyOn(adapter, 'getModels').mockReturnValue([]);
+    for await (const _ of adapter.chat({
+      model: '',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      /* drain */
+    }
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}')) as {
+      model?: string;
+    };
+    expect(body.model).toBe('gpt-4o');
+  });
 });

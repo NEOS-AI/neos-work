@@ -141,9 +141,14 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           title="Clear completed runs"
           onClick={async () => {
             if (!client) return;
+            const wfId = safeEntityId(props.workflowId);
+            if (!wfId) {
+              window.alert('Workflow id contains invalid control characters');
+              return;
+            }
             if (!window.confirm('Delete all completed runs for this workflow?')) return;
             try {
-              const res = await client.clearWorkflowRuns(props.workflowId, 'completed');
+              const res = await client.clearWorkflowRuns(wfId, 'completed');
               if (res.ok) {
                 setRuns((prev) => prev.filter((r) => r.status !== 'completed'));
                 setSelectedRunId(null);
@@ -172,9 +177,14 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           title="Clear failed runs"
           onClick={async () => {
             if (!client) return;
+            const wfId = safeEntityId(props.workflowId);
+            if (!wfId) {
+              window.alert('Workflow id contains invalid control characters');
+              return;
+            }
             if (!window.confirm('Delete all failed runs for this workflow?')) return;
             try {
-              const res = await client.clearWorkflowRuns(props.workflowId, 'failed');
+              const res = await client.clearWorkflowRuns(wfId, 'failed');
               if (res.ok) {
                 setRuns((prev) => prev.filter((r) => r.status !== 'failed'));
                 setSelectedRunId(null);
@@ -203,9 +213,14 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           title="Clear cancelled runs"
           onClick={async () => {
             if (!client) return;
+            const wfId = safeEntityId(props.workflowId);
+            if (!wfId) {
+              window.alert('Workflow id contains invalid control characters');
+              return;
+            }
             if (!window.confirm('Delete all cancelled runs for this workflow?')) return;
             try {
-              const res = await client.clearWorkflowRuns(props.workflowId, 'cancelled');
+              const res = await client.clearWorkflowRuns(wfId, 'cancelled');
               if (res.ok) {
                 setRuns((prev) => prev.filter((r) => r.status !== 'cancelled'));
                 setSelectedRunId(null);
@@ -281,8 +296,15 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                     onClick={async (e) => {
                       e.stopPropagation();
                       if (!client) return;
+                      // Control-char / blank / overlong ids never sent to export API
+                      const wfId = safeEntityId(props.workflowId);
+                      const runEntityId = safeEntityId(run.id);
+                      if (!wfId || !runEntityId) {
+                        window.alert('Run id contains invalid control characters');
+                        return;
+                      }
                       try {
-                        const res = await client.getWorkflowRun(props.workflowId, run.id);
+                        const res = await client.getWorkflowRun(wfId, runEntityId);
                         if (!res.ok || !res.data) {
                           window.alert(
                             scrubDisplayText((res as { error?: string }).error, {

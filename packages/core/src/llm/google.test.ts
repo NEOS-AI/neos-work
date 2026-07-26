@@ -196,6 +196,54 @@ describe('GoogleAdapter', () => {
     expect((req[0].config as { maxOutputTokens: number }).maxOutputTokens).toBe(4096);
   });
 
+  it('tolerates non-array messages, non-string system, empty catalog model', async () => {
+    generateContentStream.mockResolvedValue(streamOf([]));
+    const adapter = new GoogleAdapter('sk');
+    vi.spyOn(adapter, 'getModels').mockReturnValue([]);
+
+    for await (const _ of adapter.chat({
+      model: null as unknown as string,
+      messages: undefined as unknown as [],
+    })) {
+      /* drain */
+    }
+    let req = generateContentStream.mock.calls[0] as [Record<string, unknown>];
+    expect(req[0].model).toBe('gemini-2.0-flash');
+    expect(req[0].contents).toEqual([]);
+
+    generateContentStream.mockResolvedValue(streamOf([]));
+    for await (const _ of adapter.chat({
+      model: 'gemini-2.0-flash',
+      messages: [
+        { role: 'system', content: 42 as unknown as string },
+        { role: 'user', content: { a: 1 } as unknown as string },
+      ],
+    })) {
+      /* drain */
+    }
+    req = generateContentStream.mock.calls[1] as [Record<string, unknown>];
+    const cfg = req[0].config as { systemInstruction?: string };
+    // Non-string system → '' (possibly omitted depending on API build)
+    expect(!cfg.systemInstruction || cfg.systemInstruction === '').toBe(true);
+    const contents = req[0].contents as Array<{ parts: Array<{ text: string }> }>;
+    // Non-string user content JSON.stringified
+    expect(contents[0]!.parts[0]!.text).toContain('a');
+  });
+
+  it('yields scrubbed Unknown error when generateContentStream throws control-only Error', async () => {
+    generateContentStream.mockRejectedValue(new Error('\n\0  '));
+    const adapter = new GoogleAdapter('sk');
+    const chunks: Array<{ type: string; content?: string }> = [];
+    for await (const c of adapter.chat({
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      chunks.push(c);
+    }
+    expect(chunks[0]?.type).toBe('error');
+    expect(chunks[0]?.content).toBe('Unknown error');
+  });
+
   it('chat omits thinking and tools when not requested', async () => {
     generateContentStream.mockResolvedValue(
       streamOf([

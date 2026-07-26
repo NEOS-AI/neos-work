@@ -4,6 +4,7 @@ import { useEngine } from '../../hooks/useEngine.js';
 import type { WorkflowRun } from '../../lib/engine.js';
 import {
   formatDurationMs,
+  safeEntityId,
   scrubDisplayText,
   serializeNodeOutput,
 } from '../../lib/format-duration.js';
@@ -45,7 +46,16 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
     if (!client) return;
     setLoading(true);
     setError('');
-    client.getWorkflowRun(workflowId, runId)
+    // Control-char / blank / overlong ids never sent to get-run API
+    const wfId = safeEntityId(workflowId);
+    const safeRunId = safeEntityId(runId);
+    if (!wfId || !safeRunId) {
+      setRun(null);
+      setError('Run id contains invalid control characters');
+      setLoading(false);
+      return;
+    }
+    client.getWorkflowRun(wfId, safeRunId)
       .then((res) => {
         if (res.ok && res.data) {
           setRun(res.data);
