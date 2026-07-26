@@ -141,14 +141,16 @@ export function Routines() {
 
   useEffect(() => {
     if (!client || !selectedId) return;
-    setRunsError(null);
-    // Control-char / blank / overlong routine ids never sent to list-runs API
+    // Control-char / blank / overlong routine ids never sent to list-runs API.
+    // Fail closed without clearing error first (avoids null↔error render loop when
+    // useEngine returns a new client object each render).
     const safeId = safeEntityId(selectedId);
     if (!safeId) {
-      setRuns([]);
+      setRuns((prev) => (prev.length === 0 ? prev : []));
       setRunsError('Routine id contains invalid control characters');
       return;
     }
+    setRunsError(null);
     client
       .listRoutineRuns(safeId)
       .then((res) => {

@@ -735,13 +735,11 @@ describe('Routines page', () => {
     fireEvent.click(screen.getByText('Evil Routine'));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument());
 
-    // Selecting dirty id must not call listRoutineRuns
-    await waitFor(() => {
-      expect(
-        screen.getByText('Routine id contains invalid control characters'),
-      ).toBeInTheDocument();
-    });
+    // Selecting dirty id must not call listRoutineRuns (load gate)
     expect(listRoutineRuns).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('Routine id contains invalid control characters'),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(confirmSpy).not.toHaveBeenCalled();

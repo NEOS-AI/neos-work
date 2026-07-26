@@ -344,16 +344,35 @@ export class EngineClient {
   }
 
   /**
-   * Sanitize a path-segment id for URL construction.
-   * Rejects control-char / blank / overlong / traversal; encodes for path safety.
-   * Returns empty string when invalid (callers fail closed).
+   * Sanitize an entity id for API use (body or path).
+   * Rejects control-char / blank / overlong / path separators / `.` / `..`.
+   * Returns the trimmed raw string when valid (callers fail closed on '').
    */
-  private pathSegment(raw: unknown, maxChars = 200): string {
+  private sanitizeId(raw: unknown, maxChars = 200): string {
     if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
     const s = raw.trim();
     if (!s || s.length > maxChars) return '';
-    // Path separators / relative segments never allowed in ids
-    if (s.includes('/') || s.includes('\\') || s.includes('..')) return '';
+    // Path separators and bare relative segments never allowed in ids
+    if (s.includes('/') || s.includes('\\') || s === '.' || s === '..') return '';
+    return s;
+  }
+
+  /**
+   * Sanitize + encode a path-segment id for URL construction.
+   * Returns empty string when invalid (callers fail closed).
+   */
+  private pathSegment(raw: unknown, maxChars = 200): string {
+    const s = this.sanitizeId(raw, maxChars);
+    return s ? encodeURIComponent(s) : '';
+  }
+
+  /**
+   * Settings key path segment (align with server paramSettingKey).
+   * Alphanumeric / underscore / hyphen / dot; max 100 chars.
+   */
+  private settingKeySegment(raw: unknown): string {
+    const s = this.sanitizeId(raw, 100);
+    if (!s || !/^[a-zA-Z0-9_.-]+$/.test(s)) return '';
     return encodeURIComponent(s);
   }
 
@@ -370,6 +389,20 @@ export class EngineClient {
     if (name.length > max) return '';
     if (!/^[a-zA-Z0-9_\-.]+$/.test(name)) return '';
     return encodeURIComponent(name);
+  }
+
+  /** Authorization-only headers for binary media fetch/delete (control-char safe). */
+  private mediaAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (
+      this.authToken
+      && typeof this.authToken === 'string'
+      && !/[\0\r\n]/.test(this.authToken)
+      && this.authToken.trim()
+    ) {
+      headers.Authorization = `Bearer ${this.authToken}`;
+    }
+    return headers;
   }
 
   private invalidIdResponse<T = unknown>(label = 'id'): ApiResponse<T> {
@@ -414,10 +447,12 @@ export class EngineClient {
     model?: string;
     thinkingMode?: string;
   }): Promise<ApiResponse<SessionData>> {
+    const workspaceId = this.sanitizeId(params.workspaceId);
+    if (!workspaceId) return this.invalidIdResponse('workspace id');
     const res = await fetch(`${this.baseUrl}/api/session`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify(params),
+      body: JSON.stringify({ ...params, workspaceId }),
     });
     return readApiResponse(res);
   }
@@ -638,7 +673,7 @@ export class EngineClient {
   }
 
   async getSetting(key: string): Promise<ApiResponse<{ key: string; value: string }>> {
-    const seg = this.pathSegment(key);
+    const seg = this.settingKeySegment(key);
     if (!seg) return this.invalidIdResponse('setting key');
     const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
       headers: this.getHeaders(),
@@ -647,7 +682,7 @@ export class EngineClient {
   }
 
   async saveSetting(key: string, value: string): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(key);
+    const seg = this.settingKeySegment(key);
     if (!seg) return this.invalidIdResponse('setting key');
     const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
       method: 'PUT',
@@ -715,10 +750,8 @@ export class EngineClient {
 
   async upgradeSkillToPlugin(skillId: string): Promise<ApiResponse<Plugin>> {
     // Validate skill id before body send (control-char / blank / traversal fail closed)
-    const seg = this.pathSegment(skillId);
-    if (!seg) return this.invalidIdResponse('skill id');
-    // Decode for JSON body (pathSegment returns encodeURIComponent form)
-    const safeId = decodeURIComponent(seg);
+    const safeId = this.sanitizeId(skillId);
+    if (!safeId) return this.invalidIdResponse('skill id');
     const res = await fetch(`${this.baseUrl}/api/plugins/upgrade-from-skill`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
@@ -913,10 +946,15 @@ export class EngineClient {
       const res = await fetch(`${this.baseUrl}/api/artifacts?runId=${seg}`, { headers: this.getHeaders() });
       return readApiResponse(res);
     }
-    const seg = this.pathSegment(params.workflowId);
-    if (!seg) return this.invalidIdResponse('workflow id');
-    const res = await fetch(`${this.baseUrl}/api/artifacts?workflowId=${seg}`, { headers: this.getHeaders() });
-    return readApiResponse(res);
+    if (params.workflowId) {
+      const seg = this.pathSegment(params.workflowId);
+      if (!seg) return this.invalidIdResponse('workflow id');
+      const res = await fetch(`${this.baseUrl}/api/artifacts?workflowId=${seg}`, {
+        headers: this.getHeaders(),
+      });
+      return readApiResponse(res);
+    }
+    return this.invalidIdResponse('workflow id');
   }
 
   async getArtifact(id: string): Promise<ApiResponse<Artifact>> {
@@ -969,7 +1007,7 @@ export class EngineClient {
     if (!seg) return this.invalidIdResponse('media filename');
     const res = await fetch(`${this.baseUrl}/api/media/file/${seg}`, {
       method: 'DELETE',
-      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+      headers: this.mediaAuthHeaders(),
     });
     return readApiResponse(res);
   }
@@ -996,9 +1034,8 @@ export class EngineClient {
     enabled?: boolean;
     inputs?: Record<string, unknown>;
   }): Promise<ApiResponse<Routine>> {
-    const wfSeg = this.pathSegment(input.workflowId);
-    if (!wfSeg) return this.invalidIdResponse('workflow id');
-    const safeWorkflowId = decodeURIComponent(wfSeg);
+    const safeWorkflowId = this.sanitizeId(input.workflowId);
+    if (!safeWorkflowId) return this.invalidIdResponse('workflow id');
     const res = await fetch(`${this.baseUrl}/api/routines`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
@@ -1052,7 +1089,7 @@ export class EngineClient {
     const seg = this.mediaFilenameSegment(filename);
     if (!seg) throw new Error('Invalid media filename');
     const res = await fetch(`${this.baseUrl}/api/media/file/${seg}`, {
-      headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
+      headers: this.mediaAuthHeaders(),
     });
     if (!res.ok) throw new Error(`Failed to load media (${res.status})`);
     return res.blob();
@@ -1146,7 +1183,10 @@ export class EngineClient {
     const runIdPromise = (async () => {
       try {
         const seg = this.pathSegment(id);
-        if (!seg) return null;
+        if (!seg) {
+          onEvent({ type: 'error', error: 'Invalid plugin id' });
+          return null;
+        }
         const res = await fetch(`${this.baseUrl}/api/plugins/${seg}/run`, {
           method: 'POST',
           headers: this.getHeaders(),
@@ -1631,10 +1671,9 @@ export class EngineClient {
   async listDeployments(workflowId?: string, limit = 100): Promise<ApiResponse<Deployment[]>> {
     const params = new URLSearchParams();
     if (workflowId) {
-      const seg = this.pathSegment(workflowId);
-      if (!seg) return this.invalidIdResponse('workflow id');
-      // URLSearchParams encodes; pass decoded form from pathSegment via decodeURIComponent
-      params.set('workflowId', decodeURIComponent(seg));
+      const safeId = this.sanitizeId(workflowId);
+      if (!safeId) return this.invalidIdResponse('workflow id');
+      params.set('workflowId', safeId);
     }
     if (limit) params.set('limit', String(limit));
     const qs = params.toString();

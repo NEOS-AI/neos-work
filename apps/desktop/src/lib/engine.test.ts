@@ -97,6 +97,15 @@ describe('EngineClient', () => {
       ok: false,
       error: 'Invalid setting key',
     });
+    // Server setting keys: alnum / _ . - only; max 100
+    await expect(client.getSetting('has space')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid setting key',
+    });
+    await expect(client.saveSetting('x'.repeat(101), 'v')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid setting key',
+    });
     await expect(client.upgradeSkillToPlugin(`sk${'\0'}1`)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid skill id',
@@ -110,6 +119,10 @@ describe('EngineClient', () => {
     ).resolves.toMatchObject({
       ok: false,
       error: 'Invalid workflow id',
+    });
+    await expect(client.createSession({ workspaceId: `ws${'\n'}1` })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workspace id',
     });
     await expect(client.deleteMediaFile(`img${'\n'}.png`)).resolves.toMatchObject({
       ok: false,
@@ -140,6 +153,8 @@ describe('EngineClient', () => {
       schedule: '0 9 * * *',
     });
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string).workflowId).toBe('wf-1');
+    await client.createSession({ workspaceId: 'ws-1', title: 'T' });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string).workspaceId).toBe('ws-1');
     expect(client.mediaFileUrl('img_1.png')).toBe('http://engine.test/api/media/file/img_1.png');
   });
 
@@ -1092,6 +1107,14 @@ describe('EngineClient', () => {
     fetchMock.mockResolvedValueOnce(new Response('nope', { status: 500 }));
     const failed = client.runPlugin('p1', {}, () => {});
     await expect(failed.runIdPromise).resolves.toBeNull();
+
+    // Invalid plugin id fails closed without fetch; surfaces error event
+    fetchMock.mockClear();
+    const badIdEvents: unknown[] = [];
+    const badIdRun = client.runPlugin(`p${'\n'}x`, {}, (e) => badIdEvents.push(e));
+    await expect(badIdRun.runIdPromise).resolves.toBeNull();
+    expect(badIdEvents).toEqual([{ type: 'error', error: 'Invalid plugin id' }]);
+    expect(fetchMock).not.toHaveBeenCalled();
 
     // malformed SSE chunks ignored; still extracts runId from valid event
     const badStream = new ReadableStream<Uint8Array>({
