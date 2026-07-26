@@ -315,13 +315,19 @@ export function Routines() {
 
   const handleCrystallize = async (run: RoutineRun) => {
     if (!client || !selectedId) return;
+    const routineId = safeEntityId(selectedId);
+    const runId = safeEntityId(run.id);
+    if (!routineId || !runId) {
+      window.alert('Routine or run id contains invalid control characters');
+      return;
+    }
     if (run.status !== 'completed') {
       window.alert('Only completed runs can be crystallized into a skill.');
       return;
     }
     if (!window.confirm('Save this successful run as a skill candidate?')) return;
     try {
-      const res = await client.crystallizeRoutineRun(selectedId, run.id);
+      const res = await client.crystallizeRoutineRun(routineId, runId);
       if (res.ok && res.data) {
         const name =
           scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'skill';
