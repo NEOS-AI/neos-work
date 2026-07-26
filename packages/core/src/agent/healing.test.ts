@@ -354,10 +354,18 @@ describe('ReflectionStrategy', () => {
         status: 'completed',
         // no error field → history branch without "(에러: …)"
       },
+      {
+        id: 'bare-hist',
+        index: 1,
+        description: undefined as unknown as string,
+        type: 'tool_use',
+        status: 'error',
+        error: 'hist-err',
+      },
     ];
     const noDesc: AgentStep = {
       id: 'nd',
-      index: 1,
+      index: 2,
       description: undefined as unknown as string,
       type: 'plan',
       status: 'error',
@@ -370,6 +378,7 @@ describe('ReflectionStrategy', () => {
     expect(captured).toContain('목표:');
     expect(captured).toContain('[completed] Completed fine');
     expect(captured).not.toMatch(/Completed fine \(에러:/);
+    expect(captured).toContain('hist-err');
   });
 
   it('drops revisedInput when JSON.stringify throws (non-serializable payload)', async () => {

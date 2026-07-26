@@ -26,6 +26,11 @@ describe('createShellTool', () => {
   it('coerces non-string command and cwd values', async () => {
     await mkdir(join(root, 'sub'), { recursive: true });
     const tool = createShellTool(root);
+    // nullish command → String(command ?? '') → blank → required error
+    const nullCmd = await tool.execute({ command: null as unknown as string });
+    expect(nullCmd.success).toBe(false);
+    expect(nullCmd.error).toMatch(/command is required/i);
+
     // Non-string command → String(command)
     const coerced = await tool.execute({ command: 12345 as unknown as string });
     // "12345" is not a shell-friendly command — expect structured failure or non-zero
@@ -43,6 +48,15 @@ describe('createShellTool', () => {
     });
     expect(withCwd.success).toBe(true);
     expect((withCwd.output as { stdout: string }).stdout).toContain('sub');
+
+    // nullish cwd is still truthy-check on input.cwd — only entered when provided
+    // Provide empty-object-ish that stringifies empty after String(null)
+    const nullCwd = await tool.execute({
+      command: 'pwd',
+      cwd: null as unknown as string,
+    });
+    // String(null) = 'null' path or early return — structured either way
+    expect(typeof nullCwd.success).toBe('boolean');
   });
 
   it('blocks forbidden commands', async () => {

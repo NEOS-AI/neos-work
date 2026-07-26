@@ -1084,6 +1084,7 @@ function McpServersSection() {
       || /[\0\r\n]/.test(clientId)
       || (scope && /[\0\r\n]/.test(scope))
     ) {
+      window.alert('OAuth fields contain invalid control characters');
       return;
     }
     const authEp = authorizationEndpoint.trim();

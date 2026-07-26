@@ -224,15 +224,6 @@ describe('memory tools', () => {
   it('coerces nullish non-string fields; empty tags → undefined; scrub empty errors', async () => {
     const cb = mockCallbacks();
     const remember = createRememberTool(cb);
-    // nullish key/content coerced via String(… ?? '')
-    const saved = await remember.execute({
-      key: null as unknown as string,
-      content: undefined as unknown as string,
-      tags: [null, undefined, '  keep  '] as unknown as string[],
-    });
-    // empty key after String(null) → 'null' actually... String(null) is 'null'
-    // Use empty-after-filter tags + whitespace content path separately
-    expect(typeof saved.success).toBe('boolean');
 
     // Tags that all filter out → undefined (not empty array)
     await remember.execute({
@@ -242,14 +233,35 @@ describe('memory tools', () => {
     });
     expect(cb.save).toHaveBeenCalledWith('k1', 'v1', undefined);
 
-    const recall = createRecallTool(cb);
-    await recall.execute({
-      query: 99 as unknown as string,
-      tags: undefined,
+    // nullish key/content (non-string) → String(… ?? '') → blank → validation error
+    const nullish = await remember.execute({
+      key: null as unknown as string,
+      content: undefined as unknown as string,
     });
+    expect(nullish.success).toBe(false);
+    expect(nullish.error).toMatch(/Key must be between|Content must be between/i);
+
+    // Non-null non-string still coerces
+    await remember.execute({
+      key: 42 as unknown as string,
+      content: true as unknown as string,
+    });
+    expect(cb.save).toHaveBeenCalledWith('42', 'true', undefined);
+
+    const recall = createRecallTool(cb);
+    // nullish query hits String(input.query ?? '') → blank
+    const blankQ = await recall.execute({ query: null as unknown as string });
+    expect(blankQ.success).toBe(false);
+    expect(blankQ.error).toMatch(/query is required/i);
+
+    await recall.execute({ query: 99 as unknown as string });
     expect(cb.search).toHaveBeenCalledWith('99', undefined, 5);
 
     const forget = createForgetTool(cb);
+    // nullish key for forget → String(undefined ?? '') → blank
+    const blankKey = await forget.execute({ key: undefined as unknown as string });
+    expect(blankKey.success).toBe(false);
+    expect(blankKey.error).toMatch(/key is required/i);
     await forget.execute({ key: 7 as unknown as string });
     expect(cb.remove).toHaveBeenCalledWith('7');
 

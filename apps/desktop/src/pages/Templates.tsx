@@ -83,7 +83,10 @@ export function Templates() {
   const handleUse = async (tpl: TemplateWorkflow) => {
     if (!client || creating) return;
     // Control-char template names never submitted (align with workflow create)
-    if (typeof tpl.name !== 'string' || /[\0\r\n]/.test(tpl.name)) return;
+    if (typeof tpl.name !== 'string' || /[\0\r\n]/.test(tpl.name)) {
+      window.alert('Template name contains invalid control characters');
+      return;
+    }
     const name = tpl.name.trim();
     if (!name) return;
     let description: string | undefined;

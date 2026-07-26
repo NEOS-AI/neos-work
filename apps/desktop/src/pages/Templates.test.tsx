@@ -280,10 +280,13 @@ describe('Templates page', () => {
     // description collapsed
     expect(screen.getByText(/desc line/)).toBeInTheDocument();
 
-    // Control-char name template: Use is a no-op
+    // Control-char name template: Use alerts and does not call API
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     const useButtons = screen.getAllByRole('button', { name: 'Use Template' });
     await user.click(useButtons[0]!);
     expect(createWorkflow).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Template name contains invalid control characters');
+    alertSpy.mockRestore();
 
     createWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-safe' } });
     await user.click(useButtons[1]!);
