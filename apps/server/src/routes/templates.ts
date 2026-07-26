@@ -67,6 +67,32 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
       { id: 'e5', source: 'analyst', target: 'output' },
     ],
   },
+  {
+    name: 'Live Chart Analysis (TradingView)',
+    description:
+      'TradingView MCP + 차트 분석 하네스로 라이브 차트를 읽고 구조·레벨·바이어스 JSON 리포트를 생성합니다. ' +
+      'Settings → MCP에서 TradingView 프리셋을 연결하고 Desktop을 디버그 포트로 실행한 뒤 Sessions에서 사용하세요.',
+    domain: 'finance',
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+      {
+        id: 'chart',
+        type: 'agent_finance',
+        label: 'Chart Analyst (TV)',
+        position: { x: 360, y: 200 },
+        config: {
+          harnessId: 'finance_chart_analyst',
+          systemPrompt:
+            'tv_health_check 후 현재 차트의 심볼·가격·주요 레벨·지표를 읽고 JSON 분석 리포트를 작성하세요.',
+        },
+      },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 640, y: 200 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'chart' },
+      { id: 'e2', source: 'chart', target: 'output' },
+    ],
+  },
 
   // ── Coding templates ──────────────────────────────────
   {

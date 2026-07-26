@@ -183,6 +183,19 @@ describe('WorkflowEditor page', () => {
     expect(getWorkflow).toHaveBeenCalledWith('wf-1');
   });
 
+  it('shows scrubbed blocks load error badge when listBlocks fails', async () => {
+    listBlocks.mockResolvedValue({
+      ok: false,
+      error: `blocks${'\n'}down${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText('Editor Flow')).toBeInTheDocument();
+      expect(screen.getByText('blocks down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('scrubs control-char canvas node labels', () => {
     const { container, unmount } = render(
       <WorkflowNodeComponent

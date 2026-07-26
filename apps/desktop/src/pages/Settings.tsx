@@ -20,12 +20,24 @@ export function Settings() {
   // Load saved defaults from server
   useEffect(() => {
     if (!client) return;
-    client.getSettings().then((res) => {
-      if (res.ok && res.data) {
-        if (res.data['defaults.provider']) setDefaultProvider(res.data['defaults.provider']);
-        if (res.data['defaults.model']) setDefaultModel(res.data['defaults.model']);
-      }
-    });
+    client
+      .getSettings()
+      .then((res) => {
+        if (!res.ok || !res.data) return;
+        const provider = res.data['defaults.provider'];
+        if (typeof provider === 'string' && !/[\0\r\n]/.test(provider)) {
+          const p = provider.trim();
+          if (p) setDefaultProvider(p);
+        }
+        const model = res.data['defaults.model'];
+        if (typeof model === 'string' && !/[\0\r\n]/.test(model)) {
+          const m = model.trim();
+          if (m) setDefaultModel(m);
+        }
+      })
+      .catch(() => {
+        // Keep built-in defaults when settings are unavailable
+      });
   }, [client]);
 
   const handleSaveDefault = async (key: string, value: string) => {

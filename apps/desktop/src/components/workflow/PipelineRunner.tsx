@@ -64,6 +64,11 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
 
   const handleStart = useCallback(() => {
     if (!client || run) return;
+    // Control-char / empty plugin id → fail closed before creating run UI
+    if (typeof plugin.id !== 'string' || /[\0\r\n]/.test(plugin.id)) return;
+    const pluginId = plugin.id.trim();
+    if (!pluginId || pluginId.length > 100) return;
+
     const newRun: RunState = { runId: null, stages: [], waiting: null, completed: false, failed: null };
     setRun(newRun);
 
@@ -79,11 +84,6 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
       trimmedInputs[k] =
         typeof value === 'string' ? value.trim() : String(value ?? '').trim();
     }
-
-    // Control-char plugin id → no-op (check before trim)
-    if (typeof plugin.id !== 'string' || /[\0\r\n]/.test(plugin.id)) return;
-    const pluginId = plugin.id.trim();
-    if (!pluginId || pluginId.length > 100) return;
 
     const { stop, runIdPromise } = client.runPlugin(pluginId, trimmedInputs, (event: unknown) => {
       const e = event as Record<string, unknown>;

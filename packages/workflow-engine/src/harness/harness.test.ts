@@ -176,7 +176,7 @@ describe('built-in coding and finance harness catalogs', () => {
   });
 
   it('includes expected finance harness ids with output schemas', () => {
-    const expectedIds = ['finance_analyst', 'finance_risk'] as const;
+    const expectedIds = ['finance_analyst', 'finance_risk', 'finance_chart_analyst'] as const;
     const finance = listHarnesses('finance');
     const ids = finance.map((h) => h.id);
     expect(ids).toEqual(expect.arrayContaining([...expectedIds]));
@@ -206,13 +206,22 @@ describe('built-in coding and finance harness catalogs', () => {
   });
 
   it('exports finance harness catalog modules with schemas and constraints', () => {
-    expect(FINANCE_HARNESSES).toHaveLength(2);
-    expect(FINANCE_HARNESSES.map((h) => h.id)).toEqual(['finance_analyst', 'finance_risk']);
+    expect(FINANCE_HARNESSES).toHaveLength(3);
+    expect(FINANCE_HARNESSES.map((h) => h.id)).toEqual([
+      'finance_analyst',
+      'finance_risk',
+      'finance_chart_analyst',
+    ]);
     expect(FINANCE_HARNESSES.every((h) => h.domain === 'finance' && h.isBuiltIn)).toBe(true);
     expect(FINANCE_HARNESSES[0]!.constraints?.maxSteps).toBe(10);
     expect(FINANCE_HARNESSES[1]!.constraints?.maxSteps).toBe(12);
     expect(FINANCE_HARNESSES[1]!.outputSchema?.required).toEqual(
       expect.arrayContaining(['riskLevel', 'factors', 'mitigations', 'recommendation']),
+    );
+    expect(FINANCE_HARNESSES[2]!.constraints?.maxSteps).toBe(16);
+    expect(FINANCE_HARNESSES[2]!.systemPrompt).toMatch(/TradingView|tv_health_check/i);
+    expect(FINANCE_HARNESSES[2]!.outputSchema?.required).toEqual(
+      expect.arrayContaining(['symbol', 'structure', 'bias', 'confidence', 'riskNotes']),
     );
   });
 

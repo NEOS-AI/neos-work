@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunLogPanel, filterRunLogEvents, linkifyText, safeLogHref } from './RunLogPanel.js';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
@@ -216,6 +216,22 @@ describe('RunLogPanel copy', () => {
     await user.click(screen.getByText(/✓ Node/));
     await user.click(screen.getByRole('button', { name: /copy/i }));
     expect(writeText).toHaveBeenCalledWith('hello-out');
+    await waitFor(() => expect(screen.getByRole('button', { name: /copied/i })).toBeInTheDocument());
+  });
+
+  it('shows Copy failed when clipboard write rejects', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    const events: WorkflowSSEEvent[] = [
+      { type: 'node.completed', nodeId: 'n1', output: 'hello-out', durationMs: 10 },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{ n1: 'Node' }} />);
+    await user.click(screen.getByText(/✓ Node/));
+    await user.click(screen.getByRole('button', { name: /^copy$/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /copy failed/i })).toBeInTheDocument());
   });
 });
 

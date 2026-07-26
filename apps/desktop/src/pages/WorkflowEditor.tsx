@@ -135,6 +135,7 @@ export function WorkflowEditor() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTabState] = useState<RightPanelTab>(() => loadEditorRightPanelTab());
   const [allBlocks, setAllBlocks] = useState<WorkflowBlock[]>([]);
+  const [blocksLoadError, setBlocksLoadError] = useState<string | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [revisionPanelOpen, setRevisionPanelOpen] = useState(false);
@@ -225,10 +226,34 @@ export function WorkflowEditor() {
   useEffect(() => {
     let cancelled = false;
     if (!client) return;
+    setBlocksLoadError(null);
 
-    client.listBlocks().then((res) => {
-      if (!cancelled && res.ok && res.data) setAllBlocks(res.data);
-    }).catch(() => {});
+    client
+      .listBlocks()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data) {
+          setAllBlocks(res.data);
+          setBlocksLoadError(null);
+        } else {
+          setAllBlocks([]);
+          setBlocksLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load blocks for validation',
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setAllBlocks([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load blocks for validation';
+        setBlocksLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load blocks for validation',
+        );
+      });
 
     return () => {
       cancelled = true;
@@ -621,6 +646,16 @@ export function WorkflowEditor() {
           )}
         </span>
         <div className="flex-1" />
+        {blocksLoadError && (
+          <span
+            className="max-w-[12rem] truncate rounded-lg px-2.5 py-1.5 text-[10px] font-medium text-amber-300"
+            style={{ backgroundColor: '#78350f40' }}
+            title={blocksLoadError}
+          >
+            {scrubDisplayText(blocksLoadError, { collapseLines: true, maxChars: 80 })
+              || 'Blocks unavailable'}
+          </span>
+        )}
         {validationSummary.total > 0 && (
           <button
             type="button"

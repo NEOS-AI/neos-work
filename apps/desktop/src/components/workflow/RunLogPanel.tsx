@@ -118,11 +118,26 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
   const { t } = useTranslation('common');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [logFilter, setLogFilter] = useState<RunLogFilter>(() => loadRunLogFilter());
+  /** `${idx}:ok` | `${idx}:fail` for copy button feedback */
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const handleLogFilter = (next: RunLogFilter) => {
     setLogFilter(next);
     saveRunLogFilter(next);
+  };
+
+  const copyLogText = async (idx: number, text: string) => {
+    try {
+      const write = navigator.clipboard?.writeText;
+      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+      await write.call(navigator.clipboard, text);
+      setCopyStatus(`${idx}:ok`);
+      setTimeout(() => setCopyStatus((cur) => (cur === `${idx}:ok` ? null : cur)), 1500);
+    } catch {
+      setCopyStatus(`${idx}:fail`);
+      setTimeout(() => setCopyStatus((cur) => (cur === `${idx}:fail` ? null : cur)), 2000);
+    }
   };
 
   const visibleEvents = useMemo(
@@ -259,10 +274,14 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                     style={{ color: 'var(--text-muted)' }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      void navigator.clipboard?.writeText(streamText);
+                      void copyLogText(i, streamText);
                     }}
                   >
-                    Copy
+                    {copyStatus === `${i}:ok`
+                      ? 'Copied'
+                      : copyStatus === `${i}:fail`
+                        ? 'Copy failed'
+                        : 'Copy'}
                   </button>
                 </div>
                 <pre
@@ -282,12 +301,17 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
                     style={{ color: 'var(--text-muted)' }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      void navigator.clipboard?.writeText(
+                      void copyLogText(
+                        i,
                         serializeNodeOutput((ev as { output: unknown }).output),
                       );
                     }}
                   >
-                    Copy
+                    {copyStatus === `${i}:ok`
+                      ? 'Copied'
+                      : copyStatus === `${i}:fail`
+                        ? 'Copy failed'
+                        : 'Copy'}
                   </button>
                 </div>
                 <pre

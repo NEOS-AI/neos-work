@@ -161,6 +161,23 @@ describe('Settings page', () => {
     });
   });
 
+  it('ignores control-char defaults from getSettings', async () => {
+    getSettings.mockResolvedValue({
+      ok: true,
+      data: {
+        'defaults.provider': `google${'\0'}`,
+        'defaults.model': `gemini${'\n'}bad`,
+      },
+    });
+    render(<Settings />);
+    await waitFor(() => expect(getSettings).toHaveBeenCalled());
+    // Built-in defaults remain (Anthropic / default model), not hostile strings
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Anthropic')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('changes theme and language', async () => {
     render(<Settings />);
     fireEvent.click(screen.getByRole('button', { name: 'settings:appearance.light' }));

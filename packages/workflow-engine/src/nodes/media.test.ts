@@ -593,6 +593,42 @@ describe('MediaNode', () => {
     expect(result.error).toBe('Audio generation failed: 502');
   });
 
+  it('defaults whitespace-only voice/model and treats non-number status as 0', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 'oops' as unknown as number,
+      text: async () => 'bad',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await MediaNode.execute(
+      ctx({
+        config: {
+          mediaType: 'audio',
+          text: 'hello world',
+          voice: '   ',
+          model: '   ',
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/Audio generation failed: 0/);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.voice).toBe('alloy');
+    expect(body.model).toBe('tts-1');
+  });
+
+  it('falls back when audio fetch throws a control-only Error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new Error('\n\r\0')),
+    );
+    const result = await MediaNode.execute(
+      ctx({ config: { mediaType: 'audio', text: 'hello world' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Audio generation failed');
+  });
+
   it('includes audio HTTP error body detail when present', async () => {
     vi.stubGlobal(
       'fetch',

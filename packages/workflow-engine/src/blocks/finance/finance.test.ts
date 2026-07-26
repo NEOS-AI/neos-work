@@ -326,6 +326,15 @@ describe('macd', () => {
     expect(out.current == null).toBe(true);
     expect(out.histogram).toBeNull();
   });
+
+  it('falls back to Operation failed when MACD chart error scrubs empty', async () => {
+    getStockChart.mockRejectedValue(new Error('\0\r\n'));
+    const result = await exec().execute(
+      ctx({ symbol: '005930', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Operation failed');
+  });
 });
 
 describe('portfolio_summary', () => {

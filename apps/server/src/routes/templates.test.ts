@@ -138,6 +138,16 @@ describe('workflow TEMPLATES', () => {
     const portfolio = TEMPLATES.find((t) => t.name === 'Portfolio Risk Report');
     expect(portfolio?.domain).toBe('finance');
 
+    const liveChart = TEMPLATES.find((t) => t.name === 'Live Chart Analysis (TradingView)');
+    expect(liveChart?.domain).toBe('finance');
+    expect(
+      liveChart?.nodes.some(
+        (n) =>
+          n.type === 'agent_finance'
+          && (n.config as { harnessId?: string }).harnessId === 'finance_chart_analyst',
+      ),
+    ).toBe(true);
+
     const webResearch = TEMPLATES.find((t) => t.name === 'Web Research + Slack');
     expect(webResearch?.domain).toBe('general');
     expect(webResearch?.nodes.some((n) => n.type === 'web_search' || n.type === 'slack_message')).toBe(true);
