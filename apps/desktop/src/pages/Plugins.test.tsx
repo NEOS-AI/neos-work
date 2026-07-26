@@ -166,6 +166,41 @@ describe('Plugins page', () => {
     expect(screen.queryByText(/No plugins found/)).not.toBeInTheDocument();
   });
 
+  it('rejects Run when plugin id has control chars or is overlong', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    listPlugins.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `evil${'\0'}id`,
+          name: 'Dirty Id Plugin',
+          version: '1.0.0',
+          description: 'x',
+          pipeline: [{ id: 'a', name: 'A', kind: 'discovery' }],
+        },
+        {
+          id: 'x'.repeat(101),
+          name: 'Overlong Id Plugin',
+          version: '1.0.0',
+          description: 'y',
+          pipeline: [{ id: 'a', name: 'A', kind: 'discovery' }],
+        },
+      ],
+    });
+    render(<Plugins />);
+    await waitFor(() => expect(screen.getByText('Dirty Id Plugin')).toBeInTheDocument());
+
+    await user.click(screen.getAllByRole('button', { name: 'Run' })[0]!);
+    expect(window.alert).toHaveBeenCalledWith('Plugin id contains invalid control characters');
+    expect(screen.queryByTestId('pipeline-runner')).not.toBeInTheDocument();
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    await user.click(screen.getAllByRole('button', { name: 'Run' })[1]!);
+    expect(window.alert).toHaveBeenCalledWith('Plugin id is missing or too long');
+    expect(screen.queryByTestId('pipeline-runner')).not.toBeInTheDocument();
+  });
+
   it('scrubs control chars from plugin name, description, and version', async () => {
     listPlugins.mockResolvedValue({
       ok: true,

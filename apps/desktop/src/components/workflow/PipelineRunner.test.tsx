@@ -390,6 +390,46 @@ describe('PipelineRunner', () => {
     });
   });
 
+  it('surfaces resume failure when plugin id becomes invalid mid-wait', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-mid') };
+    });
+
+    const { rerender } = render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-mid' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: 'confirmation',
+        schema: { prompt: 'OK to continue?', confirmLabel: 'Yes', cancelLabel: 'No' },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('OK to continue?')).toBeInTheDocument());
+
+    // Hostile re-render with control-char plugin id before resume
+    rerender(
+      <PipelineRunner
+        plugin={{ ...plugin, id: `plug${'\0'}evil` } as never}
+        onClose={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => {
+      expect(resumePlugin).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/Error: Resume failed: invalid stage, run, or plugin id/),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('ignores control-char stageId / unknown surface on waiting events', async () => {
     const user = userEvent.setup();
     let onEvent: ((e: unknown) => void) | null = null;

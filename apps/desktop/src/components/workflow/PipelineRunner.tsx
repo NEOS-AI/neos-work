@@ -171,14 +171,6 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
   const handleResume = useCallback(
     async (stageId: string, response: Record<string, unknown>) => {
       if (!client || !run?.runId) return;
-      // Control-char stage / run / plugin ids never sent to resume API
-      const sid = safePipelineId(stageId, 100);
-      const rid = safePipelineId(run.runId, 100);
-      const pid =
-        typeof plugin.id === 'string' && !/[\0\r\n]/.test(plugin.id)
-          ? plugin.id.trim().slice(0, 100)
-          : '';
-      if (!sid || !rid || !pid) return;
       const failResume = (raw: unknown) => {
         const err =
           scrubDisplayText(
@@ -195,6 +187,17 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
             : prev,
         );
       };
+      // Control-char stage / run / plugin ids never sent to resume API
+      const sid = safePipelineId(stageId, 100);
+      const rid = safePipelineId(run.runId, 100);
+      const pid =
+        typeof plugin.id === 'string' && !/[\0\r\n]/.test(plugin.id)
+          ? plugin.id.trim().slice(0, 100)
+          : '';
+      if (!sid || !rid || !pid) {
+        failResume('Resume failed: invalid stage, run, or plugin id');
+        return;
+      }
       try {
         const res = await client.resumePlugin(pid, rid, sid, response);
         if (!res.ok) {

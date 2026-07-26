@@ -134,7 +134,19 @@ export function Plugins() {
                   type="button"
                   className="rounded px-3 py-1 text-xs text-white"
                   style={{ backgroundColor: '#10b981' }}
-                  onClick={() => setSelected(p)}
+                  onClick={() => {
+                    // Control-char / blank plugin id → fail closed before opening runner
+                    if (typeof p.id !== 'string' || /[\0\r\n]/.test(p.id)) {
+                      window.alert('Plugin id contains invalid control characters');
+                      return;
+                    }
+                    const id = p.id.trim();
+                    if (!id || id.length > 100) {
+                      window.alert('Plugin id is missing or too long');
+                      return;
+                    }
+                    setSelected(p);
+                  }}
                 >
                   Run
                 </button>
