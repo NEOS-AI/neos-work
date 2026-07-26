@@ -214,12 +214,14 @@ export function ArtifactPreview({
       if (res.ok && typeof res.data?.content === 'string') {
         const raw = res.data.content;
         setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
+        setContentError(null);
         setStatusMsg('Content reloaded');
       } else {
         const again = await client.getArtifact(selectedId);
         if (again.ok && typeof again.data?.content === 'string') {
           const raw = again.data.content;
           setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
+          setContentError(null);
           setStatusMsg('Content reloaded');
         } else {
           setStatusMsg(

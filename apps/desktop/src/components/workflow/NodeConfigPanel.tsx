@@ -837,6 +837,7 @@ function WorkflowWebhookSection() {
               const res = await client.regenerateWebhookSecret(workflowId);
               if (res.ok && res.data) {
                 setSecret(sanitizeWebhookSecret(res.data.secret));
+                setSecretError(null);
                 flashCopy('Secret regenerated');
               } else {
                 const err =
