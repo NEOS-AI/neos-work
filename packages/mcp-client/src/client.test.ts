@@ -84,6 +84,16 @@ describe('McpClient', () => {
         enabled: true,
       }),
     ).rejects.toThrow(/invalid command/i);
+    // Whitespace-only command survives control-char check then fails after trim
+    await expect(
+      c.connect({
+        id: '1',
+        name: 'S',
+        transport: 'stdio',
+        command: '   ',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/requires a command/i);
   });
 
   it('rejects http without url', async () => {
@@ -244,6 +254,66 @@ describe('McpClient', () => {
     });
     await c.disconnect();
     expect(c.connected).toBe(false);
+  });
+
+  it('disconnect succeeds when close resolves cleanly', async () => {
+    closeMock.mockResolvedValueOnce(undefined);
+    const c = new McpClient();
+    await c.connect({
+      id: '1',
+      name: 's',
+      transport: 'stdio',
+      command: 'echo',
+      enabled: true,
+    });
+    expect(c.connected).toBe(true);
+    await c.disconnect();
+    expect(closeMock).toHaveBeenCalled();
+    expect(c.connected).toBe(false);
+  });
+
+  it('stdio args drop nullish/control-char entries and keep valid ones', async () => {
+    const c = new McpClient();
+    await c.connect({
+      id: '1',
+      name: 's',
+      transport: 'stdio',
+      command: 'npx',
+      args: [null, undefined, 'ok', 'bad\narg', '\0x', '  keep  ', ''] as unknown as string[],
+      enabled: true,
+    });
+    expect(connectMock).toHaveBeenCalled();
+    expect(c.connected).toBe(true);
+  });
+
+  it('listTools drops whitespace-only descriptions after newline collapse', async () => {
+    listToolsMock.mockResolvedValue({
+      tools: [
+        { name: 'ws-desc', description: '\n\n  \n', inputSchema: {} },
+        { name: 'spaces', description: '   ', inputSchema: {} },
+      ],
+    });
+    const c = new McpClient();
+    const tools = await c.listTools();
+    expect(tools).toEqual([
+      { name: 'ws-desc', description: undefined, inputSchema: {} },
+      { name: 'spaces', description: undefined, inputSchema: {} },
+    ]);
+  });
+
+  it('callTool handles missing text/data on content items', async () => {
+    callToolMock.mockResolvedValue({
+      isError: false,
+      content: [
+        { type: 'text' }, // missing text → empty string
+        { type: 'image' }, // missing data → stringify whole item
+        { type: 'text', text: null },
+      ],
+    });
+    const c = new McpClient();
+    const result = await c.callTool('mixed', {});
+    expect(result.success).toBe(true);
+    expect(String(result.output)).toContain('image');
   });
 
   it('rejects unsupported transport', async () => {

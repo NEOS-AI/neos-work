@@ -185,6 +185,51 @@ describe('RunHistoryPanel', () => {
     expect(screen.getByText('completed')).toBeInTheDocument();
   });
 
+  it('alerts scrubbed message when clear completed throws', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed')],
+    });
+    clearWorkflowRuns.mockRejectedValue(new Error(`clear${'\n'}boom${'\0'}!`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Clear completed/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('clear boom!');
+    });
+    expect(screen.getByText('completed')).toBeInTheDocument();
+  });
+
+  it('alerts scrubbed message when clear failed / cancelled throws', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-f1', 'failed'), makeRun('run-x1', 'cancelled')],
+    });
+    clearWorkflowRuns
+      .mockRejectedValueOnce(new Error(`fail${'\0'}path`))
+      .mockRejectedValueOnce(new Error(`cancel${'\n'}path`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('failed')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Clear failed/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('failpath');
+    });
+
+    await user.click(screen.getByRole('button', { name: /Clear cancelled/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('cancel path');
+    });
+    expect(screen.getByText('failed')).toBeInTheDocument();
+    expect(screen.getByText('cancelled')).toBeInTheDocument();
+  });
+
   it('alerts scrubbed error when single run delete fails and keeps the run', async () => {
     const user = userEvent.setup();
     listWorkflowRuns.mockResolvedValue({

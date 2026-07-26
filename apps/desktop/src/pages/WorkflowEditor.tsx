@@ -715,36 +715,43 @@ export function WorkflowEditor() {
         <button
           onClick={async () => {
             if (!client || !workflow) return;
-            const res = await client.preflightWorkflow(workflow.id);
-            if (!res.ok || !res.data) {
-              const err = scrubDisplayText(
-                (res as { error?: string }).error ?? 'Preflight failed',
-                { collapseLines: true, maxChars: 500 },
+            try {
+              const res = await client.preflightWorkflow(workflow.id);
+              if (!res.ok || !res.data) {
+                const err = scrubDisplayText(
+                  (res as { error?: string }).error ?? 'Preflight failed',
+                  { collapseLines: true, maxChars: 500 },
+                );
+                window.alert(err || 'Preflight failed');
+                return;
+              }
+              const { ok, issues } = res.data;
+              if (issues.length === 0) {
+                window.alert('Preflight OK — ready to run.');
+                return;
+              }
+              const lines = issues.slice(0, 40).map((i) => {
+                const sev = scrubDisplayText(i.severity, { collapseLines: true, maxChars: 20 }) || 'info';
+                const msg =
+                  scrubDisplayText(i.message, { collapseLines: true, maxChars: 300 })
+                  || scrubDisplayText(i.code, { collapseLines: true, maxChars: 80 })
+                  || 'issue';
+                const nid = i.nodeId
+                  ? scrubDisplayText(i.nodeId, { collapseLines: true, maxChars: 80 })
+                  : '';
+                return `[${sev}] ${msg}${nid ? ` (${nid})` : ''}`;
+              });
+              const more =
+                issues.length > 40 ? `\n…and ${issues.length - 40} more` : '';
+              window.alert(
+                `${ok ? 'Preflight warnings' : 'Preflight blocked'}:\n\n${lines.join('\n')}${more}`,
               );
-              window.alert(err || 'Preflight failed');
-              return;
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Preflight failed';
+              window.alert(
+                scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Preflight failed',
+              );
             }
-            const { ok, issues } = res.data;
-            if (issues.length === 0) {
-              window.alert('Preflight OK — ready to run.');
-              return;
-            }
-            const lines = issues.slice(0, 40).map((i) => {
-              const sev = scrubDisplayText(i.severity, { collapseLines: true, maxChars: 20 }) || 'info';
-              const msg =
-                scrubDisplayText(i.message, { collapseLines: true, maxChars: 300 })
-                || scrubDisplayText(i.code, { collapseLines: true, maxChars: 80 })
-                || 'issue';
-              const nid = i.nodeId
-                ? scrubDisplayText(i.nodeId, { collapseLines: true, maxChars: 80 })
-                : '';
-              return `[${sev}] ${msg}${nid ? ` (${nid})` : ''}`;
-            });
-            const more =
-              issues.length > 40 ? `\n…and ${issues.length - 40} more` : '';
-            window.alert(
-              `${ok ? 'Preflight warnings' : 'Preflight blocked'}:\n\n${lines.join('\n')}${more}`,
-            );
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}

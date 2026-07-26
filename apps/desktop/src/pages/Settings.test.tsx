@@ -779,16 +779,21 @@ describe('Settings page', () => {
     expect(sessionStorage.getItem('devAuthToken')).toBeNull();
     expect(setAuthToken).not.toHaveBeenCalled();
 
-    // Simple key (Tavily) control-char rejected
-    const tavily = screen.getByPlaceholderText(/tvly-/i);
+    // Simple key (Tavily) control-char rejected with alert
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    const tavily = screen.getByPlaceholderText('tvly-...');
     fireEvent.change(tavily, { target: { value: `tvly${'\0'}bad` } });
-    // nearest Save in the same row
-    const row = tavily.closest('div')?.parentElement;
-    const saveBtn = row?.querySelector('button');
-    if (saveBtn) fireEvent.click(saveBtn);
+    const tavilyRow = tavily.closest('div')!.parentElement!;
+    const tavilySave = Array.from(tavilyRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    expect(tavilySave).toBeTruthy();
+    fireEvent.click(tavilySave!);
     expect(saveSetting).not.toHaveBeenCalledWith('TAVILY_API_KEY', expect.anything());
+    expect(window.alert).toHaveBeenCalledWith('Value contains invalid control characters');
 
-    // Provider API key verify/save reject control chars
+    // Provider API key verify/save reject control chars (save alerts)
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     const anthropic = screen.getByPlaceholderText('sk-ant-...');
     fireEvent.change(anthropic, { target: { value: `sk-ant${'\0'}bad` } });
     const verifyButtons = screen.getAllByRole('button', { name: 'common:action.verify' });
@@ -797,6 +802,7 @@ describe('Settings page', () => {
     const saveButtons = screen.getAllByRole('button', { name: 'common:action.save' });
     fireEvent.click(saveButtons[0]!);
     expect(saveSetting).not.toHaveBeenCalledWith('apiKey.anthropic', expect.anything());
+    expect(window.alert).toHaveBeenCalledWith('Key contains invalid control characters');
   });
 
   it('shows empty CLI agents message when none detected', async () => {

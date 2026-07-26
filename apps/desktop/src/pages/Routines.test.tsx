@@ -670,4 +670,43 @@ describe('Routines page', () => {
     });
     expect(String(alertMock.mock.calls.at(-1)?.[0] ?? '')).not.toContain('\0');
   });
+
+  it('keeps routines list when listWorkflows throws', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockRejectedValue(new Error(`wf${'\n'}down${'\0'}!`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    // Routines survived isolated workflows failure
+    expect(screen.queryByText(/Failed to load routines/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Hourly Sync')).toBeInTheDocument();
+  });
+
+  it('surfaces scrubbed workflows load error in create modal', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: [] });
+    listWorkflows.mockResolvedValue({
+      ok: false,
+      error: `wf${'\n'}catalog${'\0'}!`,
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText(/No routines/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    await waitFor(() => expect(screen.getByText('New Routine')).toBeInTheDocument());
+    expect(screen.getByText('wf catalog!')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+    // Workflow select disabled while catalog unavailable
+    const select = screen.getByDisplayValue('— Select workflow —') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+  });
+
+  it('surfaces workflows throw error without wiping empty routines list state', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: [] });
+    listWorkflows.mockRejectedValue(new Error(`net${'\n'}wf${'\0'}!`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText(/No routines/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    await waitFor(() => expect(screen.getByText('New Routine')).toBeInTheDocument());
+    expect(screen.getByText('net wf!')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

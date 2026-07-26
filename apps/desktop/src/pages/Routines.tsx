@@ -25,6 +25,8 @@ export function Routines() {
   const [runsError, setRunsError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** Workflow catalog for create/detail labels — independent of routines list load */
+  const [workflowsError, setWorkflowsError] = useState<string | null>(null);
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('routines'));
 
   const handleEnabledFilter = (value: EnabledFilterPref) => {
@@ -50,8 +52,22 @@ export function Routines() {
   const load = async () => {
     if (!client) return;
     setLoadError(null);
-    try {
-      const [rRes, wRes] = await Promise.all([client.listRoutines(), client.listWorkflows()]);
+    setWorkflowsError(null);
+
+    // Isolate catalog loads so a workflow throw never wipes routines (and vice versa)
+    const [rOutcome, wOutcome] = await Promise.all([
+      client.listRoutines().then(
+        (res) => ({ kind: 'ok' as const, res }),
+        (err: unknown) => ({ kind: 'err' as const, err }),
+      ),
+      client.listWorkflows().then(
+        (res) => ({ kind: 'ok' as const, res }),
+        (err: unknown) => ({ kind: 'err' as const, err }),
+      ),
+    ]);
+
+    if (rOutcome.kind === 'ok') {
+      const rRes = rOutcome.res;
       if (rRes.ok && rRes.data) {
         setRoutines(rRes.data);
       } else {
@@ -63,14 +79,33 @@ export function Routines() {
           }) || 'Failed to load routines',
         );
       }
-      if (wRes.ok && wRes.data) setWorkflows(wRes.data);
-      else setWorkflows([]);
-    } catch (err) {
+    } else {
       setRoutines([]);
-      setWorkflows([]);
-      const msg = err instanceof Error ? err.message : 'Failed to load routines';
+      const msg = rOutcome.err instanceof Error ? rOutcome.err.message : 'Failed to load routines';
       setLoadError(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load routines',
+      );
+    }
+
+    if (wOutcome.kind === 'ok') {
+      const wRes = wOutcome.res;
+      if (wRes.ok && wRes.data) {
+        setWorkflows(wRes.data);
+        setWorkflowsError(null);
+      } else {
+        setWorkflows([]);
+        setWorkflowsError(
+          scrubDisplayText((wRes as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load workflows',
+        );
+      }
+    } else {
+      setWorkflows([]);
+      const msg = wOutcome.err instanceof Error ? wOutcome.err.message : 'Failed to load workflows';
+      setWorkflowsError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load workflows',
       );
     }
   };
@@ -739,6 +774,7 @@ export function Routines() {
                   }}
                   value={formWorkflowId}
                   onChange={(e) => setFormWorkflowId(e.target.value)}
+                  disabled={!!workflowsError}
                 >
                   <option value="">— Select workflow —</option>
                   {workflows.map((w) => (
@@ -747,6 +783,12 @@ export function Routines() {
                     </option>
                   ))}
                 </select>
+                {workflowsError ? (
+                  <p className="mt-1 text-xs text-red-400">
+                    {scrubDisplayText(workflowsError, { collapseLines: true, maxChars: 300 })
+                      || workflowsError}
+                  </p>
+                ) : null}
               </div>
 
               <div>

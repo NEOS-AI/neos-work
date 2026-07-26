@@ -535,6 +535,7 @@ function ApiKeyInput({
     // Control-char secrets rejected before trim (align with settings PUT)
     if (/[\0\r\n]/.test(value)) {
       setSaveStatus('idle');
+      window.alert('Key contains invalid control characters');
       return;
     }
     const next = value.trim();
@@ -694,7 +695,10 @@ function SimpleKeyInput({
   const handleSave = async () => {
     if (!client) return;
     // Control-char secrets/paths rejected before trim (align with settings PUT)
-    if (/[\0\r\n]/.test(value)) return;
+    if (/[\0\r\n]/.test(value)) {
+      window.alert('Value contains invalid control characters');
+      return;
+    }
     const next = value.trim();
     if (!next) return;
     setSaving(true);

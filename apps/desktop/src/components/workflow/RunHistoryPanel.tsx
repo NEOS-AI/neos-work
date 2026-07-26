@@ -142,16 +142,23 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           onClick={async () => {
             if (!client) return;
             if (!window.confirm('Delete all completed runs for this workflow?')) return;
-            const res = await client.clearWorkflowRuns(props.workflowId, 'completed');
-            if (res.ok) {
-              setRuns((prev) => prev.filter((r) => r.status !== 'completed'));
-              setSelectedRunId(null);
-            } else {
+            try {
+              const res = await client.clearWorkflowRuns(props.workflowId, 'completed');
+              if (res.ok) {
+                setRuns((prev) => prev.filter((r) => r.status !== 'completed'));
+                setSelectedRunId(null);
+              } else {
+                window.alert(
+                  scrubDisplayText((res as { error?: string }).error, {
+                    collapseLines: true,
+                    maxChars: 300,
+                  }) || 'Clear failed',
+                );
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Clear failed';
               window.alert(
-                scrubDisplayText((res as { error?: string }).error, {
-                  collapseLines: true,
-                  maxChars: 300,
-                }) || 'Clear failed',
+                scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Clear failed',
               );
             }
           }}
@@ -166,16 +173,23 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           onClick={async () => {
             if (!client) return;
             if (!window.confirm('Delete all failed runs for this workflow?')) return;
-            const res = await client.clearWorkflowRuns(props.workflowId, 'failed');
-            if (res.ok) {
-              setRuns((prev) => prev.filter((r) => r.status !== 'failed'));
-              setSelectedRunId(null);
-            } else {
+            try {
+              const res = await client.clearWorkflowRuns(props.workflowId, 'failed');
+              if (res.ok) {
+                setRuns((prev) => prev.filter((r) => r.status !== 'failed'));
+                setSelectedRunId(null);
+              } else {
+                window.alert(
+                  scrubDisplayText((res as { error?: string }).error, {
+                    collapseLines: true,
+                    maxChars: 300,
+                  }) || 'Clear failed',
+                );
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Clear failed';
               window.alert(
-                scrubDisplayText((res as { error?: string }).error, {
-                  collapseLines: true,
-                  maxChars: 300,
-                }) || 'Clear failed',
+                scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Clear failed',
               );
             }
           }}
@@ -190,16 +204,23 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
           onClick={async () => {
             if (!client) return;
             if (!window.confirm('Delete all cancelled runs for this workflow?')) return;
-            const res = await client.clearWorkflowRuns(props.workflowId, 'cancelled');
-            if (res.ok) {
-              setRuns((prev) => prev.filter((r) => r.status !== 'cancelled'));
-              setSelectedRunId(null);
-            } else {
+            try {
+              const res = await client.clearWorkflowRuns(props.workflowId, 'cancelled');
+              if (res.ok) {
+                setRuns((prev) => prev.filter((r) => r.status !== 'cancelled'));
+                setSelectedRunId(null);
+              } else {
+                window.alert(
+                  scrubDisplayText((res as { error?: string }).error, {
+                    collapseLines: true,
+                    maxChars: 300,
+                  }) || 'Clear failed',
+                );
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Clear failed';
               window.alert(
-                scrubDisplayText((res as { error?: string }).error, {
-                  collapseLines: true,
-                  maxChars: 300,
-                }) || 'Clear failed',
+                scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Clear failed',
               );
             }
           }}

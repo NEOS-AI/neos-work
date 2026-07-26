@@ -580,6 +580,26 @@ describe('WorkflowEditor page', () => {
     });
   });
 
+  it('alerts scrubbed message when toolbar preflight throws', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    preflightWorkflow.mockRejectedValueOnce(new Error(`net${'\n'}fail${'\0'}!`));
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('net fail!');
+    });
+    expect(String((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])).not.toContain(
+      '\0',
+    );
+
+    preflightWorkflow.mockRejectedValueOnce('not-an-error');
+    fireEvent.click(screen.getByRole('button', { name: /Preflight/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Preflight failed');
+    });
+  });
+
   it('scrubs control-char preflight API errors and issue fields', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
