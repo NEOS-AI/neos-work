@@ -1254,4 +1254,50 @@ describe('Settings page', () => {
     }
   });
 
+  it('surfaces scrubbed engine health error when health throws', async () => {
+    engine.status = 'connected';
+    health.mockRejectedValue(new Error(`health${'\n'}down${'\0'}!`));
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('health down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    // Version/uptime fall back to dashes
+    expect(document.body.textContent).toMatch(/Version/);
+  });
+
+  it('surfaces health error when status is not ok', async () => {
+    engine.status = 'connected';
+    health.mockResolvedValue({ status: 'degraded', version: '0.3.1', uptime: 1 });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('Health check failed')).toBeInTheDocument();
+    });
+  });
+
+  it('keeps MCP server list when OAuth status probe throws', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-keep',
+          name: 'Keep Me',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', 'pkg'],
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockRejectedValue(new Error('oauth status boom'));
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('Keep Me')).toBeInTheDocument();
+    });
+    // List load error must not appear — servers survived OAuth probe failure
+    expect(screen.queryByText(/Failed to load MCP/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/oauth status boom/i)).not.toBeInTheDocument();
+  });
+
 });

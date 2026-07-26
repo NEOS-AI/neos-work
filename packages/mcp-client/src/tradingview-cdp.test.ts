@@ -88,6 +88,27 @@ describe('TradingView CDP probe', () => {
     expect(health.targetCount).toBeUndefined();
   });
 
+  it('drops whitespace-only Protocol-Version after trim', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (String(url).includes('/json/version')) {
+        return {
+          ok: true,
+          json: async () => ({
+            Browser: 'Chrome',
+            'Protocol-Version': '   ',
+            webSocketDebuggerUrl: 'ws://127.0.0.1:9222/x',
+          }),
+        };
+      }
+      return { ok: false, json: async () => [] };
+    }) as unknown as typeof fetch;
+    const health = await checkTradingViewCdp(9222, fetchImpl);
+    expect(health.ok).toBe(true);
+    expect(health.browser).toBe('Chrome');
+    expect(health.protocolVersion).toBeUndefined();
+    expect(health.targetCount).toBeUndefined(); // list not ok
+  });
+
   it('accepts wss debugger urls and tolerates non-JSON version body', async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (String(url).includes('/json/version')) {

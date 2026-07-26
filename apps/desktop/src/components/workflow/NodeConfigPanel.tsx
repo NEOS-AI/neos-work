@@ -711,7 +711,9 @@ function WorkflowWebhookSection() {
     try {
       // Scrub secret/URL before clipboard (null-byte defense)
       const safe = scrubDisplayText(text, { maxChars: 10_000 });
-      await navigator.clipboard.writeText(safe);
+      const write = navigator.clipboard?.writeText;
+      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+      await write.call(navigator.clipboard, safe);
       flashCopy(label);
     } catch {
       flashCopy('Copy failed');

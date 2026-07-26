@@ -575,4 +575,85 @@ describe('ArtifactPreview', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('copies scrubbed artifact content and shows Copied', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const art = {
+      id: 'a-copy',
+      workflowId: 'wf-1',
+      name: 'out.txt',
+      contentType: 'text/plain',
+      content: `hello${'\0'}world`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Copy$/i })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /^Copy$/i }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalled();
+      expect(String(writeText.mock.calls[0]?.[0] ?? '')).toBe('helloworld');
+      expect(screen.getByRole('button', { name: /Copied/i })).toBeInTheDocument();
+    });
+  });
+
+  it('shows Copy failed when clipboard write rejects', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    const art = {
+      id: 'a-copy-fail',
+      workflowId: 'wf-1',
+      name: 'out.txt',
+      contentType: 'text/plain',
+      content: 'x',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    const copyBtn = await screen.findByTitle('Copy artifact content');
+    expect(copyBtn).toBeEnabled();
+    await user.click(copyBtn);
+    // Status toast and/or button label surface the failure
+    await waitFor(() => {
+      expect(screen.getAllByText('Copy failed').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows Download failed when blob URL creation throws', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-dl-fail',
+      workflowId: 'wf-1',
+      name: 'out.txt',
+      contentType: 'text/plain',
+      content: 'payload',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    const createSpy = vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+      throw new Error('blob denied');
+    });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    const dlBtn = await screen.findByTitle('Download artifact');
+    expect(dlBtn).toBeEnabled();
+    await user.click(dlBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Download failed')).toBeInTheDocument();
+    });
+    createSpy.mockRestore();
+  });
+
 });

@@ -131,7 +131,9 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
     try {
       const write = navigator.clipboard?.writeText;
       if (typeof write !== 'function') throw new Error('Clipboard unavailable');
-      await write.call(navigator.clipboard, text);
+      // Scrub before clipboard (null-byte / control-char defense)
+      const safe = scrubDisplayText(text, { maxChars: 100_000 });
+      await write.call(navigator.clipboard, safe);
       setCopyStatus(`${idx}:ok`);
       setTimeout(() => setCopyStatus((cur) => (cur === `${idx}:ok` ? null : cur)), 1500);
     } catch {

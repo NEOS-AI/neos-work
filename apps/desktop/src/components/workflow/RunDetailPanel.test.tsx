@@ -141,6 +141,30 @@ describe('RunDetailPanel', () => {
     });
   });
 
+  it('shows Copy failed when clipboard API is missing', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'run-noclip01',
+        workflowId: 'wf',
+        status: 'completed',
+        nodeResults: {
+          n1: { nodeId: 'n1', status: 'completed', output: 'x' },
+        },
+        startedAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+    render(<RunDetailPanel workflowId="wf" runId="run-noclip01" onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Copy')).toBeInTheDocument());
+    await user.click(screen.getByText('Copy'));
+    await waitFor(() => expect(screen.getByText('Copy failed')).toBeInTheDocument());
+  });
+
   it('shows Copy failed when clipboard write rejects', async () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, 'clipboard', {

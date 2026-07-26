@@ -233,5 +233,31 @@ describe('RunLogPanel copy', () => {
     await user.click(screen.getByRole('button', { name: /^copy$/i }));
     await waitFor(() => expect(screen.getByRole('button', { name: /copy failed/i })).toBeInTheDocument());
   });
+
+  it('scrubs control chars before writing log output to clipboard', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const events: WorkflowSSEEvent[] = [
+      {
+        type: 'node.completed',
+        nodeId: 'n1',
+        output: `line${'\0'}a${'\n'}b`,
+        durationMs: 10,
+      },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{ n1: 'Node' }} />);
+    await user.click(screen.getByText(/✓ Node/));
+    await user.click(screen.getByRole('button', { name: /^copy$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const payload = String(writeText.mock.calls[0]?.[0] ?? '');
+    expect(payload).not.toContain('\0');
+    // JSON-serialized string keeps escaped newlines in pretty form; null stripped
+    expect(payload).toContain('line');
+    expect(payload).toContain('a');
+  });
 });
 

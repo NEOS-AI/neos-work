@@ -96,6 +96,7 @@ export function ArtifactPreview({
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [viewport, setViewport] = useState<ViewportMode>(() => loadArtifactViewport());
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
 
   const handleViewport = (mode: ViewportMode) => {
     setViewport(mode);
@@ -107,22 +108,35 @@ export function ArtifactPreview({
     try {
       // Strip null bytes before clipboard (DOM/clipboard injection defense)
       const safe = scrubDisplayText(selectedContent, { maxChars: 500_000 });
-      await navigator.clipboard.writeText(safe);
+      const write = navigator.clipboard?.writeText;
+      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+      await write.call(navigator.clipboard, safe);
+      setCopyFailed(false);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
+      setCopied(false);
+      setCopyFailed(true);
       setStatusMsg('Copy failed');
-      setTimeout(() => setStatusMsg(null), 2000);
+      setTimeout(() => {
+        setCopyFailed(false);
+        setStatusMsg((cur) => (cur === 'Copy failed' ? null : cur));
+      }, 2000);
     }
   };
 
   const handleDownloadContent = () => {
     if (!selectedContent || !selectedId) return;
-    const art = artifacts.find((a) => a.id === selectedId);
-    const mime = art?.contentType || 'text/plain';
-    downloadTextFile(art?.name || 'artifact.txt', selectedContent, mime);
-    setStatusMsg('Downloaded');
-    setTimeout(() => setStatusMsg(null), 1500);
+    try {
+      const art = artifacts.find((a) => a.id === selectedId);
+      const mime = art?.contentType || 'text/plain';
+      downloadTextFile(art?.name || 'artifact.txt', selectedContent, mime);
+      setStatusMsg('Downloaded');
+      setTimeout(() => setStatusMsg((cur) => (cur === 'Downloaded' ? null : cur)), 1500);
+    } catch {
+      setStatusMsg('Download failed');
+      setTimeout(() => setStatusMsg((cur) => (cur === 'Download failed' ? null : cur)), 2000);
+    }
   };
 
   const [listError, setListError] = useState<string | null>(null);
@@ -415,10 +429,12 @@ export function ArtifactPreview({
           type="button"
           onClick={() => void handleCopyContent()}
           disabled={!selectedContent}
-          className="shrink-0 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 disabled:opacity-40"
-          title="Copy artifact content"
+          className={`shrink-0 rounded px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-40 ${
+            copyFailed ? 'text-red-400' : 'text-white/70'
+          }`}
+          title={copyFailed ? 'Copy failed' : 'Copy artifact content'}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? 'Copied' : copyFailed ? 'Copy failed' : 'Copy'}
         </button>
         <button
           type="button"

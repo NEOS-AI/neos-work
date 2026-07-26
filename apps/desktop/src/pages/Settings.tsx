@@ -371,25 +371,40 @@ function EngineStatusSection() {
   const { client, status, mode, serverUrl } = useEngine();
   const [version, setVersion] = useState<string | null>(null);
   const [uptimeSec, setUptimeSec] = useState<number | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client || status !== 'connected') {
       setVersion(null);
       setUptimeSec(null);
+      setHealthError(null);
       return;
     }
     let cancelled = false;
+    setHealthError(null);
     void client
       .health()
       .then((h) => {
-        if (cancelled || h.status !== 'ok') return;
+        if (cancelled) return;
+        if (h.status !== 'ok') {
+          setVersion(null);
+          setUptimeSec(null);
+          setHealthError('Health check failed');
+          return;
+        }
         setVersion(h.version ?? null);
         setUptimeSec(typeof h.uptime === 'number' ? h.uptime : null);
+        setHealthError(null);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
           setVersion(null);
           setUptimeSec(null);
+          const msg = err instanceof Error ? err.message : 'Health check failed';
+          setHealthError(
+            scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+            || 'Health check failed',
+          );
         }
       });
     return () => {
@@ -406,6 +421,9 @@ function EngineStatusSection() {
   const urlSafe = serverUrl
     ? scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 })
     : '';
+  const healthErrorSafe = healthError
+    ? scrubDisplayText(healthError, { collapseLines: true, maxChars: 300 }) || healthError
+    : '';
 
   return (
     <section
@@ -415,6 +433,9 @@ function EngineStatusSection() {
       <h2 className="mb-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
         Engine
       </h2>
+      {healthErrorSafe ? (
+        <p className="mb-3 text-xs text-red-400">{healthErrorSafe}</p>
+      ) : null}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <dt style={{ color: 'var(--text-muted)' }}>Status</dt>
         <dd style={{ color: 'var(--text-primary)' }}>{statusLabel}</dd>
@@ -784,17 +805,22 @@ function McpServersSection() {
       const res = await client.listMcpServers();
       if (res.ok && res.data) {
         setServers(res.data);
-        // Load OAuth status for each server
+        // OAuth status is best-effort per server — never wipe the server list on status throw
         const statusMap: Record<string, OAuthStatus> = {};
         await Promise.all(
           res.data.map(async (s) => {
-            const st = await client.getMcpOAuthStatus(s.id);
-            if (st.ok && st.data) statusMap[s.id] = st.data;
+            try {
+              const st = await client.getMcpOAuthStatus(s.id);
+              if (st.ok && st.data) statusMap[s.id] = st.data;
+            } catch {
+              // omit badge when status probe fails
+            }
           }),
         );
         setOauthStatuses(statusMap);
       } else {
         setServers([]);
+        setOauthStatuses({});
         setMcpLoadError(
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
@@ -804,6 +830,7 @@ function McpServersSection() {
       }
     } catch (err) {
       setServers([]);
+      setOauthStatuses({});
       const msg = err instanceof Error ? err.message : 'Failed to load MCP servers';
       setMcpLoadError(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })

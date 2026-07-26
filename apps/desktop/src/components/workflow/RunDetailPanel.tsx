@@ -87,7 +87,9 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
 
   const handleCopyOutput = async (nodeId: string, output: unknown) => {
     try {
-      await navigator.clipboard.writeText(serializeNodeOutput(output));
+      const write = navigator.clipboard?.writeText;
+      if (typeof write !== 'function') throw new Error('Clipboard unavailable');
+      await write.call(navigator.clipboard, serializeNodeOutput(output));
       setCopyFailedNodeId(null);
       setCopiedNodeId(nodeId);
       setTimeout(() => setCopiedNodeId((cur) => (cur === nodeId ? null : cur)), 1500);
