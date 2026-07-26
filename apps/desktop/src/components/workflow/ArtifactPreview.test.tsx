@@ -138,6 +138,30 @@ describe('ArtifactPreview', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('shows scrubbed content error when getArtifact fails', async () => {
+    const art = {
+      id: 'a1',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({
+      ok: false,
+      error: `content${'\n'}gone${'\0'}!`,
+    });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('page.html')).toBeInTheDocument());
+    await waitFor(() => {
+      expect(getArtifact).toHaveBeenCalledWith('a1');
+      expect(screen.getByText('content gone!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('renders HTML artifact in iframe and supports viewport + reload', async () => {
     const user = userEvent.setup();
     const art = {

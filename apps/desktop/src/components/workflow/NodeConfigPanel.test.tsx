@@ -100,6 +100,26 @@ describe('NodeConfigPanel', () => {
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
   });
 
+  it('shows scrubbed design systems load error under select', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: false,
+      error: `ds${'\n'}down${'\0'}!`,
+    });
+    render(
+      <NodeConfigPanel
+        selectedNode={null}
+        validationIssues={[]}
+        onPatchNodeData={() => {}}
+        designSystemId=""
+        onUpdateDesignSystemId={() => {}}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('ds down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('shows label field and issues for selected trigger node', async () => {
     const node = {
       id: 't1',
@@ -933,6 +953,24 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
     expect(screen.getByText(/whsec_/)).toBeInTheDocument();
 
+    window.history.pushState({}, '', prev || '/');
+  });
+
+  it('shows scrubbed error when webhook secret fails to load', async () => {
+    const prev = window.location.pathname + window.location.search;
+    window.history.pushState({}, '', '/workflows/wf-webhook-secret-fail');
+    getWebhookSecret.mockResolvedValue({
+      ok: false,
+      error: `secret${'\n'}missing${'\0'}!`,
+    });
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await waitFor(() => {
+      expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-secret-fail');
+      expect(screen.getByText('secret missing!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
     window.history.pushState({}, '', prev || '/');
   });
 
