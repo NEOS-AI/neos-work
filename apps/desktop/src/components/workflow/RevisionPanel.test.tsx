@@ -825,4 +825,21 @@ describe('RevisionPanel', () => {
     alertSpy.mockRestore();
   });
 
+  it('rejects list load when workflow id has control chars', async () => {
+    render(
+      <RevisionPanel
+        workflowId={`wf${'\0'}1`}
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByText('Workflow id contains invalid control characters'),
+      ).toBeInTheDocument();
+    });
+    expect(listRevisions).not.toHaveBeenCalled();
+  });
+
 });
