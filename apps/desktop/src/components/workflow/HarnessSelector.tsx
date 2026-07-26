@@ -110,8 +110,8 @@ export function HarnessSelector(props: {
           </p>
           <p>
             Tools:{' '}
-            {selected.allowedTools.length > 0
-              ? selected.allowedTools
+            {(selected.allowedTools?.length ?? 0) > 0
+              ? (selected.allowedTools ?? [])
                   .filter((t) => typeof t === 'string' && !/[\0\r\n]/.test(t) && t.trim())
                   .map((t) => t.trim())
                   .join(', ') || 'None'

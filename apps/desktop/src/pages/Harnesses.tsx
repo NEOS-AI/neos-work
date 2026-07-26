@@ -302,9 +302,9 @@ function HarnessCard({
               {tool}
             </span>
           ))}
-          {h.allowedTools.length > 4 && (
+          {(h.allowedTools?.length ?? 0) > 4 && (
             <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              +{h.allowedTools.length - 4}
+              +{(h.allowedTools?.length ?? 0) - 4}
             </span>
           )}
         </div>
@@ -333,7 +333,14 @@ function HarnessModal({
   const [name, setName] = useState(
     () => scrubDisplayText(existing?.name, { collapseLines: true, maxChars: 200 }),
   );
-  const [domain, setDomain] = useState<'finance' | 'coding' | 'general'>(existing?.domain ?? 'general');
+  const [domain, setDomain] = useState<string>(() => {
+    const d = typeof existing?.domain === 'string' && !/[\0\r\n]/.test(existing.domain)
+      ? existing.domain.trim().toLowerCase()
+      : 'general';
+    return (['finance', 'coding', 'general'] as const).includes(d as 'finance')
+      ? d
+      : 'general';
+  });
   const [description, setDescription] = useState(() => {
     const raw = typeof existing?.description === 'string' ? existing.description : '';
     return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;

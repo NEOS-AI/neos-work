@@ -42,9 +42,19 @@ export function filterRunLogEvents(
 ): WorkflowSSEEvent[] {
   if (filter === 'all') return events;
   return events.filter((ev) => {
-    if (filter === 'progress') return ev.type === 'node.progress';
-    if (filter === 'completed') return ev.type === 'node.completed';
-    if (filter === 'failed') return ev.type === 'node.failed' || ev.type === 'run.failed';
+    if (filter === 'progress') {
+      return ev.type === 'node.progress' || ev.type === 'worker.progress';
+    }
+    if (filter === 'completed') {
+      return ev.type === 'node.completed' || ev.type === 'worker.completed';
+    }
+    if (filter === 'failed') {
+      return (
+        ev.type === 'node.failed'
+        || ev.type === 'run.failed'
+        || ev.type === 'worker.failed'
+      );
+    }
     if (filter === 'lifecycle') {
       return (
         ev.type === 'run.started'
@@ -52,6 +62,10 @@ export function filterRunLogEvents(
         || ev.type === 'run.failed'
         || ev.type === 'node.started'
         || ev.type === 'node.failed'
+        || ev.type === 'node.warning'
+        || ev.type === 'worker.started'
+        || ev.type === 'worker.completed'
+        || ev.type === 'worker.failed'
       );
     }
     return true;
@@ -228,12 +242,24 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
             ? safeLogLine((ev as { nodeType?: string }).nodeType, 'node')
             : '';
         const failedError =
-          ev.type === 'node.failed' || ev.type === 'run.failed'
+          ev.type === 'node.failed' || ev.type === 'run.failed' || ev.type === 'worker.failed'
             ? safeLogLine((ev as { error?: string }).error, 'error')
             : '';
         const runIdSafe =
           ev.type === 'run.started' || ev.type === 'run.completed' || ev.type === 'run.failed'
             ? safeLogLine((ev as { runId?: string }).runId, 'run')
+            : '';
+        const workerIdSafe =
+          ev.type === 'worker.started'
+            ? safeLogLine((ev as { workerId?: string }).workerId, 'worker')
+            : '';
+        const workerRunIdSafe =
+          ev.type.startsWith('worker.')
+            ? safeLogLine((ev as { workerRunId?: string }).workerRunId, 'w')
+            : '';
+        const warningMsg =
+          ev.type === 'node.warning'
+            ? safeLogLine((ev as { message?: string }).message, 'warning')
             : '';
         return (
           <div
@@ -259,6 +285,29 @@ export function RunLogPanel({ events, nodeLabelMap }: RunLogPanelProps) {
               </span>
             )}
             {ev.type === 'node.failed' && `✗ ${nodeLabel}: ${failedError}`}
+            {ev.type === 'node.warning' && (
+              <span className="text-amber-400">⚠ {nodeLabel}: {warningMsg}</span>
+            )}
+            {ev.type === 'worker.started' && (
+              <span className="text-violet-400">
+                ↳ worker {workerIdSafe} ({workerRunIdSafe.slice(0, 8)}) on {nodeLabel}
+              </span>
+            )}
+            {ev.type === 'worker.progress' && (
+              <span className="text-sky-400">
+                ↳ … worker {workerRunIdSafe.slice(0, 8)} streaming
+              </span>
+            )}
+            {ev.type === 'worker.completed' && (
+              <span className="text-violet-400">
+                ↳ ✓ worker {workerRunIdSafe.slice(0, 8)}
+              </span>
+            )}
+            {ev.type === 'worker.failed' && (
+              <span className="text-red-400">
+                ↳ ✗ worker {workerRunIdSafe.slice(0, 8)}: {failedError}
+              </span>
+            )}
             {ev.type === 'run.started' && `Run ${runIdSafe.slice(0, 8)}`}
             {ev.type === 'run.completed' && (
               <span>

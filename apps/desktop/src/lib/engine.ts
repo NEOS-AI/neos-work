@@ -1871,7 +1871,12 @@ export interface Workflow {
   id: string;
   name: string;
   description?: string;
-  domain: 'finance' | 'coding' | 'general';
+  /** schemaVersion 2 after server migrate; missing treated as v1. */
+  schemaVersion?: 1 | 2;
+  /** Primary pack id (DB column `domain`; API also exposes primaryDomain). */
+  domain: string;
+  primaryDomain?: string;
+  domainPackIds?: string[];
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   webhookSecret?: string;
@@ -1914,16 +1919,33 @@ export interface WorkflowRun {
   error?: string;
 }
 
+/** @deprecated Prefer DomainWorker (v0.4). Alias kept for Harnesses UI. */
 export interface AgentHarness {
   id: string;
   name: string;
-  domain: 'finance' | 'coding' | 'general';
+  domain: string;
   description: string;
   systemPrompt: string;
-  allowedTools: string[];
+  allowedTools?: string[];
   isBuiltIn?: boolean;
-  constraints?: { maxSteps?: number; maxTokens?: number; timeoutMs?: number };
+  constraints?: {
+    maxSteps?: number;
+    maxTokens?: number;
+    timeoutMs?: number;
+    maxSpawnedWorkers?: number;
+  };
+  permissionProfile?: 'read_only' | 'read_write' | 'execute' | 'network' | 'full';
+  workspace?:
+    | { kind: 'none' }
+    | { kind: 'run'; subdir?: string }
+    | { kind: 'isolated' };
+  defaultMode?: 'solo' | 'coordinator';
+  preferredBlockIds?: string[];
+  meta?: Record<string, unknown>;
 }
+
+/** v0.4 DomainWorker — same shape as AgentHarness (alias). */
+export type DomainWorker = AgentHarness;
 
 export type WorkflowSSEEvent =
   | { type: 'run.started'; runId: string }
@@ -1931,13 +1953,38 @@ export type WorkflowSSEEvent =
   | { type: 'node.progress'; nodeId: string; chunk: string; accumulated: string }
   | { type: 'node.completed'; nodeId: string; output: unknown; durationMs?: number }
   | { type: 'node.failed'; nodeId: string; error: string }
+  | { type: 'node.warning'; nodeId: string; message: string }
   | { type: 'run.completed'; runId: string; duration: number; artifactId?: string }
-  | { type: 'run.failed'; runId: string; error: string };
+  | { type: 'run.failed'; runId: string; error: string }
+  | {
+      type: 'worker.started';
+      nodeId: string;
+      workerId: string;
+      workerRunId: string;
+    }
+  | {
+      type: 'worker.progress';
+      nodeId: string;
+      workerRunId: string;
+      chunk: string;
+    }
+  | {
+      type: 'worker.completed';
+      nodeId: string;
+      workerRunId: string;
+      output: unknown;
+    }
+  | {
+      type: 'worker.failed';
+      nodeId: string;
+      workerRunId: string;
+      error: string;
+    };
 
 export interface WorkflowBlock {
   id: string;
   name: string;
-  domain: 'finance' | 'coding' | 'general';
+  domain: string;
   category: string;
   description: string;
   isBuiltIn: boolean;
