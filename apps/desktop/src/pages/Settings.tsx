@@ -770,6 +770,12 @@ function McpServersSection() {
   const [oauthModal, setOauthModal] = useState<OAuthModalState | null>(null);
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [mcpLoadError, setMcpLoadError] = useState<string | null>(null);
+  // TradingView MCP preset
+  const [tvInstallPath, setTvInstallPath] = useState('');
+  const [tvAdding, setTvAdding] = useState(false);
+  const [tvCdpStatus, setTvCdpStatus] = useState<string | null>(null);
+  const [tvCdpChecking, setTvCdpChecking] = useState(false);
+  const [showTvHelp, setShowTvHelp] = useState(false);
 
   const loadServers = useCallback(async () => {
     if (!client) return;
@@ -809,6 +815,87 @@ function McpServersSection() {
   useEffect(() => {
     loadServers();
   }, [loadServers]);
+
+  const tradingViewConnected = servers.some(
+    (s) =>
+      s.enabled
+      && typeof s.name === 'string'
+      && s.name.toLowerCase().includes('tradingview'),
+  );
+
+  const handleAddTradingView = async () => {
+    if (!client) return;
+    if (/[\0\r\n]/.test(tvInstallPath)) return;
+    const path = tvInstallPath.trim();
+    if (!path) {
+      window.alert('Enter the full path to the tradingview-mcp folder (contains package.json and src/).');
+      return;
+    }
+    setTvAdding(true);
+    try {
+      const res = await client.createMcpServerFromPreset({
+        presetId: 'tradingview',
+        installPath: path,
+        name: 'TradingView',
+      });
+      if (res.ok) {
+        setTvInstallPath('');
+        await loadServers();
+      } else {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 400,
+          }) || 'Failed to add TradingView MCP',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add TradingView MCP';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 400 }) || 'Failed to add TradingView MCP',
+      );
+    } finally {
+      setTvAdding(false);
+    }
+  };
+
+  const handleCheckTvCdp = async () => {
+    if (!client) return;
+    setTvCdpChecking(true);
+    setTvCdpStatus(null);
+    try {
+      const res = await client.checkTradingViewCdp(9222);
+      if (res.ok && res.data) {
+        if (res.data.cdpConnected) {
+          const browser = scrubDisplayText(res.data.browser, { collapseLines: true, maxChars: 80 });
+          const targets =
+            typeof res.data.targetCount === 'number' ? ` · ${res.data.targetCount} targets` : '';
+          setTvCdpStatus(
+            `Connected on port ${res.data.port}${browser ? ` · ${browser}` : ''}${targets}`,
+          );
+        } else {
+          setTvCdpStatus(
+            scrubDisplayText(res.data.error, { collapseLines: true, maxChars: 300 })
+            || 'CDP not reachable — launch TradingView with --remote-debugging-port=9222',
+          );
+        }
+      } else {
+        setTvCdpStatus(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'CDP health check failed',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'CDP health check failed';
+      setTvCdpStatus(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'CDP health check failed',
+      );
+    } finally {
+      setTvCdpChecking(false);
+    }
+  };
 
   const closeAddForm = useCallback(() => {
     setShowAddForm(false);
@@ -1024,6 +1111,117 @@ function McpServersSection() {
         >
           + Add
         </button>
+      </div>
+
+      {/* TradingView finance preset */}
+      <div
+        className="mb-4 rounded-lg border p-4"
+        style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                TradingView MCP
+              </span>
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px]"
+                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)' }}
+              >
+                finance
+              </span>
+              {tradingViewConnected && (
+                <span className="rounded px-1.5 py-0.5 text-[10px]" style={{ backgroundColor: '#065f4620', color: '#059669' }}>
+                  ● Connected
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Bridge NEOS agents to your local TradingView Desktop charts (CDP port 9222).
+              Clone{' '}
+              <span className="font-mono">tradesdontlie/tradingview-mcp</span>, run npm install,
+              launch TV with debug port, then paste the package path below.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTvHelp((v) => !v)}
+            className="shrink-0 rounded-lg border px-2 py-1 text-[10px]"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+          >
+            {showTvHelp ? 'Hide setup' : 'Setup guide'}
+          </button>
+        </div>
+
+        {showTvHelp && (
+          <ol
+            className="mb-3 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            <li>
+              Install Node.js LTS and TradingView <strong>Desktop</strong> (browser-only will not work; paid plan required).
+            </li>
+            <li>
+              Download ZIP from github.com/tradesdontlie/tradingview-mcp → extract. Use the folder that
+              directly contains <span className="font-mono">package.json</span> and <span className="font-mono">src/</span>
+              (watch for nested folder-in-folder).
+            </li>
+            <li>
+              In that folder run <span className="font-mono">npm install</span>. Ignore audit warnings; do not run npm audit fix.
+            </li>
+            <li>
+              Fully quit TradingView, then launch with debug port:
+              <br />
+              <span className="font-mono text-[10px]">
+                Mac: open -a TradingView --args --remote-debugging-port=9222
+              </span>
+              <br />
+              <span className="font-mono text-[10px]">
+                Windows: &quot;%LOCALAPPDATA%\TradingView\TradingView.exe&quot; --remote-debugging-port=9222
+              </span>
+            </li>
+            <li>Log in and open a real chart tab (not the welcome screen).</li>
+            <li>Paste the package path below → Add → open a new Session chat and ask for tv_health_check.</li>
+          </ol>
+        )}
+
+        {!tradingViewConnected && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              placeholder="Full path to tradingview-mcp (…/tradingview-mcp or …/tradingview-mcp-main)"
+              value={tvInstallPath}
+              onChange={(e) => setTvInstallPath(e.target.value)}
+              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs outline-none font-mono"
+              style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+            />
+            <button
+              type="button"
+              onClick={handleAddTradingView}
+              disabled={tvAdding || !tvInstallPath.trim()}
+              className="shrink-0 rounded-lg px-3 py-2 text-xs transition-colors disabled:opacity-40"
+              style={{ backgroundColor: '#059669', color: 'white' }}
+            >
+              {tvAdding ? 'Adding…' : 'Add TradingView'}
+            </button>
+          </div>
+        )}
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCheckTvCdp}
+            disabled={tvCdpChecking}
+            className="rounded-lg border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-40"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+          >
+            {tvCdpChecking ? 'Checking CDP…' : 'Test CDP :9222'}
+          </button>
+          {tvCdpStatus && (
+            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              {scrubDisplayText(tvCdpStatus, { collapseLines: true, maxChars: 280 }) || tvCdpStatus}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* OAuth Connect Modal */}

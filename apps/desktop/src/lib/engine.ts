@@ -167,6 +167,32 @@ export interface McpServerData {
   createdAt: string;
 }
 
+/** Built-in MCP server preset (e.g. TradingView). */
+export interface McpPresetData {
+  id: string;
+  name: string;
+  description: string;
+  docsUrl: string;
+  transport: 'stdio' | 'http';
+  command?: string;
+  argsTemplate?: string[];
+  entryRelativePath?: string;
+  requirements: string[];
+  toolHints: string[];
+  domain?: 'finance' | 'coding' | 'general';
+}
+
+export interface TradingViewCdpHealthData {
+  ok: boolean;
+  cdpConnected: boolean;
+  port: number;
+  browser?: string;
+  protocolVersion?: string;
+  webSocketDebuggerUrl?: string;
+  targetCount?: number;
+  error?: string;
+}
+
 export interface DesignSystem {
   id: string;
   name: string;
@@ -619,6 +645,37 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(params),
+    });
+    return readApiResponse(res);
+  }
+
+  async listMcpPresets(): Promise<ApiResponse<McpPresetData[]>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/presets`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async createMcpServerFromPreset(params: {
+    presetId: string;
+    installPath?: string;
+    name?: string;
+  }): Promise<ApiResponse<McpServerData>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/from-preset`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(params),
+    });
+    return readApiResponse(res);
+  }
+
+  async checkTradingViewCdp(port?: number): Promise<ApiResponse<TradingViewCdpHealthData>> {
+    const q =
+      typeof port === 'number' && Number.isFinite(port)
+        ? `?port=${encodeURIComponent(String(Math.floor(port)))}`
+        : '';
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/tradingview/cdp-health${q}`, {
+      headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }

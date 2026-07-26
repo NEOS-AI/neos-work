@@ -11,6 +11,9 @@ const getMediaConfig = vi.fn();
 const listMcpServers = vi.fn();
 const getMcpOAuthStatus = vi.fn();
 const createMcpServer = vi.fn();
+const createMcpServerFromPreset = vi.fn();
+const listMcpPresets = vi.fn();
+const checkTradingViewCdp = vi.fn();
 const toggleMcpServer = vi.fn();
 const deleteMcpServer = vi.fn();
 const revokeMcpOAuth = vi.fn();
@@ -30,6 +33,9 @@ const clientApi = {
   listMcpServers,
   getMcpOAuthStatus,
   createMcpServer,
+  createMcpServerFromPreset,
+  listMcpPresets,
+  checkTradingViewCdp,
   toggleMcpServer,
   deleteMcpServer,
   revokeMcpOAuth,
@@ -94,6 +100,15 @@ describe('Settings page', () => {
     listMcpServers.mockReset().mockResolvedValue({ ok: true, data: [] });
     getMcpOAuthStatus.mockReset().mockResolvedValue({ ok: true, data: { connected: false } });
     createMcpServer.mockReset().mockResolvedValue({ ok: true });
+    createMcpServerFromPreset.mockReset().mockResolvedValue({ ok: true, data: { id: 'tv-1', name: 'TradingView' } });
+    listMcpPresets.mockReset().mockResolvedValue({
+      ok: true,
+      data: [{ id: 'tradingview', name: 'TradingView', domain: 'finance', toolHints: ['tv_health_check'] }],
+    });
+    checkTradingViewCdp.mockReset().mockResolvedValue({
+      ok: true,
+      data: { ok: true, cdpConnected: true, port: 9222, browser: 'Chrome/120', targetCount: 2 },
+    });
     toggleMcpServer.mockReset().mockResolvedValue({ ok: true });
     deleteMcpServer.mockReset().mockResolvedValue({ ok: true });
     revokeMcpOAuth.mockReset().mockResolvedValue({ ok: true });
@@ -123,6 +138,7 @@ describe('Settings page', () => {
     expect(screen.getByText('Deploy')).toBeInTheDocument();
     expect(screen.getByText('Media generation')).toBeInTheDocument();
     expect(screen.getByText('MCP Servers')).toBeInTheDocument();
+    expect(screen.getByText('TradingView MCP')).toBeInTheDocument();
     expect(screen.getByText('CLI Agents')).toBeInTheDocument();
     expect(screen.getByText('Dev Tools')).toBeInTheDocument();
 
@@ -135,6 +151,57 @@ describe('Settings page', () => {
       expect(screen.getByText('Configured')).toBeInTheDocument();
       expect(screen.getByText('workflow, chat')).toBeInTheDocument();
     });
+  });
+
+
+  it('adds TradingView MCP from preset path and probes CDP', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('TradingView MCP')).toBeInTheDocument();
+    });
+
+    const pathInput = screen.getByPlaceholderText(/Full path to tradingview-mcp/i);
+    await user.type(pathInput, '/Users/me/tradingview-mcp');
+    await user.click(screen.getByRole('button', { name: 'Add TradingView' }));
+
+    await waitFor(() => {
+      expect(createMcpServerFromPreset).toHaveBeenCalledWith({
+        presetId: 'tradingview',
+        installPath: '/Users/me/tradingview-mcp',
+        name: 'TradingView',
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: /Test CDP/i }));
+    await waitFor(() => {
+      expect(checkTradingViewCdp).toHaveBeenCalledWith(9222);
+      expect(screen.getByText(/Connected on port 9222/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows TradingView connected badge when server already listed', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-tv',
+          name: 'TradingView',
+          transport: 'stdio',
+          command: 'node',
+          args: ['/tmp/tv/src/server.js'],
+          url: null,
+          enabled: true,
+          createdAt: '2026-01-01',
+        },
+      ],
+    });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('● Connected')).toBeInTheDocument();
+    });
+    // Path form hidden when connected
+    expect(screen.queryByPlaceholderText(/Full path to tradingview-mcp/i)).not.toBeInTheDocument();
   });
 
   it('loads defaults and saves provider/model changes', async () => {
@@ -176,6 +243,32 @@ describe('Settings page', () => {
       expect(screen.getByDisplayValue('Anthropic')).toBeInTheDocument();
     });
     expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('adds TradingView MCP from preset and checks CDP status', async () => {
+    const user = userEvent.setup();
+    listMcpServers.mockResolvedValue({ ok: true, data: [] });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('TradingView MCP')).toBeInTheDocument());
+
+    await user.type(
+      screen.getByPlaceholderText(/Full path to tradingview-mcp/),
+      '/tmp/tradingview-mcp',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add TradingView' }));
+    await waitFor(() => {
+      expect(createMcpServerFromPreset).toHaveBeenCalledWith({
+        presetId: 'tradingview',
+        installPath: '/tmp/tradingview-mcp',
+        name: 'TradingView',
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Test CDP/i }));
+    await waitFor(() => {
+      expect(checkTradingViewCdp).toHaveBeenCalledWith(9222);
+      expect(screen.getByText(/Connected on port 9222/)).toBeInTheDocument();
+    });
   });
 
   it('changes theme and language', async () => {

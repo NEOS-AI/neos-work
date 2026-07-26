@@ -563,3 +563,99 @@ describe('mcp routes', () => {
     expect(((await del.json()) as { ok: boolean }).ok).toBe(true);
   });
 });
+
+describe('mcp presets + TradingView CDP', () => {
+  const PRESET_NAME = `_cov_tv_preset_${process.pid}`;
+
+  afterEach(() => {
+    getDb().prepare('DELETE FROM mcp_server WHERE name = ?').run(PRESET_NAME);
+  });
+
+  it('lists built-in presets including tradingview', async () => {
+    const res = await mcp.request('/presets');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: Array<{ id: string; domain?: string; toolHints: string[] }>;
+    };
+    expect(body.ok).toBe(true);
+    const tv = body.data.find((p) => p.id === 'tradingview');
+    expect(tv).toBeDefined();
+    expect(tv?.domain).toBe('finance');
+    expect(tv?.toolHints).toEqual(expect.arrayContaining(['tv_health_check']));
+  });
+
+  it('from-preset validates installPath and creates tradingview stdio server', async () => {
+    const missing = await mcp.request('/from-preset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ presetId: 'tradingview' }),
+    });
+    expect(missing.status).toBe(400);
+
+    const unknown = await mcp.request('/from-preset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ presetId: 'nope', installPath: '/tmp' }),
+    });
+    expect(unknown.status).toBe(404);
+
+    // Create a temp fake package root with src/server.js
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-tv-mcp-'));
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'src', 'server.js'), 'console.log("fake")\n');
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"fake"}\n');
+
+    try {
+      const create = await mcp.request('/from-preset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'tradingview',
+          installPath: dir,
+          name: PRESET_NAME,
+        }),
+      });
+      expect(create.status).toBe(201);
+      const created = (await create.json()) as {
+        ok: boolean;
+        data: { name: string; transport: string; command: string | null; args: string[] | null };
+      };
+      expect(created.ok).toBe(true);
+      expect(created.data.name).toBe(PRESET_NAME);
+      expect(created.data.transport).toBe('stdio');
+      expect(created.data.command).toBe('node');
+      expect(created.data.args?.[0]).toContain(path.join('src', 'server.js').replace(/\\/g, path.sep));
+      // Or just check ends with server.js
+      expect(created.data.args?.[0]?.endsWith('server.js')).toBe(true);
+
+      const dup = await mcp.request('/from-preset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'tradingview',
+          installPath: dir,
+          name: PRESET_NAME,
+        }),
+      });
+      expect(dup.status).toBe(409);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('probes tradingview cdp-health without throwing', async () => {
+    const res = await mcp.request('/tradingview/cdp-health');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { cdpConnected: boolean; port: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(typeof body.data.cdpConnected).toBe('boolean');
+    expect(body.data.port).toBe(9222);
+  });
+});
