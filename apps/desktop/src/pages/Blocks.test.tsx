@@ -95,6 +95,18 @@ describe('Blocks page', () => {
     expect(screen.queryByText('Price Lookup')).not.toBeInTheDocument();
   });
 
+  it('shows scrubbed load error when listBlocks fails', async () => {
+    listBlocks.mockResolvedValue({
+      ok: false,
+      error: `blocks${'\n'}down${'\0'}!`,
+    });
+    render(<Blocks />);
+    await waitFor(() => {
+      expect(screen.getByText('blocks down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('creates a prompt block via modal', async () => {
     listBlocks
       .mockResolvedValueOnce({ ok: true, data: [] })

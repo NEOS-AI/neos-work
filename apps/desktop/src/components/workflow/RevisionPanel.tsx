@@ -29,6 +29,7 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   const { t } = useTranslation('common');
   const [revisions, setRevisions] = useState<WorkflowRevision[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [labelInput, setLabelInput] = useState('');
   const [restoring, setRestoring] = useState<string | null>(null);
@@ -43,9 +44,26 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
 
   const loadRevisions = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await client.listRevisions(workflowId);
-      if (res.ok && res.data) setRevisions(res.data);
+      if (res.ok && res.data) {
+        setRevisions(res.data);
+      } else {
+        setRevisions([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load revisions',
+        );
+      }
+    } catch (err) {
+      setRevisions([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load revisions';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load revisions',
+      );
     } finally {
       setLoading(false);
     }
@@ -208,7 +226,12 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
         {loading && (
           <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>{t('common.loading')}</p>
         )}
-        {!loading && revisions.length === 0 && (
+        {!loading && loadError && (
+          <p className="text-center text-xs text-red-400">
+            {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+          </p>
+        )}
+        {!loading && !loadError && revisions.length === 0 && (
           <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
             {t('workflow.noRevisions', 'No saved versions yet.')}
           </p>

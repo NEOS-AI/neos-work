@@ -49,6 +49,26 @@ describe('RevisionPanel', () => {
     });
   });
 
+  it('shows scrubbed load error when listRevisions fails', async () => {
+    listRevisions.mockResolvedValue({
+      ok: false,
+      error: `rev${'\n'}down${'\0'}!`,
+    });
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('rev down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/no saved versions/i)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists revisions with node counts and restores after confirm', async () => {
     const user = userEvent.setup();
     listRevisions.mockResolvedValue({

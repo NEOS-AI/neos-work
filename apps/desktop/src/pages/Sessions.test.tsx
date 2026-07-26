@@ -96,6 +96,19 @@ describe('Sessions page', () => {
     expect(screen.getByRole('button', { name: 'newSession' })).toBeInTheDocument();
   });
 
+  it('shows scrubbed load error when listSessions fails', async () => {
+    listSessions.mockResolvedValue({
+      ok: false,
+      error: `sess${'\n'}down${'\0'}!`,
+    });
+    render(<Sessions />);
+    await waitFor(() => {
+      expect(screen.getByText('sess down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('noTasks')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists sessions sorted by updated date and filters by search', async () => {
     const user = userEvent.setup();
     listSessions.mockResolvedValue({ ok: true, data: sessions });

@@ -66,16 +66,31 @@ export function Sessions() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [sessionSearch, setSessionSearch] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load sessions from server
   const loadSessions = useCallback(async () => {
     if (!client) return;
+    setLoadError(null);
     try {
       const res = await client.listSessions();
-      if (res.ok) setSessions(res.data ?? []);
-      else setSessions([]);
-    } catch {
+      if (res.ok) {
+        setSessions(res.data ?? []);
+      } else {
+        setSessions([]);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load sessions',
+        );
+      }
+    } catch (err) {
       setSessions([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load sessions';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load sessions',
+      );
     }
   }, [client]);
 
@@ -223,7 +238,11 @@ export function Sessions() {
         )}
 
         <div className="flex-1 overflow-auto px-2">
-          {sessions.length === 0 ? (
+          {loadError ? (
+            <p className="px-2 py-1 text-xs text-red-400">
+              {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+            </p>
+          ) : sessions.length === 0 ? (
             <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>{t('noTasks')}</p>
           ) : visibleSessions.length === 0 ? (
             <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>No matches</p>

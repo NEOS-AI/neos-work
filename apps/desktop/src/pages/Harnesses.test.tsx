@@ -62,6 +62,18 @@ describe('Harnesses page', () => {
     });
   });
 
+  it('shows scrubbed load error when listHarnesses fails', async () => {
+    listHarnesses.mockResolvedValue({
+      ok: false,
+      error: `harness${'\n'}down${'\0'}!`,
+    });
+    render(<Harnesses />);
+    await waitFor(() => {
+      expect(screen.getByText('harness down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists harnesses and filters by domain/search', async () => {
     const user = userEvent.setup();
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });

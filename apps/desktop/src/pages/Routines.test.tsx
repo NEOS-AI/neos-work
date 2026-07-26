@@ -104,6 +104,20 @@ describe('Routines page', () => {
     vi.spyOn(window, 'alert').mockImplementation(() => {});
   });
 
+  it('shows scrubbed load error when listRoutines fails', async () => {
+    listRoutines.mockResolvedValue({
+      ok: false,
+      error: `rtn${'\n'}down${'\0'}!`,
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    render(<Routines />);
+    await waitFor(() => {
+      expect(screen.getByText('rtn down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/No routines\. Create one/)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('shows empty state', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: [] });
     listWorkflows.mockResolvedValue({ ok: true, data: [] });

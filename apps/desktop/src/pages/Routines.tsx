@@ -23,6 +23,7 @@ export function Routines() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RoutineRun[]>([]);
   const [search, setSearch] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('routines'));
 
   const handleEnabledFilter = (value: EnabledFilterPref) => {
@@ -47,15 +48,29 @@ export function Routines() {
 
   const load = async () => {
     if (!client) return;
+    setLoadError(null);
     try {
       const [rRes, wRes] = await Promise.all([client.listRoutines(), client.listWorkflows()]);
-      if (rRes.ok && rRes.data) setRoutines(rRes.data);
-      else setRoutines([]);
+      if (rRes.ok && rRes.data) {
+        setRoutines(rRes.data);
+      } else {
+        setRoutines([]);
+        setLoadError(
+          scrubDisplayText((rRes as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load routines',
+        );
+      }
       if (wRes.ok && wRes.data) setWorkflows(wRes.data);
       else setWorkflows([]);
-    } catch {
+    } catch (err) {
       setRoutines([]);
       setWorkflows([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load routines';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load routines',
+      );
     }
   };
 
@@ -379,7 +394,11 @@ export function Routines() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {routines.length === 0 ? (
+          {loadError ? (
+            <div className="p-4 text-sm text-red-400">
+              {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+            </div>
+          ) : routines.length === 0 ? (
             <div className="p-4 text-sm" style={{ color: 'var(--text-muted)' }}>
               No routines. Create one to automate workflows.
             </div>

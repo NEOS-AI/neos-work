@@ -233,17 +233,15 @@ export function DesignSystems() {
       {/* List */}
       {loading ? (
         <p className="text-white/40 text-sm">Loading...</p>
-      ) : pageError && systems.length === 0 ? (
-        <p className="text-sm text-red-400">
-          {scrubDisplayText(pageError, { collapseLines: true, maxChars: 300 }) || pageError}
-        </p>
       ) : systems.length === 0 ? (
-        <div className="text-center py-16 space-y-2">
-          <p className="text-white/40 text-sm">No design systems found.</p>
-          <p className="text-white/30 text-xs">
-            Create one to inject brand guidelines and component styles into agent prompts.
-          </p>
-        </div>
+        !pageError ? (
+          <div className="text-center py-16 space-y-2">
+            <p className="text-white/40 text-sm">No design systems found.</p>
+            <p className="text-white/30 text-xs">
+              Create one to inject brand guidelines and component styles into agent prompts.
+            </p>
+          </div>
+        ) : null
       ) : filteredSystems.length === 0 ? (
         <p className="text-white/40 text-sm">No design systems match your search.</p>
       ) : (

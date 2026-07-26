@@ -95,6 +95,19 @@ describe('Workflows page', () => {
     });
   });
 
+  it('shows scrubbed load error when listWorkflows fails', async () => {
+    listWorkflows.mockResolvedValue({
+      ok: false,
+      error: `wf${'\n'}down${'\0'}!`,
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('wf down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('workflow.empty')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists workflows and filters by domain/search', async () => {
     const user = userEvent.setup();
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });

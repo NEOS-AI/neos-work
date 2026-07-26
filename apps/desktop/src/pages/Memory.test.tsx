@@ -78,6 +78,19 @@ describe('Memory page', () => {
     });
   });
 
+  it('shows scrubbed load error when listMemories fails', async () => {
+    listMemories.mockResolvedValue({
+      ok: false,
+      error: `mem${'\n'}down${'\0'}!`,
+    });
+    render(<Memory />);
+    await waitFor(() => {
+      expect(screen.getByText('mem down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('memory.empty')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists items and filters by type/enabled/search', async () => {
     const user = userEvent.setup();
     listMemories.mockResolvedValue({ ok: true, data: items });

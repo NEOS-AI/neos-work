@@ -185,12 +185,17 @@ describe('Templates page', () => {
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
-  it('settles to empty when getTemplates is non-ok', async () => {
-    getTemplates.mockResolvedValue({ ok: false, error: 'down' });
+  it('shows scrubbed load error when getTemplates is non-ok', async () => {
+    getTemplates.mockResolvedValue({
+      ok: false,
+      error: `tpl${'\n'}down${'\0'}!`,
+    });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('No templates found.')).toBeInTheDocument();
+      expect(screen.getByText('tpl down!')).toBeInTheDocument();
     });
+    expect(screen.queryByText('No templates found.')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('shows node/edge counts and required settings badges', async () => {
