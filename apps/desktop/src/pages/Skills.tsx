@@ -90,7 +90,16 @@ export function Skills() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
-    await client.deleteSkill(id);
+    const res = await client.deleteSkill(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     setSkills((prev) => prev.filter((s) => s.id !== id));
   };
 

@@ -147,7 +147,16 @@ export function Routines() {
 
   const handleDelete = async (id: string) => {
     if (!client || !confirm('Delete this routine?')) return;
-    await client.deleteRoutine(id);
+    const res = await client.deleteRoutine(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     if (selectedId === id) setSelectedId(null);
     await load();
   };

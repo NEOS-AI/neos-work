@@ -285,6 +285,28 @@ describe('Routines page', () => {
     await waitFor(() => expect(deleteRoutine).toHaveBeenCalledWith('r1'));
   });
 
+  it('alerts scrubbed error when routine delete fails', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    deleteRoutine.mockResolvedValue({
+      ok: false,
+      error: `still${'\n'}running${'\0'}!`,
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(deleteRoutine).toHaveBeenCalledWith('r1');
+      expect(window.alert).toHaveBeenCalledWith('still running!');
+    });
+    // List + detail still show the routine after failed delete
+    expect(screen.getAllByText('Morning Digest').length).toBeGreaterThanOrEqual(1);
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
   it('saves schedule edits and crystallizes completed runs', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });

@@ -130,6 +130,24 @@ describe('Skills page', () => {
     await waitFor(() => expect(deleteSkill).toHaveBeenCalled());
   });
 
+  it('alerts scrubbed error when skill delete fails and keeps the skill', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    deleteSkill.mockResolvedValue({
+      ok: false,
+      error: `locked${'\n'}skill${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove skill' })[0]!);
+    await waitFor(() => {
+      expect(deleteSkill).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('locked skill!');
+    });
+    expect(screen.getByText('Alpha Skill')).toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
   it('disables an enabled skill and shows no-match search', async () => {
     const user = userEvent.setup();
     listSkills.mockResolvedValue({ ok: true, data: skills });

@@ -747,7 +747,16 @@ function McpServersSection() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
-    await client.deleteMcpServer(id);
+    const res = await client.deleteMcpServer(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     setServers((prev) => prev.filter((s) => s.id !== id));
   };
 

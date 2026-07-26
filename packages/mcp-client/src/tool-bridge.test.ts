@@ -79,6 +79,59 @@ describe('mcpToolToTool', () => {
     expect(failed.error).toBe('mcp failx');
     expect(failed.output).toBe(`mcp${'\n'}fail${'\0'}x`);
   });
+
+  it('stringifies non-string isError outputs and falls back when scrub empties', async () => {
+    const objTool = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => ({
+          success: false,
+          output: { code: 42, msg: 'nope' },
+        })),
+      } as never),
+      def,
+    );
+    const objFail = await objTool.execute({});
+    expect(objFail.success).toBe(false);
+    // String(object) path (not JSON.stringify) for non-string isError outputs
+    expect(objFail.error).toBe('[object Object]');
+    expect(objFail.output).toEqual({ code: 42, msg: 'nope' });
+
+    const nullOut = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => ({ success: false, output: null })),
+      } as never),
+      def,
+    );
+    const nullFail = await nullOut.execute({});
+    expect(nullFail.success).toBe(false);
+    expect(nullFail.error).toBe('MCP tool failed');
+
+    // Control-only thrown message → scrub empty → generic fallback
+    const emptyThrow = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => {
+          throw new Error(`\0\n\r`);
+        }),
+      } as never),
+      def,
+    );
+    const empty = await emptyThrow.execute({});
+    expect(empty.success).toBe(false);
+    expect(empty.error).toBe('MCP tool failed');
+
+    // Non-Error throw
+    const strThrow = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => {
+          throw 'raw-string-fail';
+        }),
+      } as never),
+      def,
+    );
+    const strFail = await strThrow.execute({});
+    expect(strFail.success).toBe(false);
+    expect(strFail.error).toBe('raw-string-fail');
+  });
 });
 
 describe('buildMcpTools', () => {

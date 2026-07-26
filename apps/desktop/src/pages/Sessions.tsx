@@ -116,7 +116,16 @@ export function Sessions() {
   const handleDeleteSession = async (id: string) => {
     if (!client) return;
     if (!window.confirm('Delete this session and its messages?')) return;
-    await client.deleteSession(id);
+    const res = await client.deleteSession(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      window.alert(err);
+      return;
+    }
     if (activeSessionId === id) setActiveSessionId(null);
     await loadSessions();
   };

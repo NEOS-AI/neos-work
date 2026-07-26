@@ -83,6 +83,7 @@ describe('Sessions page', () => {
     listMessages.mockResolvedValue({ ok: true, data: [] });
     confirmTool.mockResolvedValue({ ok: true });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
   });
 
   it('shows empty state when no sessions', async () => {
@@ -194,6 +195,24 @@ describe('Sessions page', () => {
     fireEvent.click(screen.getAllByTitle('Delete session')[0]!);
     expect(window.confirm).toHaveBeenCalled();
     await waitFor(() => expect(deleteSession).toHaveBeenCalledWith('s1'));
+  });
+
+  it('alerts scrubbed error when session delete fails', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    deleteSession.mockResolvedValue({
+      ok: false,
+      error: `busy${'\n'}now${'\0'}!`,
+    });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('Delete session')[0]!);
+    await waitFor(() => {
+      expect(deleteSession).toHaveBeenCalledWith('s1');
+      expect(window.alert).toHaveBeenCalledWith('busy now!');
+    });
+    expect(screen.getByText('Alpha Chat')).toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
   it('sends a chat message and streams assistant text', async () => {

@@ -193,4 +193,69 @@ describe('executeWorkflow concurrent or_gate race', () => {
       events.some((e) => e.type === 'node.completed' && (e as { nodeId: string }).nodeId === 'or'),
     ).toBe(true);
   });
+
+  it('combines workflow signal with branch AbortSignals and wires upstream edge inputs', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    const controller = new AbortController();
+    await executeWorkflow({
+      runId: 'run-or-race-signal',
+      signal: controller.signal,
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'src', type: 'trigger', label: 'Src', position: { x: 0, y: 0 }, config: {} },
+          { id: 'b1', type: 'output', label: 'B1', position: { x: 1, y: 0 }, config: {} },
+          { id: 'b2', type: 'output', label: 'B2', position: { x: 1, y: 1 }, config: {} },
+          { id: 'or', type: 'or_gate', label: 'OR', position: { x: 2, y: 0 }, config: {} },
+        ],
+        edges: [
+          // Upstream edges into racing branches (wired inside concurrent path)
+          { id: 'e0', source: 'src', target: 'b1' },
+          { id: 'e0b', source: 'src', target: 'b2' },
+          { id: 'e1', source: 'b1', target: 'or' },
+          { id: 'e2', source: 'b2', target: 'or' },
+          // Control-char edge endpoints ignored when collecting branch inputs
+          { id: 'ebad', source: 'src\nid', target: 'b1' },
+        ],
+      }),
+      settings: {},
+      triggerInputs: { seed: 1 },
+      onEvent: (e) => events.push(e),
+    });
+    expect(
+      events.some((e) => e.type === 'node.completed' && (e as { nodeId: string }).nodeId === 'or'),
+    ).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed' });
+  });
+
+  it('fails concurrent branch with overlong node id via runNode invalid-id path', async () => {
+    const longId = 'n'.repeat(201);
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-or-race-longid',
+      workflow: baseWorkflow({
+        nodes: [
+          {
+            id: longId,
+            type: 'output',
+            label: 'Long',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+          { id: 'or', type: 'or_gate', label: 'OR', position: { x: 1, y: 0 }, config: {} },
+        ],
+        edges: [{ id: 'e1', source: longId, target: 'or' }],
+      }),
+      settings: {},
+      onEvent: (e) => events.push(e),
+    });
+    // runNode rejects overlong ids as "invalid"
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'node.failed'
+          && (e as { nodeId?: string; error?: string }).nodeId === 'invalid'
+          && /Invalid node id/i.test(String((e as { error?: string }).error ?? '')),
+      ),
+    ).toBe(true);
+  });
 });

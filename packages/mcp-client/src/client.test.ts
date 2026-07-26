@@ -379,4 +379,27 @@ describe('McpClient', () => {
     await expect(c.callTool('t'.repeat(201), {})).rejects.toThrow(/Invalid tool name/i);
     await expect(c.callTool(null as unknown as string, {})).rejects.toThrow(/Invalid tool name/i);
   });
+
+  it('rejects control-char transport before connect and caps oversized tool outputs', async () => {
+    const c = new McpClient();
+    await expect(
+      c.connect({
+        id: 's',
+        name: 'S',
+        transport: 'stdio\n' as 'stdio',
+        command: 'echo',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/unsupported transport|transport/i);
+
+    // Oversize joined content → truncate marker
+    callToolMock.mockResolvedValue({
+      isError: false,
+      content: [{ type: 'text', text: 'Z'.repeat(600 * 1024) }],
+    });
+    const out = await c.callTool('big', {});
+    expect(out.success).toBe(true);
+    expect(String(out.output).length).toBeLessThanOrEqual(512 * 1024 + 30);
+    expect(String(out.output)).toContain('…[truncated]');
+  });
 });

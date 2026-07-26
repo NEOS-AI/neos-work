@@ -137,7 +137,16 @@ export function Workflows() {
   const handleDelete = async (id: string) => {
     if (!client) return;
     if (!confirm(t('workflow.confirmDelete'))) return;
-    await client.deleteWorkflow(id);
+    const res = await client.deleteWorkflow(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     setWorkflows((prev) => prev.filter((w) => w.id !== id));
   };
 
