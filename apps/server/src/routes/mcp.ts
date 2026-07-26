@@ -1,9 +1,20 @@
 /**
  * MCP servers API — manage MCP server configurations + OAuth 2.0 PKCE flow.
+ * Includes built-in presets (TradingView) and CDP health probe for finance workflows.
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Hono } from 'hono';
+
+import {
+  buildPresetStdioArgs,
+  checkTradingViewCdp,
+  getMcpPreset,
+  listMcpPresets,
+  sanitizeMcpInstallPath,
+} from '@neos-work/mcp-client';
 
 import { getDb } from '../db/schema.js';
 import { isSafeHttpBaseUrl } from '../db/settings.js';
@@ -228,6 +239,127 @@ function rowToResponse(row: McpServerRow) {
 mcp.get('/', (c) => {
   const rows = listMcpServers();
   return c.json({ ok: true, data: rows.map(rowToResponse) });
+});
+
+// GET /api/mcp-servers/presets — built-in one-click MCP catalogs (TradingView, …)
+mcp.get('/presets', (c) => {
+  return c.json({ ok: true, data: listMcpPresets() });
+});
+
+// GET /api/mcp-servers/tradingview/cdp-health — probe local CDP (default 9222)
+mcp.get('/tradingview/cdp-health', async (c) => {
+  try {
+    const portRaw = c.req.query('port');
+    const health = await checkTradingViewCdp(portRaw ?? 9222);
+    return c.json({ ok: true, data: health });
+  } catch (err) {
+    return c.json({ ok: false, error: safeError(err, 'tradingview-cdp-health') }, 500);
+  }
+});
+
+/**
+ * POST /api/mcp-servers/from-preset
+ * Body: { presetId: string, installPath?: string, name?: string }
+ * Creates an enabled MCP server row from a built-in preset (TradingView requires installPath).
+ */
+mcp.post('/from-preset', async (c) => {
+  try {
+    const body = await c.req.json<{
+      presetId?: string;
+      installPath?: string;
+      name?: string;
+    }>().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+    }
+
+    const presetIdRaw = typeof body.presetId === 'string' ? body.presetId : '';
+    if (/[\0\r\n]/.test(presetIdRaw)) {
+      return c.json({ ok: false, error: 'Missing or invalid "presetId"' }, 400);
+    }
+    const preset = getMcpPreset(presetIdRaw);
+    if (!preset) {
+      return c.json({ ok: false, error: 'Unknown MCP preset' }, 404);
+    }
+
+    // Optional display name override (default: preset.name)
+    let name = preset.name;
+    if (typeof body.name === 'string') {
+      if (/[\0\r\n]/.test(body.name) || body.name.trim().length > 200) {
+        return c.json({ ok: false, error: 'Missing or invalid "name"' }, 400);
+      }
+      const n = body.name.trim();
+      if (n) name = n;
+    }
+
+    // Reject duplicate name (case-sensitive match on stored names)
+    const existing = listMcpServers().find((r) => r.name === name);
+    if (existing) {
+      return c.json(
+        { ok: false, error: `MCP server named "${name}" already exists` },
+        409,
+      );
+    }
+
+    if (preset.transport === 'stdio') {
+      const installPath = sanitizeMcpInstallPath(body.installPath);
+      if (!installPath) {
+        return c.json(
+          {
+            ok: false,
+            error:
+              'installPath is required (folder containing package.json and src/ from tradingview-mcp)',
+          },
+          400,
+        );
+      }
+
+      // Resolve and validate entry file exists (src/server.js for TradingView)
+      const entryRel =
+        typeof preset.entryRelativePath === 'string' && !/[\0\r\n]/.test(preset.entryRelativePath)
+          ? preset.entryRelativePath.trim().replace(/^[/\\]+/, '')
+          : '';
+      if (!entryRel || entryRel.includes('..')) {
+        return c.json({ ok: false, error: 'Preset entry path is invalid' }, 500);
+      }
+      const entryAbs = path.resolve(installPath, entryRel);
+      const rootAbs = path.resolve(installPath);
+      // Ensure resolved entry stays under install root
+      if (entryAbs !== rootAbs && !entryAbs.startsWith(rootAbs + path.sep)) {
+        return c.json({ ok: false, error: 'installPath entry escapes root' }, 400);
+      }
+      if (!fs.existsSync(entryAbs) || !fs.statSync(entryAbs).isFile()) {
+        return c.json(
+          {
+            ok: false,
+            error: `Entry not found: ${entryRel}. Clone tradingview-mcp, npm install, and pass the package root path.`,
+          },
+          400,
+        );
+      }
+
+      const built = buildPresetStdioArgs(preset, installPath);
+      if (!built) {
+        return c.json({ ok: false, error: 'Failed to build preset command args' }, 400);
+      }
+
+      const row = createMcpServer({
+        name,
+        transport: 'stdio',
+        command: built.command,
+        args: built.args,
+      });
+      return c.json({ ok: true, data: rowToResponse(row) }, 201);
+    }
+
+    return c.json({ ok: false, error: 'Preset transport not supported' }, 400);
+  } catch (err) {
+    const msg = publicErrorMessage(err, 'mcp-from-preset failed');
+    if (/control characters|max length|required|transport|url|invalid|already exists/i.test(msg)) {
+      return c.json({ ok: false, error: msg }, 400);
+    }
+    return c.json({ ok: false, error: safeError(err, 'mcp-from-preset') }, 500);
+  }
 });
 
 // POST /api/mcp-servers
