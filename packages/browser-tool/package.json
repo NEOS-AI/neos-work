@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/browser-tool",
-  "version": "0.3.149",
+  "version": "0.3.150",
   "private": true,
   "license": "MIT",
   "type": "module",

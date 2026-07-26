@@ -303,4 +303,25 @@ describe('WebSearchNode', () => {
       expect.objectContaining({ title: 'ok', url: 'https://good.example' }),
     ]);
   });
+
+  it('drops unparseable result URLs from Tavily payloads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            { title: 'ok', url: 'https://good.example/x', content: 'a', score: 1 },
+            { title: 'bad', url: 'http://[::1', content: 'b', score: 0.5 }, // URL() throws
+            { title: 'ftp', url: 'ftp://files.example/x', content: 'c', score: 0.1 },
+          ],
+        }),
+      }),
+    );
+    const result = await node.execute(ctx({ TAVILY_API_KEY: 'tvly' }, { query: 'q' }));
+    expect(result.ok).toBe(true);
+    const out = result.output as Array<{ url: string }>;
+    expect(out).toHaveLength(1);
+    expect(out[0]!.url).toBe('https://good.example/x');
+  });
 });

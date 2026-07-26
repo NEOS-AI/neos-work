@@ -124,6 +124,13 @@ export function Workflows() {
     if (res.ok && res.data) {
       closeCreateModal();
       navigate(`/workflows/${res.data.id}`);
+    } else {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Create workflow failed';
+      alert(err);
     }
   };
 

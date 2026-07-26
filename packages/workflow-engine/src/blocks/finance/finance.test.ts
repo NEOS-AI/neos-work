@@ -313,6 +313,19 @@ describe('macd', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/KIS_APP_KEY/);
   });
+
+  it('reports unknown signal when MACD series is empty (too few bars)', async () => {
+    // Fewer bars than slowPeriod → technicalindicators returns empty series
+    getStockChart.mockResolvedValue(barsNewestFirst([100, 101, 102, 103, 104]));
+    const result = await exec().execute(
+      ctx({ symbol: '005930', fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 }),
+    );
+    expect(result.ok).toBe(true);
+    const out = result.output as { signal: string; current: unknown; histogram: number | null };
+    expect(out.signal).toBe('unknown');
+    expect(out.current == null).toBe(true);
+    expect(out.histogram).toBeNull();
+  });
 });
 
 describe('portfolio_summary', () => {

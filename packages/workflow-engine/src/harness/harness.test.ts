@@ -261,5 +261,18 @@ describe('built-in coding and finance harness catalogs', () => {
       allowedTools: [],
     });
     expect(resolveHarness('cov_harness_bad_prompt')).toBeUndefined();
+
+    // Non-string description preserved; non-array allowedTools → []
+    registerHarness({
+      id: 'cov_harness_nonstr_desc',
+      name: 'NonStrDesc',
+      domain: 'coding',
+      description: 99 as never,
+      systemPrompt: 'prompt ok',
+      allowedTools: 'read_file' as never,
+    });
+    const ns = resolveHarness('cov_harness_nonstr_desc');
+    expect(ns?.description).toBe(99 as never);
+    expect(ns?.allowedTools).toEqual([]);
   });
 });

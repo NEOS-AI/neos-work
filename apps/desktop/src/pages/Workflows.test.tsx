@@ -184,6 +184,34 @@ describe('Workflows page', () => {
     expect(createWorkflow).not.toHaveBeenCalled();
   });
 
+  it('alerts scrubbed create API error and keeps modal open', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    createWorkflow.mockResolvedValue({
+      ok: false,
+      error: `name${'\n'}taken${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByText('workflow.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: /workflow\.new/i })[0]!);
+    const nameInput = await waitFor(() => {
+      const inputs = document.querySelectorAll('input[type="text"]');
+      expect(inputs.length).toBeGreaterThan(0);
+      return inputs[0] as HTMLInputElement;
+    });
+    fireEvent.change(nameInput, { target: { value: 'Dup Name' } });
+    const form = nameInput.closest('form');
+    if (form) fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('name taken!');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
   it('deletes a workflow after confirm', async () => {
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
     deleteWorkflow.mockResolvedValue({ ok: true });

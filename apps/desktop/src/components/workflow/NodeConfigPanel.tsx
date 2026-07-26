@@ -33,6 +33,17 @@ function getConfig(node: Node): Record<string, unknown> {
   return (node.data.config as Record<string, unknown> | undefined) ?? {};
 }
 
+/** Multi-line config field display: strip null bytes only (keep newlines). */
+function displayMultiline(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+}
+
+/** Single-line config field display: collapse control chars. */
+function displayLine(raw: unknown, max = 500): string {
+  return scrubDisplayText(raw, { collapseLines: true, maxChars: max });
+}
+
 function stringifyJson(value: unknown): string {
   if (value === undefined) return '';
   try {
@@ -142,7 +153,9 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
 
       <TextField
         label="Label"
-        value={String(selectedNode.data.label ?? '')}
+        value={
+          scrubDisplayText(selectedNode.data.label, { collapseLines: true, maxChars: 200 })
+        }
         onChange={(label) => {
           // Control-char labels rejected (align with WorkflowValidation safeLabel)
           if (/[\0\r\n]/.test(label)) return;
@@ -220,7 +233,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           />
           <TextAreaField
             label="Additional system prompt"
-            value={typeof config.systemPrompt === 'string' ? config.systemPrompt : ''}
+            value={displayMultiline(config.systemPrompt)}
             rows={4}
             onChange={(systemPrompt) => {
               // Null-byte system prompts rejected (multi-line OK; align with harness)
@@ -296,7 +309,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
         <div className="space-y-3">
           <TextField
             label="Query"
-            value={typeof config.query === 'string' ? config.query : ''}
+            value={displayLine(config.query)}
             onChange={(query) => {
               // Control-char queries never applied (align with WorkflowValidation / resolveSearchQuery)
               if (/[\0\r\n]/.test(query)) return;
@@ -317,7 +330,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
         <div className="space-y-3">
           <TextField
             label="Channel"
-            value={typeof config.channel === 'string' ? config.channel : ''}
+            value={displayLine(config.channel)}
             placeholder="#alerts"
             onChange={(channel) => {
               // Control-char channel never applied (align with SlackMessageNode)
@@ -327,7 +340,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           />
           <TextAreaField
             label="Text template"
-            value={typeof config.textTemplate === 'string' ? config.textTemplate : ''}
+            value={displayMultiline(config.textTemplate)}
             rows={4}
             onChange={(textTemplate) => {
               // Null-byte templates rejected (multi-line OK)
@@ -341,7 +354,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
       {nodeType === 'discord_message' && (
         <TextAreaField
           label="Text template"
-          value={typeof config.textTemplate === 'string' ? config.textTemplate : ''}
+          value={displayMultiline(config.textTemplate)}
           rows={4}
           onChange={(textTemplate) => {
             // Null-byte templates rejected (multi-line OK)
@@ -380,7 +393,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             <>
               <TextAreaField
                 label="Prompt"
-                value={typeof config.prompt === 'string' ? config.prompt : ''}
+                value={displayLine(config.prompt, 10_000)}
                 rows={3}
                 onChange={(prompt) => {
                   // Image prompts reject null-byte / CR / LF (align with MediaNode + validation)
@@ -420,7 +433,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             <>
               <TextAreaField
                 label="Text"
-                value={typeof config.text === 'string' ? config.text : ''}
+                value={displayMultiline(config.text)}
                 rows={3}
                 onChange={(text) => {
                   // TTS: null-byte only (multi-line OK; align with MediaNode)
@@ -478,7 +491,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           </div>
           <TextField
             label="Project name"
-            value={typeof config.projectName === 'string' ? config.projectName : ''}
+            value={displayLine(config.projectName)}
             placeholder="neos-deploy"
             onChange={(projectName) => {
               // Control-char projectName never applied (align with DeployNode)
@@ -488,7 +501,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           />
           <TextAreaField
             label="Content (HTML)"
-            value={typeof config.content === 'string' ? config.content : ''}
+            value={displayMultiline(config.content)}
             rows={4}
             description="Optional static content; otherwise uses upstream `content` input."
             onChange={(content) => {

@@ -58,6 +58,24 @@ export function filterRunLogEvents(
   });
 }
 
+/**
+ * Validate linkify hrefs: http(s) only, no control/whitespace, length-capped.
+ * Exported for unit tests.
+ */
+export function safeLogHref(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  if (/\s/.test(raw)) return '';
+  const href = raw.replace(/[.,;:)]+$/, '');
+  if (!href || href.length > 2_048) return '';
+  try {
+    const u = new URL(href);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return href;
+  } catch {
+    return '';
+  }
+}
+
 /** Exported for unit tests — turn plain text into linkified React nodes. */
 export function linkifyText(text: string): ReactNode[] {
   // Scrub null bytes before splitting / rendering (keep multi-line for outputs)
@@ -65,16 +83,12 @@ export function linkifyText(text: string): ReactNode[] {
   const parts = safe.split(URL_RE);
   return parts.map((part, i) => {
     if (/^https?:\/\//.test(part)) {
-      // Drop control-char / non-http hrefs from linkify (defense-in-depth)
-      if (/[\0\r\n]/.test(part)) {
-        return <span key={i}>{scrubDisplayText(part, { collapseLines: true })}</span>;
+      const href = safeLogHref(part);
+      if (!href) {
+        // Hostile / overlong / control URL → plain text only
+        return <span key={i}>{scrubDisplayText(part, { collapseLines: true, maxChars: 500 })}</span>;
       }
-      const href = part.replace(/[.,;:)]+$/, '');
-      const trailing = part.slice(href.length);
-      // Only linkify plain http(s) without embedded whitespace
-      if (/\s/.test(href)) {
-        return <span key={i}>{part}</span>;
-      }
+      const trailing = part.startsWith(href) ? part.slice(href.length) : '';
       return (
         <span key={i}>
           <a

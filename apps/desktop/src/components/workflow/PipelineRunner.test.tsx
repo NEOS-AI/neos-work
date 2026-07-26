@@ -309,6 +309,46 @@ describe('PipelineRunner', () => {
     });
   });
 
+  it('ignores control-char stageId / unknown surface on waiting events', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-wait') };
+    });
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: `run${'\0'}x` });
+      onEvent?.({ type: 'stage.started', stageId: `st${'\n'}1`, stageName: 'Bad' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: `evil${'\n'}surface`,
+        schema: { fields: [{ key: 'n', label: 'N', type: 'text' }] },
+      });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: `plan${'\0'}`,
+        surface: 'form',
+        schema: { fields: [{ key: 'n', label: 'N', type: 'text' }] },
+      });
+    });
+    // Control-char runId/stageId/surface never open GenUI
+    expect(screen.queryByText(/Your input needed/i)).not.toBeInTheDocument();
+    // Valid event still works
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-ok' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: 'form',
+        schema: { fields: [{ key: 'n', label: 'Note', type: 'text', placeholder: 'ph' }] },
+      });
+    });
+    await waitFor(() => expect(screen.getByText(/Your input needed/i)).toBeInTheDocument());
+  });
+
   it('scrubs control-char plugin name and stage labels', async () => {
     const user = userEvent.setup();
     const dirtyPlugin = {

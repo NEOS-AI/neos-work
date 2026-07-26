@@ -70,6 +70,17 @@ describe('ToolRegistry', () => {
       execute: async () => ({ success: true, output: null }),
     });
     expect(reg.get('ok')?.description.length).toBe(2_000);
+
+    // Invalid inputSchema falls back to empty object schema; null-byte description scrubbed
+    reg.register({
+      name: 'schema_fallback',
+      description: `desc${'\0'}x`,
+      inputSchema: ['not', 'an', 'object'] as never,
+      execute: async () => ({ success: true, output: 1 }),
+    });
+    const t = reg.get('schema_fallback');
+    expect(t?.inputSchema).toEqual({ type: 'object', properties: {} });
+    expect(t?.description).toBe('desc x');
   });
 
   it('execute runs tool and catches thrown errors', async () => {

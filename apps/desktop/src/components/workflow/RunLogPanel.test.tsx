@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RunLogPanel, filterRunLogEvents, linkifyText } from './RunLogPanel.js';
+import { RunLogPanel, filterRunLogEvents, linkifyText, safeLogHref } from './RunLogPanel.js';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
 
 describe('RunLogPanel', () => {
@@ -124,6 +124,15 @@ describe('filterRunLogEvents', () => {
 });
 
 describe('linkifyText', () => {
+  it('safeLogHref gates protocol, control chars, and length', () => {
+    expect(safeLogHref('https://ok.example/path')).toBe('https://ok.example/path');
+    expect(safeLogHref('https://ok.example/path).')).toBe('https://ok.example/path');
+    expect(safeLogHref(`https://x.example/${'\0'}`)).toBe('');
+    expect(safeLogHref('http://x example.com')).toBe('');
+    expect(safeLogHref('ftp://files.example')).toBe('');
+    expect(safeLogHref('https://' + 'a'.repeat(2100))).toBe('');
+  });
+
   it('wraps http URLs in anchors', () => {
     const nodes = linkifyText('Deployed to vercel: https://example.vercel.app/path');
     const { container } = render(<div>{nodes}</div>);
@@ -145,6 +154,13 @@ describe('linkifyText', () => {
     const { container } = render(<div>{nodes}</div>);
     expect(container.querySelector('a')).toBeNull();
     expect(container.textContent).toBe('no urls here');
+  });
+
+  it('does not linkify overlong URLs', () => {
+    const long = 'https://evil.example/' + 'a'.repeat(2100);
+    const nodes = linkifyText(`see ${long}`);
+    const { container } = render(<div>{nodes}</div>);
+    expect(container.querySelector('a')).toBeNull();
   });
 });
 

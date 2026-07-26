@@ -27,6 +27,21 @@ interface PipelineRunnerProps {
   onClose: () => void;
 }
 
+/** Control-char / blank pipeline ids rejected (stageId, runId, plugin id). */
+function safePipelineId(raw: unknown, max = 100): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const s = raw.trim();
+  if (!s || s.length > max) return '';
+  return s;
+}
+
+/** Only known GenUI surfaces accepted for waiting stages. */
+function safePipelineSurface(raw: unknown): string {
+  const s = safePipelineId(raw, 40);
+  if (s === 'form' || s === 'choice' || s === 'confirmation') return s;
+  return '';
+}
+
 export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
   const { client } = useEngine();
   const [inputs, setInputs] = useState<Record<string, string>>(() =>
@@ -76,27 +91,47 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
         if (!prev) return prev;
         const next = { ...prev };
         switch (e.type) {
-          case 'pipeline.started':
-            next.runId = e.runId as string;
+          case 'pipeline.started': {
+            const runId = safePipelineId(e.runId, 100);
+            if (runId) next.runId = runId;
             break;
-          case 'stage.started':
+          }
+          case 'stage.started': {
+            const stageId = safePipelineId(e.stageId, 100);
+            if (!stageId) break;
+            const stageName =
+              scrubDisplayText(e.stageName, { collapseLines: true, maxChars: 120 }) || stageId;
             next.stages = [
               ...next.stages,
-              { stageId: e.stageId as string, stageName: e.stageName as string, status: 'running' },
+              { stageId, stageName, status: 'running' },
             ];
             break;
-          case 'stage.waiting':
-            next.waiting = { stageId: e.stageId as string, surface: e.surface as string, schema: e.schema };
+          }
+          case 'stage.waiting': {
+            const stageId = safePipelineId(e.stageId, 100);
+            const surface = safePipelineSurface(e.surface);
+            if (!stageId || !surface) break;
+            next.waiting = { stageId, surface, schema: e.schema };
             next.stages = next.stages.map((s) =>
-              s.stageId === e.stageId ? { ...s, status: 'waiting' } : s,
+              s.stageId === stageId ? { ...s, status: 'waiting' } : s,
             );
             break;
-          case 'stage.completed':
+          }
+          case 'stage.completed': {
+            const stageId = safePipelineId(e.stageId, 100);
+            if (!stageId) break;
             next.stages = next.stages.map((s) =>
-              s.stageId === e.stageId ? { ...s, output: e.output as string, status: 'done' } : s,
+              s.stageId === stageId
+                ? {
+                    ...s,
+                    output: scrubDisplayText(e.output, { maxChars: 2_000 }),
+                    status: 'done',
+                  }
+                : s,
             );
-            if (next.waiting?.stageId === e.stageId) next.waiting = null;
+            if (next.waiting?.stageId === stageId) next.waiting = null;
             break;
+          }
           case 'pipeline.completed':
             next.completed = true;
             next.waiting = null;
@@ -112,7 +147,8 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
     });
 
     runIdPromise.then((id) => {
-      if (id) setRun((prev) => (prev ? { ...prev, runId: id } : prev));
+      const safe = safePipelineId(id, 100);
+      if (safe) setRun((prev) => (prev ? { ...prev, runId: safe } : prev));
     });
     setStopFn(() => stop);
   }, [client, plugin.id, inputs, run]);
@@ -120,7 +156,15 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
   const handleResume = useCallback(
     async (stageId: string, response: Record<string, unknown>) => {
       if (!client || !run?.runId) return;
-      await client.resumePlugin(plugin.id, run.runId, stageId, response);
+      // Control-char stage / run / plugin ids never sent to resume API
+      const sid = safePipelineId(stageId, 100);
+      const rid = safePipelineId(run.runId, 100);
+      const pid =
+        typeof plugin.id === 'string' && !/[\0\r\n]/.test(plugin.id)
+          ? plugin.id.trim().slice(0, 100)
+          : '';
+      if (!sid || !rid || !pid) return;
+      await client.resumePlugin(pid, rid, sid, response);
     },
     [client, plugin.id, run],
   );

@@ -73,6 +73,12 @@ describe('resolveMessageText', () => {
     expect(resolveMessageText(undefined, {})).toBe('');
   });
 
+  it('returns empty string when input JSON serialization fails (circular)', () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    expect(resolveMessageText({}, circular)).toBe('');
+  });
+
   it('JSON-stringifies non-string input values in templates', () => {
     expect(
       resolveMessageText({ textTemplate: 'obj={{data}}' }, { data: { ok: true } }),

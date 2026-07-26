@@ -458,4 +458,31 @@ describe('createBrowserTools', () => {
     expect(linksFail.success).toBe(false);
     expect(linksFail.error).toMatch(/evaluate boom|browser_extract_links/i);
   });
+
+  it('browser_screenshot and extract_text return structured errors on page failures', async () => {
+    const pageShot = {
+      screenshot: vi.fn(async () => {
+        throw new Error('screenshot boom');
+      }),
+    };
+    const shot = createBrowserTools(makeManager(pageShot)).find(
+      (t) => t.name === 'browser_screenshot',
+    )!;
+    const shotRes = await shot.execute({});
+    expect(shotRes.success).toBe(false);
+    expect(shotRes.error).toMatch(/screenshot boom|browser_screenshot/i);
+
+    const pageText = {
+      evaluate: vi.fn(async () => {
+        throw new Error('text boom');
+      }),
+      locator: vi.fn(),
+    };
+    const extract = createBrowserTools(makeManager(pageText)).find(
+      (t) => t.name === 'browser_extract_text',
+    )!;
+    const textRes = await extract.execute({});
+    expect(textRes.success).toBe(false);
+    expect(textRes.error).toMatch(/text boom|browser_extract_text/i);
+  });
 });

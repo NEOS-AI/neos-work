@@ -200,4 +200,24 @@ describe('memory tools', () => {
     await recall.execute({ query: 'q', limit: 0 });
     expect(cb.search).toHaveBeenCalledWith('q', undefined, 1);
   });
+
+  it('rejects null-byte content and caps overlong recall queries', async () => {
+    const cb = mockCallbacks();
+    const remember = createRememberTool(cb);
+    const nullContent = await remember.execute({
+      key: 'k',
+      content: `hello${'\0'}world`,
+    });
+    expect(nullContent.success).toBe(false);
+    expect(nullContent.error).toMatch(/control characters/i);
+    expect(cb.save).not.toHaveBeenCalled();
+
+    const recall = createRecallTool(cb);
+    const longQ = 'q'.repeat(5_000);
+    await recall.execute({ query: longQ });
+    expect(cb.search).toHaveBeenCalled();
+    const searchMock = cb.search as unknown as { mock: { calls: unknown[][] } };
+    const usedQuery = String(searchMock.mock.calls.at(-1)?.[0] ?? '');
+    expect(usedQuery.length).toBe(2_000);
+  });
 });

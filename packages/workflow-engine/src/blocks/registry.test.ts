@@ -162,6 +162,24 @@ describe('block registry', () => {
     expect(resolveBlock('cov_skill_non_string')?.skillId).toBeUndefined();
   });
 
+  it('maps invalid domains to general and preserves non-string descriptions', () => {
+    registerBlockMeta({
+      id: 'cov_domain_quantum',
+      name: 'Quantum',
+      domain: 'quantum' as never,
+      category: 'test',
+      description: 42 as never,
+      isBuiltIn: true,
+      implementationType: 'native',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    const got = resolveBlock('cov_domain_quantum');
+    expect(got?.domain).toBe('general');
+    expect(got?.description).toBe(42 as never);
+  });
+
   it('rejects unsafe block ids and caps metadata fields', () => {
     registerNativeBlock({
       blockId: 'bad id!',
