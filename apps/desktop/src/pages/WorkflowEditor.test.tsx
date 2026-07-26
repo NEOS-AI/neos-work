@@ -33,12 +33,14 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+const routeParams = { id: 'wf-1' as string };
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
     useNavigate: () => navigate,
-    useParams: () => ({ id: 'wf-1' }),
+    useParams: () => ({ id: routeParams.id }),
     useBlocker: () => ({ state: 'unblocked' }),
   };
 });
@@ -155,6 +157,7 @@ function renderEditor() {
 
 describe('WorkflowEditor page', () => {
   beforeEach(() => {
+    routeParams.id = 'wf-1';
     getWorkflow.mockReset().mockResolvedValue({ ok: true, data: sampleWorkflow });
     listBlocks.mockReset().mockResolvedValue({ ok: true, data: [] });
     updateWorkflow.mockReset().mockResolvedValue({ ok: true, data: sampleWorkflow });
@@ -168,6 +171,17 @@ describe('WorkflowEditor page', () => {
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     vi.spyOn(window, 'alert').mockImplementation(() => {});
+  });
+
+  it('rejects control-char route id without calling getWorkflow', async () => {
+    routeParams.id = `wf${'\0'}1`;
+    renderEditor();
+    await waitFor(() => {
+      expect(
+        screen.getByText('Workflow id contains invalid control characters'),
+      ).toBeInTheDocument();
+    });
+    expect(getWorkflow).not.toHaveBeenCalled();
   });
 
   it('shows loading then workflow toolbar', async () => {

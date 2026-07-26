@@ -142,8 +142,15 @@ export function Routines() {
   useEffect(() => {
     if (!client || !selectedId) return;
     setRunsError(null);
+    // Control-char / blank / overlong routine ids never sent to list-runs API
+    const safeId = safeEntityId(selectedId);
+    if (!safeId) {
+      setRuns([]);
+      setRunsError('Routine id contains invalid control characters');
+      return;
+    }
     client
-      .listRoutineRuns(selectedId)
+      .listRoutineRuns(safeId)
       .then((res) => {
         if (res.ok && res.data) {
           setRuns(res.data);
@@ -179,7 +186,8 @@ export function Routines() {
     // Control-char name/schedule/timezone rejected before API (align with routines routes)
     if (/[\0\r\n]/.test(formName)) { setFormError('Name is invalid'); return; }
     if (!formName.trim()) { setFormError('Name is required'); return; }
-    if (!formWorkflowId || /[\0\r\n]/.test(formWorkflowId)) {
+    const workflowId = safeEntityId(formWorkflowId);
+    if (!workflowId) {
       setFormError('Select a workflow');
       return;
     }
@@ -194,7 +202,7 @@ export function Routines() {
     try {
       const res = await client.createRoutine({
         name: formName.trim(),
-        workflowId: formWorkflowId.trim(),
+        workflowId,
         schedule: formSchedule.trim(),
         timezone: formTimezone.trim() || 'UTC',
         enabled: formEnabled,

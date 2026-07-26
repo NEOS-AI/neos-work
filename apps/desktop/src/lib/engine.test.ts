@@ -81,6 +81,68 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/session/sess%201');
   });
 
+  it('rejects control-char settings keys, skill upgrade ids, createRoutine workflowId, media filenames', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockClear();
+
+    await expect(client.getSetting(`KEY${'\n'}X`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid setting key',
+    });
+    await expect(client.saveSetting('', 'v')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid setting key',
+    });
+    await expect(client.saveSetting('../etc', 'v')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid setting key',
+    });
+    await expect(client.upgradeSkillToPlugin(`sk${'\0'}1`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid skill id',
+    });
+    await expect(
+      client.createRoutine({
+        name: 'R',
+        workflowId: `wf${'\n'}1`,
+        schedule: '0 9 * * *',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.deleteMediaFile(`img${'\n'}.png`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid media filename',
+    });
+    await expect(client.deleteMediaFile('a b.png')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid media filename',
+    });
+    await expect(client.deleteMediaFile('../x.png')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid media filename',
+    });
+    expect(client.mediaFileUrl('a b.png')).toBe('');
+    expect(client.mediaFileUrl(`bad${'\0'}.png`)).toBe('');
+    await expect(client.fetchMediaBlob('a b.png')).rejects.toThrow(/Invalid media filename/);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Valid paths still reach fetch
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+    await client.getSetting('OPENAI_API_KEY');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/settings/OPENAI_API_KEY');
+    await client.upgradeSkillToPlugin('sk1');
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ skillId: 'sk1' });
+    await client.createRoutine({
+      name: 'R',
+      workflowId: 'wf-1',
+      schedule: '0 9 * * *',
+    });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string).workflowId).toBe('wf-1');
+    expect(client.mediaFileUrl('img_1.png')).toBe('http://engine.test/api/media/file/img_1.png');
+  });
+
   it('exposes base url and auth header after setAuthToken', async () => {
     const client = new EngineClient('http://engine.test');
     expect(client.url).toBe('http://engine.test');
@@ -952,9 +1014,11 @@ describe('EngineClient', () => {
     await client.updateRoutine('r1', { enabled: false });
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
 
-    expect(client.mediaFileUrl('a b.png')).toBe(
-      'http://engine.test/api/media/file/a%20b.png',
+    expect(client.mediaFileUrl('photo-1.png')).toBe(
+      'http://engine.test/api/media/file/photo-1.png',
     );
+    // Spaces / path separators rejected (align with server isSafeMediaFilename)
+    expect(client.mediaFileUrl('a b.png')).toBe('');
 
     const blob = new Blob(['img-bytes']);
     fetchMock.mockResolvedValueOnce(new Response(blob, { status: 200 }));

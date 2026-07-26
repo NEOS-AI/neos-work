@@ -357,6 +357,21 @@ export class EngineClient {
     return encodeURIComponent(s);
   }
 
+  /**
+   * Media filename path segment (align with server isSafeMediaFilename).
+   * Alphanumeric / underscore / hyphen / dot only; no leading dots.
+   */
+  private mediaFilenameSegment(raw: unknown, maxChars = 200): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const name = raw.trim();
+    if (!name || name === '.' || name === '..') return '';
+    if (name.startsWith('.')) return '';
+    const max = typeof maxChars === 'number' && maxChars > 0 ? maxChars : 200;
+    if (name.length > max) return '';
+    if (!/^[a-zA-Z0-9_\-.]+$/.test(name)) return '';
+    return encodeURIComponent(name);
+  }
+
   private invalidIdResponse<T = unknown>(label = 'id'): ApiResponse<T> {
     return { ok: false, error: `Invalid ${label}` } as ApiResponse<T>;
   }
@@ -623,14 +638,18 @@ export class EngineClient {
   }
 
   async getSetting(key: string): Promise<ApiResponse<{ key: string; value: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/settings/${encodeURIComponent(key)}`, {
+    const seg = this.pathSegment(key);
+    if (!seg) return this.invalidIdResponse('setting key');
+    const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async saveSetting(key: string, value: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/settings/${encodeURIComponent(key)}`, {
+    const seg = this.pathSegment(key);
+    if (!seg) return this.invalidIdResponse('setting key');
+    const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({ value }),
@@ -695,10 +714,15 @@ export class EngineClient {
   }
 
   async upgradeSkillToPlugin(skillId: string): Promise<ApiResponse<Plugin>> {
+    // Validate skill id before body send (control-char / blank / traversal fail closed)
+    const seg = this.pathSegment(skillId);
+    if (!seg) return this.invalidIdResponse('skill id');
+    // Decode for JSON body (pathSegment returns encodeURIComponent form)
+    const safeId = decodeURIComponent(seg);
     const res = await fetch(`${this.baseUrl}/api/plugins/upgrade-from-skill`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skillId }),
+      body: JSON.stringify({ skillId: safeId }),
     });
     return readApiResponse(res);
   }
@@ -941,7 +965,9 @@ export class EngineClient {
   }
 
   async deleteMediaFile(filename: string): Promise<ApiResponse<void>> {
-    const res = await fetch(this.mediaFileUrl(filename), {
+    const seg = this.mediaFilenameSegment(filename);
+    if (!seg) return this.invalidIdResponse('media filename');
+    const res = await fetch(`${this.baseUrl}/api/media/file/${seg}`, {
       method: 'DELETE',
       headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
     });
@@ -970,10 +996,13 @@ export class EngineClient {
     enabled?: boolean;
     inputs?: Record<string, unknown>;
   }): Promise<ApiResponse<Routine>> {
+    const wfSeg = this.pathSegment(input.workflowId);
+    if (!wfSeg) return this.invalidIdResponse('workflow id');
+    const safeWorkflowId = decodeURIComponent(wfSeg);
     const res = await fetch(`${this.baseUrl}/api/routines`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, workflowId: safeWorkflowId }),
     });
     return readApiResponse(res);
   }
@@ -1013,12 +1042,16 @@ export class EngineClient {
   }
 
   mediaFileUrl(filename: string): string {
-    return `${this.baseUrl}/api/media/file/${encodeURIComponent(filename)}`;
+    const seg = this.mediaFilenameSegment(filename);
+    if (!seg) return '';
+    return `${this.baseUrl}/api/media/file/${seg}`;
   }
 
   /** Authenticated fetch of a media file as Blob (for FileViewer). */
   async fetchMediaBlob(filename: string): Promise<Blob> {
-    const res = await fetch(this.mediaFileUrl(filename), {
+    const seg = this.mediaFilenameSegment(filename);
+    if (!seg) throw new Error('Invalid media filename');
+    const res = await fetch(`${this.baseUrl}/api/media/file/${seg}`, {
       headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
     });
     if (!res.ok) throw new Error(`Failed to load media (${res.status})`);

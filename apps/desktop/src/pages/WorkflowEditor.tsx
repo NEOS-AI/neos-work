@@ -1114,11 +1114,16 @@ export function WorkflowEditor() {
                     return;
                   }
                   if (!scheduleName.trim() || !scheduleCron.trim()) return;
+                  const wfId = safeEntityId(workflow.id);
+                  if (!wfId) {
+                    window.alert('Workflow id contains invalid control characters');
+                    return;
+                  }
                   setScheduleBusy(true);
                   try {
                     const res = await client.createRoutine({
                       name: scheduleName.trim(),
-                      workflowId: workflow.id,
+                      workflowId: wfId,
                       schedule: scheduleCron.trim(),
                       enabled: true,
                     });

@@ -14,12 +14,14 @@ vi.mock('../hooks/useEngine.js', () => ({
   }),
 }));
 
+const routeParams = { id: 'ds-1' as string };
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
     useNavigate: () => navigate,
-    useParams: () => ({ id: 'ds-1' }),
+    useParams: () => ({ id: routeParams.id }),
   };
 });
 
@@ -35,6 +37,7 @@ function renderEditor() {
 
 describe('DesignSystemEditor page', () => {
   beforeEach(() => {
+    routeParams.id = 'ds-1';
     listDesignSystems.mockReset().mockResolvedValue({
       ok: true,
       data: [{ id: 'ds-1', name: 'Brand X', description: '', updatedAt: '2026-01-01T00:00:00.000Z' }],
@@ -46,6 +49,18 @@ describe('DesignSystemEditor page', () => {
     saveDesignSystemContent.mockReset().mockResolvedValue({ ok: true });
     navigate.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('rejects control-char route id without calling content APIs', async () => {
+    routeParams.id = `ds${'\n'}1`;
+    renderEditor();
+    await waitFor(() => {
+      expect(
+        screen.getByText('Design system id contains invalid control characters'),
+      ).toBeInTheDocument();
+    });
+    expect(listDesignSystems).not.toHaveBeenCalled();
+    expect(getDesignSystemContent).not.toHaveBeenCalled();
   });
 
   it('loads design system content', async () => {
