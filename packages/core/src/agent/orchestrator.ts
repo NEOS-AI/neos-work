@@ -8,6 +8,7 @@
 
 import type { Message, MessageContent } from '@neos-work/shared';
 import type { LLMProviderAdapter } from '../llm/provider.js';
+import { scrubErrorMessage } from '../tools/base.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { Planner } from './planner.js';
 import type { AgentEvent, AgentStep, AgentTask, OrchestratorOptions } from './types.js';
@@ -131,7 +132,9 @@ export class AgentOrchestrator {
 
           yield { type: 'step_complete', step: { ...step } };
         } catch (err) {
-          const error = err instanceof Error ? err.message : String(err);
+          const error =
+            scrubErrorMessage(err instanceof Error ? err.message : String(err))
+            || 'Step failed';
           let healed = false;
 
           // Healing attempt 1: retry
@@ -186,7 +189,9 @@ export class AgentOrchestrator {
           }
 
           if (!healed) {
-            const finalError = err instanceof Error ? err.message : String(err);
+            const finalError =
+              scrubErrorMessage(err instanceof Error ? err.message : String(err))
+              || 'Step failed';
             step.status = 'error';
             step.error = finalError;
             yield { type: 'step_error', step: { ...step }, error: finalError };
@@ -205,8 +210,9 @@ export class AgentOrchestrator {
       yield { type: 'done', task };
     } catch (err) {
       task.status = 'failed';
-      let msg = err instanceof Error ? err.message : String(err);
-      if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+      const msg =
+        scrubErrorMessage(err instanceof Error ? err.message : String(err), 4_000)
+        || 'Agent failed';
       yield { type: 'error', error: msg };
     }
   }

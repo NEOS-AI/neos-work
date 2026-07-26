@@ -144,7 +144,16 @@ export function Workflows() {
   const handleDuplicate = async (id: string) => {
     if (!client) return;
     const res = await client.duplicateWorkflow(id);
-    if (res.ok) await loadWorkflows();
+    if (res.ok) {
+      await loadWorkflows();
+    } else {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Duplicate failed';
+      alert(err);
+    }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -156,13 +165,28 @@ export function Workflows() {
     if (!file || !client) return;
     try {
       const text = await file.text();
+      // Reject null-byte JSON payloads before parse (hostile paste / file)
+      if (/\0/.test(text)) {
+        alert('JSON import failed: invalid control characters');
+        return;
+      }
       const data = JSON.parse(text) as unknown;
       const res = await client.importWorkflow(data as Parameters<typeof client.importWorkflow>[0]);
       if (res.ok && res.data) {
         navigate(`/workflows/${res.data.id}`);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'JSON import failed';
+        alert(err);
       }
-    } catch {
-      // 파싱 또는 import 오류
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'JSON import failed';
+      alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'JSON import failed',
+      );
     } finally {
       e.target.value = '';
     }

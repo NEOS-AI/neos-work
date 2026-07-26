@@ -87,7 +87,19 @@ export function Templates() {
       });
       if (res.ok && res.data) {
         navigate(`/workflows/${res.data.id}`);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Create workflow failed';
+        alert(err);
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Create workflow failed';
+      alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Create workflow failed',
+      );
     } finally {
       setCreating(null);
     }

@@ -147,6 +147,7 @@ describe('Templates page', () => {
     const user = userEvent.setup();
     getTemplates.mockResolvedValue({ ok: true, data: templates });
     createWorkflow.mockResolvedValue({ ok: false, error: 'boom' });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
     renderPage();
     await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
 
@@ -158,8 +159,30 @@ describe('Templates page', () => {
     await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
 
     await user.click(screen.getAllByRole('button', { name: 'Use Template' })[0]!);
-    await waitFor(() => expect(createWorkflow).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('boom');
+    });
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('alerts scrubbed create API error when template use fails', async () => {
+    const user = userEvent.setup();
+    getTemplates.mockResolvedValue({ ok: true, data: templates });
+    createWorkflow.mockResolvedValue({
+      ok: false,
+      error: `quota${'\n'}exceeded${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Use Template' })[0]!);
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('quota exceeded!');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
   it('settles to empty when getTemplates is non-ok', async () => {

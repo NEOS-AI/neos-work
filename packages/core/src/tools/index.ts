@@ -1,4 +1,5 @@
 export type { Tool, ToolResult } from './base.js';
+export { scrubErrorMessage } from './base.js';
 export { ToolRegistry } from './registry.js';
 export {
   createReadFileTool,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Tool } from './base.js';
+import { scrubErrorMessage } from './base.js';
 import { ToolRegistry } from './registry.js';
 
 function makeTool(name: string, execute?: Tool['execute']): Tool {
@@ -104,6 +105,34 @@ describe('ToolRegistry', () => {
     const nonErr = await reg.execute('throw-string', null as unknown as Record<string, unknown>);
     expect(nonErr.success).toBe(false);
     expect(nonErr.error).toBe('Tool execution failed');
+  });
+
+  it('scrubs control chars from thrown and returned tool errors', async () => {
+    expect(scrubErrorMessage(`boom${'\n'}now${'\0'}!`)).toBe('boom now!');
+    expect(scrubErrorMessage('\0\n')).toBe('');
+
+    const reg = new ToolRegistry();
+    reg.register(
+      makeTool('throw-ctrl', async () => {
+        throw new Error(`disk${'\n'}full${'\0'}!`);
+      }),
+    );
+    reg.register(
+      makeTool('return-ctrl', async () => ({
+        success: false,
+        output: null,
+        error: `bad${'\0'}err\nline`,
+      })),
+    );
+    const thrown = await reg.execute('throw-ctrl', {});
+    expect(thrown.success).toBe(false);
+    expect(thrown.error).toBe('disk full!');
+    expect(thrown.error).not.toContain('\0');
+
+    const returned = await reg.execute('return-ctrl', {});
+    expect(returned.success).toBe(false);
+    expect(returned.error).toBe('baderr line');
+    expect(returned.error).not.toContain('\0');
   });
 
   it('caps registry size and still allows re-register of existing names', async () => {

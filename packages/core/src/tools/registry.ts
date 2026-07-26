@@ -5,6 +5,7 @@
 import type { ToolDefinition } from '@neos-work/shared';
 
 import type { Tool, ToolResult } from './base.js';
+import { scrubErrorMessage } from './base.js';
 
 /** Cap tool identity fields in the registry. */
 export const TOOL_NAME_MAX_CHARS = 200;
@@ -73,12 +74,22 @@ export class ToolRegistry {
       return { success: false, output: null, error: `Tool not found: ${n}` };
     }
     try {
-      return await tool.execute(input && typeof input === 'object' && !Array.isArray(input) ? input : {});
+      const result = await tool.execute(
+        input && typeof input === 'object' && !Array.isArray(input) ? input : {},
+      );
+      // Scrub control chars from tool-returned error strings (SSE / UI hygiene)
+      if (result && typeof result.error === 'string') {
+        const scrubbed = scrubErrorMessage(result.error);
+        return { ...result, error: scrubbed || 'Tool execution failed' };
+      }
+      return result;
     } catch (err) {
       return {
         success: false,
         output: null,
-        error: err instanceof Error ? err.message : 'Tool execution failed',
+        error:
+          scrubErrorMessage(err instanceof Error ? err.message : 'Tool execution failed')
+          || 'Tool execution failed',
       };
     }
   }

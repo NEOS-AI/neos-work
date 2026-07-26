@@ -235,6 +235,22 @@ describe('Workflows page', () => {
     });
   });
 
+  it('alerts scrubbed duplicate failure errors', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    duplicateWorkflow.mockResolvedValue({
+      ok: false,
+      error: `copy${'\n'}failed${'\0'}!`,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('workflow.duplicate')[0]!);
+    await waitFor(() => {
+      expect(duplicateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('copy failed!');
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
   it('duplicates a workflow and cancels delete when confirm is false', async () => {
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
     duplicateWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-copy' } });
@@ -284,6 +300,56 @@ describe('Workflows page', () => {
     await waitFor(() => {
       expect(importWorkflow).toHaveBeenCalledWith(payload);
       expect(navigate).toHaveBeenCalledWith('/workflows/wf-imported');
+    });
+  });
+
+  it('alerts scrubbed JSON import API / parse / null-byte failures', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    importWorkflow.mockResolvedValue({
+      ok: false,
+      error: `invalid${'\n'}graph${'\0'}!`,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    const jsonInput = document.querySelector('input[accept=".json"]') as HTMLInputElement;
+
+    const payload = { name: 'Bad', domain: 'general', nodes: [], edges: [] };
+    const file = new File([JSON.stringify(payload)], 'wf.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      value: async () => JSON.stringify(payload),
+    });
+    fireEvent.change(jsonInput, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(importWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('invalid graph!');
+    });
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    importWorkflow.mockClear();
+    const nullFile = new File(['x'], 'bad.json', { type: 'application/json' });
+    Object.defineProperty(nullFile, 'text', {
+      value: async () => `{"name":"x"${'\0'}}`,
+    });
+    fireEvent.change(jsonInput, { target: { files: [nullFile] } });
+    await waitFor(() => {
+      expect(importWorkflow).not.toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith(
+        'JSON import failed: invalid control characters',
+      );
+    });
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    const badJson = new File(['not-json'], 'bad.json', { type: 'application/json' });
+    Object.defineProperty(badJson, 'text', {
+      value: async () => 'not{json',
+    });
+    fireEvent.change(jsonInput, { target: { files: [badJson] } });
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalled();
+      const msg = String((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] ?? '');
+      expect(msg).not.toContain('\0');
+      // parse error message scrubbed
+      expect(msg.length).toBeGreaterThan(0);
     });
   });
 
