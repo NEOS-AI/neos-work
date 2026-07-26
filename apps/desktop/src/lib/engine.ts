@@ -59,6 +59,45 @@ export function scrubApiErrorMessage(raw: unknown, fallback = 'Request failed'):
   return s || fallback;
 }
 
+/**
+ * Parse an ApiResponse JSON body. Invalid JSON / non-object bodies never throw
+ * SyntaxError into UI handlers — returns a scrubbed `{ ok: false, error }`.
+ * Exported for unit tests.
+ */
+export async function readApiResponse<T = unknown>(res: Response): Promise<ApiResponse<T>> {
+  try {
+    const body: unknown = await res.json();
+    if (body && typeof body === 'object') {
+      return body as ApiResponse<T>;
+    }
+  } catch {
+    /* invalid JSON */
+  }
+  return {
+    ok: false,
+    error: scrubApiErrorMessage(
+      res.statusText,
+      formatHttpErrorMessage(res.status, res.statusText),
+    ),
+  };
+}
+
+/**
+ * Parse health JSON. Invalid body throws a clean Error (checkConnection catches).
+ * Exported for unit tests.
+ */
+export async function readHealthResponse(res: Response): Promise<HealthResponse> {
+  try {
+    const body: unknown = await res.json();
+    if (body && typeof body === 'object' && body !== null && 'status' in body) {
+      return body as HealthResponse;
+    }
+  } catch {
+    /* invalid JSON */
+  }
+  throw new Error(formatHttpErrorMessage(res.status, res.statusText));
+}
+
 export interface SessionData {
   id: string;
   workspace_id: string;
@@ -240,7 +279,7 @@ export class EngineClient {
 
   async health(): Promise<HealthResponse> {
     const res = await fetch(`${this.baseUrl}/api/health`);
-    return res.json();
+    return readHealthResponse(res);
   }
 
   async checkConnection(): Promise<boolean> {
@@ -259,7 +298,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/session${qs}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createSession(params: {
@@ -274,7 +313,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteSession(id: string): Promise<ApiResponse<void>> {
@@ -282,7 +321,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Messages ---
@@ -291,7 +330,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/messages`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Chat (SSE) ---
@@ -396,7 +435,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Tool Confirmation (VULN-003) ---
@@ -414,7 +453,7 @@ export class EngineClient {
         body: JSON.stringify({ approved }),
       },
     );
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Workspaces ---
@@ -423,7 +462,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/workspace`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createWorkspace(params: {
@@ -436,7 +475,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateWorkspace(
@@ -448,7 +487,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteWorkspace(id: string): Promise<ApiResponse<void>> {
@@ -456,7 +495,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Settings ---
@@ -465,14 +504,14 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/settings`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getSetting(key: string): Promise<ApiResponse<{ key: string; value: string }>> {
     const res = await fetch(`${this.baseUrl}/api/settings/${encodeURIComponent(key)}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async saveSetting(key: string, value: string): Promise<ApiResponse<void>> {
@@ -481,7 +520,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ value }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async verifyApiKey(provider: string, key: string): Promise<ApiResponse<{ valid: boolean }>> {
@@ -490,7 +529,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ provider, key }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Models ---
@@ -499,7 +538,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/models`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Skills ---
@@ -508,7 +547,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/skills`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async scanSkills(): Promise<ApiResponse<{ scanned: number; total: number }>> {
@@ -516,7 +555,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async toggleSkill(id: string, enabled: boolean): Promise<ApiResponse<void>> {
@@ -525,7 +564,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ enabled }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteSkill(id: string): Promise<ApiResponse<void>> {
@@ -533,7 +572,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async upgradeSkillToPlugin(skillId: string): Promise<ApiResponse<Plugin>> {
@@ -542,7 +581,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ skillId }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- MCP Servers ---
@@ -551,7 +590,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/mcp-servers`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createMcpServer(params: {
@@ -566,7 +605,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async toggleMcpServer(id: string, enabled: boolean): Promise<ApiResponse<void>> {
@@ -575,7 +614,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ enabled }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteMcpServer(id: string): Promise<ApiResponse<void>> {
@@ -583,7 +622,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- MCP OAuth ---
@@ -601,14 +640,14 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getMcpOAuthStatus(serverId: string): Promise<ApiResponse<{ connected: boolean; expiresAt?: string; scope?: string }>> {
     const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}/status`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async revokeMcpOAuth(serverId: string): Promise<ApiResponse<void>> {
@@ -616,7 +655,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async refreshMcpOAuth(serverId: string, params: { tokenEndpoint: string; clientId: string }): Promise<ApiResponse<{ connected: boolean; expiresAt?: string }>> {
@@ -625,7 +664,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- CLI Agents ---
@@ -634,14 +673,14 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/cli-agents`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Design Systems ---
 
   async listDesignSystems(): Promise<ApiResponse<DesignSystem[]>> {
     const res = await fetch(`${this.baseUrl}/api/design-systems`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createDesignSystem(name: string, description?: string): Promise<ApiResponse<DesignSystem>> {
@@ -650,7 +689,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, description }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteDesignSystem(id: string): Promise<ApiResponse<null>> {
@@ -658,12 +697,12 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getDesignSystemContent(id: string): Promise<ApiResponse<{ content: string }>> {
     const res = await fetch(`${this.baseUrl}/api/design-systems/${id}/content`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async saveDesignSystemContent(id: string, content: string): Promise<ApiResponse<null>> {
@@ -672,7 +711,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Artifacts ---
@@ -680,12 +719,12 @@ export class EngineClient {
   async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {
     const q = params.runId ? `runId=${params.runId}` : `workflowId=${params.workflowId}`;
     const res = await fetch(`${this.baseUrl}/api/artifacts?${q}`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getArtifact(id: string): Promise<ApiResponse<Artifact>> {
     const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async refreshArtifact(
@@ -697,7 +736,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteArtifact(id: string): Promise<ApiResponse<void>> {
@@ -705,7 +744,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateArtifact(
@@ -717,7 +756,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteMediaFile(filename: string): Promise<ApiResponse<void>> {
@@ -725,19 +764,19 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {},
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Routines ---
 
   async listRoutines(): Promise<ApiResponse<Routine[]>> {
     const res = await fetch(`${this.baseUrl}/api/routines`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getRoutine(id: string): Promise<ApiResponse<Routine>> {
     const res = await fetch(`${this.baseUrl}/api/routines/${id}`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createRoutine(input: {
@@ -753,7 +792,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateRoutine(id: string, input: Partial<{ name: string; schedule: string; timezone: string; enabled: boolean; inputs: Record<string, unknown> }>): Promise<ApiResponse<Routine>> {
@@ -762,14 +801,14 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async listMediaFiles(limit = 100): Promise<ApiResponse<MediaFileInfo[]>> {
     const res = await fetch(`${this.baseUrl}/api/media/files?limit=${limit}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /** Media generation readiness (no secrets returned). */
@@ -785,7 +824,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/media/config`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   mediaFileUrl(filename: string): string {
@@ -806,7 +845,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteRoutine(id: string): Promise<ApiResponse<null>> {
@@ -814,7 +853,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async runRoutineNow(id: string): Promise<ApiResponse<{ runId: string }>> {
@@ -822,12 +861,12 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async listRoutineRuns(id: string): Promise<ApiResponse<RoutineRun[]>> {
     const res = await fetch(`${this.baseUrl}/api/routines/${id}/runs`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async crystallizeRoutineRun(
@@ -840,7 +879,7 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input ?? {}),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deployPreflight(provider: 'vercel' | 'cloudflare', projectName?: string): Promise<
@@ -851,19 +890,19 @@ export class EngineClient {
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, projectName }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Plugins ---
 
   async listPlugins(): Promise<ApiResponse<Plugin[]>> {
     const res = await fetch(`${this.baseUrl}/api/plugins`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getPlugin(id: string): Promise<ApiResponse<Plugin>> {
     const res = await fetch(`${this.baseUrl}/api/plugins/${id}`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   runPlugin(
@@ -934,7 +973,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ stageId, response }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Workflows ---
@@ -943,14 +982,14 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/workflow`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getWorkflow(id: string): Promise<ApiResponse<Workflow>> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createWorkflow(input: {
@@ -965,7 +1004,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateWorkflow(
@@ -977,7 +1016,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteWorkflow(id: string): Promise<ApiResponse<void>> {
@@ -985,7 +1024,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async duplicateWorkflow(id: string): Promise<ApiResponse<Workflow>> {
@@ -993,7 +1032,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /**
@@ -1036,7 +1075,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(data),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async importWorkflowZip(file: File): Promise<ApiResponse<Workflow> & { meta?: { importKind?: string; artifactId?: string } }> {
@@ -1050,7 +1089,7 @@ export class EngineClient {
       headers,
       body: form,
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /** Import Claude Design / HTML-only ZIP as a workflow + artifact */
@@ -1064,7 +1103,7 @@ export class EngineClient {
       headers,
       body: form,
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /**
@@ -1136,14 +1175,14 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs?limit=${limit}&offset=${offset}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<WorkflowRun>> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<void>> {
@@ -1151,7 +1190,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /** Clear runs for a workflow. Optional status filter. */
@@ -1164,7 +1203,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async preflightWorkflow(workflowId: string): Promise<ApiResponse<{
@@ -1175,7 +1214,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Webhook ---
@@ -1187,7 +1226,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/secret`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getWebhookRateLimit(workflowId: string): Promise<ApiResponse<{
@@ -1199,7 +1238,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/rate-limit`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async regenerateWebhookSecret(workflowId: string): Promise<ApiResponse<{ secret: string }>> {
@@ -1207,7 +1246,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /**
@@ -1253,14 +1292,14 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getRevision(workflowId: string, revisionId: string): Promise<ApiResponse<WorkflowRevision>> {
     const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   /** Persist a revision snapshot onto the workflow record (plan Task 16). */
@@ -1272,7 +1311,7 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateRevisionLabel(workflowId: string, revisionId: string, label: string): Promise<ApiResponse<WorkflowRevision>> {
@@ -1281,7 +1320,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ label }),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteRevision(workflowId: string, revisionId: string): Promise<ApiResponse<void>> {
@@ -1289,7 +1328,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Deployments ---
@@ -1302,14 +1341,14 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/deploy${qs ? `?${qs}` : ''}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async getDeployment(id: string): Promise<ApiResponse<Deployment>> {
     const res = await fetch(`${this.baseUrl}/api/deploy/${id}`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteDeployment(id: string): Promise<ApiResponse<void>> {
@@ -1317,7 +1356,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Harnesses ---
@@ -1326,7 +1365,7 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/harness`, {
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Promise<ApiResponse<AgentHarness>> {
@@ -1335,7 +1374,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateHarness(id: string, input: Partial<AgentHarness>): Promise<ApiResponse<AgentHarness>> {
@@ -1344,7 +1383,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteHarness(id: string): Promise<ApiResponse<void>> {
@@ -1352,7 +1391,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Blocks ---
@@ -1362,7 +1401,7 @@ export class EngineClient {
       ? `${this.baseUrl}/api/blocks?domain=${encodeURIComponent(domain)}`
       : `${this.baseUrl}/api/blocks`;
     const res = await fetch(url, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createBlock(input: Omit<WorkflowBlock, 'isBuiltIn'>): Promise<ApiResponse<WorkflowBlock>> {
@@ -1371,7 +1410,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateBlock(id: string, input: Partial<WorkflowBlock>): Promise<ApiResponse<WorkflowBlock>> {
@@ -1380,7 +1419,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteBlock(id: string): Promise<ApiResponse<void>> {
@@ -1388,7 +1427,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Templates ---
@@ -1398,14 +1437,14 @@ export class EngineClient {
       ? `${this.baseUrl}/api/templates?domain=${encodeURIComponent(domain)}`
       : `${this.baseUrl}/api/templates`;
     const res = await fetch(url, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   // --- Memory ---
 
   async listMemories(): Promise<ApiResponse<MemoryItem[]>> {
     const res = await fetch(`${this.baseUrl}/api/memory`, { headers: this.getHeaders() });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async createMemory(input: CreateMemoryInput): Promise<ApiResponse<MemoryItem>> {
@@ -1414,7 +1453,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async updateMemory(id: string, input: UpdateMemoryInput): Promise<ApiResponse<MemoryItem>> {
@@ -1423,7 +1462,7 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(input),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async deleteMemory(id: string): Promise<ApiResponse<void>> {
@@ -1431,7 +1470,7 @@ export class EngineClient {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 
   async toggleMemory(id: string): Promise<ApiResponse<MemoryItem>> {
@@ -1439,7 +1478,7 @@ export class EngineClient {
       method: 'PUT',
       headers: this.getHeaders(),
     });
-    return res.json();
+    return readApiResponse(res);
   }
 }
 

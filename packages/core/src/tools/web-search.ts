@@ -76,7 +76,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.162',
+            'User-Agent': 'neos-work/0.3.163',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });

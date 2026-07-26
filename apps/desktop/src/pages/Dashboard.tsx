@@ -44,12 +44,14 @@ export function Dashboard() {
   const [recentWorkflows, setRecentWorkflows] = useState<Workflow[]>([]);
   const [recentRoutines, setRecentRoutines] = useState<Routine[]>([]);
   const [recentDeployments, setRecentDeployments] = useState<Deployment[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
 
     void (async () => {
+      setLoadError(null);
       const [sessions, workflows, skills, plugins, routines, designSystems, deployments, media, health] =
         await Promise.all([
           client.listSessions().catch(() => null),
@@ -63,6 +65,27 @@ export function Dashboard() {
           client.health().catch(() => null),
         ]);
       if (cancelled) return;
+      const results = [
+        sessions,
+        workflows,
+        skills,
+        plugins,
+        routines,
+        designSystems,
+        deployments,
+        media,
+      ];
+      // Banner when every catalog list failed (network throw or !ok) — not partial gaps
+      const allFailed = results.every((r) => r == null || r.ok === false);
+      if (allFailed) {
+        const firstErr = results.find((r) => r && r.ok === false) as { error?: string } | undefined;
+        setLoadError(
+          scrubDisplayText(firstErr?.error, { collapseLines: true, maxChars: 300 })
+            || 'Failed to load dashboard data',
+        );
+      } else {
+        setLoadError(null);
+      }
       const wfList = workflows?.ok && workflows.data ? workflows.data : [];
       const deployList = deployments?.ok && deployments.data ? deployments.data : [];
       setStats({
@@ -100,6 +123,12 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{t('nav.dashboard')}</h1>
+
+      {loadError && (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
+      )}
 
       {/* Status Cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">

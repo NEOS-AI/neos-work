@@ -4,6 +4,8 @@ import {
   formatHttpErrorMessage,
   parseSseDataPayload,
   parseSseEventName,
+  readApiResponse,
+  readHealthResponse,
   scrubApiErrorMessage,
 } from './engine.js';
 
@@ -709,6 +711,46 @@ describe('EngineClient', () => {
     expect(scrubApiErrorMessage(`disk${'\n'}full${'\0'}!`)).toBe('disk full!');
     expect(scrubApiErrorMessage('\0\r\n', 'fallback')).toBe('fallback');
     expect(scrubApiErrorMessage(null, 'fallback')).toBe('fallback');
+  });
+
+  it('readApiResponse returns envelope or scrubbed failure without throwing', async () => {
+    const okRes = new Response(JSON.stringify({ ok: true, data: { id: 'x' } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    await expect(readApiResponse(okRes)).resolves.toEqual({ ok: true, data: { id: 'x' } });
+
+    // Response ctor rejects control-char statusText — stub getters
+    const badJson = new Response('not-json{', {
+      status: 502,
+      statusText: 'Bad Gateway',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    Object.defineProperty(badJson, 'statusText', {
+      value: `Bad${'\n'}Gateway${'\0'}!`,
+    });
+    const failed = await readApiResponse(badJson);
+    expect(failed.ok).toBe(false);
+    expect(failed.error).toMatch(/Bad Gateway|HTTP 502/);
+    expect(failed.error).not.toContain('\0');
+    expect(failed.error).not.toMatch(/[\r\n]/);
+
+    const nonObject = new Response(JSON.stringify('plain'), { status: 200 });
+    const plain = await readApiResponse(nonObject);
+    expect(plain.ok).toBe(false);
+  });
+
+  it('readHealthResponse parses ok body and throws clean error on invalid JSON', async () => {
+    const ok = new Response(JSON.stringify({ status: 'ok', version: '0.3.162' }), {
+      status: 200,
+    });
+    await expect(readHealthResponse(ok)).resolves.toMatchObject({ status: 'ok', version: '0.3.162' });
+
+    const bad = new Response('<html>nope</html>', {
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    await expect(readHealthResponse(bad)).rejects.toThrow(/HTTP 503/);
   });
 
   it('harness and block CRUD with domain query', async () => {

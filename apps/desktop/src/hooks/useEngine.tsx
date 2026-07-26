@@ -7,6 +7,7 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 import type { ReactNode } from 'react';
 
 import { EngineClient } from '../lib/engine.js';
+import { scrubDisplayText } from '../lib/format-duration.js';
 import { startEngine, stopEngine, getAuthToken, getEnginePort } from '../lib/tauri.js';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -140,11 +141,13 @@ export function EngineProvider({ children }: { children: ReactNode }) {
         await new Promise((r) => setTimeout(r, retryDelay));
       }
 
+      const urlSafe =
+        scrubDisplayText(serverUrl, { collapseLines: true, maxChars: 200 }) || 'server';
       setState({
         status: 'error',
         mode,
         serverUrl,
-        error: `Could not connect to engine at ${serverUrl}`,
+        error: `Could not connect to engine at ${urlSafe}`,
         client: null,
       });
     },

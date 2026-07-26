@@ -311,4 +311,21 @@ describe('Dashboard page', () => {
     expect(listDeployments).toHaveBeenCalledWith(undefined, 200);
     expect(listMediaFiles).toHaveBeenCalledWith(200);
   });
+
+  it('shows scrubbed load error when all catalog lists fail', async () => {
+    listSessions.mockResolvedValue({ ok: false, error: `dash${'\n'}down${'\0'}!` });
+    listWorkflows.mockResolvedValue({ ok: false, error: 'wf fail' });
+    listSkills.mockResolvedValue({ ok: false });
+    listPlugins.mockResolvedValue({ ok: false });
+    listRoutines.mockResolvedValue({ ok: false });
+    listDesignSystems.mockResolvedValue({ ok: false });
+    listDeployments.mockResolvedValue({ ok: false });
+    listMediaFiles.mockResolvedValue({ ok: false });
+    health.mockResolvedValue({ status: 'ok', version: '0.3.162', uptime: 1 });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('dash down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

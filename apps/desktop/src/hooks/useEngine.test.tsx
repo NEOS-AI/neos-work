@@ -164,9 +164,54 @@ describe('useEngine / EngineProvider', () => {
       expect(screen.getByTestId('status').textContent).toBe('error');
     });
 
-    expect(screen.getByTestId('error').textContent).toMatch(/Could not connect to engine at http:\/\/192\.168\.1\.10:57286/);
+    expect(screen.getByTestId('error').textContent).toMatch(
+      /Could not connect to engine at http:\/\/192\.168\.1\.10:57286/,
+    );
     expect(screen.getByTestId('client').textContent).toBe('no');
     expect(checkConnection.mock.calls.length).toBe(3);
+  });
+
+  it('scrubs control chars from connect failure server URL in error', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    checkConnection.mockResolvedValue(false);
+    // Probe uses default remote URL from its button handler — exercise connect via URL with controls
+    // by calling connect through a custom harness below would need Probe change; instead assert scrub helper path
+    // via a direct EngineProvider consumer:
+    function CustomProbe() {
+      const { error, connect, status } = useEngine();
+      return (
+        <div>
+          <button
+            type="button"
+            onClick={() => void connect('client', `http://evil.example/${'\0'}x${'\n'}y`)}
+          >
+            dirty
+          </button>
+          <span data-testid="status">{status}</span>
+          <span data-testid="error">{error ?? ''}</span>
+        </div>
+      );
+    }
+    render(
+      <EngineProvider>
+        <CustomProbe />
+      </EngineProvider>,
+    );
+    const clickPromise = user.click(screen.getByRole('button', { name: 'dirty' }));
+    await act(async () => {
+      for (let i = 0; i < 6; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+    });
+    await clickPromise;
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('error');
+    });
+    const msg = screen.getByTestId('error').textContent ?? '';
+    expect(msg).toMatch(/Could not connect to engine at/);
+    expect(msg).not.toContain('\0');
+    expect(msg).not.toMatch(/[\r\n]/);
+    expect(msg).toMatch(/evil\.example/);
   });
 
   it('sets error when host mode retries exhaust', async () => {
