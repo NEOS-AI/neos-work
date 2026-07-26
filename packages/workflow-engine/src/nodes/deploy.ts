@@ -5,6 +5,7 @@
 import { isValidDeployProjectName } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { safeServerUrl } from './server-url.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 export { isValidDeployProjectName };
 
@@ -150,7 +151,7 @@ export const DeployNode: ExecutableNode = {
       return {
         ok: false,
         output: null,
-        error: err instanceof Error ? err.message : 'Deploy failed',
+        error: scrubErrorMessage(err instanceof Error ? err.message : 'Deploy failed') || 'Deploy failed',
         durationMs: Date.now() - start,
       };
     }

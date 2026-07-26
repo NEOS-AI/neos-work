@@ -105,6 +105,16 @@ describe('ToolRegistry', () => {
     const nonErr = await reg.execute('throw-string', null as unknown as Record<string, unknown>);
     expect(nonErr.success).toBe(false);
     expect(nonErr.error).toBe('Tool execution failed');
+
+    // Control-only thrown message scrubs to empty → generic fallback
+    reg.register(
+      makeTool('throw-ctrl-only', async () => {
+        throw new Error(`\0\n\r`);
+      }),
+    );
+    const emptyThrow = await reg.execute('throw-ctrl-only', {});
+    expect(emptyThrow.success).toBe(false);
+    expect(emptyThrow.error).toBe('Tool execution failed');
   });
 
   it('scrubs control chars from thrown and returned tool errors', async () => {

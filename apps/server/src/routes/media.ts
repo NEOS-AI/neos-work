@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getSecretSetting } from '../db/settings.js';
+import { publicErrorMessage } from '../lib/errors.js';
 import { generateImage, generateAudio, listMediaFiles, MEDIA_DIR as MEDIA_DIR_EXPORT } from '../lib/media-generator.js';
 import { isSafeMediaFilename } from '../lib/media-filename.js';
 
@@ -84,7 +85,7 @@ media.post('/image', async (c) => {
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to generate image';
+    const msg = publicErrorMessage(err, 'Failed to generate image');
     return c.json({ ok: false, error: msg }, 500);
   }
 });
@@ -125,7 +126,7 @@ media.post('/audio', async (c) => {
       data: { filePath: result.filePath, filename: path.basename(result.filePath) },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to generate audio';
+    const msg = publicErrorMessage(err, 'Failed to generate audio');
     return c.json({ ok: false, error: msg }, 500);
   }
 });
@@ -246,7 +247,7 @@ media.post('/generate', async (c) => {
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to generate media';
+    const msg = publicErrorMessage(err, 'Failed to generate media');
     return c.json({ ok: false, error: msg }, 500);
   }
 });
@@ -267,7 +268,7 @@ media.delete('/file/:filename', (c) => {
     fs.unlinkSync(filePath);
     return c.json({ ok: true });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Delete failed';
+    const msg = publicErrorMessage(err, 'Delete failed');
     return c.json({ ok: false, error: msg }, 500);
   }
 });

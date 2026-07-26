@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { Tool, ToolResult } from './base.js';
+import { scrubErrorMessage, type Tool, type ToolResult } from './base.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
@@ -209,7 +209,7 @@ export function createShellTool(workspaceRoot: string): Tool {
         return {
           success: false,
           output: null,
-          error: err instanceof Error ? err.message : String(err),
+          error: scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed',
         };
       }
     },

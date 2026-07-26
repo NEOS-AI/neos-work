@@ -15,6 +15,7 @@ import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { registerNativeBlock } from '../registry.js';
 import type { BlockExecutionContext, BlockResult } from '../types.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 const WORKSPACES_DIR = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
 /** Simple binaries: any args. go/cargo require `test` as first argument (plan Task 12). */
@@ -177,7 +178,7 @@ async function executeCodeEval(ctx: BlockExecutionContext): Promise<BlockResult>
 
     return { ok: true, output, durationMs: Date.now() - start };
   } catch (err) {
-    let msg = err instanceof Error ? err.message : String(err);
+    let msg = scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed';
     if (msg.length > 4_000) msg = msg.slice(0, 4_000);
     return {
       ok: false,
@@ -226,7 +227,7 @@ async function executeFileRead(ctx: BlockExecutionContext): Promise<BlockResult>
     return {
       ok: false,
       output: null,
-      error: err instanceof Error ? err.message : String(err),
+      error: scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed',
       durationMs: Date.now() - start,
     };
   }
@@ -274,7 +275,7 @@ async function executeFileWrite(ctx: BlockExecutionContext): Promise<BlockResult
     return {
       ok: false,
       output: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed',
       durationMs: Date.now() - start,
     };
   }

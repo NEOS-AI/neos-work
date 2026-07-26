@@ -7,6 +7,7 @@
 import { isDiscordWebhookUrl } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { DISCORD_CONTENT_MAX_LENGTH, resolveMessageText } from './message-text.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 export class DiscordMessageNode implements ExecutableNode {
   type = 'discord_message' as const;
@@ -88,7 +89,7 @@ export class DiscordMessageNode implements ExecutableNode {
       return {
         ok: false,
         output: null,
-        error: err instanceof Error ? err.message : 'Discord send failed',
+        error: scrubErrorMessage(err instanceof Error ? err.message : 'Discord send failed') || 'Discord send failed',
         durationMs: Date.now() - start,
       };
     }

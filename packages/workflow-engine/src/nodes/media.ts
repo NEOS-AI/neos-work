@@ -4,6 +4,7 @@
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { safeServerUrl } from './server-url.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 /** Aligned with desktop NodeConfigPanel / media-node-options allow-lists. */
 const IMAGE_SIZES = new Set(['1024x1024', '1792x1024', '1024x1792']);
@@ -153,7 +154,7 @@ export const MediaNode: ExecutableNode = {
         return {
           ok: false,
           output: null,
-          error: err instanceof Error ? err.message : 'Image generation failed',
+          error: scrubErrorMessage(err instanceof Error ? err.message : 'Image generation failed') || 'Image generation failed',
           durationMs: Date.now() - start,
         };
       }
@@ -253,7 +254,7 @@ export const MediaNode: ExecutableNode = {
         return {
           ok: false,
           output: null,
-          error: err instanceof Error ? err.message : 'Audio generation failed',
+          error: scrubErrorMessage(err instanceof Error ? err.message : 'Audio generation failed') || 'Audio generation failed',
           durationMs: Date.now() - start,
         };
       }

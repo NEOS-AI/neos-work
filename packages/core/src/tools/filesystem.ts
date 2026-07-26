@@ -8,7 +8,7 @@ import { realpathSync, createReadStream } from 'node:fs';
 import { resolve, relative, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-import type { Tool, ToolResult } from './base.js';
+import { scrubErrorMessage, type Tool, type ToolResult } from './base.js';
 
 const MAX_WRITE_SIZE = 1_048_576; // 1MB
 /** Cap read_file payload so huge files cannot bloat the agent context. */
@@ -102,7 +102,7 @@ export function createReadFileTool(workspaceRoot: string): Tool {
         }
         return { success: true, output: content };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };
@@ -142,7 +142,7 @@ export function createWriteFileTool(workspaceRoot: string): Tool {
         await writeFile(filePath, content, 'utf-8');
         return { success: true, output: `File written: ${displayPath}` };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };
@@ -194,7 +194,7 @@ export function createListDirectoryTool(workspaceRoot: string): Tool {
         );
         return { success: true, output: results };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };
@@ -318,7 +318,7 @@ export function createSearchFilesTool(workspaceRoot: string): Tool {
           return { success: true, output: { matches: matchingLines } };
         }
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };
@@ -380,7 +380,7 @@ export function createMoveFileTool(workspaceRoot: string): Tool {
         await rename(srcPath, destResolved);
         return { success: true, output: { moved: `${source} → ${destination}` } };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };

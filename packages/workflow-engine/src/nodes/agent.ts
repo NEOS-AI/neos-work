@@ -8,6 +8,7 @@ import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, Tool
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveHarness } from '../harness/index.js';
 import { safeServerUrl } from './server-url.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 
 /** Cap API keys / auth tokens (header hygiene). */
@@ -238,8 +239,9 @@ export class AgentNode implements ExecutableNode {
           durationMs: Date.now() - start,
         };
       } catch (err) {
-        let msg = err instanceof Error ? err.message : String(err);
-        if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+        const msg =
+          scrubErrorMessage(err instanceof Error ? err.message : String(err), 4_000)
+          || 'Operation failed';
         return {
           ok: false,
           output: null,
@@ -307,16 +309,20 @@ export class AgentNode implements ExecutableNode {
           return { ok: true, output: result, durationMs: Date.now() - start };
         }
         if (event.type === 'error') {
-          let errMsg = typeof event.error === 'string' ? event.error : String(event.error ?? 'Agent error');
-          if (errMsg.length > 4_000) errMsg = errMsg.slice(0, 4_000);
+          const errMsg =
+            scrubErrorMessage(
+              typeof event.error === 'string' ? event.error : String(event.error ?? 'Agent error'),
+              4_000,
+            ) || 'Agent error';
           return { ok: false, output: null, error: errMsg, durationMs: Date.now() - start };
         }
       }
 
       return { ok: true, output: lastText, durationMs: Date.now() - start };
     } catch (err) {
-      let msg = err instanceof Error ? err.message : String(err);
-      if (msg.length > 4_000) msg = msg.slice(0, 4_000);
+      const msg =
+        scrubErrorMessage(err instanceof Error ? err.message : String(err), 4_000)
+        || 'Operation failed';
       return {
         ok: false,
         output: null,

@@ -3,7 +3,7 @@
  * Requires TAVILY_API_KEY environment variable.
  */
 
-import type { Tool, ToolResult } from './base.js';
+import { scrubErrorMessage, type Tool, type ToolResult } from './base.js';
 
 const TAVILY_ENDPOINT = 'https://api.tavily.com/search';
 
@@ -76,7 +76,7 @@ export function createWebSearchTool(): Tool {
           signal: AbortSignal.timeout(15_000),
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'neos-work/0.3.152',
+            'User-Agent': 'neos-work/0.3.153',
           },
           body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         });
@@ -132,7 +132,7 @@ export function createWebSearchTool(): Tool {
         return {
           success: false,
           output: null,
-          error: err instanceof Error ? err.message : String(err),
+          error: scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed',
         };
       }
     },

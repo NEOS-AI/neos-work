@@ -6,6 +6,7 @@
 import type { ChatChunk, ChatParams, Model, ProviderId } from '@neos-work/shared';
 import { OLLAMA_PRESET_MODELS, OPENAI_MODELS } from '@neos-work/shared';
 
+import { scrubErrorMessage } from '../tools/base.js';
 import type { LLMProviderAdapter } from './provider.js';
 
 export type OpenAICompatibleProvider = 'openai' | 'ollama';
@@ -141,14 +142,15 @@ export class OpenAIAdapter implements LLMProviderAdapter {
         signal: signal ?? undefined,
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = scrubErrorMessage(err instanceof Error ? err.message : String(err), 500) || 'request failed';
       yield { type: 'error', content: `OpenAI request failed: ${message}` };
       return;
     }
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
-      yield { type: 'error', content: `OpenAI error ${response.status}: ${text}` };
+      const detail = scrubErrorMessage(text, 500);
+      yield { type: 'error', content: detail ? `OpenAI error ${response.status}: ${detail}` : `OpenAI error ${response.status}` };
       return;
     }
 

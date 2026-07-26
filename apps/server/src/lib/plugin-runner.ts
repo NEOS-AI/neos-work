@@ -236,7 +236,9 @@ async function executeStage(
       const text = data.content?.[0]?.text;
       return clampOutput(typeof text === 'string' ? text : '');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'LLM request failed';
+      const msg =
+        scrubErrorMessage(err instanceof Error ? err.message : 'LLM request failed', 500)
+        || 'LLM request failed';
       return `[Stage ${stageName}: ${msg}]`;
     }
   }
@@ -266,7 +268,9 @@ async function executeStage(
     const content = data.choices?.[0]?.message?.content;
     return clampOutput(typeof content === 'string' ? content : '');
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'LLM request failed';
+    const msg =
+      scrubErrorMessage(err instanceof Error ? err.message : 'LLM request failed', 500)
+      || 'LLM request failed';
     return `[Stage ${stageName}: ${msg}]`;
   }
 }

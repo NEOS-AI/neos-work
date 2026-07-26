@@ -3,6 +3,8 @@
  * These make REST API calls to each platform's deployment API.
  */
 
+import { scrubErrorMessage } from '@neos-work/core';
+
 /** Re-export shared deploy project name validator (single source of truth). */
 export { isValidDeployProjectName } from '@neos-work/shared';
 
@@ -21,8 +23,18 @@ export interface RemoteDeployStatusResult {
 }
 
 function networkError(err: unknown, fallback: string): Error {
-  if (err instanceof Error) return err;
+  // Scrub control chars so deploy provider errors never inject CR/LF/null into callers
+  if (err instanceof Error) {
+    const msg = scrubErrorMessage(err.message, 2_000) || fallback;
+    return new Error(msg);
+  }
   return new Error(fallback);
+}
+
+/** Scrub provider API error bodies before rethrowing. */
+function providerApiError(raw: unknown, fallback: string): Error {
+  const msg = scrubErrorMessage(raw, 2_000) || fallback;
+  return new Error(msg);
 }
 
 /** Cap deploy API tokens / account / deployment ids (header / path hygiene). */
@@ -91,7 +103,7 @@ export async function getVercelDeploymentStatus(
   }
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(errBody.error?.message ?? `Vercel status error ${res.status}`);
+    throw providerApiError(errBody.error?.message, `Vercel status error ${res.status}`);
   }
   const data = await res.json() as {
     readyState?: string;
@@ -139,7 +151,7 @@ export async function getCloudflareDeploymentStatus(options: {
   }
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as { errors?: { message: string }[] };
-    throw new Error(errBody.errors?.[0]?.message ?? `Cloudflare status error ${res.status}`);
+    throw providerApiError(errBody.errors?.[0]?.message, `Cloudflare status error ${res.status}`);
   }
   const data = await res.json() as {
     result?: { url?: string; latest_stage?: { status?: string; name?: string }; stages?: Array<{ status?: string }> };
@@ -215,7 +227,7 @@ export async function deployToVercel(options: {
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(errBody.error?.message ?? `Vercel API error ${res.status}`);
+    throw providerApiError(errBody.error?.message, `Vercel API error ${res.status}`);
   }
 
   const data = await res.json() as { url?: string; id?: string };
@@ -287,7 +299,7 @@ export async function deployToCloudflare(options: {
 
   if (!deployRes.ok) {
     const errBody = await deployRes.json().catch(() => ({})) as { errors?: { message: string }[] };
-    throw new Error(errBody.errors?.[0]?.message ?? `Cloudflare API error ${deployRes.status}`);
+    throw providerApiError(errBody.errors?.[0]?.message, `Cloudflare API error ${deployRes.status}`);
   }
 
   const data = await deployRes.json() as { result?: { url?: string; id?: string } };

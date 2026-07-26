@@ -13,6 +13,7 @@ import { listHarnesses, resolveHarness } from '@neos-work/workflow-engine';
 import * as db from '../db/harnesses.js';
 import { registerHarness } from '@neos-work/workflow-engine';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const harness = new Hono();
 
@@ -148,7 +149,7 @@ harness.post('/', async (c) => {
 
     return c.json({ ok: true, data: newHarness }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create harness';
+    const msg = publicErrorMessage(err, 'Failed to create harness');
     return c.json({ ok: false, error: msg }, 400);
   }
 });

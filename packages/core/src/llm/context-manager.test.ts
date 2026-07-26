@@ -75,6 +75,29 @@ describe('ContextManager', () => {
     expect(captured).toContain('…');
   });
 
+  it('caps overall transcript length before calling the model', async () => {
+    const cm = new ContextManager();
+    // 40 older messages with long bodies → transcript exceeds 100k
+    const older = Array.from({ length: 40 }, (_, i) =>
+      msg('user', `block-${i}-` + 'Y'.repeat(4_000)),
+    );
+    const recent = Array.from({ length: 20 }, (_, i) => msg('assistant', `r${i}`));
+    const messages = [...older, ...recent];
+
+    let capturedPrompt = '';
+    const adapter = mockAdapter(['capped-summary']);
+    const base = adapter.chat.bind(adapter);
+    adapter.chat = async function* (params) {
+      capturedPrompt = String(params.messages?.[0]?.content ?? '');
+      yield* base(params);
+    };
+    const out = await cm.compress(messages, adapter);
+    expect(out[0]?.role).toBe('system');
+    expect(capturedPrompt).toContain('[transcript truncated]');
+    // Prompt body stays bounded (header + 100k transcript + marker)
+    expect(capturedPrompt.length).toBeLessThan(120_000);
+  });
+
   it('compress summarizes older messages and keeps recent 20', async () => {
     const cm = new ContextManager();
     const messages = Array.from({ length: 25 }, (_, i) => msg('user', `msg-${i}`));

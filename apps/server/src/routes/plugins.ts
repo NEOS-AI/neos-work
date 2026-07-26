@@ -15,6 +15,7 @@ import { getExecutionSettings } from '../db/settings.js';
 import { getDb } from '../db/schema.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { safeRouteId } from '../lib/path-safety.js';
+import { publicErrorMessage } from '../lib/errors.js';
 
 const plugins = new Hono();
 
@@ -102,7 +103,7 @@ plugins.post('/upgrade-from-skill', async (c) => {
     const { dir: _, skillContent: __, ...safe } = plugin;
     return c.json({ ok: true, data: safe }, 201);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Upgrade failed';
+    const msg = publicErrorMessage(err, 'Upgrade failed');
     return c.json({ ok: false, error: msg }, 400);
   }
 });

@@ -4,6 +4,7 @@
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveMaxResults, resolveSearchQuery } from './message-text.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 interface TavilyResult {
   title: string;
@@ -45,7 +46,7 @@ export class WebSearchNode implements ExecutableNode {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'neos-work/0.3.152',
+          'User-Agent': 'neos-work/0.3.153',
         },
         body: JSON.stringify({ api_key: apiKey, query, max_results: maxResults }),
         signal: ctx.signal,
@@ -107,7 +108,7 @@ export class WebSearchNode implements ExecutableNode {
       return {
         ok: false,
         output: null,
-        error: err instanceof Error ? err.message : 'Web search failed',
+        error: scrubErrorMessage(err instanceof Error ? err.message : 'Web search failed') || 'Web search failed',
         durationMs: Date.now() - start,
       };
     }

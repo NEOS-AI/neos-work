@@ -753,5 +753,124 @@ describe('AgentOrchestrator', () => {
     expect(err?.error?.length).toBe(4_000);
     expect(err?.error?.startsWith('P')).toBe(true);
   });
+
+  it('falls back to generic agent/step errors when scrub empties the message', async () => {
+    // Top-level plan throw with control-only message → "Agent failed"
+    const orch = new AgentOrchestrator(mockAdapter(['[]']), new ToolRegistry());
+    (orch as unknown as { planner: { plan: () => Promise<AgentStep[]> } }).planner = {
+      plan: async () => {
+        throw new Error(`\0\n\r  `);
+      },
+    };
+    const top = await collectEvents(orch.run('empty plan err'));
+    const topErr = top.find((e) => e.type === 'error') as { error?: string } | undefined;
+    expect(topErr?.error).toBe('Agent failed');
+
+    // Step tool returns control-only error → registry → generic tool failure → step_error
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'empty_fail',
+      description: 'e',
+      inputSchema: { type: 'object' },
+      execute: async () => ({
+        success: false,
+        output: null,
+        error: `\0\n`,
+      }),
+    });
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
+        const content = String(params.messages?.[0]?.content ?? '');
+        if (content.includes('에이전트 step이 실패') || content.includes('"action"')) {
+          yield { type: 'text', content: JSON.stringify({ action: 'skip' }) };
+        } else {
+          yield { type: 'text', content: 'ok' };
+        }
+        yield { type: 'done' };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const orch2 = new AgentOrchestrator(adapter, registry);
+    injectPlan(orch2, [
+      step({
+        description: 'empty err',
+        toolName: 'empty_fail',
+        input: {},
+      }),
+    ]);
+    const events = await collectEvents(orch2.run('step empty'));
+    const stepErr = events.find((e) => e.type === 'step_error') as { error?: string };
+    expect(stepErr?.error).toBe('Tool execution failed');
+  });
+
+  it('records failed LLM tool_use results without throwing (Error: prefix path)', async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: 'soft_fail',
+      description: 'fails soft',
+      inputSchema: { type: 'object' },
+      execute: async () => ({
+        success: false,
+        output: null,
+        error: 'not found',
+      }),
+    });
+    let call = 0;
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(): AsyncIterable<ChatChunk> {
+        call += 1;
+        if (call === 1) {
+          yield {
+            type: 'tool_use',
+            toolName: 'soft_fail',
+            toolUseId: 'tu-soft',
+            toolInput: { q: 1 },
+          };
+        } else {
+          yield { type: 'text', content: 'done' };
+        }
+        yield { type: 'done' };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const orch = new AgentOrchestrator(adapter, registry);
+    injectPlan(orch, [step({ description: 'soft tool fail', type: 'tool_use' })]);
+    const events = await collectEvents(orch.run('soft'));
+    expect(events.some((e) => e.type === 'step_complete')).toBe(true);
+    const complete = events.find((e) => e.type === 'step_complete') as {
+      step?: { input?: { results?: Array<{ content?: string }> } };
+    };
+    expect(complete?.step?.input?.results?.[0]?.content).toMatch(/^Error: /);
+  });
 });
 

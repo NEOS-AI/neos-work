@@ -6,6 +6,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { scrubErrorMessage } from '@neos-work/core';
 
 const KIS_BASE_URL = 'https://openapi.koreainvestment.com:9443';
 const CHART_PERIODS = new Set(['D', 'W', 'M']);
@@ -55,7 +56,7 @@ async function kisFetch(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = scrubErrorMessage(err instanceof Error ? err.message : String(err)) || 'Operation failed';
     throw new Error(`KIS network error: ${msg}`);
   }
 }

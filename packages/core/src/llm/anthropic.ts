@@ -7,6 +7,7 @@ import type { ChatChunk, ChatParams, Model } from '@neos-work/shared';
 import { ANTHROPIC_MODELS, THINKING_BUDGET } from '@neos-work/shared';
 
 import type { LLMProviderAdapter } from './provider.js';
+import { scrubErrorMessage } from '../tools/base.js';
 
 export class AnthropicAdapter implements LLMProviderAdapter {
   readonly id = 'anthropic' as const;
@@ -152,7 +153,7 @@ export class AnthropicAdapter implements LLMProviderAdapter {
 
       yield { type: 'done' };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = scrubErrorMessage(error instanceof Error ? error.message : 'Unknown error', 500) || 'Unknown error';
       yield { type: 'error', content: message };
     }
   }

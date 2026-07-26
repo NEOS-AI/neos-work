@@ -17,6 +17,7 @@ import type { BlockExecutionContext, BlockResult } from '../types.js';
 import { registerNativeBlock } from '../registry.js';
 import { getStockPrice, getStockChart, normalizeSymbol } from './kis-api.js';
 import type { KisConfig } from './kis-api.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 function getKisConfig(settings: Record<string, string>): KisConfig {
   // Control-char check before trim (header hygiene; align with kis-api sanitize)
@@ -79,7 +80,7 @@ registerNativeBlock({
       const price = await getStockPrice(config, symbol);
       return { ok: true, output: price, durationMs: elapsed() };
     } catch (e) {
-      return { ok: false, output: null, error: (e as Error).message, durationMs: elapsed() };
+      return { ok: false, output: null, error: scrubErrorMessage((e as Error).message) || 'Operation failed', durationMs: elapsed() };
     }
   },
 }, priceLookupMeta);
@@ -141,7 +142,7 @@ registerNativeBlock({
         durationMs: elapsed(),
       };
     } catch (e) {
-      return { ok: false, output: null, error: (e as Error).message, durationMs: elapsed() };
+      return { ok: false, output: null, error: scrubErrorMessage((e as Error).message) || 'Operation failed', durationMs: elapsed() };
     }
   },
 }, movingAverageMeta);
@@ -193,7 +194,7 @@ registerNativeBlock({
         durationMs: elapsed(),
       };
     } catch (e) {
-      return { ok: false, output: null, error: (e as Error).message, durationMs: elapsed() };
+      return { ok: false, output: null, error: scrubErrorMessage((e as Error).message) || 'Operation failed', durationMs: elapsed() };
     }
   },
 }, rsiMeta);
@@ -253,7 +254,7 @@ registerNativeBlock({
         durationMs: elapsed(),
       };
     } catch (e) {
-      return { ok: false, output: null, error: (e as Error).message, durationMs: elapsed() };
+      return { ok: false, output: null, error: scrubErrorMessage((e as Error).message) || 'Operation failed', durationMs: elapsed() };
     }
   },
 }, macdMeta);
@@ -308,7 +309,7 @@ registerNativeBlock({
         durationMs: elapsed(),
       };
     } catch (e) {
-      return { ok: false, output: null, error: (e as Error).message, durationMs: elapsed() };
+      return { ok: false, output: null, error: scrubErrorMessage((e as Error).message) || 'Operation failed', durationMs: elapsed() };
     }
   },
 }, portfolioSummaryMeta);
@@ -386,7 +387,7 @@ registerNativeBlock({
         durationMs: elapsed(),
       };
     } catch (e) {
-      return { ok: false, output: null, error: (e as Error).message, durationMs: elapsed() };
+      return { ok: false, output: null, error: scrubErrorMessage((e as Error).message) || 'Operation failed', durationMs: elapsed() };
     }
   },
 }, riskReportMeta);

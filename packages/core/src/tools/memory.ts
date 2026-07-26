@@ -3,7 +3,7 @@
  * Uses a callback pattern so the core package doesn't depend on the server's DB layer.
  */
 
-import type { Tool, ToolResult } from './base.js';
+import { scrubErrorMessage, type Tool, type ToolResult } from './base.js';
 
 export interface MemoryCallbacks {
   save(key: string, content: string, tags?: string[]): Promise<void>;
@@ -86,7 +86,7 @@ export function createRememberTool(callbacks: MemoryCallbacks): Tool {
         await callbacks.save(key, content, tags);
         return { success: true, output: { saved: key } };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };
@@ -126,7 +126,7 @@ export function createRecallTool(callbacks: MemoryCallbacks): Tool {
         const memories = await callbacks.search(query, tags, limit);
         return { success: true, output: { memories } };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };
@@ -158,7 +158,7 @@ export function createForgetTool(callbacks: MemoryCallbacks): Tool {
         await callbacks.remove(key);
         return { success: true, output: { removed: key } };
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message };
+        return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
       }
     },
   };

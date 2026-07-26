@@ -6,6 +6,7 @@
 import { WebClient } from '@slack/web-api';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 import { resolveMessageText, SLACK_CONTENT_MAX_LENGTH } from './message-text.js';
+import { scrubErrorMessage } from '@neos-work/core';
 
 export class SlackMessageNode implements ExecutableNode {
   type = 'slack_message' as const;
@@ -112,7 +113,7 @@ export class SlackMessageNode implements ExecutableNode {
       return {
         ok: false,
         output: null,
-        error: err instanceof Error ? err.message : 'Slack send failed',
+        error: scrubErrorMessage(err instanceof Error ? err.message : 'Slack send failed') || 'Slack send failed',
         durationMs: Date.now() - start,
       };
     }
