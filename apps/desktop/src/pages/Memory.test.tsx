@@ -197,6 +197,23 @@ describe('Memory page', () => {
     await waitFor(() => expect(deleteMemory).toHaveBeenCalledWith('m1'));
   });
 
+  it('alerts scrubbed delete API errors', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    deleteMemory.mockResolvedValue({
+      ok: false,
+      error: `in${'\n'}use${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]!);
+    await waitFor(() => {
+      expect(deleteMemory).toHaveBeenCalledWith('m1');
+      expect(window.alert).toHaveBeenCalledWith('in use!');
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
   it('cancels delete when confirm is false and shows no-match filter', async () => {
     const user = userEvent.setup();
     listMemories.mockResolvedValue({ ok: true, data: items });

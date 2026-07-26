@@ -17,6 +17,7 @@ export function DesignSystems() {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -90,7 +91,17 @@ export function DesignSystems() {
       scrubDisplayText(name, { collapseLines: true, maxChars: 200 }) || id || 'design system';
     if (!window.confirm(`Delete design system "${nameSafe}"? This cannot be undone.`)) return;
     const res = await client.deleteDesignSystem(id);
-    if (res.ok) setSystems((prev) => prev.filter((s) => s.id !== id));
+    if (res.ok) {
+      setPageError(null);
+      setSystems((prev) => prev.filter((s) => s.id !== id));
+    } else {
+      setPageError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Failed to delete design system',
+      );
+    }
   };
 
   return (
@@ -125,6 +136,12 @@ export function DesignSystems() {
           </button>
         </div>
       </div>
+
+      {pageError && (
+        <p className="text-sm text-red-400">
+          {scrubDisplayText(pageError, { collapseLines: true, maxChars: 300 }) || pageError}
+        </p>
+      )}
 
       {/* Create form */}
       {isCreating && (

@@ -2,7 +2,7 @@
  * Tool bridge — converts MCP tools into the core Tool interface.
  */
 
-import type { Tool, ToolResult } from '@neos-work/core';
+import { scrubErrorMessage, type Tool, type ToolResult } from '@neos-work/core';
 
 import type { McpClient, McpToolDefinition } from './client.js';
 
@@ -37,12 +37,28 @@ export function mcpToolToTool(mcpClient: McpClient, mcpTool: McpToolDefinition):
     async execute(input): Promise<ToolResult> {
       try {
         const result = await mcpClient.callTool(name, input ?? {});
-        return { success: result.success, output: result.output };
+        if (result.success) {
+          return { success: true, output: result.output };
+        }
+        // MCP isError path: surface scrubbed text as error (output kept for debugging)
+        const errText =
+          typeof result.output === 'string'
+            ? result.output
+            : result.output != null
+              ? String(result.output)
+              : 'MCP tool failed';
+        return {
+          success: false,
+          output: result.output,
+          error: scrubErrorMessage(errText, 2_000) || 'MCP tool failed',
+        };
       } catch (err) {
         return {
           success: false,
           output: null,
-          error: err instanceof Error ? err.message : String(err),
+          error:
+            scrubErrorMessage(err instanceof Error ? err.message : String(err), 2_000)
+            || 'MCP tool failed',
         };
       }
     },

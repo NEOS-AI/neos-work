@@ -80,6 +80,18 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/boom/);
     });
 
+    it('scrubs control characters from code_eval error messages', async () => {
+      const result = await exec().execute(
+        ctx({
+          code: 'throw new Error("bad\\nline\\0x")',
+          language: 'js',
+        }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error).toBeTruthy();
+      expect(result.error).not.toMatch(/[\r\n\0]/);
+    });
+
     it('truncates oversized JS console output and long error messages', async () => {
       // SPAWN_OUTPUT_MAX_CHARS = 512 KiB — force huge console payload
       const huge = await exec().execute(

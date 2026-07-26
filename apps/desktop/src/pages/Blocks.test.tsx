@@ -212,6 +212,22 @@ describe('Blocks page', () => {
     await waitFor(() => expect(deleteBlock).toHaveBeenCalledWith('my_custom'));
   });
 
+  it('alerts scrubbed block delete API errors', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: blocks });
+    deleteBlock.mockResolvedValue({
+      ok: false,
+      error: `in${'\n'}use${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByText('Custom Block')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(deleteBlock).toHaveBeenCalledWith('my_custom');
+      expect(window.alert).toHaveBeenCalledWith('in use!');
+    });
+  });
+
   it('cancels delete when confirm is false and shows no-match filter', async () => {
     const user = userEvent.setup();
     listBlocks.mockResolvedValue({ ok: true, data: blocks });

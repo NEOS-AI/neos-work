@@ -861,6 +861,68 @@ describe('AgentOrchestrator', () => {
     expect(stepErr?.error).toBe('Step failed');
   });
 
+  it('emits step_error when reflection revisedStep also fails', async () => {
+    const registry = new ToolRegistry();
+    let attempts = 0;
+    registry.register({
+      name: 'always_fail2',
+      description: 'fails',
+      inputSchema: { type: 'object' },
+      execute: async () => {
+        attempts += 1;
+        return { success: false, output: null, error: `fail-${attempts}` };
+      },
+    });
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
+        const content = String(params.messages?.[0]?.content ?? '');
+        if (content.includes('에이전트 step이 실패') || content.includes('"action"')) {
+          yield {
+            type: 'text',
+            content: JSON.stringify({
+              action: 'retry',
+              revisedToolName: 'always_fail2',
+              revisedInput: { n: 2 },
+            }),
+          };
+        } else {
+          yield { type: 'text', content: 'summary' };
+        }
+        yield { type: 'done' };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const orch = new AgentOrchestrator(adapter, registry);
+    injectPlan(orch, [
+      step({
+        description: 'Fail thrice',
+        toolName: 'always_fail2',
+        input: { n: 1 },
+      }),
+    ]);
+    const events = await collectEvents(orch.run('revised fail'));
+    const types = events.map((e) => e.type);
+    expect(types).toContain('step_healing');
+    expect(types).toContain('step_error');
+    expect(attempts).toBeGreaterThanOrEqual(2);
+    expect(types).toContain('done');
+  });
+
   it('records failed LLM tool_use results without throwing (Error: prefix path)', async () => {
     const registry = new ToolRegistry();
     registry.register({

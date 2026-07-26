@@ -245,7 +245,16 @@ export default function Memory() {
   const handleDelete = async (id: string) => {
     if (!client) return;
     if (!window.confirm(t('memory.confirmDelete'))) return;
-    await client.deleteMemory(id);
+    const res = await client.deleteMemory(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     void load();
   };
 

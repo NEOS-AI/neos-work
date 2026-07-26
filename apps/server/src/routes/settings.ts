@@ -4,7 +4,7 @@ import { ProviderRegistry, AnthropicAdapter, GoogleAdapter } from '@neos-work/co
 
 import * as settingsDb from '../db/settings.js';
 import { isSensitiveKey } from '../db/crypto.js';
-import { publicErrorMessage } from '../lib/errors.js';
+import { publicErrorMessage, safeError } from '../lib/errors.js';
 
 /** Mask sensitive values so full secrets are never returned via API. */
 function maskValue(key: string, value: string): string {
@@ -139,10 +139,10 @@ settings.post('/verify-key', async (c) => {
     const valid = await adapter.validateApiKey(key);
     return c.json({ ok: true, data: { valid } });
   } catch (error) {
-    console.error('[verify-key]', error instanceof Error ? error.message : error);
+    // Log-safe scrub (null/CR/LF) then generic client message
     return c.json({
       ok: false,
-      error: 'API key validation failed',
+      error: safeError(error, 'verify-key'),
     });
   }
 });

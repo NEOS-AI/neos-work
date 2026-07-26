@@ -50,6 +50,35 @@ describe('mcpToolToTool', () => {
     expect(result.output).toBeNull();
     expect(result.error).toBe('transport closed');
   });
+
+  it('scrubs control-char thrown and isError outputs', async () => {
+    const throwTool = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => {
+          throw new Error(`disk${'\n'}full${'\0'}!`);
+        }),
+      } as never),
+      def,
+    );
+    const thrown = await throwTool.execute({});
+    expect(thrown.success).toBe(false);
+    expect(thrown.error).toBe('disk full!');
+    expect(thrown.error).not.toContain('\0');
+
+    const errTool = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => ({
+          success: false,
+          output: `mcp${'\n'}fail${'\0'}x`,
+        })),
+      } as never),
+      def,
+    );
+    const failed = await errTool.execute({});
+    expect(failed.success).toBe(false);
+    expect(failed.error).toBe('mcp failx');
+    expect(failed.output).toBe(`mcp${'\n'}fail${'\0'}x`);
+  });
 });
 
 describe('buildMcpTools', () => {

@@ -73,7 +73,16 @@ export function Harnesses() {
     const nameSafe =
       scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || h.id || 'harness';
     if (!window.confirm(t('harness.confirmDelete', { name: nameSafe }))) return;
-    await client.deleteHarness(h.id);
+    const res = await client.deleteHarness(h.id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     await load();
   };
   const onSaved = () => { closeModal(); load(); };

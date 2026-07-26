@@ -304,7 +304,10 @@ describe('Deployments page', () => {
   it('does not remove row when delete fails', async () => {
     listDeployments.mockResolvedValue({ ok: true, data: deployments });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
-    deleteDeployment.mockResolvedValue({ ok: false as const, error: 'forbidden' });
+    deleteDeployment.mockResolvedValue({
+      ok: false as const,
+      error: `for${'\n'}bidden${'\0'}!`,
+    });
     renderPage();
     await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
 
@@ -312,6 +315,8 @@ describe('Deployments page', () => {
     await waitFor(() => expect(deleteDeployment).toHaveBeenCalledWith('d1'));
     expect(screen.getByText('my-app')).toBeInTheDocument();
     expect(screen.getByText('pages-site')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('for bidden!')).toBeInTheDocument());
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('shows no-match empty message when status filter excludes all rows', async () => {

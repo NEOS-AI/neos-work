@@ -1,5 +1,6 @@
 // packages/browser-tool/src/tools.ts
-import type { Tool, ToolResult } from '@neos-work/core';
+import { scrubErrorMessage, type Tool, type ToolResult } from '@neos-work/core';
+
 import type { BrowserManager } from './manager.js';
 
 /** Cap browser navigation URLs (defense against pathological query strings). */
@@ -39,10 +40,12 @@ const BROWSER_LINKS_MAX = 500;
 const BROWSER_SCREENSHOT_MAX_BYTES = 8 * 1024 * 1024;
 
 function toolFailure(err: unknown, fallback: string): ToolResult {
-  // Scrub control chars from upstream Playwright error text (log/UI hygiene)
-  let msg = err instanceof Error ? err.message : fallback;
-  if (typeof msg !== 'string') msg = fallback;
-  msg = msg.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 2_000) || fallback;
+  // Scrub control chars from upstream Playwright error text (log/UI hygiene).
+  // Null bytes → space first so "waiting\0for" stays readable (Playwright embeds \0).
+  const raw = err instanceof Error ? err.message : fallback;
+  const normalized =
+    typeof raw === 'string' ? raw.replace(/\0/g, ' ') : fallback;
+  const msg = scrubErrorMessage(normalized, 2_000) || fallback;
   return {
     success: false,
     output: null,

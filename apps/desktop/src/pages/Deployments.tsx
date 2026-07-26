@@ -152,7 +152,16 @@ export function Deployments() {
     if (!client) return;
     if (!window.confirm('Remove this deployment history entry?')) return;
     const res = await client.deleteDeployment(id);
-    if (res.ok) setDeployments((prev) => prev.filter((d) => d.id !== id));
+    if (res.ok) {
+      setDeployments((prev) => prev.filter((d) => d.id !== id));
+    } else {
+      setError(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed',
+      );
+    }
   };
 
   const handleRefreshStatus = async (id: string) => {

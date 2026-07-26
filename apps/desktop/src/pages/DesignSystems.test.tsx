@@ -160,6 +160,23 @@ describe('DesignSystems page', () => {
     });
   });
 
+  it('shows scrubbed page error when delete fails', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: systems });
+    deleteDesignSystem.mockResolvedValue({
+      ok: false,
+      error: `in${'\n'}use${'\0'}!`,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    await waitFor(() => {
+      expect(deleteDesignSystem).toHaveBeenCalledWith('ds-a');
+      expect(screen.getByText('in use!')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Alpha Brand')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('search filter and Escape cancel create / clear search', async () => {
     const user = userEvent.setup();
     listDesignSystems.mockResolvedValue({ ok: true, data: systems });

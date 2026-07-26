@@ -158,6 +158,22 @@ describe('Harnesses page', () => {
     await waitFor(() => expect(deleteHarness).toHaveBeenCalledWith('h-custom'));
   });
 
+  it('alerts scrubbed harness delete API errors', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    deleteHarness.mockResolvedValue({
+      ok: false,
+      error: `still${'\n'}linked${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('Custom Analyst')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    await waitFor(() => {
+      expect(deleteHarness).toHaveBeenCalledWith('h-custom');
+      expect(window.alert).toHaveBeenCalledWith('still linked!');
+    });
+  });
+
   it('cancels delete when confirm is false', async () => {
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
     vi.spyOn(window, 'confirm').mockReturnValue(false);

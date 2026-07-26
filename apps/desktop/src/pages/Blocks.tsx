@@ -503,7 +503,16 @@ export function Blocks() {
 
   const handleDelete = async (id: string) => {
     if (!client || !window.confirm('Are you sure you want to delete this block?')) return;
-    await client.deleteBlock(id);
+    const res = await client.deleteBlock(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      alert(err);
+      return;
+    }
     await load();
   };
 
