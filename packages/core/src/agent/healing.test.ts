@@ -328,6 +328,50 @@ describe('ReflectionStrategy', () => {
     expect(result.revisedStep?.input).toEqual(step.input);
   });
 
+  it('handles history without errors, missing description, empty models, null error', async () => {
+    let captured = '';
+    const adapter = {
+      id: 'openai' as const,
+      name: 'Cap',
+      getModels: () => [] as Array<{ id: string }>,
+      async *chat(params: { messages?: Array<{ content?: string }>; model?: string }) {
+        captured = String(params.messages?.[0]?.content ?? '');
+        // empty models → model id falls back to ''
+        expect(params.model ?? '').toBe('');
+        yield { type: 'text' as const, content: JSON.stringify({ action: 'skip' }) };
+        yield { type: 'done' as const };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const history: AgentStep[] = [
+      {
+        id: 'ok',
+        index: 0,
+        description: 'Completed fine',
+        type: 'tool_use',
+        status: 'completed',
+        // no error field → history branch without "(에러: …)"
+      },
+    ];
+    const noDesc: AgentStep = {
+      id: 'nd',
+      index: 1,
+      description: undefined as unknown as string,
+      type: 'plan',
+      status: 'error',
+    };
+    await new ReflectionStrategy(adapter as never).heal(
+      noDesc,
+      null as unknown as string,
+      history,
+    );
+    expect(captured).toContain('목표:');
+    expect(captured).toContain('[completed] Completed fine');
+    expect(captured).not.toMatch(/Completed fine \(에러:/);
+  });
+
   it('drops revisedInput when JSON.stringify throws (non-serializable payload)', async () => {
     // Build LLM payload before installing the spy
     const llmPayload = JSON.stringify({

@@ -32,6 +32,8 @@ describe('RevisionPanel', () => {
     deleteRevision.mockReset();
     onClose.mockReset();
     onRestore.mockReset();
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   it('shows empty state', async () => {
@@ -652,6 +654,7 @@ describe('RevisionPanel', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
     expect(updateRevisionLabel).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Label contains invalid control characters');
     await waitFor(() => {
       expect(screen.getByText('Snap A')).toBeInTheDocument();
     });

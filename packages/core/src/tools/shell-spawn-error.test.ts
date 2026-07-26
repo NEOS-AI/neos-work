@@ -70,4 +70,21 @@ describe('createShellTool spawn error path', () => {
     expect(result.success).toBe(false);
     expect(result.output).toMatchObject({ exitCode: -1 });
   });
+
+  it('maps non-Error spawn failures and scrubbed-empty messages to Operation failed', async () => {
+    const tool = createShellTool(root);
+    const run = tool.execute({ command: 'echo hi' });
+    await Promise.resolve();
+    lastChildren.at(-1)?.emit('error', 'raw-string-fail');
+    const result = await run;
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/raw-string-fail|Operation failed/i);
+
+    const run2 = tool.execute({ command: 'echo hi' });
+    await Promise.resolve();
+    lastChildren.at(-1)?.emit('error', new Error('   '));
+    const empty = await run2;
+    expect(empty.success).toBe(false);
+    expect(empty.error).toBe('Operation failed');
+  });
 });

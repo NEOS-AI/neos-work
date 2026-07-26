@@ -138,7 +138,7 @@ export function Workflows() {
     if (!client) return;
     // Control-char name rejected before trim (align with workflow API)
     if (/[\0\r\n]/.test(newName)) {
-      alert('Name contains invalid control characters');
+      window.alert('Name contains invalid control characters');
       return;
     }
     if (!newName.trim()) return;

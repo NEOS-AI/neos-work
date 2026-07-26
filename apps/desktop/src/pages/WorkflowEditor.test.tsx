@@ -504,6 +504,7 @@ describe('WorkflowEditor page', () => {
   });
 
   it('rejects control-char workflow rename without calling API', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
 
@@ -513,10 +514,12 @@ describe('WorkflowEditor page', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(updateWorkflow).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Name contains invalid control characters');
     // Exits edit mode; original title remains
     await waitFor(() => {
       expect(screen.getByText('Editor Flow')).toBeInTheDocument();
     });
+    alertSpy.mockRestore();
   });
 
   it('shows not-found when workflow load fails', async () => {

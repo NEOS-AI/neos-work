@@ -194,4 +194,39 @@ describe('ToolRegistry', () => {
     expect(long.success).toBe(false);
     expect(long.error).toMatch(/Invalid tool name/i);
   });
+
+  it('drops non-string tool names and coerces nullish descriptions', () => {
+    const reg = new ToolRegistry();
+    // typeof name !== 'string' → empty nameRaw → drop
+    reg.register({
+      name: 42 as unknown as string,
+      description: 'x',
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, output: null }),
+    });
+    reg.register({
+      name: null as unknown as string,
+      description: 'y',
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, output: null }),
+    });
+    expect(reg.getAll()).toHaveLength(0);
+
+    // Non-string / nullish description → String(description ?? '') path
+    reg.register({
+      name: 'coerced-desc',
+      description: null as unknown as string,
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, output: null }),
+    });
+    expect(reg.get('coerced-desc')?.description).toBe('');
+
+    reg.register({
+      name: 'num-desc',
+      description: 123 as unknown as string,
+      inputSchema: { type: 'object', properties: {} },
+      execute: async () => ({ success: true, output: null }),
+    });
+    expect(reg.get('num-desc')?.description).toBe('123');
+  });
 });

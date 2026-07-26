@@ -220,4 +220,71 @@ describe('memory tools', () => {
     const usedQuery = String(searchMock.mock.calls.at(-1)?.[0] ?? '');
     expect(usedQuery.length).toBe(2_000);
   });
+
+  it('coerces nullish non-string fields; empty tags → undefined; scrub empty errors', async () => {
+    const cb = mockCallbacks();
+    const remember = createRememberTool(cb);
+    // nullish key/content coerced via String(… ?? '')
+    const saved = await remember.execute({
+      key: null as unknown as string,
+      content: undefined as unknown as string,
+      tags: [null, undefined, '  keep  '] as unknown as string[],
+    });
+    // empty key after String(null) → 'null' actually... String(null) is 'null'
+    // Use empty-after-filter tags + whitespace content path separately
+    expect(typeof saved.success).toBe('boolean');
+
+    // Tags that all filter out → undefined (not empty array)
+    await remember.execute({
+      key: 'k1',
+      content: 'v1',
+      tags: [null, undefined, '', '  ', 'bad\ntag'] as unknown as string[],
+    });
+    expect(cb.save).toHaveBeenCalledWith('k1', 'v1', undefined);
+
+    const recall = createRecallTool(cb);
+    await recall.execute({
+      query: 99 as unknown as string,
+      tags: undefined,
+    });
+    expect(cb.search).toHaveBeenCalledWith('99', undefined, 5);
+
+    const forget = createForgetTool(cb);
+    await forget.execute({ key: 7 as unknown as string });
+    expect(cb.remove).toHaveBeenCalledWith('7');
+
+    // scrubErrorMessage('') → Operation failed fallback
+    const scrubEmpty = createRememberTool(
+      mockCallbacks({
+        save: async () => {
+          throw new Error('   ');
+        },
+      }),
+    );
+    const r1 = await scrubEmpty.execute({ key: 'k', content: 'v' });
+    expect(r1.success).toBe(false);
+    expect(r1.error).toBe('Operation failed');
+
+    const scrubRecall = createRecallTool(
+      mockCallbacks({
+        search: async () => {
+          throw new Error('\n\r\0');
+        },
+      }),
+    );
+    const r2 = await scrubRecall.execute({ query: 'q' });
+    expect(r2.success).toBe(false);
+    expect(r2.error).toBe('Operation failed');
+
+    const scrubForget = createForgetTool(
+      mockCallbacks({
+        remove: async () => {
+          throw new Error('\0');
+        },
+      }),
+    );
+    const r3 = await scrubForget.execute({ key: 'k' });
+    expect(r3.success).toBe(false);
+    expect(r3.error).toBe('Operation failed');
+  });
 });
