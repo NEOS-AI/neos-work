@@ -436,4 +436,33 @@ describe('Deployments page', () => {
     // javascript: URL never becomes a link
     expect(screen.queryByRole('link', { name: /javascript/i })).not.toBeInTheDocument();
   });
+
+  it('surfaces scrubbed delete throw and keeps the row', async () => {
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    deleteDeployment.mockRejectedValue(new Error(`del${'\n'}boom${'\0'}`));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    await waitFor(() => {
+      expect(deleteDeployment).toHaveBeenCalledWith('d1');
+      expect(screen.getByText(/del boom/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('my-app')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('surfaces scrubbed refresh throw', async () => {
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    refreshDeployment.mockRejectedValue(new Error(`refresh${'\n'}down${'\0'}!`));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('my-app')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('Poll provider for latest status')[0]!);
+    await waitFor(() => {
+      expect(refreshDeployment).toHaveBeenCalledWith('d1');
+      expect(screen.getByText(/refresh down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 });

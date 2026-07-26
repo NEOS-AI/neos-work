@@ -395,4 +395,34 @@ describe('Memory page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('alerts scrubbed delete throw and keeps the item', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    deleteMemory.mockRejectedValue(new Error(`del${'\n'}fail${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]!);
+    await waitFor(() => {
+      expect(deleteMemory).toHaveBeenCalledWith('m1');
+      expect(window.alert).toHaveBeenCalledWith('del fail!');
+    });
+    expect(screen.getByText('User Pref')).toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
+  it('alerts scrubbed toggle throw', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    toggleMemory.mockRejectedValue(new Error(`tog${'\n'}fail${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'memory.enabled' })[0]!);
+    await waitFor(() => {
+      expect(toggleMemory).toHaveBeenCalledWith('m1');
+      expect(window.alert).toHaveBeenCalledWith('tog fail!');
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
 });

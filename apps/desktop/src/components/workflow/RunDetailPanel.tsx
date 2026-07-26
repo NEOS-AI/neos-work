@@ -49,10 +49,20 @@ export function RunDetailPanel({ workflowId, runId, nodeLabelMap, onClose }: Run
         if (res.ok && res.data) {
           setRun(res.data);
         } else {
-          setError('Failed to load run details.');
+          setError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load run details.',
+          );
         }
       })
-      .catch(() => { setError('Network error.'); })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : 'Network error.';
+        setError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Network error.',
+        );
+      })
       .finally(() => { setLoading(false); });
   }, [client, workflowId, runId]);
 

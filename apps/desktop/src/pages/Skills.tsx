@@ -76,6 +76,11 @@ export function Skills() {
           scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown error';
         setScanResult('Scan failed: ' + detail);
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      const detail =
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || 'unknown error';
+      setScanResult('Scan failed: ' + detail);
     } finally {
       setIsScanning(false);
       setTimeout(() => setScanResult(null), 4000);
@@ -84,49 +89,64 @@ export function Skills() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
-    const res = await client.toggleSkill(id, enabled);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Update failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.toggleSkill(id, enabled);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed';
+        alert(err);
+        return;
+      }
+      setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
     }
-    setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
   };
 
   const handleDelete = async (id: string) => {
     if (!client) return;
-    const res = await client.deleteSkill(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.deleteSkill(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        alert(err);
+        return;
+      }
+      setSkills((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
-    setSkills((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleUpgradeToPlugin = async (id: string) => {
     if (!client) return;
     if (!confirm('Create open-design.json plugin sidecar for this skill?')) return;
-    const res = await client.upgradeSkillToPlugin(id);
-    if (res.ok && res.data) {
-      const name =
-        scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'plugin';
-      alert(`Upgraded to plugin: ${name}\nOpen the Plugins page to run it.`);
-    } else {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Upgrade failed';
-      alert(err);
+    try {
+      const res = await client.upgradeSkillToPlugin(id);
+      if (res.ok && res.data) {
+        const name =
+          scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'plugin';
+        alert(`Upgraded to plugin: ${name}\nOpen the Plugins page to run it.`);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Upgrade failed';
+        alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upgrade failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Upgrade failed');
     }
   };
 

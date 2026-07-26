@@ -80,17 +80,24 @@ export function Media() {
     const nameSafe =
       scrubDisplayText(filename, { collapseLines: true, maxChars: 200 }) || 'file';
     if (!window.confirm(`Delete ${nameSafe}?`)) return;
-    const res = await client.deleteMediaFile(filename);
-    if (res.ok) {
-      setFiles((prev) => prev.filter((f) => f.filename !== filename));
-      // Clear selection only; blob effect cleanup revokes the object URL
-      if (selected?.filename === filename) setSelected(null);
-    } else {
+    try {
+      const res = await client.deleteMediaFile(filename);
+      if (res.ok) {
+        setFiles((prev) => prev.filter((f) => f.filename !== filename));
+        // Clear selection only; blob effect cleanup revokes the object URL
+        if (selected?.filename === filename) setSelected(null);
+      } else {
+        setError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
       setError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
       );
     }
   };

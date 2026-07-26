@@ -596,4 +596,46 @@ describe('Routines page', () => {
       expect(crystallizeRoutineRun).not.toHaveBeenCalled();
     }
   });
+
+  it('surfaces scrubbed create throw, keeps modal open, re-enables Create', async () => {
+    const user = userEvent.setup();
+    listRoutines.mockResolvedValue({ ok: true, data: [] });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    createRoutine.mockRejectedValue(new Error(`create${'\n'}net${'\0'}!`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText(/No routines/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+    await waitFor(() => expect(screen.getByText('New Routine')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Daily digest'), 'Throw Routine');
+    fireEvent.change(screen.getByDisplayValue('— Select workflow —'), { target: { value: 'wf-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(createRoutine).toHaveBeenCalled();
+      expect(screen.getByText(/create net!/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('New Routine')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+    expect(screen.getByRole('button', { name: 'Create' })).not.toBeDisabled();
+  });
+
+  it('alerts scrubbed error when routine delete throws', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: [] });
+    deleteRoutine.mockRejectedValue(new Error(`still${'\n'}running${'\0'}!`));
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(listRoutineRuns).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(deleteRoutine).toHaveBeenCalled();
+      expect(alertMock).toHaveBeenCalledWith('still running!');
+    });
+    expect(String(alertMock.mock.calls.at(-1)?.[0] ?? '')).not.toContain('\0');
+  });
 });

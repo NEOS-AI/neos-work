@@ -399,4 +399,31 @@ describe('Skills page', () => {
     expect(msg).toBe('upgradedenied now');
     expect(msg).not.toContain('\0');
   });
+
+  it('surfaces scrubbed scan throw and re-enables Scan', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    scanSkills.mockRejectedValue(new Error(`scan${'\n'}down${'\0'}!`));
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Scan/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Scan/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Scan failed: scan down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    expect(screen.getByRole('button', { name: /Scan/i })).not.toBeDisabled();
+  });
+
+  it('alerts scrubbed error when skill delete throws', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    deleteSkill.mockRejectedValue(new Error(`locked${'\n'}skill${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove skill' })[0]!);
+    await waitFor(() => {
+      expect(deleteSkill).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('locked skill!');
+    });
+    expect(screen.getByText('Alpha Skill')).toBeInTheDocument();
+  });
 });

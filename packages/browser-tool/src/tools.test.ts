@@ -459,6 +459,51 @@ describe('createBrowserTools', () => {
     expect(linksFail.error).toMatch(/evaluate boom|browser_extract_links/i);
   });
 
+  it('browser_extract_links evaluate callback walks document anchors (in-process)', async () => {
+    const anchors = [
+      { innerText: '  Home  ', href: 'https://a.test/' },
+      { innerText: 'About', href: 'https://b.test/about' },
+    ];
+    const nav = {
+      querySelectorAll: (sel: string) => (sel === 'a[href]' ? anchors : []),
+    };
+    const fakeDocument = {
+      querySelector: (sel: string) => (sel === '#nav' ? nav : null),
+      querySelectorAll: (sel: string) => (sel === 'a[href]' ? anchors : []),
+    };
+    const page = {
+      evaluate: vi.fn(async (fn: (sel: string | null) => unknown, sel: string | null) => {
+        const prev = (globalThis as { document?: unknown }).document;
+        (globalThis as { document?: unknown }).document = fakeDocument;
+        try {
+          return fn(sel);
+        } finally {
+          (globalThis as { document?: unknown }).document = prev;
+        }
+      }),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const extract = tools.find((t) => t.name === 'browser_extract_links')!;
+
+    // With selector: uses querySelector, falls back to document when missing
+    const withSel = await extract.execute({ selector: '#nav' });
+    expect(withSel.success).toBe(true);
+    expect((withSel.output as { links: unknown[] }).links).toEqual([
+      { text: 'Home', href: 'https://a.test/' },
+      { text: 'About', href: 'https://b.test/about' },
+    ]);
+
+    // Missing selector container → falls back to document
+    const missingSel = await extract.execute({ selector: '#nope' });
+    expect(missingSel.success).toBe(true);
+    expect((missingSel.output as { links: unknown[] }).links).toHaveLength(2);
+
+    // Whole page (null selector)
+    const whole = await extract.execute({});
+    expect(whole.success).toBe(true);
+    expect((whole.output as { links: unknown[] }).links).toHaveLength(2);
+  });
+
   it('browser_screenshot and extract_text return structured errors on page failures', async () => {
     const pageShot = {
       screenshot: vi.fn(async () => {

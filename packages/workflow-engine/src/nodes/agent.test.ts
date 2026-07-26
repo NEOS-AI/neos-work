@@ -73,6 +73,39 @@ describe('AgentNode CLI provider', () => {
     expect(String(result.error).length).toBe(4_000);
   });
 
+  it('falls back to Operation failed when CLI error scrubs to empty', async () => {
+    const cliSpawn = vi.fn().mockRejectedValue(new Error('\n\r\0'));
+    const node = new AgentNode('agent_coding', { provider: 'cli-claude' });
+    const result = await node.execute(ctx({ cliSpawn }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Operation failed');
+  });
+
+  it('hard-caps CLI prompt when design context + fat inputs exceed bound', async () => {
+    let captured = '';
+    const cliSpawn = vi.fn(async (_id: string, prompt: string) => {
+      captured = prompt;
+      return { output: 'ok', exitCode: 0 };
+    });
+    const node = new AgentNode('agent_coding', {
+      provider: 'cli-claude',
+      systemPrompt: 'S'.repeat(100_000),
+    });
+    const result = await node.execute(
+      ctx({
+        cliSpawn,
+        // DESIGN_CONTEXT_MAX 32k + base 100k + inputs 256k pushes past hard cap
+        designSystemContent: 'D'.repeat(40_000),
+        inputs: { blob: 'X'.repeat(300_000) },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(cliSpawn).toHaveBeenCalled();
+    // SYSTEM_PROMPT_MAX (100k) + CLI_INPUTS_MAX (256k)
+    expect(captured.length).toBeLessThanOrEqual(100_000 + 256 * 1024);
+    expect(captured).toMatch(/…\[inputs truncated\]|DESIGN CONTEXT|S{100}/);
+  });
+
   it('forwards progress chunks from CLI spawn', async () => {
     const onProgress = vi.fn();
     const cliSpawn = vi.fn().mockImplementation(async (_id, _prompt, onChunk) => {
@@ -806,6 +839,19 @@ describe('AgentNode LLM model selection', () => {
     expect(result.error).toMatch(/orchestrator down/i);
   });
 
+  it('falls back to Operation failed when orchestrator throw scrubs to empty', async () => {
+    orchestratorRun.mockImplementation(async function* () {
+      throw new Error('\0\r\n');
+      yield { type: 'done', task: { steps: [] } };
+    });
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(
+      ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Operation failed');
+  });
+
   it('falls back when SERVER_URL is non-http for memory fetch', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -941,6 +987,33 @@ describe('AgentNode LLM model selection', () => {
     expect(orchestratorRun).toHaveBeenCalled();
     const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
     expect(goal).toMatch(/…\[inputs truncated\]/);
+  });
+
+  it('caps oversized harness systemPrompt alone before node merge', async () => {
+    const { registerHarness, resolveHarness } = await import('../harness/index.js');
+    registerHarness({
+      id: 'cov_agent_harness_only_fat',
+      name: 'Fat Only',
+      description: 'test',
+      domain: 'coding',
+      systemPrompt: 'Harness base prompt',
+      allowedTools: [],
+      constraints: { maxSteps: 5 },
+    });
+    // Registry caps at 100k; mutate stored object to exercise agent-side re-cap
+    const stored = resolveHarness('cov_agent_harness_only_fat');
+    if (stored) stored.systemPrompt = 'H'.repeat(120_000);
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent_coding', {
+      harnessId: 'cov_agent_harness_only_fat',
+      systemPrompt: '',
+    });
+    await node.execute(ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }));
+    expect(orchestratorRun).toHaveBeenCalled();
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    // Agent-side slice to SYSTEM_PROMPT_MAX_CHARS (100k)
+    expect(goal.startsWith('H')).toBe(true);
+    expect((goal.match(/H/g) ?? []).length).toBeLessThanOrEqual(100_000);
   });
 
   it('caps oversized harness systemPrompt before merge', async () => {

@@ -197,4 +197,25 @@ describe('DesignSystemEditor page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('surfaces scrubbed save throw and clears Saving… busy state', async () => {
+    saveDesignSystemContent.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    const ta = screen.getByRole('textbox');
+    fireEvent.change(ta, { target: { value: '# throw path' } });
+    expect((ta as HTMLTextAreaElement).value).toBe('# throw path');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(saveDesignSystemContent).toHaveBeenCalledWith('ds-1', '# throw path');
+      expect(screen.getByText(/Save failed: net down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    // finally clears saving — label returns to Save (not stuck on Saving…)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument();
+    });
+  });
 });

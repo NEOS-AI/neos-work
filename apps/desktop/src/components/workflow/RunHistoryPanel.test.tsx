@@ -193,6 +193,26 @@ describe('RunHistoryPanel', () => {
     expect(screen.getByText('completed')).toBeInTheDocument();
   });
 
+  it('alerts scrubbed error when export run JSON fails', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed')],
+    });
+    getWorkflowRun.mockResolvedValue({
+      ok: false,
+      error: `export${'\n'}blocked${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument());
+    await user.click(screen.getByTitle('Export run JSON'));
+    await waitFor(() => {
+      expect(getWorkflowRun).toHaveBeenCalledWith('wf-1', 'run-c1');
+      expect(window.alert).toHaveBeenCalledWith('export blocked!');
+    });
+  });
+
   it('shows Load more when more than one page of runs', async () => {
     const page = Array.from({ length: 21 }, (_, i) =>
       makeRun(`run-${String(i).padStart(4, '0')}`, 'completed'),

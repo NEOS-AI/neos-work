@@ -290,4 +290,37 @@ describe('DesignSystems page', () => {
     expect(deleteDesignSystem).not.toHaveBeenCalled();
   });
 
+  it('surfaces scrubbed create throw and keeps form open', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: [] });
+    createDesignSystem.mockRejectedValue(new Error(`create${'\n'}boom${'\0'}`));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
+    fireEvent.change(screen.getByPlaceholderText('my-design-system'), {
+      target: { value: 'ThrowDS' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(screen.getByText(/create boom/)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('heading', { name: 'New Design System' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('surfaces scrubbed delete throw and keeps the system', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: systems });
+    deleteDesignSystem.mockRejectedValue(new Error(`del${'\n'}fail${'\0'}!`));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    await waitFor(() => {
+      expect(screen.getByText(/del fail!/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('Alpha Brand')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

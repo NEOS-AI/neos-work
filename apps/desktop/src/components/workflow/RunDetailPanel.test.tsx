@@ -173,6 +173,29 @@ describe('RunDetailPanel', () => {
     getWorkflowRun.mockResolvedValue({ ok: false, error: 'nope' });
     render(<RunDetailPanel workflowId="wf" runId="run-missing" onClose={() => {}} />);
     await waitFor(() => {
+      expect(screen.getByText(/nope/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows scrubbed API error when load fails with control chars', async () => {
+    getWorkflowRun.mockResolvedValue({
+      ok: false,
+      error: `disk${'\n'}full${'\0'}!`,
+    });
+    render(<RunDetailPanel workflowId="wf" runId="run-missing" onClose={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText('disk full!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('falls back to generic message when load error is empty after scrub', async () => {
+    getWorkflowRun.mockResolvedValue({
+      ok: false,
+      error: String.fromCharCode(0) + String.fromCharCode(10),
+    });
+    render(<RunDetailPanel workflowId="wf" runId="run-missing" onClose={() => {}} />);
+    await waitFor(() => {
       expect(screen.getByText(/Failed to load run details/i)).toBeInTheDocument();
     });
   });

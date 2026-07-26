@@ -53,16 +53,24 @@ export function DesignSystemEditor() {
     }
     setSaving(true);
     setSaveMessage(null);
-    const res = await client.saveDesignSystemContent(id, content);
-    if (res.ok) {
-      setSavedContent(content);
-      setSaveMessage('Saved');
-    } else {
+    try {
+      const res = await client.saveDesignSystemContent(id, content);
+      if (res.ok) {
+        setSavedContent(content);
+        setSaveMessage('Saved');
+      } else {
+        const detail =
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown';
+        setSaveMessage(`Save failed: ${detail}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
       const detail =
-        scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown';
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || 'unknown';
       setSaveMessage(`Save failed: ${detail}`);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }, [client, id, content, saving]);
 
   // Clear save toast after a short delay (and on unmount)

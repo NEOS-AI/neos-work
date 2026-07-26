@@ -113,83 +113,106 @@ export function Routines() {
     }
     setSubmitting(true);
     setFormError('');
-    const res = await client.createRoutine({
-      name: formName.trim(),
-      workflowId: formWorkflowId.trim(),
-      schedule: formSchedule.trim(),
-      timezone: formTimezone.trim() || 'UTC',
-      enabled: formEnabled,
-    });
-    setSubmitting(false);
-    if (!res.ok) {
+    try {
+      const res = await client.createRoutine({
+        name: formName.trim(),
+        workflowId: formWorkflowId.trim(),
+        schedule: formSchedule.trim(),
+        timezone: formTimezone.trim() || 'UTC',
+        enabled: formEnabled,
+      });
+      if (!res.ok) {
+        setFormError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed',
+        );
+        return;
+      }
+      setCreateOpen(false);
+      setFormName('');
+      setFormWorkflowId('');
+      setFormSchedule('0 9 * * *');
+      setFormTimezone('UTC');
+      setFormEnabled(true);
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed';
       setFormError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed',
       );
-      return;
+    } finally {
+      setSubmitting(false);
     }
-    setCreateOpen(false);
-    setFormName('');
-    setFormWorkflowId('');
-    setFormSchedule('0 9 * * *');
-    setFormTimezone('UTC');
-    setFormEnabled(true);
-    await load();
   };
 
   const handleToggle = async (routine: Routine) => {
     if (!client) return;
-    const res = await client.updateRoutine(routine.id, { enabled: !routine.enabled });
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Update failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.updateRoutine(routine.id, { enabled: !routine.enabled });
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed';
+        alert(err);
+        return;
+      }
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
     }
-    await load();
   };
 
   const handleDelete = async (id: string) => {
     if (!client || !confirm('Delete this routine?')) return;
-    const res = await client.deleteRoutine(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.deleteRoutine(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        alert(err);
+        return;
+      }
+      if (selectedId === id) setSelectedId(null);
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
-    if (selectedId === id) setSelectedId(null);
-    await load();
   };
 
   const handleRun = async (id: string) => {
     if (!client) return;
-    const res = await client.runRoutineNow(id);
-    if (res.ok) {
-      const runId =
-        scrubDisplayText(res.data?.runId, { collapseLines: true, maxChars: 64 }).slice(0, 8)
-        || '—';
-      alert(`Triggered! runId: ${runId}`);
-      await load();
-      if (selectedId === id) {
-        const runsRes = await client.listRoutineRuns(id);
-        if (runsRes.ok && runsRes.data) setRuns(runsRes.data);
+    try {
+      const res = await client.runRoutineNow(id);
+      if (res.ok) {
+        const runId =
+          scrubDisplayText(res.data?.runId, { collapseLines: true, maxChars: 64 }).slice(0, 8)
+          || '—';
+        alert(`Triggered! runId: ${runId}`);
+        await load();
+        if (selectedId === id) {
+          const runsRes = await client.listRoutineRuns(id);
+          if (runsRes.ok && runsRes.data) setRuns(runsRes.data);
+        }
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Run failed';
+        alert(err);
       }
-    } else {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Run failed';
-      alert(err);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Run failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Run failed');
     }
   };
 
@@ -200,20 +223,27 @@ export function Routines() {
       return;
     }
     if (!confirm('Save this successful run as a skill candidate?')) return;
-    const res = await client.crystallizeRoutineRun(selectedId, run.id);
-    if (res.ok && res.data) {
-      const name =
-        scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'skill';
-      const path =
-        scrubDisplayText(res.data.path, { collapseLines: true, maxChars: 300 }) || '';
-      alert(`Crystallized skill: ${name}${path ? `\n${path}` : ''}`);
-    } else {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Crystallize failed';
-      alert(err);
+    try {
+      const res = await client.crystallizeRoutineRun(selectedId, run.id);
+      if (res.ok && res.data) {
+        const name =
+          scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'skill';
+        const path =
+          scrubDisplayText(res.data.path, { collapseLines: true, maxChars: 300 }) || '';
+        alert(`Crystallized skill: ${name}${path ? `\n${path}` : ''}`);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Crystallize failed';
+        alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Crystallize failed';
+      alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Crystallize failed',
+      );
     }
   };
 
@@ -233,21 +263,29 @@ export function Routines() {
     }
     setEditSaving(true);
     setEditError('');
-    const res = await client.updateRoutine(selectedId, {
-      schedule: editSchedule.trim(),
-      timezone: editTimezone.trim() || 'UTC',
-    });
-    setEditSaving(false);
-    if (!res.ok) {
+    try {
+      const res = await client.updateRoutine(selectedId, {
+        schedule: editSchedule.trim(),
+        timezone: editTimezone.trim() || 'UTC',
+      });
+      if (!res.ok) {
+        setEditError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed',
+        );
+        return;
+      }
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
       setEditError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Update failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed',
       );
-      return;
+    } finally {
+      setEditSaving(false);
     }
-    await load();
   };
 
   const schedulePresets = [

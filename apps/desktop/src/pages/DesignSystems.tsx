@@ -71,15 +71,23 @@ export function DesignSystems() {
     }
     if (!newName.trim()) return;
     setCreateError(null);
-    const res = await client.createDesignSystem(newName.trim(), newDescription.trim() || undefined);
-    if (res.ok && res.data) {
-      setSystems((prev) => [...prev, res.data!]);
-      setNewName('');
-      setNewDescription('');
-      setIsCreating(false);
-    } else {
+    try {
+      const res = await client.createDesignSystem(newName.trim(), newDescription.trim() || undefined);
+      if (res.ok && res.data) {
+        setSystems((prev) => [...prev, res.data!]);
+        setNewName('');
+        setNewDescription('');
+        setIsCreating(false);
+      } else {
+        setCreateError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || 'Failed to create design system',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create design system';
       setCreateError(
-        scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
           || 'Failed to create design system',
       );
     }
@@ -90,16 +98,24 @@ export function DesignSystems() {
     const nameSafe =
       scrubDisplayText(name, { collapseLines: true, maxChars: 200 }) || id || 'design system';
     if (!window.confirm(`Delete design system "${nameSafe}"? This cannot be undone.`)) return;
-    const res = await client.deleteDesignSystem(id);
-    if (res.ok) {
-      setPageError(null);
-      setSystems((prev) => prev.filter((s) => s.id !== id));
-    } else {
+    try {
+      const res = await client.deleteDesignSystem(id);
+      if (res.ok) {
+        setPageError(null);
+        setSystems((prev) => prev.filter((s) => s.id !== id));
+      } else {
+        setPageError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to delete design system',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete design system';
       setPageError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Failed to delete design system',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to delete design system',
       );
     }
   };

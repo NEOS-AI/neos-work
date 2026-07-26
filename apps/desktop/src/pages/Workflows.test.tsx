@@ -435,4 +435,45 @@ describe('Workflows page', () => {
     expect(screen.getByText(/line1 line2/)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('alerts scrubbed create throw and re-enables create form', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    createWorkflow.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByText('workflow.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole('button', { name: /workflow\.new/i })[0]!);
+    const nameInput = await waitFor(() => {
+      const inputs = document.querySelectorAll('input[type="text"]');
+      expect(inputs.length).toBeGreaterThan(0);
+      return inputs[0] as HTMLInputElement;
+    });
+    fireEvent.change(nameInput, { target: { value: 'Throw WF' } });
+    const form = nameInput.closest('form');
+    if (form) fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('net down!');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
+  it('alerts scrubbed delete throw and keeps the workflow', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    deleteWorkflow.mockRejectedValue(new Error(`del${'\n'}fail${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('common.delete')[0]!);
+    await waitFor(() => {
+      expect(deleteWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('del fail!');
+    });
+    expect(screen.getByText('Alpha Flow')).toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
 });

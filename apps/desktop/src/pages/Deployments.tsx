@@ -151,30 +151,44 @@ export function Deployments() {
   const handleDelete = async (id: string) => {
     if (!client) return;
     if (!window.confirm('Remove this deployment history entry?')) return;
-    const res = await client.deleteDeployment(id);
-    if (res.ok) {
-      setDeployments((prev) => prev.filter((d) => d.id !== id));
-    } else {
+    try {
+      const res = await client.deleteDeployment(id);
+      if (res.ok) {
+        setDeployments((prev) => prev.filter((d) => d.id !== id));
+      } else {
+        setError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
       setError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed',
       );
     }
   };
 
   const handleRefreshStatus = async (id: string) => {
     if (!client) return;
-    const res = await client.refreshDeployment(id);
-    if (res.ok && res.data) {
-      setDeployments((prev) => prev.map((d) => (d.id === id ? res.data! : d)));
-    } else {
+    try {
+      const res = await client.refreshDeployment(id);
+      if (res.ok && res.data) {
+        setDeployments((prev) => prev.map((d) => (d.id === id ? res.data! : d)));
+      } else {
+        setError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Status refresh failed',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Status refresh failed';
       setError(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Status refresh failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Status refresh failed',
       );
     }
   };

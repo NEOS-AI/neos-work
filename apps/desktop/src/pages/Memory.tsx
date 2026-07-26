@@ -227,51 +227,69 @@ export default function Memory() {
 
   const handleSave = async (data: CreateMemoryInput) => {
     if (!client) return;
-    const res =
-      modal?.mode === 'edit'
-        ? await client.updateMemory(modal.item.id, data)
-        : await client.createMemory(data);
-    if (!res.ok) {
+    try {
+      const res =
+        modal?.mode === 'edit'
+          ? await client.updateMemory(modal.item.id, data)
+          : await client.createMemory(data);
+      if (!res.ok) {
+        throw new Error(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed',
+        );
+      }
+      setModal(null);
+      void load();
+    } catch (err) {
+      // Re-throw so MemoryModal surfaces scrubbed error and stays open
+      const msg = err instanceof Error ? err.message : 'Save failed';
       throw new Error(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Save failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
       );
     }
-    setModal(null);
-    void load();
   };
 
   const handleToggle = async (id: string) => {
     if (!client) return;
-    const res = await client.toggleMemory(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Update failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.toggleMemory(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed';
+        alert(err);
+        return;
+      }
+      void load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
     }
-    void load();
   };
 
   const handleDelete = async (id: string) => {
     if (!client) return;
     if (!window.confirm(t('memory.confirmDelete'))) return;
-    const res = await client.deleteMemory(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.deleteMemory(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        alert(err);
+        return;
+      }
+      void load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
-    void load();
   };
 
   return (

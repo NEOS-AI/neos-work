@@ -176,6 +176,14 @@ export function ArtifactPreview({
         if (again.ok && typeof again.data?.content === 'string') {
           const raw = again.data.content;
           setSelectedContent(/\0/.test(raw) ? raw.replace(/\0/g, '') : raw);
+          setStatusMsg('Content reloaded');
+        } else {
+          setStatusMsg(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Reload failed',
+          );
         }
       }
       loadList();

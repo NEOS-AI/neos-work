@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const listMediaFiles = vi.fn();
@@ -260,5 +260,21 @@ describe('Media page', () => {
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('photo.png'));
     const msg = String(confirmSpy.mock.calls[0]?.[0] ?? '');
     expect(msg).not.toContain('\0');
+  });
+
+  it('surfaces scrubbed delete throw and keeps the file', async () => {
+    listMediaFiles.mockResolvedValue({ ok: true, data: files });
+    deleteMediaFile.mockRejectedValue(new Error(`del${'\n'}net${'\0'}!`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Media />);
+    await waitFor(() => expect(screen.getByText('photo.png')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('Delete file')[0]!);
+    expect(window.confirm).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(deleteMediaFile).toHaveBeenCalled();
+      expect(screen.getByText(/del net!/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('photo.png')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
   });
 });

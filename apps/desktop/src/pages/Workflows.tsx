@@ -109,59 +109,77 @@ export function Workflows() {
     // Control-char name rejected before trim (align with workflow API)
     if (!client || /[\0\r\n]/.test(newName) || !newName.trim()) return;
     setCreating(true);
-    const triggerId = crypto.randomUUID();
-    const outputId = crypto.randomUUID();
-    const res = await client.createWorkflow({
-      name: newName.trim(),
-      domain: newDomain,
-      nodes: [
-        { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
-        { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
-      ],
-      edges: [{ id: crypto.randomUUID(), source: triggerId, target: outputId }],
-    });
-    setCreating(false);
-    if (res.ok && res.data) {
-      closeCreateModal();
-      navigate(`/workflows/${res.data.id}`);
-    } else {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Create workflow failed';
-      alert(err);
+    try {
+      const triggerId = crypto.randomUUID();
+      const outputId = crypto.randomUUID();
+      const res = await client.createWorkflow({
+        name: newName.trim(),
+        domain: newDomain,
+        nodes: [
+          { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+          { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
+        ],
+        edges: [{ id: crypto.randomUUID(), source: triggerId, target: outputId }],
+      });
+      if (res.ok && res.data) {
+        closeCreateModal();
+        navigate(`/workflows/${res.data.id}`);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Create workflow failed';
+        alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Create workflow failed';
+      alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Create workflow failed',
+      );
+    } finally {
+      setCreating(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!client) return;
     if (!confirm(t('workflow.confirmDelete'))) return;
-    const res = await client.deleteWorkflow(id);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Delete failed';
-      alert(err);
-      return;
+    try {
+      const res = await client.deleteWorkflow(id);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Delete failed';
+        alert(err);
+        return;
+      }
+      setWorkflows((prev) => prev.filter((w) => w.id !== id));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
-    setWorkflows((prev) => prev.filter((w) => w.id !== id));
   };
 
   const handleDuplicate = async (id: string) => {
     if (!client) return;
-    const res = await client.duplicateWorkflow(id);
-    if (res.ok) {
-      await loadWorkflows();
-    } else {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Duplicate failed';
-      alert(err);
+    try {
+      const res = await client.duplicateWorkflow(id);
+      if (res.ok) {
+        await loadWorkflows();
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Duplicate failed';
+        alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Duplicate failed';
+      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Duplicate failed');
     }
   };
 

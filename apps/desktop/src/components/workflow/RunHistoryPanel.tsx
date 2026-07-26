@@ -237,7 +237,15 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                       e.stopPropagation();
                       if (!client) return;
                       const res = await client.getWorkflowRun(props.workflowId, run.id);
-                      if (!res.ok || !res.data) return;
+                      if (!res.ok || !res.data) {
+                        window.alert(
+                          scrubDisplayText((res as { error?: string }).error, {
+                            collapseLines: true,
+                            maxChars: 300,
+                          }) || 'Export failed',
+                        );
+                        return;
+                      }
                       const blob = new Blob([JSON.stringify(res.data, null, 2)], {
                         type: 'application/json',
                       });

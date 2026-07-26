@@ -158,6 +158,36 @@ describe('ArtifactPreview', () => {
     });
   });
 
+  it('shows scrubbed status when artifact reload fails', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a1',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html><body>hi</body></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact
+      .mockResolvedValueOnce({ ok: true, data: art }) // initial select load
+      .mockResolvedValue({ ok: false, error: 'gone' }); // fallback after failed refresh
+    refreshArtifact.mockResolvedValue({
+      ok: false,
+      error: `reload${'\n'}denied${'\0'}!`,
+    });
+
+    render(<ArtifactPreview workflowId="wf-1" onRerunWorkflow={() => {}} />);
+    await waitFor(() => expect(screen.getByText('page.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /reload/i }));
+    await waitFor(() => {
+      expect(refreshArtifact).toHaveBeenCalledWith('a1', 'reload');
+      expect(screen.getByText('reload denied!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('restores viewport mode from localStorage prefs', async () => {
     localStorage.setItem('neos-artifact-viewport', 'tablet');
     const art = {
