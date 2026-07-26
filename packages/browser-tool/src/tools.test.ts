@@ -31,6 +31,10 @@ describe('createBrowserTools', () => {
     // Leading control char must not strip to a valid URL
     expect(isSafeBrowserUrl('\nhttps://example.com')).toBeNull();
     expect(isSafeBrowserUrl('file:///etc/passwd')).toBeNull();
+    // Non-string inputs
+    expect(isSafeBrowserUrl(null)).toBeNull();
+    expect(isSafeBrowserUrl(123)).toBeNull();
+    expect(isSafeBrowserUrl(undefined)).toBeNull();
   });
 
   it('browser_navigate goes to url and returns title/url', async () => {
@@ -529,5 +533,87 @@ describe('createBrowserTools', () => {
     const textRes = await extract.execute({});
     expect(textRes.success).toBe(false);
     expect(textRes.error).toMatch(/text boom|browser_extract_text/i);
+  });
+
+  it('toolFailure uses fallback for non-Error / scrubbed-empty messages', async () => {
+    const page = {
+      click: vi.fn(async () => {
+        throw 'raw-string-throw';
+      }),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const nonErr = await tools.find((t) => t.name === 'browser_click')!.execute({
+      selector: '#x',
+    });
+    expect(nonErr.success).toBe(false);
+    expect(nonErr.error).toMatch(/browser_click failed/i);
+
+    page.click = vi.fn(async () => {
+      throw new Error('   ');
+    });
+    const scrubbed = await tools.find((t) => t.name === 'browser_click')!.execute({
+      selector: '#x',
+    });
+    expect(scrubbed.success).toBe(false);
+    expect(scrubbed.error).toMatch(/browser_click failed/i);
+
+    // Error.message that is not a string → fallback path in toolFailure
+    page.click = vi.fn(async () => {
+      const err = new Error('x');
+      Object.defineProperty(err, 'message', { value: 42 });
+      throw err;
+    });
+    const weird = await tools.find((t) => t.name === 'browser_click')!.execute({
+      selector: '#x',
+    });
+    expect(weird.success).toBe(false);
+    expect(weird.error).toMatch(/browser_click failed/i);
+  });
+
+  it('navigate coerces non-string title and blank final URL', async () => {
+    const page = {
+      goto: vi.fn(async () => {}),
+      title: vi.fn(async () => 99 as unknown as string),
+      url: vi.fn(() => '   '),
+    };
+    const tools = createBrowserTools(makeManager(page));
+    const nav = tools.find((t) => t.name === 'browser_navigate')!;
+    const result = await nav.execute({ url: 'https://example.com/start' });
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ title: '99', url: 'https://example.com/start' });
+
+    page.title = vi.fn(async () => null as unknown as string);
+    page.url = vi.fn(() => 'https://example.com/ok');
+    const nullTitle = await nav.execute({ url: 'https://example.com/start' });
+    expect(nullTitle.success).toBe(true);
+    expect((nullTitle.output as { title: string }).title).toBe('');
+  });
+
+  it('extract_text stringifies null DOM text; extract_links drops non-string href', async () => {
+    const pageText = {
+      evaluate: vi.fn(async () => null as unknown as string),
+      locator: vi.fn(),
+    };
+    const textRes = await createBrowserTools(makeManager(pageText))
+      .find((t) => t.name === 'browser_extract_text')!
+      .execute({});
+    expect(textRes.success).toBe(true);
+    expect((textRes.output as { text: string }).text).toBe('');
+
+    const pageLinks = {
+      evaluate: vi.fn(async () => [
+        { text: 'num-href', href: 123 as unknown as string },
+        { text: 'ok', href: 'https://ok.test/' },
+        null,
+        { text: 'missing' },
+      ]),
+    };
+    const linksRes = await createBrowserTools(makeManager(pageLinks))
+      .find((t) => t.name === 'browser_extract_links')!
+      .execute({});
+    expect(linksRes.success).toBe(true);
+    expect((linksRes.output as { links: unknown[] }).links).toEqual([
+      { text: 'ok', href: 'https://ok.test/' },
+    ]);
   });
 });
