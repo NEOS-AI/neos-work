@@ -72,7 +72,20 @@ vi.mock('@tauri-apps/plugin-shell', () => ({
   open: (...args: unknown[]) => shellOpen(...args),
 }));
 
-const { Settings } = await import('./Settings.js');
+const { Settings, safeOAuthAuthUrl } = await import('./Settings.js');
+
+describe('safeOAuthAuthUrl', () => {
+  it('allows http(s) and rejects control chars / non-http schemes', () => {
+    expect(safeOAuthAuthUrl('https://auth.example/start')).toBe('https://auth.example/start');
+    expect(safeOAuthAuthUrl('http://localhost:3000/oauth')).toBe('http://localhost:3000/oauth');
+    expect(safeOAuthAuthUrl(`https://x.example/${'\0'}`)).toBe('');
+    expect(safeOAuthAuthUrl('javascript:alert(1)')).toBe('');
+    expect(safeOAuthAuthUrl('ftp://files.example')).toBe('');
+    expect(safeOAuthAuthUrl('not a url')).toBe('');
+    expect(safeOAuthAuthUrl(null)).toBe('');
+    expect(safeOAuthAuthUrl('  https://ok.example  ')).toBe('https://ok.example');
+  });
+});
 
 describe('Settings page', () => {
   beforeEach(() => {
@@ -630,6 +643,111 @@ describe('Settings page', () => {
     await waitFor(() => {
       expect(shellOpen).toHaveBeenCalledWith('https://auth.example/start');
     });
+  });
+
+  it('rejects non-http(s) OAuth authUrl without opening the browser', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-bad-url',
+          name: 'Bad Auth URL',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
+    startMcpOAuth.mockResolvedValue({
+      ok: true,
+      data: { authUrl: 'javascript:alert(1)' },
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Bad Auth URL')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
+    await waitFor(() => expect(screen.getByText('Connect: Bad Auth URL')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
+      target: { value: 'https://auth.example/authorize' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
+      target: { value: 'https://auth.example/token' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Client ID'), {
+      target: { value: 'client-id' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+
+    await waitFor(() => {
+      expect(startMcpOAuth).toHaveBeenCalled();
+    });
+    expect(shellOpen).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/invalid authorization URL/i),
+    );
+    alertSpy.mockRestore();
+  });
+
+  it('isolates OAuth status poll throw after successful browser open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-poll',
+          name: 'Poll Target',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus
+      .mockResolvedValueOnce({ ok: true, data: { connected: false } })
+      .mockRejectedValueOnce(new Error('poll boom'));
+    startMcpOAuth.mockResolvedValue({
+      ok: true,
+      data: { authUrl: 'https://auth.example/start' },
+    });
+
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Poll Target')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
+    await waitFor(() => expect(screen.getByText('Connect: Poll Target')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
+      target: { value: 'https://auth.example/authorize' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
+      target: { value: 'https://auth.example/token' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Client ID'), {
+      target: { value: 'client-id' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+
+    await waitFor(() => {
+      expect(shellOpen).toHaveBeenCalledWith('https://auth.example/start');
+    });
+
+    await vi.advanceTimersByTimeAsync(3100);
+    await waitFor(() => {
+      // Initial list probe + post-connect poll
+      expect(getMcpOAuthStatus).toHaveBeenCalledWith('mcp-poll');
+    });
+    // Server list still intact; no poll error banner
+    expect(screen.getByText('Poll Target')).toBeInTheDocument();
+    expect(screen.queryByText(/poll boom/i)).not.toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it('shows CLI agents and applies dev auth token', async () => {

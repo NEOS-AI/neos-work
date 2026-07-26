@@ -777,6 +777,24 @@ interface OAuthModalState {
   scope: string;
 }
 
+/**
+ * Only allow http(s) OAuth authorization URLs for shell open.
+ * Control-char, non-http(s), and overlong values are rejected.
+ * Exported for unit tests.
+ */
+export function safeOAuthAuthUrl(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const s = raw.trim();
+  if (!s || s.length > 2_048) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return s;
+  } catch {
+    return '';
+  }
+}
+
 function McpServersSection() {
   const { client } = useEngine();
   const [servers, setServers] = useState<McpServerData[]>([]);
@@ -1071,10 +1089,16 @@ function McpServersSection() {
         scope: scope?.trim() || undefined,
       });
       if (res.ok && res.data?.authUrl) {
+        // Gate authUrl before shell open (javascript:/control-char injection defense)
+        const authUrl = safeOAuthAuthUrl(res.data.authUrl);
+        if (!authUrl) {
+          window.alert('OAuth start failed: invalid authorization URL');
+          return;
+        }
         // Open in system browser via Tauri
         try {
           const { open } = await import('@tauri-apps/plugin-shell');
-          await open(res.data.authUrl);
+          await open(authUrl);
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Failed to open browser';
           window.alert(
@@ -1082,13 +1106,20 @@ function McpServersSection() {
           );
           return;
         }
+        const serverId = oauthModal.serverId;
         setOauthModal(null);
-        // Poll for token after 3s
-        setTimeout(async () => {
-          const st = await client.getMcpOAuthStatus(oauthModal.serverId);
-          if (st.ok && st.data) {
-            setOauthStatuses((prev) => ({ ...prev, [oauthModal.serverId]: st.data! }));
-          }
+        // Poll for token after 3s — best-effort; never surface unhandled rejection
+        setTimeout(() => {
+          void (async () => {
+            try {
+              const st = await client.getMcpOAuthStatus(serverId);
+              if (st.ok && st.data) {
+                setOauthStatuses((prev) => ({ ...prev, [serverId]: st.data! }));
+              }
+            } catch {
+              // omit badge refresh when status probe fails
+            }
+          })();
         }, 3000);
       } else {
         window.alert(
