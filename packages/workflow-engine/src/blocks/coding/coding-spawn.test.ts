@@ -88,4 +88,47 @@ describe('coding blocks spawn timeout / scrub paths', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe('Operation failed');
   });
+
+  it('abort signal kills python code_eval spawn (abortHandler path)', async () => {
+    const exec = getNativeExecutor('code_eval')!;
+    const controller = new AbortController();
+    const run = exec.execute({
+      params: { code: 'print(1)', language: 'python' },
+      inputs: {},
+      settings: {},
+      signal: controller.signal,
+    });
+    // Let spawn attach listeners
+    await Promise.resolve();
+    await Promise.resolve();
+    const child = lastChildren.at(-1);
+    expect(child).toBeDefined();
+    // Fire abort → abortHandler calls kill (mocked to throw; swallow)
+    controller.abort();
+    expect(child!.kill).toHaveBeenCalled();
+    child!.emit('exit', null);
+    const result = await run;
+    // exit null / non-zero after abort is a structured failure or empty output path
+    expect(typeof result.durationMs).toBe('number');
+  });
+
+  it('abort signal kills git_diff spawn via abortHandler', async () => {
+    const exec = getNativeExecutor('git_diff')!;
+    const controller = new AbortController();
+    const run = exec.execute({
+      params: { repoPath: process.cwd() },
+      inputs: {},
+      settings: {},
+      signal: controller.signal,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const child = lastChildren.at(-1);
+    expect(child).toBeDefined();
+    controller.abort();
+    expect(child!.kill).toHaveBeenCalled();
+    child!.emit('exit', 1);
+    const result = await run;
+    expect(result.ok).toBe(false);
+  });
 });

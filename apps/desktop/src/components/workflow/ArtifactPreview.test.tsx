@@ -621,9 +621,9 @@ describe('ArtifactPreview', () => {
     listArtifacts.mockResolvedValue({ ok: true, data: [art] });
     getArtifact.mockResolvedValue({ ok: true, data: art });
     render(<ArtifactPreview workflowId="wf-1" />);
-    const copyBtn = await screen.findByTitle('Copy artifact content');
-    expect(copyBtn).toBeEnabled();
-    await user.click(copyBtn);
+    // Wait until content is loaded — copy is disabled until selectedContent is set
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Copy$/i })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /^Copy$/i }));
     // Status toast and/or button label surface the failure
     await waitFor(() => {
       expect(screen.getAllByText('Copy failed').length).toBeGreaterThanOrEqual(1);

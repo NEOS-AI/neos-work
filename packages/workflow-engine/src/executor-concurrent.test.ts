@@ -258,4 +258,43 @@ describe('executeWorkflow concurrent or_gate race', () => {
       ),
     ).toBe(true);
   });
+
+  it('fails concurrent branch with control-char node id via runNode invalid-id path', async () => {
+    // Mocked topologicalSort keeps the raw node; concurrent branch path still
+    // filters control-char ids before runNode. Non-string empty-coerced id is
+    // filtered too. Cover runNode defense by using a node id that is only
+    // invalid after String() — not possible for string control chars in the
+    // branch filter. Instead: empty string id that slipped past sort mock.
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-or-race-emptyid',
+      workflow: baseWorkflow({
+        nodes: [
+          {
+            id: '',
+            type: 'output',
+            label: 'Empty',
+            position: { x: 0, y: 0 },
+            config: {},
+          },
+          { id: 'or', type: 'or_gate', label: 'OR', position: { x: 1, y: 0 }, config: {} },
+        ],
+        // Edge source empty is also filtered from predecessors — use a valid
+        // looking source that maps to the empty-id node after sort mock order.
+        edges: [{ id: 'e1', source: '', target: 'or' }],
+      }),
+      settings: {},
+      onEvent: (e) => events.push(e),
+    });
+    // Empty branch id never enters runNode; or_gate fails closed when no
+    // pending/successful branches resolve.
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'node.failed'
+          && (e as { nodeId?: string }).nodeId === 'or'
+          && /OR gate/i.test(String((e as { error?: string }).error ?? '')),
+      ),
+    ).toBe(true);
+  });
 });

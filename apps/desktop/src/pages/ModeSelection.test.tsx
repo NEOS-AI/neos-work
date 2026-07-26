@@ -83,6 +83,7 @@ describe('ModeSelection', () => {
 
   it('rejects control-char remote url and bearer token', async () => {
     const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<ModeSelection />);
 
     const urlInput = screen.getByPlaceholderText('http://192.168.1.100:57286');
@@ -91,18 +92,21 @@ describe('ModeSelection', () => {
     fireEvent.change(urlInput, { target: { value: `http://10.0.0.5:57286${'\0'}` } });
     await user.click(screen.getByRole('button', { name: 'Connect' }));
     expect(connect).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('URL contains invalid control characters');
 
     fireEvent.change(urlInput, { target: { value: 'http://10.0.0.5:57286' } });
     fireEvent.change(tokenInput, { target: { value: `tok${'\0'}bad` } });
     await user.click(screen.getByRole('button', { name: 'Connect' }));
     expect(connect).not.toHaveBeenCalled();
     expect(sessionStorage.getItem('devAuthToken')).toBeNull();
+    expect(alertSpy).toHaveBeenCalledWith('Token contains invalid control characters');
 
     // Clean token is trimmed before storage
     fireEvent.change(tokenInput, { target: { value: '  tok-clean  ' } });
     await user.click(screen.getByRole('button', { name: 'Connect' }));
     expect(connect).toHaveBeenCalledWith('client', 'http://10.0.0.5:57286');
     expect(sessionStorage.getItem('devAuthToken')).toBe('tok-clean');
+    alertSpy.mockRestore();
   });
 
   it('disables host while connecting', () => {

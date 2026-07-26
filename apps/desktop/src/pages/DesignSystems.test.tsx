@@ -336,10 +336,13 @@ describe('DesignSystems page', () => {
   it('surfaces scrubbed delete throw and keeps the system', async () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: systems });
     deleteDesignSystem.mockRejectedValue(new Error(`del${'\n'}fail${'\0'}!`));
+    // Ensure confirm is true even if a prior test left a false mock
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPage();
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
     await waitFor(() => {
+      expect(deleteDesignSystem).toHaveBeenCalledWith('ds-a');
       expect(screen.getByText(/del fail!/)).toBeInTheDocument();
     });
     expect(screen.getByText('Alpha Brand')).toBeInTheDocument();

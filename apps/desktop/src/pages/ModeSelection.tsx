@@ -27,11 +27,17 @@ export function ModeSelection() {
   const handleSelect = (mode: AppMode) => {
     if (mode === 'client') {
       // Control-char remote URL never used for connect (check before trim)
-      if (/[\0\r\n]/.test(remoteUrl)) return;
+      if (/[\0\r\n]/.test(remoteUrl)) {
+        window.alert('URL contains invalid control characters');
+        return;
+      }
       if (!remoteUrl.trim()) return;
     }
     // Control-char bearer token never stored (header injection defense)
-    if (devToken && /[\0\r\n]/.test(devToken)) return;
+    if (devToken && /[\0\r\n]/.test(devToken)) {
+      window.alert('Token contains invalid control characters');
+      return;
+    }
     if (devToken) sessionStorage.setItem('devAuthToken', devToken.trim());
     if (mode === 'client') saveRemoteUrl(remoteUrl);
     connect(mode, mode === 'client' ? remoteUrl.trim() : undefined);
