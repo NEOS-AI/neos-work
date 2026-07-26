@@ -6,8 +6,20 @@ describe('allowedDomainsForAgentNode', () => {
     expect([...allowedDomainsForAgentNode('agent_finance')].sort()).toEqual(['finance', 'general']);
   });
 
-  it('defaults coding agent domains', () => {
+  it('maps coding agent to coding+general', () => {
     expect([...allowedDomainsForAgentNode('agent_coding')].sort()).toEqual(['coding', 'general']);
+  });
+
+  it('maps unified agent to all built-in packs', () => {
+    expect([...allowedDomainsForAgentNode('agent')].sort()).toEqual([
+      'coding',
+      'finance',
+      'general',
+      'research',
+    ]);
+  });
+
+  it('defaults unknown node types to coding+general', () => {
     expect([...allowedDomainsForAgentNode('other')].sort()).toEqual(['coding', 'general']);
   });
 });
@@ -28,6 +40,11 @@ describe('filterAndSortHarnesses', () => {
   it('filters finance node types', () => {
     const filtered = filterAndSortHarnesses(harnesses, 'agent_finance');
     expect(filtered.map((h) => h.id)).toEqual(['f1', 'g1']);
+  });
+
+  it('lists all domains for unified agent node type', () => {
+    const filtered = filterAndSortHarnesses(harnesses, 'agent');
+    expect(filtered.map((h) => h.id)).toEqual(['c1', 'c2', 'f1', 'g1']);
   });
 
   it('returns empty when no harnesses match domain', () => {

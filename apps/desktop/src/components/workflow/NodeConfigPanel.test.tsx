@@ -196,6 +196,78 @@ describe('NodeConfigPanel', () => {
     expect(onPatchNodeData).toHaveBeenCalled();
   });
 
+  it('prefers workerId over harnessId and writes workerId on harness change', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'coding_reviewer',
+          name: 'Reviewer',
+          domain: 'coding',
+          description: 'd',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: true,
+        },
+        {
+          id: 'coding_implementer',
+          name: 'Implementer',
+          domain: 'coding',
+          description: 'd',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: true,
+        },
+      ],
+    });
+
+    const node = {
+      id: 'a1',
+      type: 'agent',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent',
+        label: 'Agent',
+        // Migrated graphs only have workerId
+        config: { llmProvider: 'anthropic', workerId: 'coding_reviewer' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+
+    // Wait for harness options; selected description reflects workerId match
+    await waitFor(() => expect(listHarnesses).toHaveBeenCalled());
+    expect(await screen.findByText('Reviewer (coding)')).toBeInTheDocument();
+    // Selected harness detail panel (description "d") only when value matches
+    expect(screen.getByText(/^d$/)).toBeInTheDocument();
+
+    // Change selection → workerId write, harnessId cleared
+    const selects = screen.getAllByRole('combobox');
+    const harnessSelect = selects.find((el) =>
+      Array.from(el.querySelectorAll('option')).some((o) => o.value === 'coding_reviewer'),
+    );
+    expect(harnessSelect).toBeTruthy();
+    expect(harnessSelect).toHaveValue('coding_reviewer');
+    await user.selectOptions(harnessSelect!, 'coding_implementer');
+    expect(onPatchNodeData).toHaveBeenCalledWith(
+      'a1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          workerId: 'coding_implementer',
+          harnessId: undefined,
+        }),
+      }),
+    );
+  });
+
   it('rejects control-char label and null-byte initial inputs JSON', async () => {
     const onPatchNodeData = vi.fn();
     const node = {

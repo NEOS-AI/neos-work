@@ -121,6 +121,40 @@ describe('filterRunLogEvents', () => {
       'run.failed',
     ]);
   });
+
+  it('includes worker.* and node.warning in filter chips', () => {
+    const withWorkers: WorkflowSSEEvent[] = [
+      ...events,
+      { type: 'node.warning', nodeId: 'n1', message: 'soft' },
+      { type: 'worker.started', nodeId: 'n1', workerId: 'finance_analyst', workerRunId: 'wr1' },
+      { type: 'worker.progress', nodeId: 'n1', workerRunId: 'wr1', chunk: '…' },
+      { type: 'worker.completed', nodeId: 'n1', workerRunId: 'wr1', output: { ok: true } },
+      { type: 'worker.failed', nodeId: 'n1', workerRunId: 'wr2', error: 'spawn failed' },
+    ];
+    expect(filterRunLogEvents(withWorkers, 'progress').map((e) => e.type)).toEqual([
+      'node.progress',
+      'worker.progress',
+    ]);
+    expect(filterRunLogEvents(withWorkers, 'completed').map((e) => e.type)).toEqual([
+      'node.completed',
+      'worker.completed',
+    ]);
+    expect(filterRunLogEvents(withWorkers, 'failed').map((e) => e.type)).toEqual([
+      'node.failed',
+      'run.failed',
+      'worker.failed',
+    ]);
+    expect(filterRunLogEvents(withWorkers, 'lifecycle').map((e) => e.type)).toEqual([
+      'run.started',
+      'node.started',
+      'node.failed',
+      'run.failed',
+      'node.warning',
+      'worker.started',
+      'worker.completed',
+      'worker.failed',
+    ]);
+  });
 });
 
 describe('linkifyText', () => {

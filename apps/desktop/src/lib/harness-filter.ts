@@ -18,7 +18,13 @@ function safeNodeType(raw: unknown): string {
 
 export function allowedDomainsForAgentNode(nodeType: string): Set<string> {
   const t = safeNodeType(nodeType);
+  // Unified v2 agent: all built-in packs (PLAN_FOR_V0_4_0)
+  if (t === 'agent') {
+    return new Set(['finance', 'coding', 'research', 'general']);
+  }
   if (t === 'agent_finance') return new Set(['finance', 'general']);
+  if (t === 'agent_coding') return new Set(['coding', 'general']);
+  // Unknown / control-char → conservative coding+general (legacy default)
   return new Set(['coding', 'general']);
 }
 

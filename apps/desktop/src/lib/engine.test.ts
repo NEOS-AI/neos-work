@@ -158,6 +158,306 @@ describe('EngineClient', () => {
     expect(client.mediaFileUrl('img_1.png')).toBe('http://engine.test/api/media/file/img_1.png');
   });
 
+  it('rejects control-char / blank / traversal ids across remaining entity APIs without fetch', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockClear();
+    const bad = `id${'\n'}x`;
+    const blank = '   ';
+    const trav = '../etc';
+
+    // Sessions / tools
+    await expect(client.listSessions(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workspace id',
+    });
+    await expect(client.cancelSession(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid session id',
+    });
+    await expect(client.confirmTool(bad, 'tool-1', true)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid session id',
+    });
+    await expect(client.confirmTool('sess-1', trav, false)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid tool use id',
+    });
+
+    // Workspaces / skills / MCP
+    await expect(client.updateWorkspace(blank, { name: 'N' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workspace id',
+    });
+    await expect(client.deleteWorkspace(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workspace id',
+    });
+    await expect(client.toggleSkill(bad, true)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid skill id',
+    });
+    await expect(client.deleteSkill(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid skill id',
+    });
+    await expect(client.toggleMcpServer(bad, false)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid MCP server id',
+    });
+    await expect(client.deleteMcpServer(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid MCP server id',
+    });
+    await expect(client.getMcpOAuthStatus(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid MCP server id',
+    });
+    await expect(client.revokeMcpOAuth(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid MCP server id',
+    });
+    await expect(
+      client.refreshMcpOAuth(bad, { tokenEndpoint: 'https://t', clientId: 'c' }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid MCP server id' });
+
+    // Design systems / artifacts
+    await expect(client.deleteDesignSystem(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.getDesignSystemContent(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemContent(trav, 'md')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.listArtifacts({ runId: bad })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid run id',
+    });
+    await expect(client.listArtifacts({ workflowId: trav })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.listArtifacts({})).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getArtifact(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid artifact id',
+    });
+    await expect(client.refreshArtifact(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid artifact id',
+    });
+    await expect(client.deleteArtifact(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid artifact id',
+    });
+    await expect(client.updateArtifact(bad, { name: 'n' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid artifact id',
+    });
+
+    // Routines / deployments / plugins
+    await expect(client.getRoutine(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid routine id',
+    });
+    await expect(client.updateRoutine(blank, { name: 'R' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid routine id',
+    });
+    await expect(client.deleteRoutine(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid routine id',
+    });
+    await expect(client.runRoutineNow(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid routine id',
+    });
+    await expect(client.listRoutineRuns(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid routine id',
+    });
+    await expect(client.crystallizeRoutineRun(bad, 'run-1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid routine id',
+    });
+    await expect(client.crystallizeRoutineRun('r-1', trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid run id',
+    });
+    await expect(client.refreshDeployment(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid deployment id',
+    });
+    await expect(client.getPlugin(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid plugin id',
+    });
+    await expect(client.resumePlugin(trav, 'run-1', 'stage', {})).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid plugin id',
+    });
+    await expect(client.resumePlugin('p-1', bad, 'stage', {})).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid run id',
+    });
+
+    // Workflows / runs / webhook / revisions
+    await expect(client.getWorkflow(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.updateWorkflow(blank, { name: 'W' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.deleteWorkflow(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.duplicateWorkflow(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.deleteWorkflowRun(bad, 'run-1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.deleteWorkflowRun('wf-1', trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid run id',
+    });
+    await expect(client.preflightWorkflow(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getWebhookSecret(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getWebhookRateLimit(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.regenerateWebhookSecret(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.testWebhookFire(blank)).resolves.toMatchObject({
+      ok: false,
+      status: 0,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.listRevisions(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getRevision(bad, 'rev-1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getRevision('wf-1', trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid revision id',
+    });
+    await expect(client.restoreRevision(blank, 'rev-1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.restoreRevision('wf-1', bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid revision id',
+    });
+    await expect(client.updateRevisionLabel(trav, 'rev-1', 'L')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.updateRevisionLabel('wf-1', blank, 'L')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid revision id',
+    });
+    await expect(client.deleteRevision(bad, 'rev-1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.deleteRevision('wf-1', trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid revision id',
+    });
+
+    // Deployments / harness / blocks / memory
+    await expect(client.listDeployments(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getDeployment(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid deployment id',
+    });
+    await expect(client.deleteDeployment(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid deployment id',
+    });
+    await expect(client.updateHarness(bad, { name: 'H' } as never)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid harness id',
+    });
+    await expect(client.deleteHarness(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid harness id',
+    });
+    await expect(client.updateBlock(trav, { name: 'B' } as never)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid block id',
+    });
+    await expect(client.deleteBlock(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid block id',
+    });
+    await expect(client.updateMemory(blank, { content: 'c' } as never)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid memory id',
+    });
+    await expect(client.deleteMemory(trav)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid memory id',
+    });
+    await expect(client.toggleMemory(bad)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid memory id',
+    });
+
+    // SSE / streaming id gates
+    const chatChunks: unknown[] = [];
+    for await (const c of client.chat(bad, 'hi')) chatChunks.push(c);
+    expect(chatChunks).toEqual([{ type: 'error', content: 'Invalid session id' }]);
+
+    const agentChunks: unknown[] = [];
+    for await (const c of client.runAgent(blank, 'hi')) agentChunks.push(c);
+    expect(agentChunks).toEqual([{ type: 'error', error: 'Invalid session id' }]);
+
+    const pluginEvents: unknown[] = [];
+    const { runIdPromise } = client.runPlugin(trav, {}, (e) => pluginEvents.push(e));
+    await expect(runIdPromise).resolves.toBeNull();
+    expect(pluginEvents).toEqual([{ type: 'error', error: 'Invalid plugin id' }]);
+
+    const wfEvents: unknown[] = [];
+    client.runWorkflow(bad, (e) => wfEvents.push(e));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(wfEvents).toEqual([
+      { type: 'run.failed', runId: '', error: 'Invalid workflow id' },
+    ]);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('exposes base url and auth header after setAuthToken', async () => {
     const client = new EngineClient('http://engine.test');
     expect(client.url).toBe('http://engine.test');

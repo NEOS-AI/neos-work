@@ -191,7 +191,7 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
         }}
       />
 
-      {(nodeType === 'agent_finance' || nodeType === 'agent_coding') && (
+      {(nodeType === 'agent' || nodeType === 'agent_finance' || nodeType === 'agent_coding') && (
         <div className="space-y-3">
           {/* Provider selector */}
           <div className="space-y-1">
@@ -252,11 +252,22 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
           )}
           <HarnessSelector
             nodeType={nodeType}
-            value={typeof config.harnessId === 'string' ? config.harnessId : ''}
-            onChange={(harnessId) => {
-              // Control-char harnessId never applied (align with AgentNode / validation)
-              if (harnessId && /[\0\r\n]/.test(harnessId)) return;
-              patchConfig({ harnessId: harnessId || undefined });
+            value={
+              // v2 workerId preferred; harnessId accepted until graph re-save (BC-4)
+              typeof config.workerId === 'string' && !/[\0\r\n]/.test(config.workerId)
+                ? config.workerId
+                : typeof config.harnessId === 'string' && !/[\0\r\n]/.test(config.harnessId)
+                  ? config.harnessId
+                  : ''
+            }
+            onChange={(workerId) => {
+              // Control-char worker/harness id never applied (align with AgentNode / validation)
+              if (workerId && /[\0\r\n]/.test(workerId)) return;
+              // Write workerId; drop legacy harnessId so migrate/save stay clean
+              patchConfig({
+                workerId: workerId || undefined,
+                harnessId: undefined,
+              });
             }}
           />
           <TextAreaField
