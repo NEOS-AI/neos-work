@@ -627,6 +627,53 @@ describe('Sessions page', () => {
     await waitFor(() => expect(chat).toHaveBeenCalled());
   });
 
+  it('alerts scrubbed error when confirmTool fails', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({ ok: true, data: [] });
+    confirmTool.mockResolvedValue({
+      ok: false,
+      error: `tool${'\n'}locked${'\0'}!`,
+    });
+
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    chat.mockImplementation(() =>
+      (async function* () {
+        yield {
+          type: 'tool_use',
+          toolName: 'shell',
+          toolUseId: 'tu-fail',
+          toolInput: { cmd: 'ls' },
+        };
+        yield { type: 'tool_pending', toolUseId: 'tu-fail' };
+        await gate;
+      })(),
+    );
+
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => expect(screen.getByText('startConversation')).toBeInTheDocument());
+
+    const input = screen.getByPlaceholderText('placeholder') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'run shell' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => {
+      expect(confirmTool).toHaveBeenCalledWith('s1', 'tu-fail', true);
+      expect(window.alert).toHaveBeenCalledWith('tool locked!');
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+    release?.();
+  });
+
   it('streams agent plan steps including healing and errors', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({ ok: true, data: [] });

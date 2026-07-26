@@ -160,8 +160,8 @@ describe('WorkflowEditor page', () => {
     updateWorkflow.mockReset().mockResolvedValue({ ok: true, data: sampleWorkflow });
     preflightWorkflow.mockReset().mockResolvedValue({ ok: true, data: { ok: true, issues: [] } });
     runWorkflow.mockReset().mockReturnValue(() => {});
-    exportWorkflow.mockReset();
-    exportWorkflowZip.mockReset();
+    exportWorkflow.mockReset().mockResolvedValue(true);
+    exportWorkflowZip.mockReset().mockResolvedValue(true);
     createRoutine.mockReset().mockResolvedValue({ ok: true, data: { id: 'r1' } });
     navigate.mockReset();
     fitView.mockReset();
@@ -230,6 +230,38 @@ describe('WorkflowEditor page', () => {
     await waitFor(() => {
       expect(updateWorkflow).toHaveBeenCalled();
       expect(window.alert).toHaveBeenCalledWith('disk full!');
+    });
+  });
+
+  it('alerts scrubbed error when workflow save throws and re-enables Save', async () => {
+    updateWorkflow.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(updateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('net down!');
+    });
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+  });
+
+  it('alerts when export JSON or ZIP fails', async () => {
+    exportWorkflow.mockResolvedValue(false);
+    exportWorkflowZip.mockResolvedValue(false);
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /workflow\.export.*JSON/i }));
+    await waitFor(() => {
+      expect(exportWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('Export failed');
+    });
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export (ZIP)' }));
+    await waitFor(() => {
+      expect(exportWorkflowZip).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('Export failed');
     });
   });
 
@@ -357,14 +389,16 @@ describe('WorkflowEditor page', () => {
   });
 
   it('exports JSON and ZIP and switches right panel tabs', async () => {
+    exportWorkflow.mockResolvedValue(true);
+    exportWorkflowZip.mockResolvedValue(true);
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /workflow\.export.*JSON/i }));
-    expect(exportWorkflow).toHaveBeenCalledWith('wf-1', 'Editor Flow');
+    await waitFor(() => expect(exportWorkflow).toHaveBeenCalledWith('wf-1', 'Editor Flow'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Export (ZIP)' }));
-    expect(exportWorkflowZip).toHaveBeenCalledWith('wf-1', 'Editor Flow');
+    await waitFor(() => expect(exportWorkflowZip).toHaveBeenCalledWith('wf-1', 'Editor Flow'));
 
     fireEvent.click(screen.getByRole('button', { name: 'workflow.runLog' }));
     expect(screen.getByTestId('run-log-panel')).toBeInTheDocument();

@@ -1015,7 +1015,15 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
 
   const handleConfirm = async (approved: boolean) => {
     if (!client || !step.toolUseId) return;
-    await client.confirmTool(sessionId, step.toolUseId, approved);
+    const res = await client.confirmTool(sessionId, step.toolUseId, approved);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Confirmation failed';
+      window.alert(err);
+    }
   };
 
   const statusIcon =

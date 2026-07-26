@@ -215,7 +215,8 @@ describe('EngineClient', () => {
     urlProto.createObjectURL = createObjectURL;
     urlProto.revokeObjectURL = revokeObjectURL;
 
-    await client.exportWorkflow('w1', 'My Workflow!');
+    const ok = await client.exportWorkflow('w1', 'My Workflow!');
+    expect(ok).toBe(true);
     expect(click).toHaveBeenCalled();
     expect(createObjectURL).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalled();
@@ -238,14 +239,15 @@ describe('EngineClient', () => {
     urlProto.revokeObjectURL = prevRevoke;
   });
 
-  it('exportWorkflow no-ops when response not ok', async () => {
+  it('exportWorkflow returns false when response not ok', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
     const createObjectURL = vi.fn();
     const urlProto = URL as unknown as { createObjectURL?: typeof createObjectURL };
     const prevCreate = urlProto.createObjectURL;
     urlProto.createObjectURL = createObjectURL;
-    await client.exportWorkflow('w1', 'x');
+    const ok = await client.exportWorkflow('w1', 'x');
+    expect(ok).toBe(false);
     expect(createObjectURL).not.toHaveBeenCalled();
     urlProto.createObjectURL = prevCreate;
   });
@@ -915,7 +917,8 @@ describe('EngineClient', () => {
     const prevRevoke = urlProto.revokeObjectURL;
     urlProto.createObjectURL = createObjectURL;
     urlProto.revokeObjectURL = revokeObjectURL;
-    await client.exportWorkflowZip('w1', 'out.zip');
+    const zipOkResult = await client.exportWorkflowZip('w1', 'out.zip');
+    expect(zipOkResult).toBe(true);
     expect(click).toHaveBeenCalled();
     // Control / spaces sanitized to download-safe basename
     await client.exportWorkflowZip('w1', `bad${'\n'} name.zip`);
@@ -931,6 +934,10 @@ describe('EngineClient', () => {
     createElement.mockRestore();
     urlProto.createObjectURL = prevCreate;
     urlProto.revokeObjectURL = prevRevoke;
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const zipFail = await client.exportWorkflowZip('w1', 'nope.zip');
+    expect(zipFail).toBe(false);
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'w' } }));
     const file = new File(['z'], 'd.zip', { type: 'application/zip' });

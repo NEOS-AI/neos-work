@@ -164,13 +164,12 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
           ? plugin.id.trim().slice(0, 100)
           : '';
       if (!sid || !rid || !pid) return;
-      const res = await client.resumePlugin(pid, rid, sid, response);
-      if (!res.ok) {
+      const failResume = (raw: unknown) => {
         const err =
-          scrubDisplayText((res as { error?: string }).error, {
-            collapseLines: true,
-            maxChars: 500,
-          }) || 'Resume failed';
+          scrubDisplayText(
+            raw instanceof Error ? raw.message : typeof raw === 'string' ? raw : 'Resume failed',
+            { collapseLines: true, maxChars: 500 },
+          ) || 'Resume failed';
         setRun((prev) =>
           prev
             ? {
@@ -180,6 +179,14 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
               }
             : prev,
         );
+      };
+      try {
+        const res = await client.resumePlugin(pid, rid, sid, response);
+        if (!res.ok) {
+          failResume((res as { error?: string }).error ?? 'Resume failed');
+        }
+      } catch (err) {
+        failResume(err);
       }
     },
     [client, plugin.id, run],

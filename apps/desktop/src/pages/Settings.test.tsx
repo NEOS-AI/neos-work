@@ -837,6 +837,26 @@ describe('Settings page', () => {
     });
   });
 
+  it('alerts scrubbed error when simple key save throws', async () => {
+    const user = userEvent.setup();
+    saveSetting.mockRejectedValue(new Error(`io${'\n'}err${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Deploy')).toBeInTheDocument());
+
+    const vercel = screen.getByPlaceholderText('vercel_...');
+    await user.type(vercel, 'vercel_tok');
+    const vercelRow = vercel.closest('div')!.parentElement!;
+    const vercelSave = Array.from(vercelRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    fireEvent.click(vercelSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('VERCEL_API_TOKEN', 'vercel_tok');
+      expect(window.alert).toHaveBeenCalledWith('io err!');
+    });
+  });
+
   it('shows disconnected and connecting engine status labels', async () => {
     engine = {
       status: 'disconnected',

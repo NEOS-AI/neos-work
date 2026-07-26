@@ -214,6 +214,36 @@ describe('PipelineRunner', () => {
     });
   });
 
+  it('surfaces scrubbed resume throw as pipeline failure and clears waiting', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-resume-throw') };
+    });
+    resumePlugin.mockRejectedValue(new Error(`socket${'\n'}reset${'\0'}!`));
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-resume-throw' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: 'confirmation',
+        schema: { prompt: 'Continue?', confirmLabel: 'Yes', cancelLabel: 'No' },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('Continue?')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => {
+      expect(resumePlugin).toHaveBeenCalled();
+      expect(screen.getByText(/Error: socket reset!/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Continue?')).not.toBeInTheDocument();
+  });
+
   it('Stop button calls stop and clears run UI', async () => {
     const user = userEvent.setup();
     let onEvent: ((e: unknown) => void) | null = null;

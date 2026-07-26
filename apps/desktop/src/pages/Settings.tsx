@@ -30,14 +30,21 @@ export function Settings() {
 
   const handleSaveDefault = async (key: string, value: string) => {
     if (!client) return;
-    const res = await client.saveSetting(key, value);
-    if (!res.ok) {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Save failed';
-      window.alert(err);
+    try {
+      const res = await client.saveSetting(key, value);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed';
+        window.alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
+      );
     }
   };
 
@@ -618,6 +625,11 @@ function SimpleKeyInput({
       }
       setHasSaved(true);
       setValue('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
+      );
     } finally {
       setSaving(false);
     }
@@ -776,6 +788,11 @@ function McpServersSection() {
           }) || 'Failed to add MCP server',
         );
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add MCP server';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to add MCP server',
+      );
     } finally {
       setAdding(false);
     }
@@ -790,7 +807,7 @@ function McpServersSection() {
           collapseLines: true,
           maxChars: 300,
         }) || 'Update failed';
-      alert(err);
+      window.alert(err);
       return;
     }
     setServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
@@ -805,7 +822,7 @@ function McpServersSection() {
           collapseLines: true,
           maxChars: 300,
         }) || 'Delete failed';
-      alert(err);
+      window.alert(err);
       return;
     }
     setServers((prev) => prev.filter((s) => s.id !== id));
@@ -840,8 +857,16 @@ function McpServersSection() {
       });
       if (res.ok && res.data?.authUrl) {
         // Open in system browser via Tauri
-        const { open } = await import('@tauri-apps/plugin-shell');
-        await open(res.data.authUrl);
+        try {
+          const { open } = await import('@tauri-apps/plugin-shell');
+          await open(res.data.authUrl);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to open browser';
+          window.alert(
+            scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to open browser',
+          );
+          return;
+        }
         setOauthModal(null);
         // Poll for token after 3s
         setTimeout(async () => {
@@ -858,6 +883,11 @@ function McpServersSection() {
           }) || 'OAuth start failed',
         );
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'OAuth start failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'OAuth start failed',
+      );
     } finally {
       setOauthConnecting(false);
     }
@@ -865,17 +895,24 @@ function McpServersSection() {
 
   const handleOAuthRevoke = async (serverId: string) => {
     if (!client) return;
-    const res = await client.revokeMcpOAuth(serverId);
-    if (!res.ok) {
+    try {
+      const res = await client.revokeMcpOAuth(serverId);
+      if (!res.ok) {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Revoke failed',
+        );
+        return;
+      }
+      setOauthStatuses((prev) => ({ ...prev, [serverId]: { connected: false } }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Revoke failed';
       window.alert(
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Revoke failed',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Revoke failed',
       );
-      return;
     }
-    setOauthStatuses((prev) => ({ ...prev, [serverId]: { connected: false } }));
   };
 
   return (

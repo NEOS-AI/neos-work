@@ -329,6 +329,11 @@ export function WorkflowEditor() {
           }) || 'Rename failed';
         window.alert(err);
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Rename failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Rename failed',
+      );
     } finally {
       nameCommitInFlightRef.current = false;
     }
@@ -342,19 +347,27 @@ export function WorkflowEditor() {
   const handleSave = async () => {
     if (!client || !workflow) return;
     setSaving(true);
-    const res = await client.updateWorkflow(workflow.id, draft);
-    if (res.ok && res.data) {
-      setWorkflow(res.data);
-      setSavedDraft(draft);
-    } else {
-      const err =
-        scrubDisplayText((res as { error?: string }).error, {
-          collapseLines: true,
-          maxChars: 300,
-        }) || 'Save failed';
-      window.alert(err);
+    try {
+      const res = await client.updateWorkflow(workflow.id, draft);
+      if (res.ok && res.data) {
+        setWorkflow(res.data);
+        setSavedDraft(draft);
+      } else {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed';
+        window.alert(err);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
+      );
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
     if (validationIssues.length > 0) showRightPanelTab('config');
   };
 
@@ -393,7 +406,16 @@ export function WorkflowEditor() {
     } catch {
       // non-blocking if preflight endpoint unavailable
     }
-    const saveRes = await client.updateWorkflow(workflow.id, draft);
+    let saveRes: Awaited<ReturnType<typeof client.updateWorkflow>>;
+    try {
+      saveRes = await client.updateWorkflow(workflow.id, draft);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed',
+      );
+      return;
+    }
     if (saveRes.ok && saveRes.data) {
       setWorkflow(saveRes.data);
       setSavedDraft(draft);
@@ -674,7 +696,11 @@ export function WorkflowEditor() {
             const name =
               scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 })
               || 'workflow';
-            void client?.exportWorkflow(workflow.id, name);
+            void (async () => {
+              if (!client) return;
+              const ok = await client.exportWorkflow(workflow.id, name);
+              if (!ok) window.alert('Export failed');
+            })();
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
@@ -687,7 +713,11 @@ export function WorkflowEditor() {
             const name =
               scrubDisplayText(workflow.name, { collapseLines: true, maxChars: 200 })
               || 'workflow';
-            void client?.exportWorkflowZip(workflow.id, name);
+            void (async () => {
+              if (!client) return;
+              const ok = await client.exportWorkflowZip(workflow.id, name);
+              if (!ok) window.alert('Export failed');
+            })();
           }}
           className="rounded-lg px-3 py-1.5 text-xs font-medium"
           style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}

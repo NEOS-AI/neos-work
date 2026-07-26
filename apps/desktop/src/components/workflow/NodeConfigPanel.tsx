@@ -769,10 +769,21 @@ function WorkflowWebhookSection() {
           onClick={async () => {
             if (!client) return;
             setBusy(true);
-            const res = await client.regenerateWebhookSecret(workflowId);
-            setBusy(false);
-            if (res.ok && res.data) {
-              setSecret(sanitizeWebhookSecret(res.data.secret));
+            try {
+              const res = await client.regenerateWebhookSecret(workflowId);
+              if (res.ok && res.data) {
+                setSecret(sanitizeWebhookSecret(res.data.secret));
+                flashCopy('Secret regenerated');
+              } else {
+                const err =
+                  scrubDisplayText((res as { error?: string }).error, {
+                    collapseLines: true,
+                    maxChars: 200,
+                  }) || 'Regenerate failed';
+                flashCopy(err);
+              }
+            } finally {
+              setBusy(false);
             }
           }}
         >

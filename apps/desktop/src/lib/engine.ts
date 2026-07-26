@@ -996,11 +996,15 @@ export class EngineClient {
     return res.json();
   }
 
-  async exportWorkflow(id: string, workflowName: string): Promise<void> {
+  /**
+   * Download workflow JSON export.
+   * @returns true when a download was triggered; false on HTTP failure.
+   */
+  async exportWorkflow(id: string, workflowName: string): Promise<boolean> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${id}/export`, {
       headers: this.getHeaders(),
     });
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const blob = await res.blob();
     // Drop control chars then collapse non-filename alphabet; never empty download base
     let raw = typeof workflowName === 'string' ? workflowName : '';
@@ -1014,6 +1018,7 @@ export class EngineClient {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+    return true;
   }
 
   async importWorkflow(data: {
@@ -1062,11 +1067,15 @@ export class EngineClient {
     return res.json();
   }
 
-  async exportWorkflowZip(id: string, filename: string): Promise<void> {
+  /**
+   * Download workflow ZIP export.
+   * @returns true when a download was triggered; false on HTTP failure.
+   */
+  async exportWorkflowZip(id: string, filename: string): Promise<boolean> {
     const res = await fetch(`${this.baseUrl}/api/workflow/${id}/export.zip`, {
       headers: this.getHeaders(),
     });
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1076,11 +1085,12 @@ export class EngineClient {
     if (/\0/.test(raw)) raw = raw.replace(/\0/g, '');
     raw = raw.replace(/[\r\n]+/g, ' ').trim().replace(/\.zip$/i, '');
     const base =
-      raw.replace(/[^a-z0-9_-]/gi, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 120)
+      raw.replace(/[^a-z0-9_-]+/gi, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 120)
       || 'workflow';
     a.download = `${base}.zip`;
     a.click();
     URL.revokeObjectURL(url);
+    return true;
   }
 
   runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void, inputs?: Record<string, unknown>): () => void {
