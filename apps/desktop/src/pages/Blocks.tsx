@@ -492,10 +492,17 @@ export function Blocks() {
 
   const handleSave = async (data: Omit<WorkflowBlock, 'isBuiltIn'>) => {
     if (!client) return;
-    if (modal?.mode === 'edit' && modal.block) {
-      await client.updateBlock(modal.block.id, data);
-    } else {
-      await client.createBlock(data);
+    const res =
+      modal?.mode === 'edit' && modal.block
+        ? await client.updateBlock(modal.block.id, data)
+        : await client.createBlock(data);
+    if (!res.ok) {
+      throw new Error(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Save failed',
+      );
     }
     setModal(null);
     await load();

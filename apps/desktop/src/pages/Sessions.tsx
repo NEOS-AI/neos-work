@@ -106,10 +106,17 @@ export function Sessions() {
       model: params.model,
       thinkingMode: params.thinkingMode,
     });
-    if (res.ok && res.data) {
-      await loadSessions();
-      setActiveSessionId(res.data.id);
+    if (!res.ok || !res.data) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Create session failed';
+      window.alert(err);
+      return;
     }
+    await loadSessions();
+    setActiveSessionId(res.data.id);
     setShowNewSessionModal(false);
   };
 

@@ -258,6 +258,124 @@ describe('RevisionPanel', () => {
     expect(screen.getByText('Snap A')).toBeInTheDocument();
   });
 
+  it('alerts scrubbed error when revision restore fetch fails', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getRevision.mockResolvedValue({
+      ok: false,
+      error: `gone${'\n'}rev${'\0'}!`,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+    await waitFor(() => {
+      expect(getRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(window.alert).toHaveBeenCalledWith('gone rev!');
+    });
+    expect(onRestore).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('alerts when revision snapshot is invalid JSON', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getRevision.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'rev-1',
+        workflowId: 'wf-1',
+        snapshot: '{not-json',
+      },
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('Invalid snapshot');
+    });
+    expect(onRestore).not.toHaveBeenCalled();
+  });
+
+  it('alerts scrubbed error when revision label update fails', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    updateRevisionLabel.mockResolvedValue({
+      ok: false,
+      error: `label${'\n'}locked${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
+    await user.click(screen.getByText('Snap A'));
+    const input = await screen.findByDisplayValue('Snap A');
+    await user.clear(input);
+    await user.type(input, 'Deploy ready{Enter}');
+    await waitFor(() => {
+      expect(updateRevisionLabel).toHaveBeenCalledWith('wf-1', 'rev-1', 'Deploy ready');
+      expect(window.alert).toHaveBeenCalledWith('label locked!');
+    });
+    // Still editing (not cleared on failure)
+    expect(screen.getByDisplayValue('Deploy ready')).toBeInTheDocument();
+  });
+
   it('closes on Escape when not editing a label', async () => {
     const user = userEvent.setup();
     listRevisions.mockResolvedValue({

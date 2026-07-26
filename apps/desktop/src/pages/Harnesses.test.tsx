@@ -174,6 +174,41 @@ describe('Harnesses page', () => {
     });
   });
 
+  it('keeps modal open and shows scrubbed create API error', async () => {
+    listHarnesses.mockResolvedValue({ ok: true, data: [] });
+    createHarness.mockResolvedValue({
+      ok: false,
+      error: `id${'\n'}taken${'\0'}!`,
+    });
+    render(<Harnesses />);
+    await waitFor(() => expect(screen.getByText('harness.empty')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'harness.new' }));
+    await waitFor(() => expect(screen.getByPlaceholderText('my_harness_id')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('my_harness_id'), { target: { value: 'my_h' } });
+    const allInputs = screen.getAllByRole('textbox');
+    for (const input of allInputs) {
+      const el = input as HTMLInputElement | HTMLTextAreaElement;
+      if (el.placeholder === 'my_harness_id') continue;
+      if (el.tagName === 'TEXTAREA' || el.getAttribute('rows')) {
+        fireEvent.change(el, { target: { value: 'System prompt here' } });
+      } else if (!el.value) {
+        fireEvent.change(el, { target: { value: 'My Harness' } });
+      }
+    }
+    const textareas = document.querySelectorAll('textarea');
+    if (textareas[0]) fireEvent.change(textareas[0], { target: { value: 'System prompt here' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.save|common\.create|Save|Create/i }));
+    await waitFor(() => {
+      expect(createHarness).toHaveBeenCalled();
+      expect(screen.getByText('id taken!')).toBeInTheDocument();
+    });
+    // Modal still open
+    expect(screen.getByPlaceholderText('my_harness_id')).toBeInTheDocument();
+  });
+
   it('cancels delete when confirm is false', async () => {
     listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
     vi.spyOn(window, 'confirm').mockReturnValue(false);

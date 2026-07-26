@@ -760,6 +760,27 @@ describe('executeWorkflow graph failure and skip paths', () => {
         onEvent: () => {},
       }),
     ).rejects.toThrow(/Unknown node type/i);
+
+    // Non-string node type takes the non-string branch of resolveNode (fail closed)
+    await expect(
+      executeWorkflow({
+        runId: 'run-nonstring-type',
+        workflow: baseWorkflow({
+          nodes: [
+            {
+              id: 'num',
+              type: 123 as never,
+              label: 'Num',
+              position: { x: 0, y: 0 },
+              config: {},
+            },
+          ],
+          edges: [],
+        }),
+        settings: {},
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow(/Unknown node type/i);
   });
 
   it('caps node.progress chunk and accumulated payloads', async () => {

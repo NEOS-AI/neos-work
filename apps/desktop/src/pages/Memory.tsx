@@ -227,10 +227,17 @@ export default function Memory() {
 
   const handleSave = async (data: CreateMemoryInput) => {
     if (!client) return;
-    if (modal?.mode === 'edit') {
-      await client.updateMemory(modal.item.id, data);
-    } else {
-      await client.createMemory(data);
+    const res =
+      modal?.mode === 'edit'
+        ? await client.updateMemory(modal.item.id, data)
+        : await client.createMemory(data);
+    if (!res.ok) {
+      throw new Error(
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Save failed',
+      );
     }
     setModal(null);
     void load();
@@ -238,7 +245,16 @@ export default function Memory() {
 
   const handleToggle = async (id: string) => {
     if (!client) return;
-    await client.toggleMemory(id);
+    const res = await client.toggleMemory(id);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Update failed';
+      alert(err);
+      return;
+    }
     void load();
   };
 

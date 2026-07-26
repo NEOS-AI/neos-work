@@ -214,6 +214,48 @@ describe('Memory page', () => {
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
+  it('alerts scrubbed toggle API errors and does not flip state', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    toggleMemory.mockResolvedValue({
+      ok: false,
+      error: `toggle${'\n'}denied${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'memory.enabled' })[0]!);
+    await waitFor(() => {
+      expect(toggleMemory).toHaveBeenCalledWith('m1');
+      expect(window.alert).toHaveBeenCalledWith('toggle denied!');
+    });
+    // Still shows enabled (not flipped optimistically)
+    expect(screen.getAllByRole('button', { name: 'memory.enabled' })[0]).toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
+  it('keeps modal open and shows scrubbed create API error', async () => {
+    listMemories.mockResolvedValue({ ok: true, data: items });
+    createMemory.mockResolvedValue({
+      ok: false,
+      error: `quota${'\n'}exceeded${'\0'}!`,
+    });
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('User Pref')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /\+ memory\.new/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText('My context')).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText('My context'), { target: { value: 'New mem' } });
+    fireEvent.change(screen.getByPlaceholderText('Markdown content...'), {
+      target: { value: 'body text' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(createMemory).toHaveBeenCalled();
+      expect(screen.getByText('quota exceeded!')).toBeInTheDocument();
+    });
+    // Modal still open
+    expect(screen.getByPlaceholderText('My context')).toBeInTheDocument();
+  });
+
   it('cancels delete when confirm is false and shows no-match filter', async () => {
     const user = userEvent.setup();
     listMemories.mockResolvedValue({ ok: true, data: items });

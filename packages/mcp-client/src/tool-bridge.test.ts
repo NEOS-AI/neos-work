@@ -131,6 +131,20 @@ describe('mcpToolToTool', () => {
     const strFail = await strThrow.execute({});
     expect(strFail.success).toBe(false);
     expect(strFail.error).toBe('raw-string-fail');
+
+    // isError with control-only string output → scrub empty → generic fallback
+    const ctrlOnly = mcpToolToTool(
+      makeClient({
+        callTool: vi.fn(async () => ({
+          success: false,
+          output: `\0\n\r`,
+        })),
+      } as never),
+      def,
+    );
+    const ctrlFail = await ctrlOnly.execute({});
+    expect(ctrlFail.success).toBe(false);
+    expect(ctrlFail.error).toBe('MCP tool failed');
   });
 });
 

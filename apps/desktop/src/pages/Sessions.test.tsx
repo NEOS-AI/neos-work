@@ -167,6 +167,27 @@ describe('Sessions page', () => {
     });
   });
 
+  it('alerts scrubbed error when session create fails and keeps modal open', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: [] });
+    createSession.mockResolvedValue({
+      ok: false,
+      error: `quota${'\n'}full${'\0'}!`,
+    });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('emptyState')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+    await waitFor(() => {
+      expect(createSession).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('quota full!');
+    });
+    // Modal remains open on failure
+    expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument();
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
   it('selects a session, loads messages, and deletes it', async () => {
     listSessions.mockResolvedValue({ ok: true, data: sessions });
     listMessages.mockResolvedValue({

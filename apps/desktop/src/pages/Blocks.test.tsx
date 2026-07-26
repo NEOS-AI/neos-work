@@ -228,6 +228,46 @@ describe('Blocks page', () => {
     });
   });
 
+  it('keeps modal open and shows scrubbed create API error', async () => {
+    listBlocks.mockResolvedValue({ ok: true, data: [] });
+    createBlock.mockResolvedValue({
+      ok: false,
+      error: `name${'\n'}taken${'\0'}!`,
+    });
+    render(<Blocks />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Block' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New Block' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument());
+
+    const inputs = Array.from(document.querySelectorAll('input, textarea')) as HTMLInputElement[];
+    let filledId = false;
+    let filledName = false;
+    for (const input of inputs) {
+      if (input.tagName === 'TEXTAREA') {
+        fireEvent.change(input, { target: { value: 'Prompt body {{x}}' } });
+        continue;
+      }
+      if (input.type === 'search') continue;
+      if (!filledId && !input.value) {
+        fireEvent.change(input, { target: { value: 'my_block' } });
+        filledId = true;
+        continue;
+      }
+      if (!filledName && !input.value) {
+        fireEvent.change(input, { target: { value: 'My Block' } });
+        filledName = true;
+      }
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(createBlock).toHaveBeenCalled();
+      expect(screen.getByText('name taken!')).toBeInTheDocument();
+    });
+    // Modal still open
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
   it('cancels delete when confirm is false and shows no-match filter', async () => {
     const user = userEvent.setup();
     listBlocks.mockResolvedValue({ ok: true, data: blocks });

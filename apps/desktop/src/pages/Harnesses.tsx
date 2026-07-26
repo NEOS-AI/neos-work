@@ -336,23 +336,31 @@ function HarnessModal({
       .map((s) => s.trim())
       .filter(Boolean);
     try {
-      if (existing) {
-        await client.updateHarness(existing.id, {
-          name: name.trim(),
-          domain,
-          description: description.trim(),
-          systemPrompt: systemPrompt.trim(),
-          allowedTools: tools,
-        });
-      } else {
-        await client.createHarness({
-          id: id.trim(),
-          name: name.trim(),
-          domain,
-          description: description.trim(),
-          systemPrompt: systemPrompt.trim(),
-          allowedTools: tools,
-        });
+      const res = existing
+        ? await client.updateHarness(existing.id, {
+            name: name.trim(),
+            domain,
+            description: description.trim(),
+            systemPrompt: systemPrompt.trim(),
+            allowedTools: tools,
+          })
+        : await client.createHarness({
+            id: id.trim(),
+            name: name.trim(),
+            domain,
+            description: description.trim(),
+            systemPrompt: systemPrompt.trim(),
+            allowedTools: tools,
+          });
+      if (!res.ok) {
+        setError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed',
+        );
+        setSaving(false);
+        return;
       }
       onSaved();
     } catch (e) {

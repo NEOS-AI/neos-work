@@ -88,7 +88,15 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
     setRestoring(rev.id);
     const full = await client.getRevision(workflowId, rev.id);
     setRestoring(null);
-    if (!full.ok || !full.data?.snapshot) return;
+    if (!full.ok || !full.data?.snapshot) {
+      const err =
+        scrubDisplayText((full as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Restore failed';
+      window.alert(err);
+      return;
+    }
     try {
       const snap = JSON.parse(full.data.snapshot) as {
         nodes: unknown[];
@@ -100,7 +108,7 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       onRestore(snap);
       onClose();
     } catch {
-      // invalid snapshot
+      window.alert('Invalid snapshot');
     }
   };
 
@@ -116,7 +124,16 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       setEditingId(null);
       return;
     }
-    await client.updateRevisionLabel(workflowId, revId, next);
+    const res = await client.updateRevisionLabel(workflowId, revId, next);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Update failed';
+      window.alert(err);
+      return;
+    }
     setEditingId(null);
     void loadRevisions();
   };

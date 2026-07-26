@@ -106,6 +106,16 @@ describe('createWebSearchTool', () => {
     expect(result.error).not.toContain('\0');
   });
 
+  it('uses status-only Tavily error when response body is empty after scrub', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    globalThis.fetch = vi.fn(
+      async () => new Response('\n\r\0', { status: 503 }),
+    ) as typeof fetch;
+    const result = await createWebSearchTool().execute({ query: 'q' });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Tavily API returned 503');
+  });
+
   it('defaults maxResults to 5 and tolerates missing results array', async () => {
     process.env['TAVILY_API_KEY'] = 'k';
     globalThis.fetch = vi.fn(async () =>
