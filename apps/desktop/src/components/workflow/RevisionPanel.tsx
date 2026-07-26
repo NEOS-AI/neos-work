@@ -45,8 +45,16 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
   const loadRevisions = async () => {
     setLoading(true);
     setLoadError(null);
+    // Control-char / blank / overlong workflow ids never sent to list API
+    const wfId = safeEntityId(workflowId);
+    if (!wfId) {
+      setRevisions([]);
+      setLoadError('Workflow id contains invalid control characters');
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await client.listRevisions(workflowId);
+      const res = await client.listRevisions(wfId);
       if (res.ok && res.data) {
         setRevisions(res.data);
       } else {

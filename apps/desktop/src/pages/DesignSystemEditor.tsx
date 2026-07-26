@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
 export function DesignSystemEditor() {
   const { id } = useParams<{ id: string }>();
@@ -26,10 +26,18 @@ export function DesignSystemEditor() {
     // Do not re-enter full-page loading after first paint — parent re-renders
     // (new client object identity) must not unmount the editor mid-edit.
     setLoadError(null);
+    // Control-char / blank / overlong route ids never sent to content API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      setDs(null);
+      setLoadError('Design system id contains invalid control characters');
+      setLoading(false);
+      return;
+    }
     try {
       const [dsRes, contentRes] = await Promise.all([
         client.listDesignSystems(),
-        client.getDesignSystemContent(id),
+        client.getDesignSystemContent(safeId),
       ]);
       if (!dsRes.ok) {
         setDs(null);
@@ -41,7 +49,7 @@ export function DesignSystemEditor() {
         );
         return;
       }
-      const found = (dsRes.data ?? []).find((d) => d.id === id) ?? null;
+      const found = (dsRes.data ?? []).find((d) => d.id === id || d.id === safeId) ?? null;
       if (!found) {
         setDs(null);
         setLoadError('Design system not found');
@@ -79,6 +87,11 @@ export function DesignSystemEditor() {
 
   const handleSave = useCallback(async () => {
     if (!client || !id || saving) return;
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      setSaveMessage('Save failed: design system id contains invalid control characters');
+      return;
+    }
     // Null-byte content rejected (align with design-systems content API)
     if (/\0/.test(content)) {
       setSaveMessage('Save failed: content contains invalid control characters');
@@ -91,7 +104,7 @@ export function DesignSystemEditor() {
     setSaving(true);
     setSaveMessage(null);
     try {
-      const res = await client.saveDesignSystemContent(id, content);
+      const res = await client.saveDesignSystemContent(safeId, content);
       if (res.ok) {
         setSavedContent(content);
         setSaveMessage('Saved');

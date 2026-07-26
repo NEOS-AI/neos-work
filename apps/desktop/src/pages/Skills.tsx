@@ -8,7 +8,7 @@ import {
   saveEnabledFilter,
   type EnabledFilterPref,
 } from '../lib/enabled-filter-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { loadSkillsCategoryFilter, saveSkillsCategoryFilter } from '../lib/skills-prefs.js';
@@ -112,12 +112,12 @@ export function Skills() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
-    // Control-char / blank skill ids never sent to toggle API
-    if (typeof id !== 'string' || /[\0\r\n]/.test(id) || !id.trim()) {
+    // Control-char / blank / overlong skill ids never sent to toggle API
+    const skillId = safeEntityId(id);
+    if (!skillId) {
       window.alert('Skill id contains invalid control characters');
       return;
     }
-    const skillId = id.trim();
     try {
       const res = await client.toggleSkill(skillId, enabled);
       if (!res.ok) {
@@ -140,12 +140,12 @@ export function Skills() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
-    // Control-char / blank skill ids never sent to delete API
-    if (typeof id !== 'string' || /[\0\r\n]/.test(id) || !id.trim()) {
+    // Control-char / blank / overlong skill ids never sent to delete API
+    const skillId = safeEntityId(id);
+    if (!skillId) {
       window.alert('Skill id contains invalid control characters');
       return;
     }
-    const skillId = id.trim();
     try {
       const res = await client.deleteSkill(skillId);
       if (!res.ok) {
@@ -166,12 +166,12 @@ export function Skills() {
 
   const handleUpgradeToPlugin = async (id: string) => {
     if (!client) return;
-    // Control-char / blank skill ids never sent to upgrade API
-    if (typeof id !== 'string' || /[\0\r\n]/.test(id) || !id.trim()) {
+    // Control-char / blank / overlong skill ids never sent to upgrade API
+    const skillId = safeEntityId(id);
+    if (!skillId) {
       window.alert('Skill id contains invalid control characters');
       return;
     }
-    const skillId = id.trim();
     if (!window.confirm('Create open-design.json plugin sidecar for this skill?')) return;
     try {
       const res = await client.upgradeSkillToPlugin(skillId);

@@ -956,6 +956,27 @@ describe('NodeConfigPanel', () => {
     window.history.pushState({}, '', prev || '/');
   });
 
+  it('rejects control-char workflow id in webhook section without API calls', async () => {
+    const prev = window.location.pathname;
+    // Path segment includes a control char so safeEntityId rejects
+    window.history.pushState({}, '', `/workflows/wf${'\n'}bad`);
+    getWebhookSecret.mockClear();
+
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Workflow id contains invalid control characters'),
+      ).toBeInTheDocument();
+    });
+    expect(getWebhookSecret).not.toHaveBeenCalled();
+    expect(screen.queryByText('Webhook')).not.toBeInTheDocument();
+
+    window.history.pushState({}, '', prev || '/');
+  });
+
   it('shows scrubbed error when webhook secret fails to load', async () => {
     const prev = window.location.pathname + window.location.search;
     window.history.pushState({}, '', '/workflows/wf-webhook-secret-fail');

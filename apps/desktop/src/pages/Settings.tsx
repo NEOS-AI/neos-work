@@ -832,8 +832,11 @@ function McpServersSection() {
         await Promise.all(
           res.data.map(async (s) => {
             try {
-              const st = await client.getMcpOAuthStatus(s.id);
-              if (st.ok && st.data) statusMap[s.id] = st.data;
+              // Skip control-char / blank / overlong server ids (status probe hygiene)
+              const sid = safeEntityId(s.id);
+              if (!sid) return;
+              const st = await client.getMcpOAuthStatus(sid);
+              if (st.ok && st.data) statusMap[sid] = st.data;
             } catch {
               // omit badge when status probe fails
             }
@@ -1532,14 +1535,22 @@ function McpServersSection() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => setOauthModal({
-                          serverId: server.id,
-                          serverName: scrubDisplayText(server.name, { collapseLines: true, maxChars: 200 }) || 'MCP',
-                          authorizationEndpoint: '',
-                          tokenEndpoint: '',
-                          clientId: '',
-                          scope: '',
-                        })}
+                        onClick={() => {
+                          // Control-char / blank / overlong server ids never enter OAuth modal
+                          const sid = safeEntityId(server.id);
+                          if (!sid) {
+                            window.alert('MCP server id contains invalid control characters');
+                            return;
+                          }
+                          setOauthModal({
+                            serverId: sid,
+                            serverName: scrubDisplayText(server.name, { collapseLines: true, maxChars: 200 }) || 'MCP',
+                            authorizationEndpoint: '',
+                            tokenEndpoint: '',
+                            clientId: '',
+                            scope: '',
+                          });
+                        }}
                         className="rounded px-2 py-1 text-[10px] transition-colors"
                         style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)' }}
                       >

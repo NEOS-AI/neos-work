@@ -514,10 +514,16 @@ export function Blocks() {
   const handleSave = async (data: Omit<WorkflowBlock, 'isBuiltIn'>) => {
     if (!client) return;
     try {
-      const res =
-        modal?.mode === 'edit' && modal.block
-          ? await client.updateBlock(modal.block.id, data)
-          : await client.createBlock(data);
+      let res;
+      if (modal?.mode === 'edit' && modal.block) {
+        const blockId = safeEntityId(modal.block.id);
+        if (!blockId) {
+          throw new Error('Block id contains invalid control characters');
+        }
+        res = await client.updateBlock(blockId, data);
+      } else {
+        res = await client.createBlock(data);
+      }
       if (!res.ok) {
         throw new Error(
           scrubDisplayText((res as { error?: string }).error, {

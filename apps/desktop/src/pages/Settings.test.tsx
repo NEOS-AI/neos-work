@@ -1442,7 +1442,7 @@ describe('Settings page', () => {
     expect(screen.queryByText(/oauth status boom/i)).not.toBeInTheDocument();
   });
 
-  it('rejects MCP toggle/delete/revoke when server id has control chars', async () => {
+  it('rejects MCP toggle/delete/oauth when server id has control chars', async () => {
     listMcpServers.mockResolvedValue({
       ok: true,
       data: [
@@ -1458,6 +1458,7 @@ describe('Settings page', () => {
         },
       ],
     });
+    // Dirty ids never probe OAuth status — no Disconnect badge
     getMcpOAuthStatus.mockResolvedValue({
       ok: true,
       data: { connected: true, expiresAt: '2099-01-01T00:00:00.000Z' },
@@ -1465,12 +1466,11 @@ describe('Settings page', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<Settings />);
     await waitFor(() => expect(screen.getByText('Evil MCP')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument());
 
-    // Disconnect = revoke
-    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
-    expect(revokeMcpOAuth).not.toHaveBeenCalled();
+    // OAuth connect button (status probe skipped for dirty id)
+    fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
     expect(alertSpy).toHaveBeenCalledWith('MCP server id contains invalid control characters');
+    expect(getMcpOAuthStatus).not.toHaveBeenCalled();
 
     // Walk up from name to the card row that holds action buttons
     let el: HTMLElement | null = screen.getByText('Evil MCP');

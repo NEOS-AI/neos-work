@@ -227,9 +227,14 @@ export function Deployments() {
           if (active.length === 0) return current;
           // fire-and-forget refresh; apply results asynchronously
           for (const d of active) {
-            void client.refreshDeployment(d.id).then((res) => {
+            // Skip control-char / blank / overlong ids (poll hygiene)
+            const entityId = safeEntityId(d.id);
+            if (!entityId) continue;
+            void client.refreshDeployment(entityId).then((res) => {
               if (res.ok && res.data) {
-                setDeployments((prev) => prev.map((x) => (x.id === d.id ? res.data! : x)));
+                setDeployments((prev) =>
+                  prev.map((x) => (x.id === d.id || x.id === entityId ? res.data! : x)),
+                );
               }
             });
           }

@@ -375,22 +375,30 @@ function HarnessModal({
       .map((s) => s.trim())
       .filter(Boolean);
     try {
-      const res = existing
-        ? await client.updateHarness(existing.id, {
-            name: name.trim(),
-            domain,
-            description: description.trim(),
-            systemPrompt: systemPrompt.trim(),
-            allowedTools: tools,
-          })
-        : await client.createHarness({
-            id: id.trim(),
-            name: name.trim(),
-            domain,
-            description: description.trim(),
-            systemPrompt: systemPrompt.trim(),
-            allowedTools: tools,
-          });
+      let res;
+      if (existing) {
+        const harnessId = safeEntityId(existing.id);
+        if (!harnessId) {
+          setError('Harness id contains invalid control characters');
+          return;
+        }
+        res = await client.updateHarness(harnessId, {
+          name: name.trim(),
+          domain,
+          description: description.trim(),
+          systemPrompt: systemPrompt.trim(),
+          allowedTools: tools,
+        });
+      } else {
+        res = await client.createHarness({
+          id: id.trim(),
+          name: name.trim(),
+          domain,
+          description: description.trim(),
+          systemPrompt: systemPrompt.trim(),
+          allowedTools: tools,
+        });
+      }
       if (!res.ok) {
         setError(
           scrubDisplayText((res as { error?: string }).error, {

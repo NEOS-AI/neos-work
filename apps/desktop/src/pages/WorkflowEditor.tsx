@@ -33,7 +33,7 @@ import {
   saveLayoutDirection,
   type EditorRightPanelTab,
 } from '../lib/layout-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import {
   buildWorkflowDraft,
   toReactFlowEdges,
@@ -169,8 +169,15 @@ export function WorkflowEditor() {
   const loadWorkflow = useCallback(async () => {
     if (!client || !id) return;
     setLoadError(null);
+    // Control-char / blank / overlong route ids never sent to get-workflow API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      setWorkflow(null);
+      setLoadError('Workflow id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.getWorkflow(id);
+      const res = await client.getWorkflow(safeId);
       if (res.ok && res.data) {
         setWorkflow(res.data);
         // Multi-line description OK; strip null bytes. Control-char designSystemId dropped.
@@ -363,7 +370,12 @@ export function WorkflowEditor() {
     setEditingName(false);
     try {
       if (!trimmed || !client || !workflow || trimmed === workflow.name) return;
-      const res = await client.updateWorkflow(workflow.id, { ...draft, name: trimmed });
+      const wfId = safeEntityId(workflow.id);
+      if (!wfId) {
+        window.alert('Workflow id contains invalid control characters');
+        return;
+      }
+      const res = await client.updateWorkflow(wfId, { ...draft, name: trimmed });
       if (res.ok && res.data) {
         setWorkflow(res.data);
       } else {
@@ -391,9 +403,14 @@ export function WorkflowEditor() {
 
   const handleSave = async () => {
     if (!client || !workflow) return;
+    const wfId = safeEntityId(workflow.id);
+    if (!wfId) {
+      window.alert('Workflow id contains invalid control characters');
+      return;
+    }
     setSaving(true);
     try {
-      const res = await client.updateWorkflow(workflow.id, draft);
+      const res = await client.updateWorkflow(wfId, draft);
       if (res.ok && res.data) {
         setWorkflow(res.data);
         setSavedDraft(draft);
@@ -418,13 +435,18 @@ export function WorkflowEditor() {
 
   const handleRun = async (inputs?: Record<string, unknown>) => {
     if (!client || !workflow) return;
+    const wfId = safeEntityId(workflow.id);
+    if (!wfId) {
+      window.alert('Workflow id contains invalid control characters');
+      return;
+    }
     if (hasValidationErrors) {
       showRightPanelTab('config');
       return;
     }
     // Soft preflight: block hard errors unless user confirms (plan polish)
     try {
-      const pf = await client.preflightWorkflow(workflow.id);
+      const pf = await client.preflightWorkflow(wfId);
       if (pf.ok && pf.data && !pf.data.ok) {
         const errs = pf.data.issues.filter((i) => i.severity === 'error');
         if (errs.length > 0) {
@@ -453,7 +475,7 @@ export function WorkflowEditor() {
     }
     let saveRes: Awaited<ReturnType<typeof client.updateWorkflow>>;
     try {
-      saveRes = await client.updateWorkflow(workflow.id, draft);
+      saveRes = await client.updateWorkflow(wfId, draft);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed';
       window.alert(
@@ -477,7 +499,7 @@ export function WorkflowEditor() {
     showRightPanelTab('run');
     setRunEvents([]);
     setRunStatuses({});
-    const stop = client.runWorkflow(workflow.id, (event) => {
+    const stop = client.runWorkflow(wfId, (event) => {
       // Collapse consecutive node.progress for the same node into one log row
       setRunEvents((prev) => {
         if (event.type === 'node.progress') {
@@ -716,8 +738,13 @@ export function WorkflowEditor() {
         <button
           onClick={async () => {
             if (!client || !workflow) return;
+            const wfId = safeEntityId(workflow.id);
+            if (!wfId) {
+              window.alert('Workflow id contains invalid control characters');
+              return;
+            }
             try {
-              const res = await client.preflightWorkflow(workflow.id);
+              const res = await client.preflightWorkflow(wfId);
               if (!res.ok || !res.data) {
                 const err = scrubDisplayText(
                   (res as { error?: string }).error ?? 'Preflight failed',
@@ -776,8 +803,13 @@ export function WorkflowEditor() {
               || 'workflow';
             void (async () => {
               if (!client) return;
+              const wfId = safeEntityId(workflow.id);
+              if (!wfId) {
+                window.alert('Workflow id contains invalid control characters');
+                return;
+              }
               try {
-                const ok = await client.exportWorkflow(workflow.id, name);
+                const ok = await client.exportWorkflow(wfId, name);
                 if (!ok) window.alert('Export failed');
               } catch (err) {
                 const msg = err instanceof Error ? err.message : 'Export failed';
@@ -800,8 +832,13 @@ export function WorkflowEditor() {
               || 'workflow';
             void (async () => {
               if (!client) return;
+              const wfId = safeEntityId(workflow.id);
+              if (!wfId) {
+                window.alert('Workflow id contains invalid control characters');
+                return;
+              }
               try {
-                const ok = await client.exportWorkflowZip(workflow.id, name);
+                const ok = await client.exportWorkflowZip(wfId, name);
                 if (!ok) window.alert('Export failed');
               } catch (err) {
                 const msg = err instanceof Error ? err.message : 'Export failed';

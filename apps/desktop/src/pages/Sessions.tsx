@@ -472,8 +472,14 @@ function ChatArea({
     if (!client) return;
     let cancelled = false;
     setHistoryError(null);
+    // Control-char / blank / overlong session ids never sent to list-messages API
+    const sid = safeEntityId(session.id);
+    if (!sid) {
+      setHistoryError('Session id contains invalid control characters');
+      return;
+    }
     client
-      .listMessages(session.id)
+      .listMessages(sid)
       .then((res) => {
         if (cancelled) return;
         if (res.ok && res.data) {
@@ -533,8 +539,19 @@ function ChatArea({
 
     try {
       abortRef.current = new AbortController();
+      const sid = safeEntityId(session.id);
+      if (!sid) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: 'Session id contains invalid control characters', isStreaming: false }
+              : m,
+          ),
+        );
+        return;
+      }
 
-      for await (const chunk of client.chat(session.id, userInput, abortRef.current.signal)) {
+      for await (const chunk of client.chat(sid, userInput, abortRef.current.signal)) {
         if (chunk.type === 'text' && chunk.content) {
           setMessages((prev) =>
             prev.map((m) =>
@@ -661,8 +678,19 @@ function ChatArea({
 
     try {
       abortRef.current = new AbortController();
+      const sid = safeEntityId(session.id);
+      if (!sid) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: 'Session id contains invalid control characters', isStreaming: false }
+              : m,
+          ),
+        );
+        return;
+      }
 
-      for await (const chunk of client.runAgent(session.id, userInput, abortRef.current.signal)) {
+      for await (const chunk of client.runAgent(sid, userInput, abortRef.current.signal)) {
         if (chunk.type === 'plan') {
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantId ? { ...m, agentPlan: chunk.steps } : m)),
@@ -1095,8 +1123,14 @@ function ToolStepCard({ step, sessionId }: { step: ToolStep; sessionId: string }
 
   const handleConfirm = async (approved: boolean) => {
     if (!client || !step.toolUseId) return;
+    const sid = safeEntityId(sessionId);
+    const toolId = safeEntityId(step.toolUseId);
+    if (!sid || !toolId) {
+      window.alert('Session or tool id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.confirmTool(sessionId, step.toolUseId, approved);
+      const res = await client.confirmTool(sid, toolId, approved);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
