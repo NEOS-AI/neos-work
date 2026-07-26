@@ -153,6 +153,46 @@ describe('Planner', () => {
     expect(captured).toContain('Goal');
   });
 
+  it('coerces non-string goal/context, empty models, non-array JSON', async () => {
+    let modelUsed = 'unset';
+    const adapter = {
+      id: 'openai' as const,
+      name: 'Mock',
+      getModels: () => [] as Array<{ id: string }>,
+      async *chat(params: { model?: string }) {
+        modelUsed = params.model ?? '';
+        yield {
+          type: 'text' as const,
+          content: JSON.stringify({ not: 'an array' }),
+        };
+        yield { type: 'done' as const };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    // nullish non-string goal → String(goal ?? '') → empty → default single step
+    const emptyGoal = await new Planner(adapter as never).plan(
+      null as unknown as string,
+      undefined as unknown as string,
+    );
+    expect(emptyGoal).toHaveLength(1);
+    expect(emptyGoal[0]!.description).toBe('Execute the goal directly');
+    expect(modelUsed).toBe(''); // getModels()[0]?.id ?? ''
+
+    // Non-null non-string goal/context coerced
+    const adapter2 = mockAdapter([JSON.stringify([{ description: 'from-num' }])]);
+    const coerced = await new Planner(adapter2).plan(
+      12345 as unknown as string,
+      { note: 'ctx' } as unknown as string,
+    );
+    expect(coerced[0]!.description).toBe('from-num');
+
+    // Parsed non-array JSON → []
+    const nonArr = await new Planner(adapter as never).plan('real goal');
+    expect(nonArr).toEqual([]);
+  });
+
   it('falls back to default step when model returns empty content', async () => {
     const adapter = mockAdapter(['   ']);
     const steps = await new Planner(adapter).plan('Ship it');

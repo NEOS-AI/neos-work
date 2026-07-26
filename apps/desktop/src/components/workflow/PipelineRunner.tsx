@@ -64,10 +64,16 @@ export function PipelineRunner({ plugin, onClose }: PipelineRunnerProps) {
 
   const handleStart = useCallback(() => {
     if (!client || run) return;
-    // Control-char / empty plugin id → fail closed before creating run UI
-    if (typeof plugin.id !== 'string' || /[\0\r\n]/.test(plugin.id)) return;
+    // Control-char / empty / overlong plugin id → fail closed before creating run UI
+    if (typeof plugin.id !== 'string' || /[\0\r\n]/.test(plugin.id)) {
+      window.alert('Plugin id contains invalid control characters');
+      return;
+    }
     const pluginId = plugin.id.trim();
-    if (!pluginId || pluginId.length > 100) return;
+    if (!pluginId || pluginId.length > 100) {
+      window.alert('Plugin id is missing or too long');
+      return;
+    }
 
     const newRun: RunState = { runId: null, stages: [], waiting: null, completed: false, failed: null };
     setRun(newRun);

@@ -80,6 +80,7 @@ describe('PipelineRunner', () => {
 
   it('does not start pipeline for control-char plugin id', async () => {
     const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(
       <PipelineRunner
         plugin={{ ...plugin, id: '\nplug-1' }}
@@ -88,10 +89,13 @@ describe('PipelineRunner', () => {
     );
     await user.click(screen.getByRole('button', { name: /run pipeline/i }));
     expect(runPlugin).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Plugin id contains invalid control characters');
+    alertSpy.mockRestore();
   });
 
   it('does not start pipeline for overlong plugin id', async () => {
     const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(
       <PipelineRunner
         plugin={{ ...plugin, id: 'p'.repeat(101) }}
@@ -100,6 +104,8 @@ describe('PipelineRunner', () => {
     );
     await user.click(screen.getByRole('button', { name: /run pipeline/i }));
     expect(runPlugin).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Plugin id is missing or too long');
+    alertSpy.mockRestore();
   });
 
   it('drops null-byte input values and control-char keys from run payload', async () => {

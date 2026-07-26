@@ -328,4 +328,31 @@ describe('createWebSearchTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('network-down');
   });
+
+  it('coerces nullish query and maps scrubbed-empty errors to Operation failed', async () => {
+    process.env['TAVILY_API_KEY'] = 'k';
+    // nullish query → String(query ?? '') → blank
+    const blank = await createWebSearchTool().execute({
+      query: null as unknown as string,
+    });
+    expect(blank.success).toBe(false);
+    expect(blank.error).toMatch(/query is required/i);
+
+    // Non-string query coerces
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ results: [] }), { status: 200 }),
+    ) as typeof fetch;
+    const coerced = await createWebSearchTool().execute({
+      query: 99 as unknown as string,
+    });
+    expect(coerced.success).toBe(true);
+
+    // Error message that scrubs to empty → Operation failed
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('   \n\0');
+    }) as typeof fetch;
+    const scrubbed = await createWebSearchTool().execute({ query: 'q' });
+    expect(scrubbed.success).toBe(false);
+    expect(scrubbed.error).toBe('Operation failed');
+  });
 });

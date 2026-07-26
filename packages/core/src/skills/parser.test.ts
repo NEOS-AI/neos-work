@@ -267,4 +267,92 @@ body
     // Overlong trigger tokens dropped; blank tokens dropped
     expect(skill!.manifest.triggers).toEqual(['ok', 'fine']);
   });
+
+  it('handles optional field hygiene, invalid source, empty triggers, path coercion', () => {
+    // YAML lines without ':' and blank keys skipped; control-char optional fields dropped
+    const content = [
+      '---',
+      'name: edge',
+      'description: d',
+      'not-a-pair',
+      ': orphan-value',
+      `mode: bad${'\0'}mode`,
+      'category:   ',
+      'version:  ',
+      'license: MIT',
+      'compatibility: node>=20',
+      'platform: darwin',
+      'triggers:  ,  ,  ',
+      'featured: false',
+      '---',
+      '',
+    ].join('\n');
+    // Null byte anywhere in the skill file is rejected entirely
+    expect(parseSkillFile(content, '/skills/edge.md', 'local')).toBeNull();
+
+    const clean = [
+      '---',
+      'name: edge',
+      'description: d',
+      'not-a-pair',
+      ': orphan-value',
+      'category:   ',
+      'version:  ',
+      'license: MIT',
+      'compatibility: node>=20',
+      'platform: darwin',
+      'triggers:  ,  ,  ',
+      'featured: false',
+      '---',
+      '',
+    ].join('\n');
+    const skill = parseSkillFile(clean, '/skills/edge.md', 'not-a-source' as 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.source).toBe('local'); // invalid source → local
+    expect(skill!.manifest.category).toBeUndefined(); // whitespace-only
+    expect(skill!.manifest.version).toBeUndefined();
+    expect(skill!.manifest.license).toBe('MIT');
+    expect(skill!.manifest.compatibility).toBe('node>=20');
+    expect(skill!.manifest.platform).toBe('darwin');
+    expect(skill!.manifest.triggers).toBeUndefined(); // all blank → undefined
+    expect(skill!.content).toBe('');
+
+    // Cap overlong name; coerce non-string path; whitespace-only path keeps raw
+    const longName = [
+      '---',
+      `name: ${'N'.repeat(250)}`,
+      'description: x',
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    const long = parseSkillFile(longName, 42 as unknown as string, 'global');
+    expect(long!.manifest.name.length).toBe(200);
+    expect(long!.path).toBe('42');
+    expect(long!.source).toBe('global');
+
+    const blankPath = parseSkillFile(longName, '   ', 'local');
+    expect(blankPath!.path).toBe('   '); // trim empty → keep raw
+
+    // Nullish non-string content → empty → null
+    expect(parseSkillFile(null as unknown as string, '/x.md', 'local')).toBeNull();
+    expect(parseSkillFile(undefined as unknown as string, '/x.md', 'local')).toBeNull();
+
+    // Overlong optional fields sliced
+    const caps = [
+      '---',
+      'name: caps',
+      'description: d',
+      `version: ${'v'.repeat(100)}`,
+      `license: ${'L'.repeat(200)}`,
+      `examplePrompt: ${'E'.repeat(5_000)}`,
+      '---',
+      'b',
+      '',
+    ].join('\n');
+    const capped = parseSkillFile(caps, '/c.md', 'local');
+    expect(capped!.manifest.version?.length).toBe(64);
+    expect(capped!.manifest.license?.length).toBe(100);
+    expect(capped!.manifest.examplePrompt?.length).toBe(4_000);
+  });
 });
