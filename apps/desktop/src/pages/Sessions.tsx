@@ -458,26 +458,45 @@ function ChatArea({
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Load existing messages
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
-    client.listMessages(session.id).then((res) => {
-      if (cancelled) return;
-      if (res.ok && res.data) {
-        const mapped = (res.data as MessageData[]).map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-        }));
-        // Do not clobber optimistic/temp messages if user already sent while load was in flight
-        setMessages((prev) =>
-          prev.some((m) => String(m.id).startsWith('temp-')) ? prev : mapped,
+    setHistoryError(null);
+    client
+      .listMessages(session.id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data) {
+          const mapped = (res.data as MessageData[]).map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+          }));
+          // Do not clobber optimistic/temp messages if user already sent while load was in flight
+          setMessages((prev) =>
+            prev.some((m) => String(m.id).startsWith('temp-')) ? prev : mapped,
+          );
+        } else {
+          setHistoryError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load messages',
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Failed to load messages';
+        setHistoryError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load messages',
         );
-      }
-    });
+      });
     return () => {
       cancelled = true;
     };
@@ -769,8 +788,10 @@ function ChatArea({
       {/* Messages */}
       {messages.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {t('startConversation')}
+          <p className={`text-sm ${historyError ? 'text-red-400' : ''}`} style={historyError ? undefined : { color: 'var(--text-muted)' }}>
+            {historyError
+              ? scrubDisplayText(historyError, { collapseLines: true, maxChars: 300 }) || historyError
+              : t('startConversation')}
           </p>
         </div>
       ) : (

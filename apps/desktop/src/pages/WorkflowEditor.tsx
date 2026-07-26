@@ -163,26 +163,45 @@ export function WorkflowEditor() {
   /** Prevent Enter+blur double commit. */
   const nameCommitInFlightRef = useRef(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadWorkflow = useCallback(async () => {
     if (!client || !id) return;
-    const res = await client.getWorkflow(id);
-    if (res.ok && res.data) {
-      setWorkflow(res.data);
-      // Multi-line description OK; strip null bytes. Control-char designSystemId dropped.
-      const descRaw = typeof res.data.description === 'string' ? res.data.description : '';
-      const descSafe = /\0/.test(descRaw) ? descRaw.replace(/\0/g, '') : descRaw;
-      const dsRaw = typeof res.data.designSystemId === 'string' ? res.data.designSystemId : '';
-      const dsSafe =
-        dsRaw && !/[\0\r\n]/.test(dsRaw) ? dsRaw.trim() : '';
-      setWorkflowDescription(descSafe);
-      setDesignSystemId(dsSafe);
-      const rfNodes = toReactFlowNodes(res.data, {});
-      const rfEdges = toReactFlowEdges(res.data);
-      setNodes(rfNodes);
-      setEdges(rfEdges);
-      setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, descSafe, dsSafe));
-      // Fit graph after positions apply
-      setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 50);
+    setLoadError(null);
+    try {
+      const res = await client.getWorkflow(id);
+      if (res.ok && res.data) {
+        setWorkflow(res.data);
+        // Multi-line description OK; strip null bytes. Control-char designSystemId dropped.
+        const descRaw = typeof res.data.description === 'string' ? res.data.description : '';
+        const descSafe = /\0/.test(descRaw) ? descRaw.replace(/\0/g, '') : descRaw;
+        const dsRaw = typeof res.data.designSystemId === 'string' ? res.data.designSystemId : '';
+        const dsSafe =
+          dsRaw && !/[\0\r\n]/.test(dsRaw) ? dsRaw.trim() : '';
+        setWorkflowDescription(descSafe);
+        setDesignSystemId(dsSafe);
+        const rfNodes = toReactFlowNodes(res.data, {});
+        const rfEdges = toReactFlowEdges(res.data);
+        setNodes(rfNodes);
+        setEdges(rfEdges);
+        setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, descSafe, dsSafe));
+        // Fit graph after positions apply
+        setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 50);
+      } else {
+        setWorkflow(null);
+        setLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load workflow',
+        );
+      }
+    } catch (err) {
+      setWorkflow(null);
+      const msg = err instanceof Error ? err.message : 'Failed to load workflow';
+      setLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load workflow',
+      );
     }
   }, [client, id, setNodes, setEdges, fitView]);
 
@@ -520,8 +539,24 @@ export function WorkflowEditor() {
 
   if (!workflow) {
     return (
-      <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-muted)' }}>
-        {t('common.loading')}
+      <div className="flex h-full flex-col items-center justify-center gap-3" style={{ color: 'var(--text-muted)' }}>
+        {loadError ? (
+          <>
+            <p className="text-sm text-red-400">
+              {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/workflows')}
+              className="text-sm"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              ← {t('nav.workflows')}
+            </button>
+          </>
+        ) : (
+          t('common.loading')
+        )}
       </div>
     );
   }

@@ -117,13 +117,18 @@ describe('HarnessSelector', () => {
     expect(onChange).toHaveBeenCalledWith('h-code');
   });
 
-  it('tolerates listHarnesses failure without crashing', async () => {
-    listHarnesses.mockResolvedValue({ ok: false, error: 'boom' });
+  it('shows scrubbed load error when listHarnesses fails', async () => {
+    listHarnesses.mockResolvedValue({
+      ok: false,
+      error: `harness${'\n'}down${'\0'}!`,
+    });
     render(
       <HarnessSelector nodeType="agent_coding" value="" onChange={() => {}} />,
     );
     await waitFor(() => expect(listHarnesses).toHaveBeenCalled());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.getByText('harness down!')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('omits control-char harness ids from options and trims padded value match', async () => {

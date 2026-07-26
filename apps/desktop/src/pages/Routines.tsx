@@ -22,6 +22,7 @@ export function Routines() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RoutineRun[]>([]);
+  const [runsError, setRunsError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilterPref>(() => loadEnabledFilter('routines'));
@@ -105,9 +106,29 @@ export function Routines() {
 
   useEffect(() => {
     if (!client || !selectedId) return;
-    client.listRoutineRuns(selectedId).then((res) => {
-      if (res.ok && res.data) setRuns(res.data);
-    });
+    setRunsError(null);
+    client
+      .listRoutineRuns(selectedId)
+      .then((res) => {
+        if (res.ok && res.data) {
+          setRuns(res.data);
+        } else {
+          setRuns([]);
+          setRunsError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load runs',
+          );
+        }
+      })
+      .catch((err) => {
+        setRuns([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load runs';
+        setRunsError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load runs',
+        );
+      });
   }, [client, selectedId]);
 
   useEffect(() => {
@@ -625,7 +646,11 @@ export function Routines() {
               <h4 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
                 Run History
               </h4>
-              {runs.length === 0 ? (
+              {runsError ? (
+                <p className="text-xs text-red-400">
+                  {scrubDisplayText(runsError, { collapseLines: true, maxChars: 300 }) || runsError}
+                </p>
+              ) : runs.length === 0 ? (
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No runs yet</p>
               ) : (
                 <div className="space-y-1">

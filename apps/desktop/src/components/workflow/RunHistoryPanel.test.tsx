@@ -59,6 +59,19 @@ describe('RunHistoryPanel', () => {
     });
   });
 
+  it('shows scrubbed load error when listWorkflowRuns fails', async () => {
+    listWorkflowRuns.mockResolvedValue({
+      ok: false,
+      error: `runs${'\n'}down${'\0'}!`,
+    });
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => {
+      expect(screen.getByText('runs down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/No runs yet/i)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('lists runs and filters by status chips', async () => {
     const user = userEvent.setup();
     listWorkflowRuns.mockResolvedValue({

@@ -208,6 +208,19 @@ describe('Settings page', () => {
     });
   });
 
+  it('shows scrubbed MCP load error when listMcpServers fails', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: false,
+      error: `mcp${'\n'}down${'\0'}!`,
+    });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('mcp down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/No MCP servers configured/)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('adds and lists MCP servers with Escape closing form', async () => {
     const user = userEvent.setup();
     listMcpServers

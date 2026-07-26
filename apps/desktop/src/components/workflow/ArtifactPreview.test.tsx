@@ -125,6 +125,19 @@ describe('ArtifactPreview', () => {
     });
   });
 
+  it('shows scrubbed list error when listArtifacts fails', async () => {
+    listArtifacts.mockResolvedValue({
+      ok: false,
+      error: `arts${'\n'}down${'\0'}!`,
+    });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => {
+      expect(screen.getByText('arts down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/no artifacts yet/i)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('renders HTML artifact in iframe and supports viewport + reload', async () => {
     const user = userEvent.setup();
     const art = {
@@ -523,6 +536,19 @@ describe('ArtifactPreview', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
     expect(onRerun).toHaveBeenCalled();
+  });
+
+  it('shows scrubbed list error when listArtifacts fails', async () => {
+    listArtifacts.mockResolvedValue({
+      ok: false,
+      error: `arts${'\n'}down${'\0'}!`,
+    });
+    render(<ArtifactPreview workflowId="wf-1" onRerunWorkflow={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText('arts down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/No artifacts yet/i)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
   });
 
 });

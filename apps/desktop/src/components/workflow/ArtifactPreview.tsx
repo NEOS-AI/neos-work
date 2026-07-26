@@ -125,22 +125,43 @@ export function ArtifactPreview({
     setTimeout(() => setStatusMsg(null), 1500);
   };
 
+  const [listError, setListError] = useState<string | null>(null);
+
   const loadList = () => {
     if (!client) return;
     const params = runId ? { runId } : { workflowId };
-    client.listArtifacts(params).then((res) => {
-      if (res.ok && res.data) {
-        setArtifacts(res.data);
-        if (res.data.length > 0) {
-          setSelectedId((prev) => {
-            if (latestArtifactId && res.data!.some((a) => a.id === latestArtifactId)) {
-              return latestArtifactId;
-            }
-            return prev ?? res.data![0].id;
-          });
+    setListError(null);
+    client
+      .listArtifacts(params)
+      .then((res) => {
+        if (res.ok && res.data) {
+          setArtifacts(res.data);
+          if (res.data.length > 0) {
+            setSelectedId((prev) => {
+              if (latestArtifactId && res.data!.some((a) => a.id === latestArtifactId)) {
+                return latestArtifactId;
+              }
+              return prev ?? res.data![0].id;
+            });
+          }
+        } else {
+          setArtifacts([]);
+          setListError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load artifacts',
+          );
         }
-      }
-    });
+      })
+      .catch((err) => {
+        setArtifacts([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load artifacts';
+        setListError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+          || 'Failed to load artifacts',
+        );
+      });
   };
 
   useEffect(() => {
@@ -318,21 +339,29 @@ export function ArtifactPreview({
   if (artifacts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-white/30 text-sm gap-2 p-4">
-        <span className="text-2xl">🖼</span>
-        <span>No artifacts yet</span>
-        <span className="text-xs text-white/20 text-center">
-          Run the workflow — HTML outputs are auto-saved as artifacts
-        </span>
-        {onRerunWorkflow && (
-          <button
-            type="button"
-            disabled={isRunning}
-            onClick={() => onRerunWorkflow()}
-            className="mt-2 rounded px-3 py-1.5 text-xs text-white disabled:opacity-40"
-            style={{ backgroundColor: '#10b981' }}
-          >
-            {isRunning ? 'Running…' : 'Run workflow'}
-          </button>
+        {listError ? (
+          <span className="text-red-400 text-center">
+            {scrubDisplayText(listError, { collapseLines: true, maxChars: 300 }) || listError}
+          </span>
+        ) : (
+          <>
+            <span className="text-2xl">🖼</span>
+            <span>No artifacts yet</span>
+            <span className="text-xs text-white/20 text-center">
+              Run the workflow — HTML outputs are auto-saved as artifacts
+            </span>
+            {onRerunWorkflow && (
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => onRerunWorkflow()}
+                className="mt-2 rounded px-3 py-1.5 text-xs text-white disabled:opacity-40"
+                style={{ backgroundColor: '#10b981' }}
+              >
+                {isRunning ? 'Running…' : 'Run workflow'}
+              </button>
+            )}
+          </>
         )}
       </div>
     );

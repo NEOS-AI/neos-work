@@ -985,6 +985,27 @@ describe('NodeConfigPanel', () => {
     window.history.pushState({}, '', prev || '/');
   });
 
+  it('flashes scrubbed error when webhook regenerate throws', async () => {
+    const user = userEvent.setup();
+    const prev = window.location.pathname + window.location.search;
+    window.history.pushState({}, '', '/workflows/wf-webhook-regen-throw');
+    regenerateWebhookSecret.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await waitFor(() =>
+      expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-regen-throw'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Regenerate' }));
+    await waitFor(() => {
+      expect(regenerateWebhookSecret).toHaveBeenCalled();
+      expect(screen.getByText(/net down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    window.history.pushState({}, '', prev || '/');
+  });
+
   it('scrubs webhook secret display and empty fire error fallback; copies scrubbed secret', async () => {
     const user = userEvent.setup();
     const prev = window.location.pathname + window.location.search;

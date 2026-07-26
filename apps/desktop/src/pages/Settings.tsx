@@ -704,21 +704,40 @@ function McpServersSection() {
   const [oauthStatuses, setOauthStatuses] = useState<Record<string, OAuthStatus>>({});
   const [oauthModal, setOauthModal] = useState<OAuthModalState | null>(null);
   const [oauthConnecting, setOauthConnecting] = useState(false);
+  const [mcpLoadError, setMcpLoadError] = useState<string | null>(null);
 
   const loadServers = useCallback(async () => {
     if (!client) return;
-    const res = await client.listMcpServers();
-    if (res.ok && res.data) {
-      setServers(res.data);
-      // Load OAuth status for each server
-      const statusMap: Record<string, OAuthStatus> = {};
-      await Promise.all(
-        res.data.map(async (s) => {
-          const st = await client.getMcpOAuthStatus(s.id);
-          if (st.ok && st.data) statusMap[s.id] = st.data;
-        }),
+    setMcpLoadError(null);
+    try {
+      const res = await client.listMcpServers();
+      if (res.ok && res.data) {
+        setServers(res.data);
+        // Load OAuth status for each server
+        const statusMap: Record<string, OAuthStatus> = {};
+        await Promise.all(
+          res.data.map(async (s) => {
+            const st = await client.getMcpOAuthStatus(s.id);
+            if (st.ok && st.data) statusMap[s.id] = st.data;
+          }),
+        );
+        setOauthStatuses(statusMap);
+      } else {
+        setServers([]);
+        setMcpLoadError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to load MCP servers',
+        );
+      }
+    } catch (err) {
+      setServers([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load MCP servers';
+      setMcpLoadError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+        || 'Failed to load MCP servers',
       );
-      setOauthStatuses(statusMap);
     }
   }, [client]);
 
@@ -1075,7 +1094,11 @@ function McpServersSection() {
         </div>
       )}
 
-      {servers.length === 0 ? (
+      {mcpLoadError ? (
+        <p className="text-xs text-red-400">
+          {scrubDisplayText(mcpLoadError, { collapseLines: true, maxChars: 300 }) || mcpLoadError}
+        </p>
+      ) : servers.length === 0 ? (
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
           No MCP servers configured. Add a server to extend the agent with external tools.
         </p>

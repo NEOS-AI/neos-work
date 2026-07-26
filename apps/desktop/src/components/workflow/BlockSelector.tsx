@@ -33,21 +33,44 @@ export function BlockSelector(props: {
 }) {
   const { client } = useEngine();
   const [blocks, setBlocks] = useState<WorkflowBlock[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { onBlocksLoaded } = props;
 
   useEffect(() => {
     let cancelled = false;
     if (!client) return;
+    setLoadError(null);
 
-    client.listBlocks().then((res) => {
-      if (!cancelled && res.ok && res.data) {
-        const sorted = [...res.data].sort((a, b) =>
-          `${a.domain}:${a.category}:${a.name}`.localeCompare(`${b.domain}:${b.category}:${b.name}`),
+    client
+      .listBlocks()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data) {
+          const sorted = [...res.data].sort((a, b) =>
+            `${a.domain}:${a.category}:${a.name}`.localeCompare(
+              `${b.domain}:${b.category}:${b.name}`,
+            ),
+          );
+          setBlocks(sorted);
+          onBlocksLoaded?.(sorted);
+        } else {
+          setBlocks([]);
+          setLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load blocks',
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBlocks([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load blocks';
+        setLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load blocks',
         );
-        setBlocks(sorted);
-        onBlocksLoaded?.(sorted);
-      }
-    }).catch(() => {});
+      });
 
     return () => {
       cancelled = true;
@@ -63,6 +86,11 @@ export function BlockSelector(props: {
 
   return (
     <div className="space-y-2">
+      {loadError && (
+        <p className="text-[10px] text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
+      )}
       <SelectField
         label="Block"
         value={valueId}

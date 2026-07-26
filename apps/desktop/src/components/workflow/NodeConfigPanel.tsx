@@ -62,9 +62,15 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
 
   useEffect(() => {
     if (!client) return;
-    client.listDesignSystems().then((res) => {
-      if (res.ok && res.data) setDesignSystems(res.data);
-    });
+    client
+      .listDesignSystems()
+      .then((res) => {
+        if (res.ok && res.data) setDesignSystems(res.data);
+        else setDesignSystems([]);
+      })
+      .catch(() => {
+        setDesignSystems([]);
+      });
   }, [client]);
 
   const selectedIssues = useMemo(() => {
@@ -517,31 +523,40 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             onClick={async () => {
               if (!client) return;
               const provider = (typeof config.provider === 'string' ? config.provider : 'vercel') as 'vercel' | 'cloudflare';
-              const res = await client.deployPreflight(
-                provider,
-                typeof config.projectName === 'string' ? config.projectName : undefined,
-              );
-              if (res.ok && res.data) {
-                const providerSafe =
-                  scrubDisplayText(res.data.provider, { collapseLines: true, maxChars: 40 })
-                  || provider;
-                const lines = (res.data.checks ?? [])
-                  .slice(0, 40)
-                  .map((ch) => {
-                    const msg =
-                      scrubDisplayText(ch.message, { collapseLines: true, maxChars: 200 })
-                      || 'check';
-                    return `${ch.ok ? '✓' : '✗'} ${msg}`;
-                  })
-                  .join('\n');
-                alert(`${res.data.ready ? 'Ready' : 'Not ready'} for ${providerSafe}\n\n${lines}`);
-              } else {
-                const err =
-                  scrubDisplayText((res as { error?: string }).error, {
-                    collapseLines: true,
-                    maxChars: 300,
-                  }) || 'Preflight failed';
-                alert(err);
+              try {
+                const res = await client.deployPreflight(
+                  provider,
+                  typeof config.projectName === 'string' ? config.projectName : undefined,
+                );
+                if (res.ok && res.data) {
+                  const providerSafe =
+                    scrubDisplayText(res.data.provider, { collapseLines: true, maxChars: 40 })
+                    || provider;
+                  const lines = (res.data.checks ?? [])
+                    .slice(0, 40)
+                    .map((ch) => {
+                      const msg =
+                        scrubDisplayText(ch.message, { collapseLines: true, maxChars: 200 })
+                        || 'check';
+                      return `${ch.ok ? '✓' : '✗'} ${msg}`;
+                    })
+                    .join('\n');
+                  window.alert(
+                    `${res.data.ready ? 'Ready' : 'Not ready'} for ${providerSafe}\n\n${lines}`,
+                  );
+                } else {
+                  const err =
+                    scrubDisplayText((res as { error?: string }).error, {
+                      collapseLines: true,
+                      maxChars: 300,
+                    }) || 'Preflight failed';
+                  window.alert(err);
+                }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Preflight failed';
+                window.alert(
+                  scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Preflight failed',
+                );
               }
             }}
           >
@@ -717,6 +732,11 @@ function WorkflowWebhookSection() {
                   resetAt: again.data.rateLimit.resetAt,
                 });
               }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Fire failed';
+              flashCopy(
+                scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || 'Fire failed',
+              );
             } finally {
               setBusy(false);
             }
@@ -782,6 +802,12 @@ function WorkflowWebhookSection() {
                   }) || 'Regenerate failed';
                 flashCopy(err);
               }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Regenerate failed';
+              flashCopy(
+                scrubDisplayText(msg, { collapseLines: true, maxChars: 200 })
+                  || 'Regenerate failed',
+              );
             } finally {
               setBusy(false);
             }

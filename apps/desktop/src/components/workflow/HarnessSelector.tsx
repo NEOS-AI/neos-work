@@ -13,14 +13,38 @@ export function HarnessSelector(props: {
 }) {
   const { client } = useEngine();
   const [harnesses, setHarnesses] = useState<AgentHarness[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     if (!client) return;
+    setLoadError(null);
 
-    client.listHarnesses().then((res) => {
-      if (!cancelled && res.ok && res.data) setHarnesses(res.data);
-    }).catch(() => {});
+    client
+      .listHarnesses()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data) {
+          setHarnesses(res.data);
+        } else {
+          setHarnesses([]);
+          setLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load harnesses',
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setHarnesses([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load harnesses';
+        setLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+            || 'Failed to load harnesses',
+        );
+      });
 
     return () => {
       cancelled = true;
@@ -44,6 +68,11 @@ export function HarnessSelector(props: {
 
   return (
     <div className="space-y-2">
+      {loadError && (
+        <p className="text-[10px] text-red-400">
+          {scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError}
+        </p>
+      )}
       <SelectField
         label="Harness"
         value={valueId}

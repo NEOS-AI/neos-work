@@ -139,4 +139,47 @@ x
     const skills = await discoverSkills(`${workspace}\0evil`);
     expect(skills.filter((s) => s.source === 'local')).toEqual([]);
   });
+
+  it('skips overlong workspace paths, oversized skill files, and overlong entry names', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(dir, { recursive: true });
+    // Valid skill
+    await writeFile(
+      join(dir, 'ok.md'),
+      `---
+name: ok
+description: ok
+---
+body
+`,
+    );
+    // Overlong filename (>200) — skipped
+    await writeFile(
+      join(dir, `${'n'.repeat(201)}.md`),
+      `---
+name: toolong
+description: x
+---
+x
+`,
+    );
+    // Oversized file (>1 MiB) — skipped
+    await writeFile(
+      join(dir, 'huge.md'),
+      `---
+name: huge
+description: huge
+---
+${'x'.repeat(1 * 1024 * 1024 + 100)}
+`,
+    );
+
+    const local = (await discoverSkills(workspace)).filter((s) => s.source === 'local');
+    expect(local.map((s) => s.manifest.name)).toEqual(['ok']);
+
+    // Workspace path longer than 4096 chars is ignored (no local scan)
+    const overlongWs = `${workspace}${'/'.repeat(4_200)}`;
+    const noLocal = (await discoverSkills(overlongWs)).filter((s) => s.source === 'local');
+    expect(noLocal).toEqual([]);
+  });
 });

@@ -36,6 +36,7 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
   const [filter, setFilter] = useState<RunFilter>(() => loadRunStatusFilter());
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleFilter = (next: RunFilter) => {
     setFilter(next);
@@ -45,32 +46,53 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
   useEffect(() => {
     setOffset(0);
     setRuns([]);
+    setLoadError(null);
   }, [props.workflowId, props.refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
     if (!client) return;
 
-    client.listWorkflowRuns(props.workflowId, PAGE_SIZE + 1, offset).then((res) => {
-      if (!cancelled && res.ok && res.data) {
-        const fetched = res.data;
-        const hasMoreData = fetched.length > PAGE_SIZE;
-        const page = fetched.slice(0, PAGE_SIZE);
-        setRuns((prev) => {
-          if (offset === 0) return page;
-          // Dedup by id (Strict Mode double-fetch / overlapping pages)
-          const seen = new Set(prev.map((r) => r.id));
-          const merged = [...prev];
-          for (const r of page) {
-            if (seen.has(r.id)) continue;
-            seen.add(r.id);
-            merged.push(r);
-          }
-          return merged;
-        });
-        setHasMore(hasMoreData);
-      }
-    }).catch(() => {});
+    client
+      .listWorkflowRuns(props.workflowId, PAGE_SIZE + 1, offset)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok && res.data) {
+          setLoadError(null);
+          const fetched = res.data;
+          const hasMoreData = fetched.length > PAGE_SIZE;
+          const page = fetched.slice(0, PAGE_SIZE);
+          setRuns((prev) => {
+            if (offset === 0) return page;
+            // Dedup by id (Strict Mode double-fetch / overlapping pages)
+            const seen = new Set(prev.map((r) => r.id));
+            const merged = [...prev];
+            for (const r of page) {
+              if (seen.has(r.id)) continue;
+              seen.add(r.id);
+              merged.push(r);
+            }
+            return merged;
+          });
+          setHasMore(hasMoreData);
+        } else if (offset === 0) {
+          setRuns([]);
+          setLoadError(
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || 'Failed to load runs',
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled || offset !== 0) return;
+        setRuns([]);
+        const msg = err instanceof Error ? err.message : 'Failed to load runs';
+        setLoadError(
+          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load runs',
+        );
+      });
 
     return () => {
       cancelled = true;
@@ -87,8 +109,10 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
 
   if (runs.length === 0 && offset === 0) {
     return (
-      <p className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-        No runs yet.
+      <p className={`p-3 text-xs ${loadError ? 'text-red-400' : ''}`} style={loadError ? undefined : { color: 'var(--text-muted)' }}>
+        {loadError
+          ? scrubDisplayText(loadError, { collapseLines: true, maxChars: 300 }) || loadError
+          : 'No runs yet.'}
       </p>
     );
   }

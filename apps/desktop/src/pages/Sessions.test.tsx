@@ -434,6 +434,24 @@ describe('Sessions page', () => {
 
     fireEvent.click(screen.getByText('Alpha Chat'));
     await waitFor(() => expect(listMessages).toHaveBeenCalledWith('s1'));
+    await waitFor(() => {
+      expect(screen.getByText('history failed')).toBeInTheDocument();
+    });
+  });
+
+  it('shows scrubbed message history error when listMessages fails', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: sessions });
+    listMessages.mockResolvedValue({
+      ok: false,
+      error: `hist${'\n'}down${'\0'}!`,
+    });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('Alpha Chat')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Alpha Chat'));
+    await waitFor(() => {
+      expect(screen.getByText('hist down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('surfaces chat stream errors without crashing', async () => {

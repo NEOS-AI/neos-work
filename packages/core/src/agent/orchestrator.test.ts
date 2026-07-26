@@ -977,5 +977,82 @@ describe('AgentOrchestrator', () => {
     };
     expect(complete?.step?.input?.results?.[0]?.content).toMatch(/^Error: /);
   });
+
+  it('drops overlong / blank tool_use names and non-object toolInput; caps tool call count', async () => {
+    const registry = new ToolRegistry();
+    const executed: string[] = [];
+    registry.register({
+      name: 'echo',
+      description: 'Echo',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
+      async execute(input) {
+        executed.push(String((input as { text?: string }).text ?? ''));
+        return { success: true, output: input };
+      },
+    });
+
+    let call = 0;
+    const adapter: LLMProviderAdapter = {
+      id: 'openai',
+      name: 'Mock',
+      getModels: () => [
+        {
+          id: 'mock-model',
+          name: 'Mock',
+          providerId: 'openai',
+          contextWindow: 128_000,
+          supportsThinking: false,
+          supportsTools: true,
+          supportsVision: false,
+        },
+      ],
+      async *chat(): AsyncIterable<ChatChunk> {
+        call += 1;
+        // injectPlan skips planner — first chat() is executeStep
+        if (call === 1) {
+          // Blank after trim
+          yield { type: 'tool_use', toolName: '   ', toolUseId: 'blank', toolInput: { text: 'no' } };
+          // Overlong name (>200)
+          yield {
+            type: 'tool_use',
+            toolName: 't'.repeat(201),
+            toolUseId: 'long',
+            toolInput: { text: 'no' },
+          };
+          // Array toolInput → coerced to {}
+          yield {
+            type: 'tool_use',
+            toolName: 'echo',
+            toolUseId: 'arr',
+            toolInput: ['not', 'object'] as unknown as Record<string, unknown>,
+          };
+          // 25 more — TOOL_CALLS_MAX is 20 total
+          for (let i = 0; i < 25; i++) {
+            yield {
+              type: 'tool_use',
+              toolName: 'echo',
+              toolUseId: `tu-${i}`,
+              toolInput: { text: `n${i}` },
+            };
+          }
+        } else {
+          yield { type: 'text', content: 'done' };
+        }
+        yield { type: 'done' };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+
+    const orch = new AgentOrchestrator(adapter, registry);
+    injectPlan(orch, [step({ description: 'Many tools', type: 'tool_use' })]);
+    await collectEvents(orch.run('cap tools'));
+    // blank + overlong dropped; first valid is arr (empty input); then capped at 20
+    expect(executed.length).toBe(20);
+    // array input coerced to {} → text undefined → ''
+    expect(executed[0]).toBe('');
+    expect(executed[1]).toBe('n0');
+  });
 });
 

@@ -158,6 +158,18 @@ describe('BlockSelector', () => {
     expect(labels.some((t) => t?.includes('Beta'))).toBe(true);
   });
 
+  it('shows scrubbed load error when listBlocks fails', async () => {
+    listBlocks.mockResolvedValue({
+      ok: false,
+      error: `blocks${'\n'}down${'\0'}!`,
+    });
+    render(<BlockSelector value="" onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText('blocks down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('shows selected block details and settings', async () => {
     render(<BlockSelector value="blk-a" onChange={() => {}} />);
 

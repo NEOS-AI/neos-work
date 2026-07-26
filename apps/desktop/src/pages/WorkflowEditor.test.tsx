@@ -510,13 +510,21 @@ describe('WorkflowEditor page', () => {
     getWorkflow.mockResolvedValue({ ok: false, error: 'missing' });
     renderEditor();
     await waitFor(() => {
-      // Common patterns: not found / error / loading settles without editor title
-      const body = document.body.textContent ?? '';
-      expect(
-        /not found|Not found|error|Error|missing|workflow\.notFound/i.test(body)
-          || !body.includes('Editor Flow'),
-      ).toBe(true);
+      expect(screen.getByText('missing')).toBeInTheDocument();
     });
+    expect(screen.queryByText('Editor Flow')).not.toBeInTheDocument();
+  });
+
+  it('shows scrubbed error when workflow load fails with control chars', async () => {
+    getWorkflow.mockResolvedValue({
+      ok: false,
+      error: `load${'\n'}fail${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText('load fail!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('alerts preflight blocked and warning issues', async () => {
