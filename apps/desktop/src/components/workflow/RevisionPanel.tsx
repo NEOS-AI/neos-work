@@ -145,6 +145,7 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
     // Control-char labels rejected (check before trim; align with revisions API)
     if (/[\0\r\n]/.test(labelInput)) {
       setEditingId(null);
+      window.alert('Label contains invalid control characters');
       return;
     }
     const next = labelInput.trim();

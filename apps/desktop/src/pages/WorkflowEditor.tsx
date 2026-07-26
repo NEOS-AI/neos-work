@@ -355,6 +355,7 @@ export function WorkflowEditor() {
     // Control-char names rejected (check before trim; align with workflow API)
     if (/[\0\r\n]/.test(nameInput)) {
       setEditingName(false);
+      window.alert('Name contains invalid control characters');
       return;
     }
     const trimmed = nameInput.trim().slice(0, 200);

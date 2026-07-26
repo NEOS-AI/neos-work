@@ -135,8 +135,13 @@ export function Workflows() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!client) return;
     // Control-char name rejected before trim (align with workflow API)
-    if (!client || /[\0\r\n]/.test(newName) || !newName.trim()) return;
+    if (/[\0\r\n]/.test(newName)) {
+      alert('Name contains invalid control characters');
+      return;
+    }
+    if (!newName.trim()) return;
     setCreating(true);
     try {
       const triggerId = crypto.randomUUID();

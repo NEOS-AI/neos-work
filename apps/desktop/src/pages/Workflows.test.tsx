@@ -182,6 +182,7 @@ describe('Workflows page', () => {
 
   it('rejects control-char workflow name without calling API', async () => {
     listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     renderPage();
     await waitFor(() => expect(screen.getByText('workflow.empty')).toBeInTheDocument());
 
@@ -195,6 +196,8 @@ describe('Workflows page', () => {
     const form = nameInput.closest('form');
     if (form) fireEvent.submit(form);
     expect(createWorkflow).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Name contains invalid control characters');
+    alertSpy.mockRestore();
   });
 
   it('alerts scrubbed create API error and keeps modal open', async () => {

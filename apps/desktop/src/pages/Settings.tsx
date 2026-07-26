@@ -980,9 +980,18 @@ function McpServersSection() {
   const handleAdd = async () => {
     if (!client) return;
     // Control-char name/command/url rejected before trim (align with MCP create route)
-    if (/[\0\r\n]/.test(formName)) return;
-    if (transport === 'stdio' && formCommand && /[\0\r\n]/.test(formCommand)) return;
-    if (transport === 'http' && formUrl && /[\0\r\n]/.test(formUrl)) return;
+    if (/[\0\r\n]/.test(formName)) {
+      window.alert('Name contains invalid control characters');
+      return;
+    }
+    if (transport === 'stdio' && formCommand && /[\0\r\n]/.test(formCommand)) {
+      window.alert('Command contains invalid control characters');
+      return;
+    }
+    if (transport === 'http' && formUrl && /[\0\r\n]/.test(formUrl)) {
+      window.alert('URL contains invalid control characters');
+      return;
+    }
     if (!formName.trim()) return;
     setAdding(true);
     try {
@@ -1681,7 +1690,10 @@ function DevToolsSection() {
 
   const handleSave = () => {
     // Control-char tokens never stored (header injection defense)
-    if (token && /[\0\r\n]/.test(token)) return;
+    if (token && /[\0\r\n]/.test(token)) {
+      window.alert('Token contains invalid control characters');
+      return;
+    }
     const next = token.trim();
     if (next) {
       sessionStorage.setItem('devAuthToken', next);

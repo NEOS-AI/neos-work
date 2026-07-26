@@ -772,12 +772,14 @@ describe('Settings page', () => {
     });
 
     // Dev token with control char never applied
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(screen.getByPlaceholderText('Override Bearer token'), {
       target: { value: `tok${'\0'}bad` },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(sessionStorage.getItem('devAuthToken')).toBeNull();
     expect(setAuthToken).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Token contains invalid control characters');
 
     // Simple key (Tavily) control-char rejected with alert
     (window.alert as ReturnType<typeof vi.fn>).mockClear();
@@ -893,6 +895,7 @@ describe('Settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
     await waitFor(() => expect(screen.getByPlaceholderText('Server name')).toBeInTheDocument());
 
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(screen.getByPlaceholderText('Server name'), {
       target: { value: `bad${'\0'}name` },
     });
@@ -901,7 +904,9 @@ describe('Settings page', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
     expect(createMcpServer).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Name contains invalid control characters');
 
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.change(screen.getByPlaceholderText('Server name'), {
       target: { value: 'ok-name' },
     });
@@ -910,8 +915,10 @@ describe('Settings page', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
     expect(createMcpServer).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Command contains invalid control characters');
 
     // HTTP transport: control-char URL rejected
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'http' }));
     await waitFor(() =>
       expect(screen.getByPlaceholderText('Server URL (e.g. http://localhost:3000/sse)')).toBeInTheDocument(),
@@ -921,6 +928,7 @@ describe('Settings page', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add Server' }));
     expect(createMcpServer).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('URL contains invalid control characters');
   });
 
   it('shows scrubbed media config load error', async () => {
