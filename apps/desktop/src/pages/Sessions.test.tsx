@@ -1181,14 +1181,7 @@ describe('Sessions CodeBlock copy', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<Sessions />);
     await waitFor(() => expect(screen.getByText('Evil Session')).toBeInTheDocument());
-    // delete button on session row
-    const delBtns = screen.getAllByRole('button').filter((b) =>
-      /delete|remove|✕|×/i.test(b.getAttribute('aria-label') || b.textContent || ''),
-    );
-    // fall back: title attribute
-    const byTitle = screen.queryAllByTitle(/delete/i);
-    const target = delBtns[0] || byTitle[0];
-    if (target) fireEvent.click(target);
+    fireEvent.click(screen.getByTitle('Delete session'));
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(deleteSession).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith('Session id contains invalid control characters');
