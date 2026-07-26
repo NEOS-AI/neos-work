@@ -299,6 +299,24 @@ describe('Routines page', () => {
     await waitFor(() => expect(deleteRoutine).toHaveBeenCalledWith('r1'));
   });
 
+  it('shows scrubbed error when listRoutineRuns fails', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({
+      ok: false,
+      error: `runs${'\n'}down${'\0'}!`,
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => {
+      expect(listRoutineRuns).toHaveBeenCalledWith('r1');
+      expect(screen.getByText('runs down!')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('No runs yet')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
   it('alerts scrubbed error when routine delete fails', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
