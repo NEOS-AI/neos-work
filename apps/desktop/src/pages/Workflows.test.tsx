@@ -556,4 +556,37 @@ describe('Workflows page', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(writeText.mock.calls[0]?.[0]).toBe('wfdirty');
   });
+
+  it('rejects delete/duplicate when workflow id has control chars', async () => {
+    listWorkflows.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `wf${'\0'}evil`,
+          name: 'Evil Id Flow',
+          domain: 'general' as const,
+          description: '',
+          nodes: [],
+          edges: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Evil Id Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByTitle('common.delete')[0]!);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteWorkflow).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Workflow id contains invalid control characters');
+
+    alertSpy.mockClear();
+    fireEvent.click(screen.getAllByTitle('workflow.duplicate')[0]!);
+    expect(duplicateWorkflow).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Workflow id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
 });

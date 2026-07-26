@@ -5,7 +5,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import { useTheme } from '../hooks/useTheme.js';
 import type { ThemeMode } from '../hooks/useTheme.js';
 import type { McpServerData } from '../lib/engine.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatEngineUptime } from '../lib/format-uptime.js';
 
 export function Settings() {
@@ -1032,8 +1032,14 @@ function McpServersSection() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to toggle API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      window.alert('MCP server id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.toggleMcpServer(id, enabled);
+      const res = await client.toggleMcpServer(safeId, enabled);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -1043,7 +1049,9 @@ function McpServersSection() {
         window.alert(err);
         return;
       }
-      setServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+      setServers((prev) =>
+        prev.map((s) => (s.id === id || s.id === safeId ? { ...s, enabled } : s)),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
       window.alert(
@@ -1054,8 +1062,14 @@ function McpServersSection() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to delete API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      window.alert('MCP server id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.deleteMcpServer(id);
+      const res = await client.deleteMcpServer(safeId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -1065,7 +1079,7 @@ function McpServersSection() {
         window.alert(err);
         return;
       }
-      setServers((prev) => prev.filter((s) => s.id !== id));
+      setServers((prev) => prev.filter((s) => s.id !== id && s.id !== safeId));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
       window.alert(

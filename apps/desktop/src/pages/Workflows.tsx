@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { Workflow } from '../lib/engine.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
@@ -178,9 +178,14 @@ export function Workflows() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Workflow id contains invalid control characters');
+      return;
+    }
     if (!window.confirm(t('workflow.confirmDelete'))) return;
     try {
-      const res = await client.deleteWorkflow(id);
+      const res = await client.deleteWorkflow(entityId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -190,7 +195,7 @@ export function Workflows() {
         window.alert(err);
         return;
       }
-      setWorkflows((prev) => prev.filter((w) => w.id !== id));
+      setWorkflows((prev) => prev.filter((w) => w.id !== id && w.id !== entityId));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
       window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
@@ -199,8 +204,13 @@ export function Workflows() {
 
   const handleDuplicate = async (id: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Workflow id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.duplicateWorkflow(id);
+      const res = await client.duplicateWorkflow(entityId);
       if (res.ok) {
         await loadWorkflows();
       } else {

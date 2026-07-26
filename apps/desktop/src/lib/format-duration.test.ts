@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatDuration,
   formatDurationMs,
+  safeEntityId,
   scrubDisplayText,
   serializeNodeOutput,
 } from './format-duration.js';
@@ -62,6 +63,20 @@ describe('scrubDisplayText', () => {
       scrubDisplayText(`a${'\0'}\nb\nc`, { collapseLines: true, maxChars: 3 }),
     ).toBe('a b');
     expect(scrubDisplayText('line1\nline2', { collapseLines: true, maxChars: 4 })).toBe('line');
+  });
+});
+
+describe('safeEntityId', () => {
+  it('allows clean ids and rejects control-char / blank / overlong / non-string', () => {
+    expect(safeEntityId('wf-1')).toBe('wf-1');
+    expect(safeEntityId('  pad  ')).toBe('pad');
+    expect(safeEntityId(`bad${'\0'}id`)).toBe('');
+    expect(safeEntityId('a\nb')).toBe('');
+    expect(safeEntityId('   ')).toBe('');
+    expect(safeEntityId(null)).toBe('');
+    expect(safeEntityId(42)).toBe('');
+    expect(safeEntityId('x'.repeat(201))).toBe('');
+    expect(safeEntityId('x'.repeat(200))).toBe('x'.repeat(200));
   });
 });
 

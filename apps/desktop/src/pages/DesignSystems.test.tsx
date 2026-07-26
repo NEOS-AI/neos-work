@@ -349,4 +349,34 @@ describe('DesignSystems page', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+  it('rejects delete when design system id has control chars', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `ds${'\0'}evil`,
+          name: 'Evil DS',
+          description: 'x',
+          path: '/tmp/x',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Evil DS')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteDesignSystem).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Design system id contains invalid control characters',
+    );
+    alertSpy.mockRestore();
+  });
+
 });

@@ -647,8 +647,9 @@ describe('ArtifactPreview', () => {
       throw new Error('blob denied');
     });
     render(<ArtifactPreview workflowId="wf-1" />);
+    // Wait until content is loaded — download is disabled until selectedContent is set
     const dlBtn = await screen.findByTitle('Download artifact');
-    expect(dlBtn).toBeEnabled();
+    await waitFor(() => expect(dlBtn).toBeEnabled());
     await user.click(dlBtn);
     await waitFor(() => {
       expect(screen.getByText('Download failed')).toBeInTheDocument();

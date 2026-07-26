@@ -8,7 +8,7 @@ import {
   saveEnabledFilter,
   type EnabledFilterPref,
 } from '../lib/enabled-filter-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -227,8 +227,14 @@ export function Routines() {
 
   const handleToggle = async (routine: Routine) => {
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to update API
+    const safeId = safeEntityId(routine.id);
+    if (!safeId) {
+      window.alert('Routine id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.updateRoutine(routine.id, { enabled: !routine.enabled });
+      const res = await client.updateRoutine(safeId, { enabled: !routine.enabled });
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -246,9 +252,16 @@ export function Routines() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!client || !window.confirm('Delete this routine?')) return;
+    if (!client) return;
+    // Control-char / blank / overlong ids never sent to delete API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      window.alert('Routine id contains invalid control characters');
+      return;
+    }
+    if (!window.confirm('Delete this routine?')) return;
     try {
-      const res = await client.deleteRoutine(id);
+      const res = await client.deleteRoutine(safeId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -258,7 +271,7 @@ export function Routines() {
         window.alert(err);
         return;
       }
-      if (selectedId === id) setSelectedId(null);
+      if (selectedId === id || selectedId === safeId) setSelectedId(null);
       await load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
@@ -268,16 +281,22 @@ export function Routines() {
 
   const handleRun = async (id: string) => {
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to run API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      window.alert('Routine id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.runRoutineNow(id);
+      const res = await client.runRoutineNow(safeId);
       if (res.ok) {
         const runId =
           scrubDisplayText(res.data?.runId, { collapseLines: true, maxChars: 64 }).slice(0, 8)
           || '—';
         window.alert(`Triggered! runId: ${runId}`);
         await load();
-        if (selectedId === id) {
-          const runsRes = await client.listRoutineRuns(id);
+        if (selectedId === id || selectedId === safeId) {
+          const runsRes = await client.listRoutineRuns(safeId);
           if (runsRes.ok && runsRes.data) setRuns(runsRes.data);
         }
       } else {

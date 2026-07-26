@@ -8,7 +8,7 @@ import {
   saveEnabledFilter,
   type EnabledFilterPref,
 } from '../lib/enabled-filter-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -274,8 +274,13 @@ export default function Memory() {
 
   const handleToggle = async (id: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Memory id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.toggleMemory(id);
+      const res = await client.toggleMemory(entityId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -294,9 +299,14 @@ export default function Memory() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Memory id contains invalid control characters');
+      return;
+    }
     if (!window.confirm(t('memory.confirmDelete'))) return;
     try {
-      const res = await client.deleteMemory(id);
+      const res = await client.deleteMemory(entityId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {

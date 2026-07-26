@@ -438,4 +438,36 @@ describe('Memory page', () => {
     });
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
+
+  it('rejects toggle/delete when memory id has control chars', async () => {
+    listMemories.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `m${'\0'}evil`,
+          name: 'Evil Mem',
+          type: 'preference',
+          content: 'x',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Memory />);
+    await waitFor(() => expect(screen.getByText('Evil Mem')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'memory.enabled' }));
+    expect(toggleMemory).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Memory id contains invalid control characters');
+
+    alertSpy.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteMemory).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Memory id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
 });

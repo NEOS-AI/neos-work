@@ -9,7 +9,7 @@ import {
   saveDomainFilter,
   type DomainFilterPref,
 } from '../lib/domain-filter-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
@@ -91,11 +91,17 @@ export function Harnesses() {
 
   const handleDelete = async (h: AgentHarness) => {
     if (!client || h.isBuiltIn) return;
+    // Control-char / blank / overlong ids never sent to delete API
+    const safeId = safeEntityId(h.id);
+    if (!safeId) {
+      window.alert('Harness id contains invalid control characters');
+      return;
+    }
     const nameSafe =
-      scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || h.id || 'harness';
+      scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || safeId || 'harness';
     if (!window.confirm(t('harness.confirmDelete', { name: nameSafe }))) return;
     try {
-      const res = await client.deleteHarness(h.id);
+      const res = await client.deleteHarness(safeId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {

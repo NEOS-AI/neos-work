@@ -21,7 +21,7 @@ import { ALL_MODELS, THINKING_MODES as THINKING_MODE_VALUES } from '@neos-work/s
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { AgentStep, MessageData, SessionData } from '../lib/engine.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
@@ -149,9 +149,15 @@ export function Sessions() {
 
   const handleDeleteSession = async (id: string) => {
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to delete API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      window.alert('Session id contains invalid control characters');
+      return;
+    }
     if (!window.confirm('Delete this session and its messages?')) return;
     try {
-      const res = await client.deleteSession(id);
+      const res = await client.deleteSession(safeId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -161,7 +167,7 @@ export function Sessions() {
         window.alert(err);
         return;
       }
-      if (activeSessionId === id) setActiveSessionId(null);
+      if (activeSessionId === id || activeSessionId === safeId) setActiveSessionId(null);
       await loadSessions();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';

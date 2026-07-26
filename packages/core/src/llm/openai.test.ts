@@ -423,4 +423,82 @@ describe('OpenAIAdapter', () => {
     expect(toolUse?.toolName).toBe('echo');
     expect(toolUse?.toolInput).toEqual({});
   });
+
+  it('falls back model/messages and maps scrubbed-empty fetch errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: null,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+
+    // Control-char / blank model → first catalog model; non-array messages → []
+    for await (const _ of adapter.chat({
+      model: `gpt${'\n'}4o`,
+      messages: null as unknown as [],
+    })) {
+      /* drain */
+    }
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body ?? '{}')) as {
+      model?: string;
+      messages?: unknown[];
+    };
+    expect(body.model).toBeTruthy();
+    expect(body.model).not.toContain('\n');
+    expect(body.messages).toEqual([]);
+
+    // Non-Error throw that scrubs empty → generic request failed
+    fetchMock.mockRejectedValueOnce(new Error('   \n\0'));
+    const chunks: Array<{ type: string; content?: string }> = [];
+    for await (const c of adapter.chat({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      chunks.push(c);
+    }
+    expect(chunks[0]?.type).toBe('error');
+    expect(chunks[0]?.content).toMatch(/request failed/i);
+
+    // HTTP error with empty scrubbed body → status-only message
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      text: async () => '\n\0  ',
+    });
+    const errChunks: Array<{ type: string; content?: string }> = [];
+    for await (const c of adapter.chat({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'hi' }],
+    })) {
+      errChunks.push(c);
+    }
+    expect(errChunks[0]?.content).toBe('OpenAI error 503');
+  });
+
+  it('skips SSE chunks with empty choices or missing delta', async () => {
+    const sse = [
+      'data: {"choices":[]}',
+      'data: {"choices":[{"delta":null}]}',
+      'data: {"choices":[{"delta":{"content":"hi"}}]}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sse));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: stream }));
+    const adapter = new OpenAIAdapter({ provider: 'openai', apiKey: 'sk' });
+    const chunks: Array<{ type: string; content?: string }> = [];
+    for await (const c of adapter.chat({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'x' }],
+    })) {
+      chunks.push(c);
+    }
+    expect(chunks.some((c) => c.type === 'text' && c.content === 'hi')).toBe(true);
+  });
 });

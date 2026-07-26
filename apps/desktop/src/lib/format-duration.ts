@@ -40,6 +40,18 @@ export function scrubDisplayText(
   return s;
 }
 
+/**
+ * Safe entity id for delete/toggle/duplicate API calls.
+ * Rejects non-string, control-char, blank-after-trim, and overlong values.
+ */
+export function safeEntityId(raw: unknown, maxChars = 200): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const s = raw.trim();
+  if (!s) return '';
+  const max = typeof maxChars === 'number' && maxChars > 0 ? maxChars : 200;
+  return s.length > max ? '' : s;
+}
+
 /** Practical bound for clipboard / preformatted node output. */
 export const NODE_OUTPUT_MAX_CHARS = 100_000;
 

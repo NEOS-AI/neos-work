@@ -12,7 +12,7 @@ import {
   type BlocksSourceFilter,
   type DomainFilterPref,
 } from '../lib/domain-filter-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
@@ -538,9 +538,16 @@ export function Blocks() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!client || !window.confirm('Are you sure you want to delete this block?')) return;
+    if (!client) return;
+    // Control-char / blank / overlong ids never sent to delete API
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      window.alert('Block id contains invalid control characters');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to delete this block?')) return;
     try {
-      const res = await client.deleteBlock(id);
+      const res = await client.deleteBlock(safeId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {

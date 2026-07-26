@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
@@ -116,14 +116,19 @@ export function DesignSystems() {
 
   const handleDelete = async (id: string, name: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Design system id contains invalid control characters');
+      return;
+    }
     const nameSafe =
-      scrubDisplayText(name, { collapseLines: true, maxChars: 200 }) || id || 'design system';
+      scrubDisplayText(name, { collapseLines: true, maxChars: 200 }) || entityId || 'design system';
     if (!window.confirm(`Delete design system "${nameSafe}"? This cannot be undone.`)) return;
     try {
-      const res = await client.deleteDesignSystem(id);
+      const res = await client.deleteDesignSystem(entityId);
       if (res.ok) {
         setPageError(null);
-        setSystems((prev) => prev.filter((s) => s.id !== id));
+        setSystems((prev) => prev.filter((s) => s.id !== id && s.id !== entityId));
       } else {
         setPageError(
           scrubDisplayText((res as { error?: string }).error, {

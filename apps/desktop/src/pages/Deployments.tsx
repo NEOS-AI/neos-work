@@ -15,7 +15,7 @@ import {
   type DeploymentProviderFilter,
   type DeploymentStatusFilter,
 } from '../lib/deployment-filter-prefs.js';
-import { scrubDisplayText } from '../lib/format-duration.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatListCount } from '../lib/list-count.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { sortByDateDesc, sortByName } from '../lib/list-sort.js';
@@ -160,11 +160,16 @@ export function Deployments() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Deployment id contains invalid control characters');
+      return;
+    }
     if (!window.confirm('Remove this deployment history entry?')) return;
     try {
-      const res = await client.deleteDeployment(id);
+      const res = await client.deleteDeployment(entityId);
       if (res.ok) {
-        setDeployments((prev) => prev.filter((d) => d.id !== id));
+        setDeployments((prev) => prev.filter((d) => d.id !== id && d.id !== entityId));
       } else {
         setError(
           scrubDisplayText((res as { error?: string }).error, {
@@ -183,10 +188,17 @@ export function Deployments() {
 
   const handleRefreshStatus = async (id: string) => {
     if (!client) return;
+    const entityId = safeEntityId(id);
+    if (!entityId) {
+      window.alert('Deployment id contains invalid control characters');
+      return;
+    }
     try {
-      const res = await client.refreshDeployment(id);
+      const res = await client.refreshDeployment(entityId);
       if (res.ok && res.data) {
-        setDeployments((prev) => prev.map((d) => (d.id === id ? res.data! : d)));
+        setDeployments((prev) =>
+          prev.map((d) => (d.id === id || d.id === entityId ? res.data! : d)),
+        );
       } else {
         setError(
           scrubDisplayText((res as { error?: string }).error, {

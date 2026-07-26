@@ -476,4 +476,38 @@ describe('Deployments page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
   });
+
+  it('rejects delete/refresh when deployment id has control chars', async () => {
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `d${'\0'}evil`,
+          workflowId: 'wf-1',
+          provider: 'vercel' as const,
+          projectName: 'evil-app',
+          status: 'success' as const,
+          url: 'https://ok.example',
+          deploymentId: 'dep-evil',
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByText('evil-app')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteDeployment).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Deployment id contains invalid control characters');
+
+    alertSpy.mockClear();
+    fireEvent.click(screen.getByTitle('Poll provider for latest status'));
+    expect(refreshDeployment).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Deployment id contains invalid control characters');
+    alertSpy.mockRestore();
+  });
 });
