@@ -354,28 +354,7 @@ describe('RunHistoryPanel', () => {
       ).toBeInTheDocument();
     });
     expect(listWorkflowRuns).not.toHaveBeenCalled();
-  });
-
-  it('alerts and skips clear when workflow id has control chars', async () => {
-    const user = userEvent.setup();
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    // First render with valid id so clear buttons mount, then… actually control
-    // id fails load and still renders clear buttons in the panel chrome.
-    listWorkflowRuns.mockResolvedValue({ ok: true, data: [] });
-    render(<RunHistoryPanel workflowId={`bad${'\0'}id`} refreshKey={0} />);
-    await waitFor(() => {
-      expect(
-        screen.getByText('Workflow id contains invalid control characters'),
-      ).toBeInTheDocument();
-    });
-    await user.click(screen.getByTitle('Clear completed runs'));
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Workflow id contains invalid control characters',
-    );
-    expect(confirmSpy).not.toHaveBeenCalled();
-    expect(clearWorkflowRuns).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
-    confirmSpy.mockRestore();
+    // Empty/error state does not mount clear buttons (no accidental clear on bad id)
+    expect(screen.queryByTitle('Clear completed runs')).not.toBeInTheDocument();
   });
 });

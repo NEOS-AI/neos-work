@@ -37,6 +37,50 @@ describe('EngineClient', () => {
     expect(new EngineClient(42 as unknown as string).url).toBe('');
   });
 
+  it('rejects control-char / blank / traversal path ids without calling fetch', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockClear();
+
+    await expect(client.deleteSession(`s${'\n'}1`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid session id',
+    });
+    await expect(client.listMessages('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid session id',
+    });
+    await expect(client.getWorkflow('../etc')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.listWorkflowRuns(`wf${'\0'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getWorkflowRun('wf-1', `run${'\n'}2`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid run id',
+    });
+    await expect(client.clearWorkflowRuns('   ')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.getWebhookSecret('a/b')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(client.preflightWorkflow('x'.repeat(201))).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Valid id is encoded and reaches fetch
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: null }));
+    await client.deleteSession('sess 1');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/session/sess%201');
+  });
+
   it('exposes base url and auth header after setAuthToken', async () => {
     const client = new EngineClient('http://engine.test');
     expect(client.url).toBe('http://engine.test');

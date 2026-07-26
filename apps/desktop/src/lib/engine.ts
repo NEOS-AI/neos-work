@@ -343,6 +343,24 @@ export class EngineClient {
     return headers;
   }
 
+  /**
+   * Sanitize a path-segment id for URL construction.
+   * Rejects control-char / blank / overlong / traversal; encodes for path safety.
+   * Returns empty string when invalid (callers fail closed).
+   */
+  private pathSegment(raw: unknown, maxChars = 200): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const s = raw.trim();
+    if (!s || s.length > maxChars) return '';
+    // Path separators / relative segments never allowed in ids
+    if (s.includes('/') || s.includes('\\') || s.includes('..')) return '';
+    return encodeURIComponent(s);
+  }
+
+  private invalidIdResponse<T = unknown>(label = 'id'): ApiResponse<T> {
+    return { ok: false, error: `Invalid ${label}` } as ApiResponse<T>;
+  }
+
   // --- Health ---
 
   async health(): Promise<HealthResponse> {
@@ -362,7 +380,12 @@ export class EngineClient {
   // --- Sessions ---
 
   async listSessions(workspaceId?: string): Promise<ApiResponse<SessionData[]>> {
-    const qs = workspaceId ? `?workspaceId=${workspaceId}` : '';
+    let qs = '';
+    if (workspaceId != null && workspaceId !== '') {
+      const seg = this.pathSegment(workspaceId);
+      if (!seg) return this.invalidIdResponse('workspace id');
+      qs = `?workspaceId=${seg}`;
+    }
     const res = await fetch(`${this.baseUrl}/api/session${qs}`, {
       headers: this.getHeaders(),
     });
@@ -385,7 +408,9 @@ export class EngineClient {
   }
 
   async deleteSession(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/session/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('session id');
+    const res = await fetch(`${this.baseUrl}/api/session/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -395,7 +420,9 @@ export class EngineClient {
   // --- Messages ---
 
   async listMessages(sessionId: string): Promise<ApiResponse<MessageData[]>> {
-    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/messages`, {
+    const seg = this.pathSegment(sessionId);
+    if (!seg) return this.invalidIdResponse('session id');
+    const res = await fetch(`${this.baseUrl}/api/session/${seg}/messages`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
@@ -408,7 +435,12 @@ export class EngineClient {
     content: string,
     signal?: AbortSignal,
   ): AsyncGenerator<ChatChunk> {
-    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/chat`, {
+    const seg = this.pathSegment(sessionId);
+    if (!seg) {
+      yield { type: 'error', content: 'Invalid session id' };
+      return;
+    }
+    const res = await fetch(`${this.baseUrl}/api/session/${seg}/chat`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ content }),
@@ -453,7 +485,12 @@ export class EngineClient {
     content: string,
     signal?: AbortSignal,
   ): AsyncGenerator<AgentChunk> {
-    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/agent`, {
+    const sid = this.pathSegment(sessionId);
+    if (!sid) {
+      yield { type: 'error', error: 'Invalid session id' };
+      return;
+    }
+    const res = await fetch(`${this.baseUrl}/api/session/${sid}/agent`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ content }),
@@ -499,7 +536,9 @@ export class EngineClient {
   // --- Cancel active chat ---
 
   async cancelSession(sessionId: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/session/${sessionId}/cancel`, {
+    const sid = this.pathSegment(sessionId);
+    if (!sid) return this.invalidIdResponse('session id');
+    const res = await fetch(`${this.baseUrl}/api/session/${sid}/cancel`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -513,8 +552,12 @@ export class EngineClient {
     toolUseId: string,
     approved: boolean,
   ): Promise<ApiResponse<void>> {
+    const sid = this.pathSegment(sessionId);
+    if (!sid) return this.invalidIdResponse('session id');
+    const tid = this.pathSegment(toolUseId);
+    if (!tid) return this.invalidIdResponse('tool use id');
     const res = await fetch(
-      `${this.baseUrl}/api/session/${sessionId}/tool-confirm/${toolUseId}`,
+      `${this.baseUrl}/api/session/${sid}/tool-confirm/${tid}`,
       {
         method: 'POST',
         headers: this.getHeaders(),
@@ -550,7 +593,9 @@ export class EngineClient {
     id: string,
     params: { name?: string; path?: string },
   ): Promise<ApiResponse<{ id: string; name: string; type: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/workspace/${id}`, {
+    const wid = this.pathSegment(id);
+    if (!wid) return this.invalidIdResponse('workspace id');
+    const res = await fetch(`${this.baseUrl}/api/workspace/${wid}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(params),
@@ -559,7 +604,9 @@ export class EngineClient {
   }
 
   async deleteWorkspace(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/workspace/${id}`, {
+    const wid = this.pathSegment(id);
+    if (!wid) return this.invalidIdResponse('workspace id');
+    const res = await fetch(`${this.baseUrl}/api/workspace/${wid}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -627,7 +674,9 @@ export class EngineClient {
   }
 
   async toggleSkill(id: string, enabled: boolean): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/skills/${id}/toggle`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('skill id');
+    const res = await fetch(`${this.baseUrl}/api/skills/${seg}/toggle`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ enabled }),
@@ -636,7 +685,9 @@ export class EngineClient {
   }
 
   async deleteSkill(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/skills/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('skill id');
+    const res = await fetch(`${this.baseUrl}/api/skills/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -708,7 +759,9 @@ export class EngineClient {
   }
 
   async toggleMcpServer(id: string, enabled: boolean): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/${id}/toggle`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('MCP server id');
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/${seg}/toggle`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ enabled }),
@@ -717,7 +770,9 @@ export class EngineClient {
   }
 
   async deleteMcpServer(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('MCP server id');
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -743,14 +798,18 @@ export class EngineClient {
   }
 
   async getMcpOAuthStatus(serverId: string): Promise<ApiResponse<{ connected: boolean; expiresAt?: string; scope?: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}/status`, {
+    const seg = this.pathSegment(serverId);
+    if (!seg) return this.invalidIdResponse('MCP server id');
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${seg}/status`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async revokeMcpOAuth(serverId: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}`, {
+    const seg = this.pathSegment(serverId);
+    if (!seg) return this.invalidIdResponse('MCP server id');
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -758,7 +817,9 @@ export class EngineClient {
   }
 
   async refreshMcpOAuth(serverId: string, params: { tokenEndpoint: string; clientId: string }): Promise<ApiResponse<{ connected: boolean; expiresAt?: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${serverId}/refresh`, {
+    const seg = this.pathSegment(serverId);
+    if (!seg) return this.invalidIdResponse('MCP server id');
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${seg}/refresh`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(params),
@@ -792,7 +853,9 @@ export class EngineClient {
   }
 
   async deleteDesignSystem(id: string): Promise<ApiResponse<null>> {
-    const res = await fetch(`${this.baseUrl}/api/design-systems/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -800,12 +863,16 @@ export class EngineClient {
   }
 
   async getDesignSystemContent(id: string): Promise<ApiResponse<{ content: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/design-systems/${id}/content`, { headers: this.getHeaders() });
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/content`, { headers: this.getHeaders() });
     return readApiResponse(res);
   }
 
   async saveDesignSystemContent(id: string, content: string): Promise<ApiResponse<null>> {
-    const res = await fetch(`${this.baseUrl}/api/design-systems/${id}/content`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/content`, {
       method: 'PUT',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
@@ -816,13 +883,22 @@ export class EngineClient {
   // --- Artifacts ---
 
   async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {
-    const q = params.runId ? `runId=${params.runId}` : `workflowId=${params.workflowId}`;
-    const res = await fetch(`${this.baseUrl}/api/artifacts?${q}`, { headers: this.getHeaders() });
+    if (params.runId) {
+      const seg = this.pathSegment(params.runId);
+      if (!seg) return this.invalidIdResponse('run id');
+      const res = await fetch(`${this.baseUrl}/api/artifacts?runId=${seg}`, { headers: this.getHeaders() });
+      return readApiResponse(res);
+    }
+    const seg = this.pathSegment(params.workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/artifacts?workflowId=${seg}`, { headers: this.getHeaders() });
     return readApiResponse(res);
   }
 
   async getArtifact(id: string): Promise<ApiResponse<Artifact>> {
-    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, { headers: this.getHeaders() });
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('artifact id');
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${seg}`, { headers: this.getHeaders() });
     return readApiResponse(res);
   }
 
@@ -830,7 +906,9 @@ export class EngineClient {
     id: string,
     mode: 'reload' | 'rerun' = 'reload',
   ): Promise<ApiResponse<Artifact> & { meta?: { mode?: string; workflowId?: string; nodeId?: string; message?: string } }> {
-    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}/refresh`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('artifact id');
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${seg}/refresh`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
@@ -839,7 +917,9 @@ export class EngineClient {
   }
 
   async deleteArtifact(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('artifact id');
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -850,7 +930,9 @@ export class EngineClient {
     id: string,
     input: { name?: string; content?: string },
   ): Promise<ApiResponse<Artifact>> {
-    const res = await fetch(`${this.baseUrl}/api/artifacts/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('artifact id');
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${seg}`, {
       method: 'PATCH',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -874,7 +956,9 @@ export class EngineClient {
   }
 
   async getRoutine(id: string): Promise<ApiResponse<Routine>> {
-    const res = await fetch(`${this.baseUrl}/api/routines/${id}`, { headers: this.getHeaders() });
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('routine id');
+    const res = await fetch(`${this.baseUrl}/api/routines/${seg}`, { headers: this.getHeaders() });
     return readApiResponse(res);
   }
 
@@ -895,7 +979,9 @@ export class EngineClient {
   }
 
   async updateRoutine(id: string, input: Partial<{ name: string; schedule: string; timezone: string; enabled: boolean; inputs: Record<string, unknown> }>): Promise<ApiResponse<Routine>> {
-    const res = await fetch(`${this.baseUrl}/api/routines/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('routine id');
+    const res = await fetch(`${this.baseUrl}/api/routines/${seg}`, {
       method: 'PUT',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -940,7 +1026,9 @@ export class EngineClient {
   }
 
   async refreshDeployment(id: string): Promise<ApiResponse<Deployment>> {
-    const res = await fetch(`${this.baseUrl}/api/deploy/${id}/refresh`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('deployment id');
+    const res = await fetch(`${this.baseUrl}/api/deploy/${seg}/refresh`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -948,7 +1036,9 @@ export class EngineClient {
   }
 
   async deleteRoutine(id: string): Promise<ApiResponse<null>> {
-    const res = await fetch(`${this.baseUrl}/api/routines/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('routine id');
+    const res = await fetch(`${this.baseUrl}/api/routines/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -956,7 +1046,9 @@ export class EngineClient {
   }
 
   async runRoutineNow(id: string): Promise<ApiResponse<{ runId: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/routines/${id}/run`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('routine id');
+    const res = await fetch(`${this.baseUrl}/api/routines/${seg}/run`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -964,7 +1056,9 @@ export class EngineClient {
   }
 
   async listRoutineRuns(id: string): Promise<ApiResponse<RoutineRun[]>> {
-    const res = await fetch(`${this.baseUrl}/api/routines/${id}/runs`, { headers: this.getHeaders() });
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('routine id');
+    const res = await fetch(`${this.baseUrl}/api/routines/${seg}/runs`, { headers: this.getHeaders() });
     return readApiResponse(res);
   }
 
@@ -973,7 +1067,11 @@ export class EngineClient {
     runId: string,
     input?: { name?: string; description?: string },
   ): Promise<ApiResponse<{ skillId: string; name: string; path: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/routines/${routineId}/runs/${runId}/crystallize`, {
+    const rseg = this.pathSegment(routineId);
+    if (!rseg) return this.invalidIdResponse('routine id');
+    const runSeg = this.pathSegment(runId);
+    if (!runSeg) return this.invalidIdResponse('run id');
+    const res = await fetch(`${this.baseUrl}/api/routines/${rseg}/runs/${runSeg}/crystallize`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input ?? {}),
@@ -1000,7 +1098,9 @@ export class EngineClient {
   }
 
   async getPlugin(id: string): Promise<ApiResponse<Plugin>> {
-    const res = await fetch(`${this.baseUrl}/api/plugins/${id}`, { headers: this.getHeaders() });
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('plugin id');
+    const res = await fetch(`${this.baseUrl}/api/plugins/${seg}`, { headers: this.getHeaders() });
     return readApiResponse(res);
   }
 
@@ -1012,7 +1112,9 @@ export class EngineClient {
     const controller = new AbortController();
     const runIdPromise = (async () => {
       try {
-        const res = await fetch(`${this.baseUrl}/api/plugins/${id}/run`, {
+        const seg = this.pathSegment(id);
+        if (!seg) return null;
+        const res = await fetch(`${this.baseUrl}/api/plugins/${seg}/run`, {
           method: 'POST',
           headers: this.getHeaders(),
           body: JSON.stringify({ inputs }),
@@ -1067,7 +1169,11 @@ export class EngineClient {
     stageId: string,
     response: Record<string, unknown>,
   ): Promise<ApiResponse<unknown>> {
-    const res = await fetch(`${this.baseUrl}/api/plugins/${id}/run/${runId}/resume`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('plugin id');
+    const runSeg = this.pathSegment(runId);
+    if (!runSeg) return this.invalidIdResponse('run id');
+    const res = await fetch(`${this.baseUrl}/api/plugins/${seg}/run/${runSeg}/resume`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ stageId, response }),
@@ -1085,7 +1191,9 @@ export class EngineClient {
   }
 
   async getWorkflow(id: string): Promise<ApiResponse<Workflow>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
@@ -1110,7 +1218,9 @@ export class EngineClient {
     id: string,
     input: { name?: string; description?: string; designSystemId?: string; nodes?: unknown[]; edges?: unknown[] },
   ): Promise<ApiResponse<Workflow>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(input),
@@ -1119,7 +1229,9 @@ export class EngineClient {
   }
 
   async deleteWorkflow(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1127,7 +1239,9 @@ export class EngineClient {
   }
 
   async duplicateWorkflow(id: string): Promise<ApiResponse<Workflow>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${id}/duplicate`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/duplicate`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -1139,7 +1253,9 @@ export class EngineClient {
    * @returns true when a download was triggered; false on HTTP failure.
    */
   async exportWorkflow(id: string, workflowName: string): Promise<boolean> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${id}/export`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return false;
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/export`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) return false;
@@ -1210,7 +1326,9 @@ export class EngineClient {
    * @returns true when a download was triggered; false on HTTP failure.
    */
   async exportWorkflowZip(id: string, filename: string): Promise<boolean> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${id}/export.zip`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return false;
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/export.zip`, {
       headers: this.getHeaders(),
     });
     if (!res.ok) return false;
@@ -1234,8 +1352,13 @@ export class EngineClient {
   runWorkflow(id: string, onEvent: (event: WorkflowSSEEvent) => void, inputs?: Record<string, unknown>): () => void {
     const controller = new AbortController();
     (async () => {
+      const seg = this.pathSegment(id);
+      if (!seg) {
+        onEvent({ type: 'run.failed', runId: '', error: 'Invalid workflow id' });
+        return;
+      }
       const body = inputs ? JSON.stringify({ inputs }) : undefined;
-      const res = await fetch(`${this.baseUrl}/api/workflow/${id}/run`, {
+      const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/run`, {
         method: 'POST',
         headers: {
           ...this.getHeaders(),
@@ -1271,21 +1394,31 @@ export class EngineClient {
   }
 
   async listWorkflowRuns(workflowId: string, limit = 20, offset = 0): Promise<ApiResponse<WorkflowRun[]>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs?limit=${limit}&offset=${offset}`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/runs?limit=${limit}&offset=${offset}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async getWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<WorkflowRun>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
+    const seg1 = this.pathSegment(workflowId);
+    const seg2 = this.pathSegment(runId);
+    if (!seg1) return this.invalidIdResponse('workflow id');
+    if (!seg2) return this.invalidIdResponse('run id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg1}/runs/${seg2}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async deleteWorkflowRun(workflowId: string, runId: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs/${runId}`, {
+    const seg1 = this.pathSegment(workflowId);
+    if (!seg1) return this.invalidIdResponse('workflow id');
+    const seg2 = this.pathSegment(runId);
+    if (!seg2) return this.invalidIdResponse('run id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg1}/runs/${seg2}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1297,8 +1430,10 @@ export class EngineClient {
     workflowId: string,
     status?: 'completed' | 'failed' | 'cancelled' | 'running',
   ): Promise<ApiResponse<{ deleted: number }>> {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
     const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/runs${qs}`, {
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/runs${qs}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1309,7 +1444,9 @@ export class EngineClient {
     ok: boolean;
     issues: Array<{ code: string; severity: 'error' | 'warning'; message: string; nodeId?: string }>;
   }>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow/${workflowId}/preflight`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow/${seg}/preflight`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -1322,7 +1459,9 @@ export class EngineClient {
     secret: string;
     rateLimit?: { limit: number; remaining: number; resetAt: number; windowMs: number };
   }>> {
-    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/secret`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/webhook/${seg}/secret`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
@@ -1334,14 +1473,18 @@ export class EngineClient {
     resetAt: number;
     windowMs: number;
   }>> {
-    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/rate-limit`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/webhook/${seg}/rate-limit`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async regenerateWebhookSecret(workflowId: string): Promise<ApiResponse<{ secret: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}/regenerate`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/webhook/${seg}/regenerate`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -1356,6 +1499,8 @@ export class EngineClient {
     workflowId: string,
     body: Record<string, unknown> = {},
   ): Promise<{ ok: boolean; status: number; error?: string }> {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return { ok: false, status: 0, error: 'Invalid workflow id' };
     const secretRes = await this.getWebhookSecret(workflowId);
     if (!secretRes.ok || !secretRes.data?.secret) {
       return { ok: false, status: 0, error: 'Failed to load webhook secret' };
@@ -1363,7 +1508,7 @@ export class EngineClient {
     const { hmacSha256Hex } = await import('./hmac.js');
     const raw = JSON.stringify(body);
     const sig = await hmacSha256Hex(secretRes.data.secret, raw);
-    const res = await fetch(`${this.baseUrl}/api/webhook/${workflowId}`, {
+    const res = await fetch(`${this.baseUrl}/api/webhook/${seg}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1388,14 +1533,20 @@ export class EngineClient {
   // --- Workflow Revisions ---
 
   async listRevisions(workflowId: string): Promise<ApiResponse<WorkflowRevision[]>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${seg}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async getRevision(workflowId: string, revisionId: string): Promise<ApiResponse<WorkflowRevision>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const rev = this.pathSegment(revisionId);
+    if (!rev) return this.invalidIdResponse('revision id');
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${seg}/${rev}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
@@ -1406,7 +1557,11 @@ export class EngineClient {
     workflowId: string,
     revisionId: string,
   ): Promise<ApiResponse<Workflow> & { meta?: { restoredFrom?: string; label?: string } }> {
-    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}/restore`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const rev = this.pathSegment(revisionId);
+    if (!rev) return this.invalidIdResponse('revision id');
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${seg}/${rev}/restore`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -1414,7 +1569,11 @@ export class EngineClient {
   }
 
   async updateRevisionLabel(workflowId: string, revisionId: string, label: string): Promise<ApiResponse<WorkflowRevision>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const rev = this.pathSegment(revisionId);
+    if (!rev) return this.invalidIdResponse('revision id');
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${seg}/${rev}`, {
       method: 'PATCH',
       headers: this.getHeaders(),
       body: JSON.stringify({ label }),
@@ -1423,7 +1582,11 @@ export class EngineClient {
   }
 
   async deleteRevision(workflowId: string, revisionId: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${workflowId}/${revisionId}`, {
+    const seg = this.pathSegment(workflowId);
+    if (!seg) return this.invalidIdResponse('workflow id');
+    const rev = this.pathSegment(revisionId);
+    if (!rev) return this.invalidIdResponse('revision id');
+    const res = await fetch(`${this.baseUrl}/api/workflow-revisions/${seg}/${rev}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1434,7 +1597,12 @@ export class EngineClient {
 
   async listDeployments(workflowId?: string, limit = 100): Promise<ApiResponse<Deployment[]>> {
     const params = new URLSearchParams();
-    if (workflowId) params.set('workflowId', workflowId);
+    if (workflowId) {
+      const seg = this.pathSegment(workflowId);
+      if (!seg) return this.invalidIdResponse('workflow id');
+      // URLSearchParams encodes; pass decoded form from pathSegment via decodeURIComponent
+      params.set('workflowId', decodeURIComponent(seg));
+    }
     if (limit) params.set('limit', String(limit));
     const qs = params.toString();
     const res = await fetch(`${this.baseUrl}/api/deploy${qs ? `?${qs}` : ''}`, {
@@ -1444,14 +1612,18 @@ export class EngineClient {
   }
 
   async getDeployment(id: string): Promise<ApiResponse<Deployment>> {
-    const res = await fetch(`${this.baseUrl}/api/deploy/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('deployment id');
+    const res = await fetch(`${this.baseUrl}/api/deploy/${seg}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
 
   async deleteDeployment(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/deploy/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('deployment id');
+    const res = await fetch(`${this.baseUrl}/api/deploy/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1477,7 +1649,9 @@ export class EngineClient {
   }
 
   async updateHarness(id: string, input: Partial<AgentHarness>): Promise<ApiResponse<AgentHarness>> {
-    const res = await fetch(`${this.baseUrl}/api/harness/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('harness id');
+    const res = await fetch(`${this.baseUrl}/api/harness/${seg}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(input),
@@ -1486,7 +1660,9 @@ export class EngineClient {
   }
 
   async deleteHarness(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/harness/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('harness id');
+    const res = await fetch(`${this.baseUrl}/api/harness/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1513,7 +1689,9 @@ export class EngineClient {
   }
 
   async updateBlock(id: string, input: Partial<WorkflowBlock>): Promise<ApiResponse<WorkflowBlock>> {
-    const res = await fetch(`${this.baseUrl}/api/blocks/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('block id');
+    const res = await fetch(`${this.baseUrl}/api/blocks/${seg}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(input),
@@ -1522,7 +1700,9 @@ export class EngineClient {
   }
 
   async deleteBlock(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/blocks/${id}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('block id');
+    const res = await fetch(`${this.baseUrl}/api/blocks/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1556,7 +1736,9 @@ export class EngineClient {
   }
 
   async updateMemory(id: string, input: UpdateMemoryInput): Promise<ApiResponse<MemoryItem>> {
-    const res = await fetch(`${this.baseUrl}/api/memory/${encodeURIComponent(id)}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('memory id');
+    const res = await fetch(`${this.baseUrl}/api/memory/${seg}`, {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify(input),
@@ -1565,7 +1747,9 @@ export class EngineClient {
   }
 
   async deleteMemory(id: string): Promise<ApiResponse<void>> {
-    const res = await fetch(`${this.baseUrl}/api/memory/${encodeURIComponent(id)}`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('memory id');
+    const res = await fetch(`${this.baseUrl}/api/memory/${seg}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
@@ -1573,7 +1757,9 @@ export class EngineClient {
   }
 
   async toggleMemory(id: string): Promise<ApiResponse<MemoryItem>> {
-    const res = await fetch(`${this.baseUrl}/api/memory/${encodeURIComponent(id)}/toggle`, {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('memory id');
+    const res = await fetch(`${this.baseUrl}/api/memory/${seg}/toggle`, {
       method: 'PUT',
       headers: this.getHeaders(),
     });

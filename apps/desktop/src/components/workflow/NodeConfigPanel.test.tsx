@@ -956,10 +956,12 @@ describe('NodeConfigPanel', () => {
     window.history.pushState({}, '', prev || '/');
   });
 
-  it('rejects control-char workflow id in webhook section without API calls', async () => {
+  it('rejects overlong workflow id in webhook section without API calls', async () => {
     const prev = window.location.pathname;
-    // Path segment includes a control char so safeEntityId rejects
-    window.history.pushState({}, '', `/workflows/wf${'\n'}bad`);
+    // history API strips control chars from pathnames; overlong ids still survive
+    // and are rejected by safeEntityId (max 200)
+    const badId = 'x'.repeat(201);
+    window.history.pushState({}, '', `/workflows/${badId}`);
     getWebhookSecret.mockClear();
 
     render(
@@ -972,7 +974,8 @@ describe('NodeConfigPanel', () => {
       ).toBeInTheDocument();
     });
     expect(getWebhookSecret).not.toHaveBeenCalled();
-    expect(screen.queryByText('Webhook')).not.toBeInTheDocument();
+    // Invalid id shows error banner, not the full Webhook chrome
+    expect(screen.queryByText('Test fire')).not.toBeInTheDocument();
 
     window.history.pushState({}, '', prev || '/');
   });
