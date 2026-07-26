@@ -297,7 +297,14 @@ export class EngineClient {
   private authToken: string | null = null;
 
   constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+    // Control-char / non-string base URLs rejected (fetch / log hygiene)
+    if (typeof baseUrl !== 'string' || /[\0\r\n]/.test(baseUrl)) {
+      this.baseUrl = '';
+      return;
+    }
+    // Trim and strip trailing slashes so `${base}/api/...` joins cleanly
+    const trimmed = baseUrl.trim().replace(/\/+$/, '');
+    this.baseUrl = trimmed;
   }
 
   get url(): string {

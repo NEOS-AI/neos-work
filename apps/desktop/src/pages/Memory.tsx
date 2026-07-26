@@ -282,13 +282,13 @@ export default function Memory() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Update failed';
-        alert(err);
+        window.alert(err);
         return;
       }
       void load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
     }
   };
 
@@ -303,13 +303,13 @@ export default function Memory() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Delete failed';
-        alert(err);
+        window.alert(err);
         return;
       }
       void load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
   };
 

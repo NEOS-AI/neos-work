@@ -28,6 +28,15 @@ describe('EngineClient', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sanitizes baseUrl: strips trailing slashes and rejects control chars', () => {
+    expect(new EngineClient('http://engine.test/').url).toBe('http://engine.test');
+    expect(new EngineClient('  http://engine.test///  ').url).toBe('http://engine.test');
+    expect(new EngineClient(`http://x${'\0'}.test`).url).toBe('');
+    expect(new EngineClient(`http://x${'\n'}.test`).url).toBe('');
+    expect(new EngineClient(null as unknown as string).url).toBe('');
+    expect(new EngineClient(42 as unknown as string).url).toBe('');
+  });
+
   it('exposes base url and auth header after setAuthToken', async () => {
     const client = new EngineClient('http://engine.test');
     expect(client.url).toBe('http://engine.test');

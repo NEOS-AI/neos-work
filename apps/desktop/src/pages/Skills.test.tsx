@@ -341,6 +341,45 @@ describe('Skills page', () => {
     expect(screen.queryByText('Beta Skill')).not.toBeInTheDocument();
   });
 
+  it('rejects toggle/delete/upgrade when skill id has control chars', async () => {
+    listSkills.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: `sk${'\0'}evil`,
+          name: 'Dirty Id Skill',
+          description: 'x',
+          category: 'tools',
+          enabled: false,
+          featured: false,
+          source: 'local',
+        },
+      ],
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Dirty Id Skill')).toBeInTheDocument());
+
+    // Toggle (Enable)
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+    expect(toggleSkill).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Skill id contains invalid control characters');
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    // Delete
+    fireEvent.click(screen.getByRole('button', { name: 'Remove skill' }));
+    expect(deleteSkill).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Skill id contains invalid control characters');
+
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    // Upgrade
+    fireEvent.click(screen.getByRole('button', { name: '→ Plugin' }));
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(upgradeSkillToPlugin).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('Skill id contains invalid control characters');
+  });
+
   it('omits control-char skill categories from chips', async () => {
     listSkills.mockResolvedValue({
       ok: true,

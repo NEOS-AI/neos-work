@@ -119,11 +119,11 @@ export function Templates() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Create workflow failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create workflow failed';
-      alert(
+      window.alert(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Create workflow failed',
       );
     } finally {

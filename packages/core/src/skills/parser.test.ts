@@ -354,5 +354,23 @@ body
     expect(capped!.manifest.version?.length).toBe(64);
     expect(capped!.manifest.license?.length).toBe(100);
     expect(capped!.manifest.examplePrompt?.length).toBe(4_000);
+
+    // optionalTrim drops CR control-char optional values (without null-byte file reject)
+    const crMode = [
+      '---',
+      'name: crmode',
+      'description: d',
+      `mode: bad${'\r'}mode`,
+      '---',
+      'body',
+      '',
+    ].join('\n');
+    const cr = parseSkillFile(crMode, '/cr.md', 'local');
+    expect(cr).not.toBeNull();
+    expect(cr!.manifest.mode).toBeUndefined();
+
+    // Non-string path with nullish → String(filePath ?? '')
+    const nullPath = parseSkillFile(caps, null as unknown as string, 'local');
+    expect(nullPath!.path).toBe('');
   });
 });

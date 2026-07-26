@@ -87,15 +87,21 @@ export function Media() {
 
   const handleDelete = async (filename: string) => {
     if (!client) return;
+    // Control-char / blank filenames never sent to delete API
+    if (typeof filename !== 'string' || /[\0\r\n]/.test(filename) || !filename.trim()) {
+      window.alert('Filename contains invalid control characters');
+      return;
+    }
+    const fileId = filename.trim();
     const nameSafe =
-      scrubDisplayText(filename, { collapseLines: true, maxChars: 200 }) || 'file';
+      scrubDisplayText(fileId, { collapseLines: true, maxChars: 200 }) || 'file';
     if (!window.confirm(`Delete ${nameSafe}?`)) return;
     try {
-      const res = await client.deleteMediaFile(filename);
+      const res = await client.deleteMediaFile(fileId);
       if (res.ok) {
-        setFiles((prev) => prev.filter((f) => f.filename !== filename));
+        setFiles((prev) => prev.filter((f) => f.filename !== filename && f.filename !== fileId));
         // Clear selection only; blob effect cleanup revokes the object URL
-        if (selected?.filename === filename) setSelected(null);
+        if (selected?.filename === filename || selected?.filename === fileId) setSelected(null);
       } else {
         setError(
           scrubDisplayText((res as { error?: string }).error, {
@@ -121,7 +127,16 @@ export function Media() {
         return;
       }
       try {
-        const blob = await client.fetchMediaBlob(selected.filename);
+        const rawName = selected.filename;
+        // Control-char / blank filenames never fetched (path injection defense)
+        if (typeof rawName !== 'string' || /[\0\r\n]/.test(rawName) || !rawName.trim()) {
+          if (!cancelled) {
+            setBlobUrl(null);
+            setError('Filename contains invalid control characters');
+          }
+          return;
+        }
+        const blob = await client.fetchMediaBlob(rawName.trim());
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setBlobUrl(objectUrl);

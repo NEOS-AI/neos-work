@@ -164,11 +164,11 @@ export function Workflows() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Create workflow failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Create workflow failed';
-      alert(
+      window.alert(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Create workflow failed',
       );
     } finally {
@@ -178,7 +178,7 @@ export function Workflows() {
 
   const handleDelete = async (id: string) => {
     if (!client) return;
-    if (!confirm(t('workflow.confirmDelete'))) return;
+    if (!window.confirm(t('workflow.confirmDelete'))) return;
     try {
       const res = await client.deleteWorkflow(id);
       if (!res.ok) {
@@ -187,13 +187,13 @@ export function Workflows() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Delete failed';
-        alert(err);
+        window.alert(err);
         return;
       }
       setWorkflows((prev) => prev.filter((w) => w.id !== id));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
   };
 
@@ -209,11 +209,11 @@ export function Workflows() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Duplicate failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Duplicate failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Duplicate failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Duplicate failed');
     }
   };
 
@@ -228,7 +228,7 @@ export function Workflows() {
       const text = await file.text();
       // Reject null-byte JSON payloads before parse (hostile paste / file)
       if (/\0/.test(text)) {
-        alert('JSON import failed: invalid control characters');
+        window.alert('JSON import failed: invalid control characters');
         return;
       }
       const data = JSON.parse(text) as unknown;
@@ -241,11 +241,11 @@ export function Workflows() {
             collapseLines: true,
             maxChars: 300,
           }) || 'JSON import failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'JSON import failed';
-      alert(
+      window.alert(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'JSON import failed',
       );
     } finally {
@@ -267,10 +267,10 @@ export function Workflows() {
             collapseLines: true,
             maxChars: 300,
           }) || 'ZIP import failed';
-        alert(err);
+        window.alert(err);
       }
     } catch {
-      alert('ZIP import failed');
+      window.alert('ZIP import failed');
     } finally {
       e.target.value = '';
     }
@@ -289,10 +289,10 @@ export function Workflows() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Claude Design import failed';
-        alert(err);
+        window.alert(err);
       }
     } catch {
-      alert('Claude Design import failed');
+      window.alert('Claude Design import failed');
     } finally {
       e.target.value = '';
     }

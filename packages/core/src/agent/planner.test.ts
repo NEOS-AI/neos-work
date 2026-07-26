@@ -83,6 +83,19 @@ describe('Planner', () => {
     );
     expect(steps.length).toBeGreaterThanOrEqual(1);
     expect(steps[0]!.description).toBeTruthy();
+
+    // Goal longer than GOAL_MAX (50_000) is sliced before LLM
+    let captured = '';
+    const capAdapter = mockAdapter([JSON.stringify([{ description: 'capped' }])]);
+    const base = capAdapter.chat.bind(capAdapter);
+    capAdapter.chat = async function* (params) {
+      captured = JSON.stringify(params.messages);
+      yield* base(params);
+    };
+    await new Planner(capAdapter).plan('G'.repeat(60_000), 'ctx');
+    // Goal text in prompt is capped (50k) — full 60k string must not appear
+    expect(captured.includes('G'.repeat(60_000))).toBe(false);
+    expect(captured).toContain('G'.repeat(1_000));
   });
 
   it('extracts JSON from markdown fences / surrounding text', async () => {
@@ -179,6 +192,12 @@ describe('Planner', () => {
     expect(emptyGoal).toHaveLength(1);
     expect(emptyGoal[0]!.description).toBe('Execute the goal directly');
     expect(modelUsed).toBe('unset'); // early return before chat
+
+    // Explicit null context (not default param) hits String(context ?? '')
+    const withNullCtx = await new Planner(
+      mockAdapter([JSON.stringify([{ description: 'ok-null-ctx' }])]),
+    ).plan('goal', null as unknown as string);
+    expect(withNullCtx[0]!.description).toBe('ok-null-ctx');
 
     // Real goal with empty models → model id falls back to ''
     const objectJson = await new Planner(adapter as never).plan('real goal');

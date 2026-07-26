@@ -235,18 +235,18 @@ export function Routines() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Update failed';
-        alert(err);
+        window.alert(err);
         return;
       }
       await load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!client || !confirm('Delete this routine?')) return;
+    if (!client || !window.confirm('Delete this routine?')) return;
     try {
       const res = await client.deleteRoutine(id);
       if (!res.ok) {
@@ -255,14 +255,14 @@ export function Routines() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Delete failed';
-        alert(err);
+        window.alert(err);
         return;
       }
       if (selectedId === id) setSelectedId(null);
       await load();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
   };
 
@@ -274,7 +274,7 @@ export function Routines() {
         const runId =
           scrubDisplayText(res.data?.runId, { collapseLines: true, maxChars: 64 }).slice(0, 8)
           || '—';
-        alert(`Triggered! runId: ${runId}`);
+        window.alert(`Triggered! runId: ${runId}`);
         await load();
         if (selectedId === id) {
           const runsRes = await client.listRoutineRuns(id);
@@ -286,21 +286,21 @@ export function Routines() {
             collapseLines: true,
             maxChars: 300,
           }) || 'Run failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Run failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Run failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Run failed');
     }
   };
 
   const handleCrystallize = async (run: RoutineRun) => {
     if (!client || !selectedId) return;
     if (run.status !== 'completed') {
-      alert('Only completed runs can be crystallized into a skill.');
+      window.alert('Only completed runs can be crystallized into a skill.');
       return;
     }
-    if (!confirm('Save this successful run as a skill candidate?')) return;
+    if (!window.confirm('Save this successful run as a skill candidate?')) return;
     try {
       const res = await client.crystallizeRoutineRun(selectedId, run.id);
       if (res.ok && res.data) {
@@ -308,18 +308,18 @@ export function Routines() {
           scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'skill';
         const path =
           scrubDisplayText(res.data.path, { collapseLines: true, maxChars: 300 }) || '';
-        alert(`Crystallized skill: ${name}${path ? `\n${path}` : ''}`);
+        window.alert(`Crystallized skill: ${name}${path ? `\n${path}` : ''}`);
       } else {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
           }) || 'Crystallize failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Crystallize failed';
-      alert(
+      window.alert(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Crystallize failed',
       );
     }

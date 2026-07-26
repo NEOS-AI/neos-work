@@ -202,4 +202,45 @@ describe('ContextManager', () => {
     // Multi-line summaries are allowed (only null bytes stripped)
     expect(content).toMatch(/line1mid\nline2/);
   });
+
+  it('handles non-array compress input, blank roles, empty models, overlong summary', async () => {
+    const cm = new ContextManager();
+    // Non-array messages → []
+    await expect(cm.compress(null as never, mockAdapter(['x']))).resolves.toEqual([]);
+    await expect(cm.compress(undefined as never, mockAdapter(['x']))).resolves.toEqual([]);
+
+    // Whitespace-only role → "unknown" after trim
+    const older = Array.from({ length: 5 }, (_, i) => {
+      if (i === 0) {
+        return { role: '   ' as Message['role'], content: 'blank-role-body' };
+      }
+      return msg('user', `old-${i}`);
+    });
+    const recent = Array.from({ length: 20 }, (_, i) => msg('assistant', `r${i}`));
+    let captured = '';
+    let modelUsed = 'unset';
+    const adapter = {
+      id: 'openai' as const,
+      name: 'Mock',
+      getModels: () => [] as Array<{ id: string }>,
+      async *chat(params: { model?: string; messages?: Array<{ content?: string }> }) {
+        modelUsed = params.model ?? '';
+        captured = String(params.messages?.[0]?.content ?? '');
+        // Stream summary past SUMMARY_MAX (8_000) to hit break + final slice paths
+        yield { type: 'text' as const, content: 'S'.repeat(5_000) };
+        yield { type: 'text' as const, content: 'T'.repeat(5_000) };
+        yield { type: 'done' as const };
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const out = await cm.compress([...older, ...recent], adapter as never);
+    expect(modelUsed).toBe(''); // empty getModels → model id ''
+    expect(captured).toContain('unknown: blank-role-body');
+    expect(out[0]?.role).toBe('system');
+    // Summary capped at 8_000 after scrub
+    const summaryBody = String(out[0]?.content ?? '').replace('[이전 대화 요약]\n', '');
+    expect(summaryBody.length).toBeLessThanOrEqual(8_000);
+  });
 });

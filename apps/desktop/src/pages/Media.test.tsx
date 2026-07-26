@@ -249,9 +249,9 @@ describe('Media page', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
-  it('scrubs control chars in delete confirm filename', async () => {
-    const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('rejects delete when filename has control chars without calling API', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     listMediaFiles.mockResolvedValue({
       ok: true,
       data: [
@@ -265,10 +265,33 @@ describe('Media page', () => {
     });
     render(<Media />);
     await waitFor(() => expect(screen.getByText('photo.png')).toBeInTheDocument());
-    await user.click(screen.getAllByTitle('Delete file')[0]!);
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('photo.png'));
-    const msg = String(confirmSpy.mock.calls[0]?.[0] ?? '');
-    expect(msg).not.toContain('\0');
+    fireEvent.click(screen.getAllByTitle('Delete file')[0]!);
+    expect(alertSpy).toHaveBeenCalledWith('Filename contains invalid control characters');
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteMediaFile).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  it('rejects preview when selected filename has control chars', async () => {
+    listMediaFiles.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          filename: `photo${'\0'}.png`,
+          kind: 'image' as const,
+          size: 10,
+          createdAt: '2026-01-03T00:00:00.000Z',
+        },
+      ],
+    });
+    fetchMediaBlob.mockClear();
+    render(<Media />);
+    await waitFor(() => expect(screen.getByText('photo.png')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('photo.png'));
+    await waitFor(() => {
+      expect(screen.getByText('Filename contains invalid control characters')).toBeInTheDocument();
+    });
+    expect(fetchMediaBlob).not.toHaveBeenCalled();
   });
 
   it('surfaces scrubbed delete throw and keeps the file', async () => {

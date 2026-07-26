@@ -112,64 +112,84 @@ export function Skills() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
+    // Control-char / blank skill ids never sent to toggle API
+    if (typeof id !== 'string' || /[\0\r\n]/.test(id) || !id.trim()) {
+      window.alert('Skill id contains invalid control characters');
+      return;
+    }
+    const skillId = id.trim();
     try {
-      const res = await client.toggleSkill(id, enabled);
+      const res = await client.toggleSkill(skillId, enabled);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
           }) || 'Update failed';
-        alert(err);
+        window.alert(err);
         return;
       }
-      setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
+      setSkills((prev) =>
+        prev.map((s) => (s.id === id || s.id === skillId ? { ...s, enabled } : s)),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!client) return;
+    // Control-char / blank skill ids never sent to delete API
+    if (typeof id !== 'string' || /[\0\r\n]/.test(id) || !id.trim()) {
+      window.alert('Skill id contains invalid control characters');
+      return;
+    }
+    const skillId = id.trim();
     try {
-      const res = await client.deleteSkill(id);
+      const res = await client.deleteSkill(skillId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
           }) || 'Delete failed';
-        alert(err);
+        window.alert(err);
         return;
       }
-      setSkills((prev) => prev.filter((s) => s.id !== id));
+      setSkills((prev) => prev.filter((s) => s.id !== id && s.id !== skillId));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
     }
   };
 
   const handleUpgradeToPlugin = async (id: string) => {
     if (!client) return;
-    if (!confirm('Create open-design.json plugin sidecar for this skill?')) return;
+    // Control-char / blank skill ids never sent to upgrade API
+    if (typeof id !== 'string' || /[\0\r\n]/.test(id) || !id.trim()) {
+      window.alert('Skill id contains invalid control characters');
+      return;
+    }
+    const skillId = id.trim();
+    if (!window.confirm('Create open-design.json plugin sidecar for this skill?')) return;
     try {
-      const res = await client.upgradeSkillToPlugin(id);
+      const res = await client.upgradeSkillToPlugin(skillId);
       if (res.ok && res.data) {
         const name =
           scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 200 }) || 'plugin';
-        alert(`Upgraded to plugin: ${name}\nOpen the Plugins page to run it.`);
+        window.alert(`Upgraded to plugin: ${name}\nOpen the Plugins page to run it.`);
       } else {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
           }) || 'Upgrade failed';
-        alert(err);
+        window.alert(err);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upgrade failed';
-      alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Upgrade failed');
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Upgrade failed');
     }
   };
 
