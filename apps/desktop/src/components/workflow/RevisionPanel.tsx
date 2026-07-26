@@ -126,7 +126,16 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       t('workflow.deleteRevisionConfirm', 'Delete this revision permanently? This cannot be undone.'),
     );
     if (!ok) return;
-    await client.deleteRevision(workflowId, revId);
+    const res = await client.deleteRevision(workflowId, revId);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Delete failed';
+      window.alert(err);
+      return;
+    }
     void loadRevisions();
   };
 

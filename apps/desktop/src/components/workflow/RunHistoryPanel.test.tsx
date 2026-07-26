@@ -149,6 +149,50 @@ describe('RunHistoryPanel', () => {
     confirmSpy.mockRestore();
   });
 
+  it('alerts scrubbed error when clear completed fails', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed')],
+    });
+    clearWorkflowRuns.mockResolvedValue({
+      ok: false,
+      error: `busy${'\n'}now${'\0'}!`,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /Clear completed/i }));
+    await waitFor(() => {
+      expect(clearWorkflowRuns).toHaveBeenCalledWith('wf-1', 'completed');
+      expect(window.alert).toHaveBeenCalledWith('busy now!');
+    });
+    // Run remains after failed clear
+    expect(screen.getByText('completed')).toBeInTheDocument();
+  });
+
+  it('alerts scrubbed error when single run delete fails and keeps the run', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed')],
+    });
+    deleteWorkflowRun.mockResolvedValue({
+      ok: false,
+      error: `locked${'\n'}run${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument());
+    await user.click(screen.getByTitle(/delete|run\.delete/i));
+    await waitFor(() => {
+      expect(deleteWorkflowRun).toHaveBeenCalledWith('wf-1', 'run-c1');
+      expect(window.alert).toHaveBeenCalledWith('locked run!');
+    });
+    expect(screen.getByText('completed')).toBeInTheDocument();
+  });
+
   it('shows Load more when more than one page of runs', async () => {
     const page = Array.from({ length: 21 }, (_, i) =>
       makeRun(`run-${String(i).padStart(4, '0')}`, 'completed'),

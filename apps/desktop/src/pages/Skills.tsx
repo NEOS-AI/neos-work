@@ -84,7 +84,16 @@ export function Skills() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
-    await client.toggleSkill(id, enabled);
+    const res = await client.toggleSkill(id, enabled);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Update failed';
+      alert(err);
+      return;
+    }
     setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
   };
 

@@ -141,7 +141,16 @@ export function Routines() {
 
   const handleToggle = async (routine: Routine) => {
     if (!client) return;
-    await client.updateRoutine(routine.id, { enabled: !routine.enabled });
+    const res = await client.updateRoutine(routine.id, { enabled: !routine.enabled });
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Update failed';
+      alert(err);
+      return;
+    }
     await load();
   };
 

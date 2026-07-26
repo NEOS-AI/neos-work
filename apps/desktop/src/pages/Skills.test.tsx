@@ -148,6 +148,24 @@ describe('Skills page', () => {
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
+  it('alerts scrubbed error when skill toggle fails and keeps prior state', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    toggleSkill.mockResolvedValue({
+      ok: false,
+      error: `toggle${'\n'}denied${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }));
+    await waitFor(() => {
+      expect(toggleSkill).toHaveBeenCalledWith('sk-a', true);
+      expect(window.alert).toHaveBeenCalledWith('toggle denied!');
+    });
+    // Still shows Enable (not flipped optimistically)
+    expect(screen.getByRole('button', { name: 'Enable' })).toBeInTheDocument();
+  });
+
   it('disables an enabled skill and shows no-match search', async () => {
     const user = userEvent.setup();
     listSkills.mockResolvedValue({ ok: true, data: skills });

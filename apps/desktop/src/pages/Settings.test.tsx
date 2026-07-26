@@ -293,6 +293,52 @@ describe('Settings page', () => {
     await waitFor(() => expect(deleteMcpServer).toHaveBeenCalledWith('mcp-1'));
   });
 
+  it('alerts scrubbed errors when MCP delete or toggle fails', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-1',
+          name: 'Remote MCP',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'http://localhost:3000/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
+    deleteMcpServer.mockResolvedValue({
+      ok: false,
+      error: `in${'\n'}use${'\0'}!`,
+    });
+    toggleMcpServer.mockResolvedValue({
+      ok: false,
+      error: `toggle${'\n'}denied${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Remote MCP')).toBeInTheDocument());
+
+    const row = screen.getByText('Remote MCP').closest('div.rounded-lg.border') as HTMLElement;
+    const rowButtons = Array.from(row.querySelectorAll('button'));
+    // enable toggle is second-to-last, delete is last
+    fireEvent.click(rowButtons[rowButtons.length - 2]!);
+    await waitFor(() => {
+      expect(toggleMcpServer).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('toggle denied!');
+    });
+    (window.alert as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.click(rowButtons[rowButtons.length - 1]!);
+    await waitFor(() => {
+      expect(deleteMcpServer).toHaveBeenCalledWith('mcp-1');
+      expect(window.alert).toHaveBeenCalledWith('in use!');
+    });
+    expect(screen.getByText('Remote MCP')).toBeInTheDocument();
+  });
+
   it('rejects control-char / blank MCP OAuth fields without calling API', async () => {
     listMcpServers.mockResolvedValue({
       ok: true,

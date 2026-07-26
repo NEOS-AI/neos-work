@@ -741,7 +741,16 @@ function McpServersSection() {
 
   const handleToggle = async (id: string, enabled: boolean) => {
     if (!client) return;
-    await client.toggleMcpServer(id, enabled);
+    const res = await client.toggleMcpServer(id, enabled);
+    if (!res.ok) {
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || 'Update failed';
+      alert(err);
+      return;
+    }
     setServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
   };
 

@@ -122,6 +122,13 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
             if (res.ok) {
               setRuns((prev) => prev.filter((r) => r.status !== 'completed'));
               setSelectedRunId(null);
+            } else {
+              window.alert(
+                scrubDisplayText((res as { error?: string }).error, {
+                  collapseLines: true,
+                  maxChars: 300,
+                }) || 'Clear failed',
+              );
             }
           }}
         >
@@ -139,6 +146,13 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
             if (res.ok) {
               setRuns((prev) => prev.filter((r) => r.status !== 'failed'));
               setSelectedRunId(null);
+            } else {
+              window.alert(
+                scrubDisplayText((res as { error?: string }).error, {
+                  collapseLines: true,
+                  maxChars: 300,
+                }) || 'Clear failed',
+              );
             }
           }}
         >
@@ -156,6 +170,13 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
             if (res.ok) {
               setRuns((prev) => prev.filter((r) => r.status !== 'cancelled'));
               setSelectedRunId(null);
+            } else {
+              window.alert(
+                scrubDisplayText((res as { error?: string }).error, {
+                  collapseLines: true,
+                  maxChars: 300,
+                }) || 'Clear failed',
+              );
             }
           }}
         >
@@ -237,7 +258,25 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
                     onClick={async (e) => {
                       e.stopPropagation();
                       if (!client) return;
-                      await client.deleteWorkflowRun(props.workflowId, run.id).catch(() => {});
+                      try {
+                        const res = await client.deleteWorkflowRun(props.workflowId, run.id);
+                        if (!res.ok) {
+                          window.alert(
+                            scrubDisplayText((res as { error?: string }).error, {
+                              collapseLines: true,
+                              maxChars: 300,
+                            }) || 'Delete failed',
+                          );
+                          return;
+                        }
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : 'Delete failed';
+                        window.alert(
+                          scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+                          || 'Delete failed',
+                        );
+                        return;
+                      }
                       setRuns((prev) => prev.filter((r) => r.id !== run.id));
                       if (selectedRunId === run.id) setSelectedRunId(null);
                     }}

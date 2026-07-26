@@ -221,6 +221,43 @@ describe('RevisionPanel', () => {
     confirmSpy.mockRestore();
   });
 
+  it('alerts scrubbed error when revision delete fails', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap A',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    deleteRevision.mockResolvedValue({
+      ok: false,
+      error: `locked${'\n'}rev${'\0'}!`,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /delete/i }));
+    await waitFor(() => {
+      expect(deleteRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(window.alert).toHaveBeenCalledWith('locked rev!');
+    });
+    expect(screen.getByText('Snap A')).toBeInTheDocument();
+  });
+
   it('closes on Escape when not editing a label', async () => {
     const user = userEvent.setup();
     listRevisions.mockResolvedValue({

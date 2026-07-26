@@ -307,6 +307,26 @@ describe('Routines page', () => {
     expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
   });
 
+  it('alerts scrubbed error when routine toggle fails', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    updateRoutine.mockResolvedValue({
+      ok: false,
+      error: `toggle${'\n'}denied${'\0'}!`,
+    });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disable' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => {
+      expect(updateRoutine).toHaveBeenCalledWith('r1', { enabled: false });
+      expect(window.alert).toHaveBeenCalledWith('toggle denied!');
+    });
+    expect(screen.getByRole('button', { name: 'Disable' })).toBeInTheDocument();
+  });
+
   it('saves schedule edits and crystallizes completed runs', async () => {
     listRoutines.mockResolvedValue({ ok: true, data: routines });
     listWorkflows.mockResolvedValue({ ok: true, data: workflows });
