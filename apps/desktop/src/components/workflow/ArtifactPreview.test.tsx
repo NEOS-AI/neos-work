@@ -680,7 +680,10 @@ describe('ArtifactPreview', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(deleteArtifact).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(screen.getByText('Artifact id contains invalid control characters')).toBeInTheDocument();
+      // Content load + delete toast can both surface the same message
+      expect(
+        screen.getAllByText('Artifact id contains invalid control characters').length,
+      ).toBeGreaterThanOrEqual(1);
     });
     confirmSpy.mockRestore();
   });

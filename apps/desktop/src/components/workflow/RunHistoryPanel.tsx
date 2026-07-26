@@ -52,9 +52,17 @@ export function RunHistoryPanel(props: { workflowId: string; refreshKey: number;
   useEffect(() => {
     let cancelled = false;
     if (!client) return;
+    // Control-char / blank / overlong ids never sent to list-runs API
+    const wfId = safeEntityId(props.workflowId);
+    if (!wfId) {
+      setRuns([]);
+      setLoadError('Workflow id contains invalid control characters');
+      setHasMore(false);
+      return;
+    }
 
     client
-      .listWorkflowRuns(props.workflowId, PAGE_SIZE + 1, offset)
+      .listWorkflowRuns(wfId, PAGE_SIZE + 1, offset)
       .then((res) => {
         if (cancelled) return;
         if (res.ok && res.data) {

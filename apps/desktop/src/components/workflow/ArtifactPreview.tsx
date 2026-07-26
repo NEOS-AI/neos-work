@@ -144,7 +144,15 @@ export function ArtifactPreview({
 
   const loadList = () => {
     if (!client) return;
-    const params = runId ? { runId } : { workflowId };
+    // Control-char / blank / overlong ids never sent to list API
+    const safeRunId = runId ? safeEntityId(runId) : '';
+    const safeWfId = safeEntityId(workflowId);
+    if (runId ? !safeRunId : !safeWfId) {
+      setArtifacts([]);
+      setListError('Workflow id contains invalid control characters');
+      return;
+    }
+    const params = runId ? { runId: safeRunId } : { workflowId: safeWfId };
     setListError(null);
     client
       .listArtifacts(params)
@@ -189,10 +197,18 @@ export function ArtifactPreview({
       setContentError(null);
       return;
     }
+    // Control-char / blank / overlong ids never sent to get-artifact API
+    const artifactId = safeEntityId(selectedId);
+    if (!artifactId) {
+      setSelectedContent(null);
+      setContentError('Artifact id contains invalid control characters');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setContentError(null);
     client
-      .getArtifact(selectedId)
+      .getArtifact(artifactId)
       .then((res) => {
         if (res.ok && typeof res.data?.content === 'string') {
           // Strip null bytes before iframe/srcDoc / clipboard (injection defense)
