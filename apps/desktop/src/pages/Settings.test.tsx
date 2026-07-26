@@ -768,6 +768,75 @@ describe('Settings page', () => {
     expect(screen.getByText('● OAuth')).toBeInTheDocument();
   });
 
+  it('alerts scrubbed error when OAuth start fails and keeps modal open', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'mcp-oauth',
+          name: 'OAuth Target',
+          transport: 'http',
+          command: null,
+          args: null,
+          url: 'https://mcp.example/sse',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getMcpOAuthStatus.mockResolvedValue({ ok: true, data: { connected: false } });
+    startMcpOAuth.mockResolvedValue({
+      ok: false,
+      error: `auth${'\n'}down${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('OAuth Target')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'OAuth' }));
+    await waitFor(() => expect(screen.getByText('Connect: OAuth Target')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Authorization Endpoint'), {
+      target: { value: 'https://auth.example/authorize' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Token Endpoint'), {
+      target: { value: 'https://auth.example/token' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Client ID'), {
+      target: { value: 'my-client' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Open Browser/i }));
+
+    await waitFor(() => {
+      expect(startMcpOAuth).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('auth down!');
+    });
+    expect(screen.getByText('Connect: OAuth Target')).toBeInTheDocument();
+  });
+
+  it('alerts scrubbed error when simple key save fails', async () => {
+    const user = userEvent.setup();
+    saveSetting.mockResolvedValue({
+      ok: false,
+      error: `disk${'\n'}full${'\0'}!`,
+    });
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Deploy')).toBeInTheDocument());
+
+    const vercel = screen.getByPlaceholderText('vercel_...');
+    await user.type(vercel, 'vercel_tok');
+    const vercelRow = vercel.closest('div')!.parentElement!;
+    const vercelSave = Array.from(vercelRow.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Save' && !(b as HTMLButtonElement).disabled,
+    );
+    fireEvent.click(vercelSave!);
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('VERCEL_API_TOKEN', 'vercel_tok');
+      expect(window.alert).toHaveBeenCalledWith('disk full!');
+    });
+  });
+
   it('shows disconnected and connecting engine status labels', async () => {
     engine = {
       status: 'disconnected',

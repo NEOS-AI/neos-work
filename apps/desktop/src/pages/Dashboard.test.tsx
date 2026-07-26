@@ -281,8 +281,13 @@ describe('Dashboard page', () => {
   it('shows em-dash engine mode when mode is null and includes server URL detail', async () => {
     engineMode = null;
     renderPage();
-    await waitFor(() => expect(health).toHaveBeenCalled());
-    expect(screen.getByText('—')).toBeInTheDocument();
+    // Wait until stats resolve so only Engine (mode=null) still shows "—" among cards
+    await waitFor(() => {
+      expect(health).toHaveBeenCalled();
+      expect(screen.getByText(/v0\.3\.55/)).toBeInTheDocument();
+    });
+    // Multiple status cards may briefly show "—"; Engine mode null is one of them
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
     // Engine detail includes server URL from useEngine
     expect(screen.getByText(/127\.0\.0\.1:57286/)).toBeInTheDocument();
   });

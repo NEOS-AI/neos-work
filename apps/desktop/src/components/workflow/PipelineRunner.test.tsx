@@ -182,6 +182,38 @@ describe('PipelineRunner', () => {
     });
   });
 
+  it('surfaces scrubbed resume API error as pipeline failure', async () => {
+    const user = userEvent.setup();
+    let onEvent: ((e: unknown) => void) | null = null;
+    runPlugin.mockImplementation((_id: string, _inputs: unknown, cb: (e: unknown) => void) => {
+      onEvent = cb;
+      return { stop, runIdPromise: Promise.resolve('run-resume-fail') };
+    });
+    resumePlugin.mockResolvedValue({
+      ok: false,
+      error: `resume${'\n'}denied${'\0'}!`,
+    });
+
+    render(<PipelineRunner plugin={plugin} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /run pipeline/i }));
+    act(() => {
+      onEvent?.({ type: 'pipeline.started', runId: 'run-resume-fail' });
+      onEvent?.({
+        type: 'stage.waiting',
+        stageId: 'plan',
+        surface: 'confirmation',
+        schema: { prompt: 'Continue?', confirmLabel: 'Yes', cancelLabel: 'No' },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('Continue?')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => {
+      expect(resumePlugin).toHaveBeenCalled();
+      expect(screen.getByText(/Error: resume denied!/)).toBeInTheDocument();
+    });
+  });
+
   it('Stop button calls stop and clears run UI', async () => {
     const user = userEvent.setup();
     let onEvent: ((e: unknown) => void) | null = null;

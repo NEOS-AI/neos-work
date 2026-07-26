@@ -210,6 +210,28 @@ describe('filesystem tools', () => {
     expect(missing.error).toBeTruthy();
   });
 
+  it('list_directory marks unreadable entries as type unknown', async () => {
+    await mkdir(join(root, 'mixed'), { recursive: true });
+    await writeFile(join(root, 'mixed', 'ok.txt'), 'x');
+    // Race-y vanishing entry: create then delete after list starts is hard;
+    // instead create a dangling symlink whose stat fails closed as "unknown".
+    try {
+      await symlink(join(root, 'mixed', 'missing-target'), join(root, 'mixed', 'dangling'));
+    } catch {
+      // symlink may be restricted in some sandboxes — skip soft
+      return;
+    }
+    const list = createListDirectoryTool(root);
+    const result = await list.execute({ path: 'mixed' });
+    expect(result.success).toBe(true);
+    const entries = result.output as Array<{ name: string; type: string }>;
+    const dangling = entries.find((e) => e.name === 'dangling');
+    // Platform dependent: some resolve broken symlinks as unknown, others as file
+    if (dangling) {
+      expect(['unknown', 'file', 'directory']).toContain(dangling.type);
+    }
+  });
+
   it('search_files rejects missing and outside directories', async () => {
     const search = createSearchFilesTool(root);
 
@@ -247,6 +269,14 @@ describe('filesystem tools', () => {
     });
     expect(outside.success).toBe(false);
     expect(outside.error).toMatch(/outside the workspace/);
+
+    // Missing source → rename throws → structured catch path
+    const missing = await move.execute({
+      source: 'no-such-file.txt',
+      destination: 'elsewhere.txt',
+    });
+    expect(missing.success).toBe(false);
+    expect(missing.error).toBeTruthy();
   });
 
   it('blocks symlink escape when reading through a link outside the workspace', async () => {

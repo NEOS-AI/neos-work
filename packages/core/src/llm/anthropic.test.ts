@@ -146,6 +146,21 @@ describe('AnthropicAdapter', () => {
     expect(msgs[0]!.content.length).toBeLessThanOrEqual(500_000 + 20);
   });
 
+  it('passes through non-string (content-block array) message content without string truncation', async () => {
+    streamMock.mockReturnValue(events([]));
+    const adapter = new AnthropicAdapter('sk');
+    const blocks = [{ type: 'text', text: 'structured' }] as unknown as string;
+    for await (const _ of adapter.chat({
+      model: 'claude-haiku-4-5-20251001',
+      messages: [{ role: 'user', content: blocks }],
+    })) {
+      /* drain */
+    }
+    const params = streamMock.mock.calls[0] as [Record<string, unknown>];
+    const msgs = params[0].messages as Array<{ content: unknown }>;
+    expect(msgs[0]!.content).toEqual(blocks);
+  });
+
   it('clamps invalid maxTokens to default 4096 and caps huge values', async () => {
     streamMock.mockReturnValue(events([]));
     const adapter = new AnthropicAdapter('sk');

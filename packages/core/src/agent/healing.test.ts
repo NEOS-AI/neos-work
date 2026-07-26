@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ReflectionStrategy, RetryStrategy } from './healing.js';
 import type { AgentStep } from './types.js';
 import { mockAdapter } from '../test-utils/mock-adapter.js';
@@ -326,5 +326,37 @@ describe('ReflectionStrategy', () => {
     ).heal(step, 'e', []);
     expect(result.action).toBe('retry');
     expect(result.revisedStep?.input).toEqual(step.input);
+  });
+
+  it('drops revisedInput when JSON.stringify throws (non-serializable payload)', async () => {
+    // Build LLM payload before installing the spy
+    const llmPayload = JSON.stringify({
+      action: 'retry',
+      revisedInput: { boom: true },
+    });
+    const origStringify = JSON.stringify.bind(JSON);
+    const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation(((
+      value: unknown,
+      ...rest: unknown[]
+    ) => {
+      if (
+        value
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && value !== null
+        && 'boom' in (value as object)
+      ) {
+        throw new TypeError('Cannot serialize');
+      }
+      return (origStringify as (...args: unknown[]) => string)(value, ...rest);
+    }) as typeof JSON.stringify);
+    try {
+      const result = await new ReflectionStrategy(mockAdapter([llmPayload])).heal(step, 'e', []);
+      expect(result.action).toBe('retry');
+      // stringify failure → input undefined → fall back to original step.input
+      expect(result.revisedStep?.input).toEqual(step.input);
+    } finally {
+      stringifySpy.mockRestore();
+    }
   });
 });

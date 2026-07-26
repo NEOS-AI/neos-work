@@ -247,5 +247,6 @@ describe('createShellTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/does not exist|outside|ENOENT/i);
   });
+
 });
 

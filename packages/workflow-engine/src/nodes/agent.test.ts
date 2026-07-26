@@ -766,6 +766,46 @@ describe('AgentNode LLM model selection', () => {
     expect(result.error).toBe('rate limited');
   });
 
+  it('truncates oversized done result string and scrubs non-string error payloads', async () => {
+    // AGENT_STREAM_TEXT_MAX_CHARS = 2 MiB — exceed via last-step string output (JSON-quoted)
+    const fat = 'Z'.repeat(2 * 1024 * 1024 + 50);
+    orchestratorRun.mockImplementation(async function* () {
+      yield {
+        type: 'done',
+        task: { steps: [{ output: fat }] },
+      };
+    });
+    const node = new AgentNode('agent_coding', {});
+    const huge = await node.execute(
+      ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }),
+    );
+    expect(huge.ok).toBe(true);
+    expect(String(huge.output).length).toBe(2 * 1024 * 1024);
+
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'error', error: { code: 429, msg: 'slow' } };
+    });
+    const errObj = await node.execute(
+      ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }),
+    );
+    expect(errObj.ok).toBe(false);
+    expect(errObj.error).toBeTruthy();
+    expect(String(errObj.error)).not.toMatch(/[\r\n\0]/);
+  });
+
+  it('returns structured failure when orchestrator.run throws', async () => {
+    orchestratorRun.mockImplementation(async function* () {
+      throw new Error('orchestrator down');
+      yield { type: 'done', task: { steps: [] } }; // unreachable — keeps generator type
+    });
+    const node = new AgentNode('agent_coding', {});
+    const result = await node.execute(
+      ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/orchestrator down/i);
+  });
+
   it('falls back when SERVER_URL is non-http for memory fetch', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

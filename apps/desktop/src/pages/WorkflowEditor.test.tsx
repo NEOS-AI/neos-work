@@ -219,6 +219,37 @@ describe('WorkflowEditor page', () => {
     await waitFor(() => expect(updateWorkflow).toHaveBeenCalled());
   });
 
+  it('alerts scrubbed error when workflow save fails', async () => {
+    updateWorkflow.mockResolvedValue({
+      ok: false,
+      error: `disk${'\n'}full${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(updateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('disk full!');
+    });
+  });
+
+  it('alerts scrubbed error when pre-run save fails and does not start run', async () => {
+    updateWorkflow.mockResolvedValue({
+      ok: false,
+      error: `locked${'\n'}graph${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => {
+      expect(updateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('locked graph!');
+    });
+    expect(runWorkflow).not.toHaveBeenCalled();
+  });
+
   it('runs preflight and opens schedule modal with Escape close', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
@@ -366,6 +397,25 @@ describe('WorkflowEditor page', () => {
         'wf-1',
         expect.objectContaining({ name: 'Renamed Flow' }),
       );
+    });
+  });
+
+  it('alerts scrubbed error when workflow rename fails', async () => {
+    updateWorkflow.mockResolvedValue({
+      ok: false,
+      error: `name${'\n'}taken${'\0'}!`,
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle('workflow.rename'));
+    const input = screen.getByDisplayValue('Editor Flow');
+    fireEvent.change(input, { target: { value: 'Taken Name' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(updateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('name taken!');
     });
   });
 
