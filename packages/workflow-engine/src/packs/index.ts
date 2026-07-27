@@ -270,8 +270,9 @@ export function resolvePack(id: string): DomainPack | undefined {
 
 /** True when id is a known built-in pack. */
 export function isBuiltInPackId(id: string): boolean {
-  if (typeof id !== 'string') return false;
-  return BUILT_IN_PACK_ID_SET.has(id.trim().toLowerCase());
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return false;
+  const trimmed = id.trim().toLowerCase();
+  return trimmed.length > 0 && BUILT_IN_PACK_ID_SET.has(trimmed);
 }
 
 // ── Deprecated harness aliases (BC-4 / BC-8) ────────────────

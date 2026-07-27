@@ -26,10 +26,14 @@ describe('BUILT_IN_PACK_IDS / isBuiltInPackId', () => {
     expect(isBuiltInPackId('general')).toBe(true);
   });
 
-  it('rejects unknown, blank, and non-string ids', () => {
+  it('rejects unknown, blank, control-char, and non-string ids', () => {
     expect(isBuiltInPackId('unknown-pack')).toBe(false);
     expect(isBuiltInPackId('')).toBe(false);
     expect(isBuiltInPackId('   ')).toBe(false);
+    // Control-char must not strip-to-match (align with resolvePack)
+    expect(isBuiltInPackId('\nfinance')).toBe(false);
+    expect(isBuiltInPackId(`coding${'\0'}`)).toBe(false);
+    expect(isBuiltInPackId('research\rid')).toBe(false);
     expect(isBuiltInPackId(null as unknown as string)).toBe(false);
     expect(isBuiltInPackId(undefined as unknown as string)).toBe(false);
     expect(isBuiltInPackId(1 as unknown as string)).toBe(false);

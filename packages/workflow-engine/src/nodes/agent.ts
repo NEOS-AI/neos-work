@@ -6,7 +6,8 @@
 
 import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
-import { resolveWorker } from '../packs/index.js';
+// Namespace import so vitest can spyOn packs.resolveWorker (live binding).
+import * as packs from '../packs/index.js';
 import { safeServerUrl } from './server-url.js';
 import { scrubErrorMessage } from '@neos-work/core';
 
@@ -134,7 +135,7 @@ export class AgentNode implements ExecutableNode {
       const s = String(rawWorkerId);
       if (!/[\0\r\n]/.test(s) && s.length <= 200) harnessId = s.trim();
     }
-    const harness = harnessId ? resolveWorker(harnessId) : undefined;
+    const harness = harnessId ? packs.resolveWorker(harnessId) : undefined;
 
     const sysRaw =
       typeof this.nodeConfig?.['systemPrompt'] === 'string'

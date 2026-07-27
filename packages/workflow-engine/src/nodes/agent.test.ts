@@ -22,6 +22,8 @@ vi.mock('@neos-work/core', async (importOriginal) => {
 
 import { AgentNode } from './agent.js';
 import type { NodeContext } from '../types.js';
+// Same module instance AgentNode resolves via `import * as packs`
+import * as packs from '../packs/index.js';
 
 function ctx(partial: Partial<NodeContext> = {}): NodeContext {
   return {
@@ -500,8 +502,7 @@ describe('AgentNode LLM model selection', () => {
   });
 
   it('strips null bytes from harness prompt; skips null-byte design context', async () => {
-    const packsMod = await import('../packs/index.js');
-    const spy = vi.spyOn(packsMod, 'resolveWorker').mockReturnValue({
+    const spy = vi.spyOn(packs, 'resolveWorker').mockReturnValue({
       id: 'cov_agent_null_harness',
       name: 'Null Harness',
       domain: 'coding',
