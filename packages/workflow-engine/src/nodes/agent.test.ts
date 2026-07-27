@@ -240,6 +240,26 @@ describe('AgentNode coordinator mode', () => {
       nodeId: 'agent',
       runId: 'agent-node',
     });
+
+    // Coordinator without worker maxSpawnedWorkers → undefined (runtime default)
+    const { registerWorker, resolveWorker } = packs;
+    registerWorker({
+      id: 'cov_coord_no_max',
+      name: 'Coord No Max',
+      domain: 'general',
+      description: 'coverage',
+      systemPrompt: 'coord',
+      defaultMode: 'coordinator',
+      permissionProfile: 'read_only',
+      // no constraints.maxSpawnedWorkers
+    });
+    expect(resolveWorker('cov_coord_no_max')?.constraints?.maxSpawnedWorkers).toBeUndefined();
+    lastCoordinatorDeps = null;
+    await new AgentNode('agent', {
+      workerId: 'cov_coord_no_max',
+      mode: 'coordinator',
+    }).execute(ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }));
+    expect(lastCoordinatorDeps.maxSpawnedWorkers).toBeUndefined();
   });
 });
 

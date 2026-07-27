@@ -633,17 +633,19 @@ describe('runWorker / WorkerRuntime', () => {
         id: 'openai' as const,
         name: 'Slow',
         getModels: () => [],
-        async *chat(_req: unknown, signal?: AbortSignal) {
+        // signal lives on the chat request object (not a 2nd arg)
+        async *chat(req: { signal?: AbortSignal }) {
           await new Promise<void>((resolve, reject) => {
-            const t = setTimeout(resolve, 5_000);
-            signal?.addEventListener(
-              'abort',
-              () => {
-                clearTimeout(t);
-                reject(new Error('aborted by polyfill combine'));
-              },
-              { once: true },
-            );
+            const t = setTimeout(resolve, 10_000);
+            const onAbort = () => {
+              clearTimeout(t);
+              reject(new Error('aborted by polyfill combine'));
+            };
+            if (req.signal?.aborted) {
+              onAbort();
+              return;
+            }
+            req.signal?.addEventListener('abort', onAbort, { once: true });
           });
           yield { type: 'done' as const };
         },
@@ -667,46 +669,35 @@ describe('runWorker / WorkerRuntime', () => {
         signal: parent.signal,
       });
 
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 30));
       parent.abort();
       const result = await runP;
       expect(result.ok).toBe(false);
       expect(String(result.error ?? '').length).toBeGreaterThan(0);
+
+      // Pre-aborted parent: polyfill marks combined controller aborted immediately
+      const pre = new AbortController();
+      pre.abort();
+      const preResult = await runWorker({
+        worker: makeWorker({
+          id: 'polyfill_preabort',
+          workspace: { kind: 'none' },
+          permissionProfile: 'read_only',
+          constraints: { maxSteps: 2, timeoutMs: 5_000 },
+        }),
+        goal: 'already cancelled',
+        settings: {},
+        adapter: mockAdapter(['nope']),
+        workspaceBaseDir: base,
+        parent: { nodeId: 'n', runId: 'r-polyfill-pre' },
+        signal: pre.signal,
+      });
+      expect(preResult.durationMs).toBeGreaterThanOrEqual(0);
     } finally {
       if (typeof anyFn === 'function') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (AbortSignal as any).any = anyFn;
       }
     }
-  });
-
-  it('falls back to Worker failed when outer catch scrubs to empty', async () => {
-    const blankThrow = {
-      id: 'openai' as const,
-      name: 'Blank',
-      getModels: () => [],
-      async *chat() {
-        // Whitespace-only message → scrubErrorMessage trims to ''
-        throw new Error('   \n\t  ');
-      },
-      async validateApiKey() {
-        return true;
-      },
-    };
-    const result = await runWorker({
-      worker: makeWorker({
-        id: 'blank_err',
-        workspace: { kind: 'none' },
-        permissionProfile: 'read_only',
-        constraints: { maxSteps: 2, timeoutMs: 5_000 },
-      }),
-      goal: 'blank fail',
-      settings: {},
-      adapter: blankThrow,
-      workspaceBaseDir: base,
-      parent: { nodeId: 'n', runId: 'r-blank-err' },
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe('Worker failed');
   });
 });

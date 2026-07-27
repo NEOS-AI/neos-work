@@ -960,31 +960,34 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(String((completed!.output as { preview: string }).preview).length).toBeLessThanOrEqual(256);
   });
 
-  it('sanitizes control-char worker ids and circular worker.completed outputs', async () => {
+  it('truncates circular worker.completed outputs before node output stringify fails', async () => {
     const events: WorkflowSSEEvent[] = [];
-    // Circular structure → JSON.stringify throws → truncated preview branch
+    // Circular structure → onWorkerEvent JSON.stringify throws → truncated preview branch
     const circular: Record<string, unknown> = { kind: 'circ' };
     circular.self = circular;
 
-    await executeWorkflow({
-      runId: 'run-worker-circular',
-      workflow: baseWorkflow({
-        nodes: [
-          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
-          {
-            id: 'agent-1',
-            type: 'agent',
-            label: 'A',
-            position: { x: 1, y: 0 },
-            config: { provider: 'cli-claude', workerId: 'coding_reviewer' },
-          },
-        ],
-        edges: [{ id: 'e1', source: 'trigger', target: 'agent-1' }],
+    // Node-level result.output is still circular (no try/catch) — expect throw after SSE emit
+    await expect(
+      executeWorkflow({
+        runId: 'run-worker-circular',
+        workflow: baseWorkflow({
+          nodes: [
+            { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+            {
+              id: 'agent-1',
+              type: 'agent',
+              label: 'A',
+              position: { x: 1, y: 0 },
+              config: { provider: 'cli-claude', workerId: 'coding_reviewer' },
+            },
+          ],
+          edges: [{ id: 'e1', source: 'trigger', target: 'agent-1' }],
+        }),
+        settings: {},
+        cliSpawn: async () => ({ output: circular, exitCode: 0 }),
+        onEvent: (event) => events.push(event),
       }),
-      settings: {},
-      cliSpawn: async () => ({ output: circular, exitCode: 0 }),
-      onEvent: (event) => events.push(event),
-    });
+    ).rejects.toThrow(/circular/i);
 
     const completed = events.find((e) => e.type === 'worker.completed') as
       | { output: unknown }

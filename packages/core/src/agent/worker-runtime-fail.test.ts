@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DomainWorker } from '@neos-work/shared';
 
-type Mode = 'failed' | 'cancelled' | 'pending';
+type Mode = 'failed' | 'cancelled' | 'pending' | 'throw_blank';
 let mode: Mode = 'failed';
 
 vi.mock('./orchestrator.js', () => {
@@ -15,6 +15,10 @@ vi.mock('./orchestrator.js', () => {
     static GOAL_MAX_CHARS = 100_000;
     constructor(..._args: unknown[]) {}
     async *run(_goal: string, _signal?: AbortSignal) {
+      if (mode === 'throw_blank') {
+        // Whitespace-only → scrubErrorMessage trims to '' → outer catch fallback
+        throw new Error('   \n\t  ');
+      }
       if (mode === 'failed') {
         yield {
           type: 'done' as const,
@@ -131,5 +135,23 @@ describe('runWorker failure terminals (mocked orchestrator)', () => {
     });
     expect(result.ok).toBe(false);
     expect(String(result.error ?? '')).toMatch(/Worker failed|failed/i);
+  });
+
+  it('falls back to Worker failed when orchestrator throws blank/whitespace error', async () => {
+    mode = 'throw_blank';
+    const result = await runWorker({
+      worker: makeWorker({
+        id: 'blank_throw',
+        workspace: { kind: 'none' },
+        permissionProfile: 'read_only',
+      }),
+      goal: 'blank',
+      settings: {},
+      adapter: stubAdapter,
+      workspaceBaseDir: base,
+      parent: { nodeId: 'n', runId: 'r-blank-throw' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Worker failed');
   });
 });
