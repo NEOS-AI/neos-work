@@ -1161,18 +1161,35 @@ export class EngineClient {
     if (typeof input.prompt !== 'string' || /\0/.test(input.prompt)) {
       return { ok: false, error: 'Invalid prompt' };
     }
+    if (input.prompt.length > 100_000) {
+      return { ok: false, error: 'prompt exceeds max length (100000)' };
+    }
+    if (
+      input.projectId != null
+      && input.projectId !== ''
+      && (typeof input.projectId !== 'string' || /[\0\r\n]/.test(input.projectId))
+    ) {
+      return this.invalidIdResponse('project id');
+    }
+    if (
+      input.agentId != null
+      && input.agentId !== ''
+      && (typeof input.agentId !== 'string' || /[\0\r\n]/.test(input.agentId))
+    ) {
+      return { ok: false, error: 'Invalid agentId' };
+    }
     const body: Record<string, unknown> = {
       prompt: input.prompt,
     };
-    if (input.projectId) body.projectId = input.projectId;
-    if (input.agentId) body.agentId = input.agentId;
+    if (input.projectId) body.projectId = input.projectId.trim();
+    if (input.agentId) body.agentId = input.agentId.trim();
     if (input.editContext != null) body.editContext = input.editContext;
     if (input.dryRun === true) body.dryRun = true;
     if (input.execute === false) body.execute = false;
 
     const res = await fetch(`${this.baseUrl}/api/runs`, {
       method: 'POST',
-      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify(body),
     });
     return readApiResponse(res);

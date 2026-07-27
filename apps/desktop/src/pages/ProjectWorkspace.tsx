@@ -183,7 +183,8 @@ export function ProjectWorkspace() {
 
   const handleChatSend = useCallback(async () => {
     if (!client || !projectId) return;
-    if (/[\0]/.test(chatPrompt)) {
+    // Null bytes rejected; newlines allowed in multi-line prompts
+    if (/\0/.test(chatPrompt)) {
       setChatError(t('project.chatInvalid'));
       return;
     }

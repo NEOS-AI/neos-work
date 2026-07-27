@@ -103,13 +103,14 @@
       "code": "Code",
       "split": "Split"
     },
-    "chat": "Chat",
-    "chatInvalid": "Invalid prompt",
-    "chatFailed": "Run failed",
+    "chat": "AI chat",
+    "chatInvalid": "Prompt contains invalid characters",
+    "chatFailed": "Failed to start run",
     "chatAgent": "Agent",
-    "chatDryRun": "Dry run (no agent)",
-    "chatPlaceholder": "Describe changes or ask the agent…",
-    "chatSend": "Send"
+    "chatDryRun": "Dry-run (no CLI)",
+    "chatPlaceholder": "Describe changes… (uses open file as edit context)",
+    "chatSend": "Run",
+    "chatEmpty": "Run log appears here"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

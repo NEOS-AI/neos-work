@@ -116,15 +116,18 @@ async function executeCliRun(runId: string): Promise<void> {
     const current = reg.get(runId);
     if (!current || current.status === 'canceled') return;
 
-    // Detect new/changed files under project
+    // Detect new files under project (best-effort; content-hash compare is later)
     if (cwd && filesBefore) {
       try {
         const after = listProjectFiles(cwd)
           .filter((f) => f.type === 'file')
           .map((f) => f.path);
-        const changed = after.filter((p) => !filesBefore!.has(p));
-        if (changed.length > 0) {
-          reg.appendEvent(runId, 'run.files_changed', { paths: changed.slice(0, 200) });
+        const created = after.filter((p) => !filesBefore!.has(p));
+        if (created.length > 0) {
+          reg.appendEvent(runId, 'run.files_changed', {
+            paths: created.slice(0, 200),
+            kind: 'created',
+          });
         }
       } catch {
         // ignore listing errors
