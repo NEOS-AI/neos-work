@@ -406,11 +406,19 @@ describe('EngineClient', () => {
     });
     await expect(client.updateHarness(bad, { name: 'H' } as never)).resolves.toMatchObject({
       ok: false,
-      error: 'Invalid harness id',
+      error: 'Invalid worker id',
     });
     await expect(client.deleteHarness(blank)).resolves.toMatchObject({
       ok: false,
-      error: 'Invalid harness id',
+      error: 'Invalid worker id',
+    });
+    await expect(client.updateWorker(bad, { name: 'W' } as never)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid worker id',
+    });
+    await expect(client.deleteWorker(blank)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid worker id',
     });
     await expect(client.updateBlock(trav, { name: 'B' } as never)).resolves.toMatchObject({
       ok: false,
