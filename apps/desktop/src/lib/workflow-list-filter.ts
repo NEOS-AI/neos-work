@@ -6,6 +6,8 @@ export interface WorkflowListItem {
   name: string;
   description?: string;
   domain: string;
+  /** v0.4 API field; preferred over `domain` when present for chip match. */
+  primaryDomain?: string;
 }
 
 /**
@@ -45,8 +47,12 @@ export function filterWorkflowList<T extends WorkflowListItem>(
   const domain = normalizeChipFilter(options.domain);
   const q = normalizeSearchQuery(options.search);
   return items.filter((wf) => {
-    // Control-char domain on item never matches a domain chip
-    if (domain && normalizeItemChipValue(wf.domain) !== domain) return false;
+    // Prefer primaryDomain (v2) then domain (DB column / v1)
+    if (domain) {
+      const itemDomain =
+        normalizeItemChipValue(wf.primaryDomain) || normalizeItemChipValue(wf.domain);
+      if (itemDomain !== domain) return false;
+    }
     if (!q) return true;
     // Scrub so visible letters still match (align with list display scrub)
     const name = scrubSearchHaystack(wf.name, 200).toLowerCase();

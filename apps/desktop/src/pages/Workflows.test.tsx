@@ -175,7 +175,13 @@ describe('Workflows page', () => {
     }
 
     await waitFor(() => {
-      expect(createWorkflow).toHaveBeenCalled();
+      expect(createWorkflow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'My Workflow',
+          primaryDomain: 'general',
+          domainPackIds: ['general'],
+        }),
+      );
       expect(navigate).toHaveBeenCalledWith('/workflows/wf-new');
     });
   });

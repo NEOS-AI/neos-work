@@ -1275,21 +1275,44 @@ export class EngineClient {
   async createWorkflow(input: {
     name: string;
     description?: string;
+    /** @deprecated Prefer primaryDomain (v0.4 Q2). Still accepted by server. */
     domain?: string;
+    /** Primary domain pack id (API/JSON v2 field). */
+    primaryDomain?: string;
+    domainPackIds?: string[];
     nodes?: unknown[];
     edges?: unknown[];
   }): Promise<ApiResponse<Workflow>> {
+    // Prefer primaryDomain when only domain is set (v2 client shape)
+    const body = {
+      ...input,
+      primaryDomain:
+        typeof input.primaryDomain === 'string' && input.primaryDomain.trim()
+          ? input.primaryDomain.trim()
+          : typeof input.domain === 'string' && input.domain.trim()
+            ? input.domain.trim()
+            : undefined,
+    };
     const res = await fetch(`${this.baseUrl}/api/workflow`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify(input),
+      body: JSON.stringify(body),
     });
     return readApiResponse(res);
   }
 
   async updateWorkflow(
     id: string,
-    input: { name?: string; description?: string; designSystemId?: string; nodes?: unknown[]; edges?: unknown[] },
+    input: {
+      name?: string;
+      description?: string;
+      designSystemId?: string;
+      domain?: string;
+      primaryDomain?: string;
+      domainPackIds?: string[] | null;
+      nodes?: unknown[];
+      edges?: unknown[];
+    },
   ): Promise<ApiResponse<Workflow>> {
     const seg = this.pathSegment(id);
     if (!seg) return this.invalidIdResponse('workflow id');

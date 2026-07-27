@@ -26,6 +26,15 @@ describe('filterWorkflowList', () => {
     expect(filterWorkflowList(items, { domain: 'coding' }).map((w) => w.name)).toEqual(['Code Review']);
   });
 
+  it('prefers primaryDomain over domain for chip match', () => {
+    const mixed = [
+      { name: 'A', domain: 'general', primaryDomain: 'research' },
+      { name: 'B', domain: 'research' },
+      { name: 'C', domain: 'coding', primaryDomain: 'coding' },
+    ];
+    expect(filterWorkflowList(mixed, { domain: 'research' }).map((w) => w.name)).toEqual(['A', 'B']);
+  });
+
   it('filters by search on name and description', () => {
     expect(filterWorkflowList(items, { search: 'price' }).map((w) => w.name)).toEqual(['Stock Bot']);
     expect(filterWorkflowList(items, { search: 'web' }).map((w) => w.name)).toEqual(['Research']);

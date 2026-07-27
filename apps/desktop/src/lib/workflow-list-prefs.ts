@@ -4,7 +4,21 @@ const SORT_KEY = 'neos-workflows-sort';
 const DOMAIN_KEY = 'neos-workflows-domain';
 
 export type WorkflowListSortMode = 'updated' | 'name';
-export type WorkflowListDomainFilter = 'all' | 'finance' | 'coding' | 'general';
+export type WorkflowListDomainFilter =
+  | 'all'
+  | 'finance'
+  | 'coding'
+  | 'research'
+  | 'general';
+
+/** Chip order for Workflows list domain filter (includes research pack). */
+export const WORKFLOW_LIST_DOMAIN_OPTIONS: readonly WorkflowListDomainFilter[] = [
+  'all',
+  'finance',
+  'coding',
+  'research',
+  'general',
+] as const;
 
 function parseSort(raw: unknown): WorkflowListSortMode | null {
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
@@ -29,7 +43,7 @@ export function saveWorkflowListSort(mode: WorkflowListSortMode): void {
   }
 }
 
-const DOMAIN_ALLOWED = new Set<string>(['all', 'finance', 'coding', 'general']);
+const DOMAIN_ALLOWED = new Set<string>(['all', 'finance', 'coding', 'research', 'general']);
 
 function parseDomain(raw: unknown): WorkflowListDomainFilter | null {
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;

@@ -136,7 +136,8 @@ describe('Templates page', () => {
       expect(createWorkflow).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Finance Brief',
-          domain: 'finance',
+          primaryDomain: 'finance',
+          domainPackIds: ['finance'],
         }),
       );
       expect(navigate).toHaveBeenCalledWith('/workflows/wf-new');

@@ -14,6 +14,7 @@ import {
   loadWorkflowListSort,
   saveWorkflowListDomain,
   saveWorkflowListSort,
+  WORKFLOW_LIST_DOMAIN_OPTIONS,
   type WorkflowListDomainFilter,
   type WorkflowListSortMode,
 } from '../lib/workflow-list-prefs.js';
@@ -36,7 +37,7 @@ export function Workflows() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newDomain, setNewDomain] = useState<'finance' | 'coding' | 'general'>('general');
+  const [newDomain, setNewDomain] = useState<'finance' | 'coding' | 'research' | 'general'>('general');
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState<WorkflowListDomainFilter>(() => loadWorkflowListDomain());
@@ -149,7 +150,8 @@ export function Workflows() {
       const outputId = crypto.randomUUID();
       const res = await client.createWorkflow({
         name: newName.trim(),
-        domain: newDomain,
+        primaryDomain: newDomain,
+        domainPackIds: [newDomain],
         nodes: [
           { id: triggerId, type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
           { id: outputId, type: 'output', label: 'Output', position: { x: 520, y: 200 }, config: {} },
@@ -370,7 +372,7 @@ export function Workflows() {
                 minWidth: 200,
               }}
             />
-            {(['all', 'finance', 'coding', 'general'] as const).map((d) => (
+            {WORKFLOW_LIST_DOMAIN_OPTIONS.map((d) => (
               <button
                 key={d}
                 type="button"
@@ -433,7 +435,10 @@ export function Workflows() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredWorkflows.map((wf) => {
               const domainSafe =
-                scrubDisplayText(wf.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+                scrubDisplayText(wf.primaryDomain ?? wf.domain, {
+                  collapseLines: true,
+                  maxChars: 40,
+                }) || 'general';
               const nameSafe =
                 scrubDisplayText(wf.name, { collapseLines: true, maxChars: 200 }) || 'Workflow';
               const descSafe = wf.description
@@ -549,6 +554,7 @@ export function Workflows() {
               <option value="general">General</option>
               <option value="finance">Finance</option>
               <option value="coding">Coding</option>
+              <option value="research">Research</option>
             </select>
             <div className="flex gap-2">
               <button

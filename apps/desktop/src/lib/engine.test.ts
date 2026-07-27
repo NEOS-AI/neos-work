@@ -584,9 +584,29 @@ describe('EngineClient', () => {
 
     await client.createWorkflow({ name: 'N', domain: 'general' });
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    // domain-only input is upgraded to primaryDomain for v2 API shape
+    const createBody = JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body));
+    expect(createBody.primaryDomain).toBe('general');
 
-    await client.updateWorkflow('w1', { name: 'N2' });
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+    await client.createWorkflow({
+      name: 'Research',
+      primaryDomain: 'research',
+      domainPackIds: ['research', 'coding'],
+    });
+    const createV2 = JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body));
+    expect(createV2.primaryDomain).toBe('research');
+    expect(createV2.domainPackIds).toEqual(['research', 'coding']);
+
+    await client.updateWorkflow('w1', {
+      name: 'N2',
+      primaryDomain: 'coding',
+      domainPackIds: ['coding'],
+    });
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+    const updateBody = JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body));
+    expect(updateBody.primaryDomain).toBe('coding');
 
     await client.deleteWorkflow('w1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');

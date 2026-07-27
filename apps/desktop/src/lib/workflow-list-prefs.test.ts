@@ -31,9 +31,11 @@ describe('workflow-list-prefs', () => {
     expect(loadWorkflowListDomain()).toBe('all');
   });
 
-  it('round-trips domain filter', () => {
+  it('round-trips domain filter including research', () => {
     saveWorkflowListDomain('coding');
     expect(loadWorkflowListDomain()).toBe('coding');
+    saveWorkflowListDomain('research');
+    expect(loadWorkflowListDomain()).toBe('research');
     saveWorkflowListDomain('all');
     expect(loadWorkflowListDomain()).toBe('all');
   });

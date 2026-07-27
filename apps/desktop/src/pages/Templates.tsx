@@ -95,20 +95,31 @@ export function Templates() {
       const d = tpl.description.trim();
       if (d) description = d;
     }
-    const domainRaw =
-      typeof tpl.domain === 'string' && !/[\0\r\n]/.test(tpl.domain)
-        ? tpl.domain.trim().toLowerCase()
-        : 'general';
+    const packSource =
+      typeof tpl.primaryDomain === 'string' && !/[\0\r\n]/.test(tpl.primaryDomain)
+        ? tpl.primaryDomain
+        : typeof tpl.domain === 'string' && !/[\0\r\n]/.test(tpl.domain)
+          ? tpl.domain
+          : 'general';
+    const domainRaw = packSource.trim().toLowerCase();
     const domain =
       domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general' || domainRaw === 'research'
         ? domainRaw
         : 'general';
+    const packIds =
+      Array.isArray(tpl.domainPackIds) && tpl.domainPackIds.length > 0
+        ? tpl.domainPackIds
+            .filter((id): id is string => typeof id === 'string' && !/[\0\r\n]/.test(id) && id.trim().length > 0)
+            .map((id) => id.trim().toLowerCase())
+            .slice(0, 16)
+        : [domain];
     setCreating(name);
     try {
       const res = await client.createWorkflow({
         name,
         description,
-        domain,
+        primaryDomain: domain,
+        domainPackIds: packIds.includes(domain) ? packIds : [domain, ...packIds],
         nodes: tpl.nodes,
         edges: tpl.edges,
       });
