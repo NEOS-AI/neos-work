@@ -525,4 +525,107 @@ describe('spawn_worker / await_workers / list_workers', () => {
     expect(res.success).toBe(false);
     expect(String(res.error)).toMatch(/workerRunIds is required/i);
   });
+
+  it('rejects acquireSlot when child signal is already aborted before queueing', async () => {
+    // Occupy the only concurrency slot with a long-running child
+    const session = makeSession({
+      concurrency: 1,
+      maxSpawnedWorkers: 3,
+      runChild: async (req) => {
+        await new Promise((r) => setTimeout(r, 200));
+        return {
+          ok: true,
+          workerRunId: req.parent!.workerRunId!,
+          output: 'hold',
+          durationMs: 200,
+          mode: 'solo',
+        };
+      },
+    });
+    const first = await session.spawn({ workerId: 'research_web', goal: 'hold' });
+    expect(first.success).toBe(true);
+
+    // Second spawn starts, then abortAll before the async acquireSlot runs
+    const secondP = session.spawn({ workerId: 'coding_reviewer', goal: 'queued-preabort' });
+    // Microtask: children map is populated; abort child controller immediately
+    session.abortAll();
+
+    const second = await secondP;
+    expect(second.success).toBe(true);
+    const secondId = (second.output as { workerRunId: string }).workerRunId;
+
+    const res = await session.awaitWorkers({
+      workerRunIds: [secondId],
+      timeoutMs: 3_000,
+    });
+    const row = (res.output as { results: Array<{ ok: boolean; error?: string }> }).results[0]!;
+    expect(row.ok).toBe(false);
+    expect(String(row.error ?? '')).toMatch(/cancel|slot|abort/i);
+  });
+
+  it('await_workers returns timed out when timeout fires before racing child promise', async () => {
+    const session = makeSession({
+      runChild: async (req) => {
+        await new Promise((r) => setTimeout(r, 500));
+        return {
+          ok: true,
+          workerRunId: req.parent!.workerRunId!,
+          output: 'late',
+          durationMs: 500,
+          mode: 'solo',
+        };
+      },
+    });
+    const spawn = session.createTools().find((t) => t.name === 'spawn_worker')!;
+    const a = await spawn.execute({ workerId: 'research_web', goal: 'a' });
+    const b = await spawn.execute({ workerId: 'coding_reviewer', goal: 'b' });
+    const idA = (a.output as { workerRunId: string }).workerRunId;
+    const idB = (b.output as { workerRunId: string }).workerRunId;
+
+    // Force setTimeout to abort immediately so map callbacks see aborted signal first
+    const realSetTimeout = globalThis.setTimeout;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).setTimeout = (fn: (...args: unknown[]) => void) => {
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    };
+    try {
+      const res = await session.awaitWorkers({
+        workerRunIds: [idA, idB],
+        timeoutMs: 1,
+      });
+      expect(res.success).toBe(true);
+      const results = (res.output as { results: Array<{ ok: boolean; error?: string }> }).results;
+      expect(results).toHaveLength(2);
+      for (const row of results) {
+        expect(row.ok).toBe(false);
+        expect(String(row.error ?? '')).toMatch(/timed out/i);
+      }
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+  });
+
+  it('tool execute catch uses default message when scrubbed error is empty', async () => {
+    const session = makeSession();
+    // Non-Error whitespace throw → scrub → '' → fallback strings
+    vi.spyOn(session, 'spawn').mockRejectedValueOnce('   \n  ');
+    vi.spyOn(session, 'awaitWorkers').mockRejectedValueOnce('   ');
+    vi.spyOn(session, 'list').mockImplementationOnce(() => {
+      throw '  \t  ';
+    });
+    const tools = Object.fromEntries(session.createTools().map((t) => [t.name, t]));
+
+    const s = await tools.spawn_worker!.execute({ workerId: 'research_web', goal: 'x' });
+    expect(s.success).toBe(false);
+    expect(s.error).toBe('spawn_worker failed');
+
+    const a = await tools.await_workers!.execute({ workerRunIds: ['x'] });
+    expect(a.success).toBe(false);
+    expect(a.error).toBe('await_workers failed');
+
+    const l = await tools.list_workers!.execute({});
+    expect(l.success).toBe(false);
+    expect(l.error).toBe('list_workers failed');
+  });
 });

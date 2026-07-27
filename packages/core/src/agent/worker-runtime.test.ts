@@ -104,6 +104,35 @@ describe('resolveWorkerToolNames', () => {
     expect(names).not.toContain('run_command');
   });
 
+  it('forces coordinator execute/read_write profiles to read_only', () => {
+    for (const permissionProfile of ['execute', 'read_write'] as const) {
+      const names = resolveWorkerToolNames(
+        makeWorker({
+          id: `coord-${permissionProfile}`,
+          permissionProfile,
+          defaultMode: 'coordinator',
+          allowedTools: ['read_file', 'write_file', 'shell'],
+        }),
+        'coordinator',
+      );
+      expect(names).toContain('read_file');
+      expect(names).not.toContain('write_file');
+      expect(names).not.toContain('run_command');
+    }
+  });
+
+  it('defaults missing coordinator profile to read_only', () => {
+    const names = resolveWorkerToolNames(
+      makeWorker({
+        id: 'coord-undef',
+        permissionProfile: undefined,
+        defaultMode: 'coordinator',
+      }),
+      'coordinator',
+    );
+    expect(names.sort()).toEqual(['list_directory', 'read_file', 'search_files'].sort());
+  });
+
   it('keeps network profile for coordinator (not forced down from network)', () => {
     const w = makeWorker({
       id: 'coord-net',
@@ -196,6 +225,17 @@ describe('resolveWorkerWorkspace', () => {
   it('defaults policy to run when omitted', async () => {
     const dir = await resolveWorkerWorkspace({ runId: 'implicit-run', baseDir: base });
     expect(dir).toBe(join(base, 'implicit-run'));
+  });
+
+  it('falls back to default workspace base when baseDir is whitespace-only', async () => {
+    const dir = await resolveWorkerWorkspace({
+      policy: { kind: 'run' },
+      runId: 'ws-default-base',
+      baseDir: '   ',
+    });
+    // Whitespace baseDir is treated as missing → package default under cwd/tmp
+    expect(dir.includes('ws-default-base')).toBe(true);
+    expect(dir).not.toBe(join('   ', 'ws-default-base'));
   });
 });
 
@@ -579,5 +619,94 @@ describe('runWorker / WorkerRuntime', () => {
     });
     expect(result.ok).toBe(true);
     expect(String(result.output ?? '').length).toBeLessThanOrEqual(2 * 1024 * 1024);
+  });
+
+  it('combines abort signals via polyfill when AbortSignal.any is unavailable', async () => {
+    const anyFn = AbortSignal.any;
+    // Force polyfill path (Node <20 / stripped env)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (AbortSignal as any).any;
+
+    try {
+      const parent = new AbortController();
+      const slow = {
+        id: 'openai' as const,
+        name: 'Slow',
+        getModels: () => [],
+        async *chat(_req: unknown, signal?: AbortSignal) {
+          await new Promise<void>((resolve, reject) => {
+            const t = setTimeout(resolve, 5_000);
+            signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(t);
+                reject(new Error('aborted by polyfill combine'));
+              },
+              { once: true },
+            );
+          });
+          yield { type: 'done' as const };
+        },
+        async validateApiKey() {
+          return true;
+        },
+      };
+
+      const runP = runWorker({
+        worker: makeWorker({
+          id: 'polyfill_abort',
+          workspace: { kind: 'none' },
+          permissionProfile: 'read_only',
+          constraints: { maxSteps: 3, timeoutMs: 30_000 },
+        }),
+        goal: 'wait then abort',
+        settings: {},
+        adapter: slow,
+        workspaceBaseDir: base,
+        parent: { nodeId: 'n', runId: 'r-polyfill' },
+        signal: parent.signal,
+      });
+
+      await new Promise((r) => setTimeout(r, 20));
+      parent.abort();
+      const result = await runP;
+      expect(result.ok).toBe(false);
+      expect(String(result.error ?? '').length).toBeGreaterThan(0);
+    } finally {
+      if (typeof anyFn === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (AbortSignal as any).any = anyFn;
+      }
+    }
+  });
+
+  it('falls back to Worker failed when outer catch scrubs to empty', async () => {
+    const blankThrow = {
+      id: 'openai' as const,
+      name: 'Blank',
+      getModels: () => [],
+      async *chat() {
+        // Whitespace-only message → scrubErrorMessage trims to ''
+        throw new Error('   \n\t  ');
+      },
+      async validateApiKey() {
+        return true;
+      },
+    };
+    const result = await runWorker({
+      worker: makeWorker({
+        id: 'blank_err',
+        workspace: { kind: 'none' },
+        permissionProfile: 'read_only',
+        constraints: { maxSteps: 2, timeoutMs: 5_000 },
+      }),
+      goal: 'blank fail',
+      settings: {},
+      adapter: blankThrow,
+      workspaceBaseDir: base,
+      parent: { nodeId: 'n', runId: 'r-blank-err' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Worker failed');
   });
 });

@@ -960,6 +960,42 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(String((completed!.output as { preview: string }).preview).length).toBeLessThanOrEqual(256);
   });
 
+  it('sanitizes control-char worker ids and circular worker.completed outputs', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    // Circular structure → JSON.stringify throws → truncated preview branch
+    const circular: Record<string, unknown> = { kind: 'circ' };
+    circular.self = circular;
+
+    await executeWorkflow({
+      runId: 'run-worker-circular',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'agent-1',
+            type: 'agent',
+            label: 'A',
+            position: { x: 1, y: 0 },
+            config: { provider: 'cli-claude', workerId: 'coding_reviewer' },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'agent-1' }],
+      }),
+      settings: {},
+      cliSpawn: async () => ({ output: circular, exitCode: 0 }),
+      onEvent: (event) => events.push(event),
+    });
+
+    const completed = events.find((e) => e.type === 'worker.completed') as
+      | { output: unknown }
+      | undefined;
+    expect(completed).toBeDefined();
+    expect(completed!.output).toEqual({
+      truncated: true,
+      preview: expect.any(String),
+    });
+  });
+
 
   it('rejects control-char node types and resolves agent/message node types', async () => {
     await expect(

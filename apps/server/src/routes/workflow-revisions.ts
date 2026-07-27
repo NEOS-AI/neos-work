@@ -69,6 +69,10 @@ workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
     name?: string;
     description?: string;
     designSystemId?: string | null;
+    domain?: string;
+    primaryDomain?: string;
+    domainPackIds?: string[];
+    schemaVersion?: number;
   };
   // Bound snapshot size before parse (align with REVISION_SNAPSHOT_MAX_CHARS)
   if (typeof rev.snapshot !== 'string' || rev.snapshot.length > db.REVISION_SNAPSHOT_MAX_CHARS) {
@@ -95,11 +99,22 @@ workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
       name: current.name,
       description: current.description,
       designSystemId: current.designSystemId,
+      domain: current.domain,
+      primaryDomain: current.primaryDomain ?? current.domain,
+      domainPackIds: current.domainPackIds,
+      schemaVersion: current.schemaVersion ?? 2,
       nodes: current.nodes,
       edges: current.edges,
     }),
     'pre-restore',
   );
+
+  const packId =
+    typeof snap.primaryDomain === 'string' && !/[\0\r\n]/.test(snap.primaryDomain)
+      ? snap.primaryDomain.trim().toLowerCase()
+      : typeof snap.domain === 'string' && !/[\0\r\n]/.test(snap.domain)
+        ? snap.domain.trim().toLowerCase()
+        : undefined;
 
   const updated = workflowDb.updateWorkflow(workflowId, {
     name: typeof snap.name === 'string' ? snap.name : undefined,
@@ -110,6 +125,8 @@ workflowRevisions.post('/:workflowId/:id/restore', async (c) => {
         : typeof snap.designSystemId === 'string'
           ? snap.designSystemId
           : undefined,
+    domain: packId,
+    domainPackIds: Array.isArray(snap.domainPackIds) ? snap.domainPackIds : undefined,
     nodes: snap.nodes,
     edges: snap.edges,
   });

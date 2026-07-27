@@ -68,6 +68,26 @@ describe('parsePortDefs / portsFromOutputSchema', () => {
     });
     expect(ports.map((p) => p.key)).toEqual(['ok']);
   });
+
+  it('tolerates non-object property schemas (schema undefined)', () => {
+    const ports = portsFromOutputSchema({
+      type: 'object',
+      properties: {
+        plain: 'string' as unknown as Record<string, unknown>,
+        arr: [1, 2] as unknown as Record<string, unknown>,
+        nil: null as unknown as Record<string, unknown>,
+        ok: { type: 'number' },
+      },
+    });
+    expect(ports).toEqual(
+      expect.arrayContaining([
+        { key: 'plain', required: false, schema: undefined },
+        { key: 'arr', required: false, schema: undefined },
+        { key: 'nil', required: false, schema: undefined },
+        { key: 'ok', required: false, schema: { type: 'number' } },
+      ]),
+    );
+  });
 });
 
 describe('resolveNodePorts', () => {
@@ -104,6 +124,26 @@ describe('resolveNodePorts', () => {
     );
     expect(ports).toEqual([
       { key: 'symbol', label: 'Symbol', schema: { type: 'string' }, required: false },
+    ]);
+  });
+
+  it('falls back unknown paramDef types to string and non-string labels to key', () => {
+    const ports = resolveNodeInputPorts(
+      { type: 'block', config: { blockId: 'x' } },
+      {
+        block: {
+          paramDefs: [
+            { key: 'payload', type: 'json' as 'string', label: 42 as unknown as string },
+            { key: 'flag', type: 'boolean', label: 'Flag' },
+            { key: 'n', type: 'number' },
+          ],
+        },
+      },
+    );
+    expect(ports).toEqual([
+      { key: 'payload', label: 'payload', schema: { type: 'string' }, required: false },
+      { key: 'flag', label: 'Flag', schema: { type: 'boolean' }, required: false },
+      { key: 'n', label: 'n', schema: { type: 'number' }, required: false },
     ]);
   });
 

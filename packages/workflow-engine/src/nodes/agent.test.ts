@@ -197,6 +197,50 @@ describe('AgentNode coordinator mode', () => {
     // Fire abort listener (session.abortAll) without throwing
     ac.abort();
   });
+
+  it('uses worker maxSpawnedWorkers and RUN_ID/parent node fallbacks in coordinator mode', async () => {
+    lastCoordinatorDeps = null;
+    // No node maxSpawnedWorkers → harness (worker) constraints.maxSpawnedWorkers (4)
+    const node = new AgentNode('agent', {
+      workerId: 'general_coordinator',
+      mode: 'coordinator',
+    });
+    const result = await node.execute(
+      ctx({
+        // Invalid runId → settings.RUN_ID; blank/control nodeId → 'agent'
+        runId: `bad${'\n'}run`,
+        nodeId: `\n`,
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          RUN_ID: 'from-settings-coord',
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(lastCoordinatorDeps).toBeTruthy();
+    expect(lastCoordinatorDeps.maxSpawnedWorkers).toBe(4);
+    expect(lastCoordinatorDeps.parent).toEqual({
+      nodeId: 'agent',
+      runId: 'from-settings-coord',
+    });
+
+    // Missing RUN_ID + non-string runId → agent-node default
+    lastCoordinatorDeps = null;
+    await new AgentNode('agent', {
+      workerId: 'general_coordinator',
+      mode: 'coordinator',
+    }).execute(
+      ctx({
+        runId: 99 as unknown as string,
+        nodeId: '   ',
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    expect(lastCoordinatorDeps.parent).toEqual({
+      nodeId: 'agent',
+      runId: 'agent-node',
+    });
+  });
 });
 
 describe('AgentNode CLI provider', () => {

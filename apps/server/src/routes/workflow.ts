@@ -87,6 +87,8 @@ workflow.post('/', async (c) => {
     name: string;
     description?: string;
     domain?: string;
+    primaryDomain?: string;
+    domainPackIds?: string[];
     nodes?: unknown[];
     edges?: unknown[];
   }>().catch(() => null);
@@ -109,19 +111,20 @@ workflow.post('/', async (c) => {
     }
     description = body.description.trim() || undefined;
   }
-  const domainRaw =
-    typeof body.domain === 'string' && !/[\0\r\n]/.test(body.domain)
-      ? body.domain.trim().toLowerCase()
-      : 'general';
-  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
-    ? (domainRaw as 'finance' | 'coding' | 'general')
-    : 'general';
+  // Q2: prefer primaryDomain; domain accepted for legacy clients
+  const domain = normalizePackId(body.primaryDomain ?? body.domain, 'general');
+  const domainPackIds = Array.isArray(body.domainPackIds)
+    ? body.domainPackIds
+        .map((p) => (typeof p === 'string' && !/[\0\r\n]/.test(p) ? p.trim().toLowerCase() : ''))
+        .filter(Boolean)
+    : undefined;
 
   try {
     const wf = db.createWorkflow({
       name,
       description,
       domain,
+      domainPackIds,
       nodes: (body.nodes as never) ?? [],
       edges: (body.edges as never) ?? [],
     });
@@ -142,6 +145,9 @@ workflow.put('/:id', async (c) => {
     name?: string;
     description?: string;
     designSystemId?: string;
+    domain?: string;
+    primaryDomain?: string;
+    domainPackIds?: string[] | null;
     nodes?: unknown[];
     edges?: unknown[];
   }>().catch(() => null);
@@ -176,6 +182,18 @@ workflow.put('/:id', async (c) => {
     }
     designSystemId = body.designSystemId.trim() || undefined;
   }
+  const domain =
+    body.primaryDomain !== undefined || body.domain !== undefined
+      ? normalizePackId(body.primaryDomain ?? body.domain, 'general')
+      : undefined;
+  const domainPackIds =
+    body.domainPackIds === null
+      ? null
+      : Array.isArray(body.domainPackIds)
+        ? body.domainPackIds
+            .map((p) => (typeof p === 'string' && !/[\0\r\n]/.test(p) ? p.trim().toLowerCase() : ''))
+            .filter(Boolean)
+        : undefined;
 
   // Auto-snapshot before update (Task 16: version history)
   const current = db.getWorkflow(id);
@@ -184,6 +202,10 @@ workflow.put('/:id', async (c) => {
       name: current.name,
       description: current.description,
       designSystemId: current.designSystemId,
+      domain: current.domain,
+      primaryDomain: current.primaryDomain ?? current.domain,
+      domainPackIds: current.domainPackIds,
+      schemaVersion: current.schemaVersion ?? 2,
       nodes: current.nodes,
       edges: current.edges,
     });
@@ -194,6 +216,8 @@ workflow.put('/:id', async (c) => {
     name,
     description,
     designSystemId,
+    domain,
+    domainPackIds,
     nodes: body.nodes as never,
     edges: body.edges as never,
   });

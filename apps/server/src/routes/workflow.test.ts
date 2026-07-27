@@ -778,3 +778,40 @@ describe('workflow migrate dry-run (v0.4)', () => {
   });
 });
 
+describe('workflow primaryDomain / domainPackIds (v0.4.2)', () => {
+  it('accepts primaryDomain and domainPackIds on create and returns them', async () => {
+    const res = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${WF_NAME}_packs`,
+        primaryDomain: 'coding',
+        domainPackIds: ['coding', 'research'],
+        nodes: minimalGraph.nodes,
+        edges: minimalGraph.edges,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      data: {
+        id: string;
+        domain: string;
+        primaryDomain?: string;
+        domainPackIds?: string[];
+        schemaVersion?: number;
+      };
+    };
+    expect(body.data.domain).toBe('coding');
+    expect(body.data.primaryDomain).toBe('coding');
+    expect(body.data.schemaVersion).toBe(2);
+    expect(body.data.domainPackIds).toEqual(expect.arrayContaining(['coding', 'research']));
+
+    const get = await workflow.request(`/${body.data.id}`);
+    const got = await get.json() as { data: { domainPackIds?: string[]; primaryDomain?: string } };
+    expect(got.data.primaryDomain).toBe('coding');
+    expect(got.data.domainPackIds).toEqual(expect.arrayContaining(['coding', 'research']));
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
+});
+
