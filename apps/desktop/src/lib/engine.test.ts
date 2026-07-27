@@ -1289,10 +1289,32 @@ describe('EngineClient', () => {
     await expect(readHealthResponse(arr)).rejects.toThrow(/HTTP 200/);
   });
 
-  it('harness and block CRUD with domain query', async () => {
+  it('worker CRUD and deprecated harness aliases hit /api/workers', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
 
+    await client.createWorker({
+      name: 'W',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'p',
+      allowedTools: [],
+      permissionProfile: 'execute',
+      defaultMode: 'solo',
+      workspace: { kind: 'isolated' },
+    });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.updateWorker('w1', { name: 'W2' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/w1$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    await client.deleteWorker('w1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/w1$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    // Deprecated harness aliases route to workers API
     await client.createHarness({
       id: 'h1',
       name: 'H',
@@ -1301,13 +1323,15 @@ describe('EngineClient', () => {
       systemPrompt: 'p',
       allowedTools: [],
     });
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/harness/);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers$/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
 
     await client.updateHarness('h1', { name: 'H2' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/h1$/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
 
     await client.deleteHarness('h1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/h1$/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
 
     await client.listBlocks('coding');

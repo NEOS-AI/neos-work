@@ -1733,6 +1733,38 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  async createWorker(
+    input: Omit<DomainWorker, 'id' | 'isBuiltIn'> & { id?: string },
+  ): Promise<ApiResponse<DomainWorker>> {
+    const res = await fetch(`${this.baseUrl}/api/workers`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return readApiResponse(res);
+  }
+
+  async updateWorker(id: string, input: Partial<DomainWorker>): Promise<ApiResponse<DomainWorker>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('worker id');
+    const res = await fetch(`${this.baseUrl}/api/workers/${seg}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return readApiResponse(res);
+  }
+
+  async deleteWorker(id: string): Promise<ApiResponse<void>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('worker id');
+    const res = await fetch(`${this.baseUrl}/api/workers/${seg}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   /** @deprecated Prefer listWorkers */
   async listHarnesses(): Promise<ApiResponse<AgentHarness[]>> {
     // Prefer workers API; fall back to harness alias for older servers
@@ -1748,34 +1780,19 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /** @deprecated Prefer createWorker — routes to `/api/workers`. */
   async createHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Promise<ApiResponse<AgentHarness>> {
-    const res = await fetch(`${this.baseUrl}/api/harness`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(input),
-    });
-    return readApiResponse(res);
+    return this.createWorker(input);
   }
 
+  /** @deprecated Prefer updateWorker — routes to `/api/workers`. */
   async updateHarness(id: string, input: Partial<AgentHarness>): Promise<ApiResponse<AgentHarness>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('harness id');
-    const res = await fetch(`${this.baseUrl}/api/harness/${seg}`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: JSON.stringify(input),
-    });
-    return readApiResponse(res);
+    return this.updateWorker(id, input);
   }
 
+  /** @deprecated Prefer deleteWorker — routes to `/api/workers`. */
   async deleteHarness(id: string): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('harness id');
-    const res = await fetch(`${this.baseUrl}/api/harness/${seg}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
+    return this.deleteWorker(id);
   }
 
   // --- Blocks ---

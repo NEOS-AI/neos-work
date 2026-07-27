@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
-import type { AgentHarness } from '../lib/engine.js';
+import type { DomainWorker } from '../lib/engine.js';
 import {
   DOMAIN_FILTER_OPTIONS,
   loadDomainFilter,
@@ -21,14 +21,52 @@ const DOMAIN_COLORS: Record<string, string> = {
   general: '#8b5cf6',
 };
 
+const PACK_DOMAINS = ['finance', 'coding', 'research', 'general'] as const;
+const PROFILES = ['read_only', 'read_write', 'execute', 'network', 'full'] as const;
+const MODES = ['solo', 'coordinator'] as const;
+const WORKSPACES = ['none', 'run', 'isolated'] as const;
+
+type PermissionProfile = (typeof PROFILES)[number];
+type WorkerMode = (typeof MODES)[number];
+type WorkspaceKind = (typeof WORKSPACES)[number];
+
+function normalizePackDomain(raw: unknown): string {
+  const d =
+    typeof raw === 'string' && !/[\0\r\n]/.test(raw) ? raw.trim().toLowerCase() : 'general';
+  return (PACK_DOMAINS as readonly string[]).includes(d) ? d : 'general';
+}
+
+function normalizeProfile(raw: unknown): PermissionProfile {
+  const p =
+    typeof raw === 'string' && !/[\0\r\n]/.test(raw) ? raw.trim().toLowerCase() : 'full';
+  return (PROFILES as readonly string[]).includes(p) ? (p as PermissionProfile) : 'full';
+}
+
+function normalizeMode(raw: unknown): WorkerMode {
+  const m =
+    typeof raw === 'string' && !/[\0\r\n]/.test(raw) ? raw.trim().toLowerCase() : 'solo';
+  return (MODES as readonly string[]).includes(m) ? (m as WorkerMode) : 'solo';
+}
+
+function normalizeWorkspaceKind(raw: unknown): WorkspaceKind {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const kind = (raw as { kind?: unknown }).kind;
+    if (typeof kind === 'string' && (WORKSPACES as readonly string[]).includes(kind)) {
+      return kind as WorkspaceKind;
+    }
+  }
+  return 'run';
+}
+
+/** Domain Workers page (route `/harnesses` kept for URL stability). */
 export function Harnesses() {
   const { t } = useTranslation('common');
   const { client } = useEngine();
-  const [harnesses, setHarnesses] = useState<AgentHarness[]>([]);
+  const [workers, setWorkers] = useState<DomainWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [editTarget, setEditTarget] = useState<AgentHarness | null>(null);
+  const [editTarget, setEditTarget] = useState<DomainWorker | null>(null);
   const [domainFilter, setDomainFilter] = useState<DomainFilterPref>(() => loadDomainFilter('harnesses'));
   const [search, setSearch] = useState('');
 
@@ -42,23 +80,23 @@ export function Harnesses() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await client.listHarnesses();
+      const res = await client.listWorkers();
       if (res.ok && res.data) {
-        setHarnesses(res.data);
+        setWorkers(res.data);
       } else {
-        setHarnesses([]);
+        setWorkers([]);
         setLoadError(
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
-          }) || 'Failed to load harnesses',
+          }) || 'Failed to load workers',
         );
       }
     } catch (err) {
-      setHarnesses([]);
-      const msg = err instanceof Error ? err.message : 'Failed to load harnesses';
+      setWorkers([]);
+      const msg = err instanceof Error ? err.message : 'Failed to load workers';
       setLoadError(
-        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load harnesses',
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load workers',
       );
     } finally {
       setLoading(false);
@@ -68,7 +106,7 @@ export function Harnesses() {
   useEffect(() => { load(); }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCreate = () => { setEditTarget(null); setShowModal(true); };
-  const openEdit = (h: AgentHarness) => { setEditTarget(h); setShowModal(true); };
+  const openEdit = (w: DomainWorker) => { setEditTarget(w); setShowModal(true); };
   const closeModal = useCallback(() => {
     setShowModal(false);
     setEditTarget(null);
@@ -90,19 +128,18 @@ export function Harnesses() {
     return () => window.removeEventListener('keydown', onKey);
   }, [showModal, search, closeModal]);
 
-  const handleDelete = async (h: AgentHarness) => {
-    if (!client || h.isBuiltIn) return;
-    // Control-char / blank / overlong ids never sent to delete API
-    const safeId = safeEntityId(h.id);
+  const handleDelete = async (w: DomainWorker) => {
+    if (!client || w.isBuiltIn) return;
+    const safeId = safeEntityId(w.id);
     if (!safeId) {
-      window.alert('Harness id contains invalid control characters');
+      window.alert('Worker id contains invalid control characters');
       return;
     }
     const nameSafe =
-      scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || safeId || 'harness';
+      scrubDisplayText(w.name, { collapseLines: true, maxChars: 200 }) || safeId || 'worker';
     if (!window.confirm(t('harness.confirmDelete', { name: nameSafe }))) return;
     try {
-      const res = await client.deleteHarness(safeId);
+      const res = await client.deleteWorker(safeId);
       if (!res.ok) {
         const err =
           scrubDisplayText((res as { error?: string }).error, {
@@ -125,9 +162,9 @@ export function Harnesses() {
   const domains = DOMAIN_FILTER_OPTIONS;
   const visible = useMemo(() => {
     const byDomain =
-      domainFilter === 'all' ? harnesses : harnesses.filter((h) => h.domain === domainFilter);
+      domainFilter === 'all' ? workers : workers.filter((w) => w.domain === domainFilter);
     return sortByName(filterBySearchText(byDomain, search));
-  }, [harnesses, domainFilter, search]);
+  }, [workers, domainFilter, search]);
 
   if (loading) {
     return (
@@ -154,7 +191,7 @@ export function Harnesses() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search harnesses…"
+            placeholder="Search workers…"
             className="rounded-lg border px-3 py-1.5 text-sm"
             style={{
               backgroundColor: 'var(--bg-secondary)',
@@ -163,9 +200,9 @@ export function Harnesses() {
               minWidth: 160,
             }}
           />
-          {harnesses.length > 0 && (
+          {workers.length > 0 && (
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {formatListCount(visible.length, harnesses.length)}
+              {formatListCount(visible.length, workers.length)}
             </span>
           )}
           <div className="flex gap-1 rounded-lg border p-0.5" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)' }}>
@@ -193,30 +230,30 @@ export function Harnesses() {
         </div>
       </div>
 
-      {/* Harness grid */}
-      {harnesses.length === 0 ? (
+      {/* Worker grid */}
+      {workers.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('harness.empty')}</span>
         </div>
       ) : visible.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
-          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No harnesses match filters</span>
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No workers match filters</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((h) => (
-            <HarnessCard
-              key={h.id}
-              harness={h}
-              onEdit={() => openEdit(h)}
-              onDelete={() => handleDelete(h)}
+          {visible.map((w) => (
+            <WorkerCard
+              key={w.id}
+              worker={w}
+              onEdit={() => openEdit(w)}
+              onDelete={() => handleDelete(w)}
             />
           ))}
         </div>
       )}
 
       {showModal && (
-        <HarnessModal
+        <WorkerModal
           existing={editTarget}
           onClose={closeModal}
           onSaved={onSaved}
@@ -226,26 +263,28 @@ export function Harnesses() {
   );
 }
 
-function HarnessCard({
-  harness: h,
+function WorkerCard({
+  worker: w,
   onEdit,
   onDelete,
 }: {
-  harness: AgentHarness;
+  worker: DomainWorker;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation('common');
   const domainSafe =
-    scrubDisplayText(h.domain, { collapseLines: true, maxChars: 40 }) || 'general';
+    scrubDisplayText(w.domain, { collapseLines: true, maxChars: 40 }) || 'general';
   const nameSafe =
-    scrubDisplayText(h.name, { collapseLines: true, maxChars: 200 }) || 'Harness';
-  const descSafe = scrubDisplayText(h.description, { collapseLines: true, maxChars: 500 });
+    scrubDisplayText(w.name, { collapseLines: true, maxChars: 200 }) || 'Worker';
+  const descSafe = scrubDisplayText(w.description, { collapseLines: true, maxChars: 500 });
   const domainColor = DOMAIN_COLORS[domainSafe] ?? '#8b5cf6';
-  const tools = (h.allowedTools ?? [])
+  const tools = (w.allowedTools ?? [])
     .filter((tool) => typeof tool === 'string' && !/[\0\r\n]/.test(tool) && tool.trim())
     .map((tool) => tool.trim())
     .slice(0, 4);
+  const mode = normalizeMode(w.defaultMode);
+  const profile = normalizeProfile(w.permissionProfile);
 
   return (
     <div
@@ -256,19 +295,33 @@ function HarnessCard({
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{nameSafe}</span>
-            {h.isBuiltIn && (
+            {w.isBuiltIn && (
               <span className="rounded-full px-1.5 py-0.5 text-[10px]"
                 style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
                 built-in
               </span>
             )}
+            {mode === 'coordinator' && (
+              <span className="rounded-full px-1.5 py-0.5 text-[10px]"
+                style={{ backgroundColor: '#8b5cf622', color: '#a78bfa' }}>
+                coordinator
+              </span>
+            )}
           </div>
-          <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-medium w-fit"
-            style={{ backgroundColor: `${domainColor}22`, color: domainColor }}
-          >
-            {domainSafe}
-          </span>
+          <div className="flex flex-wrap gap-1">
+            <span
+              className="rounded-full px-2 py-0.5 text-[11px] font-medium w-fit"
+              style={{ backgroundColor: `${domainColor}22`, color: domainColor }}
+            >
+              {domainSafe}
+            </span>
+            <span
+              className="rounded-full px-2 py-0.5 text-[11px] w-fit"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+            >
+              {profile}
+            </span>
+          </div>
         </div>
         <div className="flex gap-1">
           <button
@@ -276,9 +329,9 @@ function HarnessCard({
             className="rounded-lg px-2 py-1 text-xs"
             style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)' }}
           >
-            {h.isBuiltIn ? t('common.view') : t('common.edit')}
+            {w.isBuiltIn ? t('common.view') : t('common.edit')}
           </button>
-          {!h.isBuiltIn && (
+          {!w.isBuiltIn && (
             <button
               onClick={onDelete}
               className="rounded-lg px-2 py-1 text-xs"
@@ -303,9 +356,9 @@ function HarnessCard({
               {tool}
             </span>
           ))}
-          {(h.allowedTools?.length ?? 0) > 4 && (
+          {(w.allowedTools?.length ?? 0) > 4 && (
             <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              +{(h.allowedTools?.length ?? 0) - 4}
+              +{(w.allowedTools?.length ?? 0) - 4}
             </span>
           )}
         </div>
@@ -314,12 +367,12 @@ function HarnessCard({
   );
 }
 
-function HarnessModal({
+function WorkerModal({
   existing,
   onClose,
   onSaved,
 }: {
-  existing: AgentHarness | null;
+  existing: DomainWorker | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -328,20 +381,10 @@ function HarnessModal({
   const readOnly = existing?.isBuiltIn ?? false;
 
   // Seed edit form with scrubbed fields (control chars never re-enter inputs)
-  const [id, setId] = useState(
-    () => scrubDisplayText(existing?.id, { collapseLines: true, maxChars: 100 }),
-  );
   const [name, setName] = useState(
     () => scrubDisplayText(existing?.name, { collapseLines: true, maxChars: 200 }),
   );
-  const [domain, setDomain] = useState<string>(() => {
-    const d = typeof existing?.domain === 'string' && !/[\0\r\n]/.test(existing.domain)
-      ? existing.domain.trim().toLowerCase()
-      : 'general';
-    return (['finance', 'coding', 'general'] as const).includes(d as 'finance')
-      ? d
-      : 'general';
-  });
+  const [domain, setDomain] = useState<string>(() => normalizePackDomain(existing?.domain));
   const [description, setDescription] = useState(() => {
     const raw = typeof existing?.description === 'string' ? existing.description : '';
     return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
@@ -356,56 +399,66 @@ function HarnessModal({
       .map((t) => t.trim())
       .join(', '),
   );
+  const [permissionProfile, setPermissionProfile] = useState<PermissionProfile>(() =>
+    normalizeProfile(existing?.permissionProfile),
+  );
+  const [defaultMode, setDefaultMode] = useState<WorkerMode>(() =>
+    normalizeMode(existing?.defaultMode),
+  );
+  const [workspaceKind, setWorkspaceKind] = useState<WorkspaceKind>(() =>
+    normalizeWorkspaceKind(existing?.workspace),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const handleSave = async () => {
     if (!client || readOnly) return;
-    // Control-char id/name rejected before trim; null-byte prompt/description rejected
-    if ((!existing && /[\0\r\n]/.test(id)) || /[\0\r\n]/.test(name)) {
-      setError('Name or ID contains invalid control characters');
+    if (/[\0\r\n]/.test(name)) {
+      setError('Name contains invalid control characters');
       return;
     }
     if (/\0/.test(systemPrompt) || /\0/.test(description)) {
       setError('Fields contain invalid control characters');
       return;
     }
-    if (!id.trim() || !name.trim() || !systemPrompt.trim()) {
+    if (!name.trim() || !systemPrompt.trim()) {
       setError(t('harness.validationError'));
       return;
     }
     setSaving(true);
     setError('');
-    // Drop control-char tool tokens before trim
     const tools = allowedTools
       .split(',')
       .filter((s) => !/[\0\r\n]/.test(s))
       .map((s) => s.trim())
       .filter(Boolean);
+    const workspace =
+      workspaceKind === 'run'
+        ? { kind: 'run' as const }
+        : workspaceKind === 'isolated'
+          ? { kind: 'isolated' as const }
+          : { kind: 'none' as const };
+    const payload = {
+      name: name.trim(),
+      domain,
+      description: description.trim(),
+      systemPrompt: systemPrompt.trim(),
+      allowedTools: tools,
+      permissionProfile,
+      defaultMode,
+      workspace,
+    };
     try {
       let res;
       if (existing) {
-        const harnessId = safeEntityId(existing.id);
-        if (!harnessId) {
-          setError('Harness id contains invalid control characters');
+        const workerId = safeEntityId(existing.id);
+        if (!workerId) {
+          setError('Worker id contains invalid control characters');
           return;
         }
-        res = await client.updateHarness(harnessId, {
-          name: name.trim(),
-          domain,
-          description: description.trim(),
-          systemPrompt: systemPrompt.trim(),
-          allowedTools: tools,
-        });
+        res = await client.updateWorker(workerId, payload);
       } else {
-        res = await client.createHarness({
-          id: id.trim(),
-          name: name.trim(),
-          domain,
-          description: description.trim(),
-          systemPrompt: systemPrompt.trim(),
-          allowedTools: tools,
-        });
+        res = await client.createWorker(payload);
       }
       if (!res.ok) {
         setError(
@@ -428,7 +481,7 @@ function HarnessModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div
-        className="relative w-full max-w-xl rounded-2xl border p-6 shadow-2xl"
+        className="relative w-full max-w-xl rounded-2xl border p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
         style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
       >
         <h2 className="mb-4 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -436,19 +489,6 @@ function HarnessModal({
         </h2>
 
         <div className="flex flex-col gap-3">
-          {/* ID */}
-          {!existing && (
-            <ModalField label="ID">
-              <input
-                value={id}
-                onChange={(e) => setId(e.target.value)}
-                placeholder="my_harness_id"
-                className="modal-input"
-                style={inputStyle}
-              />
-            </ModalField>
-          )}
-
           {/* Name */}
           <ModalField label={t('harness.name')}>
             <input
@@ -464,13 +504,55 @@ function HarnessModal({
           <ModalField label={t('harness.domain')}>
             <select
               value={domain}
-              onChange={(e) => setDomain(e.target.value as 'finance' | 'coding' | 'general')}
+              onChange={(e) => setDomain(e.target.value)}
               disabled={readOnly}
               style={inputStyle}
             >
               <option value="finance">Finance</option>
               <option value="coding">Coding</option>
+              <option value="research">Research</option>
               <option value="general">General</option>
+            </select>
+          </ModalField>
+
+          {/* Permission profile */}
+          <ModalField label={t('harness.permissionProfile')}>
+            <select
+              value={permissionProfile}
+              onChange={(e) => setPermissionProfile(e.target.value as PermissionProfile)}
+              disabled={readOnly}
+              style={inputStyle}
+            >
+              {PROFILES.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </ModalField>
+
+          {/* Default mode */}
+          <ModalField label={t('harness.defaultMode')}>
+            <select
+              value={defaultMode}
+              onChange={(e) => setDefaultMode(e.target.value as WorkerMode)}
+              disabled={readOnly}
+              style={inputStyle}
+            >
+              <option value="solo">solo</option>
+              <option value="coordinator">coordinator</option>
+            </select>
+          </ModalField>
+
+          {/* Workspace */}
+          <ModalField label={t('harness.workspace')}>
+            <select
+              value={workspaceKind}
+              onChange={(e) => setWorkspaceKind(e.target.value as WorkspaceKind)}
+              disabled={readOnly}
+              style={inputStyle}
+            >
+              <option value="none">none</option>
+              <option value="run">run</option>
+              <option value="isolated">isolated</option>
             </select>
           </ModalField>
 
