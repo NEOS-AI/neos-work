@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -19,21 +19,66 @@ vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({ client }),
 }));
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useBlocker: () => ({ state: 'unblocked' as const }),
+  };
+});
+
+vi.mock('../components/workflow/ConfirmLeaveModal.js', () => ({
+  ConfirmLeaveModal: () => <div data-testid="confirm-leave">leave</div>,
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
   }),
 }));
 
-// Lightweight design-editor mock — avoid CodeMirror in jsdom unit tests
-vi.mock('@neos-work/design-editor', async () => {
-  const actual = await vi.importActual<typeof import('@neos-work/design-editor')>(
-    '@neos-work/design-editor',
-  );
+// Lightweight mock — avoid requiring built dist for unit tests
+vi.mock('@neos-work/design-editor', () => {
+  type Buf = {
+    path: string | null;
+    local: string;
+    disk: string;
+    diskHash: string | null;
+  };
   return {
-    ...actual,
+    createEmptyBuffer: (): Buf => ({ path: null, local: '', disk: '', diskHash: null }),
+    isDirty: (b: Buf) => b.local !== b.disk,
+    reduceEditorBuffer: (
+      prev: Buf,
+      event:
+        | { type: 'open'; path: string; content: string; hash?: string }
+        | { type: 'edit'; content: string }
+        | { type: 'saved'; content: string; hash?: string }
+        | { type: 'resolve-conflict'; choice: string; merged?: string },
+    ): Buf => {
+      if (event.type === 'open') {
+        return {
+          path: event.path,
+          local: event.content,
+          disk: event.content,
+          diskHash: event.hash ?? null,
+        };
+      }
+      if (event.type === 'edit') {
+        return { ...prev, local: event.content };
+      }
+      if (event.type === 'saved') {
+        return {
+          ...prev,
+          local: event.content,
+          disk: event.content,
+          diskHash: event.hash ?? prev.diskHash,
+        };
+      }
+      return prev;
+    },
     DesignEditor: (props: {
-      buffer: { path: string | null; local: string; disk: string };
+      buffer: Buf;
       onEdit?: (v: string) => void;
       onSave?: () => void;
       labels?: { code?: string; save?: string; dirty?: string };
@@ -47,11 +92,7 @@ vi.mock('@neos-work/design-editor', async () => {
             value={props.buffer.local}
             onChange={(e) => props.onEdit?.(e.target.value)}
           />
-          <button
-            type="button"
-            disabled={!dirty}
-            onClick={() => props.onSave?.()}
-          >
+          <button type="button" disabled={!dirty} onClick={() => props.onSave?.()}>
             {props.labels?.save ?? 'save'}
           </button>
         </div>
@@ -80,7 +121,7 @@ describe('ProjectWorkspace', () => {
     writeProjectFile.mockReset();
   });
 
-  it('loads project, shows files, saves dirty code', async () => {
+  it('loads project, shows files, saves dirty code via DesignEditor', async () => {
     const user = userEvent.setup();
     getProject.mockResolvedValue({
       ok: true,
@@ -119,10 +160,18 @@ describe('ProjectWorkspace', () => {
 
     const ta = screen.getByLabelText('project.mode.code') as HTMLTextAreaElement;
     await waitFor(() => expect(ta.value).toContain('hi'));
-    await user.clear(ta);
-    await user.type(ta, '<html>edited</html>');
-    // user.type may struggle with tags; force value via onChange path
-    await user.click(screen.getByRole('button', { name: 'common.save' }).catch?.(() => null) as never).catch(() => {});
+    fireEvent.change(ta, { target: { value: '<html>edited</html>' } });
+    await waitFor(() => expect(screen.getByText('project.dirty')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(writeProjectFile).toHaveBeenCalledWith(
+        'proj-1',
+        'index.html',
+        '<html>edited</html>',
+        'user',
+      );
+    });
   });
 
   it('shows error when project missing', async () => {

@@ -109,7 +109,7 @@ app.route('/api/projects', projects);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.1',
+    version: '0.5.2',
   });
 });
 
