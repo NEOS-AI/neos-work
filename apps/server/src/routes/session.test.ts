@@ -210,6 +210,17 @@ describe('session routes', () => {
     });
     expect(chatEmpty.status).toBe(400);
 
+    // Non-string content is rejected as missing/invalid (or API-key gate fires first)
+    const chatNonStr = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 42 }),
+    });
+    expect(chatNonStr.status).toBe(400);
+    expect(((await chatNonStr.json()) as { error: string }).error).toMatch(
+      /Missing or invalid content|API key/i,
+    );
+
     const agentBadJson = await session.request(`/${id}/agent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -223,6 +234,16 @@ describe('session routes', () => {
       body: JSON.stringify({ content: '' }),
     });
     expect(agentEmpty.status).toBe(400);
+
+    const agentNonStr = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: { text: 'hi' } }),
+    });
+    expect(agentNonStr.status).toBe(400);
+    expect(((await agentNonStr.json()) as { error: string }).error).toMatch(
+      /Missing or invalid content|API key/i,
+    );
 
     const missing = await session.request('/no-such-session/chat', {
       method: 'POST',
@@ -288,6 +309,9 @@ describe('session routes', () => {
       body: JSON.stringify({ approved: 'yes' }),
     });
     expect(invalidApproved.status).toBe(400);
+    expect(((await invalidApproved.json()) as { error: string }).error).toMatch(
+      /Missing or invalid "approved"/i,
+    );
 
     await session.request(`/${id}`, { method: 'DELETE' });
   });
@@ -355,6 +379,7 @@ describe('workspace routes', () => {
 
     const del = await workspace.request('/default', { method: 'DELETE' });
     expect(del.status).toBe(400);
+    expect(((await del.json()) as { error: string }).error).toMatch(/Cannot delete default workspace/i);
   });
 
   it('trims name/path and rejects blank name', async () => {

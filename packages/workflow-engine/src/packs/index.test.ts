@@ -163,6 +163,30 @@ describe('registerWorker hygiene', () => {
     expect(iso?.permissionProfile).toBeUndefined();
     expect(iso?.defaultMode).toBeUndefined();
 
+    // Unknown workspace kind is dropped (normalizeWorkspace → undefined)
+    registerWorker({
+      id: 'cov_worker_bad_ws_kind',
+      name: 'BadWs',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'prompt',
+      allowedTools: [],
+      workspace: { kind: 'shared' } as never,
+    });
+    expect(resolveWorker('cov_worker_bad_ws_kind')?.workspace).toBeUndefined();
+
+    // Non-object / null workspace ignored
+    registerWorker({
+      id: 'cov_worker_null_ws',
+      name: 'NullWs',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'prompt',
+      allowedTools: [],
+      workspace: null as never,
+    });
+    expect(resolveWorker('cov_worker_null_ws')?.workspace).toBeUndefined();
+
     registerWorker({
       id: 'cov_worker_none_ws',
       name: 'None',

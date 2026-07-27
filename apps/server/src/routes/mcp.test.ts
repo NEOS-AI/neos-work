@@ -261,6 +261,11 @@ describe('mcp routes', () => {
       body: JSON.stringify({ enabled: true }),
     });
     expect(missingToggle.status).toBe(404);
+    expect(((await missingToggle.json()) as { error: string }).error).toMatch(/MCP server not found/i);
+
+    const missingDel = await mcp.request('/no-such-mcp', { method: 'DELETE' });
+    expect(missingDel.status).toBe(404);
+    expect(((await missingDel.json()) as { error: string }).error).toMatch(/MCP server not found/i);
 
     await mcp.request(`/${created.data.id}`, { method: 'DELETE' });
   });
@@ -599,6 +604,17 @@ describe('mcp presets + TradingView CDP', () => {
       body: JSON.stringify({ presetId: 'nope', installPath: '/tmp' }),
     });
     expect(unknown.status).toBe(404);
+    expect(((await unknown.json()) as { error: string }).error).toMatch(/Unknown MCP preset/i);
+
+    const ctrlPreset = await mcp.request('/from-preset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ presetId: `tradingview${'\n'}`, installPath: '/tmp' }),
+    });
+    expect(ctrlPreset.status).toBe(400);
+    expect(((await ctrlPreset.json()) as { error: string }).error).toMatch(
+      /Missing or invalid "presetId"|Unknown MCP preset/i,
+    );
 
     // Create a temp fake package root with src/server.js
     const fs = await import('node:fs');

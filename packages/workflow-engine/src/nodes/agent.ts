@@ -4,12 +4,20 @@
  * Supports CLI providers: 'cli-claude', 'cli-gemini', 'cli-codex'.
  */
 
-import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
+import {
+  AgentOrchestrator,
+  AnthropicAdapter,
+  GoogleAdapter,
+  OpenAIAdapter,
+  buildWorkerToolRegistry,
+  resolveWorkerWorkspace,
+  scrubErrorMessage,
+} from '@neos-work/core';
+import type { DomainWorker } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 // Namespace import so vitest can spyOn packs.resolveWorker (live binding).
 import * as packs from '../packs/index.js';
 import { safeServerUrl } from './server-url.js';
-import { scrubErrorMessage } from '@neos-work/core';
 
 
 /** Cap API keys / auth tokens (header hygiene). */
@@ -93,24 +101,52 @@ async function buildSystemPromptWithMemory(
   }
 }
 
-function buildToolRegistry(
-  allowedTools?: string[],
-  settings?: Record<string, string>,
-): ToolRegistry {
-  const registry = new ToolRegistry();
+/**
+ * Build a permission/workspace-scoped tool registry for the agent node.
+ * Falls back to a full-profile worker rooted at process.cwd when no worker is set.
+ */
+async function buildAgentToolRegistry(
+  worker: DomainWorker | undefined,
+  allowedTools: string[] | undefined,
+  ctx: NodeContext,
+): Promise<{ registry: ReturnType<typeof buildWorkerToolRegistry>; workspaceRoot: string }> {
+  const effective: DomainWorker = worker
+    ? {
+        ...worker,
+        // Node-level allowlist override when harness/worker list is empty
+        allowedTools:
+          worker.allowedTools && worker.allowedTools.length > 0
+            ? worker.allowedTools
+            : allowedTools,
+      }
+    : {
+        id: 'ad_hoc_agent',
+        name: 'Agent',
+        domain: 'general',
+        description: '',
+        systemPrompt: '',
+        permissionProfile: 'full',
+        workspace: { kind: 'none' },
+        allowedTools,
+      };
 
-  const allTools = [
-    createWebSearchTool(),
-    ...createFilesystemTools(process.cwd()),
-  ];
+  const runId =
+    typeof (ctx as { runId?: unknown }).runId === 'string'
+      ? String((ctx as { runId?: string }).runId)
+      : typeof ctx.settings['RUN_ID'] === 'string'
+        ? ctx.settings['RUN_ID']
+        : 'agent-node';
 
-  for (const tool of allTools) {
-    if (!allowedTools || allowedTools.includes(tool.name)) {
-      registry.register(tool);
-    }
-  }
+  const workspaceRoot = await resolveWorkerWorkspace({
+    policy: effective.workspace ?? { kind: 'none' },
+    runId,
+    workerRunId: effective.id,
+  });
 
-  return registry;
+  return {
+    registry: buildWorkerToolRegistry({ worker: effective, workspaceRoot }),
+    workspaceRoot,
+  };
 }
 
 export class AgentNode implements ExecutableNode {
@@ -267,7 +303,12 @@ export class AgentNode implements ExecutableNode {
           ? { ...ctx.settings, llmProvider: nodeProvider }
           : ctx.settings;
       const adapter = buildAdapter(adapterSettings);
-      const toolRegistry = buildToolRegistry(toolFilter, ctx.settings);
+      // Permission profile + workspace isolation via WorkerRuntime helpers (Task 4)
+      const { registry: toolRegistry } = await buildAgentToolRegistry(
+        harness,
+        toolFilter,
+        ctx,
+      );
       // Prefer NodeConfig `llmModel` (panel field), then legacy `model`, then settings defaults
       // Control-char model ids are ignored (check before trim)
       const pickModel = (raw: unknown): string => {

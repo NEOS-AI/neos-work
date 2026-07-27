@@ -10,5 +10,10 @@ describe('@neos-work/core barrel exports', () => {
     expect(typeof (core as { Planner?: unknown }).Planner).toBe('function');
     expect(typeof (core as { createShellTool?: unknown }).createShellTool).toBe('function');
     expect(typeof (core as { discoverSkills?: unknown }).discoverSkills).toBe('function');
+    expect(typeof (core as { runWorker?: unknown }).runWorker).toBe('function');
+    expect(typeof (core as { WorkerRuntime?: unknown }).WorkerRuntime).toBe('function');
+    expect(typeof (core as { buildWorkerToolRegistry?: unknown }).buildWorkerToolRegistry).toBe(
+      'function',
+    );
   });
 });
