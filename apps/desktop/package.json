@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/desktop",
-  "version": "0.4.4",
+  "version": "0.5.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -43,6 +43,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.1",
+    "@vitest/coverage-v8": "3.2.4",
     "autoprefixer": "^10.4.21",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.0",

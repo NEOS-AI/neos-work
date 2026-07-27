@@ -205,6 +205,37 @@ export interface DesignSystem {
   updatedAt: string;
 }
 
+/** Design Project (v0.5 Open Design surface). */
+export interface DesignProject {
+  id: string;
+  name: string;
+  baseDir: string;
+  entryFile: string | null;
+  designSystemId: string | null;
+  meta: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectFileEntry {
+  path: string;
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mtimeMs?: number;
+  isEntry?: boolean;
+}
+
+export interface ProjectFileRevision {
+  id: string;
+  projectId: string;
+  path: string;
+  contentHash: string;
+  content?: string;
+  source: 'user' | 'agent' | 'import' | 'restore';
+  createdAt: string;
+}
+
 export interface Plugin {
   id: string;
   name: string;
@@ -890,6 +921,196 @@ export class EngineClient {
     const res = await fetch(`${this.baseUrl}/api/cli-agents`, {
       headers: this.getHeaders(),
     });
+    return readApiResponse(res);
+  }
+
+  // --- Design Projects (v0.5) ---
+
+  /**
+   * Encode a project-relative file path for `/files/*` splat routes.
+   * Rejects absolute paths, `..`, control chars; encodes each segment.
+   */
+  private projectRelPathSegments(raw: unknown, maxChars = 1_000): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    let p = raw.trim().replace(/\\/g, '/');
+    while (p.startsWith('./')) p = p.slice(2);
+    p = p.replace(/^\/+/, '').replace(/\/+/g, '/').replace(/\/$/, '');
+    if (!p || p.length > maxChars) return '';
+    if (p.startsWith('/') || /^[a-zA-Z]:/.test(p)) return '';
+    const segments = p.split('/');
+    for (const seg of segments) {
+      if (!seg || seg === '.' || seg === '..') return '';
+    }
+    return segments.map((s) => encodeURIComponent(s)).join('/');
+  }
+
+  async listProjects(): Promise<ApiResponse<DesignProject[]>> {
+    const res = await fetch(`${this.baseUrl}/api/projects`, { headers: this.getHeaders() });
+    return readApiResponse(res);
+  }
+
+  async getProject(id: string): Promise<ApiResponse<DesignProject>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}`, { headers: this.getHeaders() });
+    return readApiResponse(res);
+  }
+
+  async createProject(input: {
+    name: string;
+    baseDir?: string;
+    entryFile?: string | null;
+    designSystemId?: string | null;
+    meta?: Record<string, unknown>;
+  }): Promise<ApiResponse<DesignProject>> {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return { ok: false, error: 'Invalid name' };
+    }
+    if (input.baseDir != null && (typeof input.baseDir !== 'string' || /[\0\r\n]/.test(input.baseDir))) {
+      return { ok: false, error: 'Invalid baseDir' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        name: input.name.trim(),
+        baseDir: input.baseDir?.trim() || undefined,
+        entryFile: input.entryFile,
+        designSystemId: input.designSystemId,
+        meta: input.meta,
+      }),
+    });
+    return readApiResponse(res);
+  }
+
+  async updateProject(
+    id: string,
+    input: {
+      name?: string;
+      baseDir?: string;
+      entryFile?: string | null;
+      designSystemId?: string | null;
+      meta?: Record<string, unknown>;
+    },
+  ): Promise<ApiResponse<DesignProject>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (input.name != null && (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name))) {
+      return { ok: false, error: 'Invalid name' };
+    }
+    if (input.baseDir != null && (typeof input.baseDir !== 'string' || /[\0\r\n]/.test(input.baseDir))) {
+      return { ok: false, error: 'Invalid baseDir' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return readApiResponse(res);
+  }
+
+  async deleteProject(id: string): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async listProjectFiles(projectId: string): Promise<ApiResponse<ProjectFileEntry[]>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/files`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async readProjectFile(
+    projectId: string,
+    filePath: string,
+  ): Promise<ApiResponse<{ path: string; content: string; hash: string }>> {
+    const seg = this.pathSegment(projectId);
+    const pathSeg = this.projectRelPathSegments(filePath);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (!pathSeg) return this.invalidIdResponse('file path');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/files/${pathSeg}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async writeProjectFile(
+    projectId: string,
+    filePath: string,
+    content: string,
+    source: 'user' | 'agent' | 'import' | 'restore' = 'user',
+  ): Promise<ApiResponse<{ path: string; hash: string; bytes: number; created: boolean }>> {
+    const seg = this.pathSegment(projectId);
+    const pathSeg = this.projectRelPathSegments(filePath);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (!pathSeg) return this.invalidIdResponse('file path');
+    if (typeof content !== 'string' || /\0/.test(content)) {
+      return { ok: false, error: 'Invalid content' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/files/${pathSeg}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ content, source }),
+    });
+    return readApiResponse(res);
+  }
+
+  async mkdirProjectPath(
+    projectId: string,
+    dirPath: string,
+  ): Promise<ApiResponse<{ path: string }>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (typeof dirPath !== 'string' || /[\0\r\n]/.test(dirPath) || !dirPath.trim()) {
+      return this.invalidIdResponse('path');
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/mkdir`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ path: dirPath.trim() }),
+    });
+    return readApiResponse(res);
+  }
+
+  async listProjectRevisions(
+    projectId: string,
+    filePath?: string,
+  ): Promise<ApiResponse<ProjectFileRevision[]>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    let qs = '';
+    if (filePath != null && filePath !== '') {
+      if (typeof filePath !== 'string' || /[\0\r\n]/.test(filePath)) {
+        return this.invalidIdResponse('file path');
+      }
+      qs = `?path=${encodeURIComponent(filePath.trim())}`;
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/revisions${qs}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async restoreProjectRevision(
+    projectId: string,
+    revisionId: string,
+  ): Promise<ApiResponse<{ path: string; hash: string }>> {
+    const pSeg = this.pathSegment(projectId);
+    const rSeg = this.pathSegment(revisionId);
+    if (!pSeg) return this.invalidIdResponse('project id');
+    if (!rSeg) return this.invalidIdResponse('revision id');
+    const res = await fetch(
+      `${this.baseUrl}/api/projects/${pSeg}/revisions/${rSeg}/restore`,
+      { method: 'POST', headers: this.getHeaders() },
+    );
     return readApiResponse(res);
   }
 

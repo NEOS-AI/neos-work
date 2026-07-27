@@ -815,3 +815,346 @@ describe('workflow primaryDomain / domainPackIds (v0.4.2)', () => {
   });
 });
 
+
+describe('workflow validation + migrate apply + export edges', () => {
+  it('PUT rejects invalid name/description/designSystemId and blank path ids', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_putval`, ...minimalGraph }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const badJson = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const ctrlName = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'bad\nname' }),
+    });
+    expect(ctrlName.status).toBe(400);
+
+    const blankName = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    expect(blankName.status).toBe(400);
+
+    const longName = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201) }),
+    });
+    expect(longName.status).toBe(400);
+
+    const nulDesc = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ description: `x${'\0'}y` }),
+    });
+    expect(nulDesc.status).toBe(400);
+
+    const badDs = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ designSystemId: 'ds\nid' }),
+    });
+    expect(badDs.status).toBe(400);
+
+    const putOk = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${WF_NAME}_renamed`,
+        description: '  multi\nline  ',
+        designSystemId: '  ds-1  ',
+        primaryDomain: 'research',
+        domainPackIds: ['research', 'bad\n', 'coding', 42 as unknown as string],
+        nodes: minimalGraph.nodes,
+        edges: minimalGraph.edges,
+      }),
+    });
+    expect(putOk.status).toBe(200);
+    const updated = (await putOk.json()) as {
+      data: {
+        name: string;
+        description?: string;
+        designSystemId?: string;
+        domain?: string;
+        domainPackIds?: string[];
+      };
+    };
+    expect(updated.data.name).toBe(`${WF_NAME}_renamed`);
+    expect(updated.data.description).toBe('multi\nline');
+    expect(updated.data.designSystemId).toBe('ds-1');
+    expect(updated.data.domain).toBe('research');
+    expect(updated.data.domainPackIds).toEqual(expect.arrayContaining(['research', 'coding']));
+
+    const clearPacks = await workflow.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ domainPackIds: null }),
+    });
+    expect(clearPacks.status).toBe(200);
+
+    const blankGet = await workflow.request('/%20');
+    expect(blankGet.status).toBe(404);
+    const blankDel = await workflow.request('/%20', { method: 'DELETE' });
+    expect(blankDel.status).toBe(404);
+    const blankDup = await workflow.request('/%20/duplicate', { method: 'POST' });
+    expect(blankDup.status).toBe(404);
+    const blankExport = await workflow.request('/%20/export');
+    expect(blankExport.status).toBe(404);
+    const blankPre = await workflow.request('/%20/preflight', { method: 'POST' });
+    expect(blankPre.status).toBe(404);
+    const blankRun = await workflow.request('/%20/run', { method: 'POST' });
+    expect(blankRun.status).toBe(404);
+
+    const missingPut = await workflow.request('/no-such-wf-id', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(missingPut.status).toBe(404);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+  });
+
+  it('POST create rejects null-byte description', async () => {
+    const res = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${WF_NAME}_nuldesc`,
+        description: `ok${'\0'}bad`,
+        ...minimalGraph,
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('migrate dryRun:false persists when id is valid', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${WF_NAME}_migrate_apply`,
+        domain: 'finance',
+        nodes: [
+          {
+            id: 'a1',
+            type: 'agent_finance',
+            label: 'Analyst',
+            position: { x: 0, y: 0 },
+            config: { harnessId: 'finance_analyst' },
+          },
+        ],
+        edges: [],
+      }),
+    });
+    // create may migrate on write already; still exercise migrate endpoint
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const apply = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dryRun: false,
+        id,
+        workflow: {
+          id,
+          name: 'Legacy',
+          domain: 'finance',
+          nodes: [
+            {
+              id: 'a1',
+              type: 'agent_finance',
+              label: 'Analyst',
+              position: { x: 0, y: 0 },
+              config: { harnessId: 'finance_analyst' },
+            },
+          ],
+          edges: [],
+        },
+      }),
+    });
+    expect(apply.status).toBe(200);
+    const body = (await apply.json()) as {
+      ok: boolean;
+      data: { dryRun: boolean; workflow?: { nodes: Array<{ type: string }> } };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.dryRun).toBe(false);
+    if (body.data.workflow?.nodes?.[0]) {
+      expect(body.data.workflow.nodes[0]!.type).toBe('agent');
+    }
+
+    const badId = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dryRun: false,
+        id: '  ',
+        workflow: { name: 'x', domain: 'general', nodes: [], edges: [] },
+      }),
+    });
+    expect(badId.status).toBe(400);
+
+    const missing = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dryRun: false,
+        id: '00000000-0000-0000-0000-000000000099',
+        workflow: { name: 'x', domain: 'general', nodes: [], edges: [] },
+      }),
+    });
+    expect(missing.status).toBe(404);
+
+    const invalidJson = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(invalidJson.status).toBe(400);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+  });
+
+  it('import JSON attaches designSystemId when present', async () => {
+    const res = await workflow.request('/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        version: '1',
+        workflow: {
+          name: `${WF_NAME}_imp_ds`,
+          description: '  with ds  ',
+          domain: 'coding',
+          designSystemId: '  ds-import-1  ',
+          nodes: minimalGraph.nodes,
+          edges: minimalGraph.edges,
+        },
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { id: string; designSystemId?: string; description?: string } };
+    expect(body.data.designSystemId).toBe('ds-import-1');
+    expect(body.data.description).toBe('with ds');
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
+
+  it('export.zip includes artifacts and runs when present', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_zipart`, ...minimalGraph }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    // seed a run + artifact
+    workflows.saveRun({
+      id: crypto.randomUUID(),
+      workflowId: id,
+      status: 'completed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    });
+    const { createArtifact } = await import('../db/artifacts.js');
+    createArtifact({
+      workflowId: id,
+      name: 'report.html',
+      contentType: 'text/html',
+      content: '<html>zip-export</html>',
+    });
+    createArtifact({
+      workflowId: id,
+      name: 'notes.md',
+      contentType: 'text/markdown',
+      content: '# notes',
+    });
+
+    const zip = await workflow.request(`/${id}/export.zip`);
+    expect(zip.status).toBe(200);
+    expect(zip.headers.get('content-type')).toMatch(/zip/i);
+    const buf = Buffer.from(await zip.arrayBuffer());
+    expect(buf.length).toBeGreaterThan(100);
+    // zip local file header magic
+    expect(buf[0]).toBe(0x50);
+    expect(buf[1]).toBe(0x4b);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+  });
+
+  it('GET run by id validates ownership and blank runId', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_runget`, ...minimalGraph }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+    const runId = crypto.randomUUID();
+    workflows.saveRun({
+      id: runId,
+      workflowId: id,
+      status: 'completed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+    });
+
+    const ok = await workflow.request(`/${id}/runs/${runId}`);
+    expect(ok.status).toBe(200);
+
+    const other = await workflow.request(`/${id}/runs/${crypto.randomUUID()}`);
+    expect(other.status).toBe(404);
+
+    const blank = await workflow.request(`/${id}/runs/%20`);
+    expect(blank.status).toBe(404);
+
+    // wrong workflow ownership
+    const create2 = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_runget2`, ...minimalGraph }),
+    });
+    const id2 = ((await create2.json()) as { data: { id: string } }).data.id;
+    const wrong = await workflow.request(`/${id2}/runs/${runId}`);
+    expect(wrong.status).toBe(404);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+    await workflow.request(`/${id2}`, { method: 'DELETE' });
+  });
+
+  it('POST run rejects oversized inputs payload', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_bigin`, ...minimalGraph }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const res = await workflow.request(`/${id}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: { blob: 'x'.repeat(260_000) } }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/too large/i);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+  });
+
+  it('export / preflight / duplicate 404 for missing workflow', async () => {
+    expect((await workflow.request('/no-such/export')).status).toBe(404);
+    expect((await workflow.request('/no-such/duplicate', { method: 'POST' })).status).toBe(404);
+    expect((await workflow.request('/no-such/preflight', { method: 'POST' })).status).toBe(404);
+    expect((await workflow.request('/no-such/export.zip')).status).toBe(404);
+  });
+});

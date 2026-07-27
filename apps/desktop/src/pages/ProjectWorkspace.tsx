@@ -1,0 +1,343 @@
+/**
+ * Design Project workspace (v0.5.2 / PLAN_FOR_V0_5_0 Task 1b).
+ * Files tree + @neos-work/design-editor (CodeMirror 6 Preview/Code/Split).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useNavigate, useParams, useBlocker } from 'react-router-dom';
+import {
+  DesignEditor,
+  createEmptyBuffer,
+  isDirty,
+  reduceEditorBuffer,
+  type DesignEditorMode,
+  type EditorBufferState,
+} from '@neos-work/design-editor';
+
+import { useEngine } from '../hooks/useEngine.js';
+import type { DesignProject, ProjectFileEntry } from '../lib/engine.js';
+import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
+import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
+
+export function ProjectWorkspace() {
+  const { t } = useTranslation('common');
+  const { client } = useEngine();
+  const navigate = useNavigate();
+  const { id: rawId } = useParams<{ id: string }>();
+  const projectId = safeEntityId(rawId ?? '') || '';
+
+  const [project, setProject] = useState<DesignProject | null>(null);
+  const [files, setFiles] = useState<ProjectFileEntry[]>([]);
+  const [buffer, setBuffer] = useState<EditorBufferState>(() => createEmptyBuffer());
+  const [mode, setMode] = useState<DesignEditorMode>('split');
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const dirty = isDirty(buffer);
+  const blocker = useBlocker(dirty);
+
+  const loadProject = useCallback(async () => {
+    if (!client || !projectId) {
+      setPageError('Invalid project id');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setPageError(null);
+    try {
+      const res = await client.getProject(projectId);
+      if (!res.ok || !res.data) {
+        setPageError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || 'Failed to load project',
+        );
+        setProject(null);
+        return;
+      }
+      setProject(res.data);
+      const filesRes = await client.listProjectFiles(projectId);
+      const entries = filesRes.ok && filesRes.data ? filesRes.data : [];
+      setFiles(entries);
+      const entry =
+        res.data.entryFile
+        || entries.find((e) => e.type === 'file' && e.path.endsWith('.html'))?.path
+        || entries.find((e) => e.type === 'file')?.path
+        || null;
+      if (entry) {
+        const fileRes = await client.readProjectFile(projectId, entry);
+        if (fileRes.ok && fileRes.data) {
+          setBuffer(
+            reduceEditorBuffer(createEmptyBuffer(), {
+              type: 'open',
+              path: entry,
+              content: fileRes.data.content,
+              hash: fileRes.data.hash,
+            }),
+          );
+        }
+      } else {
+        setBuffer(createEmptyBuffer());
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load project';
+      setPageError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Failed to load project',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [client, projectId]);
+
+  useEffect(() => {
+    void loadProject();
+  }, [loadProject]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
+  const openFile = useCallback(
+    async (path: string) => {
+      if (!client || !projectId) return;
+      if (isDirty(buffer)) {
+        const leave = window.confirm(t('project.unsavedLeave'));
+        if (!leave) return;
+      }
+      setSaveError(null);
+      try {
+        const res = await client.readProjectFile(projectId, path);
+        if (res.ok && res.data) {
+          setBuffer(
+            reduceEditorBuffer(createEmptyBuffer(), {
+              type: 'open',
+              path,
+              content: res.data.content,
+              hash: res.data.hash,
+            }),
+          );
+        } else {
+          setSaveError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.readFailed'),
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.readFailed');
+        setSaveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+      }
+    },
+    [client, projectId, buffer, t],
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!client || !projectId || !buffer.path || !isDirty(buffer)) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await client.writeProjectFile(projectId, buffer.path, buffer.local, 'user');
+      if (res.ok) {
+        setBuffer((prev) =>
+          reduceEditorBuffer(prev, {
+            type: 'saved',
+            content: prev.local,
+            hash: res.data?.hash,
+          }),
+        );
+        const filesRes = await client.listProjectFiles(projectId);
+        if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+      } else {
+        setSaveError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || t('project.saveFailed'),
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.saveFailed');
+      setSaveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setSaving(false);
+    }
+  }, [client, projectId, buffer, t]);
+
+  const fileTree = useMemo(() => {
+    return [...files].sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+      return a.path.localeCompare(b.path);
+    });
+  }, [files]);
+
+  if (!projectId) {
+    return (
+      <div className="p-6">
+        <p className="text-sm text-red-400">{t('project.invalidId')}</p>
+        <Link to="/projects" className="mt-2 inline-block text-sm underline">
+          {t('project.backToList')}
+        </Link>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>
+        {t('common.loading')}
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="p-6 space-y-2">
+        <p className="text-sm text-red-400" role="alert">
+          {pageError || t('project.loadFailed')}
+        </p>
+        <button
+          type="button"
+          className="text-sm underline"
+          style={{ color: 'var(--text-secondary)' }}
+          onClick={() => navigate('/projects')}
+        >
+          {t('project.backToList')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="-m-6 flex h-[calc(100vh-0px)] min-h-0 flex-col">
+      <header
+        className="flex flex-wrap items-center gap-3 border-b px-4 py-2"
+        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
+      >
+        <Link to="/projects" className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          ← {t('project.title')}
+        </Link>
+        <h1 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {scrubDisplayText(project.name, { collapseLines: true, maxChars: 80 })}
+          {dirty ? ' *' : ''}
+        </h1>
+      </header>
+
+      {pageError && (
+        <div className="border-b border-red-900/40 bg-red-950/20 px-4 py-1.5 text-xs text-red-300">
+          {pageError}
+        </div>
+      )}
+      {saveError && (
+        <div
+          className="border-b border-red-900/40 bg-red-950/20 px-4 py-1.5 text-xs text-red-300"
+          role="alert"
+        >
+          {saveError}
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1">
+        <aside
+          className="flex w-52 shrink-0 flex-col border-r"
+          style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+        >
+          <div
+            className="border-b px-3 py-2 text-[10px] font-semibold uppercase tracking-wide"
+            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}
+          >
+            {t('project.files')}
+          </div>
+          <ul className="flex-1 overflow-auto py-1 text-xs">
+            {fileTree.map((f) => {
+              const depth = f.path.split('/').length - 1;
+              const active = f.path === buffer.path;
+              return (
+                <li key={f.path}>
+                  <button
+                    type="button"
+                    disabled={f.type === 'directory'}
+                    onClick={() => {
+                      if (f.type === 'file') void openFile(f.path);
+                    }}
+                    className="flex w-full items-center gap-1 truncate px-2 py-1 text-left disabled:cursor-default"
+                    style={{
+                      paddingLeft: 8 + depth * 10,
+                      backgroundColor: active
+                        ? 'color-mix(in srgb, var(--bg-tertiary) 90%, transparent)'
+                        : undefined,
+                      color:
+                        f.type === 'directory'
+                          ? 'var(--text-muted)'
+                          : active
+                            ? 'var(--text-primary)'
+                            : 'var(--text-secondary)',
+                    }}
+                    title={f.path}
+                  >
+                    <span className="opacity-60">{f.type === 'directory' ? '▸' : '·'}</span>
+                    <span className="truncate">
+                      {scrubDisplayText(f.name, { collapseLines: true, maxChars: 60 })}
+                    </span>
+                    {f.isEntry && (
+                      <span className="ml-auto text-[9px] text-emerald-400">entry</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+            {fileTree.length === 0 && (
+              <li className="px-3 py-2" style={{ color: 'var(--text-muted)' }}>
+                {t('project.noFiles')}
+              </li>
+            )}
+          </ul>
+          <div
+            className="border-t px-2 py-1.5 font-mono text-[10px]"
+            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}
+          >
+            {scrubDisplayText(project.baseDir, { collapseLines: true, maxChars: 48 })}
+          </div>
+        </aside>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <DesignEditor
+            buffer={buffer}
+            mode={mode}
+            onModeChange={setMode}
+            onEdit={(content) =>
+              setBuffer((prev) => reduceEditorBuffer(prev, { type: 'edit', content }))
+            }
+            onSave={() => void handleSave()}
+            saving={saving}
+            labels={{
+              preview: t('project.mode.preview'),
+              code: t('project.mode.code'),
+              split: t('project.mode.split'),
+              save: saving ? t('common.loading') : t('common.save'),
+              dirty: t('project.dirty'),
+            }}
+            onResolveConflict={(choice, merged) =>
+              setBuffer((prev) =>
+                reduceEditorBuffer(prev, { type: 'resolve-conflict', choice, merged }),
+              )
+            }
+          />
+        </div>
+      </div>
+
+      {blocker.state === 'blocked' && (
+        <ConfirmLeaveModal
+          onConfirm={() => blocker.proceed?.()}
+          onCancel={() => blocker.reset?.()}
+        />
+      )}
+    </div>
+  );
+}
+
+export default ProjectWorkspace;

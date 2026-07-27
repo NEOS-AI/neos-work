@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { id: 'dashboard', path: '/', icon: DashboardIcon },
   { id: 'sessions', path: '/sessions', icon: SessionsIcon },
   { id: 'workflows', path: '/workflows', icon: WorkflowsIcon },
+  { id: 'projects', path: '/projects', icon: ProjectsIcon },
   { id: 'harnesses', path: '/harnesses', icon: HarnessesIcon },
   { id: 'blocks', path: '/blocks', icon: BlocksIcon },
   { id: 'templates', path: '/templates', icon: TemplatesIcon },
@@ -259,6 +260,16 @@ function WorkflowsIcon() {
       <circle cx="19" cy="19" r="2" />
       <line x1="7" y1="11.5" x2="17" y2="6.5" />
       <line x1="7" y1="12.5" x2="17" y2="17.5" />
+    </svg>
+  );
+}
+
+function ProjectsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
     </svg>
   );
 }

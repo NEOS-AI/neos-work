@@ -444,3 +444,44 @@ describe('projects missing-id branches', () => {
     expect([400, 404]).toContain(missing.status);
   });
 });
+
+describe('projects PathSandboxError paths', () => {
+  it('POST create rejects filesystem root / invalid baseDir', async () => {
+    const root = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `${NAME}_badroot`, baseDir: '/' }),
+    });
+    expect([400, 403]).toContain(root.status);
+
+    const missing = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}_missingdir`,
+        baseDir: '/tmp/definitely-missing-neos-project-dir-xyz',
+      }),
+    });
+    expect([400, 403, 404]).toContain(missing.status);
+  });
+
+  it('PUT with invalid baseDir returns sandbox error status', async () => {
+    const project = await createViaApi();
+    const res = await app.request(`/api/projects/${project.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: '/' }),
+    });
+    expect([400, 403]).toContain(res.status);
+  });
+
+  it('write rejects path traversal with sandbox status', async () => {
+    const project = await createViaApi();
+    const res = await app.request(`/api/projects/${project.id}/files/../escape.txt`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'nope' }),
+    });
+    expect([400, 403, 404]).toContain(res.status);
+  });
+});

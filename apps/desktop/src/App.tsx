@@ -1,4 +1,4 @@
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
+import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
 
 import { Sidebar } from './components/Sidebar.js';
 import { EngineProvider, useEngine } from './hooks/useEngine.js';
@@ -20,6 +20,8 @@ import { Routines } from './pages/Routines.js';
 import { Plugins } from './pages/Plugins.js';
 import { Deployments } from './pages/Deployments.js';
 import { Media } from './pages/Media.js';
+import { Projects } from './pages/Projects.js';
+import { ProjectWorkspace } from './pages/ProjectWorkspace.js';
 
 export default function App() {
   return (
@@ -31,6 +33,36 @@ export default function App() {
   );
 }
 
+/**
+ * Data router so useBlocker works in WorkflowEditor / ProjectWorkspace (RR7).
+ * Built once; only mounted while engine is connected.
+ */
+const connectedRouter = createBrowserRouter([
+  {
+    element: <MainLayout />,
+    children: [
+      { index: true, element: <Dashboard /> },
+      { path: 'sessions', element: <Sessions /> },
+      { path: 'workflows', element: <Workflows /> },
+      { path: 'workflows/:id', element: <WorkflowEditor /> },
+      { path: 'projects', element: <Projects /> },
+      { path: 'projects/:id', element: <ProjectWorkspace /> },
+      { path: 'harnesses', element: <Harnesses /> },
+      { path: 'blocks', element: <Blocks /> },
+      { path: 'templates', element: <Templates /> },
+      { path: 'skills', element: <Skills /> },
+      { path: 'memory', element: <Memory /> },
+      { path: 'settings', element: <Settings /> },
+      { path: 'design-systems', element: <DesignSystems /> },
+      { path: 'design-systems/:id', element: <DesignSystemEditor /> },
+      { path: 'routines', element: <Routines /> },
+      { path: 'plugins', element: <Plugins /> },
+      { path: 'deployments', element: <Deployments /> },
+      { path: 'media', element: <Media /> },
+    ],
+  },
+]);
+
 function AppRouter() {
   const { status } = useEngine();
 
@@ -39,30 +71,7 @@ function AppRouter() {
     return <ModeSelection />;
   }
 
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="sessions" element={<Sessions />} />
-          <Route path="workflows" element={<Workflows />} />
-          <Route path="workflows/:id" element={<WorkflowEditor />} />
-          <Route path="harnesses" element={<Harnesses />} />
-          <Route path="blocks" element={<Blocks />} />
-          <Route path="templates" element={<Templates />} />
-          <Route path="skills" element={<Skills />} />
-          <Route path="memory" element={<Memory />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="design-systems" element={<DesignSystems />} />
-          <Route path="design-systems/:id" element={<DesignSystemEditor />} />
-          <Route path="routines" element={<Routines />} />
-          <Route path="plugins" element={<Plugins />} />
-          <Route path="deployments" element={<Deployments />} />
-          <Route path="media" element={<Media />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={connectedRouter} />;
 }
 
 function MainLayout() {

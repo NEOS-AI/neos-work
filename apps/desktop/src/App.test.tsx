@@ -37,6 +37,10 @@ vi.mock('./pages/Routines.js', () => ({ Routines: () => <div>Routines</div> }));
 vi.mock('./pages/Plugins.js', () => ({ Plugins: () => <div>Plugins</div> }));
 vi.mock('./pages/Deployments.js', () => ({ Deployments: () => <div>Deployments</div> }));
 vi.mock('./pages/Media.js', () => ({ Media: () => <div>Media</div> }));
+vi.mock('./pages/Projects.js', () => ({ Projects: () => <div>Projects</div> }));
+vi.mock('./pages/ProjectWorkspace.js', () => ({
+  ProjectWorkspace: () => <div>ProjectWorkspace</div>,
+}));
 
 const App = (await import('./App.js')).default;
 

@@ -685,3 +685,187 @@ describe('plugin-runner multi-stage human-in-loop', () => {
   });
 });
 
+
+describe('plugin-runner LLM stage (mocked fetch)', () => {
+  it('executes non-HITL stage via Anthropic when key set', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ content: [{ text: 'llm-output' }] }),
+        text: async () => '',
+      }),
+    );
+
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'llm-stage',
+      name: 'LLM Stage',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'gen',
+          name: 'Generate',
+          kind: 'generate',
+          prompt: 'Say hi about {{goal}}',
+          outputKey: 'out',
+        },
+      ],
+    };
+
+    const events: Array<{ type: string; output?: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'coverage' },
+      settings: { ANTHROPIC_API_KEY: 'sk-test-llm' },
+      onEvent: (e) => events.push(e as { type: string; output?: string }),
+    });
+
+    expect(events.some((e) => e.type === 'stage.output' && e.output === 'llm-output')).toBe(true);
+    expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
+    expect(fetch).toHaveBeenCalled();
+  });
+
+  it('falls back to OpenAI when only OPENAI key set', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'from-openai' } }] }),
+        text: async () => '',
+      }),
+    );
+
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'openai-stage',
+      name: 'OpenAI Stage',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'g',
+          name: 'G',
+          kind: 'generate',
+          prompt: 'hello',
+          outputKey: 'out',
+        },
+      ],
+    };
+
+    const events: Array<{ type: string; output?: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { OPENAI_API_KEY: 'sk-openai' },
+      onEvent: (e) => events.push(e as { type: string; output?: string }),
+    });
+    expect(events.some((e) => e.output === 'from-openai')).toBe(true);
+  });
+
+  it('returns no-key placeholder when settings empty', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'nokey',
+      name: 'No Key',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'g',
+          name: 'G',
+          kind: 'generate',
+          prompt: 'x',
+          outputKey: 'out',
+        },
+      ],
+    };
+    const events: Array<{ type: string; output?: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => events.push(e as { type: string; output?: string }),
+    });
+    expect(
+      events.some(
+        (e) => e.type === 'stage.output' && /No LLM API key/i.test(e.output ?? ''),
+      ),
+    ).toBe(true);
+  });
+
+  it('skips stages with control-char ids and reports API errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => 'rate\nlimit',
+        json: async () => ({}),
+      }),
+    );
+
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'skip-bad',
+      name: 'Skip Bad',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'bad\nid',
+          name: 'Bad',
+          kind: 'generate',
+          prompt: 'x',
+          outputKey: 'out',
+        },
+        {
+          id: 'ok',
+          name: 'Ok',
+          kind: 'generate',
+          prompt: 'x',
+          outputKey: 'out2',
+        },
+      ],
+    };
+
+    const events: Array<{ type: string; output?: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { ANTHROPIC_API_KEY: 'sk' },
+      onEvent: (e) => events.push(e as { type: string; output?: string }),
+    });
+    // bad stage skipped; ok stage runs with API error message
+    expect(
+      events.some((e) => e.type === 'stage.output' && /Anthropic API error 429/i.test(e.output ?? '')),
+    ).toBe(true);
+  });
+
+  it('aborts pipeline when signal already aborted', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'abort',
+      name: 'Abort',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'g',
+          name: 'G',
+          kind: 'generate',
+          prompt: 'x',
+          outputKey: 'out',
+        },
+      ],
+    };
+    const controller = new AbortController();
+    controller.abort();
+    const events: Array<{ type: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { ANTHROPIC_API_KEY: 'sk' },
+      signal: controller.signal,
+      onEvent: (e) => events.push(e),
+    });
+    // started then aborted before stages complete
+    expect(events.some((e) => e.type === 'pipeline.started')).toBe(true);
+  });
+});

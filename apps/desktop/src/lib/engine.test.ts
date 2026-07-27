@@ -772,6 +772,29 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toMatch(/preflight/);
   });
 
+  it('design project endpoints', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+    await client.listProjects();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/projects$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'p1', name: 'N' } }));
+    await client.createProject({ name: 'N' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'index.html', content: '<a/>', hash: 'h' } }));
+    await client.readProjectFile('p1', 'index.html');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/index.html');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'a/b.html', hash: 'x', bytes: 1, created: true } }));
+    await client.writeProjectFile('p1', 'a/b.html', '<b/>');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/a/b.html');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    const bad = await client.readProjectFile('p1', '../etc/passwd');
+    expect(bad.ok).toBe(false);
+  });
+
   it('cli agents and design systems list', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
