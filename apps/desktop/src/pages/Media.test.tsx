@@ -6,9 +6,11 @@ const listMediaFiles = vi.fn();
 const deleteMediaFile = vi.fn();
 const fetchMediaBlob = vi.fn();
 
+const client = { listMediaFiles, deleteMediaFile, fetchMediaBlob };
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listMediaFiles, deleteMediaFile, fetchMediaBlob },
+    client,
   }),
 }));
 

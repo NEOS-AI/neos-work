@@ -4,9 +4,11 @@ import userEvent from '@testing-library/user-event';
 
 const listPlugins = vi.fn();
 
+const client = { listPlugins };
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listPlugins },
+    client,
   }),
 }));
 

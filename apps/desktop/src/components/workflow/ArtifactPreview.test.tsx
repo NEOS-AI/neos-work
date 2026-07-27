@@ -9,15 +9,17 @@ const refreshArtifact = vi.fn();
 const deleteArtifact = vi.fn();
 const updateArtifact = vi.fn();
 
-vi.mock('../../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    client: {
+const client = {
       listArtifacts,
       getArtifact,
       refreshArtifact,
       deleteArtifact,
       updateArtifact,
-    },
+    };
+
+vi.mock('../../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client,
   }),
 }));
 

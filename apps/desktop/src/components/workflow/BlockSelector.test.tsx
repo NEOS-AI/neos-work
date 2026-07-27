@@ -6,9 +6,11 @@ import type { WorkflowBlock } from '../../lib/engine.js';
 
 const listBlocks = vi.fn();
 
+const client = { listBlocks };
+
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listBlocks },
+    client,
   }),
 }));
 

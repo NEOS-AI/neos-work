@@ -14,9 +14,7 @@ const createRoutine = vi.fn();
 const navigate = vi.fn();
 const fitView = vi.fn();
 
-vi.mock('../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    client: {
+const client = {
       getWorkflow,
       listBlocks,
       updateWorkflow,
@@ -25,7 +23,11 @@ vi.mock('../hooks/useEngine.js', () => ({
       exportWorkflow,
       exportWorkflowZip,
       createRoutine,
-    },
+    };
+
+vi.mock('../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client,
   }),
 }));
 
@@ -110,9 +112,12 @@ vi.mock('../components/workflow/ArtifactPreview.js', () => ({
 vi.mock('../components/workflow/RunLogPanel.js', () => ({
   RunLogPanel: () => <div data-testid="run-log-panel">run-log</div>,
 }));
+// Stable empty results so validation memos don't allocate every render
+const EMPTY_ISSUES: unknown[] = [];
+const EMPTY_SUMMARY = { total: 0, errors: 0, warnings: 0 };
 vi.mock('../components/workflow/WorkflowValidation.js', () => ({
-  validateWorkflowDraft: () => [],
-  summarizeValidationIssues: () => ({ total: 0, errors: 0, warnings: 0 }),
+  validateWorkflowDraft: () => EMPTY_ISSUES,
+  summarizeValidationIssues: () => EMPTY_SUMMARY,
 }));
 vi.mock('../lib/layout.js', () => ({
   autoLayout: (nodes: unknown[]) => nodes,
@@ -192,7 +197,7 @@ describe('WorkflowEditor page', () => {
     });
     expect(screen.getByTestId('react-flow')).toBeInTheDocument();
     expect(screen.getByText('Trigger')).toBeInTheDocument();
-    expect(screen.getByText('Finance Agent')).toBeInTheDocument();
+    expect(screen.getByText('Finance Analyst')).toBeInTheDocument();
     expect(screen.getByText('common.save')).toBeInTheDocument();
     expect(getWorkflow).toHaveBeenCalledWith('wf-1');
   });

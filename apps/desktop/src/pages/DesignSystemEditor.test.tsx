@@ -8,9 +8,11 @@ const getDesignSystemContent = vi.fn();
 const saveDesignSystemContent = vi.fn();
 const navigate = vi.fn();
 
+const client = { listDesignSystems, getDesignSystemContent, saveDesignSystemContent };
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listDesignSystems, getDesignSystemContent, saveDesignSystemContent },
+    client,
   }),
 }));
 

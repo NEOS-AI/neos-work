@@ -7,9 +7,11 @@ const getTemplates = vi.fn();
 const createWorkflow = vi.fn();
 const navigate = vi.fn();
 
+const client = { getTemplates, createWorkflow };
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { getTemplates, createWorkflow },
+    client,
   }),
 }));
 

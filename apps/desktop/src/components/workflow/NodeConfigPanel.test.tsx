@@ -12,10 +12,7 @@ const regenerateWebhookSecret = vi.fn();
 const testWebhookFire = vi.fn();
 const deployPreflight = vi.fn();
 
-vi.mock('../../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    serverUrl: 'http://127.0.0.1:57286',
-    client: {
+const client = {
       listDesignSystems,
       listBlocks,
       listHarnesses,
@@ -23,7 +20,12 @@ vi.mock('../../hooks/useEngine.js', () => ({
       regenerateWebhookSecret,
       testWebhookFire,
       deployPreflight,
-    },
+    };
+
+vi.mock('../../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    serverUrl: 'http://127.0.0.1:57286',
+    client,
   }),
 }));
 

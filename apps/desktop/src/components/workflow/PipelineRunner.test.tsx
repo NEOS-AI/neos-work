@@ -8,12 +8,14 @@ const runPlugin = vi.fn();
 const resumePlugin = vi.fn();
 const stop = vi.fn();
 
-vi.mock('../../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    client: {
+const client = {
       runPlugin,
       resumePlugin,
-    },
+    };
+
+vi.mock('../../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client,
   }),
 }));
 

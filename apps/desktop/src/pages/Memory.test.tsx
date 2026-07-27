@@ -8,9 +8,11 @@ const updateMemory = vi.fn();
 const deleteMemory = vi.fn();
 const toggleMemory = vi.fn();
 
+const client = { listMemories, createMemory, updateMemory, deleteMemory, toggleMemory };
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listMemories, createMemory, updateMemory, deleteMemory, toggleMemory },
+    client,
   }),
 }));
 

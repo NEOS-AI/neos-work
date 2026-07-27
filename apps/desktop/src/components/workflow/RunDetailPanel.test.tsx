@@ -5,9 +5,11 @@ import { RunDetailPanel } from './RunDetailPanel.js';
 
 const getWorkflowRun = vi.fn();
 
+const client = { getWorkflowRun };
+
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { getWorkflowRun },
+    client,
   }),
 }));
 

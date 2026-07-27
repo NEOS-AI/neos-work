@@ -8,14 +8,16 @@ const clearWorkflowRuns = vi.fn();
 const deleteWorkflowRun = vi.fn();
 const getWorkflowRun = vi.fn();
 
+const client = {
+  listWorkflowRuns,
+  clearWorkflowRuns,
+  deleteWorkflowRun,
+  getWorkflowRun,
+};
+
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: {
-      listWorkflowRuns,
-      clearWorkflowRuns,
-      deleteWorkflowRun,
-      getWorkflowRun,
-    },
+    client,
   }),
 }));
 

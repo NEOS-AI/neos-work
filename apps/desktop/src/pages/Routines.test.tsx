@@ -11,9 +11,7 @@ const runRoutineNow = vi.fn();
 const listRoutineRuns = vi.fn();
 const crystallizeRoutineRun = vi.fn();
 
-vi.mock('../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    client: {
+const client = {
       listRoutines,
       listWorkflows,
       createRoutine,
@@ -22,7 +20,11 @@ vi.mock('../hooks/useEngine.js', () => ({
       runRoutineNow,
       listRoutineRuns,
       crystallizeRoutineRun,
-    },
+    };
+
+vi.mock('../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client,
   }),
 }));
 

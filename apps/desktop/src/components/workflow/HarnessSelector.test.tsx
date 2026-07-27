@@ -6,9 +6,11 @@ import type { AgentHarness } from '../../lib/engine.js';
 
 const listHarnesses = vi.fn();
 
+const client = { listHarnesses };
+
 vi.mock('../../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listHarnesses },
+    client,
   }),
 }));
 

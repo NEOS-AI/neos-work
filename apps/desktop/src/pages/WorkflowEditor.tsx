@@ -661,7 +661,9 @@ export function WorkflowEditor() {
     });
   }, [edges, fitView, setNodes, layoutDirection]);
 
-  // Sync run statuses to node styles — preserve existing data (including config)
+  // Sync run statuses to node styles — preserve existing data (including config).
+  // Only allocate new node/data objects when flags actually change, otherwise
+  // draft/validation memos churn and this effect can loop (setNodes → draft → issues → setNodes).
   useEffect(() => {
     if (!workflow) return;
     const portWarnIds = new Set(
@@ -669,18 +671,41 @@ export function WorkflowEditor() {
         .filter((i) => i.code.startsWith('port_') && i.nodeId)
         .map((i) => i.nodeId as string),
     );
-    setNodes((prev) =>
-      prev.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          isRunning: runStatuses[n.id] === 'running',
-          isDone: runStatuses[n.id] === 'completed',
-          isFailed: runStatuses[n.id] === 'failed',
-          isPortWarning: portWarnIds.has(n.id),
-        },
-      })),
-    );
+    setNodes((prev) => {
+      let changed = false;
+      const next = prev.map((n) => {
+        const isRunning = runStatuses[n.id] === 'running';
+        const isDone = runStatuses[n.id] === 'completed';
+        const isFailed = runStatuses[n.id] === 'failed';
+        const isPortWarning = portWarnIds.has(n.id);
+        const d = n.data as {
+          isRunning?: boolean;
+          isDone?: boolean;
+          isFailed?: boolean;
+          isPortWarning?: boolean;
+        };
+        if (
+          d.isRunning === isRunning
+          && d.isDone === isDone
+          && d.isFailed === isFailed
+          && d.isPortWarning === isPortWarning
+        ) {
+          return n;
+        }
+        changed = true;
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            isRunning,
+            isDone,
+            isFailed,
+            isPortWarning,
+          },
+        };
+      });
+      return changed ? next : prev;
+    });
   }, [runStatuses, workflow, setNodes, validationIssues]);
 
   if (!workflow) {

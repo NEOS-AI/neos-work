@@ -8,9 +8,11 @@ const createDesignSystem = vi.fn();
 const deleteDesignSystem = vi.fn();
 const navigate = vi.fn();
 
+const client = { listDesignSystems, createDesignSystem, deleteDesignSystem };
+
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
-    client: { listDesignSystems, createDesignSystem, deleteDesignSystem },
+    client,
   }),
 }));
 

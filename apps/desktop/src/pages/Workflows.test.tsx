@@ -12,9 +12,7 @@ const importWorkflowZip = vi.fn();
 const importClaudeDesignZip = vi.fn();
 const navigate = vi.fn();
 
-vi.mock('../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    client: {
+const client = {
       listWorkflows,
       createWorkflow,
       deleteWorkflow,
@@ -22,7 +20,11 @@ vi.mock('../hooks/useEngine.js', () => ({
       importWorkflow,
       importWorkflowZip,
       importClaudeDesignZip,
-    },
+    };
+
+vi.mock('../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client,
   }),
 }));
 

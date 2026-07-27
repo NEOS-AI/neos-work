@@ -14,11 +14,7 @@ const health = vi.fn();
 
 let engineMode: 'host' | 'client' | null = 'host';
 
-vi.mock('../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    mode: engineMode,
-    serverUrl: 'http://127.0.0.1:57286',
-    client: {
+const client = {
       listSessions,
       listWorkflows,
       listSkills,
@@ -28,7 +24,13 @@ vi.mock('../hooks/useEngine.js', () => ({
       listDeployments,
       listMediaFiles,
       health,
-    },
+    };
+
+vi.mock('../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    mode: engineMode,
+    serverUrl: 'http://127.0.0.1:57286',
+    client,
   }),
 }));
 

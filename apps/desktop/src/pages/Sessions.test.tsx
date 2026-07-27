@@ -10,9 +10,7 @@ const chat = vi.fn();
 const runAgent = vi.fn();
 const confirmTool = vi.fn();
 
-vi.mock('../hooks/useEngine.js', () => ({
-  useEngine: () => ({
-    client: {
+const client = {
       listSessions,
       createSession,
       deleteSession,
@@ -20,7 +18,11 @@ vi.mock('../hooks/useEngine.js', () => ({
       chat,
       runAgent,
       confirmTool,
-    },
+    };
+
+vi.mock('../hooks/useEngine.js', () => ({
+  useEngine: () => ({
+    client,
   }),
 }));
 
