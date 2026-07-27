@@ -1233,5 +1233,89 @@ describe('executeWorkflow typed ports (Task 9)', () => {
     const warnings = events.filter((e) => e.type === 'node.warning');
     expect(failed.length + warnings.length).toBeGreaterThan(0);
   });
+
+  it('strictPorts post-execute fails and clears node output from downstream map', async () => {
+    const events: import('@neos-work/shared').WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-port-post-strict',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'agent',
+            type: 'agent',
+            label: 'A',
+            position: { x: 1, y: 0 },
+            config: {
+              provider: 'cli-claude',
+              // Require object with field x — CLI returns plain number → type error
+              outputPorts: [{ key: 'result', schema: { type: 'object', required: ['x'] } }],
+            },
+          },
+          {
+            id: 'sink',
+            type: 'output',
+            label: 'O',
+            position: { x: 2, y: 0 },
+            config: {},
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trigger', target: 'agent' },
+          { id: 'e2', source: 'agent', target: 'sink' },
+        ],
+      }),
+      settings: { strictPorts: '1' },
+      cliSpawn: async () => ({ output: 42, exitCode: 0 }),
+      onEvent: (e) => events.push(e),
+    });
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'node.failed'
+          && (e as { nodeId?: string }).nodeId === 'agent'
+          && /Output type mismatch|Port validation|expected object/i.test(
+            String((e as { error?: string }).error ?? ''),
+          ),
+      ),
+    ).toBe(true);
+    // Downstream still runs or is skipped; agent must not complete successfully
+    expect(
+      events.some(
+        (e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'agent',
+      ),
+    ).toBe(false);
+  });
+
+  it('warns on output port mismatch when strictPorts is off (agent CLI)', async () => {
+    const events: import('@neos-work/shared').WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-port-post-warn',
+      workflow: baseWorkflow({
+        nodes: [
+          {
+            id: 'agent',
+            type: 'agent',
+            label: 'A',
+            position: { x: 0, y: 0 },
+            config: {
+              provider: 'cli-claude',
+              outputPorts: [{ key: 'result', schema: { type: 'number' } }],
+            },
+          },
+        ],
+        edges: [],
+      }),
+      settings: {},
+      cliSpawn: async () => ({ output: { not: 'number' }, exitCode: 0 }),
+      onEvent: (e) => events.push(e),
+    });
+    expect(events.some((e) => e.type === 'node.warning')).toBe(true);
+    expect(
+      events.some(
+        (e) => e.type === 'node.completed' && (e as { nodeId?: string }).nodeId === 'agent',
+      ),
+    ).toBe(true);
+  });
 });
 

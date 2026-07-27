@@ -6,6 +6,23 @@ Claude Cowork의 오픈소스 대안
 
 ---
 
+## v0.4.0 주요 변경
+
+v0.4.0은 **도메인 워커(Domain Workers)** 와 워크플로우 **schemaVersion 2** 를
+중심으로 에이전트·워크플로우 런타임을 재설계한 **브레이킹 변경** 입니다.
+
+- 통합 노드: `agent` + `workerId` (`agent_finance` / `agent_coding` 대체)
+- 내장 **Domain Pack**: finance, coding, research, general
+- **코디네이터** 모드 (`spawn_worker` / `await_workers`) — 별도 노드 타입 없음
+- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` 는 v0.5 전까지 호환)
+- Typed ports MVP (기본 경고; `strictPorts=1` 이면 하드 실패)
+
+**마이그레이션:** 기존 워크플로우는 로드 시 자동 변환됩니다. 전체 브레이킹
+목록과 체크리스트는 [docs/migration/v0.4.0.md](docs/migration/v0.4.0.md) 를
+참고하세요.
+
+---
+
 ## 로컬 실행 방법
 
 ### 사전 요구사항

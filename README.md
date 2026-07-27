@@ -6,6 +6,22 @@ An open-source alternative to Claude Cowork
 
 ---
 
+## What's new in v0.4.0
+
+v0.4.0 redesigns agents around **Domain Workers** and workflow **schemaVersion 2**.
+
+- Unified graph node: `agent` + `workerId` (replaces `agent_finance` / `agent_coding`)
+- Built-in **Domain Packs**: finance, coding, research, general
+- **Coordinator** mode (`spawn_worker` / `await_workers`) without a separate node type
+- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` deprecated until v0.5)
+- Typed ports MVP (soft warnings; set `strictPorts=1` for hard fail)
+
+**Migration:** existing workflows upgrade automatically on load. See
+[docs/migration/v0.4.0.md](docs/migration/v0.4.0.md) for the full breaking
+changelog and checklist.
+
+---
+
 ## Running Locally
 
 ### Prerequisites

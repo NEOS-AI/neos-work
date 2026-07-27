@@ -1890,5 +1890,107 @@ describe('typed ports editor warnings', () => {
     });
     expect(issues.some((i) => i.code === 'port_type_mismatch')).toBe(true);
   });
+
+  it('skips edges without ports and allows number/integer compatibility', () => {
+    const noPorts = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent',
+          label: 'A',
+          config: { workerId: 'general_generalist', llmModel: 'm' },
+        },
+        {
+          id: 'b',
+          type: 'agent',
+          label: 'B',
+          config: { workerId: 'general_generalist', llmModel: 'm' },
+        },
+        { id: 'trigger', type: 'trigger', label: 'T', config: {} },
+        { id: 'output', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e0', source: 'trigger', target: 'a' },
+        { id: 'e1', source: 'a', target: 'b' },
+        { id: 'e2', source: 'b', target: 'output' },
+      ],
+      blocks: [],
+    });
+    expect(noPorts.some((i) => i.code === 'port_type_mismatch')).toBe(false);
+
+    const compatible = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent',
+          label: 'A',
+          config: {
+            workerId: 'general_generalist',
+            llmModel: 'm',
+            outputPorts: [{ key: 'n', schema: { type: 'integer' } }],
+          },
+        },
+        {
+          id: 'b',
+          type: 'agent',
+          label: 'B',
+          config: {
+            workerId: 'general_generalist',
+            llmModel: 'm',
+            inputPorts: [{ key: 'n', schema: { type: 'number' } }],
+          },
+        },
+        { id: 'trigger', type: 'trigger', label: 'T', config: {} },
+        { id: 'output', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e0', source: 'trigger', target: 'a' },
+        { id: 'e1', source: 'a', target: 'b' },
+        { id: 'e2', source: 'b', target: 'output' },
+      ],
+      blocks: [],
+    });
+    expect(compatible.some((i) => i.code === 'port_type_mismatch')).toBe(false);
+  });
+
+  it('ignores control-char port keys when reading editor port defs', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent',
+          label: 'A',
+          config: {
+            workerId: 'general_generalist',
+            llmModel: 'm',
+            outputPorts: [
+              { key: `bad${'\n'}k`, schema: { type: 'string' } },
+              { key: 'ok', schema: { type: 'string' } },
+            ],
+          },
+        },
+        {
+          id: 'b',
+          type: 'agent',
+          label: 'B',
+          config: {
+            workerId: 'general_generalist',
+            llmModel: 'm',
+            inputPorts: [{ key: 'ok', schema: { type: 'string' } }],
+          },
+        },
+        { id: 'trigger', type: 'trigger', label: 'T', config: {} },
+        { id: 'output', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e0', source: 'trigger', target: 'a' },
+        { id: 'e1', source: 'a', target: 'b' },
+        { id: 'e2', source: 'b', target: 'output' },
+      ],
+      blocks: [],
+    });
+    // Compatible ok→ok ports; control-char key dropped
+    expect(issues.some((i) => i.code === 'port_type_mismatch')).toBe(false);
+  });
 });
 

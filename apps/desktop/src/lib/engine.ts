@@ -1876,14 +1876,22 @@ export class EngineClient {
   }
 }
 
-// Local type mirrors to avoid adding @neos-work/shared to desktop package
+// Local type mirrors (aligned with @neos-work/shared NodeType / Workflow)
 export type WorkflowNodeType =
   | 'trigger'
+  | 'agent'
+  /** @deprecated v1 — migrate to `agent` + workerId */
   | 'agent_finance'
+  /** @deprecated v1 — migrate to `agent` + workerId */
   | 'agent_coding'
   | 'block'
   | 'gate_and'
   | 'gate_or'
+  | 'parallel_start'
+  | 'parallel_end'
+  | 'or_gate'
+  | 'media'
+  | 'deploy'
   | 'web_search'
   | 'slack_message'
   | 'discord_message'
@@ -1910,8 +1918,9 @@ export interface Workflow {
   description?: string;
   /** schemaVersion 2 after server migrate; missing treated as v1. */
   schemaVersion?: 1 | 2;
-  /** Primary pack id (DB column `domain`; API also exposes primaryDomain). */
+  /** Primary pack id (DB column name remains `domain`). */
   domain: string;
+  /** API/JSON primary pack id (may mirror `domain` after migrate). */
   primaryDomain?: string;
   domainPackIds?: string[];
   nodes: WorkflowNode[];

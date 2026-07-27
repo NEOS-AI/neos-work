@@ -51,6 +51,13 @@ describe('parsePortDefs / portsFromOutputSchema', () => {
     expect(portsFromOutputSchema(null)).toEqual([]);
   });
 
+  it('caps portsFromOutputSchema at 50 properties', () => {
+    const properties: Record<string, unknown> = {};
+    for (let i = 0; i < 60; i++) properties[`k${i}`] = { type: 'string' };
+    const ports = portsFromOutputSchema({ type: 'object', properties });
+    expect(ports).toHaveLength(50);
+  });
+
   it('skips control-char property keys in outputSchema', () => {
     const ports = portsFromOutputSchema({
       type: 'object',
@@ -257,6 +264,19 @@ describe('validateNodePorts', () => {
       }).some((i) => i.code === 'port.output_type'),
     ).toBe(true);
 
+    // Numeric string is accepted for number ports
+    expect(
+      validateNodePorts({
+        nodeId: 'n',
+        inputPorts: [],
+        outputPorts: [{ key: 'r', schema: { type: 'number' } }],
+        inputs: {},
+        hasIncomingEdges: false,
+        output: '3.14',
+        strict: false,
+      }),
+    ).toEqual([]);
+
     expect(
       validateNodePorts({
         nodeId: 'n',
@@ -268,6 +288,55 @@ describe('validateNodePorts', () => {
         strict: false,
       }).some((i) => i.code === 'port.output_type'),
     ).toBe(true);
+
+    // Free-form agent text for object schema is soft (no type error)
+    expect(
+      validateNodePorts({
+        nodeId: 'n',
+        inputPorts: [],
+        outputPorts: [{ key: 'r', schema: { type: 'object' } }],
+        inputs: {},
+        hasIncomingEdges: false,
+        output: 'just a prose answer',
+        strict: false,
+      }),
+    ).toEqual([]);
+
+    // JSON-as-text object is parsed for required-field checks
+    const jsonText = validateNodePorts({
+      nodeId: 'n',
+      inputPorts: [],
+      outputPorts: [{ key: 'r', schema: { type: 'object', required: ['summary'] } }],
+      inputs: {},
+      hasIncomingEdges: false,
+      output: '{"summary":"ok"}',
+      strict: false,
+    });
+    expect(jsonText).toEqual([]);
+
+    const jsonMissing = validateNodePorts({
+      nodeId: 'n',
+      inputPorts: [],
+      outputPorts: [{ key: 'r', schema: { type: 'object', required: ['summary'] } }],
+      inputs: {},
+      hasIncomingEdges: false,
+      output: '{"other":1}',
+      strict: true,
+    });
+    expect(jsonMissing.some((i) => i.code === 'port.output_required')).toBe(true);
+
+    // Invalid JSON object-looking string stays string (catch path)
+    expect(
+      validateNodePorts({
+        nodeId: 'n',
+        inputPorts: [],
+        outputPorts: [{ key: 'r', schema: { type: 'object', required: ['x'] } }],
+        inputs: {},
+        hasIncomingEdges: false,
+        output: '{not-json}',
+        strict: false,
+      }),
+    ).toEqual([]);
 
     // Required key missing in object upstream outputs
     const miss = validateNodePorts({
@@ -290,6 +359,21 @@ describe('validateNodePorts', () => {
       strict: false,
     });
     expect(ok).toEqual([]);
+  });
+
+  it('caps block paramDefs at 50 input ports', () => {
+    const paramDefs = Array.from({ length: 60 }, (_, i) => ({
+      key: `p${i}`,
+      type: i % 2 === 0 ? 'number' : 'boolean',
+      label: `P${i}`,
+    }));
+    const ports = resolveNodeInputPorts(
+      { type: 'block', config: {} },
+      { block: { paramDefs } },
+    );
+    expect(ports).toHaveLength(50);
+    expect(ports[0]?.schema?.type).toBe('number');
+    expect(ports[1]?.schema?.type).toBe('boolean');
   });
 });
 
