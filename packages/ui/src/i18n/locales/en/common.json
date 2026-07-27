@@ -131,7 +131,15 @@
     "revisionsFor": "History for {{path}}",
     "revisionEmpty": "No revisions yet — save the file to create one",
     "restore": "Restore",
-    "restoreFailed": "Failed to restore revision"
+    "restoreFailed": "Failed to restore revision",
+    "context": "Context",
+    "contextHint": "Read-only DESIGN.md / tokens for the linked design system (injected into AI runs).",
+    "designSystem": "Design system",
+    "dsNone": "None",
+    "dsEmpty": "Link a design system to preview DESIGN.md here.",
+    "dsNoContent": "No DESIGN.md content",
+    "dsLoadFailed": "Failed to load design system content",
+    "dsSaveFailed": "Failed to update design system link"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

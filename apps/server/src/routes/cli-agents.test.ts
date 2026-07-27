@@ -88,3 +88,33 @@ describe('cli-agents routes', () => {
     expect(body.meta.pathOverrides['cli-gemini']).toBeUndefined();
   });
 });
+
+describe('cli-agents detailed listing', () => {
+  it('GET /?detailed=1 returns full detect results including unavailable', async () => {
+    const res = await cliAgents.request('/?detailed=1');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: Array<{ id: string; available?: boolean; binary?: string }>;
+      meta: {
+        catalogCount: number;
+        settingKeys: Record<string, string>;
+        legacySettingKeys?: Record<string, string>;
+      };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.length).toBeGreaterThanOrEqual(12);
+    expect(body.meta.catalogCount).toBeGreaterThanOrEqual(12);
+    expect(body.meta.settingKeys['cli-claude']).toBeTruthy();
+    expect(body.meta.legacySettingKeys?.['cli-claude']).toBeTruthy();
+    // detailed includes unavailable agents
+    expect(body.data.every((a) => typeof a.id === 'string')).toBe(true);
+  });
+
+  it('GET /?all=1 is alias for detailed', async () => {
+    const res = await cliAgents.request('/?all=1');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: unknown[] };
+    expect(body.data.length).toBeGreaterThanOrEqual(12);
+  });
+});

@@ -12,6 +12,10 @@ const createProjectPreviewComment = vi.fn();
 const deleteProjectPreviewComment = vi.fn();
 const listProjectRevisions = vi.fn();
 const restoreProjectRevision = vi.fn();
+const listDesignSystems = vi.fn();
+const getDesignSystemContent = vi.fn();
+const getDesignSystemTokens = vi.fn();
+const updateProject = vi.fn();
 
 const client = {
   getProject,
@@ -23,6 +27,10 @@ const client = {
   deleteProjectPreviewComment,
   listProjectRevisions,
   restoreProjectRevision,
+  listDesignSystems,
+  getDesignSystemContent,
+  getDesignSystemTokens,
+  updateProject,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({
@@ -143,6 +151,10 @@ describe('ProjectWorkspace', () => {
     deleteProjectPreviewComment.mockReset();
     listProjectRevisions.mockReset().mockResolvedValue({ ok: true, data: [] });
     restoreProjectRevision.mockReset();
+    listDesignSystems.mockReset().mockResolvedValue({ ok: true, data: [] });
+    getDesignSystemContent.mockReset().mockResolvedValue({ ok: true, data: { content: '# DS' } });
+    getDesignSystemTokens.mockReset().mockResolvedValue({ ok: true, data: { content: ':root{}' } });
+    updateProject.mockReset();
   });
 
   it('loads project, shows files, saves dirty code via DesignEditor', async () => {
@@ -203,6 +215,42 @@ describe('ProjectWorkspace', () => {
     renderWorkspace();
     await waitFor(() => {
       expect(screen.getByText('Not found')).toBeInTheDocument();
+    });
+  });
+
+  it('switches to context tab and loads design systems', async () => {
+    const user = userEvent.setup();
+    getProject.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'proj-1',
+        name: 'Demo',
+        baseDir: '/tmp/demo',
+        entryFile: 'index.html',
+        designSystemId: null,
+        meta: {},
+        createdAt: 't',
+        updatedAt: 't',
+      },
+    });
+    listProjectFiles.mockResolvedValue({
+      ok: true,
+      data: [{ path: 'index.html', name: 'index.html', type: 'file', isEntry: true }],
+    });
+    readProjectFile.mockResolvedValue({
+      ok: true,
+      data: { path: 'index.html', content: '<html/>', hash: 'a' },
+    });
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [{ id: 'ds1', name: 'neos-default', path: '/x', hasManifest: true, hasTokens: true, hasComponents: false, source: 'bundled', createdAt: 't', updatedAt: 't' }],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-context'));
+    await waitFor(() => {
+      expect(listDesignSystems).toHaveBeenCalled();
+      expect(screen.getByTestId('project-context')).toBeInTheDocument();
     });
   });
 

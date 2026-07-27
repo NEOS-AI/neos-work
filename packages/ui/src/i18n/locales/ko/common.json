@@ -131,7 +131,15 @@
     "revisionsFor": "{{path}} 기록",
     "revisionEmpty": "리비전 없음 — 저장하면 생성됩니다",
     "restore": "복원",
-    "restoreFailed": "리비전 복원 실패"
+    "restoreFailed": "리비전 복원 실패",
+    "context": "컨텍스트",
+    "contextHint": "연결된 디자인 시스템의 DESIGN.md / tokens (읽기 전용, AI 실행에 주입).",
+    "designSystem": "디자인 시스템",
+    "dsNone": "없음",
+    "dsEmpty": "DESIGN.md를 보려면 디자인 시스템을 연결하세요.",
+    "dsNoContent": "DESIGN.md 내용 없음",
+    "dsLoadFailed": "디자인 시스템 로드 실패",
+    "dsSaveFailed": "디자인 시스템 연결 실패"
   },
   "mode": {
     "title": "NEOS Work를 어떻게 실행하시겠습니까?",

@@ -1,0 +1,16 @@
+{
+  "schema": "od-design-system-project/v1",
+  "name": "neos-default",
+  "description": "Default NEOS Work product tokens for design projects.",
+  "version": "1.0.0",
+  "provenance": {
+    "author": "neos-work",
+    "license": "MIT",
+    "importedFrom": "bundled"
+  },
+  "tokens": {
+    "color.primary": "#6366f1",
+    "color.bg": "#0f172a",
+    "font.sans": "Inter, system-ui, sans-serif"
+  }
+}

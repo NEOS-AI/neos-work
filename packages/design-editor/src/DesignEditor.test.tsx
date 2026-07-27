@@ -90,3 +90,48 @@ describe('DesignEditor chrome', () => {
     expect(onEditWithAi).toHaveBeenCalled();
   });
 });
+
+describe('DesignEditor more chrome', () => {
+  it('switches code mode and device presets; take-agent conflict', () => {
+    const onResolve = vi.fn();
+    const onModeChange = vi.fn();
+    let buffer = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'a.html',
+      content: 'base',
+    });
+    buffer = reduceEditorBuffer(buffer, { type: 'edit', content: 'mine' });
+    buffer = reduceEditorBuffer(buffer, { type: 'disk-changed', content: 'agent' });
+
+    render(
+      <DesignEditor
+        buffer={buffer}
+        mode="code"
+        onModeChange={onModeChange}
+        onResolveConflict={onResolve}
+      />,
+    );
+    expect(screen.getByTestId('design-editor')).toBeTruthy();
+    // code mode still has mode switches
+    fireEvent.click(screen.getByTestId('mode-split'));
+    expect(onModeChange).toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Take agent'));
+    expect(onResolve).toHaveBeenCalledWith('take-agent');
+  });
+
+  it('shows selection badge when selection provided', () => {
+    const buffer = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'index.html',
+      content: '<body><h1>Hi</h1></body>',
+    });
+    render(
+      <DesignEditor
+        buffer={buffer}
+        mode="preview"
+        selection={{ filePath: 'index.html', selector: 'h1', layerId: 'e1' }}
+      />,
+    );
+    expect(screen.getByTestId('selection-badge')).toBeTruthy();
+  });
+});

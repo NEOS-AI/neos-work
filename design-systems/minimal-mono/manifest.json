@@ -1,0 +1,11 @@
+{
+  "schema": "od-design-system-project/v1",
+  "name": "minimal-mono",
+  "description": "Minimal monochrome system for wireframes and docs.",
+  "version": "1.0.0",
+  "provenance": {
+    "author": "neos-work",
+    "license": "MIT",
+    "importedFrom": "bundled"
+  }
+}

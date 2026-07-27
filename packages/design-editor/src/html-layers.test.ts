@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bridgeTreeToLayers,
   filterLayers,
+  findLayerById,
   findLayerBySelector,
   flattenLayers,
   parseHtmlToLayerTree,
   stampNeosIds,
   toggleLockByNeosId,
   toggleVisibilityByNeosId,
+  toggleVisibilityInHtml,
 } from './html-layers.js';
 import { injectBridgeIntoHtml, buildBridgeInjectScript } from './bridge-inject.js';
 import {
@@ -102,5 +105,73 @@ describe('selection helpers', () => {
     expect(ctx.mode).toBe('replace-selection');
     expect(ctx.selection).toEqual({ selector: 'main > section' });
     expect(ctx.snippet).toContain('section');
+  });
+});
+
+describe('html-layers extra', () => {
+  it('returns empty for blank html and skips script/style tags', () => {
+    expect(parseHtmlToLayerTree('')).toEqual([]);
+    expect(parseHtmlToLayerTree('   ')).toEqual([]);
+    const tree = parseHtmlToLayerTree(
+      '<body><script>x</script><style>y</style><p>ok</p></body>',
+    );
+    const flat = flattenLayers(tree);
+    expect(flat.some((n) => n.tag === 'script')).toBe(false);
+    expect(flat.some((n) => n.tag === 'style')).toBe(false);
+    expect(flat.some((n) => n.tag === 'p')).toBe(true);
+  });
+
+  it('bridgeTreeToLayers maps bridge nodes; findLayerById works', () => {
+    const mapped = bridgeTreeToLayers([
+      {
+        id: 'e1',
+        tag: 'div',
+        name: 'div',
+        selector: 'div',
+        depth: 0,
+        visible: true,
+        locked: false,
+        children: [
+          {
+            id: 'e2',
+            tag: 'span',
+            name: 'span',
+            selector: 'span',
+            depth: 1,
+            visible: true,
+            locked: false,
+            children: [],
+          },
+        ],
+      },
+    ]);
+    expect(mapped[0]!.children[0]!.id).toBe('e2');
+    expect(findLayerById(mapped, 'e2')?.tag).toBe('span');
+    expect(findLayerById(mapped, 'missing')).toBeNull();
+  });
+
+  it('toggleVisibilityInHtml rewrites #id selectors and no-ops weak selectors', () => {
+    const html = '<div id="hero">Hi</div>';
+    const hidden = toggleVisibilityInHtml(html, '#hero', false);
+    expect(hidden).toMatch(/hidden|data-neos-hidden/i);
+    const shown = toggleVisibilityInHtml(hidden, '#hero', true);
+    expect(shown).not.toMatch(/data-neos-hidden="true"/);
+    expect(toggleVisibilityInHtml(html, '', false)).toBe(html);
+    expect(toggleVisibilityInHtml(html, 'div', false)).toBe(html);
+  });
+
+  it('filterLayers with empty query returns original tree', () => {
+    const tree = parseHtmlToLayerTree(SAMPLE);
+    expect(filterLayers(tree, '  ')).toEqual(tree);
+  });
+
+  it('respects hidden and locked attributes in parse', () => {
+    const tree = parseHtmlToLayerTree(
+      '<body><div id="a" hidden>x</div><div id="b" data-neos-locked="true">y</div></body>',
+    );
+    const flat = flattenLayers(tree);
+    expect(flat.find((n) => n.id && n.selector.includes('#a'))?.visible === false
+      || flat.some((n) => n.name.includes('#a') && !n.visible)).toBe(true);
+    expect(flat.some((n) => n.locked)).toBe(true);
   });
 });

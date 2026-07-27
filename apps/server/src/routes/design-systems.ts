@@ -1,21 +1,32 @@
 /**
- * Design Systems routes.
- * GET    /api/design-systems          — list
- * POST   /api/design-systems          — create
+ * Design Systems routes (v0.5.8 — bundled catalog + tokens).
+ * GET    /api/design-systems          — list (user + bundled, shadowed)
+ * POST   /api/design-systems          — create (user writable)
  * GET    /api/design-systems/:id      — get
- * DELETE /api/design-systems/:id      — delete
+ * DELETE /api/design-systems/:id      — delete (user only)
  * GET    /api/design-systems/:id/content  — DESIGN.md raw text
- * PUT    /api/design-systems/:id/content  — save DESIGN.md
+ * PUT    /api/design-systems/:id/content  — save DESIGN.md (user only)
+ * GET    /api/design-systems/:id/tokens   — tokens.css raw text
  */
 
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import * as store from '../lib/design-system-store.js';
 import { safeRouteId } from '../lib/path-safety.js';
 
+const REPO_DS_CANDIDATE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../design-systems',
+);
+
 const designSystems = new Hono();
 
 designSystems.get('/', async (c) => {
-  const list = await store.listDesignSystems();
+  const bundledRoot =
+    store.resolveBundledDesignSystemsDir(REPO_DS_CANDIDATE)
+    ?? store.resolveBundledDesignSystemsDir(null);
+  const list = await store.listDesignSystems({ bundledRoot, includeBundled: true });
   return c.json({ ok: true, data: list });
 });
 
@@ -97,8 +108,22 @@ designSystems.put('/:id/content', async (c) => {
     }, 400);
   }
   const updated = await store.updateDesignSystemContent(id, body.content);
-  if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!updated) {
+    const ds = await store.getDesignSystem(id);
+    if (ds?.source === 'bundled') {
+      return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+    }
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
   return c.json({ ok: true });
+});
+
+designSystems.get('/:id/tokens', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const content = await store.getDesignSystemTokens(id);
+  if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: { content } });
 });
 
 export default designSystems;

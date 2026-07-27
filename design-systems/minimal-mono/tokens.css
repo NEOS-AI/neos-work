@@ -1,0 +1,8 @@
+:root {
+  --color-ink: #111111;
+  --color-paper: #ffffff;
+  --color-border: #d4d4d4;
+  --color-muted: #737373;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 0;
+}

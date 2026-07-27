@@ -70,3 +70,47 @@ describe('editor buffer state machine', () => {
     expect(d.preview.some((l) => l.startsWith('-') || l.startsWith('+'))).toBe(true);
   });
 });
+
+describe('dirty-state edge cases', () => {
+  it('ignores edit/saved/disk-changed when no path open', () => {
+    const empty = createEmptyBuffer();
+    expect(reduceEditorBuffer(empty, { type: 'edit', content: 'x' })).toBe(empty);
+    expect(reduceEditorBuffer(empty, { type: 'saved', content: 'x' })).toBe(empty);
+    expect(reduceEditorBuffer(empty, { type: 'disk-changed', content: 'x' })).toBe(empty);
+    expect(reduceEditorBuffer(empty, { type: 'resolve-conflict', choice: 'keep-mine' })).toBe(
+      empty,
+    );
+  });
+
+  it('disk-changed ignores identical tip; saved keeps conflict if still diverged', () => {
+    let s = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'a.html',
+      content: 'base',
+      hash: 'h1',
+    });
+    const same = reduceEditorBuffer(s, { type: 'disk-changed', content: 'base', hash: 'h1' });
+    expect(same).toEqual(s);
+
+    s = reduceEditorBuffer(s, { type: 'edit', content: 'mine' });
+    s = reduceEditorBuffer(s, { type: 'disk-changed', content: 'agent', hash: 'ha' });
+    // save local that still differs from pending → keep pending
+    const savedDiverged = reduceEditorBuffer(s, { type: 'saved', content: 'mine2' });
+    expect(savedDiverged.pendingDisk).toBe('agent');
+    // save matching agent tip clears conflict
+    const savedMatch = reduceEditorBuffer(s, { type: 'saved', content: 'agent' });
+    expect(savedMatch.pendingDisk).toBeNull();
+  });
+
+  it('diff resolve without merged leaves conflict open', () => {
+    let s = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'a.html',
+      content: 'base',
+    });
+    s = reduceEditorBuffer(s, { type: 'edit', content: 'mine' });
+    s = reduceEditorBuffer(s, { type: 'disk-changed', content: 'agent' });
+    const still = reduceEditorBuffer(s, { type: 'resolve-conflict', choice: 'diff' });
+    expect(isConflict(still)).toBe(true);
+  });
+});

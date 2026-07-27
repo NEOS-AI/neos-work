@@ -1,6 +1,6 @@
 /**
- * Design Project workspace (v0.5.5 / PLAN_FOR_V0_5_0 Task 1c comments + revisions).
- * Files | Layers | Preview/Code/Split/Inspect | Chat / Comments / Revisions.
+ * Design Project workspace (v0.5.8 / DESIGN.md context strip + Task 5 DS link).
+ * Files | Layers | Preview/Code/Split/Inspect | Chat / Comments / Revisions / Context.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +21,7 @@ import type { SelectionState } from '@neos-work/shared';
 import { useEngine } from '../hooks/useEngine.js';
 import type {
   DesignProject,
+  DesignSystem,
   ProjectFileEntry,
   ProjectFileRevision,
   ProjectPreviewComment,
@@ -55,7 +56,7 @@ export function ProjectWorkspace() {
   /** Inspect/bridge detail (outerHTML) for selection-scoped AI context. */
   const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
 
-  type SideTab = 'chat' | 'comments' | 'revisions';
+  type SideTab = 'chat' | 'comments' | 'revisions' | 'context';
   const [sideTab, setSideTab] = useState<SideTab>('chat');
   const [comments, setComments] = useState<ProjectPreviewComment[]>([]);
   const [commentBody, setCommentBody] = useState('');
@@ -64,6 +65,13 @@ export function ProjectWorkspace() {
   const [revisions, setRevisions] = useState<ProjectFileRevision[]>([]);
   const [revisionError, setRevisionError] = useState<string | null>(null);
   const [revisionBusy, setRevisionBusy] = useState(false);
+
+  // Design system context strip (Task 1c residual / Task 5)
+  const [designSystems, setDesignSystems] = useState<DesignSystem[]>([]);
+  const [dsContent, setDsContent] = useState<string | null>(null);
+  const [dsTokens, setDsTokens] = useState<string | null>(null);
+  const [dsBusy, setDsBusy] = useState(false);
+  const [dsError, setDsError] = useState<string | null>(null);
 
   const dirty = isDirty(buffer);
   const blocker = useBlocker(dirty);
@@ -224,6 +232,81 @@ export function ProjectWorkspace() {
       setRevisions([]);
     }
   }, [client, projectId, buffer.path]);
+
+
+  const loadDesignSystems = useCallback(async () => {
+    if (!client) return;
+    try {
+      const res = await client.listDesignSystems();
+      if (res.ok && res.data) setDesignSystems(res.data);
+    } catch {
+      /* ignore */
+    }
+  }, [client]);
+
+  const loadDesignContext = useCallback(async () => {
+    if (!client || !project?.designSystemId) {
+      setDsContent(null);
+      setDsTokens(null);
+      return;
+    }
+    setDsBusy(true);
+    setDsError(null);
+    try {
+      const [cRes, tRes] = await Promise.all([
+        client.getDesignSystemContent(project.designSystemId),
+        client.getDesignSystemTokens(project.designSystemId),
+      ]);
+      setDsContent(cRes.ok && cRes.data ? cRes.data.content : null);
+      setDsTokens(tRes.ok && tRes.data ? tRes.data.content : null);
+      if (!cRes.ok && !tRes.ok) {
+        setDsError(
+          scrubDisplayText(cRes.error || tRes.error, { collapseLines: true, maxChars: 200 })
+            || t('project.dsLoadFailed'),
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.dsLoadFailed');
+      setDsError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+    } finally {
+      setDsBusy(false);
+    }
+  }, [client, project?.designSystemId, t]);
+
+  useEffect(() => {
+    if (sideTab === 'context') {
+      void loadDesignSystems();
+      void loadDesignContext();
+    }
+  }, [sideTab, loadDesignSystems, loadDesignContext]);
+
+  const handleDesignSystemChange = useCallback(
+    async (designSystemId: string) => {
+      if (!client || !projectId) return;
+      setDsBusy(true);
+      setDsError(null);
+      try {
+        const res = await client.updateProject(projectId, {
+          designSystemId: designSystemId || null,
+        });
+        if (!res.ok || !res.data) {
+          setDsError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 })
+              || t('project.dsSaveFailed'),
+          );
+          return;
+        }
+        setProject(res.data);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.dsSaveFailed');
+        setDsError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+      } finally {
+        setDsBusy(false);
+      }
+    },
+    [client, projectId, t],
+  );
+
 
   useEffect(() => {
     if (sideTab === 'comments') void loadComments();
@@ -623,6 +706,7 @@ export function ProjectWorkspace() {
                 ['chat', t('project.chat')],
                 ['comments', t('project.comments')],
                 ['revisions', t('project.revisions')],
+                ['context', t('project.context')],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -856,6 +940,107 @@ export function ProjectWorkspace() {
                   ))
                 )}
               </ul>
+            </div>
+          )}
+
+          {sideTab === 'context' && (
+            <div className="flex min-h-0 flex-1 flex-col gap-2 p-2" data-testid="project-context">
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {t('project.contextHint')}
+              </p>
+              <label className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                {t('project.designSystem')}
+              </label>
+              <select
+                aria-label={t('project.designSystem')}
+                data-testid="project-ds-select"
+                value={project.designSystemId ?? ''}
+                disabled={dsBusy}
+                onChange={(e) => void handleDesignSystemChange(e.target.value)}
+                className="w-full rounded border px-2 py-1 text-xs"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <option value="">{t('project.dsNone')}</option>
+                {designSystems.map((ds) => (
+                  <option key={ds.id} value={ds.id}>
+                    {ds.name}
+                    {ds.source === 'bundled' ? ' (bundled)' : ''}
+                  </option>
+                ))}
+              </select>
+              {dsError && (
+                <p className="text-[11px] text-red-400" role="alert">
+                  {dsError}
+                </p>
+              )}
+              {dsBusy && (
+                <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  {t('common.loading')}
+                </p>
+              )}
+              <div
+                className="min-h-0 flex-1 space-y-2 overflow-auto"
+                data-testid="project-ds-preview"
+              >
+                {!project.designSystemId ? (
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {t('project.dsEmpty')}
+                  </p>
+                ) : (
+                  <>
+                    <div>
+                      <div
+                        className="mb-1 text-[10px] font-semibold uppercase tracking-wide"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        DESIGN.md
+                      </div>
+                      <pre
+                        className="max-h-48 overflow-auto whitespace-pre-wrap rounded border p-2 font-mono text-[10px] leading-relaxed"
+                        style={{
+                          borderColor: 'var(--border-primary)',
+                          backgroundColor: 'var(--bg-primary)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        {dsContent
+                          ? scrubDisplayText(dsContent.slice(0, 6_000), {
+                              collapseLines: false,
+                              maxChars: 6_000,
+                            })
+                          : t('project.dsNoContent')}
+                      </pre>
+                    </div>
+                    {dsTokens && (
+                      <div>
+                        <div
+                          className="mb-1 text-[10px] font-semibold uppercase tracking-wide"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          tokens.css
+                        </div>
+                        <pre
+                          className="max-h-32 overflow-auto whitespace-pre-wrap rounded border p-2 font-mono text-[10px]"
+                          style={{
+                            borderColor: 'var(--border-primary)',
+                            backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {scrubDisplayText(dsTokens.slice(0, 3_000), {
+                            collapseLines: false,
+                            maxChars: 3_000,
+                          })}
+                        </pre>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </aside>
