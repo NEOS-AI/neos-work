@@ -140,6 +140,48 @@ function deleteSkillById(id: string): boolean {
   return result.changes > 0;
 }
 
+/** Last path segment only — never leak absolute host paths to the client. */
+function packageDirLabel(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return undefined;
+  const t = raw.trim().replace(/\\/g, '/');
+  if (!t) return undefined;
+  const parts = t.split('/').filter(Boolean);
+  const last = parts[parts.length - 1] ?? '';
+  return last && last.length <= 200 ? last : undefined;
+}
+
+function sanitizeExampleCards(raw: unknown): Array<{
+  id?: string;
+  key?: string;
+  title?: string;
+  path?: string;
+}> | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const out: Array<{ id?: string; key?: string; title?: string; path?: string }> = [];
+  for (const item of raw.slice(0, 40)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const o = item as Record<string, unknown>;
+    const card: { id?: string; key?: string; title?: string; path?: string } = {};
+    if (typeof o.id === 'string' && !/[\0\r\n]/.test(o.id)) {
+      const id = o.id.trim().slice(0, 200);
+      if (id) card.id = id;
+    }
+    if (typeof o.key === 'string' && !/[\0\r\n]/.test(o.key)) {
+      const key = o.key.trim().slice(0, 120);
+      if (key) card.key = key;
+    }
+    if (typeof o.title === 'string' && !/[\0\r\n]/.test(o.title)) {
+      const title = o.title.trim().slice(0, 200);
+      if (title) card.title = title;
+    }
+    // Examples may store absolute paths on disk — only surface basename for UI
+    const pathLabel = packageDirLabel(o.path);
+    if (pathLabel) card.path = pathLabel;
+    if (card.id || card.key || card.path) out.push(card);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 // GET /api/skills — list installed skills
 skills.get('/', (c) => {
   const rows = listSkillRows();
@@ -148,6 +190,7 @@ skills.get('/', (c) => {
     if (r.manifest_json) {
       try { manifest = JSON.parse(r.manifest_json) as Record<string, unknown>; } catch { /* ignore */ }
     }
+    const examples = sanitizeExampleCards(manifest?.['examples']);
     return {
       id: r.id,
       name: r.name,
@@ -162,11 +205,12 @@ skills.get('/', (c) => {
       featured: manifest?.['featured'] === true,
       triggers: manifest?.['triggers'] as string[] | undefined,
       examplePrompt: manifest?.['examplePrompt'] as string | undefined,
-      packageDir: typeof manifest?.['packageDir'] === 'string' ? manifest['packageDir'] : undefined,
-      exampleCount: Array.isArray(manifest?.['examples'])
-        ? (manifest!['examples'] as unknown[]).length
-        : undefined,
-      examples: Array.isArray(manifest?.['examples']) ? manifest!['examples'] : undefined,
+      packageDir: packageDirLabel(manifest?.['packageDir']),
+      exampleCount: examples?.length
+        ?? (Array.isArray(manifest?.['examples'])
+          ? (manifest!['examples'] as unknown[]).length
+          : undefined),
+      examples,
     };
   });
   return c.json({ ok: true, data });

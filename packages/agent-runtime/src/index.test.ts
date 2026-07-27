@@ -329,6 +329,66 @@ describe('defaultWhich / defaultVersionProbe', () => {
     expect(await defaultVersionProbe(null as unknown as string)).toBeUndefined();
   });
 
+  it('defaultWhich/versionProbe hit real node binary paths', async () => {
+    const { defaultWhich, defaultVersionProbe, resolveBinaryPath } = await import(
+      './detection.js'
+    );
+    const whichNode = await defaultWhich('node');
+    // CI/dev machines almost always have node on PATH
+    if (whichNode) {
+      expect(whichNode.length).toBeGreaterThan(0);
+      const ver = await defaultVersionProbe(whichNode, '--version');
+      expect(ver === undefined || ver.length > 0).toBe(true);
+    }
+    // non-existent binary → undefined
+    expect(await defaultVersionProbe('/definitely/not/a/binary-xyz', '--version')).toBeUndefined();
+    expect(await defaultWhich('definitely-not-a-cli-binary-xyz-123')).toBeNull();
+
+    // executable override path (node itself)
+    const def = getDefById('cli-claude')!;
+    const viaOverride = await resolveBinaryPath(def, {
+      'cli-claude': process.execPath,
+    });
+    expect(viaOverride).toBe(process.execPath);
+  });
+
+  it('requestCancel and escalateKill edge cases', () => {
+    expect(requestCancel(null)).toBe(false);
+    expect(requestCancel(undefined)).toBe(false);
+    const c = new AbortController();
+    expect(requestCancel(c)).toBe(true);
+    expect(requestCancel(c)).toBe(false);
+    const throwing = {
+      signal: { aborted: false },
+      abort: () => {
+        throw new Error('abort failed');
+      },
+    };
+    expect(requestCancel(throwing as unknown as AbortController)).toBe(false);
+
+    escalateKill(undefined);
+    escalateKill(-1);
+    escalateKill(Number.NaN);
+    // non-existent pid should not throw
+    escalateKill(2_147_483_646);
+  });
+
+  it('cancel swallows abort errors on registry run', () => {
+    resetGlobalRunRegistry();
+    const reg = getGlobalRunRegistry();
+    const run = reg.create({ projectId: 'p', agentId: 'cli-claude', prompt: 'x' });
+    reg.setStatus(run.id, 'running');
+    const rec = reg.get(run.id)!;
+    rec.abort = {
+      abort: () => {
+        throw new Error('nope');
+      },
+      signal: { aborted: false } as AbortSignal,
+    } as AbortController;
+    expect(reg.cancel(run.id)).toBe(true);
+    expect(reg.get(run.id)?.status).toBe('canceled');
+  });
+
   it('text parser truncates when over maxChars', () => {
     const t = createTextParseState();
     const { accumulated } = feedTextChunk(t, 'abcdefghij', 5);

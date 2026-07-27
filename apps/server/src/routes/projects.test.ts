@@ -589,3 +589,132 @@ describe('projects comment/conversation error paths', () => {
     expect(blankRestore.status).toBe(404);
   });
 });
+
+describe('projects export/import zip', () => {
+  async function zipFromEntries(
+    entries: Array<{ name: string; content: string | Buffer }>,
+  ): Promise<Buffer> {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    return new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      for (const e of entries) {
+        archive.append(e.content, { name: e.name });
+      }
+      void archive.finalize();
+    });
+  }
+
+  it('exports zip and re-imports via raw body', async () => {
+    const project = await createViaApi();
+    await app.request(`/api/projects/${project.id}/files/index.html`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '<html><body>export-me</body></html>' }),
+    });
+
+    const exp = await app.request(`/api/projects/${project.id}/export.zip`);
+    expect(exp.status).toBe(200);
+    expect(exp.headers.get('content-type')).toMatch(/zip/i);
+    const disp = exp.headers.get('content-disposition') ?? '';
+    expect(disp).toMatch(/\.neos-project\.zip/i);
+    const buf = Buffer.from(await exp.arrayBuffer());
+    expect(buf.length).toBeGreaterThan(40);
+
+    const imp = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: buf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as {
+      ok: boolean;
+      data: { project: { id: string; name: string }; filesImported: number };
+    };
+    expect(body.ok).toBe(true);
+    createdIds.push(body.data.project.id);
+    expect(body.data.filesImported).toBeGreaterThan(0);
+
+    const files = await app.request(`/api/projects/${body.data.project.id}/files`);
+    const filesJson = (await files.json()) as { data: Array<{ path: string }> };
+    expect(filesJson.data.some((f) => f.path === 'index.html')).toBe(true);
+  });
+
+  it('import rejects empty body and invalid archive', async () => {
+    const empty = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: Buffer.alloc(0),
+    });
+    expect(empty.status).toBe(400);
+
+    const bad = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: Buffer.from('not-zip'),
+    });
+    expect(bad.status).toBe(400);
+
+    const missingExport = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/export.zip',
+    );
+    expect(missingExport.status).toBe(404);
+
+    const blankExport = await app.request('/api/projects/%20/export.zip');
+    expect(blankExport.status).toBe(404);
+  });
+
+  it('import accepts crafted neos-project with entryFile and designSystemId', async () => {
+    const zip = await zipFromEntries([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          version: 1,
+          format: 'neos-project',
+          exportedAt: new Date().toISOString(),
+          project: {
+            name: `${NAME}_import_craft`,
+            entryFile: 'pages/home.html',
+            designSystemId: 'ds-craft',
+            meta: { from: 'test' },
+          },
+        }),
+      },
+      {
+        name: 'files/pages/home.html',
+        content: '<html><body>home</body></html>',
+      },
+      { name: 'files/styles.css', content: 'body{}' },
+      { name: 'README.md', content: 'ignored' },
+    ]);
+
+    const imp = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zip,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as {
+      data: {
+        project: {
+          id: string;
+          entryFile?: string | null;
+          designSystemId?: string | null;
+          meta?: Record<string, unknown>;
+        };
+        filesImported: number;
+      };
+    };
+    createdIds.push(body.data.project.id);
+    expect(body.data.project.entryFile).toBe('pages/home.html');
+    expect(body.data.project.designSystemId).toBe('ds-craft');
+    expect(body.data.filesImported).toBe(2);
+    expect(body.data.project.meta?.importedFrom).toBe('neos-project-zip');
+  });
+});

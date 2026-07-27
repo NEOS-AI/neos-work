@@ -113,4 +113,14 @@ describe('dirty-state edge cases', () => {
     const still = reduceEditorBuffer(s, { type: 'resolve-conflict', choice: 'diff' });
     expect(isConflict(still)).toBe(true);
   });
+
+  it('unknown event types leave state unchanged', () => {
+    const s = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'a.html',
+      content: 'x',
+    });
+    // @ts-expect-error intentional invalid event for default branch
+    expect(reduceEditorBuffer(s, { type: 'nope' })).toBe(s);
+  });
 });

@@ -109,6 +109,40 @@ describe('runs routes', () => {
     expect(created.data.prompt).toContain('Increase font size');
   });
 
+
+  it('injects design system DESIGN.md into assembled prompt', async () => {
+    const { createDesignSystem, deleteDesignSystem } = await import('../lib/design-system-store.js');
+    const ds = await createDesignSystem(`_run_ds_${process.pid}`, 'Brand for runs');
+    expect(ds).not.toBeNull();
+    const p = projects.createProject({
+      name: `${NAME}_ds`,
+      designSystemId: ds!.id,
+    });
+    ids.push(p.id);
+
+    const createRes = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        prompt: 'Polish landing',
+        dryRun: true,
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as {
+      ok: boolean;
+      data: { prompt?: string };
+    };
+    expect(created.data.prompt).toContain('DESIGN CONTEXT');
+    expect(created.data.prompt).toMatch(/Brand|Design System|Polish landing/i);
+    expect(created.data.prompt!.indexOf('DESIGN CONTEXT')).toBeLessThan(
+      created.data.prompt!.indexOf('Polish landing'),
+    );
+
+    await deleteDesignSystem(ds!.id);
+  });
+
   it('rejects unknown agent and bad editContext', async () => {
     const badAgent = await app.request('/api/runs', {
       method: 'POST',

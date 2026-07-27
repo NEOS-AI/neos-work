@@ -1,21 +1,15 @@
 /**
- * Design Project routes (v0.5.0 M1).
+ * Design Project routes (v0.5.0 M1 + v0.5.9 archive).
  *
  * GET    /api/projects
  * POST   /api/projects
  * GET    /api/projects/:id
  * PUT    /api/projects/:id
  * DELETE /api/projects/:id
+ * GET    /api/projects/:id/export.zip
+ * POST   /api/projects/import.zip
  * GET    /api/projects/:id/files
- * GET    /api/projects/:id/files/*path
- * PUT    /api/projects/:id/files/*path
- * POST   /api/projects/:id/mkdir
- * DELETE /api/projects/:id/files/*path
- * GET    /api/projects/:id/revisions
- * GET    /api/projects/:id/revisions/:revisionId
- * POST   /api/projects/:id/revisions/:revisionId/restore
- * GET/POST/DELETE preview-comments
- * GET/POST conversations + messages
+ * …
  */
 
 import { Hono } from 'hono';
@@ -27,7 +21,15 @@ import {
   mkdirProjectPath,
   readProjectFile,
   writeProjectFile,
+  detectEntryFile,
 } from '../lib/project-files.js';
+import {
+  buildProjectZipBuffer,
+  materializeImportedFiles,
+  parseProjectZipBuffer,
+  projectZipFilename,
+  PROJECT_ZIP_MAX_BYTES,
+} from '../lib/project-archive.js';
 import { PathSandboxError } from '../lib/path-sandbox.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
@@ -100,12 +102,111 @@ projects.post('/', async (c) => {
   }
 });
 
+/** Import a neos-project ZIP (multipart field "file" or raw body). */
+projects.post('/import.zip', async (c) => {
+  try {
+    let buf: Buffer | null = null;
+    const contentType = c.req.header('content-type') ?? '';
+    if (contentType.includes('multipart/form-data')) {
+      const body = await c.req.parseBody();
+      const file = body['file'];
+      if (file && typeof file === 'object' && 'arrayBuffer' in file) {
+        const ab = await (file as File).arrayBuffer();
+        buf = Buffer.from(ab);
+      }
+    } else {
+      const ab = await c.req.arrayBuffer();
+      if (ab.byteLength > 0) buf = Buffer.from(ab);
+    }
+    if (!buf || buf.length === 0) {
+      return c.json({ ok: false, error: 'ZIP body required (multipart file or raw)' }, 400);
+    }
+    if (buf.length > PROJECT_ZIP_MAX_BYTES) {
+      return c.json({
+        ok: false,
+        error: `Archive exceeds max size (${PROJECT_ZIP_MAX_BYTES} bytes)`,
+      }, 400);
+    }
+
+    const parsed = await parseProjectZipBuffer(buf);
+    if (!parsed.ok) {
+      return c.json({ ok: false, error: parsed.error }, 400);
+    }
+
+    const project = db.createProject({
+      name: parsed.name,
+      entryFile: parsed.entryFile,
+      designSystemId: parsed.designSystemId,
+      meta: { ...parsed.meta, importedFrom: 'neos-project-zip' },
+    });
+
+    try {
+      materializeImportedFiles(project.baseDir, parsed.files);
+    } catch (err) {
+      if (err instanceof PathSandboxError) {
+        return c.json(
+          { ok: false, error: publicErrorMessage(err, 'Import path rejected') },
+          sandboxStatus(err),
+        );
+      }
+      throw err;
+    }
+
+    // Prefer manifest entry when present in the archive; else re-detect on disk
+    const detected = detectEntryFile(project.baseDir);
+    const entryFile =
+      (parsed.entryFile && parsed.files.some((f) => f.path === parsed.entryFile)
+        ? parsed.entryFile
+        : null) ?? detected ?? project.entryFile;
+    if (entryFile !== project.entryFile) {
+      db.updateProject(project.id, { entryFile });
+    }
+
+    const refreshed = db.getProject(project.id) ?? project;
+    return c.json(
+      {
+        ok: true,
+        data: {
+          project: refreshed,
+          filesImported: parsed.files.length,
+        },
+      },
+      201,
+    );
+  } catch (err) {
+    return c.json({ ok: false, error: publicErrorMessage(err, 'Import failed') }, 400);
+  }
+});
+
 projects.get('/:id', (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const project = db.getProject(id);
   if (!project) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: project });
+});
+
+projects.get('/:id/export.zip', async (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const project = db.getProject(id);
+  if (!project) return c.json({ ok: false, error: 'Not found' }, 404);
+  try {
+    const buf = await buildProjectZipBuffer(project);
+    const filename = projectZipFilename(project.name);
+    c.header('Content-Type', 'application/zip');
+    c.header('Content-Disposition', `attachment; filename="${filename}"`);
+    // Hono body typings expect ArrayBufferView — copy into a Uint8Array
+    return c.body(Uint8Array.from(buf));
+  } catch (err) {
+    if (err instanceof PathSandboxError) {
+      return c.json(
+        { ok: false, error: publicErrorMessage(err, 'Export failed') },
+        sandboxStatus(err),
+      );
+    }
+    return c.json({ ok: false, error: publicErrorMessage(err, 'Export failed') }, 400);
+  }
 });
 
 projects.put('/:id', async (c) => {

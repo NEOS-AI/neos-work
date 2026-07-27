@@ -174,4 +174,45 @@ describe('html-layers extra', () => {
       || flat.some((n) => n.name.includes('#a') && !n.visible)).toBe(true);
     expect(flat.some((n) => n.locked)).toBe(true);
   });
+
+  it('uses aria-label / data-neos-name in display names', () => {
+    const tree = parseHtmlToLayerTree(
+      '<body><button aria-label="Save draft">S</button><div data-neos-name="Hero">H</div></body>',
+    );
+    const flat = flattenLayers(tree);
+    expect(flat.some((n) => n.name.includes('Save draft'))).toBe(true);
+    expect(flat.some((n) => n.name.includes('Hero'))).toBe(true);
+  });
+
+  it('findLayerBySelector miss and invalid toggle ids no-op', () => {
+    const tree = parseHtmlToLayerTree(SAMPLE);
+    expect(findLayerBySelector(tree, 'does-not-exist')).toBeNull();
+    expect(toggleVisibilityByNeosId('<div/>', '', false)).toBe('<div/>');
+    expect(toggleVisibilityByNeosId('<div/>', 'bad id!', false)).toBe('<div/>');
+    expect(toggleVisibilityByNeosId('<div data-neos-id="e1"/>', 'e99', false)).toBe(
+      '<div data-neos-id="e1"/>',
+    );
+    expect(toggleLockByNeosId('<div/>', 'x y', true)).toBe('<div/>');
+  });
+
+  it('toggleVisibilityInHtml data-neos-id selector path returns html', () => {
+    const html = '<div data-neos-id="e1">x</div>';
+    // selector form is recognized but rewrite is best-effort stub → returns original
+    expect(
+      toggleVisibilityInHtml(html, '[data-neos-id="e1"]', false),
+    ).toBe(html);
+    expect(
+      toggleVisibilityInHtml(html, 'something data-neos-id else', false),
+    ).toBe(html);
+  });
+
+  it('builds nth-of-type selectors for sibling tags without id', () => {
+    const tree = parseHtmlToLayerTree(
+      '<body><p>one</p><p>two</p></body>',
+    );
+    const flat = flattenLayers(tree);
+    const ps = flat.filter((n) => n.tag === 'p');
+    expect(ps.length).toBe(2);
+    expect(ps.some((n) => n.selector.includes('nth-of-type'))).toBe(true);
+  });
 });

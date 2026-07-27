@@ -27,6 +27,30 @@ const layers: LayerNode[] = [
   },
 ];
 
+const deepLayers: LayerNode[] = [
+  {
+    id: 'root',
+    tag: 'div',
+    name: 'div.root',
+    selector: 'div.root',
+    depth: 0,
+    visible: true,
+    locked: false,
+    children: [
+      {
+        id: 'child',
+        tag: 'span',
+        name: 'span.child',
+        selector: 'span.child',
+        depth: 1,
+        visible: false,
+        locked: true,
+        children: [],
+      },
+    ],
+  },
+];
+
 describe('LayersPanel', () => {
   it('renders tree, selects row, toggles visibility', () => {
     const onSelect = vi.fn();
@@ -55,5 +79,59 @@ describe('LayersPanel', () => {
       target: { value: 'no-match-xyz' },
     });
     expect(screen.getByTestId('layers-empty')).toBeTruthy();
+  });
+
+  it('collapses, locks, hovers, context-menu, and footer actions', () => {
+    const onHover = vi.fn();
+    const onLock = vi.fn();
+    const onCopy = vi.fn();
+    const onEdit = vi.fn();
+    render(
+      <LayersPanel
+        layers={deepLayers}
+        source="bridge"
+        selectedLayerId="child"
+        onHover={onHover}
+        onToggleLock={onLock}
+        onCopySelector={onCopy}
+        onEditWithAi={onEdit}
+      />,
+    );
+    expect(screen.getByTestId('layers-source').textContent).toMatch(/Live|Bridge/i);
+
+    const root = screen.getByTestId('layer-row-root');
+    fireEvent.mouseEnter(root);
+    expect(onHover).toHaveBeenCalledWith(expect.objectContaining({ id: 'root' }));
+    fireEvent.mouseLeave(root);
+    expect(onHover).toHaveBeenCalledWith(null);
+
+    // collapse parent (root is the only collapsible row)
+    const rootCollapse = screen
+      .getByTestId('layer-row-root')
+      .querySelector('button[aria-label="Collapse"]') as HTMLButtonElement;
+    fireEvent.click(rootCollapse);
+    expect(screen.queryByTestId('layer-row-child')).toBeNull();
+    const rootExpand = screen
+      .getByTestId('layer-row-root')
+      .querySelector('button[aria-label="Expand"]') as HTMLButtonElement;
+    fireEvent.click(rootExpand);
+    expect(screen.getByTestId('layer-row-child')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('layer-lock-child'));
+    expect(onLock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'child' }),
+      false,
+    );
+
+    // context menu: default copy, shift = edit
+    fireEvent.contextMenu(screen.getByTestId('layer-row-child'));
+    expect(onCopy).toHaveBeenCalledWith(expect.objectContaining({ id: 'child' }));
+    fireEvent.contextMenu(screen.getByTestId('layer-row-child'), { shiftKey: true });
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'child' }));
+
+    fireEvent.click(screen.getByTestId('layers-copy-selector'));
+    fireEvent.click(screen.getByTestId('layers-edit-ai'));
+    expect(onCopy).toHaveBeenCalled();
+    expect(onEdit).toHaveBeenCalled();
   });
 });

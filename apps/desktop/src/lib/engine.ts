@@ -1034,6 +1034,42 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /** Download project as neos-project ZIP (v0.5.9). Returns blob on success. */
+  async exportProjectZip(projectId: string): Promise<{ ok: true; blob: Blob } | { ok: false; error: string }> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return { ok: false, error: 'Invalid project id' };
+    try {
+      const res = await fetch(`${this.baseUrl}/api/projects/${seg}/export.zip`, {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
+        return { ok: false, error: errBody?.error || `HTTP ${res.status}` };
+      }
+      const blob = await res.blob();
+      return { ok: true, blob };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Export failed' };
+    }
+  }
+
+  /** Import neos-project ZIP (raw body). */
+  async importProjectZip(
+    zip: Blob | ArrayBuffer,
+  ): Promise<ApiResponse<{ project: DesignProject; filesImported: number }>> {
+    try {
+      const body = zip instanceof Blob ? zip : new Blob([zip]);
+      const res = await fetch(`${this.baseUrl}/api/projects/import.zip`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body,
+      });
+      return readApiResponse(res);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Import failed' };
+    }
+  }
+
   async listProjectFiles(projectId: string): Promise<ApiResponse<ProjectFileEntry[]>> {
     const seg = this.pathSegment(projectId);
     if (!seg) return this.invalidIdResponse('project id');
