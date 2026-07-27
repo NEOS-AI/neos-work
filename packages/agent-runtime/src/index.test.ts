@@ -3,6 +3,7 @@ import {
   AGENT_CLI_DEFS,
   assembleEditContextPrompt,
   assemblePreviewCommentsPrompt,
+  assembleDesignContextPrompt,
   buildLaunchArgs,
   buildLaunchForId,
   detectAllAgents,
@@ -341,5 +342,28 @@ describe('defaultWhich / defaultVersionProbe', () => {
     expect(empty.lines).toEqual([]);
     const blanks = feedJsonlChunk(j, '\n\n{"ok":true}\n\n');
     expect(blanks.lines).toEqual([{ ok: true }]);
+  });
+});
+
+
+describe('assembleDesignContextPrompt', () => {
+  it('prepends DESIGN.md block', () => {
+    const out = assembleDesignContextPrompt('Fix hero', {
+      name: 'neos-default',
+      designMd: '# Brand\nPrimary indigo',
+      tokensCss: ':root { --c: #6366f1 }',
+    });
+    expect(out).toContain('DESIGN CONTEXT');
+    expect(out).toContain('neos-default');
+    expect(out).toContain('Primary indigo');
+    expect(out).toContain('tokens.css');
+    expect(out).toContain('Fix hero');
+    expect(out.indexOf('DESIGN CONTEXT')).toBeLessThan(out.indexOf('Fix hero'));
+  });
+
+  it('returns base when empty or null-byte design', () => {
+    expect(assembleDesignContextPrompt('x', null)).toBe('x');
+    expect(assembleDesignContextPrompt('x', { designMd: '  ' })).toBe('x');
+    expect(assembleDesignContextPrompt('x', { designMd: 'a\0b' })).toBe('x');
   });
 });

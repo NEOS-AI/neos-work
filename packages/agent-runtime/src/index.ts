@@ -55,5 +55,7 @@ export {
 export {
   assembleEditContextPrompt,
   assemblePreviewCommentsPrompt,
+  assembleDesignContextPrompt,
   type PreviewCommentFragment,
+  type DesignContextFragment,
 } from './edit-context.js';

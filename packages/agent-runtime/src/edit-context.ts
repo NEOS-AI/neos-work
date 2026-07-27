@@ -94,3 +94,56 @@ export function assemblePreviewCommentsPrompt(
   lines.push('Address these annotations when editing unless the user prompt says otherwise.');
   return lines.join('\n');
 }
+
+export interface DesignContextFragment {
+  name?: string;
+  designMd: string;
+  tokensCss?: string | null;
+}
+
+const DESIGN_MD_INJECT_MAX = 32_000;
+const TOKENS_INJECT_MAX = 8_000;
+
+/**
+ * Prepend DESIGN.md (+ optional tokens.css) for project-linked design systems.
+ * Mirrors workflow AgentNode DESIGN CONTEXT injection (Task 5 unify path).
+ */
+export function assembleDesignContextPrompt(
+  basePrompt: string,
+  fragment: DesignContextFragment | null | undefined,
+): string {
+  const base = typeof basePrompt === 'string' ? basePrompt : '';
+  if (!fragment || typeof fragment.designMd !== 'string') return base;
+  if (/\0/.test(fragment.designMd)) return base;
+  let designMd = fragment.designMd.trim();
+  if (!designMd) return base;
+  if (designMd.length > DESIGN_MD_INJECT_MAX) {
+    designMd = designMd.slice(0, DESIGN_MD_INJECT_MAX) + '\n\n…[design system truncated]';
+  }
+
+  const parts: string[] = [];
+  parts.push('<!-- DESIGN CONTEXT -->');
+  if (fragment.name && typeof fragment.name === 'string' && !/[\0\r\n]/.test(fragment.name)) {
+    const n = fragment.name.trim().slice(0, 100);
+    if (n) parts.push(`Design system: ${n}`);
+  }
+  parts.push(designMd);
+
+  if (typeof fragment.tokensCss === 'string' && !/\0/.test(fragment.tokensCss)) {
+    let tokens = fragment.tokensCss.trim();
+    if (tokens) {
+      if (tokens.length > TOKENS_INJECT_MAX) {
+        tokens = tokens.slice(0, TOKENS_INJECT_MAX) + '\n/* …tokens truncated */';
+      }
+      parts.push('');
+      parts.push('### tokens.css');
+      parts.push('```css');
+      parts.push(tokens);
+      parts.push('```');
+    }
+  }
+  parts.push('<!-- /DESIGN CONTEXT -->');
+  parts.push('');
+  parts.push(base.trim());
+  return parts.join('\n');
+}

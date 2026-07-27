@@ -12,6 +12,7 @@
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import {
+  assembleDesignContextPrompt,
   assembleEditContextPrompt,
   assemblePreviewCommentsPrompt,
   getDefById,
@@ -21,6 +22,11 @@ import { normalizeEditContext } from '@neos-work/shared';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 import { getProject, listPreviewComments } from '../db/projects.js';
+import {
+  getDesignSystem,
+  getDesignSystemContent,
+  getDesignSystemTokens,
+} from '../lib/design-system-store.js';
 import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { listProjectFiles } from '../lib/project-files.js';
@@ -207,9 +213,31 @@ runs.post('/', async (c) => {
 
   let { prompt: assembled } = assembleEditContextPrompt(promptRaw, editContext);
 
-  // Inject project preview comments into agent context (Task 1c)
+  // Inject project-linked design system + preview comments (Task 5 unify / 1c)
   let commentCount = 0;
+  let designSystemInjected = false;
   if (projectId) {
+    const project = getProject(projectId);
+    if (project?.designSystemId) {
+      try {
+        const [designMd, tokensCss, dsMeta] = await Promise.all([
+          getDesignSystemContent(project.designSystemId),
+          getDesignSystemTokens(project.designSystemId),
+          getDesignSystem(project.designSystemId),
+        ]);
+        if (designMd) {
+          assembled = assembleDesignContextPrompt(assembled, {
+            name: dsMeta?.name,
+            designMd,
+            tokensCss,
+          });
+          designSystemInjected = true;
+        }
+      } catch {
+        // non-fatal — continue without design context
+      }
+    }
+
     const filePath =
       editContext?.filePath
       ?? (typeof body.commentFilePath === 'string' ? body.commentFilePath : undefined);
@@ -245,6 +273,7 @@ runs.post('/', async (c) => {
     projectId: projectId || null,
     hasEditContext: !!editContext,
     previewComments: commentCount,
+    designSystem: designSystemInjected,
   });
 
   const dryRun = body.dryRun === true || body.execute === false;
