@@ -59,6 +59,18 @@ describe('stamp + visibility/lock', () => {
     expect(shown).not.toMatch(/data-neos-hidden="true"/);
   });
 
+  it('parse layer ids align with stamp ids so visibility rewrites work', () => {
+    const raw = '<body><div class="box"><span>hi</span></div></body>';
+    const stamped = stampNeosIds(raw);
+    const layers = parseHtmlToLayerTree(stamped);
+    const flat = flattenLayers(layers);
+    const span = flat.find((n) => n.tag === 'span');
+    expect(span?.id).toMatch(/^e\d+$/);
+    const hidden = toggleVisibilityByNeosId(stamped, span!.id, false);
+    expect(hidden).not.toBe(stamped);
+    expect(hidden).toMatch(/hidden/i);
+  });
+
   it('toggles lock attribute', () => {
     const html = '<div data-neos-id="e1">x</div>';
     const locked = toggleLockByNeosId(html, 'e1', true);

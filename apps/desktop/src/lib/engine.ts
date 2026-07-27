@@ -236,6 +236,16 @@ export interface ProjectFileRevision {
   createdAt: string;
 }
 
+export interface ProjectPreviewComment {
+  id: string;
+  projectId: string;
+  filePath: string;
+  selector: string;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Plugin {
   id: string;
   name: string;
@@ -1110,6 +1120,68 @@ export class EngineClient {
     const res = await fetch(
       `${this.baseUrl}/api/projects/${pSeg}/revisions/${rSeg}/restore`,
       { method: 'POST', headers: this.getHeaders() },
+    );
+    return readApiResponse(res);
+  }
+
+  async listProjectPreviewComments(
+    projectId: string,
+    filePath?: string,
+  ): Promise<ApiResponse<ProjectPreviewComment[]>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    let qs = '';
+    if (filePath != null && filePath !== '') {
+      if (typeof filePath !== 'string' || /[\0\r\n]/.test(filePath)) {
+        return this.invalidIdResponse('file path');
+      }
+      qs = `?path=${encodeURIComponent(filePath.trim())}`;
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/preview-comments${qs}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async createProjectPreviewComment(
+    projectId: string,
+    input: { filePath: string; selector: string; body: string },
+  ): Promise<ApiResponse<ProjectPreviewComment>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (
+      typeof input.filePath !== 'string'
+      || typeof input.selector !== 'string'
+      || typeof input.body !== 'string'
+      || /[\0\r\n]/.test(input.filePath)
+      || /[\0\r\n]/.test(input.selector)
+      || /\0/.test(input.body)
+    ) {
+      return { ok: false, error: 'Invalid comment fields' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/preview-comments`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filePath: input.filePath.trim(),
+        selector: input.selector.trim(),
+        body: input.body.trim(),
+      }),
+    });
+    return readApiResponse(res);
+  }
+
+  async deleteProjectPreviewComment(
+    projectId: string,
+    commentId: string,
+  ): Promise<ApiResponse<void>> {
+    const pSeg = this.pathSegment(projectId);
+    const cSeg = this.pathSegment(commentId);
+    if (!pSeg) return this.invalidIdResponse('project id');
+    if (!cSeg) return this.invalidIdResponse('comment id');
+    const res = await fetch(
+      `${this.baseUrl}/api/projects/${pSeg}/preview-comments/${cSeg}`,
+      { method: 'DELETE', headers: this.getHeaders() },
     );
     return readApiResponse(res);
   }

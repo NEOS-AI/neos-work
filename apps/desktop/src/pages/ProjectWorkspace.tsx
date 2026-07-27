@@ -1,6 +1,6 @@
 /**
- * Design Project workspace (v0.5.4 / PLAN_FOR_V0_5_0 Task 1c Layers/Inspect + chat runs).
- * Files | Layers | Preview/Code/Split/Inspect | Chat.
+ * Design Project workspace (v0.5.5 / PLAN_FOR_V0_5_0 Task 1c comments + revisions).
+ * Files | Layers | Preview/Code/Split/Inspect | Chat / Comments / Revisions.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,13 +12,19 @@ import {
   editContextFromSelection,
   isDirty,
   reduceEditorBuffer,
+  type BridgeSelectPayload,
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
 
 import { useEngine } from '../hooks/useEngine.js';
-import type { DesignProject, ProjectFileEntry } from '../lib/engine.js';
+import type {
+  DesignProject,
+  ProjectFileEntry,
+  ProjectFileRevision,
+  ProjectPreviewComment,
+} from '../lib/engine.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
@@ -46,6 +52,18 @@ export function ProjectWorkspace() {
   const [chatLog, setChatLog] = useState<string[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selection, setSelection] = useState<SelectionState | null>(null);
+  /** Inspect/bridge detail (outerHTML) for selection-scoped AI context. */
+  const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
+
+  type SideTab = 'chat' | 'comments' | 'revisions';
+  const [sideTab, setSideTab] = useState<SideTab>('chat');
+  const [comments, setComments] = useState<ProjectPreviewComment[]>([]);
+  const [commentBody, setCommentBody] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [revisions, setRevisions] = useState<ProjectFileRevision[]>([]);
+  const [revisionError, setRevisionError] = useState<string | null>(null);
+  const [revisionBusy, setRevisionBusy] = useState(false);
 
   const dirty = isDirty(buffer);
   const blocker = useBlocker(dirty);
@@ -165,6 +183,10 @@ export function ProjectWorkspace() {
         );
         const filesRes = await client.listProjectFiles(projectId);
         if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+        if (buffer.path) {
+          const revRes = await client.listProjectRevisions(projectId, buffer.path);
+          if (revRes.ok && revRes.data) setRevisions(revRes.data);
+        }
       } else {
         setSaveError(
           scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
@@ -178,6 +200,127 @@ export function ProjectWorkspace() {
       setSaving(false);
     }
   }, [client, projectId, buffer, t]);
+
+  const loadComments = useCallback(async () => {
+    if (!client || !projectId) return;
+    try {
+      const res = await client.listProjectPreviewComments(projectId, buffer.path ?? undefined);
+      if (res.ok && res.data) setComments(res.data);
+    } catch {
+      /* ignore */
+    }
+  }, [client, projectId, buffer.path]);
+
+  const loadRevisions = useCallback(async () => {
+    if (!client || !projectId || !buffer.path) {
+      setRevisions([]);
+      return;
+    }
+    try {
+      const res = await client.listProjectRevisions(projectId, buffer.path);
+      if (res.ok && res.data) setRevisions(res.data);
+      else setRevisions([]);
+    } catch {
+      setRevisions([]);
+    }
+  }, [client, projectId, buffer.path]);
+
+  useEffect(() => {
+    if (sideTab === 'comments') void loadComments();
+    if (sideTab === 'revisions') void loadRevisions();
+  }, [sideTab, loadComments, loadRevisions]);
+
+  const handleAddComment = useCallback(async () => {
+    if (!client || !projectId || !buffer.path) return;
+    if (!selection?.selector) {
+      setCommentError(t('project.commentNeedSelection'));
+      return;
+    }
+    if (!commentBody.trim() || /\0/.test(commentBody)) {
+      setCommentError(t('project.commentInvalid'));
+      return;
+    }
+    setCommentBusy(true);
+    setCommentError(null);
+    try {
+      const res = await client.createProjectPreviewComment(projectId, {
+        filePath: buffer.path,
+        selector: selection.selector,
+        body: commentBody.trim(),
+      });
+      if (!res.ok) {
+        setCommentError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || t('project.commentFailed'),
+        );
+        return;
+      }
+      setCommentBody('');
+      await loadComments();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.commentFailed');
+      setCommentError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setCommentBusy(false);
+    }
+  }, [client, projectId, buffer.path, selection, commentBody, t, loadComments]);
+
+  const handleDeleteComment = useCallback(
+    async (commentId: string) => {
+      if (!client || !projectId) return;
+      setCommentBusy(true);
+      try {
+        await client.deleteProjectPreviewComment(projectId, commentId);
+        await loadComments();
+      } finally {
+        setCommentBusy(false);
+      }
+    },
+    [client, projectId, loadComments],
+  );
+
+  const handleRestoreRevision = useCallback(
+    async (revisionId: string) => {
+      if (!client || !projectId) return;
+      if (isDirty(buffer)) {
+        const leave = window.confirm(t('project.unsavedLeave'));
+        if (!leave) return;
+      }
+      setRevisionBusy(true);
+      setRevisionError(null);
+      try {
+        const res = await client.restoreProjectRevision(projectId, revisionId);
+        if (!res.ok) {
+          setRevisionError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.restoreFailed'),
+          );
+          return;
+        }
+        const path = res.data?.path ?? buffer.path;
+        if (path) {
+          const fileRes = await client.readProjectFile(projectId, path);
+          if (fileRes.ok && fileRes.data) {
+            setBuffer(
+              reduceEditorBuffer(createEmptyBuffer(), {
+                type: 'open',
+                path,
+                content: fileRes.data.content,
+                hash: fileRes.data.hash,
+              }),
+            );
+          }
+        }
+        await loadRevisions();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.restoreFailed');
+        setRevisionError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+      } finally {
+        setRevisionBusy(false);
+      }
+    },
+    [client, projectId, buffer, t, loadRevisions],
+  );
 
   const appendLog = useCallback((line: string) => {
     const safe = scrubDisplayText(line, { collapseLines: true, maxChars: 500 }) || line;
@@ -195,9 +338,15 @@ export function ProjectWorkspace() {
     setChatBusy(true);
     setChatError(null);
     try {
+      const selectionSnippet =
+        selectDetail?.outerHTML?.slice(0, 8_000)
+        || (selection?.selector
+          ? `<!-- selector: ${selection.selector} -->`
+          : undefined);
       const editContext = selection
         ? editContextFromSelection(selection, {
-            snippet: buffer.local.slice(0, 8_000),
+            // Prefer selected element outerHTML; fall back to selector hint (not whole file).
+            snippet: selectionSnippet,
             mode: 'replace-selection',
           })
         : buffer.path
@@ -264,7 +413,18 @@ export function ProjectWorkspace() {
     } finally {
       setChatBusy(false);
     }
-  }, [client, projectId, chatPrompt, chatAgentId, buffer.path, buffer.local, selection, t, appendLog]);
+  }, [
+    client,
+    projectId,
+    chatPrompt,
+    chatAgentId,
+    buffer.path,
+    buffer.local,
+    selection,
+    selectDetail,
+    t,
+    appendLog,
+  ]);
 
   const fileTree = useMemo(() => {
     return [...files].sort((a, b) => {
@@ -413,9 +573,13 @@ export function ProjectWorkspace() {
             onSave={() => void handleSave()}
             saving={saving}
             selection={selection}
-            onSelectionChange={(sel) => setSelection(sel)}
-            onEditWithAi={(sel) => {
+            onSelectionChange={(sel, detail) => {
               setSelection(sel);
+              setSelectDetail(detail ?? null);
+            }}
+            onEditWithAi={(sel, detail) => {
+              setSelection(sel);
+              setSelectDetail(detail ?? null);
               const hint = sel.selector
                 ? t('project.editWithAiHint', { selector: sel.selector })
                 : t('project.editWithAi');
@@ -443,88 +607,257 @@ export function ProjectWorkspace() {
           />
         </div>
 
-        {/* Chat / AI runs */}
+        {/* Chat / Comments / Revisions */}
         <aside
-          className="flex w-64 shrink-0 flex-col border-l"
+          className="flex w-72 shrink-0 flex-col border-l"
           style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
-          data-testid="project-chat"
+          data-testid="project-side-panel"
         >
           <div
-            className="border-b px-3 py-2 text-[10px] font-semibold uppercase tracking-wide"
-            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}
+            className="flex border-b"
+            style={{ borderColor: 'var(--border-primary)' }}
+            role="tablist"
           >
-            {t('project.chat')}
+            {(
+              [
+                ['chat', t('project.chat')],
+                ['comments', t('project.comments')],
+                ['revisions', t('project.revisions')],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={sideTab === id}
+                data-testid={`side-tab-${id}`}
+                onClick={() => setSideTab(id)}
+                className="flex-1 px-1 py-2 text-[10px] font-semibold uppercase tracking-wide"
+                style={{
+                  color: sideTab === id ? 'var(--text-primary)' : 'var(--text-muted)',
+                  backgroundColor:
+                    sideTab === id
+                      ? 'color-mix(in srgb, var(--bg-tertiary) 80%, transparent)'
+                      : 'transparent',
+                  borderBottom:
+                    sideTab === id ? '2px solid var(--accent, #6366f1)' : '2px solid transparent',
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-            <select
-              aria-label={t('project.chatAgent')}
-              value={chatAgentId}
-              onChange={(e) => setChatAgentId(e.target.value)}
-              className="w-full rounded border px-2 py-1 text-xs"
-              style={{
-                borderColor: 'var(--border-primary)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <option value="">{t('project.chatDryRun')}</option>
-              <option value="cli-claude">Claude Code</option>
-              <option value="cli-codex">Codex</option>
-              <option value="cli-gemini">Gemini</option>
-              <option value="cli-aider">Aider</option>
-              <option value="cli-opencode">OpenCode</option>
-              <option value="cli-cursor">Cursor Agent</option>
-            </select>
-            <textarea
-              value={chatPrompt}
-              onChange={(e) => setChatPrompt(e.target.value)}
-              placeholder={t('project.chatPlaceholder')}
-              rows={4}
-              className="w-full resize-none rounded border p-2 text-xs"
-              style={{
-                borderColor: 'var(--border-primary)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-              }}
-              aria-label={t('project.chat')}
-            />
-            <button
-              type="button"
-              disabled={chatBusy || !chatPrompt.trim()}
-              onClick={() => void handleChatSend()}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent, #6366f1)' }}
-            >
-              {chatBusy ? t('common.loading') : t('project.chatSend')}
-            </button>
-            {chatError && (
-              <p className="text-[11px] text-red-400" role="alert">
-                {chatError}
-              </p>
-            )}
-            {activeRunId && (
-              <p className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                run {activeRunId.slice(0, 8)}…
-              </p>
-            )}
-            <div
-              className="min-h-0 flex-1 overflow-auto rounded border p-2 font-mono text-[10px] leading-relaxed"
-              style={{
-                borderColor: 'var(--border-primary)',
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-secondary)',
-              }}
-              data-testid="project-chat-log"
-            >
-              {chatLog.length === 0 ? (
-                <span style={{ color: 'var(--text-muted)' }}>{t('project.chatEmpty')}</span>
-              ) : (
-                chatLog.map((line, i) => (
-                  <div key={`${i}-${line.slice(0, 12)}`}>{line}</div>
-                ))
+
+          {sideTab === 'chat' && (
+            <div className="flex min-h-0 flex-1 flex-col gap-2 p-2" data-testid="project-chat">
+              <select
+                aria-label={t('project.chatAgent')}
+                value={chatAgentId}
+                onChange={(e) => setChatAgentId(e.target.value)}
+                className="w-full rounded border px-2 py-1 text-xs"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <option value="">{t('project.chatDryRun')}</option>
+                <option value="cli-claude">Claude Code</option>
+                <option value="cli-codex">Codex</option>
+                <option value="cli-gemini">Gemini</option>
+                <option value="cli-opencode">OpenCode</option>
+                <option value="cli-cursor">Cursor Agent</option>
+                <option value="cli-aider">Aider</option>
+                <option value="cli-copilot">GitHub Copilot</option>
+                <option value="cli-qwen">Qwen</option>
+                <option value="cli-kimi">Kimi</option>
+                <option value="cli-grok">Grok</option>
+                <option value="cli-continue">Continue</option>
+              </select>
+              <textarea
+                value={chatPrompt}
+                onChange={(e) => setChatPrompt(e.target.value)}
+                placeholder={t('project.chatPlaceholder')}
+                rows={4}
+                className="w-full resize-none rounded border p-2 text-xs"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+                aria-label={t('project.chat')}
+              />
+              <button
+                type="button"
+                disabled={chatBusy || !chatPrompt.trim()}
+                onClick={() => void handleChatSend()}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+              >
+                {chatBusy ? t('common.loading') : t('project.chatSend')}
+              </button>
+              {chatError && (
+                <p className="text-[11px] text-red-400" role="alert">
+                  {chatError}
+                </p>
               )}
+              {activeRunId && (
+                <p className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  run {activeRunId.slice(0, 8)}…
+                </p>
+              )}
+              <div
+                className="min-h-0 flex-1 overflow-auto rounded border p-2 font-mono text-[10px] leading-relaxed"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-secondary)',
+                }}
+                data-testid="project-chat-log"
+              >
+                {chatLog.length === 0 ? (
+                  <span style={{ color: 'var(--text-muted)' }}>{t('project.chatEmpty')}</span>
+                ) : (
+                  chatLog.map((line, i) => (
+                    <div key={`${i}-${line.slice(0, 12)}`}>{line}</div>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {sideTab === 'comments' && (
+            <div className="flex min-h-0 flex-1 flex-col gap-2 p-2" data-testid="project-comments">
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {t('project.commentHint')}
+              </p>
+              {selection?.selector ? (
+                <p
+                  className="truncate font-mono text-[10px]"
+                  style={{ color: 'var(--text-secondary)' }}
+                  title={selection.selector}
+                >
+                  {selection.selector}
+                </p>
+              ) : (
+                <p className="text-[10px] text-amber-400/90">{t('project.commentNeedSelection')}</p>
+              )}
+              <textarea
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value)}
+                placeholder={t('project.commentPlaceholder')}
+                rows={3}
+                className="w-full resize-none rounded border p-2 text-xs"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+                aria-label={t('project.comments')}
+              />
+              <button
+                type="button"
+                disabled={commentBusy || !commentBody.trim() || !selection?.selector || !buffer.path}
+                onClick={() => void handleAddComment()}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+                data-testid="comment-add"
+              >
+                {commentBusy ? t('common.loading') : t('project.commentAdd')}
+              </button>
+              {commentError && (
+                <p className="text-[11px] text-red-400" role="alert">
+                  {commentError}
+                </p>
+              )}
+              <ul className="min-h-0 flex-1 space-y-2 overflow-auto text-xs">
+                {comments.length === 0 ? (
+                  <li style={{ color: 'var(--text-muted)' }}>{t('project.commentEmpty')}</li>
+                ) : (
+                  comments.map((c) => (
+                    <li
+                      key={c.id}
+                      className="rounded border p-2"
+                      style={{
+                        borderColor: 'var(--border-primary)',
+                        backgroundColor: 'var(--bg-primary)',
+                      }}
+                      data-testid={`comment-${c.id}`}
+                    >
+                      <div
+                        className="mb-1 truncate font-mono text-[10px]"
+                        style={{ color: 'var(--text-muted)' }}
+                        title={c.selector}
+                      >
+                        {scrubDisplayText(c.selector, { collapseLines: true, maxChars: 80 })}
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)' }}>
+                        {scrubDisplayText(c.body, { collapseLines: true, maxChars: 200 })}
+                      </div>
+                      <button
+                        type="button"
+                        className="mt-1 text-[10px] underline"
+                        style={{ color: 'var(--text-muted)' }}
+                        onClick={() => void handleDeleteComment(c.id)}
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          )}
+
+          {sideTab === 'revisions' && (
+            <div className="flex min-h-0 flex-1 flex-col gap-2 p-2" data-testid="project-revisions">
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {buffer.path
+                  ? t('project.revisionsFor', { path: buffer.path })
+                  : t('project.noFileOpen')}
+              </p>
+              {revisionError && (
+                <p className="text-[11px] text-red-400" role="alert">
+                  {revisionError}
+                </p>
+              )}
+              <ul className="min-h-0 flex-1 space-y-1 overflow-auto text-xs">
+                {revisions.length === 0 ? (
+                  <li style={{ color: 'var(--text-muted)' }}>{t('project.revisionEmpty')}</li>
+                ) : (
+                  revisions.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex items-center gap-2 rounded border px-2 py-1.5"
+                      style={{
+                        borderColor: 'var(--border-primary)',
+                        backgroundColor: 'var(--bg-primary)',
+                      }}
+                      data-testid={`revision-${r.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          {r.source} · {r.contentHash.slice(0, 8)}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>
+                          {r.createdAt}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={revisionBusy}
+                        className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium text-white disabled:opacity-40"
+                        style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+                        onClick={() => void handleRestoreRevision(r.id)}
+                      >
+                        {t('project.restore')}
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          )}
         </aside>
       </div>
 

@@ -84,7 +84,8 @@ function walk(el: Element, depth: number): LayerNode | null {
   let id = el.getAttribute('data-neos-id');
   if (!id) {
     idCounter += 1;
-    id = `p${idCounter}`;
+    // Match stampNeosIds prefix so visibility/lock rewrites hit the same ids
+    id = `e${idCounter}`;
   }
 
   const children: LayerNode[] = [];

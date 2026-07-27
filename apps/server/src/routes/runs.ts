@@ -1,5 +1,5 @@
 /**
- * Project / agent run API (v0.5.4 — live CLI execute + dry-run).
+ * Project / agent run API (v0.5.5 — CLI execute + preview comment inject).
  *
  * POST   /api/runs              — create + start (background CLI when agentId set)
  * GET    /api/runs              — list (?projectId=)
@@ -13,13 +13,14 @@ import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import {
   assembleEditContextPrompt,
+  assemblePreviewCommentsPrompt,
   getDefById,
   getGlobalRunRegistry,
 } from '@neos-work/agent-runtime';
 import { normalizeEditContext } from '@neos-work/shared';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
-import { getProject } from '../db/projects.js';
+import { getProject, listPreviewComments } from '../db/projects.js';
 import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { listProjectFiles } from '../lib/project-files.js';
@@ -134,7 +135,9 @@ async function executeCliRun(runId: string): Promise<void> {
       }
     }
 
-    if (controller.signal.aborted || current.status === 'canceled') {
+    // Re-read status after spawn (cancel may have raced)
+    const latest = reg.get(runId);
+    if (!latest || latest.status === 'canceled' || controller.signal.aborted) {
       return;
     }
 
@@ -202,7 +205,31 @@ runs.post('/', async (c) => {
     return c.json({ ok: false, error: 'Invalid editContext' }, 400);
   }
 
-  const { prompt: assembled } = assembleEditContextPrompt(promptRaw, editContext);
+  let { prompt: assembled } = assembleEditContextPrompt(promptRaw, editContext);
+
+  // Inject project preview comments into agent context (Task 1c)
+  let commentCount = 0;
+  if (projectId) {
+    const filePath =
+      editContext?.filePath
+      ?? (typeof body.commentFilePath === 'string' ? body.commentFilePath : undefined);
+    const comments = listPreviewComments(projectId, filePath).map((c) => ({
+      filePath: c.filePath,
+      selector: c.selector,
+      body: c.body,
+    }));
+    // If file-scoped empty, fall back to all project comments
+    const pool =
+      comments.length > 0
+        ? comments
+        : listPreviewComments(projectId).map((c) => ({
+            filePath: c.filePath,
+            selector: c.selector,
+            body: c.body,
+          }));
+    commentCount = pool.length;
+    assembled = assemblePreviewCommentsPrompt(assembled, pool);
+  }
 
   const reg = getGlobalRunRegistry();
   const run = reg.create({
@@ -217,6 +244,7 @@ runs.post('/', async (c) => {
     agentId,
     projectId: projectId || null,
     hasEditContext: !!editContext,
+    previewComments: commentCount,
   });
 
   const dryRun = body.dryRun === true || body.execute === false;

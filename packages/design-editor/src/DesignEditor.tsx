@@ -223,27 +223,28 @@ export function DesignEditor({
   };
 
   const handleToggleVisibility = (layer: LayerNode, visible: boolean) => {
-    const next = toggleVisibilityByNeosId(buffer.local, layer.id, visible);
+    let next = toggleVisibilityByNeosId(buffer.local, layer.id, visible);
     if (next === buffer.local) {
-      // Try stamped preview html ids mapped: layer ids from parse use pN / eN
+      // Stamp stable data-neos-id then toggle (parse/bridge synthetic ids need attributes in source)
       const stamped = stampNeosIds(buffer.local);
-      const alt = toggleVisibilityByNeosId(stamped, layer.id, visible);
-      if (alt !== stamped) {
-        applyHtmlEdit(alt);
-        setReloadKey((k) => k + 1);
-      }
-      return;
+      next = toggleVisibilityByNeosId(stamped, layer.id, visible);
+      if (next === stamped) return;
     }
     applyHtmlEdit(next);
+    setBridgeLayers(null);
     setReloadKey((k) => k + 1);
   };
 
   const handleToggleLock = (layer: LayerNode, locked: boolean) => {
-    const next = toggleLockByNeosId(buffer.local, layer.id, locked);
-    if (next !== buffer.local) {
-      applyHtmlEdit(next);
-      setReloadKey((k) => k + 1);
+    let next = toggleLockByNeosId(buffer.local, layer.id, locked);
+    if (next === buffer.local) {
+      const stamped = stampNeosIds(buffer.local);
+      next = toggleLockByNeosId(stamped, layer.id, locked);
+      if (next === stamped) return;
     }
+    applyHtmlEdit(next);
+    setBridgeLayers(null);
+    setReloadKey((k) => k + 1);
   };
 
   const handleCopySelector = async (layer: LayerNode) => {

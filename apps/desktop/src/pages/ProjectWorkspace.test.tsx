@@ -7,12 +7,22 @@ const getProject = vi.fn();
 const listProjectFiles = vi.fn();
 const readProjectFile = vi.fn();
 const writeProjectFile = vi.fn();
+const listProjectPreviewComments = vi.fn();
+const createProjectPreviewComment = vi.fn();
+const deleteProjectPreviewComment = vi.fn();
+const listProjectRevisions = vi.fn();
+const restoreProjectRevision = vi.fn();
 
 const client = {
   getProject,
   listProjectFiles,
   readProjectFile,
   writeProjectFile,
+  listProjectPreviewComments,
+  createProjectPreviewComment,
+  deleteProjectPreviewComment,
+  listProjectRevisions,
+  restoreProjectRevision,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({
@@ -128,6 +138,11 @@ describe('ProjectWorkspace', () => {
     listProjectFiles.mockReset();
     readProjectFile.mockReset();
     writeProjectFile.mockReset();
+    listProjectPreviewComments.mockReset().mockResolvedValue({ ok: true, data: [] });
+    createProjectPreviewComment.mockReset();
+    deleteProjectPreviewComment.mockReset();
+    listProjectRevisions.mockReset().mockResolvedValue({ ok: true, data: [] });
+    restoreProjectRevision.mockReset();
   });
 
   it('loads project, shows files, saves dirty code via DesignEditor', async () => {
@@ -188,6 +203,47 @@ describe('ProjectWorkspace', () => {
     renderWorkspace();
     await waitFor(() => {
       expect(screen.getByText('Not found')).toBeInTheDocument();
+    });
+  });
+
+  it('switches to comments and revisions side tabs', async () => {
+    const user = userEvent.setup();
+    getProject.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'proj-1',
+        name: 'Demo',
+        baseDir: '/tmp/demo',
+        entryFile: 'index.html',
+        designSystemId: null,
+        meta: {},
+        createdAt: 't',
+        updatedAt: 't',
+      },
+    });
+    listProjectFiles.mockResolvedValue({
+      ok: true,
+      data: [{ path: 'index.html', name: 'index.html', type: 'file', isEntry: true }],
+    });
+    readProjectFile.mockResolvedValue({
+      ok: true,
+      data: { path: 'index.html', content: '<html/>', hash: 'a' },
+    });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.getByTestId('project-side-panel')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('side-tab-comments'));
+    await waitFor(() => {
+      expect(listProjectPreviewComments).toHaveBeenCalled();
+      expect(screen.getByTestId('project-comments')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('side-tab-revisions'));
+    await waitFor(() => {
+      expect(listProjectRevisions).toHaveBeenCalledWith('proj-1', 'index.html');
+      expect(screen.getByTestId('project-revisions')).toBeInTheDocument();
     });
   });
 });

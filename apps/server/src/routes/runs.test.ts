@@ -76,6 +76,39 @@ describe('runs routes', () => {
     expect(listJson.data.some((r) => r.id === created.data.id)).toBe(true);
   });
 
+  it('injects preview comments into assembled prompt', async () => {
+    const p = projects.createProject({ name: `${NAME}_c` });
+    ids.push(p.id);
+    projects.createPreviewComment({
+      projectId: p.id,
+      filePath: 'index.html',
+      selector: 'h1.hero',
+      body: 'Increase font size',
+    });
+
+    const createRes = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        prompt: 'Polish landing',
+        dryRun: true,
+        editContext: {
+          filePath: 'index.html',
+          mode: 'patch',
+        },
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as {
+      ok: boolean;
+      data: { prompt?: string };
+    };
+    expect(created.data.prompt).toContain('Preview comments');
+    expect(created.data.prompt).toContain('h1.hero');
+    expect(created.data.prompt).toContain('Increase font size');
+  });
+
   it('rejects unknown agent and bad editContext', async () => {
     const badAgent = await app.request('/api/runs', {
       method: 'POST',
@@ -223,5 +256,85 @@ describe('runs execute path with mocked spawn', () => {
       new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 3000)),
     ]);
     expect(text === 'timeout' || text.includes('event:') || text.includes('data:')).toBe(true);
+  });
+});
+
+describe('runs preview comments injection', () => {
+  it('injects project preview comments into dry-run prompt', async () => {
+    const p = projects.createProject({ name: `${NAME}_comments` });
+    ids.push(p.id);
+
+    projects.createPreviewComment({
+      projectId: p.id,
+      filePath: 'index.html',
+      selector: 'h1',
+      body: 'Make the hero larger',
+    });
+    projects.createPreviewComment({
+      projectId: p.id,
+      filePath: 'about.html',
+      selector: '.cta',
+      body: 'Change button color',
+    });
+
+    const res = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        prompt: 'Polish the design',
+        dryRun: true,
+        editContext: {
+          filePath: 'index.html',
+          mode: 'patch',
+        },
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { data: { prompt?: string; status: string } };
+    expect(body.data.status).toBe('succeeded');
+    // file-scoped comments preferred
+    expect(body.data.prompt).toMatch(/Preview comments|Make the hero|h1/i);
+
+    // Without editContext filePath, falls back to all project comments
+    const all = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        prompt: 'Address feedback',
+        dryRun: true,
+      }),
+    });
+    expect(all.status).toBe(201);
+    const allBody = (await all.json()) as { data: { prompt?: string } };
+    expect(allBody.data.prompt).toMatch(/Preview comments|hero|button/i);
+  });
+
+  it('rejects overlong prompt', async () => {
+    const res = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'p'.repeat(100_001),
+        dryRun: true,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/max length/i);
+  });
+
+  it('execute:false is treated as dry-run', async () => {
+    const res = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'cli-claude',
+        prompt: 'no spawn',
+        execute: false,
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { data: { status: string } }).data.status).toBe('succeeded');
   });
 });

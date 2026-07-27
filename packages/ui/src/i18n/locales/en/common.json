@@ -118,7 +118,20 @@
     "editWithAi": "Edit with AI",
     "editWithAiHint": "Refine selection {{selector}}:",
     "copySelector": "Copy selector",
-    "selection": "Selection"
+    "selection": "Selection",
+    "comments": "Comments",
+    "commentHint": "Select a layer or Inspect element, then annotate for the next AI run.",
+    "commentNeedSelection": "Select an element first (Layers or Inspect).",
+    "commentPlaceholder": "Annotation for this selection…",
+    "commentAdd": "Add comment",
+    "commentEmpty": "No comments on this file",
+    "commentInvalid": "Comment is empty or invalid",
+    "commentFailed": "Failed to save comment",
+    "revisions": "Revisions",
+    "revisionsFor": "History for {{path}}",
+    "revisionEmpty": "No revisions yet — save the file to create one",
+    "restore": "Restore",
+    "restoreFailed": "Failed to restore revision"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

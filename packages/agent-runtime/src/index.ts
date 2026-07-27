@@ -52,4 +52,8 @@ export {
   type RunRegistryOptions,
 } from './run-registry.js';
 
-export { assembleEditContextPrompt } from './edit-context.js';
+export {
+  assembleEditContextPrompt,
+  assemblePreviewCommentsPrompt,
+  type PreviewCommentFragment,
+} from './edit-context.js';

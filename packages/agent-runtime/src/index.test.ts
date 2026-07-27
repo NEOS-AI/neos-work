@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   AGENT_CLI_DEFS,
   assembleEditContextPrompt,
+  assemblePreviewCommentsPrompt,
   buildLaunchArgs,
   buildLaunchForId,
   detectAllAgents,
@@ -272,5 +273,73 @@ describe('escalateKill', () => {
     escalateKill(-1);
     // unlikely pid — should not throw
     escalateKill(999_999_999);
+  });
+});
+
+describe('assemblePreviewCommentsPrompt', () => {
+  it('appends numbered annotations', () => {
+    const out = assemblePreviewCommentsPrompt('Fix spacing', [
+      { filePath: 'index.html', selector: 'h1', body: 'Make larger' },
+    ]);
+    expect(out).toContain('Preview comments');
+    expect(out).toContain('h1');
+    expect(out).toContain('Make larger');
+  });
+
+  it('returns base when empty', () => {
+    expect(assemblePreviewCommentsPrompt('x', [])).toBe('x');
+    expect(assemblePreviewCommentsPrompt('x', null as unknown as [])).toBe('x');
+  });
+
+  it('skips invalid entries, caps count/body, and drops control-char paths', () => {
+    const out = assemblePreviewCommentsPrompt(
+      'Base',
+      [
+        { filePath: 'bad\npath', selector: 'h1', body: 'skip' },
+        { filePath: 'a.html', selector: 'x\ny', body: 'skip' },
+        { filePath: 'a.html', selector: '.ok', body: 'tok\0en' },
+        { filePath: '', selector: 'h1', body: 'skip' },
+        { filePath: 'b.html', selector: '', body: 'skip' },
+        { filePath: 'c.html', selector: '.btn', body: '  hello  ' },
+        { filePath: 'd.html', selector: '.x', body: 'y'.repeat(1000) },
+        null as unknown as { filePath: string; selector: string; body: string },
+      ],
+      { maxComments: 1, maxBodyChars: 10 },
+    );
+    expect(out).toContain('Preview comments');
+    expect(out).toContain('c.html');
+    expect(out).toContain('hello');
+    // only 1 comment due to maxComments
+    expect(out).not.toContain('d.html');
+  });
+});
+
+describe('defaultWhich / defaultVersionProbe', () => {
+  it('defaultWhich rejects blank/control-char and uses mocked execFile', async () => {
+    const { defaultWhich, defaultVersionProbe } = await import('./detection.js');
+    expect(await defaultWhich('')).toBeNull();
+    expect(await defaultWhich('  ')).toBeNull();
+    expect(await defaultWhich('bad\ncmd')).toBeNull();
+    expect(await defaultWhich(null as unknown as string)).toBeNull();
+
+    // defaultVersionProbe rejects bad paths
+    expect(await defaultVersionProbe('')).toBeUndefined();
+    expect(await defaultVersionProbe('bad\npath')).toBeUndefined();
+    expect(await defaultVersionProbe(null as unknown as string)).toBeUndefined();
+  });
+
+  it('text parser truncates when over maxChars', () => {
+    const t = createTextParseState();
+    const { accumulated } = feedTextChunk(t, 'abcdefghij', 5);
+    expect(accumulated.length).toBe(5);
+    expect(accumulated).toBe('fghij');
+  });
+
+  it('jsonl feed ignores non-string chunks and blank lines', () => {
+    const j = createJsonlParseState();
+    const empty = feedJsonlChunk(j, 99 as unknown as string);
+    expect(empty.lines).toEqual([]);
+    const blanks = feedJsonlChunk(j, '\n\n{"ok":true}\n\n');
+    expect(blanks.lines).toEqual([{ ok: true }]);
   });
 });
