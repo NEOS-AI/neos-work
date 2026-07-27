@@ -15,7 +15,7 @@ import { executeWorkflow } from '@neos-work/workflow-engine';
 
 import * as workflowDb from '../db/workflows.js';
 import { getExecutionSettings } from '../db/settings.js';
-import { spawnCliAgent } from './cli-agents.js';
+import { spawnRegistryAgent } from './registry-spawn.js';
 import { getDesignSystemContent } from './design-system-store.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from './runtime-context.js';
 import { createFirstHtmlArtifact } from './html-artifact.js';
@@ -136,8 +136,8 @@ export async function runRoutine(routineId: string): Promise<string | null> {
         }
       },
       cliSpawn: (cliId, prompt, onChunk, signal) =>
-        spawnCliAgent({
-          cliId,
+        spawnRegistryAgent({
+          agentId: cliId,
           prompt,
           onChunk,
           signal,

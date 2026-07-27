@@ -1642,7 +1642,7 @@ function CliAgentsSection() {
         <div>
           <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>CLI Agents</h2>
           <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Detected CLI-based AI agents on this machine (Claude Code, Gemini CLI, Codex CLI).
+            Detected coding-agent CLIs on this machine (registry: Claude, Codex, Gemini, OpenCode, Aider, …).
             Optional absolute paths override PATH lookup (plan Task 3).
           </p>
         </div>
@@ -1706,6 +1706,14 @@ function CliAgentsSection() {
         <SimpleKeyInput label="Claude Code path" placeholder="/usr/local/bin/claude" settingKey="CLI_PATH_CLAUDE" />
         <SimpleKeyInput label="Gemini CLI path" placeholder="/usr/local/bin/gemini" settingKey="CLI_PATH_GEMINI" />
         <SimpleKeyInput label="Codex CLI path" placeholder="/usr/local/bin/codex" settingKey="CLI_PATH_CODEX" />
+        <SimpleKeyInput label="OpenCode path" placeholder="/usr/local/bin/opencode" settingKey="CLI_PATH_OPENCODE" />
+        <SimpleKeyInput label="Cursor Agent path" placeholder="/usr/local/bin/cursor-agent" settingKey="CLI_PATH_CURSOR" />
+        <SimpleKeyInput label="Aider path" placeholder="/usr/local/bin/aider" settingKey="CLI_PATH_AIDER" />
+        <SimpleKeyInput label="Copilot path" placeholder="/usr/local/bin/copilot" settingKey="CLI_PATH_COPILOT" />
+        <SimpleKeyInput label="Qwen path" placeholder="/usr/local/bin/qwen" settingKey="CLI_PATH_QWEN" />
+        <SimpleKeyInput label="Kimi path" placeholder="/usr/local/bin/kimi" settingKey="CLI_PATH_KIMI" />
+        <SimpleKeyInput label="Grok path" placeholder="/usr/local/bin/grok" settingKey="CLI_PATH_GROK" />
+        <SimpleKeyInput label="Continue (cn) path" placeholder="/usr/local/bin/cn" settingKey="CLI_PATH_CONTINUE" />
         <button
           type="button"
           onClick={loadAgents}

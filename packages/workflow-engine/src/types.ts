@@ -19,11 +19,11 @@ export interface NodeContext {
   onProgress?: (chunk: string, accumulated: string) => void;
   /**
    * Optional CLI spawn function injected by the server.
-   * Allows agent nodes to run external CLI agents (claude, gemini, codex)
-   * without coupling the workflow-engine package to Node.js child_process.
+   * Agent registry ids (`cli-*`, e.g. claude, aider, opencode, …) — v0.5.6 N CLIs.
+   * Host maps id → agent-runtime launch without coupling this package to child_process.
    */
   cliSpawn?: (
-    cliId: 'cli-claude' | 'cli-gemini' | 'cli-codex',
+    cliId: string,
     prompt: string,
     onChunk?: (chunk: string, accumulated: string) => void,
     signal?: AbortSignal,

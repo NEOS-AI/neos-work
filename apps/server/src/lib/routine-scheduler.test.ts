@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   saveRun: vi.fn(),
   executeWorkflow: vi.fn(),
   getExecutionSettings: vi.fn(() => ({})),
-  spawnCliAgent: vi.fn(),
+  spawnRegistryAgent: vi.fn(),
   getDesignSystemContent: vi.fn(),
   getRuntimeAuthToken: vi.fn(() => 'tok'),
   getRuntimeServerUrl: vi.fn(() => 'http://127.0.0.1:3000'),
@@ -50,8 +50,8 @@ vi.mock('../db/settings.js', () => ({
   getExecutionSettings: mocks.getExecutionSettings,
 }));
 
-vi.mock('./cli-agents.js', () => ({
-  spawnCliAgent: mocks.spawnCliAgent,
+vi.mock('./registry-spawn.js', () => ({
+  spawnRegistryAgent: mocks.spawnRegistryAgent,
 }));
 
 vi.mock('./design-system-store.js', () => ({

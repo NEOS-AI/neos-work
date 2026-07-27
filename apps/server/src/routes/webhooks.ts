@@ -12,7 +12,7 @@ import type { WorkflowSSEEvent } from '@neos-work/shared';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
 import { getExecutionSettings } from '../db/settings.js';
-import { spawnCliAgent } from '../lib/cli-agents.js';
+import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 import * as artifactDb from '../db/artifacts.js';
@@ -171,8 +171,8 @@ webhooks.post('/:workflowId', async (c) => {
         },
         signal: controller.signal,
         cliSpawn: (cliId, prompt, onChunk, signal) =>
-          spawnCliAgent({
-            cliId,
+          spawnRegistryAgent({
+            agentId: cliId,
             prompt,
             onChunk,
             signal,

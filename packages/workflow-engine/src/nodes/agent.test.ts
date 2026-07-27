@@ -56,7 +56,7 @@ vi.mock('@neos-work/core', async (importOriginal) => {
   };
 });
 
-import { AgentNode } from './agent.js';
+import { AgentNode, isCliProvider } from './agent.js';
 import type { NodeContext } from '../types.js';
 // Same module instance AgentNode resolves via `import * as packs`
 import * as packs from '../packs/index.js';
@@ -287,6 +287,24 @@ describe('AgentNode CLI provider', () => {
       'worker.completed',
     ]);
     expect(events[0]?.workerId).toBe('finance_analyst');
+  });
+
+
+  it('spawns any cli-* registry id (not only legacy 3)', async () => {
+    expect(isCliProvider('cli-aider')).toBe(true);
+    expect(isCliProvider('cli-opencode')).toBe(true);
+    expect(isCliProvider('anthropic')).toBe(false);
+    expect(isCliProvider('cli-')).toBe(false);
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'aider-ok', exitCode: 0 });
+    const node = new AgentNode('agent', { provider: 'cli-aider' });
+    const result = await node.execute(ctx({ cliSpawn }));
+    expect(result.ok).toBe(true);
+    expect(cliSpawn).toHaveBeenCalledWith(
+      'cli-aider',
+      expect.any(String),
+      expect.any(Function),
+      undefined,
+    );
   });
 
   it('fails when CLI provider selected but cliSpawn missing', async () => {

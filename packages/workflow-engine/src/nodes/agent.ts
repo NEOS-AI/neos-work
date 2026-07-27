@@ -4,7 +4,7 @@
  * - Canonical type: `agent` (legacy `agent_*` still accepted pre-migrate)
  * - Resolves `workerId` (preferred) / `harnessId`
  * - Non-CLI: AgentOrchestrator + permission/workspace tool registry + worker.* events
- * - CLI solo: cli-* providers via injected `cliSpawn` (+ synthetic worker events)
+ * - CLI solo: any `cli-*` registry provider via injected `cliSpawn` (+ synthetic worker events)
  */
 
 import {
@@ -23,6 +23,11 @@ import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 // Namespace import so vitest can spyOn packs.resolveWorker (live binding).
 import * as packs from '../packs/index.js';
 import { safeServerUrl } from './server-url.js';
+
+/** True when provider selects an external coding-agent CLI (registry id). */
+export function isCliProvider(provider: string): boolean {
+  return typeof provider === 'string' && provider.startsWith('cli-') && provider.length > 4;
+}
 
 /** Cap API keys / auth tokens (header hygiene). */
 const API_KEY_MAX = 8_192;
@@ -294,8 +299,7 @@ export class AgentNode implements ExecutableNode {
     if (typeof rawProvider === 'string' && !/[\0\r\n]/.test(rawProvider)) {
       provider = rawProvider.trim().toLowerCase();
     }
-    const isCli =
-      provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
+    const isCli = isCliProvider(provider);
     if (isCli && workerMode !== 'coordinator') {
       if (!ctx.cliSpawn) {
         return {
@@ -320,7 +324,7 @@ export class AgentNode implements ExecutableNode {
           prompt = prompt.slice(0, SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS);
         }
         const result = await ctx.cliSpawn(
-          provider as 'cli-claude' | 'cli-gemini' | 'cli-codex',
+          provider,
           prompt,
           (chunk, accumulated) => {
             ctx.onProgress?.(chunk, accumulated);

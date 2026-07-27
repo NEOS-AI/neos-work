@@ -51,7 +51,7 @@ export { registerCodingBlocks } from './blocks/coding/index.js';
 
 // Nodes (for external use)
 export { TriggerNode, OutputNode, AndGateNode, OrGateNode } from './nodes/gate.js';
-export { AgentNode } from './nodes/agent.js';
+export { AgentNode, isCliProvider } from './nodes/agent.js';
 export { BlockNode } from './nodes/block.js';
 export { WebSearchNode } from './nodes/web-search.js';
 export { SlackMessageNode } from './nodes/slack.js';

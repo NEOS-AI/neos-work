@@ -22,7 +22,7 @@ import * as db from '../db/workflows.js';
 import * as artifactDb from '../db/artifacts.js';
 import * as revisionDb from '../db/workflow-revisions.js';
 import { getExecutionSettings } from '../db/settings.js';
-import { spawnCliAgent } from '../lib/cli-agents.js';
+import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import {
   createDesignSystem,
@@ -961,8 +961,8 @@ workflow.post('/:id/run', async (c) => {
         },
         signal: controller.signal,
         cliSpawn: (cliId, prompt, onChunk, signal) =>
-          spawnCliAgent({
-            cliId,
+          spawnRegistryAgent({
+            agentId: cliId,
             prompt,
             onChunk,
             signal,

@@ -523,3 +523,69 @@ describe('projects create with entryFile and meta', () => {
     expect(badJson.status).toBe(400);
   });
 });
+
+describe('projects comment/conversation error paths', () => {
+  it('POST comment requires fields; conversation message validates', async () => {
+    const project = await createViaApi();
+
+    const emptyComment = await app.request(`/api/projects/${project.id}/preview-comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath: '', selector: 'h1', body: 'x' }),
+    });
+    expect([400, 500]).toContain(emptyComment.status);
+
+    const conv = await app.request(`/api/projects/${project.id}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '  chat  ' }),
+    });
+    expect(conv.status).toBe(201);
+    const convId = ((await conv.json()) as { data: { id: string } }).data.id;
+
+    const emptyMsg = await app.request(
+      `/api/projects/${project.id}/conversations/${convId}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'user', content: '' }),
+      },
+    );
+    expect([400, 500]).toContain(emptyMsg.status);
+
+    const okMsg = await app.request(
+      `/api/projects/${project.id}/conversations/${convId}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'system', content: 'sys note' }),
+      },
+    );
+    expect(okMsg.status).toBe(201);
+
+    // blank conversation id
+    const blankConv = await app.request(
+      `/api/projects/${project.id}/conversations/%20/messages`,
+    );
+    expect(blankConv.status).toBe(404);
+
+    // write without content type string path - already covered
+    const writeMissing = await app.request(`/api/projects/${project.id}/files/%20`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'x' }),
+    });
+    expect([400, 404]).toContain(writeMissing.status);
+  });
+
+  it('GET revisions blank path id 404', async () => {
+    const project = await createViaApi();
+    const blank = await app.request(`/api/projects/${project.id}/revisions/%20`);
+    expect(blank.status).toBe(404);
+    const blankRestore = await app.request(
+      `/api/projects/${project.id}/revisions/%20/restore`,
+      { method: 'POST' },
+    );
+    expect(blankRestore.status).toBe(404);
+  });
+});

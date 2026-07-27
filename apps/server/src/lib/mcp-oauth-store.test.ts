@@ -178,3 +178,72 @@ describe('mcp-oauth-store', () => {
     expect(status.connected).toBe(false);
   });
 });
+
+describe('mcp-oauth-store field hygiene', () => {
+  it('rejects invalid serverId and control-char accessToken on save', async () => {
+    await expect(
+      saveToken({ serverId: '', accessToken: 'tok' }),
+    ).rejects.toThrow(/serverId/i);
+
+    await expect(
+      saveToken({ serverId: 'bad\nid', accessToken: 'tok' }),
+    ).rejects.toThrow(/serverId/i);
+
+    await expect(
+      saveToken({ serverId: TEST_ID, accessToken: 'tok\nval' }),
+    ).rejects.toThrow(/accessToken/i);
+
+    await expect(
+      saveToken({ serverId: TEST_ID, accessToken: '   ' }),
+    ).rejects.toThrow(/accessToken/i);
+
+    await expect(
+      saveToken({ serverId: TEST_ID, accessToken: 42 as unknown as string }),
+    ).rejects.toThrow(/accessToken/i);
+  });
+
+  it('caps overlong access/refresh/scope/type fields', async () => {
+    await saveToken({
+      serverId: TEST_ID,
+      accessToken: 'a'.repeat(20_000),
+      refreshToken: 'r'.repeat(20_000),
+      scope: 's'.repeat(2_000),
+      tokenType: 't'.repeat(100),
+      expiresAt: `  ${new Date(Date.now() + 60_000).toISOString()}  `,
+    });
+    const loaded = await loadToken(TEST_ID);
+    expect(loaded?.accessToken?.length).toBe(16_384);
+    expect(loaded?.refreshToken?.length).toBe(16_384);
+    expect(loaded?.scope?.length).toBe(1_000);
+    expect(loaded?.tokenType?.length).toBe(64);
+  });
+
+  it('loadToken returns null for missing/invalid disk payloads', async () => {
+    expect(await loadToken('no-such-token-id')).toBeNull();
+    expect(await loadToken('bad\nid')).toBeNull();
+    expect(await loadToken('')).toBeNull();
+
+    // Write garbage file then load
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const os = await import('node:os');
+    const dir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
+    const f = path.join(dir, `${TEST_ID}.json`);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(f, '{not-json', 'utf8');
+    expect(await loadToken(TEST_ID)).toBeNull();
+
+    await fs.writeFile(
+      f,
+      JSON.stringify({ serverId: TEST_ID, accessToken: 'tok\n' }),
+      'utf8',
+    );
+    expect(await loadToken(TEST_ID)).toBeNull();
+  });
+
+  it('deleteToken is idempotent for invalid ids', async () => {
+    await expect(deleteToken('')).resolves.toBeUndefined();
+    await expect(deleteToken('bad\nid')).resolves.toBeUndefined();
+    await expect(deleteToken('missing-id-xyz')).resolves.toBeUndefined();
+  });
+});

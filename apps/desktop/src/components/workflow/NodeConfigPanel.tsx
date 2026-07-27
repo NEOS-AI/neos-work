@@ -215,6 +215,16 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               <option value="cli-claude">CLI · Claude Code</option>
               <option value="cli-gemini">CLI · Gemini</option>
               <option value="cli-codex">CLI · Codex</option>
+              <option value="cli-opencode">CLI · OpenCode</option>
+              <option value="cli-cursor">CLI · Cursor Agent</option>
+              <option value="cli-aider">CLI · Aider</option>
+              <option value="cli-copilot">CLI · GitHub Copilot</option>
+              <option value="cli-qwen">CLI · Qwen</option>
+              <option value="cli-kimi">CLI · Kimi</option>
+              <option value="cli-grok">CLI · Grok</option>
+              <option value="cli-devin">CLI · Devin</option>
+              <option value="cli-amp">CLI · Amp</option>
+              <option value="cli-continue">CLI · Continue</option>
             </select>
           </div>
           {/* Model selector (hidden for external CLI providers) */}
