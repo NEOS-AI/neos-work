@@ -237,14 +237,22 @@ describe('workflow routes export/import/preflight/runs', () => {
     expect(exp.status).toBe(200);
     const payload = await exp.json() as {
       version: string;
+      schemaVersion?: number;
       workflow: {
         name: string;
+        schemaVersion?: number;
+        primaryDomain?: string;
+        domain?: string;
         nodes: unknown[];
         edges: unknown[];
       };
     };
     expect(payload.version).toBe('1');
+    expect(payload.schemaVersion).toBe(2);
     expect(payload.workflow.name).toBe(WF_NAME);
+    expect(payload.workflow.schemaVersion).toBe(2);
+    expect(payload.workflow.primaryDomain).toBe('general');
+    expect(payload.workflow.domain).toBe('general');
     expect(payload.workflow.nodes.length).toBe(2);
 
     const imp = await workflow.request('/import', {
@@ -698,3 +706,54 @@ describe('workflow routes export/import/preflight/runs', () => {
     await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
   });
 });
+
+describe('workflow migrate dry-run (v0.4)', () => {
+  it('rewrites agent_finance to agent + workerId without persisting by default', async () => {
+    const res = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dryRun: true,
+        workflow: {
+          id: 'tmp',
+          name: 'Legacy',
+          domain: 'finance',
+          nodes: [
+            {
+              id: 'a1',
+              type: 'agent_finance',
+              label: 'Analyst',
+              position: { x: 0, y: 0 },
+              config: { harnessId: 'finance_analyst' },
+            },
+          ],
+          edges: [],
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      ok: boolean;
+      data: {
+        dryRun: boolean;
+        neededMigration: boolean;
+        workflow: {
+          schemaVersion: number;
+          primaryDomain: string;
+          nodes: Array<{ type: string; config: { workerId?: string; harnessId?: string } }>;
+        };
+        report: { renamedNodes: string[] };
+      };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.dryRun).toBe(true);
+    expect(body.data.neededMigration).toBe(true);
+    expect(body.data.workflow.schemaVersion).toBe(2);
+    expect(body.data.workflow.primaryDomain).toBe('finance');
+    expect(body.data.workflow.nodes[0]!.type).toBe('agent');
+    expect(body.data.workflow.nodes[0]!.config.workerId).toBe('finance_analyst');
+    expect(body.data.workflow.nodes[0]!.config.harnessId).toBeUndefined();
+    expect(body.data.report.renamedNodes).toContain('a1');
+  });
+});
+

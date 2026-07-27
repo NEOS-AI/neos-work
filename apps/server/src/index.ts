@@ -107,7 +107,7 @@ app.route('/api/plugins', pluginsRoute);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.4.0',
+    version: '0.4.1',
   });
 });
 

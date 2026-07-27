@@ -124,8 +124,9 @@ function normalizeWorkflowDomain(raw: unknown): Workflow['domain'] {
   // Control-char domain → general (check before trim)
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
   const domainRaw = raw.trim().toLowerCase() || 'general';
-  return (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
-    ? (domainRaw as Workflow['domain'])
+  // Pack ids: finance | coding | research | general (v0.4 Domain Packs)
+  return (['finance', 'coding', 'research', 'general'] as const).includes(domainRaw as never)
+    ? domainRaw
     : 'general';
 }
 
@@ -210,6 +211,8 @@ export function updateWorkflow(
     name?: string;
     description?: string;
     designSystemId?: string;
+    /** Primary pack id (DB column `domain`). */
+    domain?: string;
     nodes?: WorkflowNode[];
     edges?: WorkflowEdge[];
   },
@@ -257,6 +260,11 @@ export function updateWorkflow(
       if (designSystemId && designSystemId.length > 64) return undefined;
     }
   }
+  // Q2: domain column stores primary pack id
+  const domain =
+    input.domain !== undefined
+      ? normalizeWorkflowDomain(input.domain)
+      : existing.domain;
   let nodes = existing.nodes_json;
   let edges = existing.edges_json;
   if (input.nodes !== undefined || input.edges !== undefined) {
@@ -270,7 +278,7 @@ export function updateWorkflow(
       id: trimmed,
       name,
       description: description ?? undefined,
-      domain: existing.domain,
+      domain,
       nodes: nextNodes,
       edges: nextEdges,
       createdAt: existing.created_at,
@@ -284,9 +292,9 @@ export function updateWorkflow(
   }
 
   db.prepare(
-    `UPDATE workflow SET name = ?, description = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
+    `UPDATE workflow SET name = ?, description = ?, domain = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
      WHERE id = ?`,
-  ).run(name, description, designSystemId, nodes, edges, trimmed);
+  ).run(name, description, domain, designSystemId, nodes, edges, trimmed);
 
   return getWorkflow(trimmed);
 }

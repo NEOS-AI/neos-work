@@ -15,7 +15,8 @@ import { ZipArchive } from 'archiver';
 import unzipper from 'unzipper';
 import { Readable } from 'node:stream';
 import { scrubErrorMessage } from '@neos-work/core';
-import type { WorkflowSSEEvent } from '@neos-work/shared';
+import type { Workflow, WorkflowSSEEvent } from '@neos-work/shared';
+import { migrateWorkflowV1ToV2, needsWorkflowMigration } from '@neos-work/shared';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
 import * as artifactDb from '../db/artifacts.js';
@@ -37,6 +38,34 @@ const workflow = new Hono();
 
 function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
   return safeRouteId(c.req.param(key));
+}
+
+/** Serialize workflow document for export (always schemaVersion 2 / primaryDomain). */
+function exportableWorkflowDoc(wf: Workflow): Record<string, unknown> {
+  const primary =
+    (typeof wf.primaryDomain === 'string' && wf.primaryDomain.trim()
+      ? wf.primaryDomain.trim()
+      : undefined)
+    || (typeof wf.domain === 'string' ? wf.domain : 'general');
+  return {
+    name: wf.name,
+    description: wf.description,
+    schemaVersion: 2,
+    primaryDomain: primary,
+    domain: primary, // Q2: DB column name kept for round-trip with older importers
+    domainPackIds: wf.domainPackIds,
+    designSystemId: wf.designSystemId,
+    nodes: wf.nodes,
+    edges: wf.edges,
+  };
+}
+
+const KNOWN_PACK_IDS = new Set(['finance', 'coding', 'research', 'general']);
+
+function normalizePackId(raw: unknown, fallback = 'general'): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return fallback;
+  const d = raw.trim().toLowerCase() || fallback;
+  return KNOWN_PACK_IDS.has(d) ? d : fallback;
 }
 
 // ── CRUD ──────────────────────────────────────────────────
@@ -190,8 +219,12 @@ workflow.post('/import', async (c) => {
       name?: string;
       description?: string;
       domain?: string;
+      primaryDomain?: string;
+      domainPackIds?: string[];
+      schemaVersion?: number;
       nodes?: unknown[];
       edges?: unknown[];
+      designSystemId?: string;
     };
   }>().catch(() => null);
 
@@ -223,22 +256,27 @@ workflow.post('/import', async (c) => {
       description = wf.description.trim() || undefined;
     }
   }
-  const domainRaw =
-    typeof wf.domain === 'string' && !/[\0\r\n]/.test(wf.domain)
-      ? wf.domain.trim().toLowerCase()
-      : '';
-  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
-    ? (domainRaw as 'finance' | 'coding' | 'general')
-    : 'general';
+  // Prefer primaryDomain (v2); fall back to domain (v1 / Q2 DB column name)
+  const domain = normalizePackId(wf.primaryDomain ?? wf.domain, 'general');
 
   try {
-    const created = db.createWorkflow({
+    // createWorkflow migrates nodes to schemaVersion 2 (agent + workerId)
+    let created = db.createWorkflow({
       name: finalName,
       description,
       domain,
       nodes: (wf.nodes as never) ?? [],
       edges: (wf.edges as never) ?? [],
     });
+    if (
+      typeof wf.designSystemId === 'string'
+      && !/[\0\r\n]/.test(wf.designSystemId)
+      && wf.designSystemId.trim()
+    ) {
+      created =
+        db.updateWorkflow(created.id, { designSystemId: wf.designSystemId.trim() })
+        ?? created;
+    }
     return c.json({ ok: true, data: created }, 201);
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to import workflow');
@@ -246,6 +284,63 @@ workflow.post('/import', async (c) => {
       return c.json({ ok: false, error: msg }, 400);
     }
     throw err;
+  }
+});
+
+/**
+ * POST /api/workflow/migrate — dry-run (or apply) v1 → v2 document migration.
+ * Body: { workflow: <v1|v2 doc>, dryRun?: boolean } (default dryRun true).
+ * When dryRun is false and `id` is provided, persists migrated graph to that workflow.
+ */
+workflow.post('/migrate', async (c) => {
+  const body = await c.req.json<{
+    workflow?: unknown;
+    dryRun?: boolean;
+    id?: string;
+  }>().catch(() => null);
+  if (!body || typeof body !== 'object' || body.workflow == null) {
+    return c.json({ ok: false, error: 'workflow document is required' }, 400);
+  }
+  const dryRun = body.dryRun !== false;
+  try {
+    const input = body.workflow as Workflow;
+    const needed = needsWorkflowMigration(input);
+    const { workflow: migrated, report } = migrateWorkflowV1ToV2(input);
+
+    if (!dryRun && typeof body.id === 'string') {
+      const id = safeRouteId(body.id);
+      if (!id) return c.json({ ok: false, error: 'Invalid workflow id' }, 400);
+      const existing = db.getWorkflow(id);
+      if (!existing) return c.json({ ok: false, error: 'Not found' }, 404);
+      const updated = db.updateWorkflow(id, {
+        nodes: migrated.nodes,
+        edges: migrated.edges,
+        domain: migrated.primaryDomain ?? migrated.domain,
+        description: migrated.description,
+      });
+      return c.json({
+        ok: true,
+        data: {
+          dryRun: false,
+          neededMigration: needed,
+          report,
+          workflow: updated,
+        },
+      });
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        dryRun: true,
+        neededMigration: needed,
+        report,
+        workflow: migrated,
+      },
+    });
+  } catch (err) {
+    const msg = publicErrorMessage(err, 'Migration failed');
+    return c.json({ ok: false, error: msg }, 400);
   }
 });
 
@@ -266,14 +361,10 @@ workflow.get('/:id/export', (c) => {
   c.header('Content-Disposition', `attachment; filename="${safeName}.neos.json"`);
   return c.json({
     version: '1',
+    format: 'neos-workflow',
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
-    workflow: {
-      name: wf.name,
-      description: wf.description,
-      domain: wf.domain,
-      nodes: wf.nodes,
-      edges: wf.edges,
-    },
+    workflow: exportableWorkflowDoc(wf),
   });
 });
 
@@ -289,15 +380,10 @@ workflow.get('/:id/export.zip', async (c) => {
 
   const manifest = JSON.stringify({
     version: '1',
+    format: 'neos-workflow',
+    schemaVersion: 2,
     exportedAt: new Date().toISOString(),
-    workflow: {
-      name: wf.name,
-      description: wf.description,
-      domain: wf.domain,
-      designSystemId: wf.designSystemId,
-      nodes: wf.nodes,
-      edges: wf.edges,
-    },
+    workflow: exportableWorkflowDoc(wf),
     runCount: runs.length,
     artifactCount: artifacts.length,
   }, null, 2);
