@@ -201,6 +201,8 @@ export interface DesignSystem {
   hasManifest: boolean;
   hasTokens: boolean;
   hasComponents: boolean;
+  /** user writable vs bundled catalog (v0.5.8). */
+  source?: 'user' | 'bundled';
   createdAt: string;
   updatedAt: string;
 }
@@ -321,6 +323,9 @@ export interface SkillData {
   featured?: boolean;
   triggers?: string[];
   examplePrompt?: string;
+  /** Package root when skill is dir/SKILL.md layout (v0.5.7). */
+  packageDir?: string;
+  exampleCount?: number;
 }
 
 export type AgentChunk =
@@ -1341,6 +1346,15 @@ export class EngineClient {
     const seg = this.pathSegment(id);
     if (!seg) return this.invalidIdResponse('design system id');
     const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/content`, { headers: this.getHeaders() });
+    return readApiResponse(res);
+  }
+
+  async getDesignSystemTokens(id: string): Promise<ApiResponse<{ content: string }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/tokens`, {
+      headers: this.getHeaders(),
+    });
     return readApiResponse(res);
   }
 

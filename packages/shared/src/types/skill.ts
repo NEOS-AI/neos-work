@@ -1,5 +1,5 @@
 /**
- * Skill types compatible with OpenCode SKILL.md format.
+ * Skill types compatible with OpenCode / OD SKILL.md package format (v0.5.7).
  */
 
 export interface SkillManifest {
@@ -9,7 +9,7 @@ export interface SkillManifest {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
-  /** Execution mode: 'agent' | 'tool' | 'template' */
+  /** Execution mode: 'agent' | 'tool' | 'template' | design modes */
   mode?: string;
   /** Target platform or runtime, e.g. 'node', 'browser', 'tauri' */
   platform?: string;
@@ -27,11 +27,31 @@ export interface SkillManifest {
   fidelity?: string;
 }
 
+/** Derived gallery card from examples/<key>.html under a skill package. */
+export interface SkillExampleCard {
+  /** `<parent-name>:<example-key>` */
+  id: string;
+  key: string;
+  path: string;
+  title?: string;
+}
+
+export type SkillSource = 'local' | 'global' | 'bundled' | 'opencode';
+
 export interface Skill {
   manifest: SkillManifest;
   content: string;
+  /** Absolute path to SKILL.md or flat .md file. */
   path: string;
-  source: 'local' | 'global' | 'opencode';
+  source: SkillSource;
+  /** Package root when discovered as dir/SKILL.md layout. */
+  packageDir?: string;
+  /** Relative asset file names under packageDir/assets (best-effort). */
+  assets?: string[];
+  /** Relative reference file names under packageDir/references. */
+  references?: string[];
+  /** Derived example cards from packageDir/examples/*.html */
+  examples?: SkillExampleCard[];
 }
 
 export interface InstalledSkill {

@@ -4,11 +4,19 @@
 
 import { Hono } from 'hono';
 
-import { discoverSkills } from '@neos-work/core';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { discoverSkills, resolveBundledSkillsDir } from '@neos-work/core';
 import { safeError } from '../lib/errors.js';
 import { getDb } from '../db/schema.js';
 import * as db from '../db/sessions.js';
 import { safeRouteId } from '../lib/path-safety.js';
+
+/** Monorepo `skills/` catalog (apps/server/src/routes → repo root). */
+const REPO_SKILLS_CANDIDATE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../skills',
+);
 
 const skills = new Hono();
 
@@ -154,6 +162,11 @@ skills.get('/', (c) => {
       featured: manifest?.['featured'] === true,
       triggers: manifest?.['triggers'] as string[] | undefined,
       examplePrompt: manifest?.['examplePrompt'] as string | undefined,
+      packageDir: typeof manifest?.['packageDir'] === 'string' ? manifest['packageDir'] : undefined,
+      exampleCount: Array.isArray(manifest?.['examples'])
+        ? (manifest!['examples'] as unknown[]).length
+        : undefined,
+      examples: Array.isArray(manifest?.['examples']) ? manifest!['examples'] : undefined,
     };
   });
   return c.json({ ok: true, data });
@@ -166,16 +179,32 @@ skills.post('/scan', async (c) => {
     const defaultWs = workspaces[0];
     const workspacePath = defaultWs?.path ?? undefined;
 
-    const discovered = await discoverSkills(workspacePath);
+    const bundledRoot =
+      resolveBundledSkillsDir(REPO_SKILLS_CANDIDATE)
+      ?? resolveBundledSkillsDir(null);
+
+    const discovered = await discoverSkills(workspacePath, {
+      bundledRoot,
+      includeBundled: true,
+      includeGlobal: true,
+    });
 
     for (const skill of discovered) {
+      // Persist package metadata alongside frontmatter for UI package view
+      const manifestPayload = {
+        ...skill.manifest,
+        packageDir: skill.packageDir,
+        examples: skill.examples,
+        assets: skill.assets,
+        references: skill.references,
+      };
       upsertSkill({
         name: skill.manifest.name,
         description: skill.manifest.description,
         source: skill.source,
         path: skill.path,
         version: skill.manifest.version ?? skill.manifest.metadata?.version,
-        manifestJson: JSON.stringify(skill.manifest),
+        manifestJson: JSON.stringify(manifestPayload),
       });
     }
 

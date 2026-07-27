@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/design-editor",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -39,6 +39,7 @@
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "3.2.4",
     "jsdom": "^26.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

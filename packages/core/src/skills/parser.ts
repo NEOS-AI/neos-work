@@ -3,7 +3,7 @@
  * Compatible with OpenCode SKILL.md format.
  */
 
-import type { SkillManifest, Skill } from '@neos-work/shared';
+import type { SkillManifest, Skill, SkillSource } from '@neos-work/shared';
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
@@ -43,7 +43,7 @@ const SKILL_TRIGGERS_MAX = 50;
 export function parseSkillFile(
   content: string,
   filePath: string,
-  source: 'local' | 'global',
+  source: SkillSource,
 ): Skill | null {
   const text = typeof content === 'string' ? content : String(content ?? '');
   // Null-byte skill files rejected entirely (frontmatter + body)
@@ -62,8 +62,10 @@ export function parseSkillFile(
   if (!name) return null;
   if (name.length > SKILL_NAME_MAX) name = name.slice(0, SKILL_NAME_MAX);
 
-  const sourceNorm =
-    source === 'global' || source === 'local' ? source : 'local';
+  const sourceNorm: SkillSource =
+    source === 'global' || source === 'local' || source === 'bundled' || source === 'opencode'
+      ? source
+      : 'local';
 
   const modeRaw = optionalTrim(raw.mode);
   const categoryRaw = optionalTrim(raw.category);

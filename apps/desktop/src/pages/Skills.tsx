@@ -512,6 +512,23 @@ function SkillCard({
               {scrubDisplayText(skill.mode, { collapseLines: true, maxChars: 40 }) || 'mode'}
             </span>
           )}
+          {skill.packageDir && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+              style={{ backgroundColor: '#10b98120', color: '#10b981' }}
+              title={skill.packageDir}
+            >
+              package
+            </span>
+          )}
+          {typeof skill.exampleCount === 'number' && skill.exampleCount > 0 && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+              style={{ backgroundColor: '#f59e0b20', color: '#f59e0b' }}
+            >
+              {skill.exampleCount} ex
+            </span>
+          )}
           {skill.category && typeof skill.category === 'string' && !/[\0\r\n]/.test(skill.category) && skill.category.trim() && (
             <span
               className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"

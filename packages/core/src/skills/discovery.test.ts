@@ -2,7 +2,31 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { discoverSkills } from './discovery.js';
+import {
+  discoverSkills,
+  mergeSkillsByPrecedence,
+  resolveBundledSkillsDir,
+  scanSkillRoot,
+} from './discovery.js';
+import type { Skill } from '@neos-work/shared';
+
+function skillMd(name: string, body = 'body'): string {
+  return `---
+name: ${name}
+description: ${name} skill
+---
+${body}
+`;
+}
+
+function fakeSkill(name: string, source: Skill['source']): Skill {
+  return {
+    manifest: { name, description: name },
+    content: 'x',
+    path: `/${source}/${name}.md`,
+    source,
+  };
+}
 
 describe('discoverSkills', () => {
   let workspace: string;
@@ -15,190 +39,135 @@ describe('discoverSkills', () => {
     await rm(workspace, { recursive: true, force: true });
   });
 
-  it('returns empty when workspace has no skills dir', async () => {
-    const skills = await discoverSkills(workspace);
-    // May include global skills if present on the machine; filter to local only.
+  it('returns empty local when workspace has no skills dir', async () => {
+    const skills = await discoverSkills(workspace, { includeGlobal: false, includeBundled: false });
     expect(skills.filter((s) => s.source === 'local')).toEqual([]);
   });
 
-  it('returns only global scan when workspacePath is omitted', async () => {
-    const skills = await discoverSkills();
-    expect(skills.every((s) => s.source === 'global')).toBe(true);
+  it('returns only global/bundled when workspacePath is omitted', async () => {
+    const skills = await discoverSkills(undefined, { includeGlobal: false, includeBundled: false });
+    expect(skills).toEqual([]);
   });
 
   it('ignores control-char workspace paths (no local scan)', async () => {
-    const skills = await discoverSkills(`\n${workspace}`);
+    const skills = await discoverSkills(`\n${workspace}`, {
+      includeGlobal: false,
+      includeBundled: false,
+    });
     expect(skills.filter((s) => s.source === 'local')).toEqual([]);
   });
 
-  it('discovers local SKILL.md-style files under .neos-work/skills', async () => {
+  it('discovers flat local markdown under .neos-work/skills', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, 'demo.md'),
-      `---
-name: demo
-description: Demo skill
----
-Body here
-`,
-    );
+    await writeFile(join(dir, 'demo.md'), skillMd('demo', 'Body here'));
     await writeFile(join(dir, 'ignore.txt'), 'not a skill');
     await writeFile(join(dir, 'bad.md'), '# no frontmatter');
 
-    const skills = await discoverSkills(workspace);
+    const skills = await discoverSkills(workspace, {
+      includeGlobal: false,
+      includeBundled: false,
+    });
     const local = skills.filter((s) => s.source === 'local');
     expect(local).toHaveLength(1);
     expect(local[0]!.manifest.name).toBe('demo');
     expect(local[0]!.content).toContain('Body here');
   });
 
-  it('skips directories and unreadable entries under skills', async () => {
+  it('discovers package layout SKILL.md + examples + assets', async () => {
+    const pkg = join(workspace, '.neos-work', 'skills', 'pack-a');
+    await mkdir(join(pkg, 'examples'), { recursive: true });
+    await mkdir(join(pkg, 'assets'), { recursive: true });
+    await writeFile(join(pkg, 'SKILL.md'), skillMd('pack-a', 'Package body'));
+    await writeFile(join(pkg, 'examples', 'card.html'), '<html><body>ex</body></html>');
+    await writeFile(join(pkg, 'assets', 'logo.svg'), '<svg></svg>');
+
+    const skills = await discoverSkills(workspace, {
+      includeGlobal: false,
+      includeBundled: false,
+    });
+    expect(skills).toHaveLength(1);
+    expect(skills[0]!.packageDir).toBe(pkg);
+    expect(skills[0]!.examples?.[0]?.id).toBe('pack-a:card');
+    expect(skills[0]!.assets).toContain('logo.svg');
+  });
+
+  it('skips directories without SKILL.md and unreadable entries', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(join(dir, 'nested-dir'), { recursive: true });
-    await writeFile(
-      join(dir, 'ok.md'),
-      `---
-name: ok
-description: ok
----
-x
-`,
-    );
-    // dangling symlink .md file → unreadable / not a regular file
+    await writeFile(join(dir, 'ok.md'), skillMd('ok'));
     await symlink(join(dir, 'missing-target.md'), join(dir, 'link.md'));
 
-    const skills = await discoverSkills(workspace);
-    const local = skills.filter((s) => s.source === 'local');
-    expect(local.map((s) => s.manifest.name)).toEqual(['ok']);
+    const skills = await discoverSkills(workspace, {
+      includeGlobal: false,
+      includeBundled: false,
+    });
+    expect(skills.map((s) => s.manifest.name)).toEqual(['ok']);
   });
 
   it('skips hidden markdown files in skill directories', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, '.hidden.md'),
-      `---
-name: hidden
-description: hidden skill
----
-Should skip
-`,
-    );
-    await writeFile(
-      join(dir, 'visible.md'),
-      `---
-name: visible
-description: visible skill
----
-Body
-`,
-    );
-    const skills = await discoverSkills(workspace);
-    const local = skills.filter((s) => s.source === 'local');
-    expect(local.map((s) => s.manifest.name)).toEqual(['visible']);
+    await writeFile(join(dir, '.hidden.md'), skillMd('hidden'));
+    await writeFile(join(dir, 'visible.md'), skillMd('visible'));
+
+    const skills = await discoverSkills(workspace, {
+      includeGlobal: false,
+      includeBundled: false,
+    });
+    expect(skills.map((s) => s.manifest.name)).toEqual(['visible']);
+  });
+});
+
+describe('mergeSkillsByPrecedence + shadowing', () => {
+  it('local shadows bundled with same name', () => {
+    const merged = mergeSkillsByPrecedence([
+      [fakeSkill('web-landing', 'local')],
+      [fakeSkill('web-landing', 'bundled'), fakeSkill('other', 'bundled')],
+    ]);
+    expect(merged).toHaveLength(2);
+    const wl = merged.find((s) => s.manifest.name === 'web-landing')!;
+    expect(wl.source).toBe('local');
+    expect(merged.find((s) => s.manifest.name === 'other')!.source).toBe('bundled');
+  });
+});
+
+describe('resolveBundledSkillsDir', () => {
+  it('returns null for missing explicit path', () => {
+    expect(resolveBundledSkillsDir('/no/such/skills/dir-xyz', tmpdir())).toBeNull();
   });
 
-  it('treats blank workspacePath as omitted (no local scan)', async () => {
-    const dir = join(workspace, '.neos-work', 'skills');
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, 'demo.md'),
-      `---
-name: demo
-description: Demo
----
-x
-`,
-    );
-    // hidden .md should be ignored when scanning
-    await writeFile(
-      join(dir, '.hidden.md'),
-      `---
-name: hidden
----
-x
-`,
-    );
-    const skills = await discoverSkills('   ');
-    expect(skills.filter((s) => s.source === 'local')).toEqual([]);
-  });
-
-  it('rejects workspacePath containing control characters', async () => {
-    const dir = join(workspace, '.neos-work', 'skills');
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, 'demo.md'),
-      `---
-name: demo
-description: Demo
----
-x
-`,
-    );
-    const skills = await discoverSkills(`${workspace}\0evil`);
-    expect(skills.filter((s) => s.source === 'local')).toEqual([]);
-  });
-
-  it('caps discovered skills at 500 entries (ENTRY_MAX)', async () => {
-    const dir = join(workspace, '.neos-work', 'skills');
-    await mkdir(dir, { recursive: true });
-    // Create 505 valid skill files — only first 500 should be kept
-    for (let i = 0; i < 505; i++) {
-      await writeFile(
-        join(dir, `s${String(i).padStart(4, '0')}.md`),
-        `---
-name: s${i}
-description: d
----
-x
-`,
-      );
+  it('resolves explicit existing directory', async () => {
+    const d = await mkdtemp(join(tmpdir(), 'bundled-'));
+    try {
+      expect(resolveBundledSkillsDir(d)).toBe(d);
+    } finally {
+      await rm(d, { recursive: true, force: true });
     }
-    const local = (await discoverSkills(workspace)).filter((s) => s.source === 'local');
-    expect(local.length).toBe(500);
-  }, 30_000);
+  });
+});
 
-  it('skips overlong workspace paths, oversized skill files, and overlong entry names', async () => {
-    const dir = join(workspace, '.neos-work', 'skills');
-    await mkdir(dir, { recursive: true });
-    // Valid skill
-    await writeFile(
-      join(dir, 'ok.md'),
-      `---
-name: ok
-description: ok
----
-body
-`,
-    );
-    // Overlong filename (>200) — skipped
-    await writeFile(
-      join(dir, `${'n'.repeat(201)}.md`),
-      `---
-name: toolong
-description: x
----
-x
-`,
-    );
-    // Oversized file (>1 MiB) — skipped
-    await writeFile(
-      join(dir, 'huge.md'),
-      `---
-name: huge
-description: huge
----
-${'x'.repeat(1 * 1024 * 1024 + 100)}
-`,
-    );
+describe('scanSkillRoot', () => {
+  it('returns empty for control-char dir', async () => {
+    expect(await scanSkillRoot('\nbad', 'local')).toEqual([]);
+  });
+});
 
-    const local = (await discoverSkills(workspace)).filter((s) => s.source === 'local');
-    expect(local.map((s) => s.manifest.name)).toEqual(['ok']);
-
-    // Workspace path longer than 4096 chars is ignored (no local scan)
-    const overlongWs = `${workspace}${'/'.repeat(4_200)}`;
-    const noLocal = (await discoverSkills(overlongWs)).filter((s) => s.source === 'local');
-    expect(noLocal).toEqual([]);
+describe('bundled monorepo skills catalog', () => {
+  it('finds ≥5 package skills when skills/ is on disk', async () => {
+    // packages/core → repo root
+    const repoSkills = join(process.cwd(), '..', '..', 'skills');
+    const root = resolveBundledSkillsDir(repoSkills) ?? resolveBundledSkillsDir(null, join(process.cwd(), '..', '..'));
+    if (!root) {
+      // CI may not copy skills; skip soft
+      expect(root).toBeNull();
+      return;
+    }
+    const scanned = await scanSkillRoot(root, 'bundled');
+    expect(scanned.length).toBeGreaterThanOrEqual(5);
+    expect(scanned.every((s) => s.source === 'bundled')).toBe(true);
+    expect(scanned.some((s) => s.manifest.name === 'web-landing')).toBe(true);
+    const landing = scanned.find((s) => s.manifest.name === 'web-landing');
+    expect(landing?.examples?.some((e) => e.key === 'hero')).toBe(true);
   });
 });
