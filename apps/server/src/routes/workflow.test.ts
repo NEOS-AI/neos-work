@@ -1158,3 +1158,64 @@ describe('workflow validation + migrate apply + export edges', () => {
     expect((await workflow.request('/no-such/export.zip')).status).toBe(404);
   });
 });
+
+describe('workflow export design system + import content-type edges', () => {
+  it('export.zip includes design-systems when designSystemId bound', async () => {
+    const { createDesignSystem, updateDesignSystemContent, deleteDesignSystem } =
+      await import('../lib/design-system-store.js');
+    const dsName = `cov_ds_${process.pid}`;
+    let dsId: string | undefined;
+    try {
+      const ds = await createDesignSystem(dsName, 'for zip export');
+      if (!ds) return; // name collision under parallel — skip
+      dsId = ds.id;
+      await updateDesignSystemContent(ds.id, '# Design System\n\nTokens here.\n');
+
+      const create = await workflow.request('/', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: `${WF_NAME}_dszip`,
+          ...minimalGraph,
+        }),
+      });
+      const id = ((await create.json()) as { data: { id: string } }).data.id;
+      await workflow.request(`/${id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ designSystemId: ds.id }),
+      });
+
+      const zip = await workflow.request(`/${id}/export.zip`);
+      expect(zip.status).toBe(200);
+      const buf = Buffer.from(await zip.arrayBuffer());
+      expect(buf.length).toBeGreaterThan(50);
+      // PK zip magic
+      expect(buf.subarray(0, 2).toString('utf8')).toBe('PK');
+
+      await workflow.request(`/${id}`, { method: 'DELETE' });
+    } finally {
+      if (dsId) {
+        try {
+          await deleteDesignSystem(dsId);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
+
+  it('import.zip rejects unsupported content-type', async () => {
+    const res = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain',
+      },
+      body: Buffer.from('not-a-zip'),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /multipart|zip|Expected/i,
+    );
+  });
+});

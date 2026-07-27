@@ -1,5 +1,5 @@
 {
-  "name": "@neos-work/shared",
+  "name": "@neos-work/agent-runtime",
   "version": "0.5.3",
   "private": true,
   "license": "MIT",
@@ -17,10 +17,14 @@
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@neos-work/shared": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   }

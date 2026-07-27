@@ -869,3 +869,82 @@ describe('plugin-runner LLM stage (mocked fetch)', () => {
     expect(events.some((e) => e.type === 'pipeline.started')).toBe(true);
   });
 });
+
+describe('plugin-runner OpenAI error and network paths', () => {
+  it('surfaces OpenAI API error body when Anthropic key missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'server\nerror',
+        json: async () => ({}),
+      }),
+    );
+
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'openai-err',
+      name: 'OpenAI Err',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'g',
+          name: 'G',
+          kind: 'generate',
+          prompt: 'x',
+          outputKey: 'out',
+        },
+      ],
+    };
+
+    const events: Array<{ type: string; output?: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { OPENAI_API_KEY: 'sk-openai' },
+      onEvent: (e) => events.push(e as { type: string; output?: string }),
+    });
+    expect(
+      events.some(
+        (e) => e.type === 'stage.output' && /OpenAI API error 500/i.test(e.output ?? ''),
+      ),
+    ).toBe(true);
+  });
+
+  it('handles OpenAI network throw', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new Error('econnreset')),
+    );
+
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'openai-net',
+      name: 'OpenAI Net',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'g',
+          name: 'G',
+          kind: 'generate',
+          prompt: 'x',
+          outputKey: 'out',
+        },
+      ],
+    };
+
+    const events: Array<{ type: string; output?: string }> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { OPENAI_API_KEY: 'sk-openai' },
+      onEvent: (e) => events.push(e as { type: string; output?: string }),
+    });
+    expect(
+      events.some(
+        (e) => e.type === 'stage.output' && /econnreset|LLM request failed/i.test(e.output ?? ''),
+      ),
+    ).toBe(true);
+  });
+});

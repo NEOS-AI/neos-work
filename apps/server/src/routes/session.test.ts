@@ -504,3 +504,102 @@ describe('models route', () => {
     }
   });
 });
+
+describe('workspace validation edges', () => {
+  it('rejects control-char name/path/type and blank path on create', async () => {
+    const ctrlName = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'bad\nname' }),
+    });
+    expect(ctrlName.status).toBe(400);
+
+    const longName = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201) }),
+    });
+    expect(longName.status).toBe(400);
+
+    const badJson = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const blankPath = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Has Blank Path', path: '   ' }),
+    });
+    expect(blankPath.status).toBe(400);
+
+    const ctrlPath = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Ctrl Path', path: '/home\n/x' }),
+    });
+    expect(ctrlPath.status).toBe(400);
+
+    const { homedir } = await import('node:os');
+    const { join } = await import('node:path');
+    const homePath = join(homedir(), `neos-cov-ws-type-${process.pid}`);
+    const withType = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `Cov Type WS ${process.pid}`,
+        path: homePath,
+        type: '\nlocal',
+      }),
+    });
+    // control-char type dropped → still creates
+    expect(withType.status).toBe(201);
+    const created = (await withType.json()) as { data: { id: string } };
+    await workspace.request(`/${created.data.id}`, { method: 'DELETE' });
+  });
+
+  it('PUT rejects control-char name and blank delete id', async () => {
+    const { homedir } = await import('node:os');
+    const { join } = await import('node:path');
+    const homePath = join(homedir(), `neos-cov-ws-put2-${process.pid}`);
+    const create = await workspace.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `Cov Put2 ${process.pid}`, path: homePath }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const ctrlName = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'x\ny' }),
+    });
+    expect(ctrlName.status).toBe(400);
+
+    const longName = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201) }),
+    });
+    expect(longName.status).toBe(400);
+
+    const ctrlPath = await workspace.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: `${homePath}\n` }),
+    });
+    expect(ctrlPath.status).toBe(400);
+
+    const blankDel = await workspace.request('/%20', { method: 'DELETE' });
+    expect(blankDel.status).toBe(404);
+
+    const missingDel = await workspace.request('/no-such-workspace-xyz', {
+      method: 'DELETE',
+    });
+    expect(missingDel.status).toBe(404);
+
+    await workspace.request(`/${id}`, { method: 'DELETE' });
+  });
+});

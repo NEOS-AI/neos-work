@@ -214,3 +214,42 @@ describe('projects db edge cases', () => {
     expect(getFileRevision(rev.id)?.content).toBe('hello');
   });
 });
+
+describe('projects update field validation', () => {
+  it('rejects invalid designSystemId and entryFile control chars', () => {
+    const p = createProject({ name: `${NAME}_ds` });
+    createdIds.push(p.id);
+
+    expect(() =>
+      updateProject(p.id, { designSystemId: 'ds\nid' }),
+    ).toThrow(/designSystemId/i);
+
+    expect(() =>
+      updateProject(p.id, { entryFile: 'path\nhtml' }),
+    ).toThrow(/entryFile/i);
+
+    const ok = updateProject(p.id, {
+      designSystemId: '  ds-ok  ',
+      entryFile: '  /nested/page.html  ',
+    });
+    expect(ok?.designSystemId).toBe('ds-ok');
+    expect(ok?.entryFile).toBe('nested/page.html');
+  });
+
+  it('create with custom baseDir under temp projects tree', async () => {
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-proj-base-'));
+    try {
+      const p = createProject({ name: `${NAME}_basedir`, baseDir: dir });
+      createdIds.push(p.id);
+      expect(p.baseDir).toBe(fs.realpathSync(dir));
+    } finally {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+});

@@ -31,8 +31,21 @@ describe('cli-agents routes', () => {
       expect(agent.name.length).toBeGreaterThan(0);
       expect(agent.path.length).toBeGreaterThan(0);
     }
-    expect(body.meta.settingKeys).toEqual(CLI_PATH_SETTING_KEYS);
+    // Expanded catalog keys (legacy three + registry)
+    expect(body.meta.settingKeys['cli-claude']).toBe(CLI_PATH_SETTING_KEYS['cli-claude']);
+    expect(body.meta.settingKeys['cli-gemini']).toBe(CLI_PATH_SETTING_KEYS['cli-gemini']);
+    expect(body.meta.settingKeys['cli-codex']).toBe(CLI_PATH_SETTING_KEYS['cli-codex']);
     expect(body.meta.pathOverrides).toBeTypeOf('object');
+    expect((body.meta as { catalogCount?: number }).catalogCount).toBeGreaterThanOrEqual(12);
+  });
+
+  it('GET /catalog returns full def list', async () => {
+    const res = await cliAgents.request('/catalog');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; data: unknown[]; meta: { count: number } };
+    expect(body.ok).toBe(true);
+    expect(body.meta.count).toBeGreaterThanOrEqual(12);
+    expect(body.data.length).toBe(body.meta.count);
   });
 
   it('exposes trimmed path overrides in meta when settings are set', async () => {

@@ -485,3 +485,58 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     ).toEqual({});
   });
 });
+
+describe('loadMcpTokenEnvVars hygiene', () => {
+  const tokenDir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
+  const files: string[] = [];
+
+  afterEach(() => {
+    for (const f of files.splice(0)) {
+      try { fs.unlinkSync(f); } catch { /* ignore */ }
+    }
+  });
+
+  it('skips control-char serverId/accessToken and malformed JSON', () => {
+    fs.mkdirSync(tokenDir, { recursive: true });
+    const badCtrl = path.join(tokenDir, `_cov_ctrl_${process.pid}.json`);
+    const badJson = path.join(tokenDir, `_cov_badjson_${process.pid}.json`);
+    const emptyTok = path.join(tokenDir, `_cov_empty_${process.pid}.json`);
+    files.push(badCtrl, badJson, emptyTok);
+
+    fs.writeFileSync(
+      badCtrl,
+      JSON.stringify({
+        serverId: 'bad\nid',
+        accessToken: 'tok',
+      }),
+    );
+    fs.writeFileSync(badJson, '{not-json');
+    fs.writeFileSync(
+      emptyTok,
+      JSON.stringify({
+        serverId: '  ',
+        accessToken: 'tok',
+      }),
+    );
+
+    const env = loadMcpTokenEnvVars();
+    expect(env.NEOS_MCP_TOKEN_BAD_ID).toBeUndefined();
+    // blank serverId skipped
+    expect(Object.values(env).includes('tok')).toBe(false);
+  });
+
+  it('skips overlong access tokens', () => {
+    fs.mkdirSync(tokenDir, { recursive: true });
+    const f = path.join(tokenDir, `_cov_longtok_${process.pid}.json`);
+    files.push(f);
+    fs.writeFileSync(
+      f,
+      JSON.stringify({
+        serverId: 'long-srv',
+        accessToken: 't'.repeat(20_000),
+      }),
+    );
+    const env = loadMcpTokenEnvVars();
+    expect(env.NEOS_MCP_TOKEN_LONG_SRV).toBeUndefined();
+  });
+});

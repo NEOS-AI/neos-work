@@ -378,3 +378,95 @@ describe('blocks routes', () => {
     try { deleteCustomBlock(domId); } catch { /* ignore */ }
   });
 });
+
+describe('blocks PUT field validation', () => {
+  it('rejects null-byte description/prompt/input/output and control-char name', async () => {
+    createCustomBlock({
+      id: ID,
+      name: 'Put Val',
+      domain: 'general',
+      category: 'test',
+      description: 'd',
+      implementationType: 'prompt',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+      promptTemplate: 'hi',
+    });
+
+    for (const body of [
+      { name: 'bad\nname' },
+      { description: `x${'\0'}` },
+      { promptTemplate: `p${'\0'}` },
+      { inputDescription: `i${'\0'}` },
+      { outputDescription: `o${'\0'}` },
+    ]) {
+      const res = await blocks.request(`/${ID}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(400);
+    }
+
+    const ok = await blocks.request(`/${ID}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        category: '  updated  ',
+        promptTemplate: '  new prompt  ',
+        inputDescription: '  in  ',
+        outputDescription: '  out  ',
+        description: '  multi\nline  ',
+      }),
+    });
+    expect(ok.status).toBe(200);
+    const body = (await ok.json()) as {
+      data: {
+        category: string;
+        promptTemplate?: string;
+        inputDescription?: string;
+        outputDescription?: string;
+        description?: string;
+      };
+    };
+    expect(body.data.category).toBe('updated');
+    expect(body.data.promptTemplate).toBe('new prompt');
+    expect(body.data.inputDescription).toBe('in');
+    expect(body.data.outputDescription).toBe('out');
+    expect(body.data.description).toBe('multi\nline');
+
+    // control-char category → custom
+    const cat = await blocks.request(`/${ID}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ category: '\nfoo' }),
+    });
+    expect(cat.status).toBe(200);
+    expect(((await cat.json()) as { data: { category: string } }).data.category).toBe('custom');
+  });
+
+  it('POST rejects null-byte description', async () => {
+    const res = await blocks.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: `${ID}_nuldesc`,
+        name: 'Nul Desc',
+        implementationType: 'prompt',
+        promptTemplate: 'hi',
+        description: `x${'\0'}`,
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('GET returns built-in block by id when present', async () => {
+    const list = await blocks.request('/');
+    const body = (await list.json()) as { data: Array<{ id: string; isBuiltIn?: boolean }> };
+    const builtin = body.data.find((b) => b.isBuiltIn === true) ?? body.data[0];
+    expect(builtin).toBeTruthy();
+    const get = await blocks.request(`/${builtin!.id}`);
+    expect(get.status).toBe(200);
+  });
+});

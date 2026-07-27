@@ -27,6 +27,7 @@ import media from './routes/media.js';
 import deploy from './routes/deploy.js';
 import pluginsRoute from './routes/plugins.js';
 import projects from './routes/projects.js';
+import runs from './routes/runs.js';
 import { migrateEncryption } from './db/settings.js';
 import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
 import { listCustomWorkers } from './db/workers.js';
@@ -104,12 +105,13 @@ app.route('/api/media', media);
 app.route('/api/deploy', deploy);
 app.route('/api/plugins', pluginsRoute);
 app.route('/api/projects', projects);
+app.route('/api/runs', runs);
 
 // Root
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.2',
+    version: '0.5.3',
   });
 });
 
