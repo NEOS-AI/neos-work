@@ -15,5 +15,9 @@ describe('@neos-work/core barrel exports', () => {
     expect(typeof (core as { buildWorkerToolRegistry?: unknown }).buildWorkerToolRegistry).toBe(
       'function',
     );
+    expect(typeof (core as { createCoordinatorTools?: unknown }).createCoordinatorTools).toBe(
+      'function',
+    );
+    expect(typeof (core as { CoordinatorSession?: unknown }).CoordinatorSession).toBe('function');
   });
 });

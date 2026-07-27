@@ -917,6 +917,50 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(events.some((e) => e.type === 'node.failed')).toBe(true);
   });
 
+  it('truncates oversized worker.progress chunks and worker.completed outputs', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    const fatOut = 'Z'.repeat(1_048_576 + 64);
+    await executeWorkflow({
+      runId: 'run-worker-truncate',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'agent-1',
+            type: 'agent',
+            label: 'A',
+            position: { x: 1, y: 0 },
+            config: { provider: 'cli-claude', workerId: 'coding_reviewer' },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'agent-1' }],
+      }),
+      settings: {},
+      cliSpawn: async (_id, _prompt, onChunk) => {
+        onChunk?.('P'.repeat(40_000), 'acc');
+        return { output: fatOut, exitCode: 0 };
+      },
+      onEvent: (event) => events.push(event),
+    });
+
+    const progress = events.find((e) => e.type === 'worker.progress') as
+      | { chunk: string }
+      | undefined;
+    expect(progress).toBeDefined();
+    expect(progress!.chunk.length).toBe(32_000);
+
+    const completed = events.find((e) => e.type === 'worker.completed') as
+      | { output: unknown }
+      | undefined;
+    expect(completed).toBeDefined();
+    expect(completed!.output).toEqual({
+      truncated: true,
+      preview: expect.any(String),
+    });
+    expect(String((completed!.output as { preview: string }).preview).length).toBeLessThanOrEqual(256);
+  });
+
+
   it('rejects control-char node types and resolves agent/message node types', async () => {
     await expect(
       executeWorkflow({

@@ -37,6 +37,45 @@ function ctx(partial: Partial<NodeContext> = {}): NodeContext {
   };
 }
 
+describe('AgentNode coordinator mode', () => {
+  it('registers coordinator spawn tools on the orchestrator registry', async () => {
+    orchestratorCtor.mockClear();
+    const node = new AgentNode('agent', {
+      workerId: 'general_coordinator',
+      mode: 'coordinator',
+      maxSteps: 5,
+    });
+    await node.execute(ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }));
+    expect(orchestratorCtor).toHaveBeenCalled();
+    const registry = orchestratorCtor.mock.calls[0]?.[1] as {
+      get?: (n: string) => unknown;
+      getAll?: () => Array<{ name: string }>;
+    };
+    const names = registry.getAll?.().map((t) => t.name) ?? [];
+    expect(names).toEqual(
+      expect.arrayContaining(['spawn_worker', 'await_workers', 'list_workers']),
+    );
+  });
+
+  it('skips CLI path when mode is coordinator (built-in loop required)', async () => {
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'cli', exitCode: 0 });
+    orchestratorCtor.mockClear();
+    const node = new AgentNode('agent', {
+      workerId: 'general_coordinator',
+      mode: 'coordinator',
+      provider: 'cli-claude',
+    });
+    await node.execute(
+      ctx({
+        cliSpawn,
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    expect(cliSpawn).not.toHaveBeenCalled();
+    expect(orchestratorCtor).toHaveBeenCalled();
+  });
+});
+
 describe('AgentNode CLI provider', () => {
   it('emits worker lifecycle events on successful CLI run', async () => {
     const events: Array<{ type: string; workerId?: string }> = [];
@@ -445,6 +484,22 @@ describe('AgentNode LLM model selection', () => {
       }),
     );
     expect(ok2.ok).toBe(true);
+    expect(orchestratorRun).toHaveBeenCalled();
+
+    // Control-char RUN_ID / blank nodeId fall back to agent-node / agent segments
+    orchestratorRun.mockClear();
+    const ctrl = new AgentNode('agent', { systemPrompt: 'Ctrl ids' });
+    const ok3 = await ctrl.execute(
+      ctx({
+        runId: `bad${'\n'}run`,
+        nodeId: `\n`,
+        settings: {
+          ANTHROPIC_API_KEY: 'sk-ant-test',
+          RUN_ID: `bad${'\0'}id`,
+        },
+      }),
+    );
+    expect(ok3.ok).toBe(true);
     expect(orchestratorRun).toHaveBeenCalled();
   });
 

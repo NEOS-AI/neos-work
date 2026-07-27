@@ -13,7 +13,9 @@ import {
   GoogleAdapter,
   OpenAIAdapter,
   buildWorkerToolRegistry,
+  createCoordinatorTools,
   resolveWorkerWorkspace,
+  runWorker,
   scrubErrorMessage,
 } from '@neos-work/core';
 import type { DomainWorker, WorkerMode } from '@neos-work/shared';
@@ -285,13 +287,16 @@ export class AgentNode implements ExecutableNode {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig)
+    // CLI provider branch (accept either `provider` or `llmProvider` from NodeConfig).
+    // Coordinator mode requires the built-in loop (no CLI nesting) — plan Task 6.
     const rawProvider = this.nodeConfig?.['provider'] ?? this.nodeConfig?.['llmProvider'];
     let provider = '';
     if (typeof rawProvider === 'string' && !/[\0\r\n]/.test(rawProvider)) {
       provider = rawProvider.trim().toLowerCase();
     }
-    if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
+    const isCli =
+      provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex';
+    if (isCli && workerMode !== 'coordinator') {
       if (!ctx.cliSpawn) {
         return {
           ok: false,
@@ -381,6 +386,7 @@ export class AgentNode implements ExecutableNode {
         toolFilter,
         ctx,
       );
+
       // Prefer NodeConfig `llmModel` (panel field), then legacy `model`, then settings defaults
       // Control-char model ids are ignored (check before trim)
       const pickModel = (raw: unknown): string => {
@@ -393,6 +399,91 @@ export class AgentNode implements ExecutableNode {
         || pickModel(ctx.settings['model'])
         || '';
       const model = rawModel || undefined;
+
+      // Coordinator mode: register spawn_worker / await_workers / list_workers (Task 6)
+      if (workerMode === 'coordinator') {
+        const allowedRaw = this.nodeConfig?.['allowedWorkerIds'];
+        const allowedWorkerIds = Array.isArray(allowedRaw)
+          ? allowedRaw.map((x) => String(x ?? '')).filter((s) => s && !/[\0\r\n]/.test(s))
+          : undefined;
+        const maxSpawned =
+          Number(harness?.constraints?.maxSpawnedWorkers)
+          || Number(this.nodeConfig?.['maxSpawnedWorkers'])
+          || undefined;
+
+        const { session, tools: coordTools } = createCoordinatorTools({
+          resolveWorker: (id) => packs.resolveWorker(id),
+          listWorkers: (domain) =>
+            packs.listWorkers(domain).map((w) => ({
+              id: w.id,
+              name: w.name,
+              domain: w.domain,
+              description: w.description ?? '',
+            })),
+          runChild: (req) => {
+            const childWorkerId = req.worker.id;
+            return runWorker({
+              ...req,
+              mode: 'solo',
+              adapter: req.adapter ?? adapter,
+              model: req.model ?? model,
+              settings: req.settings ?? ctx.settings,
+              signal: req.signal ?? ctx.signal,
+              onEvent: (e) => {
+                // Bridge child worker events to parent node telemetry
+                if (e.type === 'worker.started') {
+                  emitWorkerEvent(ctx, {
+                    type: 'worker.started',
+                    workerId: e.workerId || childWorkerId,
+                    workerRunId: e.workerRunId,
+                  });
+                } else if (e.type === 'worker.progress') {
+                  emitWorkerEvent(ctx, {
+                    type: 'worker.progress',
+                    workerId: childWorkerId,
+                    workerRunId: e.workerRunId,
+                    chunk: e.chunk,
+                  });
+                } else if (e.type === 'worker.completed') {
+                  emitWorkerEvent(ctx, {
+                    type: 'worker.completed',
+                    workerId: childWorkerId,
+                    workerRunId: e.workerRunId,
+                    output: e.output,
+                  });
+                } else if (e.type === 'worker.failed') {
+                  emitWorkerEvent(ctx, {
+                    type: 'worker.failed',
+                    workerId: childWorkerId,
+                    workerRunId: e.workerRunId,
+                    error: e.error,
+                  });
+                }
+              },
+              parent: {
+                nodeId: ctx.nodeId,
+                runId: ctx.runId,
+                workerRunId: req.parent?.workerRunId,
+              },
+            });
+          },
+          parent: { nodeId: ctx.nodeId, runId: ctx.runId },
+          settings: ctx.settings,
+          signal: ctx.signal,
+          allowedWorkerIds,
+          maxSpawnedWorkers: maxSpawned,
+          childDefaults: { adapter, model },
+        });
+        for (const t of coordTools) {
+          toolRegistry.register(t);
+        }
+        if (ctx.signal) {
+          const onAbort = () => session.abortAll();
+          if (ctx.signal.aborted) session.abortAll();
+          else ctx.signal.addEventListener('abort', onAbort, { once: true });
+        }
+      }
+
       const orchestrator = new AgentOrchestrator(adapter, toolRegistry, {
         maxIterations,
         model,
