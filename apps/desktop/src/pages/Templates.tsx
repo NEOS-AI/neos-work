@@ -20,6 +20,7 @@ type TemplateWorkflow = Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>;
 const DOMAIN_COLORS: Record<string, string> = {
   finance: '#10b981',
   coding: '#3b82f6',
+  research: '#06b6d4',
   general: '#8b5cf6',
 };
 
@@ -99,7 +100,7 @@ export function Templates() {
         ? tpl.domain.trim().toLowerCase()
         : 'general';
     const domain =
-      domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general'
+      domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general' || domainRaw === 'research'
         ? domainRaw
         : 'general';
     setCreating(name);

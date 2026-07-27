@@ -1,12 +1,13 @@
 /** Persist domain filter chips for Blocks / Templates / Harnesses lists. */
 
-export type DomainFilterPref = 'all' | 'finance' | 'coding' | 'general';
+export type DomainFilterPref = 'all' | 'finance' | 'coding' | 'research' | 'general';
 
 /** Shared chip order for Blocks / Templates / Harnesses toolbars. */
 export const DOMAIN_FILTER_OPTIONS: readonly DomainFilterPref[] = [
   'all',
   'finance',
   'coding',
+  'research',
   'general',
 ] as const;
 
@@ -18,7 +19,7 @@ const KEYS = {
 
 export type DomainFilterScope = keyof typeof KEYS;
 
-const DOMAIN_ALLOWED = new Set<string>(['all', 'finance', 'coding', 'general']);
+const DOMAIN_ALLOWED = new Set<string>(['all', 'finance', 'coding', 'research', 'general']);
 
 function parseDomain(raw: unknown): DomainFilterPref | null {
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;

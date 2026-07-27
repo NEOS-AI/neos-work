@@ -1702,9 +1702,46 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  // --- Harnesses ---
+  // --- Workers (v0.4) / Harnesses (deprecated alias) ---
 
+  async listWorkers(domain?: string): Promise<ApiResponse<AgentHarness[]>> {
+    const q =
+      typeof domain === 'string' && domain.trim() && !/[\0\r\n]/.test(domain)
+        ? `?domain=${encodeURIComponent(domain.trim().toLowerCase())}`
+        : '';
+    const res = await fetch(`${this.baseUrl}/api/workers${q}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async listDomainPacks(): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        name: string;
+        description?: string;
+        workerCount?: number;
+        blockCount?: number;
+        isBuiltIn?: boolean;
+      }>
+    >
+  > {
+    const res = await fetch(`${this.baseUrl}/api/domain-packs`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** @deprecated Prefer listWorkers */
   async listHarnesses(): Promise<ApiResponse<AgentHarness[]>> {
+    // Prefer workers API; fall back to harness alias for older servers
+    try {
+      const primary = await this.listWorkers();
+      if (primary.ok) return primary;
+    } catch {
+      // fall through
+    }
     const res = await fetch(`${this.baseUrl}/api/harness`, {
       headers: this.getHeaders(),
     });

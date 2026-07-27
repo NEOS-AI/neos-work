@@ -20,8 +20,11 @@ export function HarnessSelector(props: {
     if (!client) return;
     setLoadError(null);
 
-    client
-      .listHarnesses()
+    // Prefer /api/workers (v0.4); EngineClient.listHarnesses falls back to /api/harness
+    const load = client.listWorkers
+      ? client.listWorkers()
+      : client.listHarnesses();
+    load
       .then((res) => {
         if (cancelled) return;
         if (res.ok && res.data) {
@@ -32,17 +35,17 @@ export function HarnessSelector(props: {
             scrubDisplayText((res as { error?: string }).error, {
               collapseLines: true,
               maxChars: 300,
-            }) || 'Failed to load harnesses',
+            }) || 'Failed to load workers',
           );
         }
       })
       .catch((err) => {
         if (cancelled) return;
         setHarnesses([]);
-        const msg = err instanceof Error ? err.message : 'Failed to load harnesses';
+        const msg = err instanceof Error ? err.message : 'Failed to load workers';
         setLoadError(
           scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
-            || 'Failed to load harnesses',
+            || 'Failed to load workers',
         );
       });
 
@@ -74,7 +77,7 @@ export function HarnessSelector(props: {
         </p>
       )}
       <SelectField
-        label="Harness"
+        label="Worker"
         value={valueId}
         onChange={(next) => {
           if (!next) {
@@ -87,7 +90,7 @@ export function HarnessSelector(props: {
           props.onChange(id);
         }}
         options={[
-          { value: '', label: 'No harness selected' },
+          { value: '', label: 'No worker selected' },
           ...filtered
             .map((harness) => {
               if (typeof harness.id !== 'string' || /[\0\r\n]/.test(harness.id)) return null;

@@ -109,7 +109,12 @@ describe('workflow TEMPLATES', () => {
     const t = TEMPLATES.find((x) => x.name === 'OR Race Two Agents');
     expect(t).toBeTruthy();
     expect(t!.nodes.some((n) => n.type === 'or_gate')).toBe(true);
-    expect(t!.nodes.filter((n) => n.type === 'agent_coding').length).toBe(2);
+    // v2 templates use unified agent + workerId
+    expect(
+      t!.nodes.filter(
+        (n) => n.type === 'agent' && typeof (n.config as { workerId?: string }).workerId === 'string',
+      ).length,
+    ).toBe(2);
   });
 
   it('OR template fans into or_gate from both agents', () => {
@@ -127,14 +132,22 @@ describe('workflow TEMPLATES', () => {
 
     const review = TEMPLATES.find((t) => t.name === 'Code Review Assistant');
     expect(review?.domain).toBe('coding');
-    expect(review?.nodes.some((n) => n.type === 'agent_coding')).toBe(true);
+    expect(
+      review?.nodes.some(
+        (n) => n.type === 'agent' && (n.config as { workerId?: string }).workerId === 'coding_reviewer',
+      ),
+    ).toBe(true);
 
     const testWriter = TEMPLATES.find((t) => t.name === 'Test Writer');
     expect(testWriter?.domain).toBe('coding');
 
     const tech = TEMPLATES.find((t) => t.name === 'Technical Analysis Report');
     expect(tech?.nodes.some((n) => n.type === 'gate_and')).toBe(true);
-    expect(tech?.nodes.some((n) => n.type === 'agent_finance')).toBe(true);
+    expect(
+      tech?.nodes.some(
+        (n) => n.type === 'agent' && (n.config as { workerId?: string }).workerId === 'finance_analyst',
+      ),
+    ).toBe(true);
 
     const portfolio = TEMPLATES.find((t) => t.name === 'Portfolio Risk Report');
     expect(portfolio?.domain).toBe('finance');
@@ -144,8 +157,8 @@ describe('workflow TEMPLATES', () => {
     expect(
       liveChart?.nodes.some(
         (n) =>
-          n.type === 'agent_finance'
-          && (n.config as { harnessId?: string }).harnessId === 'finance_chart_analyst',
+          n.type === 'agent'
+          && (n.config as { workerId?: string }).workerId === 'finance_chart_analyst',
       ),
     ).toBe(true);
 

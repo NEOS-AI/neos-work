@@ -61,7 +61,14 @@
     "filterAll": "전체",
     "filterCompleted": "완료",
     "filterFailed": "실패",
-    "filterCancelled": "취소됨"
+    "filterCancelled": "취소됨",
+    "workerMode": "모드",
+    "modeSolo": "솔로",
+    "modeCoordinator": "코디네이터",
+    "coordinatorHint": "리더가 spawn_worker / await_workers로 워커를 위임합니다. CLI 프로바이더는 비활성화됩니다.",
+    "migratedToV2": "워크플로우가 v2(도메인 워커)로 변환되었습니다.",
+    "worker": "워커",
+    "domainPack": "도메인 팩"
   },
   "mode": {
     "title": "NEOS Work를 어떻게 실행하시겠습니까?",

@@ -21,6 +21,7 @@ import {
 const DOMAIN_COLORS: Record<string, string> = {
   finance: '#10b981',
   coding: '#3b82f6',
+  research: '#06b6d4',
   general: '#8b5cf6',
 };
 

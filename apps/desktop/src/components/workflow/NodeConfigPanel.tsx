@@ -270,6 +270,34 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               });
             }}
           />
+          {/* Mode: solo | coordinator (Q3 — no separate NodeType) */}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              Mode
+            </label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              value={
+                config.mode === 'coordinator' || config.mode === 'solo'
+                  ? config.mode
+                  : 'solo'
+              }
+              onChange={(e) => {
+                const mode = e.target.value === 'coordinator' ? 'coordinator' : 'solo';
+                patchConfig({ mode });
+              }}
+              data-testid="agent-mode-select"
+            >
+              <option value="solo">Solo</option>
+              <option value="coordinator">Coordinator</option>
+            </select>
+            {config.mode === 'coordinator' && (
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                Leader spawns workers via spawn_worker / await_workers. CLI providers are disabled.
+              </p>
+            )}
+          </div>
           <TextAreaField
             label="Additional system prompt"
             value={displayMultiline(config.systemPrompt)}

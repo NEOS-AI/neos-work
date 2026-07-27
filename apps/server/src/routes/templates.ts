@@ -15,6 +15,8 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Stock Price Monitor',
     description: '특정 종목의 현재가를 조회하고 Slack으로 알림을 보내는 워크플로우',
     domain: 'finance',
+    schemaVersion: 2 as const,
+    primaryDomain: 'finance',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 100, y: 200 }, config: {} },
       { id: 'price', type: 'block', label: 'Price Lookup', position: { x: 350, y: 200 }, config: { blockId: 'price_lookup', params: { symbol: '005930' } } },
@@ -31,12 +33,14 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Technical Analysis Report',
     description: 'RSI · MACD · 이동평균을 계산하고 AI 에이전트가 시황 분석 리포트를 작성',
     domain: 'finance',
+    schemaVersion: 2 as const,
+    primaryDomain: 'finance',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 60, y: 200 }, config: {} },
       { id: 'rsi', type: 'block', label: 'RSI', position: { x: 280, y: 100 }, config: { blockId: 'rsi', params: { symbol: '005930', period: 14 } } },
       { id: 'macd', type: 'block', label: 'MACD', position: { x: 280, y: 300 }, config: { blockId: 'macd', params: { symbol: '005930' } } },
       { id: 'gate', type: 'gate_and', label: 'Wait All', position: { x: 520, y: 200 }, config: {} },
-      { id: 'agent', type: 'agent_finance', label: 'Finance Analyst', position: { x: 750, y: 200 }, config: { harnessId: 'finance_analyst' } },
+      { id: 'agent', type: 'agent', label: 'Finance Analyst', position: { x: 750, y: 200 }, config: { workerId: 'finance_analyst' } },
       { id: 'output', type: 'output', label: 'Output', position: { x: 980, y: 200 }, config: {} },
     ],
     edges: [
@@ -52,11 +56,13 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Portfolio Risk Report',
     description: '복수 종목의 리스크 지표를 계산하고 위험도 리포트를 생성',
     domain: 'finance',
+    schemaVersion: 2 as const,
+    primaryDomain: 'finance',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
       { id: 'portfolio', type: 'block', label: 'Portfolio Summary', position: { x: 320, y: 130 }, config: { blockId: 'portfolio_summary', params: { symbols: '005930,000660,035720' } } },
       { id: 'risk', type: 'block', label: 'Risk Report', position: { x: 320, y: 270 }, config: { blockId: 'risk_report', params: { symbol: '005930' } } },
-      { id: 'analyst', type: 'agent_finance', label: 'Risk Analyst', position: { x: 580, y: 200 }, config: { harnessId: 'finance_risk' } },
+      { id: 'analyst', type: 'agent', label: 'Risk Analyst', position: { x: 580, y: 200 }, config: { workerId: 'finance_risk' } },
       { id: 'output', type: 'output', label: 'Output', position: { x: 820, y: 200 }, config: {} },
     ],
     edges: [
@@ -73,15 +79,17 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
       'TradingView MCP + 차트 분석 하네스로 라이브 차트를 읽고 구조·레벨·바이어스 JSON 리포트를 생성합니다. ' +
       'Settings → MCP에서 TradingView 프리셋을 연결하고 Desktop을 디버그 포트로 실행한 뒤 Sessions에서 사용하세요.',
     domain: 'finance',
+    schemaVersion: 2 as const,
+    primaryDomain: 'finance',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
       {
         id: 'chart',
-        type: 'agent_finance',
+        type: 'agent',
         label: 'Chart Analyst (TV)',
         position: { x: 360, y: 200 },
         config: {
-          harnessId: 'finance_chart_analyst',
+          workerId: 'finance_chart_analyst',
           systemPrompt:
             'tv_health_check 후 현재 차트의 심볼·가격·주요 레벨·지표를 읽고 JSON 분석 리포트를 작성하세요.',
         },
@@ -99,10 +107,12 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Code Review Assistant',
     description: '코드 변경사항을 검색하고 AI가 코드 리뷰를 수행한 뒤 Discord로 결과를 전송',
     domain: 'coding',
+    schemaVersion: 2 as const,
+    primaryDomain: 'coding',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
       { id: 'search', type: 'web_search', label: 'Web Search', position: { x: 320, y: 200 }, config: {} },
-      { id: 'reviewer', type: 'agent_coding', label: 'Code Reviewer', position: { x: 560, y: 200 }, config: { harnessId: 'coding_reviewer' } },
+      { id: 'reviewer', type: 'agent', label: 'Code Reviewer', position: { x: 560, y: 200 }, config: { workerId: 'coding_reviewer' } },
       { id: 'discord', type: 'discord_message', label: 'Discord Notify', position: { x: 800, y: 200 }, config: {} },
       { id: 'output', type: 'output', label: 'Output', position: { x: 1040, y: 200 }, config: {} },
     ],
@@ -117,9 +127,11 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Test Writer',
     description: '소스 코드를 입력받아 AI가 단위 테스트를 자동 작성',
     domain: 'coding',
+    schemaVersion: 2 as const,
+    primaryDomain: 'coding',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
-      { id: 'writer', type: 'agent_coding', label: 'Test Writer', position: { x: 340, y: 200 }, config: { harnessId: 'coding_test_writer' } },
+      { id: 'writer', type: 'agent', label: 'Test Writer', position: { x: 340, y: 200 }, config: { workerId: 'coding_test_writer' } },
       { id: 'output', type: 'output', label: 'Output', position: { x: 600, y: 200 }, config: {} },
     ],
     edges: [
@@ -133,6 +145,8 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Web Research + Slack',
     description: '주제를 검색하고 AI가 요약한 뒤 Slack으로 전송',
     domain: 'general',
+    schemaVersion: 2 as const,
+    primaryDomain: 'general',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
       { id: 'search', type: 'web_search', label: 'Web Search', position: { x: 320, y: 200 }, config: {} },
@@ -149,6 +163,8 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Parallel Research Branches',
     description: '병렬 브랜치로 두 검색을 동시에 실행한 뒤 AND join (plan Task 11)',
     domain: 'general',
+    schemaVersion: 2 as const,
+    primaryDomain: 'general',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 60, y: 220 }, config: {} },
       { id: 'ps', type: 'parallel_start', label: 'Fan-out', position: { x: 260, y: 220 }, config: {} },
@@ -170,6 +186,8 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'Generate Image & Deploy',
     description: 'DALL·E image generation then static deploy (plan Tasks 7–8)',
     domain: 'general',
+    schemaVersion: 2 as const,
+    primaryDomain: 'general',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
       {
@@ -202,22 +220,24 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
     name: 'OR Race Two Agents',
     description: '병렬 브랜치 후 OR 게이트로 먼저 끝난 결과 채택 (plan Task 11)',
     domain: 'coding',
+    schemaVersion: 2 as const,
+    primaryDomain: 'coding',
     nodes: [
       { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 60, y: 220 }, config: {} },
       { id: 'ps', type: 'parallel_start', label: 'Fan-out', position: { x: 260, y: 220 }, config: {} },
       {
         id: 'a1',
-        type: 'agent_coding',
+        type: 'agent',
         label: 'Agent A',
         position: { x: 480, y: 120 },
-        config: { harnessId: 'coding_reviewer', systemPrompt: 'Answer briefly as Agent A.' },
+        config: { workerId: 'coding_reviewer', systemPrompt: 'Answer briefly as Agent A.' },
       },
       {
         id: 'a2',
-        type: 'agent_coding',
+        type: 'agent',
         label: 'Agent B',
         position: { x: 480, y: 320 },
-        config: { harnessId: 'coding_test_writer', systemPrompt: 'Answer briefly as Agent B.' },
+        config: { workerId: 'coding_test_writer', systemPrompt: 'Answer briefly as Agent B.' },
       },
       { id: 'or', type: 'or_gate', label: 'OR Gate', position: { x: 720, y: 220 }, config: {} },
       { id: 'output', type: 'output', label: 'Output', position: { x: 940, y: 220 }, config: {} },
@@ -231,6 +251,106 @@ export const TEMPLATES: Omit<Workflow, 'id' | 'createdAt' | 'updatedAt'>[] = [
       { id: 'e6', source: 'or', target: 'output' },
     ],
   },
+  // ── v0.4 coordinator / pack templates ─────────────────
+  {
+    name: 'Coordinator Implement',
+    description:
+      '단일 coordinator 노드가 research_web + coding_implementer를 스폰·합성하는 예시 (PLAN_FOR_V0_4_0 Task 8)',
+    domain: 'coding',
+    schemaVersion: 2 as const,
+    primaryDomain: 'coding',
+    domainPackIds: ['coding', 'research', 'general'],
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+      {
+        id: 'coord',
+        type: 'agent',
+        label: 'Coordinator',
+        position: { x: 340, y: 200 },
+        config: {
+          workerId: 'general_coordinator',
+          mode: 'coordinator',
+          allowedWorkerIds: ['research_web', 'coding_implementer', 'coding_reviewer'],
+          systemPrompt:
+            'Goal을 research_web과 coding_implementer에 위임한 뒤 await_workers로 합성하세요. 직접 파일 수정은 최소화하세요.',
+        },
+      },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 600, y: 200 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'coord' },
+      { id: 'e2', source: 'coord', target: 'output' },
+    ],
+  },
+  {
+    name: 'Analyst → Risk → Slack',
+    description: '금융 분석 → 리스크 평가 → Slack 알림 파이프라인 (v2 agent + workerId)',
+    domain: 'finance',
+    schemaVersion: 2 as const,
+    primaryDomain: 'finance',
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 60, y: 200 }, config: {} },
+      {
+        id: 'analyst',
+        type: 'agent',
+        label: 'Finance Analyst',
+        position: { x: 280, y: 200 },
+        config: { workerId: 'finance_analyst', mode: 'solo' },
+      },
+      {
+        id: 'risk',
+        type: 'agent',
+        label: 'Risk Analyst',
+        position: { x: 520, y: 200 },
+        config: { workerId: 'finance_risk', mode: 'solo' },
+      },
+      {
+        id: 'slack',
+        type: 'slack_message',
+        label: 'Slack Notify',
+        position: { x: 760, y: 200 },
+        config: { channel: '#finance-alerts' },
+      },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 1000, y: 200 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'analyst' },
+      { id: 'e2', source: 'analyst', target: 'risk' },
+      { id: 'e3', source: 'risk', target: 'slack' },
+      { id: 'e4', source: 'slack', target: 'output' },
+    ],
+  },
+  {
+    name: 'Web Research Pack',
+    description: 'research_web → research_synthesizer 조사 합성 파이프라인',
+    domain: 'research',
+    schemaVersion: 2 as const,
+    primaryDomain: 'research',
+    nodes: [
+      { id: 'trigger', type: 'trigger', label: 'Trigger', position: { x: 80, y: 200 }, config: {} },
+      {
+        id: 'web',
+        type: 'agent',
+        label: 'Web Researcher',
+        position: { x: 320, y: 200 },
+        config: { workerId: 'research_web', mode: 'solo' },
+      },
+      {
+        id: 'synth',
+        type: 'agent',
+        label: 'Synthesizer',
+        position: { x: 560, y: 200 },
+        config: { workerId: 'research_synthesizer', mode: 'solo' },
+      },
+      { id: 'output', type: 'output', label: 'Output', position: { x: 800, y: 200 }, config: {} },
+    ],
+    edges: [
+      { id: 'e1', source: 'trigger', target: 'web' },
+      { id: 'e2', source: 'web', target: 'synth' },
+      { id: 'e3', source: 'synth', target: 'output' },
+    ],
+  },
+
 ];
 
 // GET /api/templates
@@ -243,7 +363,7 @@ templates.get('/', (c) => {
       : '';
   // Only known domains filter; unknown → return all (avoid empty false-negatives)
   const domain =
-    domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general'
+    domainRaw === 'finance' || domainRaw === 'coding' || domainRaw === 'general' || domainRaw === 'research'
       ? domainRaw
       : undefined;
   const filtered = domain ? TEMPLATES.filter((t) => t.domain === domain) : TEMPLATES;

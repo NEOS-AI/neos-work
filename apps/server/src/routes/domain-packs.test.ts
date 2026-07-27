@@ -33,4 +33,22 @@ describe('domain-packs routes', () => {
     const res = await domainPacks.request('/nope');
     expect(res.status).toBe(404);
   });
+
+  it('404s blank and control-char pack ids', async () => {
+    const blank = await domainPacks.request('/%20');
+    expect(blank.status).toBe(404);
+    const ctrl = await domainPacks.request(`/${encodeURIComponent('research\nid')}`);
+    expect(ctrl.status).toBe(404);
+  });
+
+  it('returns coding pack with block ids', async () => {
+    const res = await domainPacks.request('/coding');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { id: string; blockIds: string[]; workers: Array<{ id: string }> };
+    };
+    expect(body.data.id).toBe('coding');
+    expect(body.data.blockIds.length).toBeGreaterThan(0);
+    expect(body.data.workers.some((w) => w.id === 'coding_reviewer')).toBe(true);
+  });
 });

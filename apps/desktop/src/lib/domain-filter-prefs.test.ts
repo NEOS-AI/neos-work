@@ -13,7 +13,7 @@ describe('domain-filter-prefs', () => {
   });
 
   it('exposes stable domain chip options', () => {
-    expect(DOMAIN_FILTER_OPTIONS).toEqual(['all', 'finance', 'coding', 'general']);
+    expect(DOMAIN_FILTER_OPTIONS).toEqual(['all', 'finance', 'coding', 'research', 'general']);
   });
 
   it('defaults domain filters to all', () => {

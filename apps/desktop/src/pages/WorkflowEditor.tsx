@@ -64,29 +64,56 @@ const NODE_COLORS: Record<string, string> = {
   output:          '#6b7280',
 };
 
+/**
+ * Palette entries grouped by Domain Pack / control surface (PLAN_FOR_V0_4_0 Task 8).
+ * Agent variants always drop as canonical `type: 'agent'` with a default workerId.
+ */
 const NODE_TYPES_LIST = [
-  { type: 'trigger',         label: 'Trigger',         group: 'flow' },
-  { type: 'agent',           label: 'Agent',           group: 'agent' },
-  { type: 'agent_finance',   label: 'Finance Agent',   group: 'agent' },
-  { type: 'agent_coding',    label: 'Coding Agent',    group: 'agent' },
-  { type: 'web_search',      label: 'Web Search',      group: 'tool' },
-  { type: 'slack_message',   label: 'Slack Message',   group: 'tool' },
-  { type: 'discord_message', label: 'Discord Message', group: 'tool' },
-  { type: 'media',           label: 'Media',           group: 'tool' },
-  { type: 'deploy',          label: 'Deploy',          group: 'tool' },
-  { type: 'gate_and',        label: 'AND Gate',        group: 'gate' },
-  { type: 'gate_or',         label: 'OR Gate',         group: 'gate' },
-  { type: 'parallel_start',  label: 'Parallel Start',  group: 'gate' },
-  { type: 'parallel_end',    label: 'Parallel End',    group: 'gate' },
-  { type: 'or_gate',         label: 'OR Gate (race)',  group: 'gate' },
-  { type: 'block',           label: 'Block',           group: 'block' },
-  { type: 'output',          label: 'Output',          group: 'flow' },
+  { type: 'trigger',         label: 'Trigger',              group: 'control',  pack: 'control' as const },
+  { type: 'output',          label: 'Output',               group: 'control',  pack: 'control' as const },
+  { type: 'gate_and',        label: 'AND Gate',             group: 'control',  pack: 'control' as const },
+  { type: 'gate_or',         label: 'OR Gate (logic)',      group: 'control',  pack: 'control' as const },
+  { type: 'or_gate',         label: 'OR Gate (race)',       group: 'control',  pack: 'control' as const },
+  { type: 'parallel_start',  label: 'Parallel Start',       group: 'control',  pack: 'control' as const },
+  { type: 'parallel_end',    label: 'Parallel End',         group: 'control',  pack: 'control' as const },
+  { type: 'agent',           label: 'Agent',                group: 'agent',    pack: 'general' as const, defaultWorkerId: 'general_generalist', defaultMode: 'solo' as const },
+  { type: 'agent',           label: 'Coordinator',          group: 'agent',    pack: 'general' as const, defaultWorkerId: 'general_coordinator', defaultMode: 'coordinator' as const, paletteKey: 'agent_coordinator' },
+  { type: 'agent',           label: 'Finance Analyst',      group: 'agent',    pack: 'finance' as const, defaultWorkerId: 'finance_analyst', defaultMode: 'solo' as const, paletteKey: 'agent_finance' },
+  { type: 'agent',           label: 'Coding Reviewer',      group: 'agent',    pack: 'coding' as const, defaultWorkerId: 'coding_reviewer', defaultMode: 'solo' as const, paletteKey: 'agent_coding' },
+  { type: 'agent',           label: 'Research Web',         group: 'agent',    pack: 'research' as const, defaultWorkerId: 'research_web', defaultMode: 'solo' as const, paletteKey: 'agent_research' },
+  { type: 'block',           label: 'Block',                group: 'block',    pack: 'general' as const },
+  { type: 'web_search',      label: 'Web Search',           group: 'delivery', pack: 'research' as const },
+  { type: 'slack_message',   label: 'Slack Message',        group: 'delivery', pack: 'delivery' as const },
+  { type: 'discord_message', label: 'Discord Message',      group: 'delivery', pack: 'delivery' as const },
+  { type: 'media',           label: 'Media',                group: 'delivery', pack: 'delivery' as const },
+  { type: 'deploy',          label: 'Deploy',               group: 'delivery', pack: 'delivery' as const },
 ] as const;
+
+const PALETTE_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'coding', label: 'Coding' },
+  { id: 'research', label: 'Research' },
+  { id: 'general', label: 'General' },
+  { id: 'control', label: 'Control' },
+  { id: 'delivery', label: 'Delivery' },
+] as const;
+
+type PaletteTabId = (typeof PALETTE_TABS)[number]['id'];
 
 // ── Custom node component ─────────────────────────────────
 
 /** Canvas node chrome — exported for unit tests (label scrub). */
-export function WorkflowNodeComponent({ data }: { data: { label: string; nodeType: string; isRunning?: boolean; isDone?: boolean; isFailed?: boolean } }) {
+export function WorkflowNodeComponent({ data }: {
+  data: {
+    label: string;
+    nodeType: string;
+    isRunning?: boolean;
+    isDone?: boolean;
+    isFailed?: boolean;
+    config?: Record<string, unknown>;
+  };
+}) {
   const color = NODE_COLORS[data.nodeType] ?? '#6b7280';
   const borderColor = data.isFailed ? '#ef4444' : data.isDone ? '#22c55e' : data.isRunning ? '#facc15' : color;
   // Scrub hostile / multi-line labels for canvas chrome (fall back to node type)
@@ -94,11 +121,14 @@ export function WorkflowNodeComponent({ data }: { data: { label: string; nodeTyp
     scrubDisplayText(data.label, { collapseLines: true, maxChars: 80 })
     || scrubDisplayText(data.nodeType, { collapseLines: true, maxChars: 40 })
     || 'node';
+  const isCoordinator = data.config?.mode === 'coordinator';
   return (
     <div
       className="min-w-[130px] rounded-xl border-2 px-3 py-2 text-center text-xs font-medium text-white shadow-md"
       style={{ backgroundColor: color + 'cc', borderColor }}
+      title={isCoordinator ? 'Coordinator mode' : undefined}
     >
+      {isCoordinator && <span className="mr-1 opacity-90" aria-label="coordinator">◎</span>}
       {label}
       {data.isRunning && <span className="ml-1 animate-pulse">⏳</span>}
       {data.isDone && <span className="ml-1">✓</span>}
@@ -148,6 +178,8 @@ export function WorkflowEditor() {
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>(() => loadLayoutDirection());
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paletteTab, setPaletteTab] = useState<PaletteTabId>('all');
+  const [migrationToast, setMigrationToast] = useState<string | null>(null);
 
   /** User-initiated tab choice — persists across reloads. */
   const selectRightPanelTab = useCallback((tab: RightPanelTab) => {
@@ -195,6 +227,30 @@ export function WorkflowEditor() {
         setNodes(rfNodes);
         setEdges(rfEdges);
         setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, descSafe, dsSafe));
+        // One-time toast when server returned schemaVersion 2 after v1 migrate (Task 8)
+        try {
+          const toastKey = `neos.workflow.migrated.v2.${safeId}`;
+          const hasLegacyAgent = (res.data.nodes ?? []).some(
+            (n) => n.type === 'agent_finance' || n.type === 'agent_coding',
+          );
+          const isV2 = res.data.schemaVersion === 2 || res.data.primaryDomain != null;
+          if (isV2 && !hasLegacyAgent && sessionStorage.getItem(toastKey) !== '1') {
+            sessionStorage.setItem(toastKey, '1');
+            // Show only if graph looks freshly normalized (has agent + workerId)
+            const hasWorkerId = (res.data.nodes ?? []).some(
+              (n) =>
+                n.type === 'agent'
+                && n.config
+                && typeof (n.config as { workerId?: unknown }).workerId === 'string',
+            );
+            if (hasWorkerId) {
+              setMigrationToast('Workflow converted to v2 (Domain Workers).');
+              setTimeout(() => setMigrationToast(null), 6_000);
+            }
+          }
+        } catch {
+          // sessionStorage may be unavailable
+        }
         // Fit graph after positions apply
         setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 50);
       } else {
@@ -277,15 +333,32 @@ export function WorkflowEditor() {
   const handleDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
+      // Prefer paletteKey when present so agent pack presets resolve correctly
+      const paletteKey = e.dataTransfer.getData('paletteKey');
       const nodeType = e.dataTransfer.getData('nodeType');
-      if (!nodeType) return;
-      const typeDef = NODE_TYPES_LIST.find((t) => t.type === nodeType);
+      if (!nodeType && !paletteKey) return;
+      const typeDef =
+        (paletteKey
+          ? NODE_TYPES_LIST.find((t) => {
+              const k =
+                'paletteKey' in t && (t as { paletteKey?: string }).paletteKey
+                  ? (t as { paletteKey?: string }).paletteKey!
+                  : `${t.type}:${t.label}`;
+              return k === paletteKey;
+            })
+          : undefined)
+        ?? NODE_TYPES_LIST.find((t) => t.type === nodeType);
       if (!typeDef) return;
+      const config: Record<string, unknown> = {};
+      const workerId = (typeDef as { defaultWorkerId?: string }).defaultWorkerId;
+      const mode = (typeDef as { defaultMode?: string }).defaultMode;
+      if (workerId) config.workerId = workerId;
+      if (mode) config.mode = mode;
       const newNode: Node = {
         id: crypto.randomUUID(),
         type: 'workflowNode',
         position: { x: e.nativeEvent.offsetX - 65, y: e.nativeEvent.offsetY - 16 },
-        data: { label: typeDef.label, nodeType, config: {} },
+        data: { label: typeDef.label, nodeType: typeDef.type, config },
       };
       setNodes((nds) => [...nds, newNode]);
     },
@@ -883,23 +956,70 @@ export function WorkflowEditor() {
         )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Node Palette */}
-        <aside className="flex w-44 flex-col gap-1 overflow-y-auto border-r p-3" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
-          <p className="mb-1 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+      <div className="relative flex flex-1 overflow-hidden">
+        {migrationToast && (
+          <div
+            data-testid="migration-toast"
+            className="absolute left-1/2 top-3 z-40 -translate-x-1/2 rounded-lg border px-3 py-2 text-xs shadow-lg"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              borderColor: 'var(--border-secondary)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {migrationToast}
+            <button
+              type="button"
+              className="ml-2 underline"
+              style={{ color: 'var(--text-muted)' }}
+              onClick={() => setMigrationToast(null)}
+            >
+              OK
+            </button>
+          </div>
+        )}
+        {/* Node Palette — Domain Pack tabs (v0.4 Task 8) */}
+        <aside className="flex w-48 flex-col gap-1 overflow-y-auto border-r p-2" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
+          <p className="mb-1 px-1 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
             {t('workflow.nodes')}
           </p>
-          {NODE_TYPES_LIST.map((item) => (
-            <div
-              key={item.type}
-              draggable
-              onDragStart={(e) => e.dataTransfer.setData('nodeType', item.type)}
-              className="cursor-grab rounded-lg px-2 py-1.5 text-xs font-medium text-white"
-              style={{ backgroundColor: NODE_COLORS[item.type] + 'cc' }}
-            >
-              {item.label}
-            </div>
-          ))}
+          <div className="mb-2 flex flex-wrap gap-1">
+            {PALETTE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setPaletteTab(tab.id)}
+                className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: paletteTab === tab.id ? 'var(--border-secondary)' : 'transparent',
+                  color: paletteTab === tab.id ? 'var(--text-primary)' : 'var(--text-muted)',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {NODE_TYPES_LIST.filter((item) => paletteTab === 'all' || item.pack === paletteTab).map((item) => {
+            const key = ('paletteKey' in item && item.paletteKey) ? item.paletteKey : `${item.type}:${item.label}`;
+            return (
+              <div
+                key={key}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('nodeType', item.type);
+                  e.dataTransfer.setData('paletteKey', key);
+                }}
+                className="cursor-grab rounded-lg px-2 py-1.5 text-xs font-medium text-white"
+                style={{ backgroundColor: (NODE_COLORS[item.type] ?? '#6b7280') + 'cc' }}
+                title={'defaultWorkerId' in item && item.defaultWorkerId ? `worker: ${item.defaultWorkerId}` : item.label}
+              >
+                {item.label}
+                {'defaultMode' in item && item.defaultMode === 'coordinator' && (
+                  <span className="ml-1 opacity-80">◎</span>
+                )}
+              </div>
+            );
+          })}
         </aside>
 
         {/* React Flow Canvas */}

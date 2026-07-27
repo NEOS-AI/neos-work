@@ -61,7 +61,14 @@
     "filterAll": "All",
     "filterCompleted": "Completed",
     "filterFailed": "Failed",
-    "filterCancelled": "Cancelled"
+    "filterCancelled": "Cancelled",
+    "workerMode": "Mode",
+    "modeSolo": "Solo",
+    "modeCoordinator": "Coordinator",
+    "coordinatorHint": "Leader spawns workers via spawn_worker / await_workers. CLI providers are disabled.",
+    "migratedToV2": "Workflow converted to v2 (Domain Workers).",
+    "worker": "Worker",
+    "domainPack": "Domain pack"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",
