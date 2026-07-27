@@ -1,7 +1,10 @@
 /**
- * AgentNode — wraps AgentOrchestrator for use in a workflow.
- * Supports optional harness injection for domain-specific agent configuration.
- * Supports CLI providers: 'cli-claude', 'cli-gemini', 'cli-codex'.
+ * AgentNode — domain worker execution for workflow graphs (v0.4 Task 5).
+ *
+ * - Canonical type: `agent` (legacy `agent_*` still accepted pre-migrate)
+ * - Resolves `workerId` (preferred) / `harnessId`
+ * - Non-CLI: AgentOrchestrator + permission/workspace tool registry + worker.* events
+ * - CLI solo: cli-* providers via injected `cliSpawn` (+ synthetic worker events)
  */
 
 import {
@@ -13,12 +16,11 @@ import {
   resolveWorkerWorkspace,
   scrubErrorMessage,
 } from '@neos-work/core';
-import type { DomainWorker } from '@neos-work/shared';
+import type { DomainWorker, WorkerMode } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 // Namespace import so vitest can spyOn packs.resolveWorker (live binding).
 import * as packs from '../packs/index.js';
 import { safeServerUrl } from './server-url.js';
-
 
 /** Cap API keys / auth tokens (header hygiene). */
 const API_KEY_MAX = 8_192;
@@ -66,7 +68,7 @@ function buildAdapter(settings: Record<string, string>) {
 
 /** Cap injected memory context so runaway exports cannot bloat the system prompt. */
 const MEMORY_CONTEXT_MAX_CHARS = 32_000;
-/** Cap Design System DESIGN.md injection (plan Task 1). */
+/** Cap Design System DESIGN.md injection. */
 const DESIGN_CONTEXT_MAX_CHARS = 32_000;
 /** Cap node/harness system prompts before memory/design injection. */
 const SYSTEM_PROMPT_MAX_CHARS = 100_000;
@@ -113,7 +115,6 @@ async function buildAgentToolRegistry(
   const effective: DomainWorker = worker
     ? {
         ...worker,
-        // Node-level allowlist override when harness/worker list is empty
         allowedTools:
           worker.allowedTools && worker.allowedTools.length > 0
             ? worker.allowedTools
@@ -131,8 +132,8 @@ async function buildAgentToolRegistry(
       };
 
   const runId =
-    typeof (ctx as { runId?: unknown }).runId === 'string'
-      ? String((ctx as { runId?: string }).runId)
+    typeof ctx.runId === 'string' && ctx.runId.trim()
+      ? ctx.runId.trim()
       : typeof ctx.settings['RUN_ID'] === 'string'
         ? ctx.settings['RUN_ID']
         : 'agent-node';
@@ -144,9 +145,38 @@ async function buildAgentToolRegistry(
   });
 
   return {
-    registry: buildWorkerToolRegistry({ worker: effective, workspaceRoot }),
+    registry: buildWorkerToolRegistry({
+      worker: effective,
+      workspaceRoot,
+      mode: effective.defaultMode,
+    }),
     workspaceRoot,
   };
+}
+
+/** Resolve solo/coordinator mode from node config or worker default. */
+function resolveMode(config: Record<string, unknown> | undefined, worker?: DomainWorker): WorkerMode {
+  const raw = config?.['mode'];
+  if (raw === 'solo' || raw === 'coordinator') return raw;
+  return worker?.defaultMode ?? 'solo';
+}
+
+function emitWorkerEvent(
+  ctx: NodeContext,
+  event: {
+    type: 'worker.started' | 'worker.progress' | 'worker.completed' | 'worker.failed';
+    workerId: string;
+    workerRunId: string;
+    chunk?: string;
+    output?: unknown;
+    error?: string;
+  },
+): void {
+  try {
+    ctx.onWorkerEvent?.(event);
+  } catch {
+    // Host handlers must not break the node
+  }
 }
 
 export class AgentNode implements ExecutableNode {
@@ -172,6 +202,9 @@ export class AgentNode implements ExecutableNode {
       if (!/[\0\r\n]/.test(s) && s.length <= 200) harnessId = s.trim();
     }
     const harness = harnessId ? packs.resolveWorker(harnessId) : undefined;
+    const workerId = harness?.id ?? 'ad_hoc_agent';
+    const workerRunId = crypto.randomUUID();
+    const workerMode = resolveMode(this.nodeConfig, harness);
 
     const sysRaw =
       typeof this.nodeConfig?.['systemPrompt'] === 'string'
@@ -250,8 +283,14 @@ export class AgentNode implements ExecutableNode {
     }
     if (provider === 'cli-claude' || provider === 'cli-gemini' || provider === 'cli-codex') {
       if (!ctx.cliSpawn) {
-        return { ok: false, output: null, error: 'CLI spawn not available in this environment', durationMs: Date.now() - start };
+        return {
+          ok: false,
+          output: null,
+          error: 'CLI spawn not available in this environment',
+          durationMs: Date.now() - start,
+        };
       }
+      emitWorkerEvent(ctx, { type: 'worker.started', workerId, workerRunId });
       try {
         let inputsJson = JSON.stringify(ctx.inputs ?? {});
         if (inputsJson.length > CLI_INPUTS_MAX_CHARS) {
@@ -268,19 +307,40 @@ export class AgentNode implements ExecutableNode {
         const result = await ctx.cliSpawn(
           provider,
           prompt,
-          (chunk, accumulated) => ctx.onProgress?.(chunk, accumulated),
+          (chunk, accumulated) => {
+            ctx.onProgress?.(chunk, accumulated);
+            emitWorkerEvent(ctx, {
+              type: 'worker.progress',
+              workerId,
+              workerRunId,
+              chunk,
+            });
+          },
           ctx.signal,
         );
+        const durationMs = Date.now() - start;
+        if (result.exitCode === 0) {
+          emitWorkerEvent(ctx, {
+            type: 'worker.completed',
+            workerId,
+            workerRunId,
+            output: result.output,
+          });
+          return { ok: true, output: result.output, durationMs };
+        }
+        const error = `CLI exited with code ${result.exitCode}`;
+        emitWorkerEvent(ctx, { type: 'worker.failed', workerId, workerRunId, error });
         return {
-          ok: result.exitCode === 0,
+          ok: false,
           output: result.output,
-          error: result.exitCode !== 0 ? `CLI exited with code ${result.exitCode}` : undefined,
-          durationMs: Date.now() - start,
+          error,
+          durationMs,
         };
       } catch (err) {
         const msg =
           scrubErrorMessage(err instanceof Error ? err.message : String(err), 4_000)
           || 'Operation failed';
+        emitWorkerEvent(ctx, { type: 'worker.failed', workerId, workerRunId, error: msg });
         return {
           ok: false,
           output: null,
@@ -305,7 +365,9 @@ export class AgentNode implements ExecutableNode {
       const adapter = buildAdapter(adapterSettings);
       // Permission profile + workspace isolation via WorkerRuntime helpers (Task 4)
       const { registry: toolRegistry } = await buildAgentToolRegistry(
-        harness,
+        harness
+          ? { ...harness, defaultMode: workerMode }
+          : undefined,
         toolFilter,
         ctx,
       );
@@ -335,6 +397,8 @@ export class AgentNode implements ExecutableNode {
         ? `${systemPrompt}\n\n---\n${inputsJson}`
         : inputsJson;
 
+      emitWorkerEvent(ctx, { type: 'worker.started', workerId, workerRunId });
+
       let lastText = '';
       for await (const event of orchestrator.run(goal, ctx.signal)) {
         if (event.type === 'text') {
@@ -344,12 +408,24 @@ export class AgentNode implements ExecutableNode {
             lastText += chunk.length > room ? chunk.slice(0, room) : chunk;
           }
           ctx.onProgress?.(chunk, lastText);
+          emitWorkerEvent(ctx, {
+            type: 'worker.progress',
+            workerId,
+            workerRunId,
+            chunk,
+          });
         }
         if (event.type === 'done') {
           let result = lastText || JSON.stringify(event.task.steps.at(-1)?.output ?? null);
           if (typeof result === 'string' && result.length > AGENT_STREAM_TEXT_MAX_CHARS) {
             result = result.slice(0, AGENT_STREAM_TEXT_MAX_CHARS);
           }
+          emitWorkerEvent(ctx, {
+            type: 'worker.completed',
+            workerId,
+            workerRunId,
+            output: result,
+          });
           return { ok: true, output: result, durationMs: Date.now() - start };
         }
         if (event.type === 'error') {
@@ -358,15 +434,33 @@ export class AgentNode implements ExecutableNode {
               typeof event.error === 'string' ? event.error : String(event.error ?? 'Agent error'),
               4_000,
             ) || 'Agent error';
+          emitWorkerEvent(ctx, {
+            type: 'worker.failed',
+            workerId,
+            workerRunId,
+            error: errMsg,
+          });
           return { ok: false, output: null, error: errMsg, durationMs: Date.now() - start };
         }
       }
 
+      emitWorkerEvent(ctx, {
+        type: 'worker.completed',
+        workerId,
+        workerRunId,
+        output: lastText,
+      });
       return { ok: true, output: lastText, durationMs: Date.now() - start };
     } catch (err) {
       const msg =
         scrubErrorMessage(err instanceof Error ? err.message : String(err), 4_000)
         || 'Operation failed';
+      emitWorkerEvent(ctx, {
+        type: 'worker.failed',
+        workerId,
+        workerRunId,
+        error: msg,
+      });
       return {
         ok: false,
         output: null,
@@ -376,4 +470,3 @@ export class AgentNode implements ExecutableNode {
     }
   }
 }
-

@@ -354,6 +354,45 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
         }
         onEvent({ type: 'node.progress', nodeId, chunk: c, accumulated: a });
       },
+      onWorkerEvent: (we) => {
+        const workerRunId =
+          typeof we.workerRunId === 'string' && !/[\0\r\n]/.test(we.workerRunId)
+            ? we.workerRunId.trim().slice(0, 200)
+            : 'unknown';
+        const workerId =
+          typeof we.workerId === 'string' && !/[\0\r\n]/.test(we.workerId)
+            ? we.workerId.trim().slice(0, 200) || 'unknown'
+            : 'unknown';
+        if (we.type === 'worker.started') {
+          onEvent({ type: 'worker.started', nodeId, workerId, workerRunId });
+          return;
+        }
+        if (we.type === 'worker.progress') {
+          let chunk = typeof we.chunk === 'string' ? we.chunk : String(we.chunk ?? '');
+          if (chunk.length > MAX_PROGRESS_CHUNK_CHARS) {
+            chunk = chunk.slice(0, MAX_PROGRESS_CHUNK_CHARS);
+          }
+          onEvent({ type: 'worker.progress', nodeId, workerRunId, chunk });
+          return;
+        }
+        if (we.type === 'worker.completed') {
+          let output = we.output;
+          try {
+            const serialized = JSON.stringify(output);
+            if (serialized.length > MAX_OUTPUT_BYTES) {
+              output = { truncated: true, preview: serialized.slice(0, 256) };
+            }
+          } catch {
+            output = { truncated: true, preview: String(output).slice(0, 256) };
+          }
+          onEvent({ type: 'worker.completed', nodeId, workerRunId, output });
+          return;
+        }
+        if (we.type === 'worker.failed') {
+          const error = formatExecutorError(we.error, 'Worker failed');
+          onEvent({ type: 'worker.failed', nodeId, workerRunId, error });
+        }
+      },
       cliSpawn: options.cliSpawn,
       designSystemContent: options.designSystemContent,
     };

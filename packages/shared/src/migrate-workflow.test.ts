@@ -289,6 +289,95 @@ describe('migrateWorkflowV1ToV2', () => {
     expect(workflow.nodes[0]!.config['systemPrompt']).toBe('hello');
     expect(workflow.nodes[0]!.config['maxSteps']).toBe(7);
   });
+
+  it('infers research/general packs from workerId prefixes and keeps prior domainPackIds', () => {
+    const { workflow } = migrateWorkflowV1ToV2({
+      id: 'multi',
+      name: 'Multi',
+      domain: 'coding',
+      domainPackIds: ['research', '  ', `bad${'\n'}pack`, 'custom-ok'],
+      nodes: [
+        {
+          id: 'r',
+          type: 'agent',
+          label: 'R',
+          position: { x: 0, y: 0 },
+          config: { workerId: 'research_web' },
+        },
+        {
+          id: 'g',
+          type: 'agent',
+          label: 'G',
+          position: { x: 1, y: 0 },
+          config: { harnessId: 'general_generalist' },
+        },
+      ],
+      edges: null as unknown as Workflow['edges'],
+      createdAt: '',
+      updatedAt: '',
+    } as Workflow);
+
+    expect(workflow.edges).toEqual([]);
+    expect(workflow.domainPackIds).toEqual(
+      expect.arrayContaining(['coding', 'research', 'general', 'custom-ok']),
+    );
+    expect(workflow.domainPackIds).not.toContain('bad\npack');
+    expect(workflow.nodes[0]!.config['workerId']).toBe('research_web');
+    expect(workflow.nodes[1]!.config['workerId']).toBe('general_generalist');
+    expect(workflow.nodes[1]!.config['harnessId']).toBeUndefined();
+  });
+
+  it('normalizes null/array node config to empty object', () => {
+    const { workflow } = migrateWorkflowV1ToV2(
+      baseV1([
+        {
+          id: 'a',
+          type: 'agent',
+          label: 'A',
+          position: { x: 0, y: 0 },
+          config: null as unknown as Record<string, unknown>,
+        },
+        {
+          id: 'b',
+          type: 'agent',
+          label: 'B',
+          position: { x: 1, y: 0 },
+          config: ['not', 'object'] as unknown as Record<string, unknown>,
+        },
+      ], 'general'),
+    );
+    // bare agent + empty config → default worker
+    expect(workflow.nodes[0]!.config['workerId']).toBe('general_generalist');
+    expect(workflow.nodes[1]!.config['workerId']).toBe('general_generalist');
+  });
+
+  it('is idempotent for already-v2 documents without legacy keys', () => {
+    const input: Workflow = {
+      id: 'v2',
+      name: 'V2',
+      domain: 'finance',
+      schemaVersion: 2,
+      primaryDomain: 'finance',
+      domainPackIds: ['finance'],
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent',
+          label: 'A',
+          position: { x: 0, y: 0 },
+          config: { workerId: 'finance_analyst' },
+        },
+      ],
+      edges: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const { workflow, report } = migrateWorkflowV1ToV2(input);
+    expect(workflow.schemaVersion).toBe(2);
+    expect(workflow.nodes[0]!.config['workerId']).toBe('finance_analyst');
+    // No renames; may still report changed=false when already clean v2
+    expect(report.renamedNodes).toEqual([]);
+  });
 });
 
 describe('needsWorkflowMigration', () => {

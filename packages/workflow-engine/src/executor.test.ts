@@ -816,6 +816,107 @@ describe('executeWorkflow graph failure and skip paths', () => {
     expect(progress!.accumulated.length).toBe(256_000);
   });
 
+  it('emits worker.* SSE around CLI agent runs (ordering)', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-worker-sse',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'agent-1',
+            type: 'agent',
+            label: 'A',
+            position: { x: 1, y: 0 },
+            config: {
+              workerId: 'coding_reviewer',
+              provider: 'cli-claude',
+            },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'agent-1' }],
+      }),
+      settings: {},
+      cliSpawn: async (_id, _prompt, onChunk) => {
+        onChunk?.('hello', 'hello');
+        return { output: 'review ok', exitCode: 0 };
+      },
+      onEvent: (event) => events.push(event),
+    });
+
+    const types = events.map((e) => e.type);
+    expect(types).toContain('run.started');
+    expect(types).toContain('node.started');
+    expect(types).toContain('worker.started');
+    expect(types).toContain('worker.progress');
+    expect(types).toContain('node.progress');
+    expect(types).toContain('worker.completed');
+    expect(types).toContain('node.completed');
+    expect(types).toContain('run.completed');
+
+    // Ordering: node.started before worker.started; worker.completed before node.completed
+    const nodeStarted = types.indexOf('node.started');
+    // node.started for agent-1 (trigger also starts — find last worker.started relative)
+    const workerStarted = types.indexOf('worker.started');
+    const workerCompleted = types.indexOf('worker.completed');
+    const nodeCompleted = types.lastIndexOf('node.completed');
+    expect(workerStarted).toBeGreaterThan(nodeStarted);
+    expect(workerCompleted).toBeGreaterThan(workerStarted);
+    expect(nodeCompleted).toBeGreaterThan(workerCompleted);
+
+    const started = events.find((e) => e.type === 'worker.started') as {
+      nodeId: string;
+      workerId: string;
+      workerRunId: string;
+    };
+    expect(started.nodeId).toBe('agent-1');
+    expect(started.workerId).toBe('coding_reviewer');
+    expect(started.workerRunId.length).toBeGreaterThan(0);
+
+    const progress = events.find((e) => e.type === 'worker.progress') as {
+      chunk: string;
+      nodeId: string;
+    };
+    expect(progress.chunk).toBe('hello');
+    expect(progress.nodeId).toBe('agent-1');
+
+    const completed = events.find((e) => e.type === 'worker.completed') as {
+      output: unknown;
+    };
+    expect(completed.output).toBe('review ok');
+  });
+
+  it('emits worker.failed when CLI agent exits non-zero', async () => {
+    const events: WorkflowSSEEvent[] = [];
+    await executeWorkflow({
+      runId: 'run-worker-fail',
+      workflow: baseWorkflow({
+        nodes: [
+          { id: 'trigger', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} },
+          {
+            id: 'agent-1',
+            type: 'agent',
+            label: 'A',
+            position: { x: 1, y: 0 },
+            config: { provider: 'cli-claude' },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'trigger', target: 'agent-1' }],
+      }),
+      settings: {},
+      cliSpawn: async () => ({ output: 'boom', exitCode: 1 }),
+      onEvent: (event) => events.push(event),
+    });
+    const failed = events.find((e) => e.type === 'worker.failed') as {
+      error: string;
+      nodeId: string;
+    };
+    expect(failed).toBeDefined();
+    expect(failed.nodeId).toBe('agent-1');
+    expect(failed.error).toMatch(/exited with code 1/i);
+    expect(events.some((e) => e.type === 'node.failed')).toBe(true);
+  });
+
   it('rejects control-char node types and resolves agent/message node types', async () => {
     await expect(
       executeWorkflow({

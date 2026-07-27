@@ -34,6 +34,18 @@ export interface NodeContext {
    * before the system prompt.
    */
   designSystemContent?: string;
+  /**
+   * Optional worker lifecycle bridge (Task 5). Executor maps these to SSE
+   * `worker.started|progress|completed|failed` for Run Log nesting.
+   */
+  onWorkerEvent?: (event: {
+    type: 'worker.started' | 'worker.progress' | 'worker.completed' | 'worker.failed';
+    workerId: string;
+    workerRunId: string;
+    chunk?: string;
+    output?: unknown;
+    error?: string;
+  }) => void;
 }
 
 export interface NodeResult {
