@@ -712,11 +712,24 @@ session.post('/:id/agent', async (c) => {
 
         switch (event.type) {
           case 'plan': {
+            const allowedStepTypes = new Set([
+              'plan',
+              'tool_use',
+              'tool_result',
+              'reasoning',
+              'error',
+            ] as const);
             for (const step of event.steps) {
+              // Persist as DB AgentStepType; fall back to 'plan' for unknown labels.
+              const stepType = allowedStepTypes.has(
+                step.type as 'plan' | 'tool_use' | 'tool_result' | 'reasoning' | 'error',
+              )
+                ? (step.type as 'plan' | 'tool_use' | 'tool_result' | 'reasoning' | 'error')
+                : 'plan';
               const row = agentStepsDb.createAgentStep({
                 sessionId,
                 stepIndex: step.index,
-                type: step.type,
+                type: stepType,
                 data: step,
               });
               stepDbIds.set(step.id, row.id);

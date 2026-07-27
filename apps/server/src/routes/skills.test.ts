@@ -200,3 +200,95 @@ describe('skills routes', () => {
     }
   });
 });
+
+describe('upsertSkill edge cases', () => {
+  it('truncates long description and version; defaults blank source', () => {
+    const row = upsertSkill({
+      name: `${SKILL_NAME}_trunc`,
+      description: 'd'.repeat(5_000),
+      source: '   ',
+      path: `/tmp/${SKILL_NAME}_trunc/SKILL.md`,
+      version: 'v'.repeat(100),
+      manifestJson: JSON.stringify({ mode: 'reference' }),
+    });
+    expect(row.name).toBe(`${SKILL_NAME}_trunc`);
+    expect(row.description?.length).toBe(4_000);
+    expect(row.source).toBe('local');
+    expect(row.version?.length).toBe(64);
+  });
+
+  it('rejects blank name and overlong path', () => {
+    expect(() =>
+      upsertSkill({
+        name: '   ',
+        source: 'local',
+        path: '/tmp/x',
+      }),
+    ).toThrow(/name is required|invalid skill name/i);
+
+    expect(() =>
+      upsertSkill({
+        name: `${SKILL_NAME}_longpath`,
+        source: 'local',
+        path: 'p'.repeat(1_001),
+      }),
+    ).toThrow(/invalid skill path/i);
+
+    expect(() =>
+      upsertSkill({
+        name: 'n'.repeat(201),
+        source: 'local',
+        path: '/tmp/x',
+      }),
+    ).toThrow(/invalid skill name/i);
+  });
+
+  it('truncates huge manifest_json', () => {
+    const huge = JSON.stringify({ blob: 'x'.repeat(300_000) });
+    const row = upsertSkill({
+      name: `${SKILL_NAME}_manifest`,
+      source: 'local',
+      path: `/tmp/${SKILL_NAME}_manifest`,
+      manifestJson: huge,
+    });
+    expect(row.manifest_json).toMatch(/truncated/);
+  });
+
+  it('updates existing skill on name conflict', () => {
+    const first = upsertSkill({
+      name: `${SKILL_NAME}_upsert`,
+      source: 'local',
+      path: '/tmp/a',
+      description: 'first',
+    });
+    const second = upsertSkill({
+      name: `${SKILL_NAME}_upsert`,
+      source: 'remote',
+      path: '/tmp/b',
+      description: 'second',
+      version: '2.0.0',
+    });
+    expect(second.name).toBe(first.name);
+    expect(second.description).toBe('second');
+    expect(second.source).toBe('remote');
+    expect(second.path).toBe('/tmp/b');
+    expect(second.version).toBe('2.0.0');
+  });
+
+  it('list tolerates invalid manifest_json', async () => {
+    const id = crypto.randomUUID();
+    getDb()
+      .prepare(
+        `INSERT INTO skill (id, name, description, source, path, version, enabled, manifest_json)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+      )
+      .run(id, `${SKILL_NAME}_badjson`, null, 'local', '/tmp/x', null, '{not-json');
+
+    const res = await skills.request('/');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: Array<{ name: string; category?: string }> };
+    const found = body.data.find((s) => s.name === `${SKILL_NAME}_badjson`);
+    expect(found).toBeTruthy();
+    expect(found!.category).toBeUndefined();
+  });
+});

@@ -4,6 +4,7 @@ export * from './types/api.js';
 export * from './types/skill.js';
 export * from './types/workflow.js';
 export * from './types/memory.js';
+export * from './types/project.js';
 export * from './models.js';
 export * from './messaging.js';
 export * from './deploy.js';

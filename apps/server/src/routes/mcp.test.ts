@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../db/schema.js';
 import { mcp } from './mcp.js';
 
@@ -673,5 +673,259 @@ describe('mcp presets + TradingView CDP', () => {
     expect(body.ok).toBe(true);
     expect(typeof body.data.cdpConnected).toBe('boolean');
     expect(body.data.port).toBe(9222);
+  });
+});
+
+describe('mcp oauth token exchange + refresh success', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('oauth/callback exchanges code for tokens when state is pending', async () => {
+    const start = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: `oauth-srv-${process.pid}`,
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+        scope: 'mcp',
+      }),
+    });
+    expect(start.status).toBe(200);
+    const started = (await start.json()) as { data: { state: string } };
+    const state = started.data.state;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: 'at-ok',
+          refresh_token: 'rt-ok',
+          expires_in: 3600,
+          scope: 'mcp',
+          token_type: 'Bearer',
+        }),
+        text: async () => '',
+      }),
+    );
+
+    const cb = await mcp.request(
+      `/oauth/callback?code=auth-code-1&state=${encodeURIComponent(state)}`,
+    );
+    expect(cb.status).toBe(200);
+    const html = await cb.text();
+    expect(html).toMatch(/Connected successfully/i);
+
+    const status = await mcp.request(`/oauth/oauth-srv-${process.pid}/status`);
+    expect(status.status).toBe(200);
+    const statusBody = (await status.json()) as { data: { connected: boolean } };
+    expect(statusBody.data.connected).toBe(true);
+
+    // refresh with mocked fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: 'at-refreshed',
+          expires_in: 1800,
+        }),
+        text: async () => '',
+      }),
+    );
+    const refresh = await mcp.request(`/oauth/oauth-srv-${process.pid}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+      }),
+    });
+    expect(refresh.status).toBe(200);
+    expect(((await refresh.json()) as { ok: boolean }).ok).toBe(true);
+
+    const del = await mcp.request(`/oauth/oauth-srv-${process.pid}`, { method: 'DELETE' });
+    expect(del.status).toBe(200);
+  });
+
+  it('oauth/callback reports token exchange network failure', async () => {
+    const start = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: `oauth-net-${process.pid}`,
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    const state = ((await start.json()) as { data: { state: string } }).data.state;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new Error('network down')),
+    );
+
+    const cb = await mcp.request(
+      `/oauth/callback?code=c1&state=${encodeURIComponent(state)}`,
+    );
+    expect(cb.status).toBe(502);
+    expect(await cb.text()).toMatch(/Token exchange failed|Network error/i);
+  });
+
+  it('oauth/callback reports non-ok token response', async () => {
+    const start = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: `oauth-bad-${process.pid}`,
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    const state = ((await start.json()) as { data: { state: string } }).data.state;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        text: async () => 'invalid_grant',
+        json: async () => ({}),
+      }),
+    );
+
+    const cb = await mcp.request(
+      `/oauth/callback?code=c1&state=${encodeURIComponent(state)}`,
+    );
+    expect(cb.status).toBe(500);
+    expect(await cb.text()).toMatch(/Token exchange failed|invalid_grant/i);
+  });
+
+  it('oauth/callback rejects missing access_token', async () => {
+    const start = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: `oauth-empty-${process.pid}`,
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    const state = ((await start.json()) as { data: { state: string } }).data.state;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: '' }),
+        text: async () => '',
+      }),
+    );
+
+    const cb = await mcp.request(
+      `/oauth/callback?code=c1&state=${encodeURIComponent(state)}`,
+    );
+    expect(cb.status).toBe(500);
+    expect(await cb.text()).toMatch(/access_token/i);
+  });
+
+  it('oauth refresh returns 502 when token endpoint fails', async () => {
+    // seed token via successful callback first
+    const start = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId: `oauth-ref-fail-${process.pid}`,
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    const state = ((await start.json()) as { data: { state: string } }).data.state;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: 'at',
+          refresh_token: 'rt',
+        }),
+        text: async () => '',
+      }),
+    );
+    await mcp.request(`/oauth/callback?code=c1&state=${encodeURIComponent(state)}`);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({}),
+        text: async () => 'bad',
+      }),
+    );
+    const refresh = await mcp.request(`/oauth/oauth-ref-fail-${process.pid}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+      }),
+    });
+    expect(refresh.status).toBe(502);
+    await mcp.request(`/oauth/oauth-ref-fail-${process.pid}`, { method: 'DELETE' });
+  });
+
+  it('from-preset rejects missing entry file and bad name', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-tv-empty-'));
+    try {
+      const missingEntry = await mcp.request('/from-preset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'tradingview',
+          installPath: dir,
+          name: `tv-empty-${process.pid}`,
+        }),
+      });
+      expect(missingEntry.status).toBe(400);
+      expect(((await missingEntry.json()) as { error: string }).error).toMatch(/Entry not found/i);
+
+      const badName = await mcp.request('/from-preset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'tradingview',
+          installPath: dir,
+          name: 'bad\nname',
+        }),
+      });
+      expect(badName.status).toBe(400);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('from-preset rejects invalid JSON body', async () => {
+    const res = await mcp.request('/from-preset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(res.status).toBe(400);
   });
 });

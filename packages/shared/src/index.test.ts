@@ -6,8 +6,9 @@ import {
   THINKING_BUDGET,
   migrateWorkflowV1ToV2,
   needsWorkflowMigration,
+  normalizeEditContext,
 } from './index.js';
-import type { DomainWorker, DomainPack, PortDef, AgentHarness } from './index.js';
+import type { DomainWorker, DomainPack, PortDef, AgentHarness, DesignProject } from './index.js';
 
 describe('@neos-work/shared barrel exports', () => {
   it('re-exports model catalogs and thinking budgets', () => {
@@ -38,6 +39,18 @@ describe('@neos-work/shared barrel exports', () => {
       isBuiltIn: true,
     };
     // AgentHarness is a deprecated alias of DomainWorker
+    expect(normalizeEditContext({ filePath: 'index.html' })?.mode).toBe('replace-selection');
+    const project: DesignProject = {
+      id: 'p',
+      name: 'n',
+      baseDir: '/tmp/p',
+      entryFile: 'index.html',
+      designSystemId: null,
+      meta: {},
+      createdAt: 't',
+      updatedAt: 't',
+    };
+    expect(project.entryFile).toBe('index.html');
     const harness: AgentHarness = worker;
     expect(harness.id).toBe('general_generalist');
 

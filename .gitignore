@@ -30,3 +30,7 @@ src-tauri/target/
 
 # superpowers
 .superpowers/
+
+# accidental session stream coverage artifacts
+_cov_sess_write_*.txt
+apps/server/_cov_sess_write_*.txt

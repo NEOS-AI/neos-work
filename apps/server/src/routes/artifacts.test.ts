@@ -456,3 +456,106 @@ describe('artifacts routes', () => {
     await artifacts.request(`/${id}`, { method: 'DELETE' });
   });
 });
+
+describe('artifacts refresh filePath reload', () => {
+  it('reloads content from a file under home when filePath set', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const homeFile = path.join(os.homedir(), `.neos-artifact-cov-${process.pid}.html`);
+    fs.writeFileSync(homeFile, '<html>from-disk</html>');
+
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+
+    try {
+      // Create via DB so we can set filePath (route may not accept filePath on create)
+      const { createArtifact } = await import('../db/artifacts.js');
+      const art = createArtifact({
+        workflowId: wf.id,
+        name: 'disk.html',
+        contentType: 'text/html',
+        content: '<html>stale</html>',
+        filePath: homeFile,
+      });
+
+      const refresh = await artifacts.request(`/${art.id}/refresh`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'reload' }),
+      });
+      expect(refresh.status).toBe(200);
+      const body = (await refresh.json()) as {
+        ok: boolean;
+        data: { content?: string };
+        meta?: { mode?: string };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.data.content).toContain('from-disk');
+      expect(body.meta?.mode).toBe('reload');
+
+      // Outside home denied
+      const outside = createArtifact({
+        workflowId: wf.id,
+        name: 'outside.html',
+        contentType: 'text/html',
+        content: 'x',
+        filePath: '/tmp/neos-artifact-outside.html',
+      });
+      fs.writeFileSync('/tmp/neos-artifact-outside.html', 'nope');
+      try {
+        const bad = await artifacts.request(`/${outside.id}/refresh`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'reload' }),
+        });
+        expect(bad.status).toBe(400);
+        expect(((await bad.json()) as { error: string }).error).toMatch(/Invalid file path/i);
+      } finally {
+        try { fs.unlinkSync('/tmp/neos-artifact-outside.html'); } catch { /* ignore */ }
+        await artifacts.request(`/${outside.id}`, { method: 'DELETE' });
+      }
+
+      await artifacts.request(`/${art.id}`, { method: 'DELETE' });
+    } finally {
+      try { fs.unlinkSync(homeFile); } catch { /* ignore */ }
+    }
+  });
+
+  it('create rejects overlong contentType and invalid runId control chars', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const longCt = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'x.html',
+        contentType: 't'.repeat(201),
+        content: '<p>x</p>',
+      }),
+    });
+    expect(longCt.status).toBe(400);
+
+    const badRun = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'x.html',
+        contentType: 'text/html',
+        runId: 'bad\nid',
+        content: '<p>x</p>',
+      }),
+    });
+    expect(badRun.status).toBe(400);
+  });
+});

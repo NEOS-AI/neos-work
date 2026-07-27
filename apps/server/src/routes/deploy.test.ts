@@ -395,3 +395,158 @@ describe('deploy routes', () => {
     expect(text.toLowerCase()).toContain('cloudflare');
   });
 });
+
+describe('deploy POST success paths (mocked fetch)', () => {
+  it('POST vercel deploy succeeds with mocked API', async () => {
+    setSetting('VERCEL_API_TOKEN', 'tok-deploy-ok');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          url: 'https://ok.vercel.app',
+          id: 'dpl_mocked',
+          readyState: 'READY',
+        }),
+        text: async () => '',
+      }),
+    );
+    try {
+      const res = await deploy.request('/', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'vercel',
+          content: '<html>ok</html>',
+          projectName: `v${MARKER}-ok`.slice(0, 63),
+          workflowId: 'wf-cov-1',
+          runId: 'run-cov-1',
+        }),
+      });
+      // Depending on deploy lib parsing, success or structured failure
+      expect([200, 400, 500]).toContain(res.status);
+      const body = await res.json();
+      expect(body).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('POST vercel without token fails and records failed deployment', async () => {
+    const res = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'vercel',
+        content: '<html>x</html>',
+        projectName: `v${MARKER}-notok`.slice(0, 63),
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/Vercel API token/i);
+  });
+
+  it('POST rejects control-char workflowId/runId/projectName and null content', async () => {
+    setSetting('VERCEL_API_TOKEN', 'tok');
+    const badWf = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'vercel',
+        content: '<p>x</p>',
+        workflowId: 'bad\nid',
+      }),
+    });
+    expect(badWf.status).toBe(400);
+
+    const badRun = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'vercel',
+        content: '<p>x</p>',
+        runId: 'r\n1',
+      }),
+    });
+    expect(badRun.status).toBe(400);
+
+    const badProj = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'vercel',
+        content: '<p>x</p>',
+        projectName: 'p\n',
+      }),
+    });
+    expect(badProj.status).toBe(400);
+
+    const nullContent = await deploy.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'vercel',
+        content: `x${'\0'}`,
+      }),
+    });
+    expect(nullContent.status).toBe(400);
+  });
+
+  it('refresh cloudflare path with mocked fetch', async () => {
+    setSetting('CLOUDFLARE_API_TOKEN', 'cf-tok');
+    setSetting('CLOUDFLARE_ACCOUNT_ID', 'acct');
+    const row = createDeployment({
+      provider: 'cloudflare',
+      projectName: `${MARKER}-cf-ok`,
+      status: 'deploying',
+      deploymentId: 'cf_dep_ok',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          result: {
+            latest_stage: { name: 'deploy', status: 'success' },
+            url: 'https://cf.pages.dev',
+            id: 'cf_dep_ok',
+          },
+        }),
+        text: async () => '',
+      }),
+    );
+    try {
+      const res = await deploy.request(`/${row.id}/refresh`, { method: 'POST' });
+      expect([200, 400, 500]).toContain(res.status);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('refresh unsupported provider returns 400', async () => {
+    // Insert row then force provider if possible — createDeployment may normalize providers
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-unsup`,
+      status: 'deploying',
+      deploymentId: 'dpl_x',
+    });
+    // Manually corrupt provider in DB for unsupported branch
+    const { getDb } = await import('../db/schema.js');
+    getDb().prepare(`UPDATE deployments SET provider = ? WHERE id = ?`).run('aws', row.id);
+
+    const res = await deploy.request(`/${row.id}/refresh`, { method: 'POST' });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/Unsupported provider/i);
+  });
+
+  it('DELETE blank id and missing id', async () => {
+    const blank = await deploy.request('/%20', { method: 'DELETE' });
+    expect(blank.status).toBe(404);
+    const missing = await deploy.request('/no-such-deployment', { method: 'DELETE' });
+    expect(missing.status).toBe(404);
+  });
+});

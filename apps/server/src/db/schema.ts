@@ -261,6 +261,61 @@ function initSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_deployments_workflow_id ON deployments(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_created_at ON deployments(created_at);
+
+    -- Design Project tables (v0.5.0 M1 / PLAN_FOR_V0_5_0 Task 1)
+    CREATE TABLE IF NOT EXISTS projects (
+      id                TEXT PRIMARY KEY,
+      name              TEXT NOT NULL,
+      base_dir          TEXT NOT NULL,
+      entry_file        TEXT,
+      design_system_id  TEXT,
+      meta_json         TEXT,
+      created_at        TEXT DEFAULT (datetime('now')),
+      updated_at        TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS project_conversations (
+      id          TEXT PRIMARY KEY,
+      project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      title       TEXT,
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS project_messages (
+      id               TEXT PRIMARY KEY,
+      conversation_id  TEXT NOT NULL REFERENCES project_conversations(id) ON DELETE CASCADE,
+      role             TEXT NOT NULL,
+      content          TEXT NOT NULL,
+      agent_id         TEXT,
+      created_at       TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS file_revisions (
+      id            TEXT PRIMARY KEY,
+      project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      path          TEXT NOT NULL,
+      content_hash  TEXT NOT NULL,
+      content       TEXT,
+      source        TEXT NOT NULL DEFAULT 'user',
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS preview_comments (
+      id          TEXT PRIMARY KEY,
+      project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      file_path   TEXT NOT NULL,
+      selector    TEXT NOT NULL,
+      body        TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_project_conversations_project_id ON project_conversations(project_id);
+    CREATE INDEX IF NOT EXISTS idx_project_messages_conversation_id ON project_messages(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_file_revisions_project_path ON file_revisions(project_id, path);
+    CREATE INDEX IF NOT EXISTS idx_preview_comments_project_id ON preview_comments(project_id);
   `);
 
   // Migrations for older schemas

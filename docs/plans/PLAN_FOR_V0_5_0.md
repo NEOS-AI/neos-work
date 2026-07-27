@@ -80,59 +80,59 @@ v0.5.0 완료 시 아래 **Acceptance Gates**를 모두 통과해야 한다.
 
 #### Part B — Agent Runtime Full (OD §5, §6)
 
-15. **Runtime registry 패키지**: `packages/agent-runtime` (defs / detection / launch / parse / cancel)
-16. **CLI adapter ≥ 12**: Claude, Codex, Gemini, OpenCode, Cursor Agent, Aider, Copilot, Qwen, Kimi, Grok Build, Devin, OpenCode 계열 등 (설치 시 detect, 미설치 graceful skip)
-17. **Stream adapters**: plain text, JSONL, ACP/RPC(지원 CLI), SSE → UI/`neos run`
-18. **Run registry**: queued|running|succeeded|failed|canceled, event buffer, cancel 우선순위, optional `events.jsonl`
-19. **BYOK proxy 경로**: Anthropic/OpenAI/Azure/Google/Ollama stream proxy (외부 agent·CLI가 동일 서버 사용)
+16. **Runtime registry 패키지**: `packages/agent-runtime` (defs / detection / launch / parse / cancel)
+17. **CLI adapter ≥ 12**: Claude, Codex, Gemini, OpenCode, Cursor Agent, Aider, Copilot, Qwen, Kimi, Grok Build, Devin, OpenCode 계열 등 (설치 시 detect, 미설치 graceful skip)
+18. **Stream adapters**: plain text, JSONL, ACP/RPC(지원 CLI), SSE → UI/`neos run`
+19. **Run registry**: queued|running|succeeded|failed|canceled, event buffer, cancel 우선순위, optional `events.jsonl`
+20. **BYOK proxy 경로**: Anthropic/OpenAI/Azure/Google/Ollama stream proxy (외부 agent·CLI가 동일 서버 사용)
 
 #### Part C — Extension Protocols Full (OD §9–§12, §16)
 
-20. **Skill package protocol**: `SKILL.md` + assets/references/examples, shadowing, derived example cards
-21. **Bundled catalogs**: `skills/`, `design-systems/`, `plugins/`, `templates/` in-repo + user override roots
-22. **Design system full**: manifest, tokens, components, provenance fields, Agent/Project 주입
-23. **Plugin full**: atom registry, apply, snapshot, trust/capability metadata, pipeline simulate
-24. **GenUI surfaces**: form / choice / confirmation (+ CLI `neos ui respond`)
-25. **Memory full**: index file, extraction config, SSE change events, prompt injection policy
+21. **Skill package protocol**: `SKILL.md` + assets/references/examples, shadowing, derived example cards
+22. **Bundled catalogs**: `skills/`, `design-systems/`, `plugins/`, `templates/` in-repo + user override roots
+23. **Design system full**: manifest, tokens, components, provenance fields, Agent/Project 주입
+24. **Plugin full**: atom registry, apply, snapshot, trust/capability metadata, pipeline simulate
+25. **GenUI surfaces**: form / choice / confirmation (+ CLI `neos ui respond`)
+26. **Memory full**: index file, extraction config, SSE change events, prompt injection policy
 
 #### Part D — Media · Live Artifact · Deploy (OD §13, §17, §19)
 
-26. **Media multi-provider**: OpenAI, Azure-compatible, Google image, xAI image/video, ImageRouter/custom OpenAI-compatible; video surface
-27. **Media guards**: path, size, MIME allowlist, duration clamp, stub policy (`NEOS_MEDIA_ALLOW_STUBS`)
-28. **Live artifacts**: CRUD, preview, refresh history, tool-token routes
-29. **Deploy parity**: preflight, check-link, config mask, project-scoped history (기존 Vercel/CF 강화)
+27. **Media multi-provider**: OpenAI, Azure-compatible, Google image, xAI image/video, ImageRouter/custom OpenAI-compatible; video surface
+28. **Media guards**: path, size, MIME allowlist, duration clamp, stub policy (`NEOS_MEDIA_ALLOW_STUBS`)
+29. **Live artifacts**: CRUD, preview, refresh history, tool-token routes
+30. **Deploy parity**: preflight, check-link, config mask, project-scoped history (기존 Vercel/CF 강화)
 
 #### Part E — Headless CLI & UI/CLI Parity (OD §20)
 
-30. **`neos` CLI** (`apps/cli` → bin `neos`): daemon launcher + API wrapper
-31. Subcommands: `status`, `daemon`, `project`, `files`, `run`, `media`, `plugin`, `skills`, `design-systems`, `memory`, `mcp`, `automation`, `deploy`, `ui`, `doctor`, `version` (+ `files edit` 보조)
-32. Agent env injection: `NEOS_BIN`, `NEOS_SERVER_URL`, `NEOS_PROJECT_ID`, `NEOS_PROJECT_DIR`, auth token
+31. **`neos` CLI** (`apps/cli` → bin `neos`): daemon launcher + API wrapper
+32. Subcommands: `status`, `daemon`, `project`, `files`, `run`, `media`, `plugin`, `skills`, `design-systems`, `memory`, `mcp`, `automation`, `deploy`, `ui`, `doctor`, `version` (+ `files edit` 보조)
+33. Agent env injection: `NEOS_BIN`, `NEOS_SERVER_URL`, `NEOS_PROJECT_ID`, `NEOS_PROJECT_DIR`, auth token
 
 #### Part F — Web Client · Self-host · Topology (OD §3, §23)
 
-33. **`apps/web`**: Vite+React 공유 UI 패키지 추출 후 브라우저 클라이언트 (desktop과 동일 화면 공유 최대화; Design Editor 포함)
-34. **Docker**: single image 또는 compose (server + optional static web), volume `neos_data`, token env
-35. **Dev orchestration**: `pnpm tools-dev` 수준 스크립트 (server/web/desktop lifecycle) — `tools/dev`
-36. Server static serving: production에서 빌드된 web 제공 옵션
+34. **`apps/web`**: Vite+React 공유 UI 패키지 추출 후 브라우저 클라이언트 (desktop과 동일 화면 공유 최대화; Design Editor 포함)
+35. **Docker**: single image 또는 compose (server + optional static web), volume `neos_data`, token env
+36. **Dev orchestration**: `pnpm tools-dev` 수준 스크립트 (server/web/desktop lifecycle) — `tools/dev`
+37. Server static serving: production에서 빌드된 web 제공 옵션
 
 #### Part G — Security · Observability (OD §22, §24)
 
-37. **SSRF**: URL parse + DNS + private/link-local/metadata block + redirect deny
-38. **Archive/path sandbox** 완성, media tool capability
-39. **Privacy-light telemetry**: opt-in metrics endpoint (prom-style optional); PostHog 강제 아님 — consent gate만 준비
-40. **Connection test** API (provider + local CLI smoke)
+38. **SSRF**: URL parse + DNS + private/link-local/metadata block + redirect deny
+39. **Archive/path sandbox** 완성, media tool capability
+40. **Privacy-light telemetry**: opt-in metrics endpoint (prom-style optional); PostHog 강제 아님 — consent gate만 준비
+41. **Connection test** API (provider + local CLI smoke)
 
 #### Part H — Domain Pack SDK (v0.4 후속)
 
-41. Custom Domain Pack loader (manifest + workers/blocks/tools)
-42. Pack install from local dir / ZIP (marketplace worker-pack는 local only)
+42. Custom Domain Pack loader (manifest + workers/blocks/tools)
+43. Pack install from local dir / ZIP (marketplace worker-pack는 local only)
 
 #### Part I — Quality · Docs · Migration
 
-43. OD fixture e2e / contract tests, migration guide `docs/migration/v0.5.0.md`
-44. README / README.ko: dual product surface (Cowork workflows + Design Projects + **Design Editor loop**)
-45. monorepo `0.5.0`, health banner, User-Agent 동기화
-46. Capability inventory 생성 스크립트 (`pnpm inventory`) — agent/skill/plugin/media 목록 drift 방지
+44. OD fixture e2e / contract tests, migration guide `docs/migration/v0.5.0.md`
+45. README / README.ko: dual product surface (Cowork workflows + Design Projects + **Design Editor loop**)
+46. monorepo `0.5.0`, health banner, User-Agent 동기화
+47. Capability inventory 생성 스크립트 (`pnpm inventory`) — agent/skill/plugin/media 목록 drift 방지
 
 ### 비목표 (v0.5.0에서 하지 않음)
 
