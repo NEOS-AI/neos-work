@@ -671,7 +671,7 @@ GET /api/harnesses → 동일 핸들러, Deprecation: true, Link: </api/workers>
 
 ### Task 10 — Docs, version bump, changelog
 
-- `docs/implementation/v0.4.0.md` (구현 후)
+- `docs/implementation/v0.4/v0.4.0.md` (구현 후)
 - README breaking notes + migration guide `docs/migration/v0.4.0.md`
 - monorepo version `0.4.0`
 - health / banner / MCP UA / web_search UA
