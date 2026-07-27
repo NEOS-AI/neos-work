@@ -226,6 +226,51 @@ describe('mcp routes', () => {
     });
     expect(longName.status).toBe(400);
 
+    const longCmd = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}-longcmd`,
+        transport: 'stdio',
+        command: 'c'.repeat(501),
+      }),
+    });
+    expect(longCmd.status).toBe(400);
+    expect(((await longCmd.json()) as { error: string }).error).toMatch(/command|max length/i);
+
+    const longUrl = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}-longurl`,
+        transport: 'http',
+        url: `https://example.com/${'p'.repeat(2100)}`,
+      }),
+    });
+    expect(longUrl.status).toBe(400);
+
+    const garbageUrl = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}-badurl`,
+        transport: 'http',
+        url: 'not a url at all',
+      }),
+    });
+    expect(garbageUrl.status).toBe(400);
+
+    const leadingUrlCtrl = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}-urlctrl`,
+        transport: 'http',
+        url: '\nhttps://example.com/mcp',
+      }),
+    });
+    expect(leadingUrlCtrl.status).toBe(400);
+
     const missingUrl = await mcp.request('/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -233,6 +278,13 @@ describe('mcp routes', () => {
     });
     expect(missingUrl.status).toBe(400);
     expect(((await missingUrl.json()) as { error: string }).error).toMatch(/url/i);
+
+    // overlong lookup id → 404
+    const overlongId = await mcp.request(`/${'a'.repeat(101)}`, { method: 'DELETE' });
+    expect(overlongId.status).toBe(404);
+
+    const ctrlId = await mcp.request(`/${encodeURIComponent('bad\nid')}`, { method: 'DELETE' });
+    expect(ctrlId.status).toBe(404);
 
     const create = await mcp.request('/', {
       method: 'POST',

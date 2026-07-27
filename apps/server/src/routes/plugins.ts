@@ -8,6 +8,7 @@
 
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
+import { getGlobalAtomRegistry } from '@neos-work/plugin-runtime';
 import { listPlugins, getPlugin, upgradeSkillToPlugin } from '../lib/plugin-store.js';
 import { runPlugin, resumeRun } from '../lib/plugin-runner.js';
 import type { PluginSSEEvent } from '../lib/plugin-runner.js';
@@ -27,6 +28,16 @@ plugins.get('/', async (c) => {
   const list = await listPlugins();
   // Strip skillContent and dir for list view
   return c.json({ ok: true, data: list.map(({ skillContent: _, dir: __, ...p }) => p) });
+});
+
+/** Atom registry catalog (Task 6 foundation). */
+plugins.get('/atoms', (c) => {
+  const reg = getGlobalAtomRegistry();
+  return c.json({
+    ok: true,
+    data: reg.list(),
+    meta: { count: reg.list().length },
+  });
 });
 
 /**

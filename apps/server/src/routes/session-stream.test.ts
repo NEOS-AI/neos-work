@@ -139,8 +139,9 @@ vi.mock('@neos-work/browser-tool', () => {
   };
 });
 
-import { listSessions, deleteSession } from '../db/sessions.js';
+import { listSessions, deleteSession, addMessage } from '../db/sessions.js';
 import { deleteSetting, setSetting } from '../db/settings.js';
+import { getDb } from '../db/schema.js';
 import { session, models } from './session.js';
 
 const TITLE = `_cov_sess_stream_${process.pid}`;
@@ -445,6 +446,71 @@ describe('session chat SSE (mocked LLM)', () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toMatch(/error|upstream failed/);
+  });
+
+  it('loads MCP args (invalid JSON + valid) and structured history before chat', async () => {
+    const id = await createSession();
+    const db = getDb();
+    const mcpIds = [`mcp_bad_${process.pid}`, `mcp_ok_${process.pid}`];
+    db.prepare(
+      `INSERT INTO mcp_server (id, name, transport, command, args, url, enabled)
+       VALUES (?, ?, 'stdio', 'npx', ?, NULL, 1)`,
+    ).run(mcpIds[0], `_cov_mcp_bad_${process.pid}`, '{not-json');
+    db.prepare(
+      `INSERT INTO mcp_server (id, name, transport, command, args, url, enabled)
+       VALUES (?, ?, 'stdio', 'npx', ?, NULL, 1)`,
+    ).run(
+      mcpIds[1],
+      `_cov_mcp_ok_${process.pid}`,
+      JSON.stringify(['-y', 'pkg', '\nbad', '', 'ok']),
+    );
+
+    // structured metadata message (array) + invalid structured JSON fallback
+    addMessage({
+      sessionId: id,
+      role: 'assistant',
+      content: JSON.stringify([{ type: 'text', text: 'prior structured' }]),
+      metadata: { structured: true },
+    });
+    addMessage({
+      sessionId: id,
+      role: 'assistant',
+      content: '{not-json-array',
+      metadata: { structured: true },
+    });
+
+    mockState.setResponses([[{ type: 'text', content: 'after history' }, { type: 'done' }]]);
+    try {
+      const res = await session.request(`/${id}/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'continue' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toMatch(/after history/);
+    } finally {
+      for (const mid of mcpIds) {
+        db.prepare('DELETE FROM mcp_server WHERE id = ?').run(mid);
+      }
+    }
+  });
+
+  it('delete missing session and blank id paths return 404', async () => {
+    const del = await session.request('/00000000-0000-0000-0000-000000000099', {
+      method: 'DELETE',
+    });
+    expect(del.status).toBe(404);
+    const msgs = await session.request('/00000000-0000-0000-0000-000000000099/messages');
+    expect(msgs.status).toBe(404);
+    const chat = await session.request('/00000000-0000-0000-0000-000000000099/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'x' }),
+    });
+    expect(chat.status).toBe(404);
+    const blank = await session.request('/%20', { method: 'DELETE' });
+    expect(blank.status).toBe(404);
   });
 });
 

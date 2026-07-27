@@ -158,4 +158,44 @@ describe('runs live execute (mocked spawn)', () => {
     const body = (await cancel.json()) as { data: { status: string } };
     expect(body.data.status).toBe('canceled');
   });
+
+  it('emits files_changed when project gains files during spawn', async () => {
+    const p = projects.createProject({ name: `${NAME}_fc` });
+    ids.push(p.id);
+    fs.writeFileSync(`${p.baseDir}/index.html`, '<html>old</html>');
+
+    spawnMock.mockImplementation(async () => {
+      fs.writeFileSync(`${p.baseDir}/new-from-cli.html`, '<html>new</html>');
+      return { output: 'created', exitCode: 0 };
+    });
+
+    const create = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        agentId: 'cli-claude',
+        prompt: 'create file',
+        dryRun: false,
+      }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    let status = 'running';
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      const get = await app.request(`/api/runs/${id}`);
+      status = ((await get.json()) as { data: { status: string } }).data.status;
+      if (status !== 'running') break;
+    }
+    expect(status).toBe('succeeded');
+
+    const ev = await app.request(`/api/runs/${id}/events`);
+    const evBody = (await ev.json()) as {
+      data: Array<{ type: string; data?: { paths?: string[] } }>;
+    };
+    const changed = evBody.data.find((e) => e.type === 'run.files_changed');
+    expect(changed).toBeTruthy();
+    expect(changed?.data?.paths?.some((x) => x.includes('new-from-cli'))).toBe(true);
+  });
 });

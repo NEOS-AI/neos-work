@@ -390,6 +390,79 @@ describe('spawnCliAgent', () => {
     child.emit('error', new Error('ENOENT'));
     await expect(promise).rejects.toThrow('ENOENT');
   });
+
+  it('truncates overlong prompts and drops control-char optional fields', async () => {
+    const { CLI_PROMPT_MAX_CHARS } = await import('./cli-agents.js');
+    const child = makeChild();
+    spawnMock.mockReturnValue(child);
+    const longPrompt = 'p'.repeat(CLI_PROMPT_MAX_CHARS + 50);
+    const promise = spawnCliAgent({
+      cliId: 'cli-claude',
+      prompt: longPrompt,
+      workflowId: 'bad\nid',
+      runId: 'r'.repeat(200),
+      serverUrl: 'http://x\n',
+      authToken: 'tok\0',
+    });
+    await waitForSpawn();
+    const args = spawnMock.mock.calls[0]?.[1] as string[];
+    const promptArg = args[args.length - 1] ?? '';
+    expect(promptArg.length).toBeLessThan(longPrompt.length);
+    expect(promptArg).toMatch(/truncated/i);
+    child.emit('exit', 0);
+    await promise;
+  });
+
+  it('rejects cwd that is a file and uses settings binary override when executable', async () => {
+    const fileCwd = path.join(os.tmpdir(), `neos-cli-cwd-file-${process.pid}`);
+    fs.writeFileSync(fileCwd, 'not-a-dir');
+    try {
+      await expect(
+        spawnCliAgent({ cliId: 'cli-claude', prompt: 'x', cwd: fileCwd }),
+      ).rejects.toThrow(/not a directory/i);
+    } finally {
+      try { fs.unlinkSync(fileCwd); } catch { /* ignore */ }
+    }
+
+    const override = path.join(os.tmpdir(), `neos-cli-bin-${process.pid}`);
+    fs.writeFileSync(override, '#!/bin/sh\necho ok\n', { mode: 0o755 });
+    const { getSetting } = await import('../db/settings.js');
+    vi.mocked(getSetting).mockReturnValueOnce(override);
+    const child = makeChild();
+    spawnMock.mockReturnValue(child);
+    try {
+      const promise = spawnCliAgent({ cliId: 'cli-claude', prompt: 'via-override' });
+      await waitForSpawn();
+      expect(spawnMock.mock.calls[0]?.[0]).toBe(override);
+      child.emit('exit', 0);
+      await promise;
+    } finally {
+      vi.mocked(getSetting).mockReturnValue(undefined);
+      try { fs.unlinkSync(override); } catch { /* ignore */ }
+    }
+  });
+
+  it('creates per-run workspace when runId set and cwd omitted', async () => {
+    const child = makeChild();
+    spawnMock.mockReturnValue(child);
+    const runId = `spawn_ws_${process.pid}`;
+    const promise = spawnCliAgent({
+      cliId: 'cli-gemini',
+      prompt: 'workspace cwd',
+      runId,
+    });
+    await waitForSpawn();
+    const opts = spawnMock.mock.calls[0]?.[2] as { cwd?: string };
+    expect(opts.cwd).toContain(path.join('.config', 'neos-work', 'workspaces'));
+    child.emit('exit', 0);
+    await promise;
+    try {
+      fs.rmSync(path.join(os.homedir(), '.config', 'neos-work', 'workspaces', runId), {
+        recursive: true,
+        force: true,
+      });
+    } catch { /* ignore */ }
+  });
 });
 
 
@@ -461,6 +534,11 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     expect(() => ensureCliWorkspace('')).toThrow(/Invalid runId/i);
     expect(() => ensureCliWorkspace('bad\nid')).toThrow(/Invalid runId/i);
     expect(() => ensureCliWorkspace('x'.repeat(101))).toThrow(/Invalid runId/i);
+    expect(() => ensureCliWorkspace(null as unknown as string)).toThrow(/Invalid runId/i);
+    // punctuation becomes underscores and is accepted
+    const punct = ensureCliWorkspace(`!!!_${process.pid}`);
+    expect(path.basename(punct)).toMatch(/_+/);
+    try { fs.rmSync(punct, { recursive: true }); } catch { /* ignore */ }
 
     const dirty = `../evil_${process.pid}`;
     const dir = ensureCliWorkspace(dirty);

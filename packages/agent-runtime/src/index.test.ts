@@ -426,4 +426,18 @@ describe('assembleDesignContextPrompt', () => {
     expect(assembleDesignContextPrompt('x', { designMd: '  ' })).toBe('x');
     expect(assembleDesignContextPrompt('x', { designMd: 'a\0b' })).toBe('x');
   });
+
+  it('truncates overlong designMd and tokensCss', () => {
+    const designMd = 'D'.repeat(40_000);
+    const tokensCss = 'T'.repeat(10_000);
+    const out = assembleDesignContextPrompt('task', {
+      name: 'big-system',
+      designMd,
+      tokensCss,
+    });
+    expect(out).toMatch(/truncated/i);
+    expect(out).toContain('tokens.css');
+    expect(out).toMatch(/tokens truncated/i);
+    expect(out.length).toBeLessThan(designMd.length + tokensCss.length);
+  });
 });

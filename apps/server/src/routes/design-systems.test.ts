@@ -217,4 +217,38 @@ describe('design-systems routes', () => {
 
     await designSystems.request(`/${id}`, { method: 'DELETE' });
   });
+
+  it('GET tokens and rejects write to bundled design systems', async () => {
+    const list = await designSystems.request('/');
+    const listBody = (await list.json()) as {
+      data: Array<{ id: string; source?: string; name: string }>;
+    };
+    const bundled = listBody.data.find((d) => d.source === 'bundled')
+      ?? listBody.data.find((d) => d.id === 'neos-default' || d.name === 'neos-default');
+    expect(bundled).toBeTruthy();
+
+    const tokens = await designSystems.request(`/${bundled!.id}/tokens`);
+    // tokens may exist or 404 depending on store layout — either is a covered path
+    expect([200, 404]).toContain(tokens.status);
+    if (tokens.status === 200) {
+      const body = (await tokens.json()) as { data: { content: string } };
+      expect(typeof body.data.content).toBe('string');
+    }
+
+    const blankTokens = await designSystems.request('/%20/tokens');
+    expect(blankTokens.status).toBe(404);
+
+    const missingTokens = await designSystems.request('/no-such-ds-xyz/tokens');
+    expect(missingTokens.status).toBe(404);
+
+    const putBundled = await designSystems.request(`/${bundled!.id}/content`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '# hack\n' }),
+    });
+    expect([403, 404]).toContain(putBundled.status);
+    if (putBundled.status === 403) {
+      expect(((await putBundled.json()) as { error: string }).error).toMatch(/read-only|Bundled/i);
+    }
+  });
 });

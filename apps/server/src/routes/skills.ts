@@ -191,6 +191,16 @@ skills.get('/', (c) => {
       try { manifest = JSON.parse(r.manifest_json) as Record<string, unknown>; } catch { /* ignore */ }
     }
     const examples = sanitizeExampleCards(manifest?.['examples']);
+    const sanitizeNames = (raw: unknown): string[] | undefined => {
+      if (!Array.isArray(raw)) return undefined;
+      const out: string[] = [];
+      for (const item of raw.slice(0, 100)) {
+        if (typeof item !== 'string' || /[\0\r\n]/.test(item)) continue;
+        const base = packageDirLabel(item) ?? item.trim().split(/[/\\]/).pop();
+        if (base && base.length <= 200) out.push(base);
+      }
+      return out.length > 0 ? out : undefined;
+    };
     return {
       id: r.id,
       name: r.name,
@@ -211,6 +221,8 @@ skills.get('/', (c) => {
           ? (manifest!['examples'] as unknown[]).length
           : undefined),
       examples,
+      assets: sanitizeNames(manifest?.['assets']),
+      references: sanitizeNames(manifest?.['references']),
     };
   });
   return c.json({ ok: true, data });

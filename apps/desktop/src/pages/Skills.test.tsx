@@ -535,4 +535,34 @@ describe('Skills page', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Copy$/i }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('Trybeta'));
   });
+
+  it('opens package detail drawer', async () => {
+    const user = userEvent.setup();
+    listSkills.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'sk-pkg',
+          name: 'Pack Skill',
+          description: 'Package layout skill',
+          category: 'design',
+          enabled: true,
+          featured: false,
+          source: 'bundled',
+          packageDir: 'web-landing',
+          exampleCount: 1,
+          examples: [{ key: 'hero', title: 'hero', path: 'hero.html' }],
+          path: 'SKILL.md',
+          version: '1.0.0',
+          triggers: ['landing'],
+        },
+      ],
+    });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Pack Skill')).toBeInTheDocument());
+    await user.click(screen.getByTestId('skill-details-sk-pkg'));
+    expect(screen.getByTestId('skill-detail-drawer')).toBeInTheDocument();
+    expect(screen.getByText('web-landing')).toBeInTheDocument();
+    expect(screen.getByTestId('skill-detail-drawer').textContent).toMatch(/hero/i);
+  });
 });

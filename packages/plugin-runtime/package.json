@@ -1,5 +1,5 @@
 {
-  "name": "@neos-work/mcp-client",
+  "name": "@neos-work/plugin-runtime",
   "version": "0.5.11",
   "private": true,
   "license": "MIT",
@@ -17,13 +17,15 @@
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint src/"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.15.0",
-    "@neos-work/core": "workspace:*"
+    "@neos-work/shared": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "3.2.4",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   }

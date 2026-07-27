@@ -27,6 +27,7 @@ export function Skills() {
   const [tryPrompt, setTryPrompt] = useState<string | null>(null);
   /** null | 'ok' | 'fail' — try-prompt Copy button feedback */
   const [tryPromptCopyStatus, setTryPromptCopyStatus] = useState<'ok' | 'fail' | null>(null);
+  const [detailSkill, setDetailSkill] = useState<SkillData | null>(null);
 
   const handleEnabledFilter = (value: EnabledFilterPref) => {
     setEnabledFilter(value);
@@ -388,11 +389,185 @@ export function Skills() {
                 onDelete={() => handleDelete(skill.id)}
                 onUpgrade={() => void handleUpgradeToPlugin(skill.id)}
                 onTry={skill.examplePrompt ? () => setTryPrompt(skill.examplePrompt!) : undefined}
+                onDetails={() => setDetailSkill(skill)}
               />
             ))}
           </div>
         )}
       </section>
+
+
+      {/* Package / skill detail drawer */}
+      {detailSkill && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end"
+          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+          data-testid="skill-detail-backdrop"
+          onClick={() => setDetailSkill(null)}
+        >
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="skill-detail-title"
+            data-testid="skill-detail-drawer"
+            className="flex h-full w-full max-w-md flex-col border-l shadow-xl"
+            style={{
+              borderColor: 'var(--border-primary)',
+              backgroundColor: 'var(--bg-secondary)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="flex items-center justify-between border-b px-4 py-3"
+              style={{ borderColor: 'var(--border-primary)' }}
+            >
+              <h3
+                id="skill-detail-title"
+                className="truncate text-sm font-semibold"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {scrubDisplayText(detailSkill.name, { collapseLines: true, maxChars: 120 })
+                  || 'Skill'}
+              </h3>
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-xs"
+                style={{ color: 'var(--text-muted)' }}
+                onClick={() => setDetailSkill(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4 text-xs">
+              {detailSkill.description && (
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  {scrubDisplayText(detailSkill.description, { maxChars: 2_000 })}
+                </p>
+              )}
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                <dt style={{ color: 'var(--text-muted)' }}>Source</dt>
+                <dd style={{ color: 'var(--text-primary)' }}>
+                  {scrubDisplayText(detailSkill.source, { collapseLines: true, maxChars: 40 })
+                    || '—'}
+                </dd>
+                <dt style={{ color: 'var(--text-muted)' }}>Version</dt>
+                <dd style={{ color: 'var(--text-primary)' }}>
+                  {detailSkill.version
+                    ? scrubDisplayText(detailSkill.version, { collapseLines: true, maxChars: 40 })
+                    : '—'}
+                </dd>
+                <dt style={{ color: 'var(--text-muted)' }}>Mode</dt>
+                <dd style={{ color: 'var(--text-primary)' }}>{detailSkill.mode || '—'}</dd>
+                <dt style={{ color: 'var(--text-muted)' }}>Category</dt>
+                <dd style={{ color: 'var(--text-primary)' }}>{detailSkill.category || '—'}</dd>
+                <dt style={{ color: 'var(--text-muted)' }}>Package</dt>
+                <dd className="font-mono break-all" style={{ color: 'var(--text-primary)' }}>
+                  {detailSkill.packageDir
+                    ? scrubDisplayText(detailSkill.packageDir, {
+                        collapseLines: true,
+                        maxChars: 200,
+                      })
+                    : 'flat file'}
+                </dd>
+                <dt style={{ color: 'var(--text-muted)' }}>Path</dt>
+                <dd className="font-mono break-all" style={{ color: 'var(--text-secondary)' }}>
+                  {scrubDisplayText(detailSkill.path, { collapseLines: true, maxChars: 240 })
+                    || '—'}
+                </dd>
+              </dl>
+              {detailSkill.triggers && detailSkill.triggers.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>
+                    Triggers
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {detailSkill.triggers.map((tr) => (
+                      <span
+                        key={tr}
+                        className="rounded px-1.5 py-0.5"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                      >
+                        {scrubDisplayText(tr, { collapseLines: true, maxChars: 80 })}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {detailSkill.examples && detailSkill.examples.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>
+                    Examples ({detailSkill.examples.length})
+                  </div>
+                  <ul className="space-y-1">
+                    {detailSkill.examples.map((ex, i) => (
+                      <li
+                        key={ex.id || ex.key || String(i)}
+                        className="rounded border px-2 py-1.5 font-mono"
+                        style={{
+                          borderColor: 'var(--border-primary)',
+                          backgroundColor: 'var(--bg-primary)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        {scrubDisplayText(ex.title || ex.key || ex.path || 'example', {
+                          collapseLines: true,
+                          maxChars: 120,
+                        })}
+                        {ex.key && (
+                          <span className="ml-2 opacity-60">
+                            {scrubDisplayText(ex.key, { collapseLines: true, maxChars: 60 })}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {detailSkill.assets && detailSkill.assets.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>
+                    Assets
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)' }}>
+                    {detailSkill.assets
+                      .map((a) => scrubDisplayText(a, { collapseLines: true, maxChars: 80 }))
+                      .join(', ')}
+                  </p>
+                </div>
+              )}
+              {detailSkill.references && detailSkill.references.length > 0 && (
+                <div>
+                  <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>
+                    References
+                  </div>
+                  <p style={{ color: 'var(--text-secondary)' }}>
+                    {detailSkill.references
+                      .map((a) => scrubDisplayText(a, { collapseLines: true, maxChars: 80 }))
+                      .join(', ')}
+                  </p>
+                </div>
+              )}
+              {detailSkill.examplePrompt && (
+                <div>
+                  <div className="mb-1 font-medium" style={{ color: 'var(--text-muted)' }}>
+                    Example prompt
+                  </div>
+                  <pre
+                    className="whitespace-pre-wrap rounded border p-2"
+                    style={{
+                      borderColor: 'var(--border-primary)',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {scrubDisplayText(detailSkill.examplePrompt, { maxChars: 4_000 })}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Try prompt modal */}
       {tryPrompt && (
@@ -468,12 +643,14 @@ function SkillCard({
   onDelete,
   onUpgrade,
   onTry,
+  onDetails,
 }: {
   skill: SkillData;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
   onUpgrade?: () => void;
   onTry?: () => void;
+  onDetails?: () => void;
 }) {
   const { t } = useTranslation('common');
   return (
@@ -568,6 +745,17 @@ function SkillCard({
       </div>
 
       <div className="ml-3 flex shrink-0 items-center gap-2">
+        {onDetails && (
+          <button
+            type="button"
+            data-testid={`skill-details-${skill.id}`}
+            onClick={onDetails}
+            className="rounded-lg border px-2 py-0.5 text-[10px] transition-colors"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+          >
+            Details
+          </button>
+        )}
         {onUpgrade && (
           <button
             onClick={onUpgrade}

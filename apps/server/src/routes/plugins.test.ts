@@ -403,4 +403,17 @@ describe('plugins additional coverage', () => {
     // no pending run → 404
     expect(nonObject.status).toBe(404);
   });
+
+  it('lists atom registry catalog', async () => {
+    const res = await plugins.request('/atoms');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: Array<{ id: string }>;
+      meta?: { count: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.length).toBeGreaterThanOrEqual(12);
+    expect(body.data.some((a) => a.id === 'editor.apply_patch')).toBe(true);
+  });
 });

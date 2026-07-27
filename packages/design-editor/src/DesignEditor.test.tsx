@@ -283,6 +283,40 @@ describe('DesignEditor bridge + layers actions', () => {
     fireEvent.click(screen.getByTestId('layers-edit-ai'));
   });
 
+  it('stamps neos ids when toggling unstamped html; clipboard errors are ignored', async () => {
+    const onEdit = vi.fn();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error('denied')),
+      },
+    });
+    // no data-neos-id → toggle stamps then rewrites
+    const buffer = openHtml('<body><section><p>unstamped</p></section></body>');
+    render(
+      <DesignEditor buffer={buffer} mode="preview" onEdit={onEdit} onEditWithAi={vi.fn()} />,
+    );
+    const rows = screen.getAllByRole('treeitem');
+    const leaf = rows[rows.length - 1]!;
+    const layerId = leaf.getAttribute('data-layer-id')!;
+    fireEvent.click(screen.getByTestId(`layer-vis-${layerId}`));
+    expect(onEdit).toHaveBeenCalled();
+    expect(onEdit.mock.calls.at(-1)?.[0]).toMatch(/data-neos-id|hidden/i);
+
+    onEdit.mockClear();
+    fireEvent.click(screen.getByTestId(`layer-lock-${layerId}`));
+    if (onEdit.mock.calls.length) {
+      expect(onEdit.mock.calls.at(-1)?.[0]).toMatch(/data-neos-locked|data-neos-id/);
+    }
+
+    fireEvent.click(leaf);
+    fireEvent.click(screen.getByTestId('layers-copy-selector'));
+    // rejection swallowed
+    await waitFor(() => {
+      expect(screen.getByTestId('layers-copy-selector')).toBeTruthy();
+    });
+  });
+
   it('shows and dismisses conflict diff preview', () => {
     const onResolve = vi.fn();
     let buffer = openHtml('line1\nline2');

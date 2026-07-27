@@ -717,4 +717,35 @@ describe('projects export/import zip', () => {
     expect(body.data.filesImported).toBe(2);
     expect(body.data.project.meta?.importedFrom).toBe('neos-project-zip');
   });
+
+  it('import via multipart form-data file field', async () => {
+    const zip = await zipFromEntries([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          version: 1,
+          format: 'neos-project',
+          exportedAt: new Date().toISOString(),
+          project: {
+            name: `${NAME}_multipart`,
+            entryFile: 'index.html',
+            designSystemId: null,
+          },
+        }),
+      },
+      { name: 'files/index.html', content: '<html>mp</html>' },
+    ]);
+    const form = new FormData();
+    form.append(
+      'file',
+      new File([zip], 'proj.neos-project.zip', { type: 'application/zip' }),
+    );
+    const imp = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      body: form,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as { data: { project: { id: string } } };
+    createdIds.push(body.data.project.id);
+  });
 });
