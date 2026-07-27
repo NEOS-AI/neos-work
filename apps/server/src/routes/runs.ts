@@ -1,16 +1,16 @@
 /**
- * Project / agent run registry API (v0.5 Task 3 foundation).
+ * Project / agent run API (v0.5.4 — live CLI execute + dry-run).
  *
- * POST   /api/runs              — create + optionally start
+ * POST   /api/runs              — create + start (background CLI when agentId set)
  * GET    /api/runs              — list (?projectId=)
  * GET    /api/runs/:id          — get run
  * GET    /api/runs/:id/events   — events (?after=eventId)
+ * GET    /api/runs/:id/events/stream — SSE of new events
  * POST   /api/runs/:id/cancel   — cancel
- *
- * Execution of BYOK/CLI is wired incrementally; create records + cancel work now.
  */
 
 import { Hono } from 'hono';
+import { stream } from 'hono/streaming';
 import {
   assembleEditContextPrompt,
   getDefById,
@@ -20,6 +20,9 @@ import { normalizeEditContext } from '@neos-work/shared';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 import { getProject } from '../db/projects.js';
+import { spawnRegistryAgent } from '../lib/registry-spawn.js';
+import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
+import { listProjectFiles } from '../lib/project-files.js';
 
 const runs = new Hono();
 
@@ -55,6 +58,103 @@ function publicRun(record: {
   };
 }
 
+/**
+ * Background CLI execution for a run. Uses project baseDir as cwd when present.
+ */
+async function executeCliRun(runId: string): Promise<void> {
+  const reg = getGlobalRunRegistry();
+  const run = reg.get(runId);
+  if (!run || !run.agentId) return;
+  if (run.status === 'canceled' || run.status === 'succeeded' || run.status === 'failed') {
+    return;
+  }
+
+  const def = getDefById(run.agentId);
+  if (!def) {
+    reg.setStatus(runId, 'failed', 'Unknown agent');
+    reg.appendEvent(runId, 'run.failed', { error: 'Unknown agent' });
+    return;
+  }
+
+  let cwd: string | undefined;
+  let filesBefore: Set<string> | undefined;
+  if (run.projectId) {
+    const project = getProject(run.projectId);
+    if (project?.baseDir) {
+      cwd = project.baseDir;
+      try {
+        filesBefore = new Set(
+          listProjectFiles(project.baseDir).filter((f) => f.type === 'file').map((f) => f.path),
+        );
+      } catch {
+        filesBefore = undefined;
+      }
+    }
+  }
+
+  const controller = run.abort ?? new AbortController();
+  run.abort = controller;
+
+  try {
+    const result = await spawnRegistryAgent({
+      agentId: run.agentId,
+      prompt: run.prompt ?? '',
+      cwd,
+      signal: controller.signal,
+      runId,
+      projectId: run.projectId ?? undefined,
+      serverUrl: getRuntimeServerUrl(),
+      authToken: getRuntimeAuthToken(),
+      onChunk: (chunk) => {
+        // Re-check cancel
+        const current = reg.get(runId);
+        if (!current || current.status === 'canceled') return;
+        reg.appendEvent(runId, 'run.stdout', { chunk: chunk.slice(0, 16_384) });
+      },
+    });
+
+    const current = reg.get(runId);
+    if (!current || current.status === 'canceled') return;
+
+    // Detect new/changed files under project
+    if (cwd && filesBefore) {
+      try {
+        const after = listProjectFiles(cwd)
+          .filter((f) => f.type === 'file')
+          .map((f) => f.path);
+        const changed = after.filter((p) => !filesBefore!.has(p));
+        if (changed.length > 0) {
+          reg.appendEvent(runId, 'run.files_changed', { paths: changed.slice(0, 200) });
+        }
+      } catch {
+        // ignore listing errors
+      }
+    }
+
+    if (controller.signal.aborted || current.status === 'canceled') {
+      return;
+    }
+
+    if (result.exitCode === 0 || result.exitCode === null) {
+      reg.appendEvent(runId, 'run.succeeded', {
+        exitCode: result.exitCode,
+        outputChars: result.output.length,
+      });
+      reg.setStatus(runId, 'succeeded');
+    } else {
+      const err = `CLI exited with code ${result.exitCode}`;
+      reg.appendEvent(runId, 'run.failed', { error: err, exitCode: result.exitCode });
+      reg.setStatus(runId, 'failed', err);
+    }
+  } catch (err) {
+    const current = reg.get(runId);
+    if (!current || current.status === 'canceled') return;
+    const msg = publicErrorMessage(err, 'Agent run failed');
+    reg.appendEvent(runId, 'run.failed', { error: msg });
+    reg.setStatus(runId, 'failed', msg);
+  }
+}
+
 runs.get('/', (c) => {
   const projectId = safeRouteId(c.req.query('projectId') ?? '') || undefined;
   const reg = getGlobalRunRegistry();
@@ -86,6 +186,13 @@ runs.post('/', async (c) => {
   if (/\0/.test(promptRaw)) {
     return c.json({ ok: false, error: 'Invalid prompt' }, 400);
   }
+  const MAX_PROMPT = 100_000;
+  if (promptRaw.length > MAX_PROMPT) {
+    return c.json({ ok: false, error: `prompt exceeds max length (${MAX_PROMPT})` }, 400);
+  }
+  if (!promptRaw.trim() && !body.editContext) {
+    return c.json({ ok: false, error: 'prompt is required' }, 400);
+  }
 
   const editContext = normalizeEditContext(body.editContext);
   if (body.editContext != null && !editContext) {
@@ -102,7 +209,6 @@ runs.post('/', async (c) => {
     editContext: editContext ?? undefined,
   });
 
-  // Immediate start marker — full spawn/BYOK lands in later slices
   reg.setStatus(run.id, 'running');
   reg.appendEvent(run.id, 'run.started', {
     agentId,
@@ -110,18 +216,23 @@ runs.post('/', async (c) => {
     hasEditContext: !!editContext,
   });
 
-  // Dry-run mode: mark succeeded with assembled prompt length (no process spawn yet)
   const dryRun = body.dryRun === true || body.execute === false;
-  if (dryRun || !agentId) {
+  const shouldExecute = !dryRun && !!agentId;
+
+  if (!shouldExecute) {
     reg.appendEvent(run.id, 'run.progress', {
-      message: dryRun || !agentId
-        ? 'Run recorded (execution deferred — use agentId + execute without dryRun when spawn is enabled)'
-        : undefined,
+      message: dryRun
+        ? 'Dry-run: prompt assembled, CLI not spawned'
+        : 'No agentId: run recorded without execution (set agentId to spawn CLI)',
       promptChars: assembled.length,
     });
     reg.setStatus(run.id, 'succeeded');
-    reg.appendEvent(run.id, 'run.succeeded', { deferred: true });
+    reg.appendEvent(run.id, 'run.succeeded', { deferred: true, dryRun });
+    return c.json({ ok: true, data: publicRun(reg.get(run.id)!) }, 201);
   }
+
+  // Fire-and-forget live CLI spawn (events polled/streamed by client)
+  void executeCliRun(run.id);
 
   return c.json({ ok: true, data: publicRun(reg.get(run.id)!) }, 201);
 });
@@ -144,6 +255,45 @@ runs.get('/:id/events', (c) => {
   return c.json({ ok: true, data: events });
 });
 
+/** Lightweight SSE: poll registry and push new events until terminal. */
+runs.get('/:id/events/stream', (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const reg = getGlobalRunRegistry();
+  if (!reg.get(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  c.header('Content-Type', 'text/event-stream');
+  c.header('Cache-Control', 'no-cache');
+  c.header('Connection', 'keep-alive');
+
+  return stream(c, async (s) => {
+    let after: string | undefined;
+    const started = Date.now();
+    const maxMs = 10 * 60 * 1000;
+
+    while (Date.now() - started < maxMs) {
+      if (c.req.raw.signal.aborted) break;
+      const run = reg.get(id);
+      if (!run) break;
+
+      const batch = reg.eventsAfter(id, after);
+      for (const ev of batch) {
+        after = ev.id;
+        await s.write(`id: ${ev.id}\nevent: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+      }
+
+      if (
+        run.status === 'succeeded'
+        || run.status === 'failed'
+        || run.status === 'canceled'
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  });
+});
+
 runs.post('/:id/cancel', (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -157,4 +307,4 @@ runs.post('/:id/cancel', (c) => {
 });
 
 export default runs;
-export { runs };
+export { runs, executeCliRun };

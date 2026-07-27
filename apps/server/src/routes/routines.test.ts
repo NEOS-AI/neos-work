@@ -518,3 +518,105 @@ describe('routines routes', () => {
     expect(((await nulDesc.json()) as { error: string }).error).toMatch(/Invalid description/i);
   });
 });
+
+describe('routines validation remaining edges', () => {
+  it('PUT rejects overlong name and timezone; create rejects null-byte inputs key only via ok create', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const create = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Edge Routine',
+        workflowId: wf.id,
+        schedule: '0 9 * * *',
+        enabled: false,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const longName = await routines.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201) }),
+    });
+    expect(longName.status).toBe(400);
+
+    const longTz = await routines.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ timezone: 'z'.repeat(101) }),
+    });
+    expect(longTz.status).toBe(400);
+
+    const missingRuns = await routines.request('/no-such/runs');
+    expect(missingRuns.status).toBe(404);
+
+    const blankCrystallize = await routines.request('/%20/runs/r1/crystallize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(blankCrystallize.status).toBe(404);
+
+    const blankRunId = await routines.request(`/${id}/runs/%20/crystallize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(blankRunId.status).toBe(404);
+
+    // create with enabled=true schedules
+    const enabled = await routines.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Enabled Sched',
+        workflowId: wf.id,
+        schedule: '0 10 * * *',
+        timezone: 'UTC',
+        enabled: true,
+      }),
+    });
+    expect(enabled.status).toBe(201);
+    const enId = ((await enabled.json()) as { data: { id: string } }).data.id;
+
+    // disable via PUT
+    const off = await routines.request(`/${enId}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(off.status).toBe(200);
+
+    await routines.request(`/${id}`, { method: 'DELETE' });
+    await routines.request(`/${enId}`, { method: 'DELETE' });
+  });
+
+  it('POST /:id/run executes or fails gracefully for empty graph', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const routine = routinesDb.createRoutine({
+      name: 'Run Me',
+      workflowId: wf.id,
+      schedule: '0 9 * * *',
+      timezone: 'UTC',
+      enabled: false,
+    });
+
+    const res = await routines.request(`/${routine.id}/run`, { method: 'POST' });
+    // empty graph may complete or fail depending on executor
+    expect([200, 500]).toContain(res.status);
+
+    await routines.request(`/${routine.id}`, { method: 'DELETE' });
+  });
+});

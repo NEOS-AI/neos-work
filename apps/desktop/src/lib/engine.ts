@@ -1114,6 +1114,114 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  // --- Project runs (v0.5 agent-runtime) ---
+
+  async listProjectRuns(projectId?: string): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        status: string;
+        agentId?: string | null;
+        projectId?: string | null;
+        prompt?: string;
+        error?: string | null;
+        createdAt: string;
+        eventCount?: number;
+      }>
+    >
+  > {
+    let qs = '';
+    if (projectId != null && projectId !== '') {
+      const seg = this.pathSegment(projectId);
+      if (!seg) return this.invalidIdResponse('project id');
+      qs = `?projectId=${seg}`;
+    }
+    const res = await fetch(`${this.baseUrl}/api/runs${qs}`, { headers: this.getHeaders() });
+    return readApiResponse(res);
+  }
+
+  async createProjectRun(input: {
+    projectId?: string;
+    agentId?: string | null;
+    prompt: string;
+    editContext?: unknown;
+    dryRun?: boolean;
+    execute?: boolean;
+  }): Promise<
+    ApiResponse<{
+      id: string;
+      status: string;
+      agentId?: string | null;
+      projectId?: string | null;
+      prompt?: string;
+      error?: string | null;
+      createdAt: string;
+    }>
+  > {
+    if (typeof input.prompt !== 'string' || /\0/.test(input.prompt)) {
+      return { ok: false, error: 'Invalid prompt' };
+    }
+    const body: Record<string, unknown> = {
+      prompt: input.prompt,
+    };
+    if (input.projectId) body.projectId = input.projectId;
+    if (input.agentId) body.agentId = input.agentId;
+    if (input.editContext != null) body.editContext = input.editContext;
+    if (input.dryRun === true) body.dryRun = true;
+    if (input.execute === false) body.execute = false;
+
+    const res = await fetch(`${this.baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
+  }
+
+  async getProjectRun(runId: string): Promise<
+    ApiResponse<{
+      id: string;
+      status: string;
+      agentId?: string | null;
+      projectId?: string | null;
+      prompt?: string;
+      error?: string | null;
+      eventCount?: number;
+    }>
+  > {
+    const seg = this.pathSegment(runId);
+    if (!seg) return this.invalidIdResponse('run id');
+    const res = await fetch(`${this.baseUrl}/api/runs/${seg}`, { headers: this.getHeaders() });
+    return readApiResponse(res);
+  }
+
+  async listProjectRunEvents(
+    runId: string,
+    after?: string,
+  ): Promise<ApiResponse<Array<{ id: string; type: string; ts: string; data?: unknown }>>> {
+    const seg = this.pathSegment(runId);
+    if (!seg) return this.invalidIdResponse('run id');
+    let qs = '';
+    if (after) {
+      const a = this.pathSegment(after);
+      if (a) qs = `?after=${a}`;
+    }
+    const res = await fetch(`${this.baseUrl}/api/runs/${seg}/events${qs}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async cancelProjectRun(runId: string): Promise<ApiResponse<{ id: string; status: string }>> {
+    const seg = this.pathSegment(runId);
+    if (!seg) return this.invalidIdResponse('run id');
+    const res = await fetch(`${this.baseUrl}/api/runs/${seg}/cancel`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   // --- Design Systems ---
 
   async listDesignSystems(): Promise<ApiResponse<DesignSystem[]>> {

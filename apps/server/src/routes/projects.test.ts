@@ -485,3 +485,41 @@ describe('projects PathSandboxError paths', () => {
     expect([400, 403, 404]).toContain(res.status);
   });
 });
+
+describe('projects create with entryFile and meta', () => {
+  it('accepts entryFile null and meta object on create', async () => {
+    const res = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${NAME}_meta`,
+        entryFile: null,
+        designSystemId: null,
+        meta: { theme: 'light', count: 1 },
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      data: { id: string; entryFile?: string | null; meta?: { theme?: string } };
+    };
+    createdIds.push(body.data.id);
+    expect(body.data.meta?.theme).toBe('light');
+  });
+
+  it('mkdir rejects blank path and missing project', async () => {
+    const project = await createViaApi();
+    const blank = await app.request(`/api/projects/${project.id}/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 42 }),
+    });
+    expect(blank.status).toBe(400);
+
+    const badJson = await app.request(`/api/projects/${project.id}/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+  });
+});

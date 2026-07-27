@@ -1219,3 +1219,128 @@ describe('workflow export design system + import content-type edges', () => {
     );
   });
 });
+
+describe('workflow import.zip artifacts + design systems', () => {
+  it('imports artifacts and design-systems from zip', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const dsDir = `cov_ds_imp_${process.pid}`;
+    const zipBuf: Buffer = await new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      archive.append(
+        JSON.stringify({
+          version: '1',
+          workflow: {
+            name: `${WF_NAME}_zip_ds_art`,
+            description: 'with artifacts',
+            domain: 'coding',
+            nodes: minimalGraph.nodes,
+            edges: minimalGraph.edges,
+          },
+        }),
+        { name: 'workflow.json' },
+      );
+      archive.append('<html><body>art</body></html>', {
+        name: 'artifacts/report.html',
+      });
+      archive.append('# notes', { name: 'artifacts/readme.md' });
+      archive.append('# Design\n\nButtons.\n', {
+        name: `design-systems/${dsDir}/DESIGN.md`,
+      });
+      void archive.finalize();
+    });
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as {
+      ok: boolean;
+      data: { id: string; designSystemId?: string };
+      meta?: { designSystemId?: string };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.id).toBeTruthy();
+    // design system should be bound when import succeeds
+    const dsId = body.meta?.designSystemId ?? body.data.designSystemId;
+    expect(dsId).toBeTruthy();
+
+    // artifacts restored
+    const { listArtifacts } = await import('../db/artifacts.js');
+    const arts = listArtifacts(body.data.id);
+    expect(arts.some((a) => /report|readme|html|md/i.test(a.name))).toBe(true);
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+    if (dsId) {
+      try {
+        const { deleteDesignSystem } = await import('../lib/design-system-store.js');
+        await deleteDesignSystem(dsId);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it('import.zip falls back to Claude Design with preferred nested HTML', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const zipBuf: Buffer = await new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      archive.append('<html><body>nested</body></html>', {
+        name: 'pages/landing.html',
+      });
+      void archive.finalize();
+    });
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as {
+      data: { id: string; name: string };
+      meta?: { importKind?: string };
+    };
+    expect(body.meta?.importKind).toBe('claude-design');
+    expect(body.data.name.length).toBeGreaterThan(0);
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
+
+  it('POST run accepts valid inputs bag', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_runin`, ...minimalGraph }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const res = await workflow.request(`/${id}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputs: { foo: 'bar', n: 1 } }),
+    });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text.length).toBeGreaterThan(0);
+    // run persisted
+    const runs = workflows.listRuns(id, 5);
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+  });
+});

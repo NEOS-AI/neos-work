@@ -102,7 +102,14 @@
       "preview": "Preview",
       "code": "Code",
       "split": "Split"
-    }
+    },
+    "chat": "Chat",
+    "chatInvalid": "Invalid prompt",
+    "chatFailed": "Run failed",
+    "chatAgent": "Agent",
+    "chatDryRun": "Dry run (no agent)",
+    "chatPlaceholder": "Describe changes or ask the agent…",
+    "chatSend": "Send"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

@@ -1,5 +1,5 @@
 /**
- * Design Project workspace (v0.5.2 / PLAN_FOR_V0_5_0 Task 1b).
+ * Design Project workspace (v0.5.4 / PLAN_FOR_V0_5_0 Task 3 chat + runs).
  * Files tree + @neos-work/design-editor (CodeMirror 6 Preview/Code/Split).
  */
 
@@ -35,6 +35,14 @@ export function ProjectWorkspace() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Chat / runs panel
+  const [chatPrompt, setChatPrompt] = useState('');
+  const [chatAgentId, setChatAgentId] = useState('');
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatLog, setChatLog] = useState<string[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const dirty = isDirty(buffer);
   const blocker = useBlocker(dirty);
@@ -167,6 +175,88 @@ export function ProjectWorkspace() {
       setSaving(false);
     }
   }, [client, projectId, buffer, t]);
+
+  const appendLog = useCallback((line: string) => {
+    const safe = scrubDisplayText(line, { collapseLines: true, maxChars: 500 }) || line;
+    setChatLog((prev) => [...prev.slice(-200), safe]);
+  }, []);
+
+  const handleChatSend = useCallback(async () => {
+    if (!client || !projectId) return;
+    if (/[\0]/.test(chatPrompt)) {
+      setChatError(t('project.chatInvalid'));
+      return;
+    }
+    if (!chatPrompt.trim()) return;
+    setChatBusy(true);
+    setChatError(null);
+    try {
+      const editContext =
+        buffer.path
+          ? {
+              filePath: buffer.path,
+              mode: 'patch' as const,
+              snippet: buffer.local.slice(0, 8_000),
+            }
+          : undefined;
+      // dryRun when no agent selected; live CLI when agentId set
+      const res = await client.createProjectRun({
+        projectId,
+        prompt: chatPrompt.trim(),
+        agentId: chatAgentId || undefined,
+        dryRun: !chatAgentId,
+        editContext,
+      });
+      if (!res.ok || !res.data) {
+        setChatError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || t('project.chatFailed'),
+        );
+        return;
+      }
+      setActiveRunId(res.data.id);
+      appendLog(`→ run ${res.data.id.slice(0, 8)}… (${res.data.status})`);
+      setChatPrompt('');
+
+      // Poll events a few times for dry-run / fast CLI failure
+      let after: string | undefined;
+      for (let i = 0; i < 40; i++) {
+        const evRes = await client.listProjectRunEvents(res.data.id, after);
+        if (evRes.ok && evRes.data) {
+          for (const ev of evRes.data) {
+            after = ev.id;
+            const detail =
+              ev.type === 'run.stdout' && ev.data && typeof ev.data === 'object' && 'chunk' in ev.data
+                ? String((ev.data as { chunk: string }).chunk).slice(0, 120)
+                : ev.type === 'run.failed' && ev.data && typeof ev.data === 'object' && 'error' in ev.data
+                  ? String((ev.data as { error: string }).error)
+                  : '';
+            appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
+          }
+        }
+        const st = await client.getProjectRun(res.data.id);
+        if (
+          st.ok
+          && st.data
+          && (st.data.status === 'succeeded' || st.data.status === 'failed' || st.data.status === 'canceled')
+        ) {
+          appendLog(`✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`);
+          // Reload files if CLI may have written
+          if (st.data.status === 'succeeded' && chatAgentId) {
+            const filesRes = await client.listProjectFiles(projectId);
+            if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+          }
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.chatFailed');
+      setChatError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setChatBusy(false);
+    }
+  }, [client, projectId, chatPrompt, chatAgentId, buffer.path, buffer.local, t, appendLog]);
 
   const fileTree = useMemo(() => {
     return [...files].sort((a, b) => {
@@ -328,6 +418,90 @@ export function ProjectWorkspace() {
             }
           />
         </div>
+
+        {/* Chat / AI runs */}
+        <aside
+          className="flex w-64 shrink-0 flex-col border-l"
+          style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+          data-testid="project-chat"
+        >
+          <div
+            className="border-b px-3 py-2 text-[10px] font-semibold uppercase tracking-wide"
+            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}
+          >
+            {t('project.chat')}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+            <select
+              aria-label={t('project.chatAgent')}
+              value={chatAgentId}
+              onChange={(e) => setChatAgentId(e.target.value)}
+              className="w-full rounded border px-2 py-1 text-xs"
+              style={{
+                borderColor: 'var(--border-primary)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <option value="">{t('project.chatDryRun')}</option>
+              <option value="cli-claude">Claude Code</option>
+              <option value="cli-codex">Codex</option>
+              <option value="cli-gemini">Gemini</option>
+              <option value="cli-aider">Aider</option>
+              <option value="cli-opencode">OpenCode</option>
+              <option value="cli-cursor">Cursor Agent</option>
+            </select>
+            <textarea
+              value={chatPrompt}
+              onChange={(e) => setChatPrompt(e.target.value)}
+              placeholder={t('project.chatPlaceholder')}
+              rows={4}
+              className="w-full resize-none rounded border p-2 text-xs"
+              style={{
+                borderColor: 'var(--border-primary)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+              }}
+              aria-label={t('project.chat')}
+            />
+            <button
+              type="button"
+              disabled={chatBusy || !chatPrompt.trim()}
+              onClick={() => void handleChatSend()}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+              style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+            >
+              {chatBusy ? t('common.loading') : t('project.chatSend')}
+            </button>
+            {chatError && (
+              <p className="text-[11px] text-red-400" role="alert">
+                {chatError}
+              </p>
+            )}
+            {activeRunId && (
+              <p className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                run {activeRunId.slice(0, 8)}…
+              </p>
+            )}
+            <div
+              className="min-h-0 flex-1 overflow-auto rounded border p-2 font-mono text-[10px] leading-relaxed"
+              style={{
+                borderColor: 'var(--border-primary)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-secondary)',
+              }}
+              data-testid="project-chat-log"
+            >
+              {chatLog.length === 0 ? (
+                <span style={{ color: 'var(--text-muted)' }}>{t('project.chatEmpty')}</span>
+              ) : (
+                chatLog.map((line, i) => (
+                  <div key={`${i}-${line.slice(0, 12)}`}>{line}</div>
+                ))
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
 
       {blocker.state === 'blocked' && (

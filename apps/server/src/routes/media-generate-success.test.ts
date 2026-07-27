@@ -1,7 +1,25 @@
 /**
- * Success paths for media generate endpoints (mocked OpenAI generator).
+ * Success paths for media generate endpoints (mocked OpenAI generator + settings).
+ * Mocks getSecretSetting so parallel suites cannot race the shared OPENAI_API_KEY row.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const SECRET = `sk-test-media-success-${process.pid}`;
+
+const getSecretSettingMock = vi.hoisted(() =>
+  vi.fn((key: string): string | undefined => {
+    if (key === 'OPENAI_API_KEY') return SECRET;
+    return undefined;
+  }),
+);
+
+vi.mock('../db/settings.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../db/settings.js')>();
+  return {
+    ...actual,
+    getSecretSetting: (key: string) => getSecretSettingMock(key),
+  };
+});
 
 vi.mock('../lib/media-generator.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/media-generator.js')>();
@@ -17,33 +35,27 @@ vi.mock('../lib/media-generator.js', async (importOriginal) => {
   };
 });
 
-import { deleteSetting, setSetting } from '../db/settings.js';
-import { generateAudio, generateImage } from '../lib/media-generator.js';
+import { generateAudio, generateImage, MEDIA_DIR } from '../lib/media-generator.js';
 import media from './media.js';
 
-const SECRET = `sk-test-media-success-${process.pid}`;
-
 beforeEach(() => {
-  try {
-    deleteSetting('OPENAI_API_KEY');
-  } catch {
-    /* ignore */
-  }
-  vi.mocked(generateImage).mockClear();
-  vi.mocked(generateAudio).mockClear();
-});
-
-afterEach(() => {
-  try {
-    deleteSetting('OPENAI_API_KEY');
-  } catch {
-    /* ignore */
-  }
+  getSecretSettingMock.mockImplementation((key: string) => {
+    if (key === 'OPENAI_API_KEY') return SECRET;
+    return undefined;
+  });
+  vi.mocked(generateImage).mockReset();
+  vi.mocked(generateAudio).mockReset();
+  vi.mocked(generateImage).mockResolvedValue({
+    filePath: `${MEDIA_DIR}/mock-image.png`,
+    revisedPrompt: 'a refined cat',
+  });
+  vi.mocked(generateAudio).mockResolvedValue({
+    filePath: `${MEDIA_DIR}/mock-audio.mp3`,
+  });
 });
 
 describe('media generate success paths', () => {
   it('POST /image returns mocked generator result', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
     const res = await media.request('/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -61,7 +73,6 @@ describe('media generate success paths', () => {
   });
 
   it('POST /audio returns mocked generator result', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
     const res = await media.request('/audio', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -75,8 +86,6 @@ describe('media generate success paths', () => {
   });
 
   it('POST /generate image and audio surfaces', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
-
     const img = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -99,7 +108,6 @@ describe('media generate success paths', () => {
   });
 
   it('POST /generate maps image prompt from text field', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
     const res = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -112,7 +120,6 @@ describe('media generate success paths', () => {
   });
 
   it('POST /image returns 500 when generator throws', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
     vi.mocked(generateImage).mockRejectedValueOnce(new Error('upstream down'));
     const res = await media.request('/image', {
       method: 'POST',
@@ -124,7 +131,6 @@ describe('media generate success paths', () => {
   });
 
   it('POST /generate rejects overlong image prompt and null audio text', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
     const long = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -138,5 +144,16 @@ describe('media generate success paths', () => {
       body: JSON.stringify({ surface: 'audio', text: `hi${'\0'}` }),
     });
     expect(nul.status).toBe(400);
+  });
+
+  it('POST /image returns 400 when API key missing', async () => {
+    getSecretSettingMock.mockReturnValue(undefined);
+    const res = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'a cat' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/OpenAI|key|configured/i);
   });
 });

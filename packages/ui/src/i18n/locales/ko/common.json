@@ -102,7 +102,14 @@
       "preview": "미리보기",
       "code": "코드",
       "split": "분할"
-    }
+    },
+    "chat": "채팅",
+    "chatInvalid": "잘못된 프롬프트입니다",
+    "chatFailed": "실행에 실패했습니다",
+    "chatAgent": "에이전트",
+    "chatDryRun": "드라이런 (에이전트 없음)",
+    "chatPlaceholder": "변경 요청이나 질문을 입력하세요…",
+    "chatSend": "보내기"
   },
   "mode": {
     "title": "NEOS Work를 어떻게 실행하시겠습니까?",
