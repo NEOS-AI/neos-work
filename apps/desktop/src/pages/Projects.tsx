@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,6 +23,9 @@ export function Projects() {
   const [importBaseDir, setImportBaseDir] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -121,6 +124,81 @@ export function Projects() {
     }
   };
 
+
+  const handleExportZip = useCallback(
+    async (id: string, name: string) => {
+      if (!client) return;
+      const entityId = safeEntityId(id);
+      if (!entityId) {
+        setZipError(t('project.invalidId'));
+        return;
+      }
+      setZipBusy(true);
+      setZipError(null);
+      try {
+        const res = await client.exportProjectZip(entityId);
+        if (!res.ok) {
+          setZipError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.exportFailed'),
+          );
+          return;
+        }
+        const url = URL.createObjectURL(res.blob);
+        const a = document.createElement('a');
+        const safe =
+          scrubDisplayText(name, { collapseLines: true, maxChars: 60 })
+            ?.replace(/[^a-z0-9_-]+/gi, '_')
+          || entityId.slice(0, 8);
+        a.href = url;
+        a.download = `${safe}.neos-project.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.exportFailed');
+        setZipError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+      } finally {
+        setZipBusy(false);
+      }
+    },
+    [client, t],
+  );
+
+  const handleImportZip = useCallback(
+    async (file: File | null) => {
+      if (!client || !file) return;
+      if (!file.name.toLowerCase().endsWith('.zip') && file.type && !file.type.includes('zip')) {
+        setZipError(t('project.importZipInvalid'));
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        setZipError(t('project.importZipTooLarge'));
+        return;
+      }
+      setZipBusy(true);
+      setZipError(null);
+      try {
+        const res = await client.importProjectZip(file);
+        if (!res.ok || !res.data?.project) {
+          setZipError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.importZipFailed'),
+          );
+          return;
+        }
+        await load();
+        navigate(`/projects/${res.data.project.id}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.importZipFailed');
+        setZipError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+      } finally {
+        setZipBusy(false);
+        if (zipInputRef.current) zipInputRef.current.value = '';
+      }
+    },
+    [client, t, load, navigate],
+  );
+
   const handleDelete = async (id: string, name: string) => {
     if (!client) return;
     const entityId = safeEntityId(id);
@@ -163,14 +241,37 @@ export function Projects() {
             {t('project.subtitle')}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowModal(true)}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ backgroundColor: 'var(--accent, #6366f1)' }}
-        >
-          {t('project.new')}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={zipInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            data-testid="project-zip-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              void handleImportZip(f);
+            }}
+          />
+          <button
+            type="button"
+            disabled={zipBusy}
+            data-testid="project-import-zip"
+            onClick={() => zipInputRef.current?.click()}
+            className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+          >
+            {zipBusy ? t('common.loading') : t('project.importZip')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+            style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+          >
+            {t('project.new')}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -198,6 +299,15 @@ export function Projects() {
           className="rounded-lg border border-red-900/50 bg-red-950/20 px-3 py-2 text-sm text-red-300"
         >
           {pageError}
+        </div>
+      )}
+      {zipError && (
+        <div
+          role="alert"
+          data-testid="project-zip-error"
+          className="rounded-lg border border-red-900/50 bg-red-950/20 px-3 py-2 text-sm text-red-300"
+        >
+          {zipError}
         </div>
       )}
 
@@ -254,7 +364,17 @@ export function Projects() {
                   </time>
                 </p>
               </button>
-              <div className="mt-3 flex justify-end">
+              <div className="mt-3 flex justify-end gap-3">
+                <button
+                  type="button"
+                  data-testid={`project-export-${p.id}`}
+                  disabled={zipBusy}
+                  className="text-xs disabled:opacity-50"
+                  style={{ color: 'var(--text-secondary)' }}
+                  onClick={() => void handleExportZip(p.id, p.name)}
+                >
+                  {t('project.exportZip')}
+                </button>
                 <button
                   type="button"
                   className="text-xs text-red-400 hover:text-red-300"

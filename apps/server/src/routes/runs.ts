@@ -1,5 +1,5 @@
 /**
- * Project / agent run API (v0.5.5 — CLI execute + preview comment inject).
+ * Project / agent run API (v0.5.10 — DS + memory + comment inject, CLI execute).
  *
  * POST   /api/runs              — create + start (background CLI when agentId set)
  * GET    /api/runs              — list (?projectId=)
@@ -30,6 +30,7 @@ import {
 import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { listProjectFiles } from '../lib/project-files.js';
+import { exportMemories } from '../lib/memory-store.js';
 
 const runs = new Hono();
 
@@ -213,9 +214,10 @@ runs.post('/', async (c) => {
 
   let { prompt: assembled } = assembleEditContextPrompt(promptRaw, editContext);
 
-  // Inject project-linked design system + preview comments (Task 5 unify / 1c)
+  // Inject design system + memory + preview comments for project chat (Tasks 5 / 7 / 1c)
   let commentCount = 0;
   let designSystemInjected = false;
+  let memoryInjected = false;
   if (projectId) {
     const project = getProject(projectId);
     if (project?.designSystemId) {
@@ -236,6 +238,21 @@ runs.post('/', async (c) => {
       } catch {
         // non-fatal — continue without design context
       }
+    }
+
+    try {
+      const mem = exportMemories();
+      if (typeof mem === 'string' && mem.trim() && !/\0/.test(mem)) {
+        let block = mem.trim();
+        const MAX_MEM = 32_000;
+        if (block.length > MAX_MEM) {
+          block = block.slice(0, MAX_MEM) + '\n\n…[memory truncated]';
+        }
+        assembled = `${assembled.trim()}\n\n---\n## Agent Memory\n${block}`;
+        memoryInjected = true;
+      }
+    } catch {
+      // non-fatal
     }
 
     const filePath =
@@ -274,6 +291,7 @@ runs.post('/', async (c) => {
     hasEditContext: !!editContext,
     previewComments: commentCount,
     designSystem: designSystemInjected,
+    memory: memoryInjected,
   });
 
   const dryRun = body.dryRun === true || body.execute === false;

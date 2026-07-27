@@ -6,9 +6,17 @@ import { MemoryRouter } from 'react-router-dom';
 const listProjects = vi.fn();
 const createProject = vi.fn();
 const deleteProject = vi.fn();
+const exportProjectZip = vi.fn();
+const importProjectZip = vi.fn();
 const navigate = vi.fn();
 
-const client = { listProjects, createProject, deleteProject };
+const client = {
+  listProjects,
+  createProject,
+  deleteProject,
+  exportProjectZip,
+  importProjectZip,
+};
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({ client }),
@@ -56,6 +64,8 @@ describe('Projects page', () => {
     listProjects.mockReset();
     createProject.mockReset();
     deleteProject.mockReset();
+    exportProjectZip.mockReset();
+    importProjectZip.mockReset();
     navigate.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -114,5 +124,48 @@ describe('Projects page', () => {
     await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
     await user.click(screen.getByText('common.delete'));
     await waitFor(() => expect(deleteProject).toHaveBeenCalledWith('p1'));
+  });
+
+  it('exports project zip via download', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: sample });
+    const blob = new Blob(['PK'], { type: 'application/zip' });
+    exportProjectZip.mockResolvedValue({ ok: true, blob });
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL });
+    const click = vi.fn();
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag);
+      if (tag === 'a') {
+        Object.defineProperty(el, 'click', { value: click });
+      }
+      return el;
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
+    await user.click(screen.getByTestId('project-export-p1'));
+    await waitFor(() => expect(exportProjectZip).toHaveBeenCalledWith('p1'));
+    expect(click).toHaveBeenCalled();
+  });
+
+  it('imports project zip from file input', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    importProjectZip.mockResolvedValue({
+      ok: true,
+      data: { project: { ...sample[0], id: 'imp1', name: 'Imported' }, filesImported: 2 },
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('project-import-zip')).toBeInTheDocument());
+    const input = screen.getByTestId('project-zip-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x50, 0x4b])], 'demo.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+    await waitFor(() => {
+      expect(importProjectZip).toHaveBeenCalled();
+      expect(navigate).toHaveBeenCalledWith('/projects/imp1');
+    });
   });
 });

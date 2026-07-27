@@ -309,6 +309,13 @@ export interface RoutineRun {
   error?: string;
 }
 
+export interface SkillExampleCard {
+  id?: string;
+  key?: string;
+  title?: string;
+  path?: string;
+}
+
 export interface SkillData {
   id: string;
   name: string;
@@ -323,9 +330,13 @@ export interface SkillData {
   featured?: boolean;
   triggers?: string[];
   examplePrompt?: string;
-  /** Package root when skill is dir/SKILL.md layout (v0.5.7). */
+  /** Package root label when skill is dir/SKILL.md layout (v0.5.7). */
   packageDir?: string;
   exampleCount?: number;
+  /** Derived example cards (sanitized basenames). */
+  examples?: SkillExampleCard[];
+  assets?: string[];
+  references?: string[];
 }
 
 export type AgentChunk =
@@ -1044,12 +1055,20 @@ export class EngineClient {
       });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
-        return { ok: false, error: errBody?.error || `HTTP ${res.status}` };
+        const raw = errBody?.error || `HTTP ${res.status}`;
+        return { ok: false, error: scrubApiErrorMessage(raw, 'Export failed') };
       }
       const blob = await res.blob();
+      if (blob.size === 0) return { ok: false, error: 'Empty export' };
       return { ok: true, blob };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Export failed' };
+      return {
+        ok: false,
+        error: scrubApiErrorMessage(
+          err instanceof Error ? err.message : 'Export failed',
+          'Export failed',
+        ),
+      };
     }
   }
 
@@ -1058,10 +1077,14 @@ export class EngineClient {
     zip: Blob | ArrayBuffer,
   ): Promise<ApiResponse<{ project: DesignProject; filesImported: number }>> {
     try {
-      const body = zip instanceof Blob ? zip : new Blob([zip]);
+      const body = zip instanceof Blob ? zip : new Blob([zip], { type: 'application/zip' });
+      // Auth only — do not send application/json Content-Type for binary ZIP body
+      const headers = { ...this.getHeaders() };
+      delete headers['Content-Type'];
+      headers['Content-Type'] = 'application/zip';
       const res = await fetch(`${this.baseUrl}/api/projects/import.zip`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers,
         body,
       });
       return readApiResponse(res);

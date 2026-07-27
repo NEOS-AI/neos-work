@@ -143,6 +143,34 @@ describe('runs routes', () => {
     await deleteDesignSystem(ds!.id);
   });
 
+
+  it('injects enabled memories into project run prompt', async () => {
+    const { createMemory, deleteMemory, listMemories } = await import('../lib/memory-store.js');
+    const mem = createMemory({
+      name: `_run_mem_${process.pid}`,
+      type: 'user',
+      content: 'Prefer indigo accents on CTAs',
+    });
+    // ensure enabled
+    const p = projects.createProject({ name: `${NAME}_mem` });
+    ids.push(p.id);
+
+    const createRes = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        prompt: 'Update button styles',
+        dryRun: true,
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { data: { prompt?: string } };
+    expect(created.data.prompt).toContain('Agent Memory');
+    expect(created.data.prompt).toContain('indigo accents');
+    deleteMemory(mem.id);
+  });
+
   it('rejects unknown agent and bad editContext', async () => {
     const badAgent = await app.request('/api/runs', {
       method: 'POST',

@@ -139,7 +139,13 @@
     "dsEmpty": "Link a design system to preview DESIGN.md here.",
     "dsNoContent": "No DESIGN.md content",
     "dsLoadFailed": "Failed to load design system content",
-    "dsSaveFailed": "Failed to update design system link"
+    "dsSaveFailed": "Failed to update design system link",
+    "exportZip": "Export ZIP",
+    "importZip": "Import ZIP",
+    "exportFailed": "Failed to export project ZIP",
+    "importZipFailed": "Failed to import project ZIP",
+    "importZipInvalid": "Please choose a .zip archive",
+    "importZipTooLarge": "ZIP exceeds 50MB limit"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",
