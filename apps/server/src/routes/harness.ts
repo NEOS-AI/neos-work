@@ -10,12 +10,21 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { listHarnesses, resolveHarness } from '@neos-work/workflow-engine';
-import * as db from '../db/harnesses.js';
+import * as db from '../db/workers.js';
 import { registerHarness } from '@neos-work/workflow-engine';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
 const harness = new Hono();
+
+/** v0.4.x deprecation alias for /api/workers (BC-4). */
+harness.use('*', async (c, next) => {
+  c.header('Deprecation', 'true');
+  c.header('Link', '</api/workers>; rel="successor-version"');
+  c.header('X-Neos-Deprecated', 'Use /api/workers instead of /api/harness');
+  await next();
+});
+
 
 function paramHarnessId(c: { req: { param: (k: string) => string } }): string {
   return safeRouteId(c.req.param('id'));
@@ -129,7 +138,7 @@ harness.post('/', async (c) => {
     typeof body.domain === 'string' && !/[\0\r\n]/.test(body.domain)
       ? body.domain.trim().toLowerCase() || 'general'
       : 'general';
-  const domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+  const domain = (['finance', 'coding', 'research', 'general'] as const).includes(domainRaw as never)
     ? domainRaw
     : 'general';
 
@@ -205,7 +214,7 @@ harness.put('/:id', async (c) => {
     const domainRaw = !/[\0\r\n]/.test(body.domain)
       ? body.domain.trim().toLowerCase() || 'general'
       : 'general';
-    patch.domain = (['finance', 'coding', 'general'] as const).includes(domainRaw as never)
+    patch.domain = (['finance', 'coding', 'research', 'general'] as const).includes(domainRaw as never)
       ? domainRaw
       : 'general';
   }

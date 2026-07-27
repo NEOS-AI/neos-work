@@ -343,7 +343,7 @@ describe('custom harnesses CRUD', () => {
     });
     const db = getDb();
     db.prepare(
-      `UPDATE custom_harness SET allowed_tools_json = ?, constraints_json = ? WHERE id = ?`,
+      `UPDATE workers SET allowed_tools_json = ?, constraints_json = ? WHERE id = ?`,
     ).run('not-json', '[1,2,3]', ID);
     const got = getCustomHarness(ID);
     expect(got?.allowedTools).toEqual([]);

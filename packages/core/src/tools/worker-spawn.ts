@@ -226,7 +226,23 @@ export class CoordinatorSession {
     this.spawnedCount += 1;
 
     const runPromise = (async (): Promise<WorkerRunResult> => {
-      await this.acquireSlot(controller.signal);
+      try {
+        await this.acquireSlot(controller.signal);
+      } catch (err) {
+        // Slot never taken — still resolve (don't reject) so await_workers can surface the error
+        parentSignal?.removeEventListener('abort', onParentAbort);
+        const error =
+          scrubErrorMessage(err instanceof Error ? err.message : String(err), 2_000)
+          || 'Cancelled while waiting for spawn slot';
+        return {
+          ok: false,
+          workerRunId,
+          output: null,
+          error,
+          durationMs: 0,
+          mode: 'solo',
+        };
+      }
       try {
         // Force solo — nested coordinators are forbidden (Q3/Task 6)
         const childWorker: DomainWorker = {

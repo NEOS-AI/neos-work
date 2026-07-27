@@ -412,4 +412,117 @@ describe('spawn_worker / await_workers / list_workers', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(seenGoal).toBe('helloworld');
   });
+
+  it('session.spawn accepts non-string goals directly (safeGoal coerce path)', async () => {
+    let seenGoal = '';
+    const session = makeSession({
+      runChild: async (req) => {
+        seenGoal = req.goal;
+        return {
+          ok: true,
+          workerRunId: req.parent!.workerRunId!,
+          output: 'ok',
+          durationMs: 1,
+          mode: 'solo',
+        };
+      },
+    });
+    // Bypass tool String() coercion — hit safeGoal(typeof !== 'string')
+    const r = await session.spawn({
+      workerId: 'research_web',
+      goal: 99 as unknown as string,
+    });
+    expect(r.success).toBe(true);
+    await new Promise((r2) => setTimeout(r2, 20));
+    expect(seenGoal).toBe('99');
+  });
+
+  it('tool execute catch paths surface scrubbed errors', async () => {
+    const session = makeSession();
+    vi.spyOn(session, 'spawn').mockRejectedValueOnce(new Error('spawn boom'));
+    vi.spyOn(session, 'awaitWorkers').mockRejectedValueOnce(new Error('await boom'));
+    vi.spyOn(session, 'list').mockImplementationOnce(() => {
+      throw new Error('list boom');
+    });
+    const tools = Object.fromEntries(session.createTools().map((t) => [t.name, t]));
+
+    const s = await tools.spawn_worker!.execute({ workerId: 'research_web', goal: 'x' });
+    expect(s.success).toBe(false);
+    expect(String(s.error)).toMatch(/spawn boom/i);
+
+    const a = await tools.await_workers!.execute({ workerRunIds: ['x'] });
+    expect(a.success).toBe(false);
+    expect(String(a.error)).toMatch(/await boom/i);
+
+    const l = await tools.list_workers!.execute({});
+    expect(l.success).toBe(false);
+    expect(String(l.error)).toMatch(/list boom/i);
+  });
+
+  it('cancels queued spawn via parent abort and surfaces error on await', async () => {
+    const parent = new AbortController();
+    const session = makeSession({
+      concurrency: 1,
+      maxSpawnedWorkers: 3,
+      signal: parent.signal,
+      runChild: async (req) => {
+        await new Promise((r) => setTimeout(r, 150));
+        if (req.signal?.aborted) {
+          return {
+            ok: false,
+            workerRunId: req.parent!.workerRunId!,
+            output: null,
+            error: 'aborted',
+            durationMs: 1,
+            mode: 'solo',
+          };
+        }
+        return {
+          ok: true,
+          workerRunId: req.parent!.workerRunId!,
+          output: 'ok',
+          durationMs: 150,
+          mode: 'solo',
+        };
+      },
+    });
+    // Occupy the only concurrency slot
+    const first = await session.spawn({ workerId: 'research_web', goal: 'hold' });
+    expect(first.success).toBe(true);
+    const firstId = (first.output as { workerRunId: string }).workerRunId;
+
+    // Second waits for slot — must resolve (not reject) when aborted mid-queue
+    const secondP = session.spawn({ workerId: 'coding_reviewer', goal: 'queued' });
+    await new Promise((r) => setTimeout(r, 20));
+    parent.abort();
+    session.abortAll();
+
+    const second = await secondP;
+    expect(second.success).toBe(true);
+    const secondId = (second.output as { workerRunId: string }).workerRunId;
+
+    // Drain both child promises via await_workers (no unhandled rejections)
+    const res = await session.awaitWorkers({
+      workerRunIds: [firstId, secondId],
+      timeoutMs: 3_000,
+    });
+    expect(res.success).toBe(true);
+    const results = (
+      res.output as { results: Array<{ workerRunId: string; ok: boolean; error?: string }> }
+    ).results;
+    expect(results).toHaveLength(2);
+    const queued = results.find((r) => r.workerRunId === secondId)!;
+    expect(queued.ok).toBe(false);
+    expect(String(queued.error ?? '')).toMatch(/cancel|slot|abort/i);
+  });
+
+  it('await_workers coerces non-array workerRunIds via tool wrapper', async () => {
+    const session = makeSession();
+    const awaitTool = session.createTools().find((t) => t.name === 'await_workers')!;
+    const res = await awaitTool.execute({
+      workerRunIds: 'not-array' as unknown as string[],
+    });
+    expect(res.success).toBe(false);
+    expect(String(res.error)).toMatch(/workerRunIds is required/i);
+  });
 });

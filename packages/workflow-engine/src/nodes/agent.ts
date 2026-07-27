@@ -320,7 +320,7 @@ export class AgentNode implements ExecutableNode {
           prompt = prompt.slice(0, SYSTEM_PROMPT_MAX_CHARS + CLI_INPUTS_MAX_CHARS);
         }
         const result = await ctx.cliSpawn(
-          provider,
+          provider as 'cli-claude' | 'cli-gemini' | 'cli-codex',
           prompt,
           (chunk, accumulated) => {
             ctx.onProgress?.(chunk, accumulated);
@@ -404,12 +404,34 @@ export class AgentNode implements ExecutableNode {
       if (workerMode === 'coordinator') {
         const allowedRaw = this.nodeConfig?.['allowedWorkerIds'];
         const allowedWorkerIds = Array.isArray(allowedRaw)
-          ? allowedRaw.map((x) => String(x ?? '')).filter((s) => s && !/[\0\r\n]/.test(s))
+          ? allowedRaw
+              .map((x) => (typeof x === 'string' ? x : String(x ?? '')))
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0 && s.length <= 200 && !/[\0\r\n]/.test(s))
           : undefined;
+        // Prefer node override when finite ≥1; else worker constraints; else runtime default
+        const nodeMax = Number(this.nodeConfig?.['maxSpawnedWorkers']);
+        const harnessMax = Number(harness?.constraints?.maxSpawnedWorkers);
         const maxSpawned =
-          Number(harness?.constraints?.maxSpawnedWorkers)
-          || Number(this.nodeConfig?.['maxSpawnedWorkers'])
-          || undefined;
+          Number.isFinite(nodeMax) && nodeMax >= 1
+            ? nodeMax
+            : Number.isFinite(harnessMax) && harnessMax >= 1
+              ? harnessMax
+              : undefined;
+
+        // Sanitize parent ids for child workspace paths (align with buildAgentToolRegistry)
+        const parentRunId =
+          typeof ctx.runId === 'string' && ctx.runId.trim() && !/[\0\r\n]/.test(ctx.runId)
+            ? ctx.runId.trim()
+            : typeof ctx.settings['RUN_ID'] === 'string'
+                && ctx.settings['RUN_ID'].trim()
+                && !/[\0\r\n]/.test(ctx.settings['RUN_ID'])
+              ? ctx.settings['RUN_ID'].trim()
+              : 'agent-node';
+        const parentNodeId =
+          typeof ctx.nodeId === 'string' && ctx.nodeId.trim() && !/[\0\r\n]/.test(ctx.nodeId)
+            ? ctx.nodeId.trim()
+            : 'agent';
 
         const { session, tools: coordTools } = createCoordinatorTools({
           resolveWorker: (id) => packs.resolveWorker(id),
@@ -461,13 +483,13 @@ export class AgentNode implements ExecutableNode {
                 }
               },
               parent: {
-                nodeId: ctx.nodeId,
-                runId: ctx.runId,
+                nodeId: parentNodeId,
+                runId: parentRunId,
                 workerRunId: req.parent?.workerRunId,
               },
             });
           },
-          parent: { nodeId: ctx.nodeId, runId: ctx.runId },
+          parent: { nodeId: parentNodeId, runId: parentRunId },
           settings: ctx.settings,
           signal: ctx.signal,
           allowedWorkerIds,

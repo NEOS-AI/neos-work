@@ -12,6 +12,8 @@ import { skills } from './routes/skills.js';
 import { mcp } from './routes/mcp.js';
 import workflow from './routes/workflow.js';
 import harness from './routes/harness.js';
+import workers from './routes/workers.js';
+import domainPacks from './routes/domain-packs.js';
 import blocks from './routes/blocks.js';
 import templates from './routes/templates.js';
 import memory from './routes/memory.js';
@@ -25,7 +27,8 @@ import media from './routes/media.js';
 import deploy from './routes/deploy.js';
 import pluginsRoute from './routes/plugins.js';
 import { migrateEncryption } from './db/settings.js';
-import { registerCodingBlocks, registerFinanceBlocks } from '@neos-work/workflow-engine';
+import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
+import { listCustomWorkers } from './db/workers.js';
 import { initScheduler } from './lib/routine-scheduler.js';
 import { setRuntimeContext } from './lib/runtime-context.js';
 
@@ -83,7 +86,10 @@ app.route('/api/settings', settings);
 app.route('/api/skills', skills);
 app.route('/api/mcp-servers', mcp);
 app.route('/api/workflow', workflow);
+app.route('/api/workers', workers);
+app.route('/api/domain-packs', domainPacks);
 app.route('/api/harness', harness);
+app.route('/api/harnesses', harness); // v0.4 deprecation alias
 app.route('/api/blocks', blocks);
 app.route('/api/templates', templates);
 app.route('/api/memory', memory);
@@ -101,7 +107,7 @@ app.route('/api/plugins', pluginsRoute);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.3.192',
+    version: '0.3.193',
   });
 });
 
@@ -110,6 +116,10 @@ migrateEncryption();
 
 // Register built-in domain blocks
 registerFinanceBlocks();
+// Hydrate custom workers from SQLite into runtime registry
+for (const w of listCustomWorkers()) {
+  registerWorker(w);
+}
 registerCodingBlocks();
 
 // Initialize automation routine scheduler

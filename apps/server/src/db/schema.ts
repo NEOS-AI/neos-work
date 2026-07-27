@@ -144,6 +144,7 @@ function initSchema(db: Database.Database): void {
       error             TEXT
     );
 
+    -- Legacy name kept for first-boot on older code paths; migrated to workers below (v0.4 Q1)
     CREATE TABLE IF NOT EXISTS custom_harness (
       id                  TEXT PRIMARY KEY,
       name                TEXT NOT NULL,
@@ -152,6 +153,22 @@ function initSchema(db: Database.Database): void {
       system_prompt       TEXT NOT NULL DEFAULT '',
       allowed_tools_json  TEXT NOT NULL DEFAULT '[]',
       constraints_json    TEXT NOT NULL DEFAULT '{}',
+      created_at          TEXT DEFAULT (datetime('now')),
+      updated_at          TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Canonical custom worker table (v0.4.0 / PLAN_FOR_V0_4_0 Task 7)
+    CREATE TABLE IF NOT EXISTS workers (
+      id                  TEXT PRIMARY KEY,
+      name                TEXT NOT NULL,
+      domain              TEXT NOT NULL DEFAULT 'general',
+      description         TEXT NOT NULL DEFAULT '',
+      system_prompt       TEXT NOT NULL DEFAULT '',
+      allowed_tools_json  TEXT NOT NULL DEFAULT '[]',
+      constraints_json    TEXT NOT NULL DEFAULT '{}',
+      permission_profile  TEXT DEFAULT 'full',
+      workspace_json      TEXT,
+      default_mode        TEXT DEFAULT 'solo',
       created_at          TEXT DEFAULT (datetime('now')),
       updated_at          TEXT DEFAULT (datetime('now'))
     );
@@ -265,5 +282,42 @@ function initSchema(db: Database.Database): void {
   const routineCols = (db.prepare("PRAGMA table_info(routine)").all() as Array<{ name: string }>).map((c) => c.name);
   if (!routineCols.includes('timezone')) {
     db.exec("ALTER TABLE routine ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC'");
+  }
+
+  // v0.4.0 — custom_harness → workers rename + DomainWorker columns (Q1 locked)
+  const tableNames = (
+    db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+  ).map((t) => t.name);
+  if (tableNames.includes('custom_harness') && tableNames.includes('workers')) {
+    // Fresh schema created both: copy any legacy rows then drop custom_harness
+    const legacyCount = (
+      db.prepare('SELECT COUNT(*) AS c FROM custom_harness').get() as { c: number }
+    ).c;
+    const workersCount = (db.prepare('SELECT COUNT(*) AS c FROM workers').get() as { c: number }).c;
+    if (legacyCount > 0 && workersCount === 0) {
+      db.exec(`
+        INSERT INTO workers (id, name, domain, description, system_prompt, allowed_tools_json, constraints_json, created_at, updated_at)
+        SELECT id, name, domain, description, system_prompt, allowed_tools_json, constraints_json, created_at, updated_at
+        FROM custom_harness
+      `);
+    }
+    db.exec('DROP TABLE IF EXISTS custom_harness');
+  } else if (tableNames.includes('custom_harness') && !tableNames.includes('workers')) {
+    db.exec('ALTER TABLE custom_harness RENAME TO workers');
+  }
+
+  const workerCols = (
+    db.prepare('PRAGMA table_info(workers)').all() as Array<{ name: string }>
+  ).map((c) => c.name);
+  if (workerCols.length > 0) {
+    if (!workerCols.includes('permission_profile')) {
+      db.exec("ALTER TABLE workers ADD COLUMN permission_profile TEXT DEFAULT 'full'");
+    }
+    if (!workerCols.includes('workspace_json')) {
+      db.exec('ALTER TABLE workers ADD COLUMN workspace_json TEXT');
+    }
+    if (!workerCols.includes('default_mode')) {
+      db.exec("ALTER TABLE workers ADD COLUMN default_mode TEXT DEFAULT 'solo'");
+    }
   }
 }

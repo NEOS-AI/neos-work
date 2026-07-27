@@ -175,6 +175,28 @@ describe('AgentNode coordinator mode', () => {
     expect(result.ok).toBe(true);
     expect(lastCoordinatorDeps).toBeTruthy();
   });
+
+  it('registers abort listener when signal is live and uses listWorkers catalog', async () => {
+    lastCoordinatorDeps = null;
+    const ac = new AbortController();
+    const node = new AgentNode('agent', {
+      workerId: 'general_coordinator',
+      mode: 'coordinator',
+      maxSpawnedWorkers: 2,
+    });
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        signal: ac.signal,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(lastCoordinatorDeps?.listWorkers).toBeTypeOf('function');
+    const listed = lastCoordinatorDeps.listWorkers('research');
+    expect(Array.isArray(listed)).toBe(true);
+    // Fire abort listener (session.abortAll) without throwing
+    ac.abort();
+  });
 });
 
 describe('AgentNode CLI provider', () => {
