@@ -6,6 +6,7 @@ import {
   listPacks,
   listWorkers,
   registerWorker,
+  unregisterWorker,
   resolvePack,
   resolveWorker,
 } from './index.js';
@@ -112,6 +113,31 @@ describe('listWorkers / resolveWorker (packs API)', () => {
     expect(general.map((w) => w.id)).toEqual(
       expect.arrayContaining(['general_generalist', 'general_coordinator']),
     );
+  });
+});
+
+describe('unregisterWorker', () => {
+  it('removes custom workers and refuses built-ins / bad ids', () => {
+    registerWorker({
+      id: 'cov_worker_unreg',
+      name: 'Temp',
+      domain: 'general',
+      description: 'd',
+      systemPrompt: 'prompt',
+      allowedTools: [],
+    });
+    expect(resolveWorker('cov_worker_unreg')).toBeDefined();
+    expect(unregisterWorker('cov_worker_unreg')).toBe(true);
+    expect(resolveWorker('cov_worker_unreg')).toBeUndefined();
+    expect(unregisterWorker('cov_worker_unreg')).toBe(false);
+
+    // Built-in protected
+    expect(unregisterWorker('finance_analyst')).toBe(false);
+    expect(resolveWorker('finance_analyst')).toBeDefined();
+
+    expect(unregisterWorker('')).toBe(false);
+    expect(unregisterWorker('bad\nid')).toBe(false);
+    expect(unregisterWorker(null as unknown as string)).toBe(false);
   });
 });
 

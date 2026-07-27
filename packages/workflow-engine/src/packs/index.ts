@@ -242,6 +242,19 @@ export function registerWorker(worker: DomainWorker): void {
   });
 }
 
+/**
+ * Remove a custom (non-built-in) worker from the runtime registry.
+ * Built-in ids are never removed. Returns true when an entry was deleted.
+ */
+export function unregisterWorker(id: string): boolean {
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return false;
+  const trimmed = id.trim();
+  if (!isSafeId(trimmed)) return false;
+  const existing = workerRegistry.get(trimmed);
+  if (!existing || existing.isBuiltIn === true) return false;
+  return workerRegistry.delete(trimmed);
+}
+
 /** List built-in domain packs (custom packs not supported in v0.4). */
 export function listPacks(): DomainPack[] {
   return BUILT_IN_PACKS.map((p) => ({
@@ -283,3 +296,5 @@ export const resolveHarness = resolveWorker;
 export const listHarnesses = listWorkers;
 /** @deprecated Use {@link registerWorker} */
 export const registerHarness = registerWorker;
+/** @deprecated Use {@link unregisterWorker} */
+export const unregisterHarness = unregisterWorker;

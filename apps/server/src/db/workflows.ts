@@ -18,6 +18,8 @@ interface WorkflowRow {
   name: string;
   description: string | null;
   domain: string;
+  /** Optional JSON array of pack ids (v0.4 Q2). */
+  domain_pack_ids_json: string | null;
   nodes_json: string;
   edges_json: string;
   webhook_secret: string | null;
@@ -60,13 +62,43 @@ function safeParseJsonObject<T extends Record<string, unknown>>(
   }
 }
 
+function parseDomainPackIds(raw: string | null | undefined): string[] | undefined {
+  if (raw == null || raw === '') return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const ids = parsed
+      .map((p) => (typeof p === 'string' && !/[\0\r\n]/.test(p) ? p.trim().toLowerCase() : ''))
+      .filter((p) => p.length > 0 && p.length <= 64)
+      .slice(0, 32);
+    return ids.length > 0 ? ids : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function serializeDomainPackIds(ids: string[] | undefined | null): string | null {
+  if (ids == null) return null;
+  if (!Array.isArray(ids)) return null;
+  const clean = ids
+    .map((p) => (typeof p === 'string' && !/[\0\r\n]/.test(p) ? p.trim().toLowerCase() : ''))
+    .filter((p) => p.length > 0 && p.length <= 64)
+    .slice(0, 32);
+  if (clean.length === 0) return null;
+  // Omit storage when only general (plan: optional omit)
+  if (clean.length === 1 && clean[0] === 'general') return null;
+  return JSON.stringify(clean);
+}
+
 function rowToWorkflow(row: WorkflowRow): Workflow {
   // Always surface schemaVersion 2 + unified agent nodes (PLAN_FOR_V0_4_0 Task 2)
+  const storedPacks = parseDomainPackIds(row.domain_pack_ids_json);
   const { workflow } = migrateWorkflowV1ToV2({
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
     domain: row.domain,
+    domainPackIds: storedPacks,
     nodes: safeParseJsonArray<WorkflowNode>(row.nodes_json),
     edges: safeParseJsonArray<WorkflowEdge>(row.edges_json),
     webhookSecret: row.webhook_secret ?? undefined,
@@ -74,6 +106,15 @@ function rowToWorkflow(row: WorkflowRow): Workflow {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
+  // Prefer persisted domainPackIds when present; migrate may expand from nodes
+  if (storedPacks && storedPacks.length > 0) {
+    const merged = new Set([...(workflow.domainPackIds ?? []), ...storedPacks]);
+    const primary = workflow.primaryDomain ?? workflow.domain;
+    if (primary) merged.add(primary);
+    const list = [...merged];
+    workflow.domainPackIds =
+      list.length === 1 && list[0] === 'general' ? undefined : list;
+  }
   return workflow;
 }
 
@@ -140,6 +181,8 @@ export function createWorkflow(input: {
   name: string;
   description?: string;
   domain: string;
+  /** Optional extra pack ids for editor palette (v0.4 Q2). */
+  domainPackIds?: string[];
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }): Workflow {
@@ -175,6 +218,7 @@ export function createWorkflow(input: {
     name,
     description: description ?? undefined,
     domain,
+    domainPackIds: input.domainPackIds,
     nodes: Array.isArray(input.nodes) ? input.nodes : [],
     edges: Array.isArray(input.edges) ? input.edges : [],
     createdAt: '',
@@ -191,14 +235,18 @@ export function createWorkflow(input: {
   const id = crypto.randomUUID();
   // Q2: DB column remains `domain` (stores primary pack id)
   const primaryDomain = migrated.primaryDomain ?? domain;
+  const packIdsJson = serializeDomainPackIds(
+    input.domainPackIds ?? migrated.domainPackIds,
+  );
   db.prepare(
-    `INSERT INTO workflow (id, name, description, domain, nodes_json, edges_json)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO workflow (id, name, description, domain, domain_pack_ids_json, nodes_json, edges_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     name,
     description,
     primaryDomain,
+    packIdsJson,
     nodesJson,
     edgesJson,
   );
@@ -213,6 +261,7 @@ export function updateWorkflow(
     designSystemId?: string;
     /** Primary pack id (DB column `domain`). */
     domain?: string;
+    domainPackIds?: string[] | null;
     nodes?: WorkflowNode[];
     edges?: WorkflowEdge[];
   },
@@ -265,6 +314,10 @@ export function updateWorkflow(
     input.domain !== undefined
       ? normalizeWorkflowDomain(input.domain)
       : existing.domain;
+  let domainPackIdsJson =
+    input.domainPackIds !== undefined
+      ? serializeDomainPackIds(input.domainPackIds)
+      : existing.domain_pack_ids_json;
   let nodes = existing.nodes_json;
   let edges = existing.edges_json;
   if (input.nodes !== undefined || input.edges !== undefined) {
@@ -279,6 +332,7 @@ export function updateWorkflow(
       name,
       description: description ?? undefined,
       domain,
+      domainPackIds: parseDomainPackIds(domainPackIdsJson),
       nodes: nextNodes,
       edges: nextEdges,
       createdAt: existing.created_at,
@@ -286,15 +340,19 @@ export function updateWorkflow(
     });
     nodes = JSON.stringify(migrated.nodes);
     edges = JSON.stringify(migrated.edges);
+    // If caller did not set domainPackIds, keep migrate-inferred packs when useful
+    if (input.domainPackIds === undefined && migrated.domainPackIds) {
+      domainPackIdsJson = serializeDomainPackIds(migrated.domainPackIds);
+    }
   }
   if (nodes.length + edges.length > WORKFLOW_GRAPH_JSON_MAX_CHARS) {
     return undefined;
   }
 
   db.prepare(
-    `UPDATE workflow SET name = ?, description = ?, domain = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
+    `UPDATE workflow SET name = ?, description = ?, domain = ?, domain_pack_ids_json = ?, design_system_id = ?, nodes_json = ?, edges_json = ?, updated_at = datetime('now')
      WHERE id = ?`,
-  ).run(name, description, domain, designSystemId, nodes, edges, trimmed);
+  ).run(name, description, domain, domainPackIdsJson, designSystemId, nodes, edges, trimmed);
 
   return getWorkflow(trimmed);
 }

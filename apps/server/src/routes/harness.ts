@@ -9,9 +9,13 @@
 
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
-import { listHarnesses, resolveHarness } from '@neos-work/workflow-engine';
+import {
+  listHarnesses,
+  resolveHarness,
+  registerHarness,
+  unregisterHarness,
+} from '@neos-work/workflow-engine';
 import * as db from '../db/workers.js';
-import { registerHarness } from '@neos-work/workflow-engine';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
@@ -249,6 +253,8 @@ harness.delete('/:id', (c) => {
 
   const deleted = db.deleteCustomHarness(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
+  // Sync runtime registry (alias of unregisterWorker)
+  unregisterHarness(id);
 
   return c.json({ ok: true });
 });

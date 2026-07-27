@@ -277,6 +277,10 @@ function initSchema(db: Database.Database): void {
   if (!workflowCols.includes('design_system_id')) {
     db.exec("ALTER TABLE workflow ADD COLUMN design_system_id TEXT");
   }
+  // v0.4.0 Q2 optional — multi-pack editor filter
+  if (!workflowCols.includes('domain_pack_ids_json')) {
+    db.exec('ALTER TABLE workflow ADD COLUMN domain_pack_ids_json TEXT');
+  }
 
   // v0.3.4 — routine timezone (DST via IANA zone for node-cron)
   const routineCols = (db.prepare("PRAGMA table_info(routine)").all() as Array<{ name: string }>).map((c) => c.name);

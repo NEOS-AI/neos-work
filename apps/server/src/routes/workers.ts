@@ -13,6 +13,7 @@ import {
   listWorkers,
   resolveWorker,
   registerWorker,
+  unregisterWorker,
 } from '@neos-work/workflow-engine';
 import type { DomainWorker, ToolPermissionProfile, WorkerMode, WorkspacePolicy } from '@neos-work/shared';
 import * as db from '../db/workers.js';
@@ -280,6 +281,8 @@ workers.delete('/:id', (c) => {
 
   const deleted = db.deleteCustomWorker(id);
   if (!deleted) return c.json({ ok: false, error: 'Not found' }, 404);
+  // Drop from runtime registry so resolve/list no longer surface the custom worker
+  unregisterWorker(id);
   return c.json({ ok: true });
 });
 

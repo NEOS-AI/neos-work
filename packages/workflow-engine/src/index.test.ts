@@ -6,6 +6,8 @@ import {
   listWorkers,
   listPacks,
   resolveWorker,
+  registerWorker,
+  unregisterWorker,
   resolvePack,
   isBuiltInPackId,
   BUILT_IN_PACK_IDS,
@@ -25,6 +27,8 @@ describe('@neos-work/workflow-engine barrel exports', () => {
     expect(typeof listWorkers).toBe('function');
     expect(typeof listPacks).toBe('function');
     expect(typeof resolveWorker).toBe('function');
+    expect(typeof registerWorker).toBe('function');
+    expect(typeof unregisterWorker).toBe('function');
     expect(typeof resolvePack).toBe('function');
     expect(typeof isBuiltInPackId).toBe('function');
     expect(BUILT_IN_PACK_IDS).toEqual(expect.arrayContaining(['finance', 'coding', 'research', 'general']));

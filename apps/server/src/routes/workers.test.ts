@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { resolveWorker, unregisterWorker } from '@neos-work/workflow-engine';
 import { deleteCustomWorker, listCustomWorkers } from '../db/workers.js';
 import workers from './workers.js';
 import harness from './harness.js';
@@ -7,7 +8,10 @@ const NAME = `_cov_worker_route_${process.pid}`;
 
 afterEach(() => {
   for (const w of listCustomWorkers()) {
-    if (w.name === NAME || w.name.startsWith(NAME)) deleteCustomWorker(w.id);
+    if (w.name === NAME || w.name.startsWith(NAME)) {
+      deleteCustomWorker(w.id);
+      unregisterWorker(w.id);
+    }
   }
 });
 
@@ -80,6 +84,10 @@ describe('workers routes', () => {
 
     const del = await workers.request(`/${id}`, { method: 'DELETE' });
     expect(del.status).toBe(200);
+    // Runtime registry must drop the custom worker (not only SQLite)
+    expect(resolveWorker(id)).toBeUndefined();
+    const gone = await workers.request(`/${id}`);
+    expect(gone.status).toBe(404);
 
     const missing = await workers.request('/no-such-worker-xyz');
     expect(missing.status).toBe(404);

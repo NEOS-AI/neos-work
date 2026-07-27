@@ -25,6 +25,7 @@ export {
   resolveWorker,
   listWorkers,
   registerWorker,
+  unregisterWorker,
   listPacks,
   resolvePack,
   isBuiltInPackId,
@@ -33,7 +34,12 @@ export {
 export type { BuiltInPackId } from './packs/index.js';
 
 // Harness registry (deprecated aliases → workers)
-export { resolveHarness, listHarnesses, registerHarness } from './harness/index.js';
+export {
+  resolveHarness,
+  listHarnesses,
+  registerHarness,
+  unregisterHarness,
+} from './harness/index.js';
 
 // Block registry
 export { registerNativeBlock, resolveBlock, getNativeExecutor, listBlocks } from './blocks/registry.js';
