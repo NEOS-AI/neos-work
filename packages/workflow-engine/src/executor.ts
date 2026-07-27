@@ -15,6 +15,14 @@ import { SlackMessageNode } from './nodes/slack.js';
 import { DiscordMessageNode } from './nodes/discord.js';
 import { MediaNode } from './nodes/media.js';
 import { DeployNode } from './nodes/deploy.js';
+import { resolveWorker } from './packs/index.js';
+import { resolveBlock } from './blocks/registry.js';
+import {
+  isStrictPortsEnabled,
+  resolveNodeInputPorts,
+  resolveNodeOutputPorts,
+  validateNodePorts,
+} from './ports.js';
 
 // Maximum serialized size for node_results_json (1 MB)
 const MAX_OUTPUT_BYTES = 1_048_576;
@@ -337,6 +345,59 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     const nodeImpl = resolveNode(node.type, node.config as Record<string, unknown> | undefined);
     // For trigger nodes, inject triggerInputs as the effective inputs
     const effectiveInputs = node.type === 'trigger' ? triggerInputs : inputs;
+
+    // Typed ports MVP (Task 9): resolve declared/inferred ports for this node
+    const cfg = (node.config ?? {}) as Record<string, unknown>;
+    const workerIdRaw = cfg['workerId'] ?? cfg['harnessId'];
+    const workerId =
+      typeof workerIdRaw === 'string' && !/[\0\r\n]/.test(workerIdRaw)
+        ? workerIdRaw.trim()
+        : '';
+    const worker = workerId ? resolveWorker(workerId) : undefined;
+    const blockIdRaw = cfg['blockId'];
+    const blockId =
+      typeof blockIdRaw === 'string' && !/[\0\r\n]/.test(blockIdRaw)
+        ? blockIdRaw.trim()
+        : '';
+    const blockMeta = blockId ? resolveBlock(blockId) : undefined;
+    const portOpts = {
+      workerOutputSchema: worker?.outputSchema,
+      block: blockMeta
+        ? {
+            paramDefs: blockMeta.paramDefs,
+            outputDescription: blockMeta.outputDescription,
+          }
+        : undefined,
+    };
+    const inputPorts = resolveNodeInputPorts(node, portOpts);
+    const outputPorts = resolveNodeOutputPorts(node, portOpts);
+    const strictPorts = isStrictPortsEnabled(settings);
+
+    // Pre-execute input port checks
+    if (inputPorts.length > 0) {
+      const preIssues = validateNodePorts({
+        nodeId,
+        inputPorts,
+        outputPorts: [],
+        inputs: effectiveInputs,
+        hasIncomingEdges: incomingEdges.length > 0,
+        strict: strictPorts,
+      });
+      for (const issue of preIssues) {
+        onEvent({ type: 'node.warning', nodeId, message: issue.message });
+      }
+      if (strictPorts && preIssues.some((i) => i.severity === 'error')) {
+        failedNodes.add(nodeId);
+        const error = formatExecutorError(
+          preIssues.find((i) => i.severity === 'error')?.message ?? 'Port validation failed',
+          'Port validation failed',
+        );
+        onEvent({ type: 'node.started', nodeId, nodeType: node.type });
+        onEvent({ type: 'node.failed', nodeId, error });
+        continue;
+      }
+    }
+
     const ctx: NodeContext = {
       workflowId: workflow.id,
       runId,
@@ -359,12 +420,12 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
           typeof we.workerRunId === 'string' && !/[\0\r\n]/.test(we.workerRunId)
             ? we.workerRunId.trim().slice(0, 200)
             : 'unknown';
-        const workerId =
+        const wId =
           typeof we.workerId === 'string' && !/[\0\r\n]/.test(we.workerId)
             ? we.workerId.trim().slice(0, 200) || 'unknown'
             : 'unknown';
         if (we.type === 'worker.started') {
-          onEvent({ type: 'worker.started', nodeId, workerId, workerRunId });
+          onEvent({ type: 'worker.started', nodeId, workerId: wId, workerRunId });
           return;
         }
         if (we.type === 'worker.progress') {
@@ -410,6 +471,32 @@ export async function executeWorkflow(options: ExecutorOptions): Promise<void> {
     nodeOutputs.set(nodeId, output);
 
     if (result.ok) {
+      // Post-execute output port checks
+      if (outputPorts.length > 0) {
+        const postIssues = validateNodePorts({
+          nodeId,
+          inputPorts: [],
+          outputPorts,
+          inputs: {},
+          hasIncomingEdges: false,
+          output,
+          strict: strictPorts,
+        });
+        for (const issue of postIssues) {
+          onEvent({ type: 'node.warning', nodeId, message: issue.message });
+        }
+        if (strictPorts && postIssues.some((i) => i.severity === 'error')) {
+          failedNodes.add(nodeId);
+          // Do not leave failed-port output available to downstream nodes
+          nodeOutputs.delete(nodeId);
+          const error = formatExecutorError(
+            postIssues.find((i) => i.severity === 'error')?.message ?? 'Port validation failed',
+            'Port validation failed',
+          );
+          onEvent({ type: 'node.failed', nodeId, error });
+          continue;
+        }
+      }
       onEvent({ type: 'node.completed', nodeId, output, durationMs: result.durationMs });
     } else {
       failedNodes.add(nodeId);

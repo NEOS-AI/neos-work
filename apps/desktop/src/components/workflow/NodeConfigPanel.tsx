@@ -264,10 +264,15 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               // Control-char worker/harness id never applied (align with AgentNode / validation)
               if (workerId && /[\0\r\n]/.test(workerId)) return;
               // Write workerId; drop legacy harnessId so migrate/save stay clean
-              patchConfig({
+              const next: Record<string, unknown> = {
                 workerId: workerId || undefined,
                 harnessId: undefined,
-              });
+              };
+              // Selecting the built-in coordinator worker defaults mode when unset
+              if (workerId === 'general_coordinator' && config.mode !== 'solo') {
+                next.mode = 'coordinator';
+              }
+              patchConfig(next);
             }}
           />
           {/* Mode: solo | coordinator (Q3 — no separate NodeType) */}
@@ -281,7 +286,9 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               value={
                 config.mode === 'coordinator' || config.mode === 'solo'
                   ? config.mode
-                  : 'solo'
+                  : config.workerId === 'general_coordinator'
+                    ? 'coordinator'
+                    : 'solo'
               }
               onChange={(e) => {
                 const mode = e.target.value === 'coordinator' ? 'coordinator' : 'solo';
@@ -292,7 +299,8 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               <option value="solo">Solo</option>
               <option value="coordinator">Coordinator</option>
             </select>
-            {config.mode === 'coordinator' && (
+            {(config.mode === 'coordinator'
+              || (config.mode !== 'solo' && config.workerId === 'general_coordinator')) && (
               <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                 Leader spawns workers via spawn_worker / await_workers. CLI providers are disabled.
               </p>

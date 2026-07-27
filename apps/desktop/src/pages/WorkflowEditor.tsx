@@ -111,17 +111,29 @@ export function WorkflowNodeComponent({ data }: {
     isRunning?: boolean;
     isDone?: boolean;
     isFailed?: boolean;
+    /** Typed-ports mismatch / soft warning (Task 9) */
+    isPortWarning?: boolean;
     config?: Record<string, unknown>;
   };
 }) {
   const color = NODE_COLORS[data.nodeType] ?? '#6b7280';
-  const borderColor = data.isFailed ? '#ef4444' : data.isDone ? '#22c55e' : data.isRunning ? '#facc15' : color;
+  const borderColor = data.isFailed
+    ? '#ef4444'
+    : data.isDone
+      ? '#22c55e'
+      : data.isRunning
+        ? '#facc15'
+        : data.isPortWarning
+          ? '#eab308'
+          : color;
   // Scrub hostile / multi-line labels for canvas chrome (fall back to node type)
   const label =
     scrubDisplayText(data.label, { collapseLines: true, maxChars: 80 })
     || scrubDisplayText(data.nodeType, { collapseLines: true, maxChars: 40 })
     || 'node';
-  const isCoordinator = data.config?.mode === 'coordinator';
+  const isCoordinator =
+    data.config?.mode === 'coordinator'
+    || (data.config?.mode !== 'solo' && data.config?.workerId === 'general_coordinator');
   return (
     <div
       className="min-w-[130px] rounded-xl border-2 px-3 py-2 text-center text-xs font-medium text-white shadow-md"
@@ -130,6 +142,11 @@ export function WorkflowNodeComponent({ data }: {
     >
       {isCoordinator && <span className="mr-1 opacity-90" aria-label="coordinator">◎</span>}
       {label}
+      {data.isPortWarning && !data.isFailed && (
+        <span className="ml-1 text-yellow-300" title="Port type warning" aria-label="port warning">
+          ⚠
+        </span>
+      )}
       {data.isRunning && <span className="ml-1 animate-pulse">⏳</span>}
       {data.isDone && <span className="ml-1">✓</span>}
       {data.isFailed && <span className="ml-1">✗</span>}
@@ -647,6 +664,11 @@ export function WorkflowEditor() {
   // Sync run statuses to node styles — preserve existing data (including config)
   useEffect(() => {
     if (!workflow) return;
+    const portWarnIds = new Set(
+      validationIssues
+        .filter((i) => i.code.startsWith('port_') && i.nodeId)
+        .map((i) => i.nodeId as string),
+    );
     setNodes((prev) =>
       prev.map((n) => ({
         ...n,
@@ -655,10 +677,11 @@ export function WorkflowEditor() {
           isRunning: runStatuses[n.id] === 'running',
           isDone: runStatuses[n.id] === 'completed',
           isFailed: runStatuses[n.id] === 'failed',
+          isPortWarning: portWarnIds.has(n.id),
         },
       })),
     );
-  }, [runStatuses, workflow, setNodes]);
+  }, [runStatuses, workflow, setNodes, validationIssues]);
 
   if (!workflow) {
     return (

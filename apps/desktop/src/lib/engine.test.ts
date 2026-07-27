@@ -858,8 +858,32 @@ describe('EngineClient', () => {
     await client.listBlocks();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/block/);
 
+    // listHarnesses prefers /api/workers (v0.4); falls back to /api/harness only on failure
     await client.listHarnesses();
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/harness/);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers/);
+
+    fetchMock.mockClear();
+    await client.listWorkers('  Research  ');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/workers?domain=research');
+
+    fetchMock.mockClear();
+    await client.listWorkers(`bad${'\n'}domain`);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers$/);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).not.toContain('domain=');
+
+    fetchMock.mockClear();
+    await client.listDomainPacks();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/domain-packs$/);
+
+    // When workers API fails, listHarnesses falls back to harness alias
+    fetchMock.mockClear();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'gone' }, { status: 404 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listHarnesses();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/harness$/);
+
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
 
     await client.getTemplates();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/template/);

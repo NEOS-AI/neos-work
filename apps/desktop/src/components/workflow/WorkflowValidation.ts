@@ -116,6 +116,57 @@ function isBlank(value: unknown): boolean {
   return false;
 }
 
+/** PortDef subset for editor-side typed-ports warnings (Task 9). */
+interface EditorPortDef {
+  key: string;
+  schemaType?: string;
+}
+
+function readPortDefs(raw: unknown): EditorPortDef[] {
+  if (!Array.isArray(raw)) return [];
+  const out: EditorPortDef[] = [];
+  for (const item of raw.slice(0, 50)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const keyRaw = (item as { key?: unknown }).key;
+    if (typeof keyRaw !== 'string' || /[\0\r\n]/.test(keyRaw)) continue;
+    const key = keyRaw.trim();
+    if (!key) continue;
+    const schema = (item as { schema?: unknown }).schema;
+    let schemaType: string | undefined;
+    if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
+      const t = (schema as { type?: unknown }).type;
+      if (typeof t === 'string' && t.trim() && !/[\0\r\n]/.test(t)) {
+        schemaType = t.trim().toLowerCase();
+      }
+    }
+    out.push({ key, schemaType });
+  }
+  return out;
+}
+
+function portTypesCompatible(a?: string, b?: string): boolean {
+  if (!a || !b || a === 'any' || b === 'any') return true;
+  if (a === b) return true;
+  if ((a === 'number' || a === 'integer') && (b === 'number' || b === 'integer')) return true;
+  return false;
+}
+
+/** Best-effort edge port mismatch message, or null if ok / unknown. */
+function edgePortMismatch(
+  sourcePorts: EditorPortDef[],
+  targetPorts: EditorPortDef[],
+): string | null {
+  if (sourcePorts.length === 0 || targetPorts.length === 0) return null;
+  for (const tp of targetPorts) {
+    const sp = sourcePorts.find((s) => s.key === tp.key) ?? sourcePorts[0];
+    if (!sp) continue;
+    if (!portTypesCompatible(sp.schemaType, tp.schemaType)) {
+      return `Port type mismatch: "${sp.key}" (${sp.schemaType}) → "${tp.key}" (${tp.schemaType})`;
+    }
+  }
+  return null;
+}
+
 /** True when edge targets the node (trimmed id compare). */
 function edgeTargetsNode(edge: { target: string }, nodeId: string): boolean {
   const nid = endpoint(nodeId);
@@ -668,6 +719,36 @@ export function validateWorkflowDraft(input: {
         });
       }
       seenEdgeIds.add(edgeId);
+    }
+  }
+
+  // Typed ports MVP (Task 9) — edge type mismatch yellow badges (best-effort)
+  {
+    const nodeById = new Map<string, DraftNode>();
+    for (const n of input.nodes) {
+      const id = endpoint(n.id);
+      if (id) nodeById.set(id, n);
+    }
+    for (const edge of input.edges) {
+      const source = endpoint(edge.source);
+      const target = endpoint(edge.target);
+      if (!source || !target) continue;
+      const sn = nodeById.get(source);
+      const tn = nodeById.get(target);
+      if (!sn || !tn) continue;
+      const outPorts = readPortDefs(sn.config?.outputPorts);
+      const inPorts = readPortDefs(tn.config?.inputPorts);
+      if (outPorts.length === 0 || inPorts.length === 0) continue;
+      const mismatch = edgePortMismatch(outPorts, inPorts);
+      if (mismatch) {
+        issues.push({
+          code: 'port_type_mismatch',
+          severity: 'warning',
+          nodeId: tn.id,
+          edgeId: edge.id,
+          message: mismatch,
+        });
+      }
     }
   }
 

@@ -1854,4 +1854,41 @@ describe('validateWorkflowDraft agent CLI and deploy content', () => {
   });
 });
 
+describe('typed ports editor warnings', () => {
+  it('flags edge port type mismatch as warning', () => {
+    const issues = validateWorkflowDraft({
+      nodes: [
+        {
+          id: 'a',
+          type: 'agent',
+          label: 'A',
+          config: {
+            workerId: 'general_generalist',
+            llmModel: 'm',
+            outputPorts: [{ key: 'result', schema: { type: 'string' } }],
+          },
+        },
+        {
+          id: 'b',
+          type: 'agent',
+          label: 'B',
+          config: {
+            workerId: 'general_generalist',
+            llmModel: 'm',
+            inputPorts: [{ key: 'in', schema: { type: 'number' } }],
+          },
+        },
+        { id: 'trigger', type: 'trigger', label: 'T', config: {} },
+        { id: 'output', type: 'output', label: 'O', config: {} },
+      ],
+      edges: [
+        { id: 'e0', source: 'trigger', target: 'a' },
+        { id: 'e1', source: 'a', target: 'b' },
+        { id: 'e2', source: 'b', target: 'output' },
+      ],
+      blocks: [],
+    });
+    expect(issues.some((i) => i.code === 'port_type_mismatch')).toBe(true);
+  });
+});
 

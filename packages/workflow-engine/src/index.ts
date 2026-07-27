@@ -7,6 +7,19 @@ export type { ExecutorOptions } from './executor.js';
 export { topologicalSort } from './graph.js';
 export type { ExecutableNode, NodeContext, NodeResult, NodeType } from './types.js';
 
+// Typed ports MVP (Task 9)
+export {
+  parsePortDefs,
+  portsFromOutputSchema,
+  resolveNodeInputPorts,
+  resolveNodeOutputPorts,
+  checkEdgePortMismatch,
+  validateNodePorts,
+  isStrictPortsEnabled,
+  typesCompatible,
+} from './ports.js';
+export type { PortIssue, PortCheckSeverity, ResolvePortsOptions } from './ports.js';
+
 // Domain packs & workers (v0.4)
 export {
   resolveWorker,
