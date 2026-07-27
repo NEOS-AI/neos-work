@@ -131,17 +131,27 @@ async function buildAgentToolRegistry(
         allowedTools,
       };
 
+  // Control-char / blank run ids → settings fallback or stable default
   const runId =
-    typeof ctx.runId === 'string' && ctx.runId.trim()
+    typeof ctx.runId === 'string' && ctx.runId.trim() && !/[\0\r\n]/.test(ctx.runId)
       ? ctx.runId.trim()
       : typeof ctx.settings['RUN_ID'] === 'string'
-        ? ctx.settings['RUN_ID']
+          && ctx.settings['RUN_ID'].trim()
+          && !/[\0\r\n]/.test(ctx.settings['RUN_ID'])
+        ? ctx.settings['RUN_ID'].trim()
         : 'agent-node';
+
+  // Unique per graph node so parallel same-worker nodes do not share isolated dirs
+  const nodeSeg =
+    typeof ctx.nodeId === 'string' && ctx.nodeId.trim() && !/[\0\r\n]/.test(ctx.nodeId)
+      ? ctx.nodeId.trim()
+      : 'agent';
+  const workerRunSeg = `${nodeSeg}_${effective.id}`;
 
   const workspaceRoot = await resolveWorkerWorkspace({
     policy: effective.workspace ?? { kind: 'none' },
     runId,
-    workerRunId: effective.id,
+    workerRunId: workerRunSeg,
   });
 
   return {

@@ -5,170 +5,17 @@ const orchestratorRun = vi.fn(async function* () {
   yield { type: 'done', task: { status: 'completed', steps: [] } };
 });
 
-/**
- * AgentNode (Task 5) calls `runWorker`, which constructs AgentOrchestrator inside
- * `@neos-work/core`. Package-level AgentOrchestrator mocks do not affect that
- * internal import — so we mock `runWorker` itself and drive the same
- * orchestratorCtor / orchestratorRun spies the suite already asserts on.
- */
 vi.mock('@neos-work/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@neos-work/core')>();
-
-  class MockOrchestrator {
-    constructor(...args: unknown[]) {
-      orchestratorCtor(...args);
-    }
-    run(...args: unknown[]) {
-      return orchestratorRun(...args);
-    }
-  }
-
   return {
     ...actual,
-    AgentOrchestrator: MockOrchestrator,
-    async runWorker(req: {
-      worker: {
-        id: string;
-        systemPrompt?: string;
-        defaultMode?: string;
-        permissionProfile?: string;
-        allowedTools?: string[];
-        workspace?: unknown;
-        constraints?: { maxSteps?: number };
-      };
-      goal: string;
-      inputs?: Record<string, unknown>;
-      mode?: string;
-      parent?: { nodeId?: string; runId?: string; workerRunId?: string };
-      settings: Record<string, string>;
-      signal?: AbortSignal;
-      onEvent?: (e: Record<string, unknown>) => void;
-      adapter?: unknown;
-      systemPromptAppend?: string;
-      designSystemContent?: string;
-      memoryContext?: string;
-      maxSteps?: number;
-      model?: string;
-      extraTools?: unknown[];
-      workspaceBaseDir?: string;
-    }) {
-      const start = Date.now();
-      const workerRunId = req.parent?.workerRunId ?? 'test-worker-run';
-      const mode = req.mode ?? req.worker.defaultMode ?? 'solo';
-      const nodeId = req.parent?.nodeId;
-      const emit = (e: Record<string, unknown>) => {
-        try {
-          req.onEvent?.(e);
-        } catch {
-          /* host handlers must not throw into runtime */
-        }
-      };
-
-      if (!req.adapter) {
-        const error = 'LLM adapter is required to run a worker';
-        emit({ type: 'worker.failed', workerRunId, error, nodeId, durationMs: 0 });
-        return {
-          ok: false,
-          workerRunId,
-          output: null,
-          error,
-          durationMs: Date.now() - start,
-          mode,
-        };
+    AgentOrchestrator: class {
+      constructor(...args: unknown[]) {
+        orchestratorCtor(...args);
       }
-
-      const systemPrompt = actual.buildWorkerSystemPrompt({
-        worker: req.worker as never,
-        systemPromptAppend: req.systemPromptAppend,
-        designSystemContent: req.designSystemContent,
-        memoryContext: req.memoryContext,
-      });
-
-      let inputsJson = JSON.stringify(req.inputs ?? {});
-      if (inputsJson.length > 256 * 1024) {
-        inputsJson = inputsJson.slice(0, 256 * 1024) + '…[inputs truncated]';
+      run(...args: unknown[]) {
+        return orchestratorRun(...args);
       }
-      let goalText =
-        typeof req.goal === 'string' ? req.goal.replace(/\0/g, '').trim() : String(req.goal ?? '');
-      if (!goalText) goalText = inputsJson;
-      const fullGoal = systemPrompt
-        ? `${systemPrompt}\n\n---\n## Goal\n${goalText}\n\n## Inputs\n${inputsJson}`
-        : `## Goal\n${goalText}\n\n## Inputs\n${inputsJson}`;
-
-      // Avoid real workspace mkdir in unit tests
-      const registry = actual.buildWorkerToolRegistry({
-        worker: req.worker as never,
-        workspaceRoot: process.cwd(),
-        mode: mode as 'solo' | 'coordinator',
-        extraTools: req.extraTools as never,
-      });
-
-      emit({
-        type: 'worker.started',
-        workerRunId,
-        workerId: req.worker.id,
-        nodeId,
-        mode,
-      });
-
-      const orch = new MockOrchestrator(req.adapter, registry, {
-        maxIterations: req.maxSteps ?? 20,
-        model: req.model,
-      });
-
-      let lastText = '';
-      let runError: string | undefined;
-      let completedOk = false;
-
-      for await (const event of orch.run(fullGoal, req.signal) as AsyncIterable<{
-        type: string;
-        content?: string;
-        error?: string;
-        task?: { status?: string };
-      }>) {
-        emit({ type: 'agent', workerRunId, event, nodeId });
-        if (event.type === 'text') {
-          const chunk = event.content ?? '';
-          lastText += chunk;
-          emit({ type: 'worker.progress', workerRunId, chunk, nodeId });
-        } else if (event.type === 'error') {
-          runError = event.error;
-        } else if (event.type === 'done') {
-          const status = event.task?.status;
-          // Fixtures may omit status — treat as completed when no error
-          completedOk = status === 'completed' || status === undefined;
-          if (status === 'failed' || status === 'cancelled') {
-            completedOk = false;
-            runError = runError ?? `Worker ${status}`;
-          }
-        }
-      }
-
-      const durationMs = Date.now() - start;
-      if (runError && !completedOk && !lastText) {
-        const error =
-          actual.scrubErrorMessage(runError, 4_000) || runError || 'Worker failed';
-        emit({ type: 'worker.failed', workerRunId, error, nodeId, durationMs });
-        return {
-          ok: false,
-          workerRunId,
-          output: null,
-          error,
-          durationMs,
-          mode,
-        };
-      }
-
-      const output = lastText || (runError ? { error: runError } : null);
-      const ok = completedOk || (!!lastText && !req.signal?.aborted);
-      if (ok) {
-        emit({ type: 'worker.completed', workerRunId, output, nodeId, durationMs });
-        return { ok: true, workerRunId, output, durationMs, mode };
-      }
-      const error =
-        actual.scrubErrorMessage(runError ?? 'Worker failed', 4_000) || 'Worker failed';
-      emit({ type: 'worker.failed', workerRunId, error, nodeId, durationMs });
-      return { ok: false, workerRunId, output, error, durationMs, mode };
     },
   };
 });
@@ -599,6 +446,44 @@ describe('AgentNode LLM model selection', () => {
     );
     expect(ok2.ok).toBe(true);
     expect(orchestratorRun).toHaveBeenCalled();
+  });
+
+  it('emits worker lifecycle events via onWorkerEvent (Task 5)', async () => {
+    const events: Array<{ type: string; workerId: string }> = [];
+    orchestratorRun.mockImplementation(async function* () {
+      yield { type: 'text', content: 'hi' };
+      yield { type: 'done', task: { status: 'completed', steps: [] } };
+    });
+    const node = new AgentNode('agent', {
+      workerId: 'coding_reviewer',
+      systemPrompt: 'Emit events',
+    });
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        onWorkerEvent: (e) => {
+          events.push({ type: e.type, workerId: e.workerId });
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(events.map((e) => e.type)).toEqual([
+      'worker.started',
+      'worker.progress',
+      'worker.completed',
+    ]);
+    expect(events.every((e) => e.workerId === 'coding_reviewer')).toBe(true);
+
+    // Host handler throw must not break the node
+    const ok = await new AgentNode('agent', { systemPrompt: 'x' }).execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        onWorkerEvent: () => {
+          throw new Error('host boom');
+        },
+      }),
+    );
+    expect(ok.ok).toBe(true);
   });
 
   it('clamps harness maxSteps to 200', async () => {
