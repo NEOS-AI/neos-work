@@ -307,7 +307,14 @@ workflow.post('/migrate', async (c) => {
     const needed = needsWorkflowMigration(input);
     const { workflow: migrated, report } = migrateWorkflowV1ToV2(input);
 
-    if (!dryRun && typeof body.id === 'string') {
+    if (!dryRun) {
+      // Persist requires a target workflow id (avoid silent dry-run when dryRun:false)
+      if (typeof body.id !== 'string') {
+        return c.json(
+          { ok: false, error: 'id is required when dryRun is false' },
+          400,
+        );
+      }
       const id = safeRouteId(body.id);
       if (!id) return c.json({ ok: false, error: 'Invalid workflow id' }, 400);
       const existing = db.getWorkflow(id);

@@ -755,5 +755,26 @@ describe('workflow migrate dry-run (v0.4)', () => {
     expect(body.data.workflow.nodes[0]!.config.harnessId).toBeUndefined();
     expect(body.data.report.renamedNodes).toContain('a1');
   });
+
+  it('rejects dryRun:false without id (no silent dry-run)', async () => {
+    const res = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dryRun: false,
+        workflow: {
+          id: 'tmp',
+          name: 'Legacy',
+          domain: 'coding',
+          nodes: [],
+          edges: [],
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/id is required/i);
+  });
 });
 
