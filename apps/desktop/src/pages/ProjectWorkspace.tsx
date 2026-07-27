@@ -1,6 +1,6 @@
 /**
- * Design Project workspace (v0.5.4 / PLAN_FOR_V0_5_0 Task 3 chat + runs).
- * Files tree + @neos-work/design-editor (CodeMirror 6 Preview/Code/Split).
+ * Design Project workspace (v0.5.4 / PLAN_FOR_V0_5_0 Task 1c Layers/Inspect + chat runs).
+ * Files | Layers | Preview/Code/Split/Inspect | Chat.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -9,11 +9,13 @@ import { Link, useNavigate, useParams, useBlocker } from 'react-router-dom';
 import {
   DesignEditor,
   createEmptyBuffer,
+  editContextFromSelection,
   isDirty,
   reduceEditorBuffer,
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
+import type { SelectionState } from '@neos-work/shared';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type { DesignProject, ProjectFileEntry } from '../lib/engine.js';
@@ -43,6 +45,7 @@ export function ProjectWorkspace() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<string[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<SelectionState | null>(null);
 
   const dirty = isDirty(buffer);
   const blocker = useBlocker(dirty);
@@ -192,8 +195,12 @@ export function ProjectWorkspace() {
     setChatBusy(true);
     setChatError(null);
     try {
-      const editContext =
-        buffer.path
+      const editContext = selection
+        ? editContextFromSelection(selection, {
+            snippet: buffer.local.slice(0, 8_000),
+            mode: 'replace-selection',
+          })
+        : buffer.path
           ? {
               filePath: buffer.path,
               mode: 'patch' as const,
@@ -257,7 +264,7 @@ export function ProjectWorkspace() {
     } finally {
       setChatBusy(false);
     }
-  }, [client, projectId, chatPrompt, chatAgentId, buffer.path, buffer.local, t, appendLog]);
+  }, [client, projectId, chatPrompt, chatAgentId, buffer.path, buffer.local, selection, t, appendLog]);
 
   const fileTree = useMemo(() => {
     return [...files].sort((a, b) => {
@@ -405,12 +412,28 @@ export function ProjectWorkspace() {
             }
             onSave={() => void handleSave()}
             saving={saving}
+            selection={selection}
+            onSelectionChange={(sel) => setSelection(sel)}
+            onEditWithAi={(sel) => {
+              setSelection(sel);
+              const hint = sel.selector
+                ? t('project.editWithAiHint', { selector: sel.selector })
+                : t('project.editWithAi');
+              setChatPrompt((prev) => (prev.trim() ? prev : hint));
+            }}
             labels={{
               preview: t('project.mode.preview'),
               code: t('project.mode.code'),
               split: t('project.mode.split'),
+              inspect: t('project.mode.inspect'),
               save: saving ? t('common.loading') : t('common.save'),
               dirty: t('project.dirty'),
+              layers: t('project.layers'),
+              layersSearch: t('project.layersSearch'),
+              layersEmpty: t('project.layersEmpty'),
+              editWithAi: t('project.editWithAi'),
+              copySelector: t('project.copySelector'),
+              selection: t('project.selection'),
             }}
             onResolveConflict={(choice, merged) =>
               setBuffer((prev) =>

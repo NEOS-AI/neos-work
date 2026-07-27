@@ -19,9 +19,38 @@ export {
   type BridgeSelectPayload,
 } from './bridge-types.js';
 
+export { buildBridgeInjectScript, injectBridgeIntoHtml } from './bridge-inject.js';
+
+export {
+  bridgeTreeToLayers,
+  filterLayers,
+  findLayerById,
+  findLayerBySelector,
+  flattenLayers,
+  parseHtmlToLayerTree,
+  stampNeosIds,
+  toggleLockByNeosId,
+  toggleVisibilityByNeosId,
+  toggleVisibilityInHtml,
+} from './html-layers.js';
+
+export {
+  createEmptySelection,
+  editContextFromSelection,
+  selectionEquals,
+  selectionFromBridge,
+  selectionFromLayer,
+} from './selection-state.js';
+
 export { DEVICE_PRESETS, resolvePresetWidth, type DevicePreset } from './device-presets.js';
-export { PreviewFrame, toPreviewDocument, type PreviewFrameProps } from './PreviewFrame.js';
+export {
+  PreviewFrame,
+  postToPreview,
+  toPreviewDocument,
+  type PreviewFrameProps,
+} from './PreviewFrame.js';
 export { CodeEditor, type CodeEditorProps } from './CodeEditor.js';
+export { LayersPanel, type LayersPanelProps } from './LayersPanel.js';
 export {
   DesignEditor,
   type DesignEditorMode,

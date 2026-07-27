@@ -40,9 +40,11 @@ describe('DesignEditor chrome', () => {
 
     expect(screen.getByTestId('design-editor')).toBeTruthy();
     expect(screen.getByTestId('dirty-badge')).toBeTruthy();
+    expect(screen.getByTestId('layers-panel')).toBeTruthy();
     fireEvent.click(screen.getByTestId('save-button'));
     expect(onSave).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('mode-preview'));
+    fireEvent.click(screen.getByTestId('mode-inspect'));
   });
 
   it('shows conflict banner actions', () => {
@@ -61,5 +63,30 @@ describe('DesignEditor chrome', () => {
     expect(screen.getByTestId('conflict-banner')).toBeTruthy();
     fireEvent.click(screen.getByText('Keep mine'));
     expect(onResolve).toHaveBeenCalledWith('keep-mine');
+  });
+
+  it('selects layer and fires edit-with-ai', () => {
+    const onEditWithAi = vi.fn();
+    const onSelectionChange = vi.fn();
+    const buffer = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'index.html',
+      content: '<!DOCTYPE html><html><body><h1 id="t">Hi</h1></body></html>',
+    });
+    render(
+      <DesignEditor
+        buffer={buffer}
+        mode="preview"
+        onEditWithAi={onEditWithAi}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    // layer rows from parse
+    const rows = screen.getAllByRole('treeitem');
+    expect(rows.length).toBeGreaterThan(0);
+    fireEvent.click(rows[rows.length - 1]);
+    expect(onSelectionChange).toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('edit-with-ai-button'));
+    expect(onEditWithAi).toHaveBeenCalled();
   });
 });

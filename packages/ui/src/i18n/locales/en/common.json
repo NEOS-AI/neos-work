@@ -101,7 +101,8 @@
     "mode": {
       "preview": "Preview",
       "code": "Code",
-      "split": "Split"
+      "split": "Split",
+      "inspect": "Inspect"
     },
     "chat": "AI chat",
     "chatInvalid": "Prompt contains invalid characters",
@@ -110,7 +111,14 @@
     "chatDryRun": "Dry-run (no CLI)",
     "chatPlaceholder": "Describe changes… (uses open file as edit context)",
     "chatSend": "Run",
-    "chatEmpty": "Run log appears here"
+    "chatEmpty": "Run log appears here",
+    "layers": "Layers",
+    "layersSearch": "Filter layers…",
+    "layersEmpty": "No layers",
+    "editWithAi": "Edit with AI",
+    "editWithAiHint": "Refine selection {{selector}}:",
+    "copySelector": "Copy selector",
+    "selection": "Selection"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

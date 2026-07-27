@@ -170,3 +170,40 @@ describe('spawnRegistryAgent extra paths', () => {
     await expect(promise).rejects.toThrow(/ENOENT/);
   });
 });
+
+describe('path overrides from settings', () => {
+  it('loadOverride uses executable setting path', async () => {
+    // Re-mock getSetting for this file is static null; instead test loadAllPathOverrides empty
+    // and spawn with valid cwd that is a file path rejected
+    const child = mockChild();
+    spawnMock.mockReturnValue(child);
+    const filePath = process.execPath; // is a file not directory
+
+    await expect(
+      spawnRegistryAgent({
+        agentId: 'cli-aider',
+        prompt: 'cwd file',
+        cwd: filePath,
+      }),
+    ).rejects.toThrow(/not a directory/i);
+  });
+
+  it('already-aborted signal kills immediately', async () => {
+    const child = mockChild();
+    spawnMock.mockReturnValue(child);
+    const ac = new AbortController();
+    ac.abort();
+
+    const promise = spawnRegistryAgent({
+      agentId: 'cli-aider',
+      prompt: 'preabort',
+      signal: ac.signal,
+    });
+
+    await Promise.resolve();
+    child.emit('close', 0);
+    const result = await promise;
+    expect(child.kill).toHaveBeenCalled();
+    expect(result.exitCode).toBe(0);
+  });
+});

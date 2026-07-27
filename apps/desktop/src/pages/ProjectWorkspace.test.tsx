@@ -47,6 +47,15 @@ vi.mock('@neos-work/design-editor', () => {
   };
   return {
     createEmptyBuffer: (): Buf => ({ path: null, local: '', disk: '', diskHash: null }),
+    editContextFromSelection: (
+      selection: { filePath: string; selector?: string },
+      opts?: { snippet?: string; mode?: string },
+    ) => ({
+      filePath: selection.filePath,
+      mode: opts?.mode ?? 'replace-selection',
+      selection: selection.selector ? { selector: selection.selector } : undefined,
+      snippet: opts?.snippet,
+    }),
     isDirty: (b: Buf) => b.local !== b.disk,
     reduceEditorBuffer: (
       prev: Buf,

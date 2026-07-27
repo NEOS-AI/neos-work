@@ -1,15 +1,31 @@
 /**
- * Design Editor chrome: mode tabs + Code + Preview (+ Split).
+ * Design Editor chrome: Layers | Preview/Code/Split/Inspect + selection (Task 1c).
  * Host supplies buffer state and save; package owns panes (Q9 CodeMirror).
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { LayerNode, SelectionState } from '@neos-work/shared';
 import { CodeEditor } from './CodeEditor.js';
 import { DEVICE_PRESETS } from './device-presets.js';
-import { PreviewFrame, toPreviewDocument } from './PreviewFrame.js';
+import { PreviewFrame, postToPreview, toPreviewDocument } from './PreviewFrame.js';
 import { isConflict, isDirty, simpleDiffLines, type EditorBufferState } from './dirty-state.js';
+import { LayersPanel } from './LayersPanel.js';
+import {
+  bridgeTreeToLayers,
+  findLayerBySelector,
+  parseHtmlToLayerTree,
+  stampNeosIds,
+  toggleLockByNeosId,
+  toggleVisibilityByNeosId,
+} from './html-layers.js';
+import {
+  editContextFromSelection,
+  selectionFromBridge,
+  selectionFromLayer,
+} from './selection-state.js';
+import type { BridgeInboundMessage, BridgeSelectPayload } from './bridge-types.js';
 
-export type DesignEditorMode = 'preview' | 'code' | 'split';
+export type DesignEditorMode = 'preview' | 'code' | 'split' | 'inspect';
 
 export interface DesignEditorProps {
   buffer: EditorBufferState;
@@ -22,6 +38,7 @@ export interface DesignEditorProps {
     preview?: string;
     code?: string;
     split?: string;
+    inspect?: string;
     save?: string;
     dirty?: string;
     conflictTitle?: string;
@@ -29,8 +46,21 @@ export interface DesignEditorProps {
     takeAgent?: string;
     showDiff?: string;
     dismissDiff?: string;
+    layers?: string;
+    layersSearch?: string;
+    layersEmpty?: string;
+    editWithAi?: string;
+    copySelector?: string;
+    selection?: string;
   };
   onResolveConflict?: (choice: 'keep-mine' | 'take-agent' | 'diff', merged?: string) => void;
+  /** Controlled selection (optional). */
+  selection?: SelectionState | null;
+  onSelectionChange?: (selection: SelectionState | null, detail?: BridgeSelectPayload | null) => void;
+  /** Edit with AI from Layers / Inspect selection. */
+  onEditWithAi?: (selection: SelectionState, detail?: BridgeSelectPayload | null) => void;
+  /** Show Layers side panel (default true for html-like paths). */
+  showLayers?: boolean;
   className?: string;
 }
 
@@ -38,6 +68,7 @@ const defaultLabels = {
   preview: 'Preview',
   code: 'Code',
   split: 'Split',
+  inspect: 'Inspect',
   save: 'Save',
   dirty: 'Unsaved',
   conflictTitle: 'Disk changed while editing',
@@ -45,7 +76,19 @@ const defaultLabels = {
   takeAgent: 'Take agent',
   showDiff: 'Diff',
   dismissDiff: 'Close diff',
+  layers: 'Layers',
+  layersSearch: 'Filter layers…',
+  layersEmpty: 'No layers',
+  editWithAi: 'Edit with AI',
+  copySelector: 'Copy selector',
+  selection: 'Selection',
 };
+
+function isHtmlPath(path: string | null): boolean {
+  if (!path) return true;
+  const p = path.toLowerCase();
+  return p.endsWith('.html') || p.endsWith('.htm') || p.endsWith('.svg');
+}
 
 export function DesignEditor({
   buffer,
@@ -56,6 +99,10 @@ export function DesignEditor({
   saving = false,
   labels: labelsProp,
   onResolveConflict,
+  selection: controlledSelection,
+  onSelectionChange,
+  onEditWithAi,
+  showLayers: showLayersProp,
   className,
 }: DesignEditorProps) {
   const labels = { ...defaultLabels, ...labelsProp };
@@ -69,14 +116,46 @@ export function DesignEditor({
   const [deviceId, setDeviceId] = useState('fluid');
   const [showDiff, setShowDiff] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [bridgeLayers, setBridgeLayers] = useState<LayerNode[] | null>(null);
+  const [internalSelection, setInternalSelection] = useState<SelectionState | null>(null);
+  const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
+  const iframeHostRef = useRef<HTMLDivElement>(null);
+
+  const selection =
+    controlledSelection !== undefined ? controlledSelection : internalSelection;
+
+  const setSelection = useCallback(
+    (next: SelectionState | null, detail?: BridgeSelectPayload | null) => {
+      if (controlledSelection === undefined) setInternalSelection(next);
+      setSelectDetail(detail ?? null);
+      onSelectionChange?.(next, detail ?? null);
+    },
+    [controlledSelection, onSelectionChange],
+  );
 
   const dirty = isDirty(buffer);
   const conflict = isConflict(buffer);
+  const htmlLike = isHtmlPath(buffer.path);
+  const showLayers = showLayersProp ?? htmlLike;
 
-  const previewHtml = useMemo(
-    () => toPreviewDocument(buffer.local, buffer.path),
-    [buffer.local, buffer.path],
+  const previewHtml = useMemo(() => {
+    const base = toPreviewDocument(buffer.local, buffer.path);
+    // Stamp ids so visibility/lock rewrites can target buffer HTML
+    return htmlLike ? stampNeosIds(base) : base;
+  }, [buffer.local, buffer.path, htmlLike]);
+
+  const parseLayers = useMemo(
+    () => (htmlLike ? parseHtmlToLayerTree(previewHtml) : []),
+    [previewHtml, htmlLike],
   );
+
+  const layers = bridgeLayers ?? parseLayers;
+  const layerSource = bridgeLayers ? 'bridge' : 'parse';
+
+  // Reset bridge tree when file/content identity changes substantially
+  useEffect(() => {
+    setBridgeLayers(null);
+  }, [buffer.path, reloadKey]);
 
   const diffPreview = useMemo(() => {
     if (!buffer.pendingDisk) return null;
@@ -87,6 +166,103 @@ export function DesignEditor({
     onSave?.();
     setReloadKey((k) => k + 1);
   };
+
+  const inspectEnabled = mode === 'inspect';
+
+  const handleBridgeMessage = useCallback(
+    (msg: BridgeInboundMessage) => {
+      if (msg.type === 'neos.dom-snapshot') {
+        setBridgeLayers(bridgeTreeToLayers(msg.tree ?? []));
+        return;
+      }
+      if (msg.type === 'neos.select' && buffer.path) {
+        const payload = msg.selection;
+        const layer = findLayerBySelector(bridgeLayers ?? parseLayers, payload.selector);
+        const sel = selectionFromBridge(buffer.path, payload, layer?.id);
+        setSelection(sel, payload);
+        // Outline already set inside iframe; also ask highlight for consistency
+        const iframe = iframeHostRef.current?.querySelector('iframe');
+        if (iframe) {
+          postToPreview(iframe as HTMLIFrameElement, {
+            type: 'neos.highlight',
+            selector: payload.selector,
+          });
+        }
+      }
+    },
+    [buffer.path, bridgeLayers, parseLayers, setSelection],
+  );
+
+  const handleLayerSelect = (layer: LayerNode) => {
+    if (!buffer.path) return;
+    const sel = selectionFromLayer(buffer.path, layer);
+    setSelection(sel, {
+      selector: layer.selector,
+      tag: layer.tag,
+    });
+    const iframe = iframeHostRef.current?.querySelector('iframe');
+    if (iframe) {
+      postToPreview(iframe as HTMLIFrameElement, {
+        type: 'neos.scroll-to',
+        selector: layer.selector,
+      });
+    }
+  };
+
+  const handleLayerHover = (layer: LayerNode | null) => {
+    const iframe = iframeHostRef.current?.querySelector('iframe');
+    if (!iframe) return;
+    postToPreview(iframe as HTMLIFrameElement, {
+      type: 'neos.highlight',
+      selector: layer?.selector ?? null,
+    });
+  };
+
+  const applyHtmlEdit = (next: string) => {
+    if (next !== buffer.local) onEdit?.(next);
+  };
+
+  const handleToggleVisibility = (layer: LayerNode, visible: boolean) => {
+    const next = toggleVisibilityByNeosId(buffer.local, layer.id, visible);
+    if (next === buffer.local) {
+      // Try stamped preview html ids mapped: layer ids from parse use pN / eN
+      const stamped = stampNeosIds(buffer.local);
+      const alt = toggleVisibilityByNeosId(stamped, layer.id, visible);
+      if (alt !== stamped) {
+        applyHtmlEdit(alt);
+        setReloadKey((k) => k + 1);
+      }
+      return;
+    }
+    applyHtmlEdit(next);
+    setReloadKey((k) => k + 1);
+  };
+
+  const handleToggleLock = (layer: LayerNode, locked: boolean) => {
+    const next = toggleLockByNeosId(buffer.local, layer.id, locked);
+    if (next !== buffer.local) {
+      applyHtmlEdit(next);
+      setReloadKey((k) => k + 1);
+    }
+  };
+
+  const handleCopySelector = async (layer: LayerNode) => {
+    try {
+      await navigator.clipboard?.writeText(layer.selector);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleEditWithAi = (layer: LayerNode) => {
+    if (!buffer.path) return;
+    const sel = selectionFromLayer(buffer.path, layer);
+    setSelection(sel, { selector: layer.selector, tag: layer.tag });
+    onEditWithAi?.(sel, { selector: layer.selector, tag: layer.tag });
+  };
+
+  const showPreview = mode === 'preview' || mode === 'split' || mode === 'inspect';
+  const showCode = mode === 'code' || mode === 'split';
 
   return (
     <div
@@ -105,7 +281,7 @@ export function DesignEditor({
         }}
       >
         <div style={{ display: 'flex', gap: 4 }}>
-          {(['preview', 'code', 'split'] as DesignEditorMode[]).map((m) => (
+          {(['preview', 'code', 'split', 'inspect'] as DesignEditorMode[]).map((m) => (
             <button
               key={m}
               type="button"
@@ -121,11 +297,17 @@ export function DesignEditor({
                 cursor: 'pointer',
               }}
             >
-              {m === 'preview' ? labels.preview : m === 'code' ? labels.code : labels.split}
+              {m === 'preview'
+                ? labels.preview
+                : m === 'code'
+                  ? labels.code
+                  : m === 'split'
+                    ? labels.split
+                    : labels.inspect}
             </button>
           ))}
         </div>
-        {(mode === 'preview' || mode === 'split') && (
+        {showPreview && (
           <select
             aria-label="Device preset"
             value={deviceId}
@@ -144,7 +326,42 @@ export function DesignEditor({
             {labels.dirty}
           </span>
         )}
-        <div style={{ marginLeft: 'auto' }}>
+        {selection?.selector && (
+          <span
+            data-testid="selection-badge"
+            title={selection.selector}
+            style={{
+              fontSize: 10,
+              maxWidth: 180,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: 'var(--text-muted, #888)',
+              fontFamily: 'ui-monospace, monospace',
+            }}
+          >
+            {labels.selection}: {selection.selector}
+          </span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {selection && onEditWithAi && (
+            <button
+              type="button"
+              data-testid="edit-with-ai-button"
+              onClick={() => onEditWithAi(selection, selectDetail)}
+              style={{
+                fontSize: 12,
+                padding: '4px 10px',
+                borderRadius: 6,
+                border: '1px solid var(--border-primary, #333)',
+                background: 'transparent',
+                color: 'var(--text-primary, inherit)',
+                cursor: 'pointer',
+              }}
+            >
+              {labels.editWithAi}
+            </button>
+          )}
           <button
             type="button"
             data-testid="save-button"
@@ -220,14 +437,39 @@ export function DesignEditor({
       )}
 
       <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-        {(mode === 'code' || mode === 'split') && (
+        {showLayers && (
+          <div style={{ width: 200, minWidth: 160, maxWidth: 280, minHeight: 0, display: 'flex' }}>
+            <LayersPanel
+              layers={layers}
+              selectedLayerId={selection?.layerId}
+              selectedSelector={selection?.selector}
+              source={layerSource}
+              onSelect={handleLayerSelect}
+              onHover={handleLayerHover}
+              onToggleVisibility={handleToggleVisibility}
+              onToggleLock={handleToggleLock}
+              onEditWithAi={onEditWithAi ? handleEditWithAi : undefined}
+              onCopySelector={handleCopySelector}
+              labels={{
+                title: labels.layers,
+                search: labels.layersSearch,
+                empty: labels.layersEmpty,
+                editWithAi: labels.editWithAi,
+                copySelector: labels.copySelector,
+              }}
+            />
+          </div>
+        )}
+
+        {showCode && (
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
               minWidth: 0,
-              width: mode === 'split' ? '50%' : '100%',
-              borderRight: mode === 'split' ? '1px solid var(--border-primary, #333)' : undefined,
+              width: showPreview ? '50%' : '100%',
+              flex: showPreview ? undefined : 1,
+              borderRight: showPreview ? '1px solid var(--border-primary, #333)' : undefined,
             }}
           >
             <div
@@ -250,13 +492,16 @@ export function DesignEditor({
             />
           </div>
         )}
-        {(mode === 'preview' || mode === 'split') && (
+
+        {showPreview && (
           <div
+            ref={iframeHostRef}
             style={{
               display: 'flex',
               flexDirection: 'column',
               minWidth: 0,
-              width: mode === 'split' ? '50%' : '100%',
+              width: showCode ? '50%' : '100%',
+              flex: showCode ? undefined : 1,
               overflow: 'auto',
             }}
           >
@@ -266,19 +511,72 @@ export function DesignEditor({
                 padding: '4px 10px',
                 color: 'var(--text-muted, #888)',
                 borderBottom: '1px solid var(--border-primary, #333)',
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
               }}
             >
-              {labels.preview}
-              {dirty ? ` (${labels.dirty})` : ''}
+              <span>
+                {mode === 'inspect' ? labels.inspect : labels.preview}
+                {dirty ? ` (${labels.dirty})` : ''}
+              </span>
+              {mode === 'inspect' && (
+                <span style={{ fontSize: 10, color: '#a5b4fc' }}>click to select</span>
+              )}
             </div>
             <PreviewFrame
               html={previewHtml}
               reloadKey={reloadKey}
               devicePresetId={deviceId}
+              bridgeEnabled={htmlLike}
+              inspectEnabled={inspectEnabled}
+              onBridgeMessage={handleBridgeMessage}
             />
+            {mode === 'inspect' && selection && (
+              <div
+                data-testid="inspect-panel"
+                style={{
+                  borderTop: '1px solid var(--border-primary, #333)',
+                  padding: 8,
+                  fontSize: 11,
+                  background: 'var(--bg-secondary, #1a1a1a)',
+                  color: 'var(--text-secondary, #ccc)',
+                  maxHeight: 140,
+                  overflow: 'auto',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{labels.selection}</div>
+                <div style={{ fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all' }}>
+                  {selection.selector ?? '—'}
+                </div>
+                {selectDetail?.tag && (
+                  <div style={{ marginTop: 4, color: 'var(--text-muted, #888)' }}>
+                    tag: {selectDetail.tag}
+                    {selectDetail.bbox
+                      && ` · ${Math.round(selectDetail.bbox.width)}×${Math.round(selectDetail.bbox.height)}`}
+                  </div>
+                )}
+                {selectDetail?.outerHTML && (
+                  <pre
+                    style={{
+                      margin: '6px 0 0',
+                      fontSize: 10,
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: 60,
+                      overflow: 'auto',
+                      color: 'var(--text-muted, #aaa)',
+                    }}
+                  >
+                    {selectDetail.outerHTML.slice(0, 500)}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
+
+export { editContextFromSelection };

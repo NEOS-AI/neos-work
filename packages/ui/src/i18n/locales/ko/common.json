@@ -101,7 +101,8 @@
     "mode": {
       "preview": "미리보기",
       "code": "코드",
-      "split": "분할"
+      "split": "분할",
+      "inspect": "Inspect"
     },
     "chat": "AI 채팅",
     "chatInvalid": "프롬프트에 잘못된 문자가 있습니다",
@@ -110,7 +111,14 @@
     "chatDryRun": "드라이런 (CLI 없음)",
     "chatPlaceholder": "변경 내용을 설명하세요… (열린 파일이 편집 컨텍스트로 사용됩니다)",
     "chatSend": "실행",
-    "chatEmpty": "실행 로그가 여기에 표시됩니다"
+    "chatEmpty": "실행 로그가 여기에 표시됩니다",
+    "layers": "레이어",
+    "layersSearch": "레이어 필터…",
+    "layersEmpty": "레이어 없음",
+    "editWithAi": "AI로 편집",
+    "editWithAiHint": "선택 영역 {{selector}} 개선:",
+    "copySelector": "선택자 복사",
+    "selection": "선택"
   },
   "mode": {
     "title": "NEOS Work를 어떻게 실행하시겠습니까?",

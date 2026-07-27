@@ -1,5 +1,12 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { resolvePresetWidth } from './device-presets.js';
+import {
+  NEOS_BRIDGE_SOURCE,
+  isBridgeInbound,
+  type BridgeInboundMessage,
+  type BridgeOutboundCommand,
+} from './bridge-types.js';
+import { injectBridgeIntoHtml } from './bridge-inject.js';
 
 export interface PreviewFrameProps {
   /** HTML (or wrapped text) document for srcDoc. */
@@ -10,6 +17,11 @@ export interface PreviewFrameProps {
   title?: string;
   className?: string;
   style?: CSSProperties;
+  /** Inject Inspect/Layers bridge script into srcDoc. */
+  bridgeEnabled?: boolean;
+  /** Enable inspect click-to-select inside iframe. */
+  inspectEnabled?: boolean;
+  onBridgeMessage?: (msg: BridgeInboundMessage) => void;
 }
 
 function escapeHtml(s: string): string {
@@ -35,6 +47,21 @@ export function toPreviewDocument(content: string, filePath?: string | null): st
   </style></head><body>${escapeHtml(content)}</body></html>`;
 }
 
+export function postToPreview(
+  iframe: HTMLIFrameElement | null,
+  cmd: BridgeOutboundCommand,
+): void {
+  if (!iframe?.contentWindow) return;
+  try {
+    iframe.contentWindow.postMessage(
+      { source: NEOS_BRIDGE_SOURCE, ...cmd },
+      '*',
+    );
+  } catch {
+    // ignore
+  }
+}
+
 export function PreviewFrame({
   html,
   reloadKey = 0,
@@ -42,7 +69,14 @@ export function PreviewFrame({
   title = 'design-preview',
   className,
   style,
+  bridgeEnabled = true,
+  inspectEnabled = false,
+  onBridgeMessage,
 }: PreviewFrameProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const onBridgeRef = useRef(onBridgeMessage);
+  onBridgeRef.current = onBridgeMessage;
+
   const width = resolvePresetWidth(devicePresetId);
   const frameStyle = useMemo((): CSSProperties => {
     const base: CSSProperties = {
@@ -65,14 +99,38 @@ export function PreviewFrame({
     return base;
   }, [width, style]);
 
+  const srcDoc = useMemo(() => {
+    return bridgeEnabled ? injectBridgeIntoHtml(html) : html;
+  }, [html, bridgeEnabled]);
+
+  // Listen for bridge messages from iframe
+  useEffect(() => {
+    if (!bridgeEnabled) return;
+    const handler = (ev: MessageEvent) => {
+      if (!isBridgeInbound(ev.data)) return;
+      onBridgeRef.current?.(ev.data);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [bridgeEnabled]);
+
+  // Sync inspect mode to iframe
+  useEffect(() => {
+    if (!bridgeEnabled) return;
+    postToPreview(iframeRef.current, { type: 'neos.set-inspect', enabled: inspectEnabled });
+  }, [inspectEnabled, bridgeEnabled, reloadKey, srcDoc]);
+
   return (
     <iframe
+      ref={iframeRef}
       key={String(reloadKey)}
       title={title}
       sandbox="allow-scripts"
-      srcDoc={html}
+      srcDoc={srcDoc}
       className={className}
       style={frameStyle}
+      data-testid="preview-frame"
+      data-inspect={inspectEnabled ? '1' : '0'}
     />
   );
 }
