@@ -5,28 +5,43 @@ const orchestratorRun = vi.fn(async function* () {
   yield { type: 'done', task: { status: 'completed', steps: [] } };
 });
 
-/** Last CoordinatorSpawnDeps passed to createCoordinatorTools (coordinator mode). */
-let lastCoordinatorDeps: {
-  runChild?: (req: {
-    worker: { id: string };
-    parent?: { workerRunId?: string };
-    onEvent?: (e: {
-      type: string;
-      workerId?: string;
-      workerRunId: string;
-      chunk?: string;
-      output?: unknown;
-      error?: string;
-    }) => void;
-  }) => Promise<unknown>;
-  signal?: AbortSignal;
-} | null = null;
+/** Last deps bag passed to createCoordinatorTools (coordinator mode). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let lastCoordinatorDeps: any = null;
+
+const runWorkerMock = vi.fn(async (req: {
+  worker: { id: string };
+  parent?: { workerRunId?: string };
+  onEvent?: (e: {
+    type: string;
+    workerId?: string;
+    workerRunId: string;
+    chunk?: string;
+    output?: unknown;
+    error?: string;
+  }) => void;
+}) => {
+  const workerRunId = req.parent?.workerRunId ?? 'child-run';
+  const workerId = req.worker.id;
+  req.onEvent?.({ type: 'worker.started', workerId, workerRunId });
+  req.onEvent?.({ type: 'worker.progress', workerId, workerRunId, chunk: 'c' });
+  req.onEvent?.({ type: 'worker.completed', workerId, workerRunId, output: 'child-out' });
+  req.onEvent?.({ type: 'worker.failed', workerId, workerRunId, error: 'soft-fail' });
+  return {
+    ok: true,
+    workerRunId,
+    output: 'child-out',
+    durationMs: 1,
+    mode: 'solo' as const,
+  };
+});
 
 vi.mock('@neos-work/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@neos-work/core')>();
   return {
     ...actual,
-    createCoordinatorTools: (deps: typeof lastCoordinatorDeps) => {
+    runWorker: (req: unknown) => runWorkerMock(req as never),
+    createCoordinatorTools: (deps: unknown) => {
       lastCoordinatorDeps = deps;
       return actual.createCoordinatorTools(deps as never);
     },
@@ -102,6 +117,7 @@ describe('AgentNode coordinator mode', () => {
 
   it('bridges child worker.* events from runChild to onWorkerEvent', async () => {
     lastCoordinatorDeps = null;
+    runWorkerMock.mockClear();
     const events: Array<{ type: string; workerId?: string; chunk?: string }> = [];
     orchestratorCtor.mockClear();
     const node = new AgentNode('agent', {
@@ -118,22 +134,46 @@ describe('AgentNode coordinator mode', () => {
     );
     expect(lastCoordinatorDeps?.runChild).toBeTypeOf('function');
 
-    // Simulate child lifecycle through the bridged onEvent handler
-    await lastCoordinatorDeps!.runChild!({
-      worker: { id: 'research_web' },
-      parent: { workerRunId: 'child-run-1' },
-      onEvent: (e) => {
-        // Invoke the wired onEvent from deps by calling runChild which uses deps.onEvent
-        // The runChild implementation in agent wires onEvent itself — call the inner bridge
-        // by re-invoking runChild with a mock that fires events via the captured deps.
-        void e;
-      },
+    // Drive the agent-wired runChild → runWorker → onEvent bridge
+    await lastCoordinatorDeps.runChild({
+      worker: { id: 'research_web', name: 'R', domain: 'research', description: '', systemPrompt: 'x' },
+      goal: 'child goal',
+      mode: 'solo',
+      parent: { nodeId: 'n1', runId: 'r1', workerRunId: 'child-run-1' },
+      settings: {},
     });
 
-    // Directly exercise the onEvent bridge by calling runChild with a stub runWorker path.
-    // Agent's runChild wraps runWorker; under our mock, actual runWorker still runs.
-    // Instead invoke the onEvent callback that agent installs by inspecting createCoordinatorTools deps:
-    // re-run with a stub: pull onEvent from a spied runChild invocation.
+    const types = events.map((e) => e.type);
+    // Parent agent also emits its own worker.started/completed around the LLM loop
+    expect(types).toEqual(expect.arrayContaining([
+      'worker.started',
+      'worker.progress',
+      'worker.completed',
+      'worker.failed',
+    ]));
+    expect(events.some((e) => e.workerId === 'research_web' && e.type === 'worker.progress' && e.chunk === 'c')).toBe(
+      true,
+    );
+    expect(runWorkerMock).toHaveBeenCalled();
+  });
+
+  it('aborts coordinator session when parent signal is already aborted', async () => {
+    lastCoordinatorDeps = null;
+    const ac = new AbortController();
+    ac.abort();
+    const node = new AgentNode('agent', {
+      workerId: 'general_coordinator',
+      mode: 'coordinator',
+    });
+    const result = await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        signal: ac.signal,
+      }),
+    );
+    // Still constructs coordinator tools; abortAll on already-aborted signal is a no-throw
+    expect(result.ok).toBe(true);
+    expect(lastCoordinatorDeps).toBeTruthy();
   });
 });
 
