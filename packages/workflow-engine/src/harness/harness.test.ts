@@ -159,7 +159,12 @@ describe('harness registry', () => {
 
 describe('built-in coding and finance harness catalogs', () => {
   it('includes expected coding harness ids with tools and constraints', () => {
-    const expectedIds = ['coding_reviewer', 'coding_test_writer', 'coding_refactor'] as const;
+    const expectedIds = [
+      'coding_reviewer',
+      'coding_test_writer',
+      'coding_refactor',
+      'coding_implementer',
+    ] as const;
     const coding = listHarnesses('coding');
     const ids = coding.map((h) => h.id);
     expect(ids).toEqual(expect.arrayContaining([...expectedIds]));
@@ -176,7 +181,12 @@ describe('built-in coding and finance harness catalogs', () => {
   });
 
   it('includes expected finance harness ids with output schemas', () => {
-    const expectedIds = ['finance_analyst', 'finance_risk', 'finance_chart_analyst'] as const;
+    const expectedIds = [
+      'finance_analyst',
+      'finance_risk',
+      'finance_chart_analyst',
+      'finance_portfolio',
+    ] as const;
     const finance = listHarnesses('finance');
     const ids = finance.map((h) => h.id);
     expect(ids).toEqual(expect.arrayContaining([...expectedIds]));
@@ -190,11 +200,12 @@ describe('built-in coding and finance harness catalogs', () => {
   });
 
   it('exports coding harness catalog modules with fixed ids and tools', () => {
-    expect(CODING_HARNESSES).toHaveLength(3);
+    expect(CODING_HARNESSES).toHaveLength(4);
     expect(CODING_HARNESSES.map((h) => h.id)).toEqual([
       'coding_reviewer',
       'coding_test_writer',
       'coding_refactor',
+      'coding_implementer',
     ]);
     expect(CODING_HARNESSES.every((h) => h.domain === 'coding' && h.isBuiltIn)).toBe(true);
     expect(CODING_HARNESSES[0]!.allowedTools).toEqual(
@@ -203,14 +214,16 @@ describe('built-in coding and finance harness catalogs', () => {
     expect(CODING_HARNESSES[0]!.outputSchema?.required).toEqual(
       expect.arrayContaining(['score', 'issues', 'suggestions', 'summary']),
     );
+    expect(CODING_HARNESSES[3]!.permissionProfile).toBe('execute');
   });
 
   it('exports finance harness catalog modules with schemas and constraints', () => {
-    expect(FINANCE_HARNESSES).toHaveLength(3);
+    expect(FINANCE_HARNESSES).toHaveLength(4);
     expect(FINANCE_HARNESSES.map((h) => h.id)).toEqual([
       'finance_analyst',
       'finance_risk',
       'finance_chart_analyst',
+      'finance_portfolio',
     ]);
     expect(FINANCE_HARNESSES.every((h) => h.domain === 'finance' && h.isBuiltIn)).toBe(true);
     expect(FINANCE_HARNESSES[0]!.constraints?.maxSteps).toBe(10);
@@ -223,6 +236,7 @@ describe('built-in coding and finance harness catalogs', () => {
     expect(FINANCE_HARNESSES[2]!.outputSchema?.required).toEqual(
       expect.arrayContaining(['symbol', 'structure', 'bias', 'confidence', 'riskNotes']),
     );
+    expect(FINANCE_HARNESSES[3]!.id).toBe('finance_portfolio');
   });
 
   it('has unique harness ids across all domains', () => {

@@ -16,7 +16,7 @@ function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
   // Control-char domain → general (check before trim)
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
   const d = raw.trim().toLowerCase() || 'general';
-  return (['finance', 'coding', 'general'] as const).includes(d as never)
+  return (['finance', 'coding', 'research', 'general'] as const).includes(d as never)
     ? (d as WorkflowBlock['domain'])
     : 'general';
 }

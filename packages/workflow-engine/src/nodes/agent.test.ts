@@ -327,6 +327,75 @@ describe('AgentNode LLM model selection', () => {
     expect(opts?.maxIterations).toBe(15);
   });
 
+  it('prefers workerId over harnessId and resolves worker maxSteps', async () => {
+    // coding_reviewer maxSteps=15; coding_implementer may differ — prefer workerId
+    orchestratorRun.mockClear();
+    orchestratorCtor.mockClear();
+    const node = new AgentNode('agent', {
+      workerId: 'coding_reviewer',
+      harnessId: 'finance_analyst',
+      maxSteps: 99,
+      systemPrompt: 'Worker path',
+    });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+      }),
+    );
+    const opts = orchestratorCtor.mock.calls[0]?.[2] as { maxIterations?: number };
+    expect(opts?.maxIterations).toBe(15);
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goal).toContain('Worker path');
+    // coding_reviewer prompt (Korean "시니어"), not finance
+    expect(goal).toContain('시니어');
+    expect(goal).not.toMatch(/금융|리스크 분석/i);
+  });
+
+  it('ignores control-char and overlong workerId (falls back to bare prompt)', async () => {
+    orchestratorRun.mockClear();
+    const ctrl = new AgentNode('agent', {
+      workerId: `coding_reviewer${'\n'}`,
+      systemPrompt: 'Base only',
+    });
+    await ctrl.execute(ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }));
+    const goalCtrl = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goalCtrl).toContain('Base only');
+    expect(goalCtrl).not.toContain('시니어');
+
+    orchestratorRun.mockClear();
+    const long = new AgentNode('agent', {
+      workerId: 'w'.repeat(201),
+      systemPrompt: 'Long id ignored',
+    });
+    await long.execute(ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }));
+    const goalLong = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goalLong).toContain('Long id ignored');
+    expect(goalLong).not.toContain('시니어');
+  });
+
+  it('coerces non-string workerId via String()', async () => {
+    const { registerHarness, resolveHarness } = await import('../harness/index.js');
+    registerHarness({
+      id: 'cov_agent_worker_num',
+      name: 'Num Worker',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'Worker num body',
+      allowedTools: ['read_file'],
+    });
+    expect(resolveHarness('cov_agent_worker_num')).toBeDefined();
+
+    orchestratorRun.mockClear();
+    const node = new AgentNode('agent', {
+      workerId: { toString: () => 'cov_agent_worker_num' } as never,
+      systemPrompt: 'Node',
+    });
+    await node.execute(ctx({ settings: { ANTHROPIC_API_KEY: 'sk-ant-test' } }));
+    const goal = String(orchestratorRun.mock.calls[0]?.[0] ?? '');
+    expect(goal).toContain('Worker num body');
+    expect(goal).toContain('Node');
+  });
+
   it('clamps harness maxSteps to 200', async () => {
     const { registerHarness } = await import('../harness/index.js');
     registerHarness({
@@ -431,8 +500,8 @@ describe('AgentNode LLM model selection', () => {
   });
 
   it('strips null bytes from harness prompt; skips null-byte design context', async () => {
-    const harnessMod = await import('../harness/index.js');
-    const spy = vi.spyOn(harnessMod, 'resolveHarness').mockReturnValue({
+    const packsMod = await import('../packs/index.js');
+    const spy = vi.spyOn(packsMod, 'resolveWorker').mockReturnValue({
       id: 'cov_agent_null_harness',
       name: 'Null Harness',
       domain: 'coding',

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { migrateWorkflowV1ToV2 } from '@neos-work/shared';
 import templates, { TEMPLATES } from './templates.js';
 
 describe('templates routes', () => {
@@ -158,5 +159,28 @@ describe('workflow TEMPLATES', () => {
     expect(new Set(names).size).toBe(names.length);
     expect(TEMPLATES.every((t) => typeof t.description === 'string' && t.description.trim().length > 0)).toBe(true);
     expect(TEMPLATES.length).toBeGreaterThanOrEqual(9);
+  });
+
+  it('migrates legacy agent_* + harnessId templates to agent + workerId (v2)', () => {
+    for (const t of TEMPLATES) {
+      const { workflow, report } = migrateWorkflowV1ToV2({
+        ...t,
+        id: `tmpl-${t.name}`,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+      expect(workflow.schemaVersion).toBe(2);
+      expect(report.warnings).toEqual([]);
+      for (const n of workflow.nodes) {
+        // No legacy agent types remain
+        expect(n.type).not.toMatch(/^agent_/);
+        if (n.type === 'agent') {
+          const workerId = n.config['workerId'];
+          expect(typeof workerId).toBe('string');
+          expect(String(workerId).length).toBeGreaterThan(0);
+          expect(n.config['harnessId']).toBeUndefined();
+        }
+      }
+    }
   });
 });

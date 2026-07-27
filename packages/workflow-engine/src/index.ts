@@ -7,7 +7,19 @@ export type { ExecutorOptions } from './executor.js';
 export { topologicalSort } from './graph.js';
 export type { ExecutableNode, NodeContext, NodeResult, NodeType } from './types.js';
 
-// Harness registry
+// Domain packs & workers (v0.4)
+export {
+  resolveWorker,
+  listWorkers,
+  registerWorker,
+  listPacks,
+  resolvePack,
+  isBuiltInPackId,
+  BUILT_IN_PACK_IDS,
+} from './packs/index.js';
+export type { BuiltInPackId } from './packs/index.js';
+
+// Harness registry (deprecated aliases → workers)
 export { resolveHarness, listHarnesses, registerHarness } from './harness/index.js';
 
 // Block registry

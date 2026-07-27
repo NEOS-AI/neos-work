@@ -6,7 +6,7 @@
 
 import { AgentOrchestrator, AnthropicAdapter, GoogleAdapter, OpenAIAdapter, ToolRegistry, createWebSearchTool, createFilesystemTools } from '@neos-work/core';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
-import { resolveHarness } from '../harness/index.js';
+import { resolveWorker } from '../packs/index.js';
 import { safeServerUrl } from './server-url.js';
 import { scrubErrorMessage } from '@neos-work/core';
 
@@ -126,7 +126,7 @@ export class AgentNode implements ExecutableNode {
     const rawWorkerId = this.nodeConfig?.['workerId'] ?? this.nodeConfig?.['harnessId'];
     let harnessId = '';
     if (typeof rawWorkerId === 'string') {
-      // Control-char / overlong → ignore harness (resolveHarness also guards)
+      // Control-char / overlong → ignore worker (resolveWorker also guards)
       if (!/[\0\r\n]/.test(rawWorkerId) && rawWorkerId.length <= 200) {
         harnessId = rawWorkerId.trim();
       }
@@ -134,7 +134,7 @@ export class AgentNode implements ExecutableNode {
       const s = String(rawWorkerId);
       if (!/[\0\r\n]/.test(s) && s.length <= 200) harnessId = s.trim();
     }
-    const harness = harnessId ? resolveHarness(harnessId) : undefined;
+    const harness = harnessId ? resolveWorker(harnessId) : undefined;
 
     const sysRaw =
       typeof this.nodeConfig?.['systemPrompt'] === 'string'
