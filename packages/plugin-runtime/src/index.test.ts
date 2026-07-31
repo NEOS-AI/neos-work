@@ -80,3 +80,24 @@ describe('@neos-work/plugin-runtime', () => {
     expect(reg.has('custom.local_atom')).toBe(true);
   });
 });
+
+import { atomIdsForStageKind, collectAtomIdsForPipeline } from './stage-atoms.js';
+
+describe('stage → atom mapping', () => {
+  it('maps known stage kinds', () => {
+    expect(atomIdsForStageKind('form')).toContain('genui.form');
+    expect(atomIdsForStageKind('execute')).toContain('editor.apply_patch');
+  });
+
+  it('collects unique pipeline atoms', () => {
+    const ids = collectAtomIdsForPipeline([
+      { kind: 'discovery' },
+      { kind: 'execute' },
+      { kind: 'form' },
+    ]);
+    expect(ids).toContain('gate.capability');
+    expect(ids).toContain('genui.form');
+    expect(ids).toContain('editor.apply_patch');
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});

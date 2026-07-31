@@ -26,17 +26,30 @@ function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): stri
 
 plugins.get('/', async (c) => {
   const list = await listPlugins();
-  // Strip skillContent and dir for list view
-  return c.json({ ok: true, data: list.map(({ skillContent: _, dir: __, ...p }) => p) });
+  // Strip skillContent and dir for list view; keep channel for marketplace filters
+  return c.json({
+    ok: true,
+    data: list.map(({ skillContent: _, dir: __, ...p }) => p),
+    meta: {
+      total: list.length,
+      channels: {
+        user: list.filter((p) => (p as { channel?: string }).channel === 'user').length,
+        official: list.filter((p) => (p as { channel?: string }).channel === 'official').length,
+        community: list.filter((p) => (p as { channel?: string }).channel === 'community').length,
+        bundled: list.filter((p) => (p as { channel?: string }).channel === 'bundled').length,
+      },
+    },
+  });
 });
 
 /** Atom registry catalog (Task 6 foundation). */
 plugins.get('/atoms', (c) => {
   const reg = getGlobalAtomRegistry();
+  const atoms = reg.list();
   return c.json({
     ok: true,
-    data: reg.list(),
-    meta: { count: reg.list().length },
+    data: atoms,
+    meta: { count: atoms.length },
   });
 });
 

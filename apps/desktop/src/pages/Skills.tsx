@@ -69,12 +69,16 @@ export function Skills() {
     loadSkills();
   }, [loadSkills]);
 
-  // Escape: close try-prompt first, otherwise clear search
+  // Escape: detail drawer → try-prompt → clear search
   useEffect(() => {
-    if (!tryPrompt && !search) return;
+    if (!detailSkill && !tryPrompt && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
+      if (detailSkill) {
+        setDetailSkill(null);
+        return;
+      }
       if (tryPrompt) {
         setTryPrompt(null);
         setTryPromptCopyStatus(null);
@@ -84,7 +88,7 @@ export function Skills() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tryPrompt, search]);
+  }, [detailSkill, tryPrompt, search]);
 
   const handleScan = async () => {
     if (!client || isScanning) return;
@@ -435,7 +439,7 @@ export function Skills() {
                 style={{ color: 'var(--text-muted)' }}
                 onClick={() => setDetailSkill(null)}
               >
-                Close
+                {t('common.cancel')}
               </button>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4 text-xs">
@@ -470,9 +474,21 @@ export function Skills() {
                     : 'flat file'}
                 </dd>
                 <dt style={{ color: 'var(--text-muted)' }}>Path</dt>
-                <dd className="font-mono break-all" style={{ color: 'var(--text-secondary)' }}>
-                  {scrubDisplayText(detailSkill.path, { collapseLines: true, maxChars: 240 })
-                    || '—'}
+                <dd
+                  className="font-mono break-all"
+                  style={{ color: 'var(--text-secondary)' }}
+                  title={scrubDisplayText(detailSkill.path, { collapseLines: true, maxChars: 240 })}
+                >
+                  {(() => {
+                    const raw = scrubDisplayText(detailSkill.path, {
+                      collapseLines: true,
+                      maxChars: 240,
+                    });
+                    if (!raw) return '—';
+                    // Prefer trailing package-relative segments over full host path
+                    const parts = raw.replace(/\\/g, '/').split('/').filter(Boolean);
+                    return parts.slice(-3).join('/') || raw;
+                  })()}
                 </dd>
               </dl>
               {detailSkill.triggers && detailSkill.triggers.length > 0 && (
@@ -753,7 +769,7 @@ function SkillCard({
             className="rounded-lg border px-2 py-0.5 text-[10px] transition-colors"
             style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
           >
-            Details
+            {t('common.view')}
           </button>
         )}
         {onUpgrade && (

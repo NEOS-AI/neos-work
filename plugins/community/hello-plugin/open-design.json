@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "od-plugin/v1",
+  "id": "hello-plugin",
+  "name": "Hello Plugin",
+  "description": "Community marketplace stub.",
+  "version": "0.1.0",
+  "pipeline": [
+    { "id": "execute", "name": "Greet", "kind": "execute", "prompt": "Greet the user about: {{message}}" }
+  ],
+  "inputFields": [
+    { "key": "message", "label": "Message", "type": "text", "placeholder": "world" }
+  ]
+}

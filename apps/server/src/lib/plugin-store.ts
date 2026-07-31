@@ -3,6 +3,7 @@
  * Skills directory: ~/.config/neos-work/skills/<plugin-name>/
  */
 
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -96,6 +97,9 @@ function normalizePipelineStages(raw: unknown): PipelineStage[] | undefined {
   return stages.length > 0 ? stages : undefined;
 }
 
+/** Marketplace channel for UI filters. */
+export type PluginChannel = 'user' | 'official' | 'community' | 'bundled';
+
 export interface PluginManifest {
   schemaVersion: 'od-plugin/v1';
   id: string;
@@ -109,83 +113,175 @@ export interface PluginManifest {
   skillContent?: string;
   /** directory where the plugin lives */
   dir?: string;
+  /** Marketplace channel (user skills vs bundled official/community). */
+  channel?: PluginChannel;
 }
 
-export async function listPlugins(): Promise<PluginManifest[]> {
-  try {
-    const entries = await fs.readdir(SKILLS_DIR, { withFileTypes: true });
-    const plugins: PluginManifest[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      // Skip hidden skill directories
-      if (!entry.name || entry.name.startsWith('.')) continue;
-      const dir = path.join(SKILLS_DIR, entry.name);
-      const manifestPath = path.join(dir, 'open-design.json');
-      try {
-        const raw = await fs.readFile(manifestPath, 'utf-8');
-        const manifest = JSON.parse(raw) as PluginManifest;
-        if (manifest.schemaVersion !== 'od-plugin/v1') continue;
-        // Normalize identity fields (dir name fallback when id blank)
-        // Control-char check before trim on manifest id
-        let id = '';
-        if (typeof manifest.id === 'string' && !/[\0\r\n]/.test(manifest.id)) {
-          id = manifest.id.trim();
-        }
-        if (!id) id = entry.name.trim();
-        if (!id || /[\0\r\n]/.test(id) || id.length > 200) continue;
-        manifest.id = id;
-        if (typeof manifest.name === 'string' && !/[\0\r\n]/.test(manifest.name)) {
-          manifest.name = manifest.name.trim() || id;
-        } else {
-          manifest.name = id;
-        }
-        if (typeof manifest.description === 'string' && !/[\0]/.test(manifest.description)) {
-          // Allow newlines in description body? Prefer single-line for UI cards
-          let d = manifest.description.replace(/[\r\n]+/g, ' ').trim() || undefined;
-          if (d && d.length > PLUGIN_DESCRIPTION_MAX) d = d.slice(0, PLUGIN_DESCRIPTION_MAX);
-          manifest.description = d;
-        }
-        if (typeof manifest.version === 'string' && !/[\0\r\n]/.test(manifest.version)) {
-          const v = manifest.version.trim() || '0.0.0';
-          manifest.version = v.length > 64 ? v.slice(0, 64) : v;
-        } else if (typeof manifest.version === 'string') {
-          manifest.version = '0.0.0';
-        }
-        // Normalize pipeline stages (kind allow-list, trim ids/names)
-        if (manifest.pipeline !== undefined) {
-          const stages = normalizePipelineStages(manifest.pipeline);
-          if (stages) manifest.pipeline = stages;
-          else delete manifest.pipeline;
-        }
-        // Optionally load SKILL.md content (whitespace-only → omit; cap size)
-        const skillPath = path.join(dir, 'SKILL.md');
-        try {
-          const skillBody = await fs.readFile(skillPath, 'utf-8');
-          // Null-byte skill files omitted (cannot inject into prompts safely)
-          if (/\0/.test(skillBody)) {
-            // skip corrupt SKILL.md
-          } else {
-            const trimmedSkill = skillBody.trim();
-            if (trimmedSkill) {
-              manifest.skillContent =
-                skillBody.length > PLUGIN_SKILL_CONTENT_MAX
-                  ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
-                  : skillBody;
-            }
-          }
-        } catch {
-          // No SKILL.md — ok
-        }
-        manifest.dir = dir;
-        plugins.push(manifest);
-      } catch {
-        // No open-design.json or invalid JSON — skip
-      }
-    }
-    return plugins;
-  } catch {
-    return [];
+export function resolveBundledPluginsDir(
+  explicit?: string | null,
+  cwd: string = process.cwd(),
+): string | null {
+  if (typeof explicit === 'string' && !/[\0\r\n]/.test(explicit)) {
+    const t = explicit.trim();
+    if (t && t.length <= 4_096 && existsSync(t)) return path.resolve(t);
   }
+  const env = process.env.NEOS_BUNDLED_PLUGINS;
+  if (typeof env === 'string' && !/[\0\r\n]/.test(env)) {
+    const t = env.trim();
+    if (t && t.length <= 4_096 && existsSync(t)) return path.resolve(t);
+  }
+  for (const c of [
+    path.join(cwd, 'plugins'),
+    path.join(cwd, '..', 'plugins'),
+    path.join(cwd, '..', '..', 'plugins'),
+    path.join(cwd, '..', '..', '..', 'plugins'),
+  ]) {
+    try {
+      if (existsSync(c)) return path.resolve(c);
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+async function loadPluginFromDir(
+  dir: string,
+  fallbackId: string,
+  channel: PluginChannel,
+): Promise<PluginManifest | null> {
+  const manifestPath = path.join(dir, 'open-design.json');
+  try {
+    const raw = await fs.readFile(manifestPath, 'utf-8');
+    const manifest = JSON.parse(raw) as PluginManifest & { channel?: PluginChannel };
+    if (manifest.schemaVersion !== 'od-plugin/v1') return null;
+    let id = '';
+    if (typeof manifest.id === 'string' && !/[\0\r\n]/.test(manifest.id)) {
+      id = manifest.id.trim();
+    }
+    if (!id) id = fallbackId.trim();
+    if (!id || /[\0\r\n]/.test(id) || id.length > 200) return null;
+    manifest.id = id;
+    if (typeof manifest.name === 'string' && !/[\0\r\n]/.test(manifest.name)) {
+      manifest.name = manifest.name.trim() || id;
+    } else {
+      manifest.name = id;
+    }
+    if (typeof manifest.description === 'string' && !/\0/.test(manifest.description)) {
+      let d = manifest.description.replace(/[\r\n]+/g, ' ').trim() || undefined;
+      if (d && d.length > PLUGIN_DESCRIPTION_MAX) d = d.slice(0, PLUGIN_DESCRIPTION_MAX);
+      manifest.description = d;
+    }
+    if (typeof manifest.version === 'string' && !/[\0\r\n]/.test(manifest.version)) {
+      const v = manifest.version.trim() || '0.0.0';
+      manifest.version = v.length > 64 ? v.slice(0, 64) : v;
+    } else if (typeof manifest.version === 'string') {
+      manifest.version = '0.0.0';
+    }
+    if (manifest.pipeline !== undefined) {
+      const stages = normalizePipelineStages(manifest.pipeline);
+      if (stages) manifest.pipeline = stages;
+      else delete manifest.pipeline;
+    }
+    const skillPath = path.join(dir, 'SKILL.md');
+    try {
+      const skillBody = await fs.readFile(skillPath, 'utf-8');
+      if (!/\0/.test(skillBody)) {
+        const trimmedSkill = skillBody.trim();
+        if (trimmedSkill) {
+          manifest.skillContent =
+            skillBody.length > PLUGIN_SKILL_CONTENT_MAX
+              ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
+              : skillBody;
+        }
+      }
+    } catch {
+      // No SKILL.md
+    }
+    manifest.dir = dir;
+    (manifest as PluginManifest & { channel?: PluginChannel }).channel = channel;
+    return manifest;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Scan a root for plugin packages.
+ * - Direct children with open-design.json
+ * - One-level groups (_official, community, …) containing packages
+ */
+async function scanPluginRoot(
+  root: string,
+  channel: PluginChannel,
+): Promise<PluginManifest[]> {
+  const out: PluginManifest[] = [];
+  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name || entry.name.startsWith('.')) continue;
+    const dir = path.join(root, entry.name);
+    // Try as package
+    const direct = await loadPluginFromDir(dir, entry.name, channel);
+    if (direct) {
+      out.push(direct);
+      continue;
+    }
+    // Try as group folder
+    let children: Awaited<ReturnType<typeof fs.readdir>>;
+    try {
+      children = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    const groupChannel: PluginChannel =
+      entry.name === '_official' || entry.name === 'official'
+        ? 'official'
+        : entry.name === 'community'
+          ? 'community'
+          : channel;
+    for (const child of children) {
+      if (!child.isDirectory() || !child.name || child.name.startsWith('.')) continue;
+      const pkg = await loadPluginFromDir(
+        path.join(dir, child.name),
+        child.name,
+        groupChannel,
+      );
+      if (pkg) out.push(pkg);
+    }
+  }
+  return out;
+}
+
+/**
+ * List plugins: user skills dir first, then bundled marketplace `plugins/`.
+ * Same plugin id → user wins (shadowing).
+ */
+export async function listPlugins(opts?: {
+  bundledRoot?: string | null;
+}): Promise<PluginManifest[]> {
+  const byId = new Map<string, PluginManifest>();
+
+  // 1) User-installed (skills with open-design.json)
+  for (const p of await scanPluginRoot(SKILLS_DIR, 'user')) {
+    byId.set(p.id, p);
+  }
+
+  // 2) Bundled marketplace
+  const bundled =
+    resolveBundledPluginsDir(opts?.bundledRoot ?? null)
+    ?? resolveBundledPluginsDir(null);
+  if (bundled) {
+    for (const p of await scanPluginRoot(bundled, 'bundled')) {
+      if (!byId.has(p.id)) byId.set(p.id, p);
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Practical bound for plugin id lookups. */

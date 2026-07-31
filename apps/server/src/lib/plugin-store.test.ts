@@ -7,6 +7,7 @@ import {
   getPlugin,
   listPlugins,
   normalizePipelineStageKind,
+  resolveBundledPluginsDir,
 } from './plugin-store.js';
 
 const SKILLS_DIR = path.join(os.homedir(), '.config', 'neos-work', 'skills');
@@ -403,5 +404,24 @@ describe('listPlugins pipeline normalization', () => {
     );
     const p = (await listPlugins()).find((x) => x.id === DIR_NAME);
     expect(p?.pipeline).toBeUndefined();
+  });
+});
+
+describe('bundled marketplace plugins', () => {
+  it('discovers official/community stubs when plugins/ is present', async () => {
+    const root =
+      resolveBundledPluginsDir(path.join(process.cwd(), '..', '..', 'plugins'))
+      ?? resolveBundledPluginsDir(null, path.join(process.cwd(), '..', '..'));
+    if (!root) {
+      expect(root).toBeNull();
+      return;
+    }
+    const list = await listPlugins({ bundledRoot: root });
+    const ids = list.map((p) => p.id);
+    expect(ids).toContain('landing-gen');
+    expect(ids).toContain('code-critique');
+    expect(ids).toContain('hello-plugin');
+    const official = list.find((p) => p.id === 'landing-gen');
+    expect(official?.channel).toBe('official');
   });
 });

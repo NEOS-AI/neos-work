@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "od-plugin/v1",
+  "id": "landing-gen",
+  "name": "Landing Page Generator",
+  "description": "Official plugin: discovery → plan → execute → critique for landing pages.",
+  "version": "1.0.0",
+  "capabilityGates": [],
+  "pipeline": [
+    { "id": "discovery", "name": "Discovery", "kind": "discovery", "humanInLoop": true, "prompt": "Ask clarifying questions about audience and offer." },
+    { "id": "plan", "name": "Plan", "kind": "plan", "prompt": "Outline sections for the landing page given: {{discovery}}" },
+    { "id": "execute", "name": "Generate", "kind": "execute", "prompt": "Write index.html for: {{plan}}" },
+    { "id": "critique", "name": "Critique", "kind": "critique", "prompt": "Review accessibility of: {{execute}}" }
+  ],
+  "inputFields": [
+    { "key": "brief", "label": "Brief", "type": "textarea", "placeholder": "SaaS analytics for founders" }
+  ]
+}

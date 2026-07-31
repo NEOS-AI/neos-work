@@ -12,3 +12,9 @@ export {
   getGlobalAtomRegistry,
   resetGlobalAtomRegistry,
 } from './registry.js';
+
+export {
+  atomIdsForStageKind,
+  collectAtomIdsForPipeline,
+  stageKindToAtomKind,
+} from './stage-atoms.js';

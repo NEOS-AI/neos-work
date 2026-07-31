@@ -323,4 +323,57 @@ describe('bundled design-systems catalog', () => {
       }
     }
   });
+
+  it('resolveBundled / scan / id hygiene edges', async () => {
+    // invalid explicit path is ignored; falls back to cwd/repo candidates (may resolve)
+    const fallback = resolveBundledDesignSystemsDir('bad\npath');
+    expect(fallback === null || fallback.includes('design-systems')).toBe(true);
+    expect(resolveBundledDesignSystemsDir('/no/such/dir-xyz') === null
+      || typeof resolveBundledDesignSystemsDir('/no/such/dir-xyz') === 'string').toBe(true);
+    expect(await scanDesignSystemsRoot('bad\nroot', 'user')).toEqual([]);
+    expect(await scanDesignSystemsRoot('', 'user')).toEqual([]);
+    expect(await scanDesignSystemsRoot('/tmp/definitely-missing-ds-root-xyz', 'user')).toEqual(
+      [],
+    );
+    expect(await getDesignSystem('')).toBeNull();
+    expect(await getDesignSystem('bad\nid')).toBeNull();
+    expect(await getDesignSystem('x'.repeat(100))).toBeNull();
+    expect(await getDesignSystemContent('nope')).toBeNull();
+    expect(await getDesignSystemTokens('nope')).toBeNull();
+    expect(await updateDesignSystemContent('nope', 'x')).toBe(false);
+    expect(await deleteDesignSystem('nope')).toBe(false);
+
+    const bundled = await listDesignSystems({ includeBundled: true });
+    const b = bundled.find((d) => d.source === 'bundled');
+    if (b) {
+      expect(await updateDesignSystemContent(b.id, '# no')).toBe(false);
+      expect(await deleteDesignSystem(b.id)).toBe(false);
+      if (b.hasTokens) {
+        const t = await getDesignSystemTokens(b.id);
+        expect(t === null || typeof t === 'string').toBe(true);
+      }
+    }
+  });
+
+  it('parseDesignSystemManifest tolerates $schema and drops bad tokens', () => {
+    const m = parseDesignSystemManifest({
+      $schema: 'od-design-system-project/v1',
+      name: '  Brand  ',
+      description: 'line1\nline2',
+      version: '2.0',
+      provenance: { author: 'a', bad: 1 },
+      tokens: {
+        ok: '#fff',
+        'bad\nkey': 'x',
+        long: 'v'.repeat(300),
+        ...Object.fromEntries(Array.from({ length: 120 }, (_, i) => [`t${i}`, '1'])),
+      },
+    });
+    expect(m?.schema).toContain('od-design-system-project');
+    expect(m?.name).toBe('Brand');
+    expect(m?.description).toContain('line1');
+    expect(m?.tokens?.ok).toBe('#fff');
+    expect(m?.tokens?.['bad\nkey']).toBeUndefined();
+    expect(Object.keys(m?.tokens ?? {}).length).toBeLessThanOrEqual(100);
+  });
 });

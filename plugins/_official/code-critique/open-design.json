@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "od-plugin/v1",
+  "id": "code-critique",
+  "name": "Code Critique",
+  "description": "Official plugin for staged code review.",
+  "version": "1.0.0",
+  "pipeline": [
+    { "id": "plan", "name": "Scope", "kind": "plan", "prompt": "List review focus areas for: {{brief}}" },
+    { "id": "execute", "name": "Review", "kind": "execute", "prompt": "Perform review: {{plan}}\n\nCode:\n{{code}}" },
+    { "id": "critique", "name": "Summarize", "kind": "critique", "prompt": "Summarize blocking vs nice-to-have from: {{execute}}" }
+  ],
+  "inputFields": [
+    { "key": "brief", "label": "Context", "type": "text" },
+    { "key": "code", "label": "Diff or code", "type": "textarea" }
+  ]
+}

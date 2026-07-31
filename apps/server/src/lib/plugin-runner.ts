@@ -1,16 +1,28 @@
 /**
  * Plugin runner — executes a plugin's atom pipeline stage by stage
  * Supports human-in-the-loop via SSE pause/resume
+ * v0.5.12: atom registry snapshot pin + capability deny + optional CLI execute
  */
 
 import crypto from 'node:crypto';
 
 import { scrubErrorMessage } from '@neos-work/core';
+import {
+  collectAtomIdsForPipeline,
+  getGlobalAtomRegistry,
+} from '@neos-work/plugin-runtime';
 
 import type { PluginManifest, PipelineStage } from './plugin-store.js';
+import { spawnRegistryAgent } from './registry-spawn.js';
 
 export type PluginSSEEvent =
-  | { type: 'pipeline.started'; runId: string; pluginId: string }
+  | {
+      type: 'pipeline.started';
+      runId: string;
+      pluginId: string;
+      snapshotId?: string;
+      atomIds?: string[];
+    }
   | { type: 'stage.started'; stageId: string; stageName: string }
   | { type: 'stage.output'; stageId: string; output: string }
   | { type: 'stage.waiting'; stageId: string; surface: string; schema: unknown }
@@ -36,9 +48,56 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
   const { plugin, inputs, settings, onEvent, signal } = options;
   const runId = crypto.randomUUID();
 
-  onEvent({ type: 'pipeline.started', runId, pluginId: plugin.id });
-
   const stages = plugin.pipeline ?? [];
+  const atomIds = collectAtomIdsForPipeline(stages);
+  const registry = getGlobalAtomRegistry();
+
+  // Capability gates from plugin manifest (deny list)
+  const deniedCaps = Array.isArray(plugin.capabilityGates)
+    ? plugin.capabilityGates
+        .filter((c): c is string => typeof c === 'string' && !/[\0\r\n]/.test(c))
+        .map((c) => c.trim())
+        .filter(Boolean)
+    : [];
+  // Settings override: PLUGIN_DENY_CAPS=tool.shell,tool.web
+  const denySetting = settings['PLUGIN_DENY_CAPS'];
+  if (typeof denySetting === 'string' && !/[\0\r\n]/.test(denySetting)) {
+    for (const part of denySetting.split(',')) {
+      const c = part.trim();
+      if (c) deniedCaps.push(c);
+    }
+  }
+  const deniedAtoms = registry.deniedByCapabilities(atomIds, deniedCaps);
+  if (deniedAtoms.length > 0) {
+    onEvent({
+      type: 'pipeline.failed',
+      runId,
+      error: `Capability deny blocked atoms: ${deniedAtoms.slice(0, 10).join(', ')}`,
+    });
+    return runId;
+  }
+
+  const snapshot = registry.pinSnapshot({
+    pluginId: plugin.id,
+    name: `${plugin.name || plugin.id}@${runId.slice(0, 8)}`,
+    atomIds,
+    fragments: {
+      skillPreview:
+        typeof plugin.skillContent === 'string'
+          ? plugin.skillContent.slice(0, 4_000)
+          : undefined,
+      inputs: Object.keys(inputs).slice(0, 50),
+    },
+  });
+
+  onEvent({
+    type: 'pipeline.started',
+    runId,
+    pluginId: plugin.id,
+    snapshotId: snapshot?.id,
+    atomIds,
+  });
+
   const stageOutputs: Record<string, string> = {};
 
   // Build initial context from inputs
@@ -83,8 +142,15 @@ export async function runPlugin(options: RunnerOptions): Promise<string> {
         stageOutputs[outputKey] = output;
         onEvent({ type: 'stage.completed', stageId, output });
       } else {
-        // Execute stage via LLM
-        const output = await executeStage(normalizedStage, context, stageOutputs, settings, signal);
+        // Prefer coding-agent CLI when PLUGIN_CLI_AGENT is a registry id
+        const output = await executeStage(
+          normalizedStage,
+          context,
+          stageOutputs,
+          settings,
+          signal,
+          plugin,
+        );
         stageOutputs[outputKey] = output;
         context[outputKey] = output;
         onEvent({ type: 'stage.output', stageId, output });
@@ -161,6 +227,7 @@ async function executeStage(
   previousOutputs: Record<string, string>,
   settings: Record<string, string>,
   signal?: AbortSignal,
+  plugin?: PluginManifest,
 ): Promise<string> {
   // Sanitize API keys before Authorization / x-api-key headers
   const sanitizeKey = (raw: unknown): string => {
@@ -175,10 +242,6 @@ async function executeStage(
     typeof stage.name === 'string' && !/[\0\r\n]/.test(stage.name)
       ? stage.name.trim() || stage.id
       : stage.id;
-
-  if (!anthropicKey && !openaiKey) {
-    return `[Stage ${stageName}: No LLM API key configured]`;
-  }
 
   // Cap interpolated prompt / stage output (plan Task 5 — runaway context defense)
   const STAGE_PROMPT_MAX = 100_000;
@@ -200,6 +263,17 @@ async function executeStage(
     if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
     prompt = prompt.replaceAll(`{{${key}}}`, String(val));
   }
+  // Prepend skill body for execute stages when present
+  if (
+    stage.kind === 'execute'
+    && plugin
+    && typeof plugin.skillContent === 'string'
+    && plugin.skillContent.trim()
+    && !/\0/.test(plugin.skillContent)
+  ) {
+    const skill = plugin.skillContent.trim().slice(0, 32_000);
+    prompt = `## Plugin skill\n${skill}\n\n## Task\n${prompt}`;
+  }
   if (prompt.length > STAGE_PROMPT_MAX) {
     prompt = prompt.slice(0, STAGE_PROMPT_MAX) + '\n…[prompt truncated]';
   }
@@ -208,6 +282,37 @@ async function executeStage(
     text.length > STAGE_OUTPUT_MAX
       ? text.slice(0, STAGE_OUTPUT_MAX) + '\n…[output truncated]'
       : text;
+
+  // Prefer coding-agent CLI when PLUGIN_CLI_AGENT is set (registry id, e.g. cli-claude)
+  const cliAgentRaw = settings['PLUGIN_CLI_AGENT'];
+  if (
+    typeof cliAgentRaw === 'string'
+    && !/[\0\r\n]/.test(cliAgentRaw)
+    && cliAgentRaw.trim().startsWith('cli-')
+    && stage.kind === 'execute'
+  ) {
+    const agentId = cliAgentRaw.trim();
+    try {
+      const result = await spawnRegistryAgent({
+        agentId,
+        prompt,
+        signal,
+      });
+      return clampOutput(result.output || `[CLI ${agentId} exit ${result.exitCode}]`);
+    } catch (err) {
+      const msg =
+        scrubErrorMessage(err instanceof Error ? err.message : 'CLI agent failed', 500)
+        || 'CLI agent failed';
+      // Fall through to LLM if CLI missing
+      if (!anthropicKey && !openaiKey) {
+        return `[Stage ${stageName}: ${msg}]`;
+      }
+    }
+  }
+
+  if (!anthropicKey && !openaiKey) {
+    return `[Stage ${stageName}: No LLM API key configured]`;
+  }
 
   // Anthropic Messages API
   if (anthropicKey) {

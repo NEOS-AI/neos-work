@@ -51,6 +51,10 @@ describe('filesystem tools', () => {
     expect(blank.success).toBe(false);
     expect(blank.error).toMatch(/Path is required/i);
 
+    const nonString = await read.execute({ path: null as unknown as string });
+    expect(nonString.success).toBe(false);
+    expect(nonString.error).toMatch(/Path is required/i);
+
     const control = await read.execute({ path: `safe${'\0'}evil.txt` });
     expect(control.success).toBe(false);
     expect(control.error).toMatch(/control characters/i);

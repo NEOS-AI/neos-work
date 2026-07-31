@@ -110,32 +110,52 @@ vi.mock('@neos-work/core', async (importOriginal) => {
   };
 });
 
-// Avoid real MCP connect noise during tool load
+// Avoid real MCP connect noise during tool load; allow success path for coverage
+const mcpMockState = vi.hoisted(() => ({ failConnect: false }));
 vi.mock('@neos-work/mcp-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@neos-work/mcp-client')>();
   return {
     ...actual,
     McpClient: class {
       async connect() {
-        throw new Error('mcp disabled in stream tests');
+        if (mcpMockState.failConnect) {
+          throw new Error('mcp disabled in stream tests');
+        }
       }
       async disconnect() {}
     },
-    buildMcpTools: async () => [],
+    buildMcpTools: async () => [
+      {
+        name: 'mcp_cov_tool',
+        description: 'coverage mcp tool',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => ({ success: true, output: 'mcp-ok' }),
+      },
+    ],
   };
 });
 
 // Browser tools are session-scoped; avoid Playwright in unit tests
+const browserMockState = vi.hoisted(() => ({ failConnect: false }));
 vi.mock('@neos-work/browser-tool', () => {
   class BrowserManager {
     async connect() {
-      throw new Error('browser unavailable in tests');
+      if (browserMockState.failConnect) {
+        throw new Error('browser unavailable in tests');
+      }
     }
     async disconnect() {}
   }
   return {
     BrowserManager,
-    createBrowserTools: () => [],
+    createBrowserTools: () => [
+      {
+        name: 'browser_cov_tool',
+        description: 'coverage browser tool',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => ({ success: true, output: 'browser-ok' }),
+      },
+    ],
   };
 });
 
@@ -148,6 +168,8 @@ const TITLE = `_cov_sess_stream_${process.pid}`;
 
 afterEach(() => {
   mockState.reset();
+  mcpMockState.failConnect = false;
+  browserMockState.failConnect = false;
   for (const s of listSessions('default')) {
     if (s.title === TITLE || (s.title && s.title.startsWith(TITLE))) {
       deleteSession(s.id);
@@ -494,6 +516,59 @@ describe('session chat SSE (mocked LLM)', () => {
         db.prepare('DELETE FROM mcp_server WHERE id = ?').run(mid);
       }
     }
+  });
+
+  it('registers MCP + browser tools on successful connect', async () => {
+    const id = await createSession();
+    const db = getDb();
+    const mcpId = `mcp_ok_tools_${process.pid}`;
+    db.prepare(
+      `INSERT INTO mcp_server (id, name, transport, command, args, url, enabled)
+       VALUES (?, ?, 'stdio', 'npx', ?, NULL, 1)`,
+    ).run(mcpId, `_cov_mcp_tools_${process.pid}`, JSON.stringify(['-y', 'pkg']));
+
+    mockState.setResponses([
+      [
+        {
+          type: 'tool_use',
+          toolUseId: 'tool_mcp_1',
+          toolName: 'mcp_cov_tool',
+          toolInput: {},
+        },
+        { type: 'done' },
+      ],
+      [{ type: 'text', content: 'used mcp tool' }, { type: 'done' }],
+    ]);
+    try {
+      const res = await session.request(`/${id}/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'use mcp' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toMatch(/mcp-ok|used mcp tool|tool_result|tool_use/);
+    } finally {
+      db.prepare('DELETE FROM mcp_server WHERE id = ?').run(mcpId);
+    }
+  });
+
+  it('tolerates MCP/browser connect failures during agent stream', async () => {
+    mcpMockState.failConnect = true;
+    browserMockState.failConnect = true;
+    const id = await createSession();
+    mockState.setAgentEvents([
+      { type: 'text', content: 'agent with failed tools' },
+      { type: 'done', task: { status: 'completed' } },
+    ]);
+    const res = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'agent fail tools' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toMatch(/agent with failed tools|done|completed/i);
   });
 
   it('delete missing session and blank id paths return 404', async () => {

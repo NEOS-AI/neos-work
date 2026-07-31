@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  FILE_REVISION_CONTENT_MAX,
   FILE_REVISION_MAX_PER_PATH,
+  PREVIEW_COMMENT_BODY_MAX,
   addMessage,
   createConversation,
   createPreviewComment,
@@ -251,5 +253,140 @@ describe('projects update field validation', () => {
         /* ignore */
       }
     }
+  });
+});
+
+describe('projects db hygiene edges', () => {
+  it('safe lookups reject control/overlong ids and bad meta parses empty', () => {
+    expect(getProject('')).toBeUndefined();
+    expect(getProject('bad\nid')).toBeUndefined();
+    expect(getProject('x'.repeat(200))).toBeUndefined();
+    expect(deleteProject('bad\nid')).toBe(false);
+    expect(listFileRevisions('bad\nid')).toEqual([]);
+    expect(listFileRevisions('ok-id', 'path\n')).toEqual([]);
+    expect(listPreviewComments('bad\nid')).toEqual([]);
+    expect(listPreviewComments('ok-id', 'a\nb')).toEqual([]);
+    expect(listConversations('')).toEqual([]);
+    expect(listMessages('')).toEqual([]);
+    expect(getFileRevision('')).toBeUndefined();
+    expect(deletePreviewComment('')).toBe(false);
+
+    // corrupt meta_json on a real row → parseMeta returns {}
+    const p = createProject({ name: `${NAME}_meta_bad` });
+    createdIds.push(p.id);
+    getDb()
+      .prepare('UPDATE projects SET meta_json = ? WHERE id = ?')
+      .run('{not-json', p.id);
+    const again = getProject(p.id);
+    expect(again?.meta).toEqual({});
+
+    getDb()
+      .prepare('UPDATE projects SET meta_json = ? WHERE id = ?')
+      .run(JSON.stringify(['array']), p.id);
+    expect(getProject(p.id)?.meta).toEqual({});
+  });
+
+  it('recordFileRevision validates content size/null and source', () => {
+    const p = createProject({ name: `${NAME}_rev_hygiene` });
+    createdIds.push(p.id);
+
+    expect(() =>
+      recordFileRevision({
+        projectId: p.id,
+        path: 'a.html',
+        content: 'x\0y',
+        source: 'user',
+      }),
+    ).toThrow(/content/i);
+
+    expect(() =>
+      recordFileRevision({
+        projectId: p.id,
+        path: 'a.html',
+        content: 'x'.repeat(FILE_REVISION_CONTENT_MAX + 1),
+        source: 'user',
+      }),
+    ).toThrow(/max size/i);
+
+    expect(() =>
+      recordFileRevision({
+        projectId: p.id,
+        path: 'a.html',
+        content: 'ok',
+        source: 'nope' as never,
+      }),
+    ).toThrow(/source/i);
+
+    expect(() =>
+      recordFileRevision({
+        projectId: '',
+        path: 'a.html',
+        content: 'ok',
+        source: 'user',
+      }),
+    ).toThrow(/projectId/i);
+  });
+
+  it('preview comments and conversations validate fields', () => {
+    const p = createProject({ name: `${NAME}_conv_hygiene` });
+    createdIds.push(p.id);
+
+    expect(() =>
+      createPreviewComment({
+        projectId: p.id,
+        filePath: 'a.html',
+        selector: 'h1',
+        body: 'b'.repeat(PREVIEW_COMMENT_BODY_MAX + 1),
+      }),
+    ).toThrow(/max length/i);
+
+    expect(() =>
+      createPreviewComment({
+        projectId: p.id,
+        filePath: 'a\nb',
+        selector: 'h1',
+        body: 'x',
+      }),
+    ).toThrow(/filePath/i);
+
+    expect(() => createConversation('no-such-project-id-xyz')).toThrow();
+    expect(() => createConversation('bad\nid')).toThrow(/projectId/i);
+
+    const conv = createConversation(p.id, '  title  ');
+    expect(conv.title).toBe('title');
+
+    expect(() =>
+      addMessage({ conversationId: conv.id, role: 'nope' as never, content: 'x' }),
+    ).toThrow(/role/i);
+    expect(() =>
+      addMessage({ conversationId: conv.id, role: 'user', content: 'x\0y' }),
+    ).toThrow(/content/i);
+    expect(() =>
+      addMessage({ conversationId: conv.id, role: 'user', content: '   ' }),
+    ).toThrow(/required/i);
+    expect(() =>
+      addMessage({ conversationId: '', role: 'user', content: 'x' }),
+    ).toThrow(/conversationId/i);
+
+    const msg = addMessage({
+      conversationId: conv.id,
+      role: 'system',
+      content: 'note',
+      agentId: 'agent-1',
+    });
+    expect(msg.agentId).toBe('agent-1');
+    expect(listMessages(conv.id).some((m) => m.id === msg.id)).toBe(true);
+  });
+
+  it('updateProject nulls entryFile and designSystemId', () => {
+    const p = createProject({
+      name: `${NAME}_nulls`,
+      entryFile: 'index.html',
+      designSystemId: 'ds1',
+    });
+    createdIds.push(p.id);
+    const updated = updateProject(p.id, { entryFile: null, designSystemId: null });
+    expect(updated?.entryFile).toBeNull();
+    expect(updated?.designSystemId).toBeNull();
   });
 });
