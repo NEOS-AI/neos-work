@@ -1245,4 +1245,63 @@ describe('NodeConfigPanel', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
+
+  it('shows scrubbed design systems load error on throw', async () => {
+    listDesignSystems.mockRejectedValue(new Error(`ds${'\n'}down${'\0'}!`));
+    render(
+      <NodeConfigPanel
+        selectedNode={null}
+        validationIssues={[]}
+        onPatchNodeData={() => {}}
+        designSystemId=""
+        onUpdateDesignSystemId={() => {}}
+      />,
+    );
+    await waitFor(() => {
+      expect(listDesignSystems).toHaveBeenCalled();
+      expect(screen.getByText('ds down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('shows scrubbed error when webhook secret throws', async () => {
+    const prev = window.location.pathname;
+    window.history.pushState({}, '', '/workflows/wf-webhook-throw');
+    getWebhookSecret.mockReset().mockRejectedValue(new Error(`wh${'\n'}crash${'\0'}`));
+
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await waitFor(() => {
+      expect(getWebhookSecret).toHaveBeenCalledWith('wf-webhook-throw');
+      expect(screen.getByText('wh crash')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    window.history.pushState({}, '', prev || '/');
+  });
+
+  it('flashes Copy failed when webhook URL copy rejects', async () => {
+    const user = userEvent.setup();
+    const prev = window.location.pathname;
+    window.history.pushState({}, '', '/workflows/wf-webhook-copyfail');
+    getWebhookSecret.mockReset().mockResolvedValue({
+      ok: true,
+      data: {
+        secret: 'whsec_ok',
+        rateLimit: { limit: 60, remaining: 60, resetAt: Date.now() + 60_000 },
+      },
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    });
+    render(
+      <NodeConfigPanel selectedNode={null} validationIssues={[]} onPatchNodeData={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy URL' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Copy URL' }));
+    await waitFor(() => expect(screen.getByText('Copy failed')).toBeInTheDocument());
+    window.history.pushState({}, '', prev || '/');
+  });
+
 });

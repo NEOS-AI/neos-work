@@ -5,9 +5,12 @@
 
 import { scrubErrorMessage } from '@neos-work/core';
 import { isValidDeployProjectName } from '@neos-work/shared';
+import { isBlockedSsrfHost } from './ssrf.js';
 
 /** Re-export shared deploy project name validator (single source of truth). */
 export { isValidDeployProjectName };
+/** @deprecated Prefer isBlockedSsrfHost from ./ssrf.js */
+export { isBlockedSsrfHost as isBlockedDeployCheckHost };
 
 export interface DeployResult {
   url: string;
@@ -358,58 +361,6 @@ export function scrubSecretsFromText(raw: unknown, knownSecrets: string[] = []):
   return text.slice(0, 2_000);
 }
 
-/** True if dotted IPv4 is loopback / private / link-local / CGNAT. */
-function isBlockedIpv4(a: number, b: number, _c: number, _d: number): boolean {
-  if (a === 10) return true;
-  if (a === 127) return true;
-  if (a === 0) return true;
-  if (a === 169 && b === 254) return true; // link-local / cloud metadata
-  if (a === 192 && b === 168) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
-  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
-  return false;
-}
-
-/** True if host looks like loopback / private / link-local (check-link SSRF light). */
-export function isBlockedDeployCheckHost(hostname: string): boolean {
-  if (typeof hostname !== 'string' || /[\0\r\n]/.test(hostname)) return true;
-  // Strip brackets used for IPv6 literals in URLs
-  let h = hostname.trim().toLowerCase().replace(/\.$/, '');
-  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1);
-  if (!h) return true;
-  if (h === 'localhost' || h === '0.0.0.0' || h === '::' || h === '::1') return true;
-  if (h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
-  // metadata hostnames (common SSRF targets)
-  if (h === 'metadata.google.internal' || h === 'metadata') return true;
-  // IPv4
-  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    return isBlockedIpv4(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]));
-  }
-  // IPv4-mapped IPv6 (:ffff:127.0.0.1 or :ffff:7f00:1 hex form coarse)
-  const v4mapped = h.match(/^:?:ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i);
-  if (v4mapped) {
-    return isBlockedIpv4(
-      Number(v4mapped[1]),
-      Number(v4mapped[2]),
-      Number(v4mapped[3]),
-      Number(v4mapped[4]),
-    );
-  }
-  // IPv6 unique-local / link-local / loopback (coarse prefix)
-  if (
-    h === '0:0:0:0:0:0:0:1'
-    || h.startsWith('fc')
-    || h.startsWith('fd')
-    || h.startsWith('fe80')
-    || h.startsWith('::ffff:7f') // ::ffff:127.x hex-ish
-  ) {
-    return true;
-  }
-  return false;
-}
-
 export interface CheckDeployLinkResult {
   url: string;
   reachable: boolean;
@@ -455,7 +406,7 @@ export async function checkDeployLink(
       reason: 'Invalid URL',
     };
   }
-  if (isBlockedDeployCheckHost(host)) {
+  if (isBlockedSsrfHost(host)) {
     return {
       url: normalized,
       reachable: false,
@@ -507,7 +458,7 @@ export async function checkDeployLink(
           };
         }
         const nextHost = new URL(nextUrl).hostname;
-        if (isBlockedDeployCheckHost(nextHost)) {
+        if (isBlockedSsrfHost(nextHost)) {
           return {
             url: normalized,
             reachable: false,

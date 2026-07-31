@@ -245,3 +245,24 @@ describe('project-archive', () => {
     expect(written).toBe(2);
   });
 });
+
+describe('project-archive symlink guards (Task 14)', () => {
+  it('path-sandbox denies symlink escape for project FS (archive uses same root)', async () => {
+    const { resolveUnderRoot } = await import('./path-sandbox.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-ssrf-arch-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-ssrf-out-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'secret.txt'), 'secret');
+      fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(root, 'link.txt'));
+      expect(() => resolveUnderRoot(root, 'link.txt', { mustExist: true })).toThrow(
+        /symlink|escape|outside/i,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});

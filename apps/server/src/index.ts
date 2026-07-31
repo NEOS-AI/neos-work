@@ -30,6 +30,7 @@ import projects from './routes/projects.js';
 import runs from './routes/runs.js';
 import liveArtifacts from './routes/live-artifacts.js';
 import toolsLiveArtifacts from './routes/tools-live-artifacts.js';
+import connectionTest from './routes/connection-test.js';
 import { migrateEncryption } from './db/settings.js';
 import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
 import { listCustomWorkers } from './db/workers.js';
@@ -145,12 +146,13 @@ app.route('/api/projects', projects);
 app.route('/api/runs', runs);
 app.route('/api/live-artifacts', liveArtifacts);
 app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
+app.route('/api/connection-test', connectionTest);
 
 // Root
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.19',
+    version: '0.5.20',
   });
 });
 

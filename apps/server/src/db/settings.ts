@@ -161,16 +161,19 @@ export function getWorkflowSecrets(): Record<string, string> {
 }
 
 /**
- * Reject non-http(s) base URLs (plan Task 7/3 polish — light guard, not full SSRF).
+ * Reject non-http(s) base URLs (plan Task 7/3 polish).
+ * Allows private hosts (Ollama on 127.0.0.1) — use assertSafeOutboundUrl for untrusted fetches.
  * Exported for unit tests.
  */
 export function isSafeHttpBaseUrl(url: string): boolean {
-  if (typeof url !== 'string') return false;
-  // Control-char check before trim (trim strips leading/trailing \r\n)
-  if (/[\0\r\n]/.test(url)) return false;
-  const trimmed = url.trim();
-  if (!trimmed || trimmed.length > 2_048) return false;
+  // Delegate scheme/control-char validation to shared SSRF helpers (private hosts allowed).
   try {
+    // Lazy require pattern avoided — static import would create cycle risk with settings→ssrf.
+    // Inline mirror of isSafeHttpUrlScheme without importing ssrf into the settings hot path:
+    if (typeof url !== 'string') return false;
+    if (/[\0\r\n]/.test(url)) return false;
+    const trimmed = url.trim();
+    if (!trimmed || trimmed.length > 2_048) return false;
     const u = new URL(trimmed);
     return u.protocol === 'http:' || u.protocol === 'https:';
   } catch {

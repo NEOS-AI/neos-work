@@ -1190,4 +1190,14 @@ describe('Sessions CodeBlock copy', () => {
     alertSpy.mockRestore();
   });
 
+
+  it('shows scrubbed load error when listSessions throws', async () => {
+    listSessions.mockRejectedValue(new Error(`sess${'\n'}down${'\0'}!`));
+    render(<Sessions />);
+    await waitFor(() => {
+      expect(screen.getByText('sess down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

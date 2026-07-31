@@ -199,19 +199,19 @@ export async function generateImage(options: {
   const item = response.data?.[0];
   if (!item?.url) throw new Error('No image URL returned');
 
-  // Download the image and save locally (http(s) only — defense against non-http redirects)
+  // Download the image and save locally (http(s) only + SSRF host block, Task 14)
   const imageUrlRaw = typeof item.url === 'string' ? item.url : '';
   if (!imageUrlRaw || /[\0\r\n]/.test(imageUrlRaw) || imageUrlRaw.length > 2_048) {
     throw new Error('Invalid image URL returned');
   }
   const imageUrl = imageUrlRaw.trim();
   try {
-    const u = new URL(imageUrl);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-      throw new Error('Image URL must be http(s)');
-    }
+    const { parseHttpUrl } = await import('./ssrf.js');
+    parseHttpUrl(imageUrl, { allowPrivateHost: false });
   } catch (err) {
-    if (err instanceof Error && err.message.includes('http(s)')) throw err;
+    if (err instanceof Error && /blocked|http\(s\)|Invalid URL|protocol/i.test(err.message)) {
+      throw new Error(err.message.includes('blocked') ? err.message : 'Invalid image URL returned');
+    }
     throw new Error('Invalid image URL returned');
   }
   await ensureMediaDir();
@@ -642,9 +642,12 @@ async function downloadVideoToMedia(url: string): Promise<{ filePath: string; fi
   if (/[\0\r\n]/.test(url) || url.length > 2_048) {
     throw new Error('Invalid video URL');
   }
-  const u = new URL(url);
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-    throw new Error('Video URL must be http(s)');
+  try {
+    const { parseHttpUrl } = await import('./ssrf.js');
+    parseHttpUrl(url, { allowPrivateHost: false });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Invalid video URL';
+    throw new Error(msg.includes('blocked') ? msg : 'Invalid video URL');
   }
   const MAX = 64 * 1024 * 1024;
   const res = await fetch(url);

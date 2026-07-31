@@ -613,4 +613,63 @@ describe('Deployments page', () => {
     expect(checkDeployLink).not.toHaveBeenCalled();
   });
 
+
+  it('auto-polls deploying/pending deployments every 15s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'd-poll',
+          workflowId: 'wf-1',
+          provider: 'vercel' as const,
+          status: 'deploying' as const,
+          projectName: 'polling-app',
+          url: null,
+          deploymentId: 'dep-poll',
+          createdAt: '2026-02-01T00:00:00.000Z',
+        },
+        {
+          id: `d${'\0'}skip`,
+          workflowId: 'wf-1',
+          provider: 'vercel' as const,
+          status: 'pending' as const,
+          projectName: 'skip-id',
+          url: null,
+          deploymentId: 'dep-skip',
+          createdAt: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    refreshDeployment.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'd-poll',
+        workflowId: 'wf-1',
+        provider: 'vercel',
+        status: 'success',
+        projectName: 'polling-app',
+        url: 'https://polling-app.vercel.app',
+        deploymentId: 'dep-poll',
+        createdAt: '2026-02-01T00:00:00.000Z',
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('polling-app')).toBeInTheDocument());
+    refreshDeployment.mockClear();
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => {
+      expect(refreshDeployment).toHaveBeenCalledWith('d-poll');
+      // control-char id never polled
+      expect(refreshDeployment.mock.calls.every((c) => c[0] === 'd-poll')).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText('success').length).toBeGreaterThanOrEqual(1);
+    });
+    vi.useRealTimers();
+  });
+
 });

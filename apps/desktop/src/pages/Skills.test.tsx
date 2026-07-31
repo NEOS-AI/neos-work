@@ -565,4 +565,20 @@ describe('Skills page', () => {
     expect(screen.getByText('web-landing')).toBeInTheDocument();
     expect(screen.getByTestId('skill-detail-drawer').textContent).toMatch(/hero/i);
   });
+
+  it('alerts scrubbed error when upgrade to plugin throws', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: skills });
+    upgradeSkillToPlugin.mockRejectedValue(new Error(`upgrade${'\n'}boom${'\0'}`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Beta Skill')).toBeInTheDocument());
+    const upgradeBtns = screen.getAllByTitle(/open-design\.json|Plugin/i);
+    fireEvent.click(upgradeBtns[0]!);
+    await waitFor(() => {
+      expect(upgradeSkillToPlugin).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('upgrade boom');
+    });
+    expect((window.alert as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).not.toContain('\0');
+  });
+
 });

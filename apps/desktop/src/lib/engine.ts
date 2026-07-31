@@ -1877,6 +1877,34 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /** Provider / URL connectivity probe (Task 14) — no secrets returned. */
+  async connectionTest(input: {
+    target: 'openai' | 'anthropic' | 'ollama' | 'url' | 'cli-agents';
+    url?: string;
+  }): Promise<
+    ApiResponse<{
+      target: string;
+      reachable: boolean;
+      blocked?: boolean;
+      status?: number;
+      message?: string;
+      catalogCount?: number;
+    }>
+  > {
+    if (!input?.target || /[\0\r\n]/.test(input.target)) {
+      return { ok: false, error: 'Invalid target' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/connection-test`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target: input.target,
+        url: input.url,
+      }),
+    });
+    return readApiResponse(res);
+  }
+
   // --- Plugins ---
 
   async listPlugins(): Promise<ApiResponse<Plugin[]> & { meta?: PluginListMeta }> {
