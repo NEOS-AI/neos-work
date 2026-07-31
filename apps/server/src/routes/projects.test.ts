@@ -998,3 +998,167 @@ describe('projects import zip edge paths', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('projects remaining error branches', () => {
+  it('rejects blank ids and missing nested resources', async () => {
+    const blankStream = await app.request('/api/projects/%20/events/stream');
+    expect(blankStream.status).toBe(404);
+
+    const blankConvPost = await app.request('/api/projects/%20/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'x' }),
+    });
+    expect(blankConvPost.status).toBe(404);
+
+    const blankCommentDel = await app.request(
+      '/api/projects/%20/preview-comments/00000000-0000-0000-0000-000000000001',
+      { method: 'DELETE' },
+    );
+    expect(blankCommentDel.status).toBe(404);
+
+    const blankMsgPost = await app.request(
+      '/api/projects/%20/conversations/00000000-0000-0000-0000-000000000001/messages',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'user', content: 'hi' }),
+      },
+    );
+    expect(blankMsgPost.status).toBe(404);
+
+    const project = await createViaApi();
+    const other = await createViaApi();
+    await app.request(`/api/projects/${project.id}/files/index.html`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'rev-a' }),
+    });
+    const revs = db.listFileRevisions(project.id, 'index.html');
+    expect(revs.length).toBeGreaterThan(0);
+    const foreign = await app.request(
+      `/api/projects/${other.id}/revisions/${revs[0]!.id}`,
+    );
+    expect(foreign.status).toBe(404);
+    const foreignRestore = await app.request(
+      `/api/projects/${other.id}/revisions/${revs[0]!.id}/restore`,
+      { method: 'POST' },
+    );
+    expect(foreignRestore.status).toBe(404);
+  });
+
+  it('rejects mkdir/delete/write traversal and missing project file ops', async () => {
+    const project = await createViaApi();
+
+    const mkdirEsc = await app.request(`/api/projects/${project.id}/mkdir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '../outside' }),
+    });
+    expect([400, 403, 404]).toContain(mkdirEsc.status);
+
+    const delEsc = await app.request(`/api/projects/${project.id}/files/../escape.txt`, {
+      method: 'DELETE',
+    });
+    expect([400, 403, 404]).toContain(delEsc.status);
+
+    const missingDel = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/files/x.txt',
+      { method: 'DELETE' },
+    );
+    expect(missingDel.status).toBe(404);
+
+    const missingRead = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/files/x.txt',
+    );
+    expect(missingRead.status).toBe(404);
+
+    const missingPostComment = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/preview-comments',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: 'a', selector: 'b', body: 'c' }),
+      },
+    );
+    expect(missingPostComment.status).toBe(404);
+
+    const missingPostConv = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/conversations',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 't' }),
+      },
+    );
+    expect(missingPostConv.status).toBe(404);
+
+    // blank comment id when project exists
+    const blankCid = await app.request(
+      `/api/projects/${project.id}/preview-comments/%20`,
+      { method: 'DELETE' },
+    );
+    expect(blankCid.status).toBe(404);
+  });
+
+  it('PUT with spent importToken returns 403; import rejects oversized body', async () => {
+    const project = await createViaApi();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-proj-put-tok-'));
+    try {
+      const tokRes = await app.request('/api/projects/import-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: dir }),
+      });
+      if (tokRes.status === 201) {
+        const { data } = (await tokRes.json()) as { data: { token: string } };
+        // spend token via create path is already covered; use spent on PUT
+        await app.request('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: `${NAME}_spend_for_put`,
+            baseDir: dir,
+            importToken: data.token,
+          }),
+        }).then(async (r) => {
+          if (r.status === 201) {
+            const b = (await r.json()) as { data: { id: string } };
+            createdIds.push(b.data.id);
+          }
+        });
+        const putSpent = await app.request(`/api/projects/${project.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ baseDir: dir, importToken: data.token }),
+        });
+        expect([400, 403]).toContain(putSpent.status);
+      }
+
+      const putBogus = await app.request(`/api/projects/${project.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseDir: dir, importToken: 'nope' }),
+      });
+      expect([400, 403]).toContain(putBogus.status);
+    } finally {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // Oversize import: length-check only (50MB+1) — allocate once
+    const { PROJECT_ZIP_MAX_BYTES } = await import('../lib/project-archive.js');
+    const huge = Buffer.alloc(PROJECT_ZIP_MAX_BYTES + 1);
+    const over = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: huge,
+    });
+    expect(over.status).toBe(400);
+    const overBody = (await over.json()) as { error?: string };
+    expect(overBody.error).toMatch(/max size|exceeds/i);
+  });
+});

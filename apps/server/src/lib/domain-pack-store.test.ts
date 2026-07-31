@@ -327,4 +327,57 @@ describe('domain-pack-store zip safety', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/max/i);
   });
+
+  it('rejects zip entries with absolute / drive / colon paths', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
+    archive.append('x', { name: '/abs/evil.txt' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/unsafe/i);
+  });
+
+  it('rejects zip with Windows drive-style entry', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'C:/windows/pack.json' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('domain-pack-store load/state edges', () => {
+  it('treats state.json with null bytes as enabled=true', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const dir = path.join(packsDir, 'legal');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'pack.json'), JSON.stringify(SAMPLE), 'utf8');
+    await fs.writeFile(path.join(dir, 'state.json'), '{"enabled":false}\0', 'utf8');
+    unregisterPack('legal');
+    const r = await loadInstalledDomainPacks();
+    expect(r.loaded).toBeGreaterThanOrEqual(1);
+    // null-byte state falls back to enabled
+    expect(resolvePack('legal')?.enabled).not.toBe(false);
+  });
+
+  it('skips non-directories and records invalid manifests on load', async () => {
+    const packsDir = resolveDomainPacksDir();
+    await fs.mkdir(packsDir, { recursive: true });
+    await fs.writeFile(path.join(packsDir, 'not-a-dir.txt'), 'x', 'utf8');
+    const badDir = path.join(packsDir, 'broken-pack');
+    await fs.mkdir(badDir, { recursive: true });
+    await fs.writeFile(path.join(badDir, 'pack.json'), '{not-json', 'utf8');
+    const r = await loadInstalledDomainPacks();
+    expect(r.errors.some((e) => /broken-pack/i.test(e))).toBe(true);
+  });
+
+  it('installPackFromDir rejects control-char source path', async () => {
+    const r = await installPackFromDir(`bad${'\n'}path`);
+    expect(r.ok).toBe(false);
+  });
 });

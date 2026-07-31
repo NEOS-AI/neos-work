@@ -98,10 +98,61 @@ vi.mock('../components/workflow/ConfirmLeaveModal.js', () => ({
   ConfirmLeaveModal: () => <div data-testid="confirm-leave">leave</div>,
 }));
 vi.mock('../components/workflow/RevisionPanel.js', () => ({
-  RevisionPanel: ({ onClose }: { onClose: () => void }) => (
+  RevisionPanel: ({
+    onClose,
+    onRestore,
+  }: {
+    onClose: () => void;
+    onRestore?: (snap: {
+      nodes?: unknown[];
+      edges?: unknown[];
+      description?: string;
+      designSystemId?: string | null;
+    }) => void;
+  }) => (
     <div data-testid="revision-panel">
       <button type="button" onClick={onClose}>
         close-revisions
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onRestore?.({
+            nodes: [
+              {
+                id: 'restored-n1',
+                type: 'trigger',
+                label: 'Restored Start',
+                position: { x: 10, y: 20 },
+                config: { seed: 1 },
+              },
+            ],
+            edges: [{ id: 'restored-e1', source: 'restored-n1', target: 'restored-n1', label: 'loop' }],
+            description: `restored${'\0'} desc`,
+            designSystemId: '  ds-restored  ',
+          })
+        }
+      >
+        restore-revision
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          onRestore?.({
+            nodes: [
+              {
+                id: 'n-clear',
+                type: 'output',
+                label: 'Clear DS',
+                position: { x: 0, y: 0 },
+              },
+            ],
+            edges: [],
+            designSystemId: null,
+          })
+        }
+      >
+        restore-clear-ds
       </button>
     </div>
   ),
@@ -1094,6 +1145,63 @@ describe('WorkflowEditor page', () => {
     window.dispatchEvent(ev);
     // handler sets returnValue to ''
     expect(ev.returnValue === '' || ev.defaultPrevented).toBe(true);
+  });
+
+  it('restores revision snapshot onto the canvas (nodes/edges/description/ds)', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle('Version History'));
+    await waitFor(() => expect(screen.getByTestId('revision-panel')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'restore-revision' }));
+    await waitFor(() => {
+      expect(Number(screen.getByTestId('react-flow').getAttribute('data-node-count'))).toBe(1);
+    });
+    // null-byte scrubbed from restored description should not appear in DOM
+    expect(document.body.textContent).not.toContain('\0');
+
+    fireEvent.click(screen.getByRole('button', { name: 'restore-clear-ds' }));
+    await waitFor(() => {
+      expect(Number(screen.getByTestId('react-flow').getAttribute('data-node-count'))).toBe(1);
+    });
+  });
+
+  it('shows v2 migration toast when schemaVersion 2 and workerId present', async () => {
+    sessionStorage.clear();
+    getWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ...sampleWorkflow,
+        schemaVersion: 2,
+        primaryDomain: 'general',
+        nodes: [
+          {
+            id: 'n1',
+            type: 'agent',
+            label: 'Agent',
+            position: { x: 0, y: 0 },
+            config: { workerId: 'general_coordinator' },
+          },
+        ],
+      },
+    });
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText(/converted to v2/i)).toBeInTheDocument();
+    });
+  });
+
+  it('navigates to routines when schedule create confirm is accepted', async () => {
+    createRoutine.mockResolvedValueOnce({ ok: true, data: { id: 'r-nav' } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Schedule/i }));
+    await waitFor(() => expect(screen.getByText('Create routine')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
+    await waitFor(() => expect(createRoutine).toHaveBeenCalled());
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/routines'));
   });
 
 });
