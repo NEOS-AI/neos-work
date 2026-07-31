@@ -36,6 +36,7 @@ import toolsLiveArtifacts from './routes/tools-live-artifacts.js';
 import connectionTest from './routes/connection-test.js';
 import { migrateEncryption } from './db/settings.js';
 import { resolveWebDist } from './lib/web-static.js';
+import { loadInstalledDomainPacks } from './lib/domain-pack-store.js';
 import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
 import { listCustomWorkers } from './db/workers.js';
 import { initScheduler } from './lib/routine-scheduler.js';
@@ -156,7 +157,7 @@ app.route('/api/connection-test', connectionTest);
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.21',
+    version: '0.5.22',
   });
 });
 
@@ -186,7 +187,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.5.21',
+      version: '0.5.22',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });
@@ -202,6 +203,16 @@ for (const w of listCustomWorkers()) {
   registerWorker(w);
 }
 registerCodingBlocks();
+
+// Load custom Domain Packs from data dir (Task 15)
+void loadInstalledDomainPacks().then((r) => {
+  if (r.loaded > 0) {
+    console.log(`Domain packs loaded: ${r.loaded}`);
+  }
+  if (r.errors.length > 0) {
+    console.warn(`Domain pack load errors: ${r.errors.join('; ')}`);
+  }
+});
 
 // Initialize automation routine scheduler
 initScheduler();

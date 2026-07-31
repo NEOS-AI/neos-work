@@ -182,7 +182,17 @@ export interface DomainPack {
   blockIds: string[];
   icon?: string;
   isBuiltIn: boolean;
+  /** Semver-ish version from pack manifest (custom packs). */
+  version?: string;
+  /** When false, pack is installed but workers/blocks are not registered. */
+  enabled?: boolean;
+  /** Absolute install path on the host (custom packs only). */
+  sourcePath?: string;
 }
+
+/** Manifest schema id for custom Domain Packs (PLAN_FOR_V0_5_0 Task 15). */
+export const DOMAIN_PACK_MANIFEST_SCHEMA = 'neos-domain-pack/v1' as const;
+export type DomainPackManifestSchema = typeof DOMAIN_PACK_MANIFEST_SCHEMA;
 
 // ── Agent node config (v2) ─────────────────────────────────
 

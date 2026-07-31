@@ -184,4 +184,43 @@ describe('path-sandbox edge cases', () => {
       else process.env.NEOS_DATA_DIR = prevData;
     }
   });
+
+  it('isPathInsideRoot returns true for contained paths', () => {
+    const root = makeTempRoot();
+    const child = path.join(root, 'nested', 'f.txt');
+    fs.mkdirSync(path.dirname(child), { recursive: true });
+    fs.writeFileSync(child, 'x');
+    expect(isPathInsideRoot(root, child)).toBe(true);
+    expect(isPathInsideRoot(root, root)).toBe(true);
+    expect(isPathInsideRoot(root, path.join(root, '..', 'outside'))).toBe(false);
+  });
+
+  it('resolveUnderRoot creates under non-existing parent chain', () => {
+    const root = makeTempRoot();
+    const rel = 'deep/nested/new.txt';
+    const r = resolveUnderRoot(root, rel);
+    expect(r.relative).toBe(rel);
+    expect(r.absolute.startsWith(fs.realpathSync(root))).toBe(true);
+  });
+
+  it('validateImportBaseDir denies dataDir re-entry and non-projects children', () => {
+    const data = makeTempRoot();
+    const projects = path.join(data, 'projects');
+    const secrets = path.join(data, 'secrets');
+    fs.mkdirSync(projects, { recursive: true });
+    fs.mkdirSync(secrets, { recursive: true });
+
+    expect(() => validateImportBaseDir(data, { dataDir: data })).toThrow(/data directory/i);
+    expect(() => validateImportBaseDir(secrets, { dataDir: data })).toThrow(/internal data paths/i);
+
+    const projChild = path.join(projects, 'my-proj');
+    fs.mkdirSync(projChild);
+    const ok = validateImportBaseDir(projChild, { dataDir: data });
+    expect(fs.realpathSync(ok)).toBe(fs.realpathSync(projChild));
+  });
+
+  it('validateImportBaseDir rejects filesystem root', () => {
+    expect(() => validateImportBaseDir('/')).toThrow(/filesystem root|denied/i);
+  });
+
 });

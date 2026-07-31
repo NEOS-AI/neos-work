@@ -131,7 +131,7 @@ PORT=3000 pnpm dev
 
 ## Browser web client
 
-MVP browser UI (`apps/web`, v0.5.21):
+MVP browser UI (`apps/web`, v0.5.22):
 
 ```bash
 # terminal 1 — engine

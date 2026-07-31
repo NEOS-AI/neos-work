@@ -484,4 +484,38 @@ describe('RunHistoryPanel', () => {
     expect(screen.getByText('completed')).toBeInTheDocument();
   });
 
+
+  it('alerts scrubbed error when clear failed/cancelled API fails', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [
+        makeRun('run-f1', 'failed'),
+        makeRun('run-x1', 'cancelled'),
+      ],
+    });
+    clearWorkflowRuns
+      .mockResolvedValueOnce({ ok: false, error: `fail${'\n'}clear${'\0'}` })
+      .mockResolvedValueOnce({ ok: false, error: `cancel${'\n'}clear` });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('failed')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Clear failed/i }));
+    await waitFor(() => {
+      expect(clearWorkflowRuns).toHaveBeenCalledWith('wf-1', 'failed');
+      expect(window.alert).toHaveBeenCalledWith('fail clear');
+    });
+
+    await user.click(screen.getByRole('button', { name: /Clear cancelled/i }));
+    await waitFor(() => {
+      expect(clearWorkflowRuns).toHaveBeenCalledWith('wf-1', 'cancelled');
+      expect(window.alert).toHaveBeenCalledWith('cancel clear');
+    });
+    // rows remain
+    expect(screen.getByText('failed')).toBeInTheDocument();
+    expect(screen.getByText('cancelled')).toBeInTheDocument();
+  });
+
 });

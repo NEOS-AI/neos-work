@@ -16,9 +16,9 @@ function normalizeDomain(raw: unknown): WorkflowBlock['domain'] {
   // Control-char domain → general (check before trim)
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
   const d = raw.trim().toLowerCase() || 'general';
-  return (['finance', 'coding', 'research', 'general'] as const).includes(d as never)
-    ? (d as WorkflowBlock['domain'])
-    : 'general';
+  // Built-in domains + custom pack slugs (Domain Pack SDK)
+  if (/^[a-z][a-z0-9_-]{0,63}$/.test(d)) return d;
+  return 'general';
 }
 
 const IMPLEMENTATION_TYPES = new Set(['native', 'prompt', 'skill']);
@@ -162,4 +162,16 @@ export function listBlocks(domain?: string): WorkflowBlock[] {
   const all = [...metaRegistry.values()];
   if (!domainRaw) return all;
   return all.filter((b) => b.domain === domainRaw);
+}
+
+/**
+ * Remove block metadata from the registry (custom pack uninstall / disable).
+ * Built-in blocks may also be removed in-process for tests; prefer only custom ids.
+ * Returns true when an entry was deleted.
+ */
+export function unregisterBlockMeta(id: string): boolean {
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return false;
+  const trimmed = id.trim();
+  if (!isSafeBlockId(trimmed)) return false;
+  return metaRegistry.delete(trimmed);
 }

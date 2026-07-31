@@ -874,4 +874,59 @@ describe('ArtifactPreview', () => {
     await waitFor(() => expect(onRerun).toHaveBeenCalled());
   });
 
+
+  it('shows scrubbed status when delete fails or throws', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-del',
+      workflowId: 'wf-1',
+      name: 'gone.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    deleteArtifact
+      .mockResolvedValueOnce({ ok: false, error: `del${'\n'}no` })
+      .mockRejectedValueOnce(new Error(`del${'\0'}boom`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('gone.html')).toBeInTheDocument());
+    await user.click(screen.getByTitle('Delete artifact'));
+    await waitFor(() => expect(screen.getByText('del no')).toBeInTheDocument());
+
+    await user.click(screen.getByTitle('Delete artifact'));
+    await waitFor(() => expect(screen.getByText('delboom')).toBeInTheDocument());
+  });
+
+  it('shows scrubbed status when rename fails or throws', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-ren',
+      workflowId: 'wf-1',
+      name: 'old.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    updateArtifact
+      .mockResolvedValueOnce({ ok: false, error: `rename${'\n'}no` })
+      .mockRejectedValueOnce(new Error(`rename${'\0'}boom`));
+    vi.spyOn(window, 'prompt').mockReturnValue('new.html');
+
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('old.html')).toBeInTheDocument());
+    await user.click(screen.getByTitle('Rename artifact'));
+    await waitFor(() => expect(screen.getByText('rename no')).toBeInTheDocument());
+
+    await user.click(screen.getByTitle('Rename artifact'));
+    await waitFor(() => expect(screen.getByText('renameboom')).toBeInTheDocument());
+  });
+
 });

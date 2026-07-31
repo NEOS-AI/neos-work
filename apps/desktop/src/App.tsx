@@ -22,6 +22,7 @@ import { Deployments } from './pages/Deployments.js';
 import { Media } from './pages/Media.js';
 import { Projects } from './pages/Projects.js';
 import { ProjectWorkspace } from './pages/ProjectWorkspace.js';
+import { DomainPacks } from './pages/DomainPacks.js';
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ const connectedRouter = createBrowserRouter([
       { path: 'projects', element: <Projects /> },
       { path: 'projects/:id', element: <ProjectWorkspace /> },
       { path: 'harnesses', element: <Harnesses /> },
+      { path: 'domain-packs', element: <DomainPacks /> },
       { path: 'blocks', element: <Blocks /> },
       { path: 'templates', element: <Templates /> },
       { path: 'skills', element: <Skills /> },

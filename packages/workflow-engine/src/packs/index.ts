@@ -1,17 +1,47 @@
 /**
- * Domain Pack registry — built-in packs + worker resolution (PLAN_FOR_V0_4_0 Task 3).
+ * Domain Pack registry — built-in packs + custom pack loader (v0.4 Task 3 / v0.5 Task 15).
  *
  * Workers are the source of truth. Harness APIs re-export these symbols for
  * v0.3.x / v0.4.x compatibility (`resolveHarness` → `resolveWorker`, etc.).
+ *
+ * Custom packs: registerPack / unregisterPack / setPackEnabled (manifest → workers + blocks).
  */
 
-import type { DomainPack, DomainWorker, ToolPermissionProfile, WorkspacePolicy, WorkerMode } from '@neos-work/shared';
+import type {
+  DomainPack,
+  DomainWorker,
+  ToolPermissionProfile,
+  WorkspacePolicy,
+  WorkerMode,
+  WorkflowBlock,
+} from '@neos-work/shared';
+import { registerBlockMeta, unregisterBlockMeta } from '../blocks/registry.js';
 import { FINANCE_BLOCK_IDS, FINANCE_WORKERS } from './finance.js';
 import { CODING_BLOCK_IDS, CODING_WORKERS } from './coding.js';
 import { RESEARCH_BLOCK_IDS, RESEARCH_WORKERS } from './research.js';
 import { GENERAL_BLOCK_IDS, GENERAL_WORKERS } from './general.js';
+import {
+  isSafePackId,
+  materializePackFromManifest,
+  parsePackManifest,
+  type ParsedPackManifest,
+} from './manifest.js';
 
-/** Built-in pack ids (v0.4). Unknown custom domains normalize to general on register. */
+export {
+  DOMAIN_PACK_MANIFEST_SCHEMA,
+  isSafePackId,
+  materializePackFromManifest,
+  parsePackManifest,
+  PACK_MANIFEST_FILENAMES,
+} from './manifest.js';
+export type {
+  PackManifestBlock,
+  PackManifestWorker,
+  ParsedPackManifest,
+  ParsePackManifestResult,
+} from './manifest.js';
+
+/** Built-in pack ids (v0.4). Unknown custom domains normalize to general on ad-hoc registerWorker. */
 export const BUILT_IN_PACK_IDS = ['finance', 'coding', 'research', 'general'] as const;
 export type BuiltInPackId = (typeof BUILT_IN_PACK_IDS)[number];
 
@@ -26,6 +56,7 @@ const BUILT_IN_PACKS: DomainPack[] = [
     blockIds: [...FINANCE_BLOCK_IDS],
     icon: 'chart',
     isBuiltIn: true,
+    enabled: true,
   },
   {
     id: 'coding',
@@ -35,6 +66,7 @@ const BUILT_IN_PACKS: DomainPack[] = [
     blockIds: [...CODING_BLOCK_IDS],
     icon: 'code',
     isBuiltIn: true,
+    enabled: true,
   },
   {
     id: 'research',
@@ -44,6 +76,7 @@ const BUILT_IN_PACKS: DomainPack[] = [
     blockIds: [...RESEARCH_BLOCK_IDS],
     icon: 'search',
     isBuiltIn: true,
+    enabled: true,
   },
   {
     id: 'general',
@@ -53,12 +86,20 @@ const BUILT_IN_PACKS: DomainPack[] = [
     blockIds: [...GENERAL_BLOCK_IDS],
     icon: 'spark',
     isBuiltIn: true,
+    enabled: true,
   },
 ];
 
 const packRegistry = new Map<string, DomainPack>(
   BUILT_IN_PACKS.map((p) => [p.id, p]),
 );
+
+/** Worker ids owned by a custom pack (for clean unregister). */
+const packOwnedWorkers = new Map<string, string[]>();
+/** Block ids owned by a custom pack. */
+const packOwnedBlocks = new Map<string, string[]>();
+/** Full block meta snapshots (for re-enable after disable). */
+const packOwnedBlockMeta = new Map<string, WorkflowBlock[]>();
 
 const workerRegistry = new Map<string, DomainWorker>();
 
@@ -94,10 +135,20 @@ function isSafeId(id: string): boolean {
   return id.length > 0 && id.length <= WORKER_ID_MAX && !/[\0\r\n]/.test(id);
 }
 
-function normalizeDomain(raw: unknown): string {
+/**
+ * Normalize worker domain for ad-hoc registerWorker.
+ * Built-in + currently registered custom pack ids are kept; unknown → general.
+ * When `forcePackId` is set (registerPack path), that id is used if safe.
+ */
+function normalizeDomain(raw: unknown, forcePackId?: string): string {
+  if (forcePackId && isSafePackId(forcePackId) && packRegistry.has(forcePackId)) {
+    return forcePackId;
+  }
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'general';
   const d = raw.trim().toLowerCase() || 'general';
-  return BUILT_IN_PACK_ID_SET.has(d) ? d : 'general';
+  if (BUILT_IN_PACK_ID_SET.has(d)) return d;
+  if (packRegistry.has(d)) return d;
+  return 'general';
 }
 
 function normalizePermissionProfile(raw: unknown): ToolPermissionProfile | undefined {
@@ -154,8 +205,12 @@ export function listWorkers(domain?: string): DomainWorker[] {
 /**
  * Register a custom (or test) worker. Built-in id overwrite is allowed in-process
  * for tests; server routes reject built-in mutations separately.
+ * @param opts.forceDomain — when registering via pack, force worker.domain = pack id
  */
-export function registerWorker(worker: DomainWorker): void {
+export function registerWorker(
+  worker: DomainWorker,
+  opts?: { forceDomain?: string },
+): void {
   const idRaw = typeof worker.id === 'string' ? worker.id : '';
   if (!idRaw || /[\0\r\n]/.test(idRaw)) return;
   const id = idRaw.trim();
@@ -167,7 +222,7 @@ export function registerWorker(worker: DomainWorker): void {
   }
   if (name.length > WORKER_NAME_MAX) name = name.slice(0, WORKER_NAME_MAX);
 
-  const domain = normalizeDomain(worker.domain);
+  const domain = normalizeDomain(worker.domain, opts?.forceDomain);
 
   let description: string | undefined;
   if (typeof worker.description === 'string') {
@@ -255,13 +310,14 @@ export function unregisterWorker(id: string): boolean {
   return workerRegistry.delete(trimmed);
 }
 
-/** List built-in domain packs (custom packs not supported in v0.4). */
+/** List built-in + custom domain packs. */
 export function listPacks(): DomainPack[] {
-  return BUILT_IN_PACKS.map((p) => ({
+  return [...packRegistry.values()].map((p) => ({
     ...p,
     // Live workers for this pack domain (built-in + custom registered into the domain)
     workers: listWorkers(p.id),
     blockIds: [...p.blockIds],
+    enabled: p.enabled !== false,
   }));
 }
 
@@ -278,6 +334,7 @@ export function resolvePack(id: string): DomainPack | undefined {
     ...base,
     workers: listWorkers(trimmed),
     blockIds: [...base.blockIds],
+    enabled: base.enabled !== false,
   };
 }
 
@@ -286,6 +343,241 @@ export function isBuiltInPackId(id: string): boolean {
   if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return false;
   const trimmed = id.trim().toLowerCase();
   return trimmed.length > 0 && BUILT_IN_PACK_ID_SET.has(trimmed);
+}
+
+/** True when id is registered (built-in or custom). */
+export function isRegisteredPackId(id: string): boolean {
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return false;
+  const trimmed = id.trim().toLowerCase();
+  return trimmed.length > 0 && packRegistry.has(trimmed);
+}
+
+export type RegisterPackResult =
+  | { ok: true; pack: DomainPack }
+  | { ok: false; error: string };
+
+/**
+ * Register a custom Domain Pack from a parsed manifest (or pre-materialized pieces).
+ * Replaces any previous custom pack with the same id. Built-in ids are rejected.
+ */
+export function registerPack(
+  input:
+    | ParsedPackManifest
+    | {
+        pack: DomainPack;
+        workers: DomainWorker[];
+        blocks: WorkflowBlock[];
+      },
+  opts?: { enabled?: boolean; sourcePath?: string },
+): RegisterPackResult {
+  let pack: DomainPack;
+  let workers: DomainWorker[];
+  let blocks: WorkflowBlock[];
+
+  // Discriminate: materialized form has `.pack`; manifest form has top-level workers/blocks
+  if (
+    input
+    && typeof input === 'object'
+    && 'pack' in input
+    && (input as { pack?: unknown }).pack
+    && typeof (input as { pack: unknown }).pack === 'object'
+  ) {
+    const body = input as {
+      pack: DomainPack;
+      workers: DomainWorker[];
+      blocks: WorkflowBlock[];
+    };
+    pack = {
+      ...body.pack,
+      isBuiltIn: false,
+      enabled: opts?.enabled !== false && body.pack.enabled !== false,
+      ...(opts?.sourcePath ? { sourcePath: opts.sourcePath } : {}),
+    };
+    workers = body.workers ?? [];
+    blocks = body.blocks ?? [];
+  } else {
+    const mat = materializePackFromManifest(input as ParsedPackManifest, opts);
+    pack = mat.pack;
+    workers = mat.workers;
+    blocks = mat.blocks;
+  }
+
+  if (!isSafePackId(pack.id)) {
+    return { ok: false, error: 'invalid pack id' };
+  }
+  if (BUILT_IN_PACK_ID_SET.has(pack.id)) {
+    return { ok: false, error: `id "${pack.id}" is reserved for a built-in pack` };
+  }
+
+  // Replace previous custom pack with same id
+  if (packRegistry.has(pack.id) && !isBuiltInPackId(pack.id)) {
+    unregisterPack(pack.id);
+  }
+
+  const enabled = pack.enabled !== false;
+  const stored: DomainPack = {
+    ...pack,
+    isBuiltIn: false,
+    enabled,
+    workers: [], // live workers filled via listWorkers
+    blockIds: blocks.map((b) => b.id),
+  };
+  packRegistry.set(pack.id, stored);
+
+  const ownedWorkers: string[] = [];
+  const ownedBlocks: string[] = [];
+
+  if (enabled) {
+    for (const w of workers) {
+      registerWorker(
+        { ...w, domain: pack.id, isBuiltIn: false },
+        { forceDomain: pack.id },
+      );
+      if (resolveWorker(w.id)) ownedWorkers.push(w.id);
+    }
+    for (const b of blocks) {
+      registerBlockMeta({
+        ...b,
+        domain: pack.id,
+        isBuiltIn: false,
+      });
+      ownedBlocks.push(b.id);
+    }
+  }
+
+  packOwnedWorkers.set(pack.id, ownedWorkers);
+  packOwnedBlocks.set(pack.id, ownedBlocks);
+  packOwnedBlockMeta.set(
+    pack.id,
+    blocks.map((b) => ({ ...b, domain: pack.id, isBuiltIn: false })),
+  );
+
+  // Refresh stored blockIds even when disabled
+  stored.blockIds = blocks.map((b) => b.id);
+  stored.workers = workers.map((w) => ({ ...w, domain: pack.id, isBuiltIn: false }));
+
+  return { ok: true, pack: resolvePack(pack.id)! };
+}
+
+/**
+ * Remove a custom pack and its owned workers/blocks from the runtime registry.
+ * Built-in packs cannot be removed. Returns true when removed.
+ */
+export function unregisterPack(id: string): boolean {
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) return false;
+  const trimmed = id.trim().toLowerCase();
+  if (!trimmed || BUILT_IN_PACK_ID_SET.has(trimmed)) return false;
+  const existing = packRegistry.get(trimmed);
+  if (!existing || existing.isBuiltIn) return false;
+
+  const workers = packOwnedWorkers.get(trimmed) ?? [];
+  for (const wid of workers) {
+    unregisterWorker(wid);
+  }
+  packOwnedWorkers.delete(trimmed);
+
+  const blocks = packOwnedBlocks.get(trimmed) ?? [];
+  for (const bid of blocks) {
+    unregisterBlockMeta(bid);
+  }
+  packOwnedBlocks.delete(trimmed);
+  packOwnedBlockMeta.delete(trimmed);
+
+  return packRegistry.delete(trimmed);
+}
+
+/**
+ * Enable or disable a custom pack in-process.
+ * Disable unregisters workers/blocks but keeps the pack entry; enable re-registers.
+ * Built-in packs always stay enabled.
+ */
+export function setPackEnabled(id: string, enabled: boolean): RegisterPackResult {
+  if (typeof id !== 'string' || /[\0\r\n]/.test(id)) {
+    return { ok: false, error: 'invalid pack id' };
+  }
+  const trimmed = id.trim().toLowerCase();
+  if (BUILT_IN_PACK_ID_SET.has(trimmed)) {
+    return { ok: false, error: 'cannot disable a built-in pack' };
+  }
+  const existing = packRegistry.get(trimmed);
+  if (!existing || existing.isBuiltIn) {
+    return { ok: false, error: 'pack not found' };
+  }
+
+  if (enabled === (existing.enabled !== false)) {
+    return { ok: true, pack: resolvePack(trimmed)! };
+  }
+
+  // Snapshot definition before unregister
+  const workersSnap = [...(existing.workers ?? [])];
+  const blockIdsSnap = [...existing.blockIds];
+  const sourcePath = existing.sourcePath;
+  const version = existing.version;
+  const icon = existing.icon;
+  const name = existing.name;
+  const description = existing.description;
+
+  if (!enabled) {
+    // Drop runtime workers/blocks, keep pack shell
+    const workers = packOwnedWorkers.get(trimmed) ?? [];
+    for (const wid of workers) unregisterWorker(wid);
+    packOwnedWorkers.set(trimmed, []);
+    const blocks = packOwnedBlocks.get(trimmed) ?? [];
+    for (const bid of blocks) unregisterBlockMeta(bid);
+    packOwnedBlocks.set(trimmed, []);
+    packRegistry.set(trimmed, {
+      ...existing,
+      enabled: false,
+      workers: workersSnap,
+      blockIds: blockIdsSnap,
+    });
+    return { ok: true, pack: resolvePack(trimmed)! };
+  }
+
+  // Re-enable: re-register from stored worker + block definitions
+  const ownedWorkers: string[] = [];
+  for (const w of workersSnap) {
+    registerWorker(
+      { ...w, domain: trimmed, isBuiltIn: false },
+      { forceDomain: trimmed },
+    );
+    if (resolveWorker(w.id)) ownedWorkers.push(w.id);
+  }
+  packOwnedWorkers.set(trimmed, ownedWorkers);
+
+  const blockMetas = packOwnedBlockMeta.get(trimmed) ?? [];
+  const ownedBlocks: string[] = [];
+  for (const b of blockMetas) {
+    registerBlockMeta({ ...b, domain: trimmed, isBuiltIn: false });
+    ownedBlocks.push(b.id);
+  }
+  packOwnedBlocks.set(trimmed, ownedBlocks);
+
+  packRegistry.set(trimmed, {
+    id: trimmed,
+    name,
+    description,
+    workers: workersSnap,
+    blockIds: blockIdsSnap,
+    ...(icon ? { icon } : {}),
+    isBuiltIn: false,
+    enabled: true,
+    ...(version ? { version } : {}),
+    ...(sourcePath ? { sourcePath } : {}),
+  });
+  return { ok: true, pack: resolvePack(trimmed)! };
+}
+
+/**
+ * Register pack from raw JSON/object (convenience for tests + loaders).
+ */
+export function registerPackFromManifest(
+  raw: unknown,
+  opts?: { enabled?: boolean; sourcePath?: string },
+): RegisterPackResult {
+  const parsed = parsePackManifest(raw);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  return registerPack(parsed.manifest, opts);
 }
 
 // ── Deprecated harness aliases (BC-4 / BC-8) ────────────────

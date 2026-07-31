@@ -20,7 +20,7 @@ export {
 } from './ports.js';
 export type { PortIssue, PortCheckSeverity, ResolvePortsOptions } from './ports.js';
 
-// Domain packs & workers (v0.4)
+// Domain packs & workers (v0.4 + Domain Pack SDK v0.5 Task 15)
 export {
   resolveWorker,
   listWorkers,
@@ -29,9 +29,26 @@ export {
   listPacks,
   resolvePack,
   isBuiltInPackId,
+  isRegisteredPackId,
+  registerPack,
+  registerPackFromManifest,
+  unregisterPack,
+  setPackEnabled,
+  parsePackManifest,
+  materializePackFromManifest,
+  isSafePackId,
   BUILT_IN_PACK_IDS,
+  DOMAIN_PACK_MANIFEST_SCHEMA,
+  PACK_MANIFEST_FILENAMES,
 } from './packs/index.js';
-export type { BuiltInPackId } from './packs/index.js';
+export type {
+  BuiltInPackId,
+  RegisterPackResult,
+  ParsedPackManifest,
+  ParsePackManifestResult,
+  PackManifestWorker,
+  PackManifestBlock,
+} from './packs/index.js';
 
 // Harness registry (deprecated aliases → workers)
 export {
@@ -42,7 +59,14 @@ export {
 } from './harness/index.js';
 
 // Block registry
-export { registerNativeBlock, resolveBlock, getNativeExecutor, listBlocks } from './blocks/registry.js';
+export {
+  registerNativeBlock,
+  registerBlockMeta,
+  resolveBlock,
+  getNativeExecutor,
+  listBlocks,
+  unregisterBlockMeta,
+} from './blocks/registry.js';
 export type { NativeBlockExecutor, BlockExecutionContext, BlockResult, BlockParams } from './blocks/types.js';
 
 // Domain block registrars

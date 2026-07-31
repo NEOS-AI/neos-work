@@ -162,7 +162,7 @@ describe('block registry', () => {
     expect(resolveBlock('cov_skill_non_string')?.skillId).toBeUndefined();
   });
 
-  it('maps invalid domains to general and preserves non-string descriptions', () => {
+  it('accepts custom pack domain slugs; maps invalid domains to general; preserves non-string descriptions', () => {
     registerBlockMeta({
       id: 'cov_domain_quantum',
       name: 'Quantum',
@@ -176,8 +176,23 @@ describe('block registry', () => {
       outputDescription: '',
     });
     const got = resolveBlock('cov_domain_quantum');
-    expect(got?.domain).toBe('general');
+    // Domain Pack SDK: safe slug domains (custom packs) are preserved
+    expect(got?.domain).toBe('quantum');
     expect(got?.description).toBe(42 as never);
+
+    registerBlockMeta({
+      id: 'cov_domain_bad',
+      name: 'Bad',
+      domain: 'Not A Domain!!' as never,
+      category: 'test',
+      description: '',
+      isBuiltIn: true,
+      implementationType: 'native',
+      paramDefs: [],
+      inputDescription: '',
+      outputDescription: '',
+    });
+    expect(resolveBlock('cov_domain_bad')?.domain).toBe('general');
   });
 
   it('rejects unsafe block ids and caps metadata fields', () => {

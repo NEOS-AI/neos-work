@@ -818,4 +818,52 @@ describe('Routines page', () => {
     });
   });
 
+
+  it('alerts scrubbed error when toggle throws', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    updateRoutine.mockRejectedValue(new Error(`toggle${'\n'}fail${'\0'}`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disable' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => {
+      expect(updateRoutine).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('toggle fail');
+    });
+  });
+
+  it('alerts scrubbed error when Run Now fails or throws', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    runRoutineNow
+      .mockResolvedValueOnce({ ok: false, error: `run${'\n'}no` })
+      .mockRejectedValueOnce(new Error(`run${'\0'}boom`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Run Now/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Run Now/i }));
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('run no'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Run Now/i }));
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('runboom'));
+  });
+
+  it('alerts scrubbed error when toggle API fails', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    updateRoutine.mockResolvedValue({ ok: false, error: `upd${'\n'}denied` });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disable' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(window.alert).toHaveBeenCalledWith('upd denied'));
+  });
+
 });

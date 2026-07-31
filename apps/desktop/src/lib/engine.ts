@@ -2501,10 +2501,68 @@ export class EngineClient {
         workerCount?: number;
         blockCount?: number;
         isBuiltIn?: boolean;
+        enabled?: boolean;
+        version?: string;
+        sourcePath?: string;
+        icon?: string;
       }>
     >
   > {
     const res = await fetch(`${this.baseUrl}/api/domain-packs`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async getDomainPack(id: string): Promise<ApiResponse<Record<string, unknown>>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('pack id');
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/${seg}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** Install a Domain Pack from a local directory containing pack.json. */
+  async installDomainPackFromPath(dirPath: string): Promise<ApiResponse<Record<string, unknown>>> {
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/install`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ path: dirPath }),
+    });
+    return readApiResponse(res);
+  }
+
+  async validateDomainPackManifest(
+    manifest: unknown,
+  ): Promise<ApiResponse<{ id: string; name: string; workerCount: number; blockCount: number }>> {
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/validate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(manifest),
+    });
+    return readApiResponse(res);
+  }
+
+  async toggleDomainPack(
+    id: string,
+    enabled: boolean,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('pack id');
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/${seg}/toggle`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ enabled }),
+    });
+    return readApiResponse(res);
+  }
+
+  async deleteDomainPack(id: string): Promise<ApiResponse<unknown>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('pack id');
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/${seg}`, {
+      method: 'DELETE',
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
