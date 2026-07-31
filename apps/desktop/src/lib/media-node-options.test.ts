@@ -31,6 +31,12 @@ describe('media-node-options', () => {
 
   it('validates media providers and types', () => {
     expect(isMediaProvider('openai')).toBe(true);
+    expect(isMediaProvider('  STUB  ')).toBe(true);
+    expect(isMediaProvider(null)).toBe(false);
+    expect(isMediaProvider('')).toBe(false);
+    expect(isMediaType(null)).toBe(false);
+    expect(isMediaType('  IMAGE  ')).toBe(true);
+    expect(isMediaType(`img${'\0'}`)).toBe(false);
     expect(isMediaProvider('azure-openai')).toBe(true);
     expect(isMediaProvider('nope')).toBe(false);
     expect(isMediaProvider('\nopenai')).toBe(false);

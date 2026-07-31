@@ -21,6 +21,16 @@ describe('multi-provider generate + stub', () => {
     ).rejects.toThrow(/disabled|not configured/i);
   });
 
+  it('rejects unknown or control-char providers', async () => {
+    await expect(
+      generateMediaUnified({ surface: 'image', provider: 'nope-provider', prompt: 'hi' }),
+    ).rejects.toThrow(/unknown media provider/i);
+    await expect(
+      generateMediaUnified({ surface: 'image', provider: 'bad\nid', prompt: 'hi' }),
+    ).rejects.toThrow(/invalid media provider/i);
+  });
+
+
   it('stub image/audio/video when allowed', async () => {
     process.env.NEOS_MEDIA_ALLOW_STUBS = '1';
     const img = await generateMediaUnified({

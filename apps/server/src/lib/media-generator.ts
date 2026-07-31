@@ -1,4 +1,3 @@
-import { isSafeMediaFilename } from './media-filename.js';
 /**
  * Media Generation helpers — multi-provider image / audio / video (Task 8).
  * OpenAI DALL-E 3 + TTS baseline; Azure / xAI / OpenAI-compatible via baseURL;
@@ -10,8 +9,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { isSafeMediaFilename } from './media-filename.js';
 import {
   defaultProviderForSurface,
+  getProviderDef,
   mediaStubsAllowed,
   resolveMediaProvider,
   type MediaProviderId,
@@ -416,7 +417,19 @@ export async function generateMediaUnified(input: {
   model?: string;
 }): Promise<UnifiedGenerateResult> {
   const surface = input.surface;
-  const providerId = (input.provider?.trim() || defaultProviderForSurface(surface)) as MediaProviderId;
+  // Prefer explicit provider when safe; otherwise surface default
+  let providerId: MediaProviderId = defaultProviderForSurface(surface);
+  if (typeof input.provider === 'string' && !/[\0\r\n]/.test(input.provider)) {
+    const p = input.provider.trim().toLowerCase();
+    if (p) {
+      if (!getProviderDef(p)) {
+        throw new Error(`Unknown media provider: ${p.slice(0, 40)}`);
+      }
+      providerId = p as MediaProviderId;
+    }
+  } else if (typeof input.provider === 'string' && /[\0\r\n]/.test(input.provider)) {
+    throw new Error('Invalid media provider');
+  }
   const resolved = resolveMediaProvider(providerId);
   if (!resolved.configured) {
     throw new Error(resolved.reason || `Provider ${providerId} is not configured`);

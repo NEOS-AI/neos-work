@@ -151,7 +151,21 @@
     "exportFailed": "Failed to export project ZIP",
     "importZipFailed": "Failed to import project ZIP",
     "importZipInvalid": "Please choose a .zip archive",
-    "importZipTooLarge": "ZIP exceeds 50MB limit"
+    "importZipTooLarge": "ZIP exceeds 50MB limit",
+    "live": "Live",
+    "liveHint": "Refreshable template + inputs (sidecar under .neos-work/live-artifacts/).",
+    "liveName": "Name",
+    "liveTemplate": "Source template",
+    "liveInputs": "Inputs JSON",
+    "liveCreate": "Create live artifact",
+    "liveEmpty": "No live artifacts yet",
+    "liveRefresh": "Refresh",
+    "liveLoadFailed": "Failed to load live artifacts",
+    "liveCreateFailed": "Failed to create live artifact",
+    "liveRefreshFailed": "Failed to refresh live artifact",
+    "liveDeleteFailed": "Failed to delete live artifact",
+    "liveInvalidName": "Name is empty or invalid",
+    "liveInvalidInputs": "Inputs must be a JSON object"
   },
   "mode": {
     "title": "How would you like to run NEOS Work today?",

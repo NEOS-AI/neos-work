@@ -22,6 +22,7 @@ import { useEngine } from '../hooks/useEngine.js';
 import type {
   DesignProject,
   DesignSystem,
+  LiveArtifact,
   ProjectFileEntry,
   ProjectFileRevision,
   ProjectPreviewComment,
@@ -56,7 +57,7 @@ export function ProjectWorkspace() {
   /** Inspect/bridge detail (outerHTML) for selection-scoped AI context. */
   const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
 
-  type SideTab = 'chat' | 'comments' | 'revisions' | 'context';
+  type SideTab = 'chat' | 'comments' | 'revisions' | 'context' | 'live';
   const [sideTab, setSideTab] = useState<SideTab>('chat');
   const [comments, setComments] = useState<ProjectPreviewComment[]>([]);
   const [commentBody, setCommentBody] = useState('');
@@ -65,6 +66,13 @@ export function ProjectWorkspace() {
   const [revisions, setRevisions] = useState<ProjectFileRevision[]>([]);
   const [revisionError, setRevisionError] = useState<string | null>(null);
   const [revisionBusy, setRevisionBusy] = useState(false);
+  const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifact[]>([]);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveName, setLiveName] = useState('Live card');
+  const [liveTemplate, setLiveTemplate] = useState('<h1>{{title}}</h1><p>{{body}}</p>');
+  const [liveInputsJson, setLiveInputsJson] = useState('{"title":"Hello","body":"Live artifact"}');
+  const [liveSelectedId, setLiveSelectedId] = useState<string | null>(null);
 
   // Design system context strip (Task 1c residual / Task 5)
   const [designSystems, setDesignSystems] = useState<DesignSystem[]>([]);
@@ -233,6 +241,122 @@ export function ProjectWorkspace() {
     }
   }, [client, projectId, buffer.path]);
 
+  const loadLiveArtifacts = useCallback(async () => {
+    if (!client || !projectId) {
+      setLiveArtifacts([]);
+      return;
+    }
+    setLiveError(null);
+    try {
+      const res = await client.listLiveArtifacts(projectId);
+      if (res.ok && res.data) setLiveArtifacts(res.data);
+      else {
+        setLiveArtifacts([]);
+        setLiveError(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 200,
+          }) || t('project.liveLoadFailed'),
+        );
+      }
+    } catch (err) {
+      setLiveArtifacts([]);
+      const msg = err instanceof Error ? err.message : t('project.liveLoadFailed');
+      setLiveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+    }
+  }, [client, projectId, t]);
+
+  const handleLiveCreate = useCallback(async () => {
+    if (!client || !projectId) return;
+    if (/[\0\r\n]/.test(liveName) || !liveName.trim()) {
+      setLiveError(t('project.liveInvalidName'));
+      return;
+    }
+    let inputs: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(liveInputsJson) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        inputs = parsed as Record<string, unknown>;
+      }
+    } catch {
+      setLiveError(t('project.liveInvalidInputs'));
+      return;
+    }
+    setLiveBusy(true);
+    setLiveError(null);
+    try {
+      const res = await client.createLiveArtifact({
+        projectId,
+        name: liveName.trim(),
+        sourceTemplate: liveTemplate,
+        inputs,
+      });
+      if (res.ok && res.data) {
+        setLiveSelectedId(res.data.id);
+        await loadLiveArtifacts();
+      } else {
+        setLiveError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 })
+            || t('project.liveCreateFailed'),
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.liveCreateFailed');
+      setLiveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+    } finally {
+      setLiveBusy(false);
+    }
+  }, [client, projectId, liveName, liveTemplate, liveInputsJson, t, loadLiveArtifacts]);
+
+  const handleLiveRefresh = useCallback(
+    async (id: string) => {
+      if (!client || !projectId) return;
+      setLiveBusy(true);
+      setLiveError(null);
+      try {
+        const res = await client.refreshLiveArtifact(id, projectId);
+        if (res.ok) await loadLiveArtifacts();
+        else {
+          setLiveError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 })
+              || t('project.liveRefreshFailed'),
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.liveRefreshFailed');
+        setLiveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+      } finally {
+        setLiveBusy(false);
+      }
+    },
+    [client, projectId, t, loadLiveArtifacts],
+  );
+
+  const handleLiveDelete = useCallback(
+    async (id: string) => {
+      if (!client || !projectId) return;
+      setLiveBusy(true);
+      try {
+        const res = await client.deleteLiveArtifact(id, projectId);
+        if (res.ok) {
+          if (liveSelectedId === id) setLiveSelectedId(null);
+          await loadLiveArtifacts();
+        } else {
+          setLiveError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 })
+              || t('project.liveDeleteFailed'),
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.liveDeleteFailed');
+        setLiveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+      } finally {
+        setLiveBusy(false);
+      }
+    },
+    [client, projectId, liveSelectedId, t, loadLiveArtifacts],
+  );
+
 
   const loadDesignSystems = useCallback(async () => {
     if (!client) return;
@@ -311,7 +435,8 @@ export function ProjectWorkspace() {
   useEffect(() => {
     if (sideTab === 'comments') void loadComments();
     if (sideTab === 'revisions') void loadRevisions();
-  }, [sideTab, loadComments, loadRevisions]);
+    if (sideTab === 'live') void loadLiveArtifacts();
+  }, [sideTab, loadComments, loadRevisions, loadLiveArtifacts]);
 
   const handleAddComment = useCallback(async () => {
     if (!client || !projectId || !buffer.path) return;
@@ -707,6 +832,7 @@ export function ProjectWorkspace() {
                 ['comments', t('project.comments')],
                 ['revisions', t('project.revisions')],
                 ['context', t('project.context')],
+                ['live', t('project.live')],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -1041,6 +1167,139 @@ export function ProjectWorkspace() {
                   </>
                 )}
               </div>
+            </div>
+          )}
+
+          {sideTab === 'live' && (
+            <div className="flex min-h-0 flex-1 flex-col gap-2 p-2" data-testid="project-live">
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {t('project.liveHint')}
+              </p>
+              <input
+                data-testid="live-name"
+                value={liveName}
+                onChange={(e) => setLiveName(e.target.value)}
+                placeholder={t('project.liveName')}
+                className="w-full rounded border px-2 py-1 text-xs"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <textarea
+                data-testid="live-template"
+                value={liveTemplate}
+                onChange={(e) => setLiveTemplate(e.target.value)}
+                rows={3}
+                className="w-full resize-y rounded border px-2 py-1 font-mono text-[10px]"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+                aria-label={t('project.liveTemplate')}
+              />
+              <textarea
+                data-testid="live-inputs"
+                value={liveInputsJson}
+                onChange={(e) => setLiveInputsJson(e.target.value)}
+                rows={2}
+                className="w-full resize-y rounded border px-2 py-1 font-mono text-[10px]"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+                aria-label={t('project.liveInputs')}
+              />
+              <button
+                type="button"
+                data-testid="live-create"
+                disabled={liveBusy}
+                onClick={() => void handleLiveCreate()}
+                className="rounded px-2 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+                style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+              >
+                {liveBusy ? t('common.loading') : t('project.liveCreate')}
+              </button>
+              {liveError && (
+                <p className="text-[11px] text-red-400" role="alert">
+                  {liveError}
+                </p>
+              )}
+              <ul className="min-h-0 flex-1 space-y-1 overflow-auto">
+                {liveArtifacts.length === 0 ? (
+                  <li className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {t('project.liveEmpty')}
+                  </li>
+                ) : (
+                  liveArtifacts.map((a) => (
+                    <li
+                      key={a.id}
+                      className="rounded border p-2"
+                      style={{
+                        borderColor:
+                          liveSelectedId === a.id
+                            ? 'var(--accent, #6366f1)'
+                            : 'var(--border-primary)',
+                        backgroundColor: 'var(--bg-primary)',
+                      }}
+                      data-testid={`live-item-${a.id}`}
+                    >
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => setLiveSelectedId(a.id)}
+                      >
+                        <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {scrubDisplayText(a.name, { collapseLines: true, maxChars: 80 }) || a.id}
+                        </div>
+                        <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          refreshes: {a.refreshCount ?? 0}
+                          {a.sidecarPath
+                            ? ` · ${scrubDisplayText(a.sidecarPath, { collapseLines: true, maxChars: 40 })}`
+                            : ''}
+                        </div>
+                      </button>
+                      {liveSelectedId === a.id && a.content && (
+                        <pre
+                          className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap rounded border p-1 font-mono text-[10px]"
+                          style={{
+                            borderColor: 'var(--border-primary)',
+                            color: 'var(--text-secondary)',
+                          }}
+                          data-testid="live-preview"
+                        >
+                          {scrubDisplayText(a.content.slice(0, 2000), {
+                            collapseLines: false,
+                            maxChars: 2000,
+                          })}
+                        </pre>
+                      )}
+                      <div className="mt-1 flex gap-2">
+                        <button
+                          type="button"
+                          disabled={liveBusy}
+                          className="text-[10px] font-medium"
+                          style={{ color: 'var(--accent, #6366f1)' }}
+                          onClick={() => void handleLiveRefresh(a.id)}
+                        >
+                          {t('project.liveRefresh')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={liveBusy}
+                          className="text-[10px] text-red-400"
+                          onClick={() => void handleLiveDelete(a.id)}
+                        >
+                          {t('common.delete')}
+                        </button>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
             </div>
           )}
         </aside>

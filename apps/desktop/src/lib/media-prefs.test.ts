@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadMediaKindFilter, saveMediaKindFilter } from './media-prefs.js';
 
 describe('media-prefs', () => {
@@ -36,6 +36,20 @@ describe('media-prefs', () => {
     expect(loadMediaKindFilter()).toBe('all');
     localStorage.setItem('neos-media-kind', '  audio  ');
     expect(loadMediaKindFilter()).toBe('audio');
+  });
+
+
+  it('tolerates localStorage failures', () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(loadMediaKindFilter()).toBe('all');
+    expect(() => saveMediaKindFilter('image')).not.toThrow();
+    getItem.mockRestore();
+    setItem.mockRestore();
   });
 
 });

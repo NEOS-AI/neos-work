@@ -316,6 +316,34 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_project_messages_conversation_id ON project_messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_file_revisions_project_path ON file_revisions(project_id, path);
     CREATE INDEX IF NOT EXISTS idx_preview_comments_project_id ON preview_comments(project_id);
+
+    -- Live artifacts (v0.5.15 / PLAN Task 9)
+    CREATE TABLE IF NOT EXISTS live_artifacts (
+      id                 TEXT PRIMARY KEY,
+      project_id         TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name               TEXT NOT NULL,
+      source_template    TEXT,
+      inputs_json        TEXT,
+      content            TEXT,
+      content_type       TEXT NOT NULL DEFAULT 'text/html',
+      sidecar_path       TEXT,
+      refresh_count      INTEGER NOT NULL DEFAULT 0,
+      last_refreshed_at  TEXT,
+      created_at         TEXT DEFAULT (datetime('now')),
+      updated_at         TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS live_artifact_refreshes (
+      id            TEXT PRIMARY KEY,
+      artifact_id   TEXT NOT NULL REFERENCES live_artifacts(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL,
+      content_hash  TEXT,
+      error         TEXT,
+      created_at    TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_live_artifacts_project_id ON live_artifacts(project_id);
+    CREATE INDEX IF NOT EXISTS idx_live_artifact_refreshes_artifact_id ON live_artifact_refreshes(artifact_id);
   `);
 
   // Migrations for older schemas

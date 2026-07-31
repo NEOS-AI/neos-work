@@ -690,4 +690,188 @@ describe('ArtifactPreview', () => {
     confirmSpy.mockRestore();
   });
 
+
+  it('rejects control-char workflow id without calling listArtifacts', async () => {
+    listArtifacts.mockClear();
+    render(<ArtifactPreview workflowId={`wf${'\n'}1`} />);
+    await waitFor(() => {
+      expect(
+        screen.getByText('Workflow id contains invalid control characters'),
+      ).toBeInTheDocument();
+    });
+    expect(listArtifacts).not.toHaveBeenCalled();
+  });
+
+  it('shows scrubbed list error when listArtifacts throws', async () => {
+    listArtifacts.mockRejectedValue(new Error(`list${'\n'}crash${'\0'}!`));
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => {
+      expect(screen.getByText('list crash!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('shows scrubbed content error when getArtifact throws', async () => {
+    const art = {
+      id: 'a-throw',
+      workflowId: 'wf-1',
+      name: 'x.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockRejectedValue(new Error(`get${'\n'}fail${'\0'}`));
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => {
+      expect(screen.getByText('get fail')).toBeInTheDocument();
+    });
+  });
+
+  it('strips null bytes from artifact content', async () => {
+    const art = {
+      id: 'a-null',
+      workflowId: 'wf-1',
+      name: 'x.txt',
+      contentType: 'text/plain',
+      content: `hello${'\0'}world`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => {
+      expect(screen.getByText(/helloworld/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('prefers latestArtifactId when present in list', async () => {
+    const a1 = {
+      id: 'old',
+      workflowId: 'wf-1',
+      name: 'old.html',
+      contentType: 'text/html',
+      content: '<html>old</html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const a2 = {
+      id: 'new',
+      workflowId: 'wf-1',
+      name: 'new.html',
+      contentType: 'text/html',
+      content: '<html>new</html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [a1, a2] });
+    getArtifact.mockImplementation(async (id: string) => ({
+      ok: true,
+      data: id === 'new' ? a2 : a1,
+    }));
+    render(<ArtifactPreview workflowId="wf-1" latestArtifactId="new" />);
+    await waitFor(() => {
+      expect(getArtifact).toHaveBeenCalledWith('new');
+    });
+  });
+
+  it('reload falls back to getArtifact when refresh fails then succeeds', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-fb',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html>v1</html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const refreshed = { ...art, content: '<html>v2</html>' };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact
+      .mockResolvedValueOnce({ ok: true, data: art })
+      .mockResolvedValueOnce({ ok: true, data: refreshed });
+    refreshArtifact.mockResolvedValue({ ok: false, error: 'no refresh' });
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('page.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /reload/i }));
+    await waitFor(() => {
+      expect(refreshArtifact).toHaveBeenCalledWith('a-fb', 'reload');
+      expect(screen.getByText('Content reloaded')).toBeInTheDocument();
+    });
+  });
+
+  it('shows scrubbed status when reload throws', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-rt',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    refreshArtifact.mockRejectedValue(new Error(`reload${'\n'}boom${'\0'}`));
+    render(<ArtifactPreview workflowId="wf-1" />);
+    await waitFor(() => expect(screen.getByText('page.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /reload/i }));
+    await waitFor(() => {
+      expect(screen.getByText('reload boom')).toBeInTheDocument();
+    });
+  });
+
+  it('re-run without callback shows not available when API fails', async () => {
+    const user = userEvent.setup();
+    const art = {
+      id: 'a-nr',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    refreshArtifact.mockResolvedValue({ ok: false, error: `rerun${'\n'}nope` });
+    // Without onRerunWorkflow the Re-run button is hidden — use only when provided
+    // Cover fallback path with onRerun absent by calling refresh path via button when present
+    // Actually button only shows with onRerunWorkflow. Provide callback that is not needed:
+    // Test throw path with callback
+    refreshArtifact.mockRejectedValueOnce(new Error(`rerun${'\0'}err`));
+    render(<ArtifactPreview workflowId="wf-1" onRerunWorkflow={() => {}} />);
+    await waitFor(() => expect(screen.getByText('page.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /▶ Re-run|Re-run/i }));
+    await waitFor(() => {
+      expect(screen.getByText('rerunerr')).toBeInTheDocument();
+    });
+  });
+
+  it('re-run falls back to onRerunWorkflow when meta mode is not rerun', async () => {
+    const user = userEvent.setup();
+    const onRerun = vi.fn();
+    const art = {
+      id: 'a-fb2',
+      workflowId: 'wf-1',
+      name: 'page.html',
+      contentType: 'text/html',
+      content: '<html></html>',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    listArtifacts.mockResolvedValue({ ok: true, data: [art] });
+    getArtifact.mockResolvedValue({ ok: true, data: art });
+    refreshArtifact.mockResolvedValue({ ok: true, meta: { mode: 'reload' } });
+    render(<ArtifactPreview workflowId="wf-1" onRerunWorkflow={onRerun} />);
+    await waitFor(() => expect(screen.getByText('page.html')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /▶ Re-run|Re-run/i }));
+    await waitFor(() => expect(onRerun).toHaveBeenCalled());
+  });
+
 });

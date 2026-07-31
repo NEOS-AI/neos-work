@@ -223,7 +223,7 @@ export interface ProjectRun {
   completedAt?: string | null;
 }
 
-// ── Live artifact (project-scoped; full CRUD in M4) ────────
+// ── Live artifact (project-scoped; full CRUD in M4 / Task 9) ────────
 
 export interface LiveArtifact {
   id: string;
@@ -233,8 +233,21 @@ export interface LiveArtifact {
   inputs?: Record<string, unknown>;
   content?: string | null;
   contentType?: string;
+  /** Project-relative sidecar path under .neos-work/live-artifacts/ */
+  sidecarPath?: string | null;
+  refreshCount?: number;
+  lastRefreshedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LiveArtifactRefresh {
+  id: string;
+  artifactId: string;
+  status: 'succeeded' | 'failed';
+  contentHash?: string | null;
+  error?: string | null;
+  createdAt: string;
 }
 
 // ── Plugin snapshot pin (M3 placeholder contract) ──────────

@@ -132,10 +132,16 @@ function safeKey(raw: string | undefined): string | undefined {
 export function resolveMediaProvider(id: string): ResolvedMediaProvider {
   const def = getProviderDef(id);
   if (!def) {
+    const safeId =
+      typeof id === 'string'
+        ? id.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 40)
+        : '';
     return {
       def: MEDIA_PROVIDER_CATALOG[0]!,
       configured: false,
-      reason: `Unknown media provider: ${String(id).slice(0, 40)}`,
+      reason: safeId
+        ? `Unknown media provider: ${safeId}`
+        : 'Unknown media provider',
     };
   }
 

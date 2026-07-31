@@ -309,6 +309,30 @@ export interface MediaFileInfo {
   urlPath: string;
 }
 
+export interface LiveArtifact {
+  id: string;
+  projectId: string;
+  name: string;
+  sourceTemplate?: string | null;
+  inputs?: Record<string, unknown>;
+  content?: string | null;
+  contentType?: string;
+  sidecarPath?: string | null;
+  refreshCount?: number;
+  lastRefreshedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiveArtifactRefresh {
+  id: string;
+  artifactId: string;
+  status: 'succeeded' | 'failed';
+  contentHash?: string | null;
+  error?: string | null;
+  createdAt: string;
+}
+
 export interface RoutineRun {
   id: string;
   routineId: string;
@@ -1585,6 +1609,99 @@ export class EngineClient {
   async listMediaFiles(limit = 100): Promise<ApiResponse<MediaFileInfo[]>> {
     const res = await fetch(`${this.baseUrl}/api/media/files?limit=${limit}`, {
       headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  // --- Live artifacts (Task 9) ---
+
+  async listLiveArtifacts(projectId: string): Promise<ApiResponse<LiveArtifact[]>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(
+      `${this.baseUrl}/api/live-artifacts?projectId=${encodeURIComponent(seg)}`,
+      { headers: this.getHeaders() },
+    );
+    return readApiResponse(res);
+  }
+
+  async createLiveArtifact(input: {
+    projectId: string;
+    name: string;
+    sourceTemplate?: string;
+    inputs?: Record<string, unknown>;
+    contentType?: string;
+  }): Promise<ApiResponse<LiveArtifact>> {
+    const seg = this.pathSegment(input.projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return { ok: false, error: 'Invalid name' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/live-artifacts`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        projectId: seg,
+        name: input.name.trim(),
+        sourceTemplate: input.sourceTemplate,
+        inputs: input.inputs,
+        contentType: input.contentType,
+      }),
+    });
+    return readApiResponse(res);
+  }
+
+  async refreshLiveArtifact(
+    id: string,
+    projectId: string,
+    inputs?: Record<string, unknown>,
+  ): Promise<ApiResponse<{ artifact: LiveArtifact; refresh: LiveArtifactRefresh }>> {
+    const aid = this.pathSegment(id);
+    const pid = this.pathSegment(projectId);
+    if (!aid || !pid) return this.invalidIdResponse('id');
+    const res = await fetch(
+      `${this.baseUrl}/api/live-artifacts/${aid}/refresh?projectId=${encodeURIComponent(pid)}`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(inputs ? { inputs } : {}),
+      },
+    );
+    return readApiResponse(res);
+  }
+
+  async deleteLiveArtifact(id: string, projectId: string): Promise<ApiResponse<null>> {
+    const aid = this.pathSegment(id);
+    const pid = this.pathSegment(projectId);
+    if (!aid || !pid) return this.invalidIdResponse('id');
+    const res = await fetch(
+      `${this.baseUrl}/api/live-artifacts/${aid}?projectId=${encodeURIComponent(pid)}`,
+      { method: 'DELETE', headers: this.getHeaders() },
+    );
+    return readApiResponse(res);
+  }
+
+  async createProjectToolToken(
+    projectId: string,
+    opts?: { capabilities?: string[]; runId?: string },
+  ): Promise<
+    ApiResponse<{
+      token: string;
+      projectId: string;
+      capabilities: string[];
+      expiresAt: string;
+    }>
+  > {
+    const pid = this.pathSegment(projectId);
+    if (!pid) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/live-artifacts/tool-tokens`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        projectId: pid,
+        capabilities: opts?.capabilities ?? ['live-artifacts'],
+        runId: opts?.runId,
+      }),
     });
     return readApiResponse(res);
   }

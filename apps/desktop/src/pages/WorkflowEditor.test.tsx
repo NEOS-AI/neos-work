@@ -924,4 +924,176 @@ describe('WorkflowEditor page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Export (ZIP)' }));
     expect(exportWorkflowZip).toHaveBeenCalledWith('wf-1', 'EvilFlow X');
   });
+
+  it('shows migration toast for v2 workflow with workerId agent', async () => {
+    sessionStorage.clear();
+    getWorkflow.mockResolvedValue({
+      ok: true,
+      data: {
+        ...sampleWorkflow,
+        schemaVersion: 2,
+        primaryDomain: 'coding',
+        nodes: [
+          {
+            id: 'a1',
+            type: 'agent',
+            label: 'Coder',
+            position: { x: 0, y: 0 },
+            config: { workerId: 'coding-worker' },
+          },
+        ],
+        edges: [],
+      },
+    });
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByTestId('migration-toast')).toHaveTextContent(
+        /converted to v2/i,
+      );
+    });
+    expect(sessionStorage.getItem('neos.workflow.migrated.v2.wf-1')).toBe('1');
+  });
+
+  it('shows scrubbed error when getWorkflow throws', async () => {
+    getWorkflow.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText('net down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('shows scrubbed blocks error when listBlocks throws', async () => {
+    listBlocks.mockRejectedValue(new Error(`blocks${'\n'}boom${'\0'}`));
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/blocks boom/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('drops a palette node onto the canvas', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    const canvas = screen.getByTestId('react-flow').parentElement as HTMLElement;
+    expect(canvas).toBeTruthy();
+
+    const dt = {
+      getData: (key: string) => (key === 'nodeType' ? 'output' : key === 'paletteKey' ? 'output:Output' : ''),
+      setData: vi.fn(),
+    };
+    fireEvent.drop(canvas, {
+      dataTransfer: dt,
+      nativeEvent: { offsetX: 120, offsetY: 80 },
+    });
+
+    await waitFor(() => {
+      const rf = screen.getByTestId('react-flow');
+      expect(Number(rf.getAttribute('data-node-count'))).toBeGreaterThan(2);
+    });
+  });
+
+  it('ignores drop without nodeType/paletteKey', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    const canvas = screen.getByTestId('react-flow').parentElement as HTMLElement;
+    const before = Number(screen.getByTestId('react-flow').getAttribute('data-node-count'));
+    fireEvent.drop(canvas, {
+      dataTransfer: { getData: () => '', setData: vi.fn() },
+      nativeEvent: { offsetX: 10, offsetY: 10 },
+    });
+    expect(Number(screen.getByTestId('react-flow').getAttribute('data-node-count'))).toBe(before);
+  });
+
+  it('switches palette domain tabs', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    // Domain pack tabs exist (coding/finance/etc depending on NODE_TYPES_LIST)
+    const codingTab = screen.queryByRole('button', { name: /^coding$/i });
+    if (codingTab) {
+      fireEvent.click(codingTab);
+      // Palette still renders something
+      expect(screen.getByText('workflow.nodes')).toBeInTheDocument();
+    } else {
+      // At least "all" tab is present
+      expect(screen.getByRole('button', { name: /^all$/i })).toBeInTheDocument();
+    }
+  });
+
+  it('processes run SSE events including progress collapse and artifact preview', async () => {
+    let onEvent: ((ev: Record<string, unknown>) => void) | undefined;
+    const stop = vi.fn();
+    runWorkflow.mockImplementation(
+      (_id: string, cb: (ev: Record<string, unknown>) => void) => {
+        onEvent = cb;
+        return stop;
+      },
+    );
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
+    expect(onEvent).toBeTypeOf('function');
+
+    onEvent!({ type: 'node.started', nodeId: 'n1' });
+    onEvent!({ type: 'node.progress', nodeId: 'n1', message: 'step 1' });
+    onEvent!({ type: 'node.progress', nodeId: 'n1', message: 'step 2' }); // collapse
+    onEvent!({ type: 'node.completed', nodeId: 'n1' });
+    onEvent!({ type: 'node.started', nodeId: 'n2' });
+    onEvent!({ type: 'node.failed', nodeId: 'n2', error: 'boom' });
+    onEvent!({ type: 'run.completed', runId: 'r1', artifactId: 'art-1' });
+
+    await waitFor(() => {
+      // artifact completion switches right panel to preview
+      expect(screen.getByTestId('artifact-preview')).toBeInTheDocument();
+    });
+  });
+
+  it('handles run.failed SSE event', async () => {
+    let onEvent: ((ev: Record<string, unknown>) => void) | undefined;
+    runWorkflow.mockImplementation(
+      (_id: string, cb: (ev: Record<string, unknown>) => void) => {
+        onEvent = cb;
+        return vi.fn();
+      },
+    );
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
+    onEvent!({ type: 'run.failed', runId: 'r1', error: 'explode' });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /▶\s*workflow\.run/i })).toBeInTheDocument();
+    });
+  });
+
+  it('registers beforeunload when dirty after drop', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    const canvas = screen.getByTestId('react-flow').parentElement as HTMLElement;
+    fireEvent.drop(canvas, {
+      dataTransfer: {
+        getData: (k: string) => (k === 'nodeType' ? 'output' : ''),
+        setData: vi.fn(),
+      },
+      nativeEvent: { offsetX: 40, offsetY: 40 },
+    });
+    await waitFor(() => {
+      expect(Number(screen.getByTestId('react-flow').getAttribute('data-node-count'))).toBeGreaterThan(
+        2,
+      );
+    });
+    const ev = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent;
+    Object.defineProperty(ev, 'returnValue', { writable: true, value: undefined });
+    window.dispatchEvent(ev);
+    // handler sets returnValue to ''
+    expect(ev.returnValue === '' || ev.defaultPrevented).toBe(true);
+  });
+
 });

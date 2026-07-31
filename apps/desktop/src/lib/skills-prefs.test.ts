@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadSkillsCategoryFilter, saveSkillsCategoryFilter } from './skills-prefs.js';
 
 describe('skills-prefs', () => {
@@ -45,4 +45,18 @@ describe('skills-prefs', () => {
     localStorage.setItem('neos-skills-category', 'c'.repeat(101));
     expect(loadSkillsCategoryFilter()).toBe('all');
   });
+
+  it('tolerates localStorage failures', () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(loadSkillsCategoryFilter()).toBe('all');
+    expect(() => saveSkillsCategoryFilter('coding')).not.toThrow();
+    getItem.mockRestore();
+    setItem.mockRestore();
+  });
+
 });

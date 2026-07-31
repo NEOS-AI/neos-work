@@ -28,6 +28,8 @@ import deploy from './routes/deploy.js';
 import pluginsRoute from './routes/plugins.js';
 import projects from './routes/projects.js';
 import runs from './routes/runs.js';
+import liveArtifacts from './routes/live-artifacts.js';
+import toolsLiveArtifacts from './routes/tools-live-artifacts.js';
 import { migrateEncryption } from './db/settings.js';
 import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
 import { listCustomWorkers } from './db/workers.js';
@@ -72,6 +74,9 @@ app.use('*', async (c, next) => {
   // Webhook endpoint uses HMAC-SHA256 signature auth — skip Bearer token check
   if (c.req.path.startsWith('/api/webhook/')) return next();
 
+  // Tool-token routes validate agent tool tokens themselves (Task 9)
+  if (c.req.path.startsWith('/api/tools/')) return next();
+
   const authHeader = c.req.header('Authorization');
   if (authHeader !== `Bearer ${AUTH_TOKEN}`) {
     return c.json({ ok: false, error: 'Unauthorized' }, 401);
@@ -106,12 +111,14 @@ app.route('/api/deploy', deploy);
 app.route('/api/plugins', pluginsRoute);
 app.route('/api/projects', projects);
 app.route('/api/runs', runs);
+app.route('/api/live-artifacts', liveArtifacts);
+app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 
 // Root
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.12',
+    version: '0.5.15',
   });
 });
 

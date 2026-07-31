@@ -151,7 +151,21 @@
     "exportFailed": "프로젝트 ZIP 내보내기 실패",
     "importZipFailed": "프로젝트 ZIP 가져오기 실패",
     "importZipInvalid": ".zip 파일을 선택하세요",
-    "importZipTooLarge": "ZIP이 50MB 제한을 초과합니다"
+    "importZipTooLarge": "ZIP이 50MB 제한을 초과합니다",
+    "live": "Live",
+    "liveHint": "새로고침 가능한 템플릿 + 입력 (.neos-work/live-artifacts/ 사이드카).",
+    "liveName": "이름",
+    "liveTemplate": "소스 템플릿",
+    "liveInputs": "입력 JSON",
+    "liveCreate": "Live artifact 만들기",
+    "liveEmpty": "Live artifact 없음",
+    "liveRefresh": "새로고침",
+    "liveLoadFailed": "Live artifact 로드 실패",
+    "liveCreateFailed": "Live artifact 생성 실패",
+    "liveRefreshFailed": "Live artifact 새로고침 실패",
+    "liveDeleteFailed": "Live artifact 삭제 실패",
+    "liveInvalidName": "이름이 비어 있거나 유효하지 않음",
+    "liveInvalidInputs": "입력은 JSON 객체여야 합니다"
   },
   "mode": {
     "title": "NEOS Work를 어떻게 실행하시겠습니까?",

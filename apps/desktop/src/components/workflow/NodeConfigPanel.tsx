@@ -491,44 +491,54 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               <option value="stub">Stub (dev)</option>
             </select>
           </div>
-          {(config.mediaType !== 'audio') && (
+          {(config.mediaType === 'image'
+            || config.mediaType === 'video'
+            || config.mediaType === undefined
+            || config.mediaType === '') && (
             <>
               <TextAreaField
                 label="Prompt"
                 value={displayLine(config.prompt, 10_000)}
                 rows={3}
                 onChange={(prompt) => {
-                  // Image prompts reject null-byte / CR / LF (align with MediaNode + validation)
+                  // Image/video prompts reject null-byte / CR / LF (align with MediaNode + validation)
                   if (/[\0\r\n]/.test(prompt)) return;
                   patchConfig({ prompt });
                 }}
               />
-              <div className="space-y-1">
-                <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Size</label>
-                <select
-                  className="w-full rounded border px-2 py-1.5 text-xs"
-                  style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-                  value={typeof config.size === 'string' ? config.size : '1024x1024'}
-                  onChange={(e) => patchConfig({ size: e.target.value })}
-                >
-                  {MEDIA_IMAGE_SIZES.map((s) => (
-                    <option key={s} value={s}>{s.replace('x', '×')}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Quality</label>
-                <select
-                  className="w-full rounded border px-2 py-1.5 text-xs"
-                  style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-                  value={typeof config.quality === 'string' ? config.quality : 'standard'}
-                  onChange={(e) => patchConfig({ quality: e.target.value })}
-                >
-                  {MEDIA_IMAGE_QUALITIES.map((q) => (
-                    <option key={q} value={q}>{q}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Size/quality apply only to image surface — not video jobs */}
+              {(config.mediaType === 'image'
+                || config.mediaType === undefined
+                || config.mediaType === '') && (
+                <>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Size</label>
+                    <select
+                      className="w-full rounded border px-2 py-1.5 text-xs"
+                      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                      value={typeof config.size === 'string' ? config.size : '1024x1024'}
+                      onChange={(e) => patchConfig({ size: e.target.value })}
+                    >
+                      {MEDIA_IMAGE_SIZES.map((s) => (
+                        <option key={s} value={s}>{s.replace('x', '×')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Quality</label>
+                    <select
+                      className="w-full rounded border px-2 py-1.5 text-xs"
+                      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                      value={typeof config.quality === 'string' ? config.quality : 'standard'}
+                      onChange={(e) => patchConfig({ quality: e.target.value })}
+                    >
+                      {MEDIA_IMAGE_QUALITIES.map((q) => (
+                        <option key={q} value={q}>{q}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </>
           )}
           {config.mediaType === 'audio' && (

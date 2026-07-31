@@ -85,6 +85,14 @@ describe('media-providers', () => {
     expect(getProviderDef('nope')).toBeUndefined();
   });
 
+  it('unknown provider reason scrubs control characters', () => {
+    const r = resolveMediaProvider('evil\nprovider');
+    expect(r.configured).toBe(false);
+    expect(r.reason).toMatch(/unknown media provider/i);
+    expect(r.reason).not.toMatch(/\n/);
+  });
+
+
   it('defaultProviderForSurface prefers openai for image', () => {
     setSetting('OPENAI_API_KEY', 'sk-def');
     expect(defaultProviderForSurface('image')).toBe('openai');
