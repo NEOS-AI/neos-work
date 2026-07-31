@@ -969,6 +969,115 @@ describe('NodeConfigPanel', () => {
     expect(screen.getByDisplayValue('Price')).toBeInTheDocument();
   });
 
+  it('clears block selection and applies defaults when picking a block', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'price_lookup',
+          name: 'Price Lookup',
+          domain: 'finance',
+          category: 'market',
+          description: 'lookup',
+          isBuiltIn: true,
+          implementationType: 'native',
+          paramDefs: [
+            { key: 'symbol', label: 'Symbol', type: 'string', default: 'TICKER' },
+          ],
+        },
+        {
+          id: 'news_scan',
+          name: 'News Scan',
+          domain: 'finance',
+          category: 'market',
+          description: 'news',
+          isBuiltIn: true,
+          implementationType: 'prompt',
+          paramDefs: [],
+        },
+      ],
+    });
+    const blockNode = {
+      id: 'b1',
+      type: 'block',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'block',
+        label: 'Price',
+        config: { blockId: 'price_lookup', params: { symbol: '005930' } },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={blockNode}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    await waitFor(() => expect(listBlocks).toHaveBeenCalled());
+
+    // Clear selection
+    const blockSelect = screen.getByLabelText(/^Block$/i);
+    await user.selectOptions(blockSelect, '');
+    await waitFor(() => {
+      const last = onPatchNodeData.mock.calls.at(-1)?.[1] as {
+        config?: { blockId?: string; params?: Record<string, unknown> };
+      };
+      expect(last?.config?.blockId).toBeUndefined();
+      expect(last?.config?.params).toEqual({});
+    });
+
+    // Select another block with defaults
+    onPatchNodeData.mockClear();
+    await user.selectOptions(blockSelect, 'news_scan');
+    await waitFor(() => {
+      const last = onPatchNodeData.mock.calls.at(-1)?.[1] as {
+        config?: { blockId?: string };
+      };
+      expect(last?.config?.blockId).toBe('news_scan');
+    });
+  });
+
+  it('accepts valid trigger initialInputs JSON and ignores invalid JSON', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    const node = {
+      id: 't1',
+      type: 'trigger',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'trigger', label: 'Start', config: {} },
+    } as unknown as Node;
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    const ta = screen.getByLabelText(/Initial inputs/i);
+    await user.clear(ta);
+    await user.type(ta, '{{"foo":1}');
+    await waitFor(() => {
+      const last = onPatchNodeData.mock.calls.at(-1)?.[1] as {
+        config?: { initialInputs?: Record<string, unknown> };
+      };
+      expect(last?.config?.initialInputs).toEqual({ foo: 1 });
+    });
+    onPatchNodeData.mockClear();
+    await user.clear(ta);
+    await user.type(ta, 'not-json');
+    // invalid JSON must not patch config
+    expect(
+      onPatchNodeData.mock.calls.every((c) => {
+        const cfg = (c[1] as { config?: { initialInputs?: unknown } }).config;
+        return cfg?.initialInputs === undefined || typeof cfg.initialInputs === 'object';
+      }),
+    ).toBe(true);
+  });
+
   it('shows gate helper copy for parallel_end, or_gate, and output', () => {
     for (const [nodeType, copy] of [
       ['parallel_end', /Fan-in: waits for all upstream/i],

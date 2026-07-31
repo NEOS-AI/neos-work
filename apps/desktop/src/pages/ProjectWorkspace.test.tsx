@@ -121,6 +121,23 @@ vi.mock('@neos-work/design-editor', () => {
           diskHash: event.hash ?? prev.diskHash,
         };
       }
+      if ((event as { type?: string }).type === 'disk-changed') {
+        const e = event as { type: 'disk-changed'; content: string; hash?: string };
+        // Mirror production: if dirty, keep local and only update disk/hash
+        if (prev.local !== prev.disk) {
+          return {
+            ...prev,
+            disk: e.content,
+            diskHash: e.hash ?? prev.diskHash,
+          };
+        }
+        return {
+          ...prev,
+          local: e.content,
+          disk: e.content,
+          diskHash: e.hash ?? prev.diskHash,
+        };
+      }
       return prev;
     },
     DesignEditor: (props: {
@@ -247,6 +264,7 @@ describe('ProjectWorkspace', () => {
     createLiveArtifact.mockReset();
     refreshLiveArtifact.mockReset();
     deleteLiveArtifact.mockReset();
+    streamProjectFileEvents.mockReset().mockImplementation(() => () => {});
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -949,6 +967,78 @@ describe('ProjectWorkspace', () => {
     await user.click(screen.getByTestId('side-tab-live'));
     await user.click(screen.getByTestId('live-create'));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('createboom'));
+  });
+
+  it('applies project file SSE disk-changed and refreshes tree on file.created', async () => {
+    let sseHandler:
+      | ((ev: { type: string; path?: string }) => void)
+      | undefined;
+    streamProjectFileEvents.mockImplementation((_id: string, cb: typeof sseHandler) => {
+      sseHandler = cb;
+      return () => {};
+    });
+    mockLoadedProject();
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await waitFor(() => expect(streamProjectFileEvents).toHaveBeenCalled());
+
+    // Remote change for open file (clean buffer → adopt disk content)
+    readProjectFile.mockResolvedValueOnce({
+      ok: true,
+      data: { path: 'index.html', content: '<html>remote</html>', hash: 'remote-hash' },
+    });
+    sseHandler?.({ type: 'file.changed', path: 'index.html' });
+    await waitFor(() => {
+      expect(readProjectFile).toHaveBeenCalledWith('proj-1', 'index.html');
+    });
+    await waitFor(() => {
+      const ta = screen.getByLabelText('project.mode.code') as HTMLTextAreaElement;
+      expect(ta.value).toContain('remote');
+    });
+
+    // file.created refreshes list
+    listProjectFiles.mockClear();
+    listProjectFiles.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+        { path: 'new.html', name: 'new.html', type: 'file', isEntry: false },
+      ],
+    });
+    readProjectFile.mockResolvedValueOnce({
+      ok: true,
+      data: { path: 'index.html', content: '<html>remote</html>', hash: 'remote-hash' },
+    });
+    sseHandler?.({ type: 'file.created', path: 'index.html' });
+    await waitFor(() => {
+      expect(listProjectFiles).toHaveBeenCalled();
+    });
+  });
+
+  it('ignores SSE for other paths and read failures', async () => {
+    let sseHandler:
+      | ((ev: { type: string; path?: string }) => void)
+      | undefined;
+    streamProjectFileEvents.mockImplementation((_id: string, cb: typeof sseHandler) => {
+      sseHandler = cb;
+      return () => {};
+    });
+    mockLoadedProject();
+    renderWorkspace();
+    await waitFor(() => expect(streamProjectFileEvents).toHaveBeenCalled());
+
+    const readsBefore = readProjectFile.mock.calls.length;
+    sseHandler?.({ type: 'file.changed', path: 'other.html' });
+    sseHandler?.({ type: 'file.deleted', path: 'index.html' });
+    sseHandler?.({ type: 'file.changed', path: '' });
+    // only other.html ignored; deleted ignored; empty path ignored
+    expect(readProjectFile.mock.calls.length).toBe(readsBefore);
+
+    readProjectFile.mockResolvedValueOnce({ ok: false, error: 'gone' });
+    sseHandler?.({ type: 'file.changed', path: 'index.html' });
+    await waitFor(() => {
+      expect(readProjectFile).toHaveBeenCalledWith('proj-1', 'index.html');
+    });
   });
 
 });

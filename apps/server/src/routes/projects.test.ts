@@ -1234,3 +1234,57 @@ describe('projects sandbox miss and message errors', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('projects import entryFile re-detect', () => {
+  async function zipFromEntries(
+    entries: Array<{ name: string; content: string | Buffer }>,
+  ): Promise<Buffer> {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    return new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      for (const e of entries) {
+        archive.append(e.content, { name: e.name });
+      }
+      void archive.finalize();
+    });
+  }
+
+  it('re-detects entryFile when manifest entry is missing from archive files', async () => {
+    const zip = await zipFromEntries([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          version: 1,
+          format: 'neos-project',
+          exportedAt: new Date().toISOString(),
+          project: {
+            name: `${NAME}_redetect`,
+            entryFile: 'missing-not-in-zip.html',
+            designSystemId: null,
+          },
+        }),
+      },
+      { name: 'files/index.html', content: '<html><body>entry</body></html>' },
+    ]);
+    const imp = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zip,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as {
+      data: { project: { id: string; entryFile?: string | null } };
+    };
+    createdIds.push(body.data.project.id);
+    // Should land on detected index.html (or non-missing path)
+    expect(body.data.project.entryFile).not.toBe('missing-not-in-zip.html');
+    expect(body.data.project.entryFile).toMatch(/index\.html|html/i);
+  });
+});
