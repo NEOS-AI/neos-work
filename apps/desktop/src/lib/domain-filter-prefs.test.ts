@@ -62,3 +62,35 @@ describe('domain-filter-prefs', () => {
   });
 
 });
+
+describe('domain-filter-prefs storage failures', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('load falls back when storage throws', () => {
+    const orig = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => {
+      throw new Error('denied');
+    };
+    try {
+      expect(loadDomainFilter('blocks')).toBe('all');
+      expect(loadBlocksSourceFilter()).toBe('all');
+    } finally {
+      Storage.prototype.getItem = orig;
+    }
+  });
+
+  it('save ignores setItem failures', () => {
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error('quota');
+    };
+    try {
+      expect(() => saveDomainFilter('templates', 'coding')).not.toThrow();
+      expect(() => saveBlocksSourceFilter('custom')).not.toThrow();
+    } finally {
+      Storage.prototype.setItem = orig;
+    }
+  });
+});

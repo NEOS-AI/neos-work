@@ -256,3 +256,23 @@ describe('domain-packs routes additional branches', () => {
     expect(badId.status).toBe(404);
   });
 });
+
+describe('domain-packs install-zip body read failure paths', () => {
+  it('rejects invalid zip content with 400', async () => {
+    const res = await domainPacks.request('/install-zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: Buffer.from('not-zip-data'),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('toggle 404 for missing installed pack', async () => {
+    const res = await domainPacks.request('/not-installed-pack/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(404);
+  });
+});

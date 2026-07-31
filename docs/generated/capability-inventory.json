@@ -1,0 +1,243 @@
+{
+  "generatedAt": "2026-07-31T14:30:54.680Z",
+  "version": "0.5.24",
+  "root": "/Users/yeonwoosung/Desktop/neos-work",
+  "catalogs": {
+    "agentCliDefs": {
+      "count": 13,
+      "ids": [
+        "cli-claude",
+        "cli-codex",
+        "cli-gemini",
+        "cli-opencode",
+        "cli-cursor",
+        "cli-aider",
+        "cli-copilot",
+        "cli-qwen",
+        "cli-kimi",
+        "cli-grok",
+        "cli-devin",
+        "cli-amp",
+        "cli-continue"
+      ],
+      "names": [
+        "Claude Code",
+        "OpenAI Codex CLI",
+        "Gemini CLI",
+        "OpenCode",
+        "Cursor Agent",
+        "Aider",
+        "GitHub Copilot CLI",
+        "Qwen Code",
+        "Kimi CLI",
+        "Grok Build / xAI CLI",
+        "Devin CLI",
+        "Amp / Sourcegraph Amp",
+        "Continue CLI"
+      ]
+    },
+    "pluginAtoms": {
+      "count": 15,
+      "ids": [
+        "prompt.system",
+        "prompt.user",
+        "tool.shell",
+        "tool.filesystem",
+        "tool.web_search",
+        "transform.json_parse",
+        "transform.markdown_extract",
+        "gate.capability",
+        "gate.hitl",
+        "genui.form",
+        "genui.choice",
+        "genui.confirm",
+        "editor.apply_patch",
+        "media.generate_image",
+        "deploy.preflight"
+      ]
+    },
+    "skills": {
+      "count": 5,
+      "items": [
+        {
+          "id": "api-docs",
+          "kind": "package",
+          "path": "skills/api-docs/SKILL.md"
+        },
+        {
+          "id": "code-review",
+          "kind": "package",
+          "path": "skills/code-review/SKILL.md"
+        },
+        {
+          "id": "design-critique",
+          "kind": "package",
+          "path": "skills/design-critique/SKILL.md"
+        },
+        {
+          "id": "refactor-safe",
+          "kind": "package",
+          "path": "skills/refactor-safe/SKILL.md"
+        },
+        {
+          "id": "web-landing",
+          "kind": "package",
+          "path": "skills/web-landing/SKILL.md"
+        }
+      ]
+    },
+    "designSystems": {
+      "count": 2,
+      "items": [
+        {
+          "id": "minimal-mono",
+          "path": "design-systems/minimal-mono/manifest.json",
+          "schema": "od-design-system-project/v1",
+          "name": "minimal-mono"
+        },
+        {
+          "id": "neos-default",
+          "path": "design-systems/neos-default/manifest.json",
+          "schema": "od-design-system-project/v1",
+          "name": "neos-default"
+        }
+      ]
+    },
+    "plugins": {
+      "count": 3,
+      "items": [
+        {
+          "id": "code-critique",
+          "tier": "official",
+          "path": "plugins/_official/code-critique/open-design.json",
+          "name": "Code Critique"
+        },
+        {
+          "id": "landing-gen",
+          "tier": "official",
+          "path": "plugins/_official/landing-gen/open-design.json",
+          "name": "Landing Page Generator"
+        },
+        {
+          "id": "hello-plugin",
+          "tier": "community",
+          "path": "plugins/community/hello-plugin/open-design.json",
+          "name": "Hello Plugin"
+        }
+      ]
+    },
+    "mediaProviders": {
+      "count": 6,
+      "ids": [
+        "openai",
+        "azure-openai",
+        "google",
+        "xai",
+        "openai-compatible",
+        "stub"
+      ],
+      "surfaces": [
+        "image",
+        "audio",
+        "video"
+      ]
+    },
+    "domainPacks": {
+      "count": 4,
+      "ids": [
+        "finance",
+        "coding",
+        "research",
+        "general"
+      ],
+      "customLoader": true
+    },
+    "mcpTools": {
+      "count": 8,
+      "ids": [
+        "neos_status",
+        "neos_projects_list",
+        "neos_files_list",
+        "neos_files_read",
+        "neos_files_write",
+        "neos_live_artifacts_list",
+        "neos_live_artifacts_create",
+        "neos_live_artifacts_refresh"
+      ]
+    }
+  },
+  "gates": {
+    "minAgentCliDefs": 12,
+    "minPluginAtoms": 12,
+    "minSkills": 5,
+    "minDesignSystems": 2,
+    "minMediaProviders": 4,
+    "minMcpTools": 6,
+    "minDomainPacks": 4,
+    "minMediaSurfaces": 3
+  },
+  "summary": {
+    "agentCliDefs": 13,
+    "pluginAtoms": 15,
+    "skills": 5,
+    "designSystems": 2,
+    "plugins": 3,
+    "mediaProviders": 6,
+    "mediaSurfaces": 3,
+    "domainPacks": 4,
+    "mcpTools": 8
+  },
+  "checks": {
+    "ok": true,
+    "results": [
+      {
+        "id": "agentCliDefs",
+        "ok": true,
+        "actual": 13,
+        "min": 12
+      },
+      {
+        "id": "pluginAtoms",
+        "ok": true,
+        "actual": 15,
+        "min": 12
+      },
+      {
+        "id": "skills",
+        "ok": true,
+        "actual": 5,
+        "min": 5
+      },
+      {
+        "id": "designSystems",
+        "ok": true,
+        "actual": 2,
+        "min": 2
+      },
+      {
+        "id": "mediaProviders",
+        "ok": true,
+        "actual": 6,
+        "min": 4
+      },
+      {
+        "id": "mediaSurfaces",
+        "ok": true,
+        "actual": 3,
+        "min": 3
+      },
+      {
+        "id": "mcpTools",
+        "ok": true,
+        "actual": 8,
+        "min": 6
+      },
+      {
+        "id": "domainPacks",
+        "ok": true,
+        "actual": 4,
+        "min": 4
+      }
+    ]
+  }
+}

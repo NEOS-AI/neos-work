@@ -159,7 +159,7 @@ app.route('/api/connection-test', connectionTest);
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.23',
+    version: '0.5.24',
   });
 });
 
@@ -189,7 +189,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.5.23',
+      version: '0.5.24',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });

@@ -1,8 +1,46 @@
 # NEOS Work
 
-Claude Cowork의 오픈소스 대안
+Claude Cowork의 오픈소스 대안 — **로컬 우선 에이전트 플랫폼**. 두 가지 1급 표면:
+
+| 표면 | 설명 |
+|---|---|
+| **Workflow** | 자동화 그래프, 도메인 워커, 팩, 게이트 |
+| **Design Project** | 파일 작업공간 + **Design Editor** (생성 → 수동 편집 → 재프롬프트) |
 
 **한국어** | **[English](README.md)**
+
+---
+
+## 빠른 시작 — Design Editor 루프 (v0.5)
+
+```bash
+pnpm install
+pnpm --filter @neos-work/server dev   # NEOS_PORT + NEOS_AUTH_TOKEN 확인
+# Desktop: cd apps/desktop && pnpm tauri dev
+# 또는 Web: pnpm --filter @neos-work/web dev  → 토큰 붙여넣기
+# Design Project 생성 → Editor (Preview / Code / Layers)
+# 채팅 브리프 → 에이전트가 HTML 기록 → Code에서 수정 → 저장 → Preview 반영
+# Layers에서 선택 → Edit with AI (기본 patch / replace-selection)
+```
+
+CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
+
+**마이그레이션 (v0.4 → v0.5):** [docs/migration/v0.5.0.md](docs/migration/v0.5.0.md)  
+**보안:** [docs/security/v0.5.md](docs/security/v0.5.md)  
+**능력 목록:** `pnpm inventory` / `pnpm inventory:check` · 스모크: `pnpm e2e:smoke`
+
+---
+
+## v0.5 주요 변경
+
+- **Design Project** + path sandbox, 리비전, 폴더 import
+- **Design Editor**: Preview · Code · Layers · Inspect · Edit with AI
+- **Agent runtime** (≥12 CLI def), runs/SSE/`editContext`
+- Skill 패키지, 플러그인 atom, 미디어 multi-provider, live artifact
+- **`neos` CLI**, **web** 클라이언트, **Docker** 셀프호스트
+- Domain Pack **커스텀 로더**, NEOS **MCP 서버** (`neos mcp serve`)
+
+v0.4 Domain Workers / schemaVersion **2** 워크플로우는 그대로 유지됩니다.
 
 ---
 
@@ -14,7 +52,7 @@ v0.4.0은 **도메인 워커(Domain Workers)** 와 워크플로우 **schemaVersi
 - 통합 노드: `agent` + `workerId` (`agent_finance` / `agent_coding` 대체)
 - 내장 **Domain Pack**: finance, coding, research, general
 - **코디네이터** 모드 (`spawn_worker` / `await_workers`) — 별도 노드 타입 없음
-- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` 는 v0.5 전까지 호환)
+- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` 는 호환 별칭)
 - Typed ports MVP (기본 경고; `strictPorts=1` 이면 하드 실패)
 
 **마이그레이션:** 기존 워크플로우는 로드 시 자동 변환됩니다. 전체 브레이킹
@@ -126,6 +164,10 @@ PORT=3000 pnpm dev
 | `pnpm lint` | ESLint 검사 |
 | `pnpm typecheck` | TypeScript 타입 검사 |
 | `pnpm format` | Prettier 포맷팅 |
+| `pnpm inventory` | 능력 카탈로그 JSON 덤프 (agents/skills/plugins/…) |
+| `pnpm inventory:check` | 게이트 미달 시 실패 |
+| `pnpm inventory:write` | `docs/generated/capability-inventory.json` 기록 |
+| `pnpm e2e:smoke` | fixture + inventory 계약 스모크 |
 | `pnpm clean` | 빌드 산출물 및 node_modules 제거 |
 
 ## 셀프호스트 (Docker)

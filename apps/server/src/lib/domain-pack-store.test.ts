@@ -215,3 +215,59 @@ describe('domain-pack-store additional branches', () => {
     expect(r.errors.some((e) => /does not match directory/i.test(e))).toBe(true);
   });
 });
+
+describe('domain-pack-store install variants', () => {
+  it('accepts neos-pack.json and overwrites existing install', async () => {
+    const src = path.join(tmpRoot, 'neos-named');
+    await fs.mkdir(src, { recursive: true });
+    await fs.writeFile(path.join(src, 'neos-pack.json'), JSON.stringify(SAMPLE), 'utf8');
+    const first = await installPackFromDir(src);
+    expect(first.ok).toBe(true);
+
+    // overwrite with updated name
+    await fs.writeFile(
+      path.join(src, 'neos-pack.json'),
+      JSON.stringify({ ...SAMPLE, name: 'Legal v2' }),
+      'utf8',
+    );
+    const second = await installPackFromDir(src);
+    expect(second.ok).toBe(true);
+    expect(resolvePack('legal')?.name).toBe('Legal v2');
+  });
+
+  it('rejects oversized zip buffer', async () => {
+    const { DOMAIN_PACK_ZIP_MAX_BYTES } = await import('./domain-pack-store.js');
+    const huge = Buffer.alloc(DOMAIN_PACK_ZIP_MAX_BYTES + 1);
+    const r = await installPackFromZipBuffer(huge);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/exceeds max/i);
+  });
+
+  it('zip with nested folder prefix still installs', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'legal/pack.json' });
+    archive.append('# Legal', { name: 'legal/README.md' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    unregisterPack('legal');
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.packId).toBe('legal');
+  });
+
+  it('rejects invalid manifest json content that is too large', async () => {
+    const { readPackManifestFromDir, DOMAIN_PACK_MANIFEST_MAX_CHARS } = await import(
+      './domain-pack-store.js'
+    );
+    const dir = path.join(tmpRoot, 'huge-manifest');
+    await fs.mkdir(dir, { recursive: true });
+    const huge = JSON.stringify({
+      ...SAMPLE,
+      description: 'x'.repeat(DOMAIN_PACK_MANIFEST_MAX_CHARS),
+    });
+    await fs.writeFile(path.join(dir, 'pack.json'), huge, 'utf8');
+    const r = await readPackManifestFromDir(dir);
+    expect(r.ok).toBe(false);
+  });
+});

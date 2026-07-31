@@ -40,3 +40,33 @@ describe('memory-prefs', () => {
   });
 
 });
+
+describe('memory-prefs storage failures', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('load falls back when storage throws', () => {
+    const orig = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => {
+      throw new Error('denied');
+    };
+    try {
+      expect(loadMemoryTypeFilter()).toBe('all');
+    } finally {
+      Storage.prototype.getItem = orig;
+    }
+  });
+
+  it('save ignores setItem failures', () => {
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error('quota');
+    };
+    try {
+      expect(() => saveMemoryTypeFilter('session')).not.toThrow();
+    } finally {
+      Storage.prototype.setItem = orig;
+    }
+  });
+});

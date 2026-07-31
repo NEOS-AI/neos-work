@@ -39,7 +39,7 @@ export class NeosApiClient {
   private headers(json = true): Record<string, string> {
     const h: Record<string, string> = {
       Accept: 'application/json',
-      'User-Agent': 'neos-cli/0.5.23',
+      'User-Agent': 'neos-cli/0.5.24',
     };
     if (json) h['Content-Type'] = 'application/json';
     if (this.config.authToken) {
@@ -127,7 +127,7 @@ export class NeosApiClient {
     try {
       const res = await this.fetchImpl(url, {
         method: 'GET',
-        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.5.23' },
+        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.5.24' },
         signal: controller.signal,
       });
       if (!res.ok) {

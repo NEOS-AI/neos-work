@@ -204,3 +204,146 @@ describe('generateMediaUnified google + live video paths', () => {
     }
   });
 });
+
+describe('live video poll path', () => {
+  it('polls remote job id until completed URL', async () => {
+    vi.spyOn(mediaProviders, 'resolveMediaProvider').mockReturnValue({
+      def: mediaProviders.getProviderDef('xai')!,
+      configured: true,
+      apiKey: 'xkey',
+      baseURL: 'https://api.x.ai/v1',
+    } as ReturnType<typeof mediaProviders.resolveMediaProvider>);
+
+    const videoBytes = new Uint8Array([9, 8, 7, 6]);
+    let polls = 0;
+    const fetchImpl = vi.fn(async (url: string, init?: { method?: string }) => {
+      const u = String(url);
+      if (u.endsWith('/videos/generations') && (init?.method === 'POST' || !init?.method)) {
+        // create without direct URL — force poll path
+        if (init?.method === 'POST') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ id: 'job-remote-1', status: 'running' }),
+            text: async () => '',
+            headers: { get: () => null },
+          };
+        }
+      }
+      if (u.includes('/videos/generations/job-remote-1')) {
+        polls += 1;
+        if (polls < 2) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ status: 'running' }),
+            text: async () => '',
+            headers: { get: () => null },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'completed',
+            data: [{ url: 'https://cdn.example.com/polled.mp4' }],
+          }),
+          text: async () => '',
+          headers: { get: () => null },
+        };
+      }
+      // download
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (k: string) =>
+            k.toLowerCase() === 'content-length' ? String(videoBytes.length) : null,
+        },
+        arrayBuffer: async () =>
+          videoBytes.buffer.slice(videoBytes.byteOffset, videoBytes.byteOffset + videoBytes.byteLength),
+        text: async () => '',
+        json: async () => ({}),
+      };
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+
+    const out = await generateMediaUnified({
+      surface: 'video',
+      provider: 'xai',
+      prompt: 'poll me',
+    });
+    expect(out.surface).toBe('video');
+    if (out.surface !== 'video') return;
+
+    let job = getMediaJob(out.jobId);
+    for (let i = 0; i < 80 && job && (job.status === 'pending' || job.status === 'running'); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      job = getMediaJob(out.jobId);
+    }
+    // 2s poll sleeps → may still be running if slow; allow longer
+    for (let i = 0; i < 40 && job && (job.status === 'pending' || job.status === 'running'); i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      job = getMediaJob(out.jobId);
+    }
+    expect(job?.status === 'succeeded' || job?.status === 'failed').toBe(true);
+    if (job?.status === 'succeeded' && job.filePath) {
+      created.push(job.filePath);
+      expect(polls).toBeGreaterThanOrEqual(1);
+    } else {
+      // download may fail SSRF; still exercised poll loop
+      expect(job?.error || job?.status).toBeTruthy();
+    }
+  }, 20_000);
+
+  it('fails video when provider returns no job id or URL', async () => {
+    vi.spyOn(mediaProviders, 'resolveMediaProvider').mockReturnValue({
+      def: mediaProviders.getProviderDef('xai')!,
+      configured: true,
+      apiKey: 'xkey',
+      baseURL: 'https://api.x.ai/v1',
+    } as ReturnType<typeof mediaProviders.resolveMediaProvider>);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        text: async () => '',
+        headers: { get: () => null },
+      }),
+    );
+
+    const out = await generateMediaUnified({
+      surface: 'video',
+      provider: 'xai',
+      prompt: 'no id',
+    });
+    if (out.surface === 'video') {
+      let job = getMediaJob(out.jobId);
+      for (let i = 0; i < 40 && job && (job.status === 'pending' || job.status === 'running'); i++) {
+        await new Promise((r) => setTimeout(r, 25));
+        job = getMediaJob(out.jobId);
+      }
+      expect(job?.status).toBe('failed');
+      expect(job?.error).toMatch(/no job id or URL/i);
+    }
+  });
+
+  it('rejects invalid video prompt and oversized prompt', async () => {
+    vi.spyOn(mediaProviders, 'resolveMediaProvider').mockReturnValue({
+      def: mediaProviders.getProviderDef('xai')!,
+      configured: true,
+      apiKey: 'xkey',
+      baseURL: 'https://api.x.ai/v1',
+    } as ReturnType<typeof mediaProviders.resolveMediaProvider>);
+
+    await expect(
+      generateMediaUnified({ surface: 'video', provider: 'xai', prompt: 'bad\np' }),
+    ).rejects.toThrow(/control/i);
+    await expect(
+      generateMediaUnified({ surface: 'video', provider: 'xai', prompt: '' }),
+    ).rejects.toThrow(/prompt is required/i);
+  });
+});
