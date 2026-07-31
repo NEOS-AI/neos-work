@@ -540,6 +540,33 @@ describe('artifacts refresh filePath reload', () => {
       expect(((await sibRes.json()) as { error: string }).error).toMatch(/Invalid file path/i);
       await artifacts.request(`/${sibArt.id}`, { method: 'DELETE' });
 
+      // Symlink under home pointing outside must not be readable
+      const linkPath = path.join(os.homedir(), `.neos-artifact-link-${process.pid}.html`);
+      try {
+        fs.symlinkSync('/etc/hosts', linkPath);
+        const linkArt = createArtifact({
+          workflowId: wf.id,
+          name: 'link.html',
+          contentType: 'text/html',
+          content: 'x',
+          filePath: linkPath,
+        });
+        const linkRes = await artifacts.request(`/${linkArt.id}/refresh`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'reload' }),
+        });
+        expect(linkRes.status).toBe(400);
+        expect(((await linkRes.json()) as { error: string }).error).toMatch(/Invalid file path/i);
+        await artifacts.request(`/${linkArt.id}`, { method: 'DELETE' });
+      } finally {
+        try {
+          fs.unlinkSync(linkPath);
+        } catch {
+          /* ignore */
+        }
+      }
+
       await artifacts.request(`/${art.id}`, { method: 'DELETE' });
     } finally {
       try { fs.unlinkSync(homeFile); } catch { /* ignore */ }
@@ -577,5 +604,88 @@ describe('artifacts refresh filePath reload', () => {
       }),
     });
     expect(badRun.status).toBe(400);
+  });
+
+  it('PUT/PATCH reject invalid bodies and oversize content', async () => {
+    const wf = workflows.createWorkflow({
+      name: WF_NAME,
+      domain: 'general',
+      nodes: [],
+      edges: [],
+    });
+    const create = await artifacts.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: wf.id,
+        name: 'edge.html',
+        contentType: 'text/html',
+        content: '<p>ok</p>',
+      }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const putBad = await artifacts.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(putBad.status).toBe(400);
+
+    const putMissing = await artifacts.request('/00000000-0000-0000-0000-000000000099', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'x' }),
+    });
+    expect(putMissing.status).toBe(404);
+
+    const putOver = await artifacts.request(`/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'c'.repeat(ARTIFACT_CONTENT_MAX_CHARS + 1) }),
+    });
+    expect(putOver.status).toBe(400);
+
+    const patchCtrl = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `bad${'\n'}name` }),
+    });
+    expect(patchCtrl.status).toBe(400);
+
+    const patchLong = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'n'.repeat(201) }),
+    });
+    expect(patchLong.status).toBe(400);
+
+    const patchWs = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: '   ' }),
+    });
+    expect(patchWs.status).toBe(400);
+
+    const patchNonStr = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 42 }),
+    });
+    expect(patchNonStr.status).toBe(400);
+
+    const patchEmpty = await artifacts.request(`/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(patchEmpty.status).toBe(400);
+
+    const delMissing = await artifacts.request('/00000000-0000-0000-0000-000000000099', {
+      method: 'DELETE',
+    });
+    expect(delMissing.status).toBe(404);
+
+    await artifacts.request(`/${id}`, { method: 'DELETE' });
   });
 });

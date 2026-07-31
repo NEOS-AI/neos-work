@@ -253,18 +253,29 @@ artifacts.post('/:id/refresh', async (c) => {
     try {
       const fs = await import('node:fs/promises');
       const pathMod = await import('node:path');
-      // Only allow reading under home (path traversal + sibling-prefix defense)
+      // Only allow reading under home (path traversal + sibling-prefix + symlink escape)
       const resolved = pathMod.resolve(artifact.filePath);
       if (/[\0\r\n]/.test(artifact.filePath) || resolved.length > 4_096) {
         return c.json({ ok: false, error: 'Invalid file path' }, 400);
       }
       const home = pathMod.resolve((await import('node:os')).homedir());
       const homePrefix = home.endsWith(pathMod.sep) ? home : home + pathMod.sep;
+      const underHome = (abs: string) => abs === home || abs.startsWith(homePrefix);
       // Require path.sep after home — bare startsWith(home) allows /home/user-evil/...
-      if (resolved !== home && !resolved.startsWith(homePrefix)) {
+      if (!underHome(resolved)) {
         return c.json({ ok: false, error: 'Invalid file path' }, 400);
       }
-      const content = await fs.readFile(resolved, 'utf8');
+      // Re-check after realpath so a symlink under home cannot escape (e.g. → /etc/hosts)
+      let real: string;
+      try {
+        real = await fs.realpath(resolved);
+      } catch {
+        return c.json({ ok: false, error: 'Invalid file path' }, 400);
+      }
+      if (!underHome(real)) {
+        return c.json({ ok: false, error: 'Invalid file path' }, 400);
+      }
+      const content = await fs.readFile(real, 'utf8');
       const updated = db.updateArtifactContent(id, content);
       return c.json({ ok: true, data: updated, meta: { mode: 'reload' } });
     } catch (err) {

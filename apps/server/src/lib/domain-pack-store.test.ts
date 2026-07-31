@@ -487,4 +487,31 @@ describe('domain-pack-store load/state edges', () => {
       expect(r.packId).toBe('legal');
     }
   });
+
+  it('rejects non-buffer zip and zip with only directories', async () => {
+    // @ts-expect-error intentional bad type
+    expect((await installPackFromZipBuffer('not-a-buffer')).ok).toBe(false);
+    // empty buffer already covered; use Buffer that is not a zip of files
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append('', { name: 'emptydir/', mode: 0o755 });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    // may be invalid zip or no files
+    expect(r.ok).toBe(false);
+  });
+
+  it('installPackFromDir fails when register rejects reserved-like remount', async () => {
+    // invalid manifest schema after write path covered; force reg fail via reserved id in neos-pack
+    const src = path.join(tmpRoot, 'reserved-reg');
+    await fs.mkdir(src, { recursive: true });
+    await fs.writeFile(
+      path.join(src, 'pack.json'),
+      JSON.stringify({ ...SAMPLE, id: 'research' }),
+      'utf8',
+    );
+    const r = await installPackFromDir(src);
+    expect(r.ok).toBe(false);
+  });
 });

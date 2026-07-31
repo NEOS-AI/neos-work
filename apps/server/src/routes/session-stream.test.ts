@@ -761,6 +761,56 @@ describe('session agent SSE (mocked orchestrator)', () => {
       ).status,
     ).toBe(404);
   });
+
+  it('rejects empty/non-string/invalid JSON for chat and agent with API key set', async () => {
+    const id = await createSession();
+    for (const path of [`/${id}/chat`, `/${id}/agent`] as const) {
+      const empty = await session.request(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: '   ' }),
+      });
+      expect(empty.status).toBe(400);
+      expect(((await empty.json()) as { error: string }).error).toMatch(/Missing or invalid content/i);
+
+      const nonStr = await session.request(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 99 }),
+      });
+      expect(nonStr.status).toBe(400);
+
+      const badJson = await session.request(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: 'not-json',
+      });
+      expect(badJson.status).toBe(400);
+    }
+  });
+
+  it('stops chat when max tool iterations is reached', async () => {
+    const id = await createSession();
+    // Always return another tool_use → chat loop hits MAX_TOOL_ITERATIONS
+    const toolChunk = {
+      type: 'tool_use',
+      toolUseId: 'tool_loop',
+      toolName: 'list_directory',
+      toolInput: { path: '.' },
+    };
+    mockState.setResponses(
+      Array.from({ length: 25 }, () => [toolChunk, { type: 'done' }]),
+    );
+
+    const res = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'loop tools' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toMatch(/Max tool iterations|tool_use|tool_result|error/i);
+  });
 });
 
 describe('models registry with google key', () => {

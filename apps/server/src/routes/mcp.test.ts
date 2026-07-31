@@ -1055,9 +1055,9 @@ describe('mcp oauth token exchange + refresh success', () => {
 
 describe('mcp oauth flow housekeeping', () => {
   it('oauth/start caps pending flows and cleanExpiredFlows does not throw', async () => {
-    // Create a batch of pending flows (bounded map defense)
+    // Exceed PENDING_FLOWS_MAX (256) so cleanExpiredFlows drops oldest entries
     const states: string[] = [];
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 270; i++) {
       const res = await mcp.request('/oauth/start', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1072,6 +1072,7 @@ describe('mcp oauth flow housekeeping', () => {
       expect(res.status).toBe(200);
       states.push(((await res.json()) as { data: { state: string } }).data.state);
     }
+    expect(states.length).toBe(270);
     // Unknown state still 400
     const cb = await mcp.request('/oauth/callback?code=x&state=not-a-pending-state');
     expect(cb.status).toBe(400);
