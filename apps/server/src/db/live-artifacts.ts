@@ -9,6 +9,7 @@ import path from 'node:path';
 import { getDb } from './schema.js';
 import { getProject } from './projects.js';
 import { contentHash, writeProjectFile } from '../lib/project-files.js';
+import { resolveUnderRoot } from '../lib/path-sandbox.js';
 
 const LOOKUP_ID_MAX = 100;
 const NAME_MAX = 200;
@@ -347,18 +348,19 @@ export function deleteLiveArtifact(id: string, projectId: string): boolean {
   const r = getDb()
     .prepare(`DELETE FROM live_artifacts WHERE id = ? AND project_id = ?`)
     .run(existing.id, projectId);
-  // best-effort sidecar cleanup
+  // best-effort sidecar cleanup — only project-relative sandboxed paths
+  // (never unlink absolute/escaped paths even if DB is corrupted)
   if (existing.sidecarPath) {
     try {
       const project = getProject(projectId);
-      if (project) {
-        const abs = path.isAbsolute(existing.sidecarPath)
-          ? existing.sidecarPath
-          : path.join(project.baseDir, existing.sidecarPath);
-        if (fs.existsSync(abs)) fs.unlinkSync(abs);
+      if (project?.baseDir) {
+        const { absolute } = resolveUnderRoot(project.baseDir, existing.sidecarPath, {
+          mustExist: true,
+        });
+        fs.unlinkSync(absolute);
       }
     } catch {
-      // ignore
+      // PathSandboxError / ENOENT / IO — never throw from cleanup
     }
   }
   return r.changes > 0;

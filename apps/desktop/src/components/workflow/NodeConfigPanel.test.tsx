@@ -1304,4 +1304,110 @@ describe('NodeConfigPanel', () => {
     window.history.pushState({}, '', prev || '/');
   });
 
+  it('defaults agent mode to coordinator when general_coordinator is selected (mode unset)', async () => {
+    const user = userEvent.setup();
+    const onPatchNodeData = vi.fn();
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'general_coordinator',
+          name: 'Coordinator',
+          domain: 'general',
+          description: 'leader',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: true,
+        },
+        {
+          id: 'coding_reviewer',
+          name: 'Reviewer',
+          domain: 'coding',
+          description: 'd',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: true,
+        },
+      ],
+    });
+
+    // mode intentionally unset so selecting coordinator defaults mode
+    const node = {
+      id: 'a1',
+      type: 'agent',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent',
+        label: 'Agent',
+        config: { llmProvider: 'anthropic', workerId: 'coding_reviewer' },
+      },
+    } as unknown as Node;
+
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    await waitFor(() => expect(listHarnesses).toHaveBeenCalled());
+
+    const selects = screen.getAllByRole('combobox');
+    const workerSelect = selects.find((el) =>
+      Array.from(el.querySelectorAll('option')).some((o) => o.textContent?.includes('Coordinator')),
+    );
+    expect(workerSelect).toBeTruthy();
+    await user.selectOptions(workerSelect!, 'general_coordinator');
+    await waitFor(() => {
+      const last = onPatchNodeData.mock.calls.at(-1)?.[1] as {
+        config?: { workerId?: string; mode?: string };
+      };
+      expect(last?.config?.workerId).toBe('general_coordinator');
+      expect(last?.config?.mode).toBe('coordinator');
+    });
+  });
+
+  it('patches agent mode via mode select', async () => {
+    const onPatchNodeData = vi.fn();
+    listHarnesses.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'coding_reviewer',
+          name: 'Reviewer',
+          domain: 'coding',
+          description: 'd',
+          systemPrompt: 'p',
+          allowedTools: [],
+          isBuiltIn: true,
+        },
+      ],
+    });
+    const node = {
+      id: 'a1',
+      type: 'agent',
+      position: { x: 0, y: 0 },
+      data: {
+        nodeType: 'agent',
+        label: 'Agent',
+        config: { workerId: 'coding_reviewer', mode: 'solo' },
+      },
+    } as unknown as Node;
+    render(
+      <NodeConfigPanel
+        selectedNode={node}
+        validationIssues={[]}
+        onPatchNodeData={onPatchNodeData}
+      />,
+    );
+    await waitFor(() => expect(listHarnesses).toHaveBeenCalled());
+    fireEvent.change(screen.getByTestId('agent-mode-select'), {
+      target: { value: 'coordinator' },
+    });
+    await waitFor(() => {
+      const last = onPatchNodeData.mock.calls.at(-1)?.[1] as { config?: { mode?: string } };
+      expect(last?.config?.mode).toBe('coordinator');
+    });
+  });
+
 });

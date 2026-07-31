@@ -400,3 +400,55 @@ describe('runs preview comments injection', () => {
     expect(((await res.json()) as { data: { status: string } }).data.status).toBe('succeeded');
   });
 });
+
+describe('runs remaining id and cancel branches', () => {
+  it('blank id on stream/cancel and cancel on missing run', async () => {
+    expect((await app.request('/api/runs/%20/events/stream')).status).toBe(404);
+    expect((await app.request('/api/runs/%20/cancel', { method: 'POST' })).status).toBe(404);
+    expect(
+      (await app.request('/api/runs/00000000-0000-0000-0000-000000000099/events/stream')).status,
+    ).toBe(404);
+  });
+
+  it('cancel on terminal dry-run returns 409', async () => {
+    const create = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'done already', dryRun: true }),
+    });
+    expect(create.status).toBe(201);
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+    const cancel = await app.request(`/api/runs/${id}/cancel`, { method: 'POST' });
+    expect(cancel.status).toBe(409);
+    const body = (await cancel.json()) as { error?: string };
+    expect(body.error).toMatch(/terminal|already/i);
+  });
+
+  it('truncates oversized memory when injecting into project dry-run', async () => {
+    const { createMemory, deleteMemory } = await import('../lib/memory-store.js');
+    const big = 'M'.repeat(40_000);
+    const mem = createMemory({
+      name: `_run_mem_big_${process.pid}`,
+      type: 'user',
+      content: big,
+    });
+    const p = projects.createProject({ name: `${NAME}_mem_big` });
+    ids.push(p.id);
+    try {
+      const res = await app.request('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: p.id,
+          prompt: 'use memory',
+          dryRun: true,
+        }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { data: { prompt?: string } };
+      expect(body.data.prompt).toMatch(/Agent Memory|memory truncated/i);
+    } finally {
+      deleteMemory(mem.id);
+    }
+  });
+});

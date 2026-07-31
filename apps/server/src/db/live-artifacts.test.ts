@@ -76,6 +76,40 @@ describe('live-artifacts db', () => {
 
     expect(deleteLiveArtifact(art.id, p.id)).toBe(true);
     expect(getLiveArtifact(art.id, p.id)).toBeNull();
+    expect(fs.existsSync(abs)).toBe(false);
+  });
+
+  it('delete ignores absolute/escaped sidecar paths (no outside unlink)', () => {
+    const p = projects.createProject({ name: `${NAME}_esc` });
+    ids.push(p.id);
+    const art = createLiveArtifact({
+      projectId: p.id,
+      name: 'Trap',
+      sourceTemplate: 'x',
+    });
+    const marker = path.join(os.tmpdir(), `neos-sidecar-marker-${process.pid}.txt`);
+    fs.writeFileSync(marker, 'keep', 'utf8');
+    try {
+      getDb()
+        .prepare('UPDATE live_artifacts SET sidecar_path = ? WHERE id = ?')
+        .run(marker, art.id);
+      expect(deleteLiveArtifact(art.id, p.id)).toBe(true);
+      expect(fs.existsSync(marker)).toBe(true);
+
+      // relative traversal also ignored
+      const art2 = createLiveArtifact({
+        projectId: p.id,
+        name: 'Trap2',
+        sourceTemplate: 'y',
+      });
+      getDb()
+        .prepare('UPDATE live_artifacts SET sidecar_path = ? WHERE id = ?')
+        .run('../../outside.txt', art2.id);
+      expect(deleteLiveArtifact(art2.id, p.id)).toBe(true);
+      expect(fs.existsSync(marker)).toBe(true);
+    } finally {
+      fs.rmSync(marker, { force: true });
+    }
   });
 
   it('rejects cross-project get', () => {

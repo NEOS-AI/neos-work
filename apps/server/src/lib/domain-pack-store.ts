@@ -153,7 +153,10 @@ export async function installPackFromDir(
   }
 
   const destRoot = resolveDomainPacksDir();
-  const destDir = path.join(destRoot, read.manifest.id);
+  const destDir = resolveInstalledPackDir(read.manifest.id);
+  if (!destDir) {
+    return { ok: false, error: 'invalid pack id' };
+  }
   await fs.mkdir(destRoot, { recursive: true });
 
   // Replace existing install of same id
@@ -260,7 +263,10 @@ export async function installPackFromZipBuffer(
     : '';
 
   const destRoot = resolveDomainPacksDir();
-  const destDir = path.join(destRoot, parsed.manifest.id);
+  const destDir = resolveInstalledPackDir(parsed.manifest.id);
+  if (!destDir) {
+    return { ok: false, error: 'invalid pack id' };
+  }
   await fs.mkdir(destRoot, { recursive: true });
   if (existsSync(destDir)) {
     await fs.rm(destDir, { recursive: true, force: true });

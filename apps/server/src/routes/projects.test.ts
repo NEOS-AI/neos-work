@@ -1162,3 +1162,75 @@ describe('projects remaining error branches', () => {
     expect(overBody.error).toMatch(/max size|exceeds/i);
   });
 });
+
+describe('projects sandbox miss and message errors', () => {
+  it('export/list/read fail when baseDir removed from disk', async () => {
+    const project = await createViaApi();
+    // Wipe on-disk tree while DB row remains
+    try {
+      fs.rmSync(project.baseDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+
+    const exp = await app.request(`/api/projects/${project.id}/export.zip`);
+    expect([400, 403, 404, 500]).toContain(exp.status);
+
+    const list = await app.request(`/api/projects/${project.id}/files`);
+    expect([400, 403, 404, 500]).toContain(list.status);
+
+    const read = await app.request(`/api/projects/${project.id}/files/index.html`);
+    expect([400, 403, 404, 500]).toContain(read.status);
+
+    const write = await app.request(`/api/projects/${project.id}/files/new.html`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '<p/>' }),
+    });
+    // write may recreate path or fail sandbox — either is a handled branch
+    expect([200, 400, 403, 404, 500]).toContain(write.status);
+  });
+
+  it('rejects null-byte message content and blank message conversation ids', async () => {
+    const project = await createViaApi();
+    const conv = await app.request(`/api/projects/${project.id}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'msgs' }),
+    });
+    expect(conv.status).toBe(201);
+    const convId = ((await conv.json()) as { data: { id: string } }).data.id;
+
+    const nul = await app.request(
+      `/api/projects/${project.id}/conversations/${convId}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'user', content: `hi${'\0'}` }),
+      },
+    );
+    expect(nul.status).toBe(400);
+
+    const blankMsg = await app.request(
+      `/api/projects/${project.id}/conversations/%20/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'user', content: 'ok' }),
+      },
+    );
+    expect(blankMsg.status).toBe(404);
+
+    // missing project on nested comment delete
+    const missingCommentProject = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/preview-comments/00000000-0000-0000-0000-000000000001',
+      { method: 'DELETE' },
+    );
+    expect(missingCommentProject.status).toBe(404);
+  });
+
+  it('SSE events/stream 404 for blank id', async () => {
+    const res = await app.request('/api/projects/%20/events/stream');
+    expect(res.status).toBe(404);
+  });
+});

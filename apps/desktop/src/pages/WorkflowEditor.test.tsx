@@ -1293,4 +1293,43 @@ describe('WorkflowEditor page', () => {
     await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
   });
 
+  it('alerts scrubbed error when rename throws', async () => {
+    updateWorkflow.mockRejectedValueOnce(new Error(`rename${'\n'}io${'\0'}!`));
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByTitle('workflow.rename'));
+    const input = screen.getByDisplayValue('Editor Flow');
+    fireEvent.change(input, { target: { value: 'Throw Name' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(updateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('rename io!');
+    });
+  });
+
+  it('Escape cancels rename without calling updateWorkflow', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByTitle('workflow.rename'));
+    const input = screen.getByDisplayValue('Editor Flow');
+    fireEvent.change(input, { target: { value: 'Should Cancel' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue('Should Cancel')).not.toBeInTheDocument();
+    });
+    // blur after escape must not commit
+    fireEvent.blur(input);
+    expect(updateWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('shows warnings-only validation badge without blocking label', async () => {
+    validationState.issues = [{ severity: 'warning', message: 'soft issue', code: 'soft' }];
+    validationState.summary = { total: 1, errors: 0, warnings: 1 };
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /1 warning/i })).toBeInTheDocument();
+    });
+  });
+
 });
