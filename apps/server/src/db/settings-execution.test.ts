@@ -236,6 +236,8 @@ describe('isSafeHttpBaseUrl', () => {
     expect(isSafeHttpBaseUrl('ftp://x')).toBe(false);
     expect(isSafeHttpBaseUrl('')).toBe(false);
     expect(isSafeHttpBaseUrl('   ')).toBe(false);
+    // credentials-in-URL rejected for stored base URLs
+    expect(isSafeHttpBaseUrl('https://user:pass@api.openai.com/v1')).toBe(false);
   });
 
   it('rejects javascript and data schemes and malformed strings', () => {

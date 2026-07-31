@@ -9,7 +9,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: neos-work:0.5.20
+    image: neos-work:0.5.21
     container_name: neos-work
     restart: unless-stopped
     ports:

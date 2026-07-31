@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -32,6 +35,7 @@ import liveArtifacts from './routes/live-artifacts.js';
 import toolsLiveArtifacts from './routes/tools-live-artifacts.js';
 import connectionTest from './routes/connection-test.js';
 import { migrateEncryption } from './db/settings.js';
+import { resolveWebDist } from './lib/web-static.js';
 import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
 import { listCustomWorkers } from './db/workers.js';
 import { initScheduler } from './lib/routine-scheduler.js';
@@ -148,13 +152,45 @@ app.route('/api/live-artifacts', liveArtifacts);
 app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 app.route('/api/connection-test', connectionTest);
 
-// Root
-app.get('/', (c) => {
+/** API banner (always JSON). SPA may own `/` when NEOS_WEB_DIST is set. */
+app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.20',
+    version: '0.5.21',
   });
 });
+
+/** Optional static web client (Task 12). See resolveWebDist / NEOS_WEB_DIST. */
+const webDist = resolveWebDist();
+if (webDist) {
+  // Serve assets; SPA fallback for client routes
+  app.use(
+    '/*',
+    serveStatic({
+      root: webDist,
+      rewriteRequestPath: (p) => (p === '/' ? '/index.html' : p),
+    }),
+  );
+  app.get('*', async (c) => {
+    // Only HTML fallback for non-file navigations
+    const indexPath = path.join(webDist, 'index.html');
+    try {
+      const html = fs.readFileSync(indexPath, 'utf8');
+      return c.html(html);
+    } catch {
+      return c.json({ ok: false, error: 'Web UI index missing' }, 404);
+    }
+  });
+  console.log(`NEOS_WEB_DIST=${webDist}`);
+} else {
+  app.get('/', (c) => {
+    return c.json({
+      name: 'NEOS Work Engine',
+      version: '0.5.21',
+      hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
+    });
+  });
+}
 
 // Migrate plaintext API keys to encrypted format
 migrateEncryption();

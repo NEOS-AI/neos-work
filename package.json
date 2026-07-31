@@ -1,7 +1,7 @@
 {
   "name": "neos-work",
   "private": true,
-  "version": "0.5.20",
+  "version": "0.5.21",
   "description": "An open-source alternative to Claude Cowork",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,9 @@
     "dev:server": "node tools/dev/dev.mjs start",
     "dev:server:stop": "node tools/dev/dev.mjs stop",
     "dev:server:status": "node tools/dev/dev.mjs status",
-    "dev:server:logs": "node tools/dev/dev.mjs logs"
+    "dev:server:logs": "node tools/dev/dev.mjs logs",
+    "dev:web": "pnpm --filter @neos-work/web dev",
+    "build:web": "pnpm --filter @neos-work/web build"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",

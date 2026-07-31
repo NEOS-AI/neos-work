@@ -760,4 +760,62 @@ describe('Routines page', () => {
     alertSpy.mockRestore();
   });
 
+
+  it('alerts scrubbed error when crystallize throws', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    crystallizeRoutineRun.mockRejectedValue(new Error(`crystal${'\n'}fail${'\0'}`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Crystallize' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Crystallize' }));
+    await waitFor(() => {
+      expect(crystallizeRoutineRun).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('crystal fail');
+    });
+  });
+
+  it('rejects blank schedule on save', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save schedule' })).toBeInTheDocument());
+    const scheduleInputs = screen.getAllByPlaceholderText('0 9 * * *');
+    fireEvent.change(scheduleInputs[0]!, { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+    await waitFor(() => {
+      expect(screen.getByText('Schedule is required')).toBeInTheDocument();
+    });
+    expect(updateRoutine).not.toHaveBeenCalled();
+  });
+
+  it('alerts scrubbed error when schedule save throws', async () => {
+    listRoutines.mockResolvedValue({ ok: true, data: routines });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    listRoutineRuns.mockResolvedValue({ ok: true, data: runs });
+    updateRoutine.mockRejectedValue(new Error(`sched${'\n'}down`));
+    render(<Routines />);
+    await waitFor(() => expect(screen.getByText('Morning Digest')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Morning Digest'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save schedule' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+    await waitFor(() => {
+      expect(screen.getByText('sched down')).toBeInTheDocument();
+    });
+  });
+
+  it('shows scrubbed load error when listRoutines throws', async () => {
+    listRoutines.mockRejectedValue(new Error(`list${'\n'}routines${'\0'}!`));
+    listWorkflows.mockResolvedValue({ ok: true, data: [] });
+    render(<Routines />);
+    await waitFor(() => {
+      expect(screen.getByText('list routines!')).toBeInTheDocument();
+    });
+  });
+
 });

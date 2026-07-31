@@ -296,4 +296,96 @@ describe('Templates page', () => {
     await waitFor(() => expect(createWorkflow).toHaveBeenCalled());
     expect(createWorkflow.mock.calls[0]![0].name).toBe('Safe Tpl');
   });
+
+  it('shows scrubbed load error when getTemplates throws', async () => {
+    getTemplates.mockRejectedValue(new Error(`tpl${'\n'}crash${'\0'}!`));
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('tpl crash!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('alerts scrubbed create throw when using template', async () => {
+    const user = userEvent.setup();
+    getTemplates.mockResolvedValue({ ok: true, data: templates });
+    createWorkflow.mockRejectedValue(new Error(`create${'\n'}boom${'\0'}`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Finance Brief')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Use Template' })[0]!);
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('create boom');
+    });
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('uses primaryDomain and domainPackIds when creating from template', async () => {
+    const user = userEvent.setup();
+    getTemplates.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          name: 'Research Pack',
+          description: 'deep dive',
+          primaryDomain: 'research',
+          domain: 'coding',
+          domainPackIds: ['research', 'coding', 'bad\nid', '  research  ', ''],
+          nodes: [{ id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} }],
+          edges: [],
+        },
+      ],
+    });
+    createWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-res' } });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Research Pack')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Use Template' }));
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Research Pack',
+          description: 'deep dive',
+          primaryDomain: 'research',
+          domainPackIds: expect.arrayContaining(['research', 'coding']),
+        }),
+      );
+    });
+    const packs = createWorkflow.mock.calls[0]![0].domainPackIds as string[];
+    expect(packs).not.toContain('bad\nid');
+    expect(packs[0]).toBe('research');
+    expect(navigate).toHaveBeenCalledWith('/workflows/wf-res');
+  });
+
+  it('falls back unknown domain to general and drops null description', async () => {
+    const user = userEvent.setup();
+    getTemplates.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          name: 'Misc',
+          description: `null${'\0'}byte`,
+          domain: 'unknown-pack',
+          nodes: [{ id: 't', type: 'trigger', label: 'T', position: { x: 0, y: 0 }, config: {} }],
+          edges: [],
+        },
+      ],
+    });
+    createWorkflow.mockResolvedValue({ ok: true, data: { id: 'wf-misc' } });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Misc')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Use Template' }));
+    await waitFor(() => {
+      expect(createWorkflow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Misc',
+          primaryDomain: 'general',
+          domainPackIds: ['general'],
+        }),
+      );
+    });
+    // null-byte description discarded
+    expect(createWorkflow.mock.calls[0]![0].description).toBeUndefined();
+  });
+
 });

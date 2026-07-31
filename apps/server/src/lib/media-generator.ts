@@ -205,19 +205,25 @@ export async function generateImage(options: {
     throw new Error('Invalid image URL returned');
   }
   const imageUrl = imageUrlRaw.trim();
-  try {
-    const { parseHttpUrl } = await import('./ssrf.js');
-    parseHttpUrl(imageUrl, { allowPrivateHost: false });
-  } catch (err) {
-    if (err instanceof Error && /blocked|http\(s\)|Invalid URL|protocol/i.test(err.message)) {
-      throw new Error(err.message.includes('blocked') ? err.message : 'Invalid image URL returned');
-    }
-    throw new Error('Invalid image URL returned');
-  }
   await ensureMediaDir();
   // Cap downloaded image size (plan Task 7 — 16 MB max)
   const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
-  const imgRes = await fetch(imageUrl);
+  let imgRes: Response;
+  try {
+    const { fetchPublicHttp } = await import('./ssrf.js');
+    imgRes = await fetchPublicHttp(imageUrl, {
+      method: 'GET',
+      checkDns: false,
+      followOneRedirect: true,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Invalid image URL returned';
+    // Preserve safe SSRF messages for tests/callers; never echo raw network dumps
+    if (/blocked/i.test(msg)) throw new Error(msg.slice(0, 200));
+    if (/http\(s\)|protocol/i.test(msg)) throw new Error('Image URL must be http(s)');
+    if (/redirect/i.test(msg)) throw new Error(msg.slice(0, 200));
+    throw new Error('Invalid image URL returned');
+  }
   if (!imgRes.ok) throw new Error('Failed to download image');
   // Reject oversized payloads early via Content-Length when present
   const clHeader = imgRes.headers?.get?.('content-length');
@@ -642,15 +648,19 @@ async function downloadVideoToMedia(url: string): Promise<{ filePath: string; fi
   if (/[\0\r\n]/.test(url) || url.length > 2_048) {
     throw new Error('Invalid video URL');
   }
+  const MAX = 64 * 1024 * 1024;
+  let res: Response;
   try {
-    const { parseHttpUrl } = await import('./ssrf.js');
-    parseHttpUrl(url, { allowPrivateHost: false });
+    const { fetchPublicHttp } = await import('./ssrf.js');
+    res = await fetchPublicHttp(url, {
+      method: 'GET',
+      checkDns: false,
+      followOneRedirect: true,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Invalid video URL';
     throw new Error(msg.includes('blocked') ? msg : 'Invalid video URL');
   }
-  const MAX = 64 * 1024 * 1024;
-  const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to download video');
   const cl = res.headers?.get?.('content-length');
   if (cl && Number(cl) > MAX) throw new Error(`Video exceeds max size (${MAX} bytes)`);

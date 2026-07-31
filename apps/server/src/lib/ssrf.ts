@@ -200,11 +200,72 @@ export function normalizeHttpUrl(raw: unknown): string | undefined {
   if (!s || s.length > 2_048) return undefined;
   try {
     const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s) ? s : `https://${s}`;
-    const u = parseHttpUrl(withScheme, { allowPrivateHost: true });
-    return u.href.replace(/\/$/, '') === u.origin + u.pathname.replace(/\/$/, '')
-      ? withScheme.replace(/\/+$/, '')
-      : withScheme.replace(/\/+$/, '');
+    // Validate scheme only; private hosts allowed for display/normalize of deploy URLs
+    parseHttpUrl(withScheme, { allowPrivateHost: true });
+    return withScheme.replace(/\/+$/, '');
   } catch {
     return undefined;
   }
+}
+
+export interface FetchPublicHttpOptions {
+  method?: string;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+  /** When true, resolve DNS and reject private A/AAAA (default false for latency). */
+  checkDns?: boolean;
+  /** Follow at most one redirect hop when Location host is also public. */
+  followOneRedirect?: boolean;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Outbound GET/HEAD for untrusted URLs (media assets, probes).
+ * - http(s) only + private host block
+ * - redirect:manual (no silent hop onto metadata IPs)
+ * - optional single public redirect hop
+ */
+export async function fetchPublicHttp(
+  rawUrl: unknown,
+  opts: FetchPublicHttpOptions = {},
+): Promise<Response> {
+  const u = await assertSafeOutboundUrl(rawUrl, { checkDns: opts.checkDns === true });
+  const fetchFn = opts.fetchImpl ?? fetch;
+  const method = opts.method ?? 'GET';
+  let res = await fetchFn(u.href, {
+    method,
+    headers: opts.headers,
+    signal: opts.signal,
+    redirect: 'manual',
+  });
+
+  if (
+    opts.followOneRedirect !== false
+    && res.status >= 300
+    && res.status < 400
+  ) {
+    const locRaw = res.headers?.get?.('location') ?? '';
+    if (!locRaw || /[\0\r\n]/.test(locRaw)) {
+      throw new SsrfError('Redirect without usable Location', 'invalid');
+    }
+    let next: URL;
+    try {
+      next = new URL(locRaw, u.href);
+    } catch {
+      throw new SsrfError('Invalid redirect Location', 'invalid');
+    }
+    await assertSafeOutboundUrl(next.href, { checkDns: opts.checkDns === true });
+    res = await fetchFn(next.href, {
+      method: method === 'HEAD' ? 'GET' : method,
+      headers: opts.headers,
+      signal: opts.signal,
+      redirect: 'manual',
+    });
+    // Do not follow a second hop
+    if (res.status >= 300 && res.status < 400) {
+      throw new SsrfError('Too many redirects', 'invalid');
+    }
+  }
+
+  return res;
 }

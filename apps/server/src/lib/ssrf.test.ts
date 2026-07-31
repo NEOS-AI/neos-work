@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   assertDnsPublic,
   assertSafeOutboundUrl,
+  fetchPublicHttp,
   isBlockedIpv4,
   isBlockedSsrfHost,
   isSafeHttpUrlScheme,
+  normalizeHttpUrl,
   parseHttpUrl,
   SsrfError,
 } from './ssrf.js';
@@ -76,5 +78,43 @@ describe('isBlockedIpv4', () => {
   it('flags RFC1918 and link-local', () => {
     expect(isBlockedIpv4(10, 0, 0, 1)).toBe(true);
     expect(isBlockedIpv4(8, 8, 8, 8)).toBe(false);
+  });
+});
+
+describe('normalizeHttpUrl', () => {
+  it('adds https and strips trailing slash', () => {
+    expect(normalizeHttpUrl('example.com/')).toBe('https://example.com');
+    expect(normalizeHttpUrl('http://a.example/path')).toBe('http://a.example/path');
+    expect(normalizeHttpUrl('file:///etc/passwd')).toBeUndefined();
+  });
+});
+
+describe('fetchPublicHttp', () => {
+  it('blocks private hosts before fetch', async () => {
+    await expect(fetchPublicHttp('http://127.0.0.1/x')).rejects.toThrow(SsrfError);
+  });
+
+  it('blocks redirect to private host', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      status: 302,
+      headers: { get: (h: string) => (h.toLowerCase() === 'location' ? 'http://169.254.169.254/' : null) },
+    });
+    await expect(
+      fetchPublicHttp('https://cdn.example.com/a', { fetchImpl: fetchImpl as never }),
+    ).rejects.toThrow(/blocked/i);
+  });
+
+  it('returns response for public 200', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      headers: { get: () => 'image/png' },
+    });
+    const res = await fetchPublicHttp('https://cdn.example.com/a.png', {
+      fetchImpl: fetchImpl as never,
+      followOneRedirect: true,
+    });
+    expect(res.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalled();
   });
 });

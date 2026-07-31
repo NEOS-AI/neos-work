@@ -127,6 +127,28 @@ PORT=3000 pnpm dev
 | `pnpm format` | Format with Prettier |
 | `pnpm clean` | Remove build artifacts and node_modules |
 
+
+
+## Browser web client
+
+MVP browser UI (`apps/web`, v0.5.21):
+
+```bash
+# terminal 1 — engine
+pnpm --filter @neos-work/server dev
+
+# terminal 2 — Vite (proxies /api → daemon)
+pnpm --filter @neos-work/web dev
+# open http://localhost:5173 — paste NEOS_AUTH_TOKEN from server logs
+```
+
+Serve the built SPA from the daemon:
+
+```bash
+pnpm --filter @neos-work/web build
+NEOS_WEB_DIST="$(pwd)/apps/web/dist" pnpm --filter @neos-work/server start
+```
+
 ## Self-host (Docker)
 
 Single-process engine with a persistent volume (v0.5.19 / Task 13):

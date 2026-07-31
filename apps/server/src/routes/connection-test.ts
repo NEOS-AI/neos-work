@@ -60,6 +60,7 @@ connectionTest.post('/', async (c) => {
   }
 
   let probeUrl: string;
+  // Private hosts only for user-configured local providers (Ollama / OpenAI-compat base)
   let allowPrivate = false;
 
   if (target === 'url') {
@@ -70,9 +71,13 @@ connectionTest.post('/', async (c) => {
   } else if (target === 'openai' || target === 'anthropic' || target === 'ollama') {
     if (target === 'openai') {
       const base = getSecretSetting('OPENAI_BASE_URL');
-      probeUrl = base
-        ? `${base.replace(/\/+$/, '')}/models`
-        : PROVIDER_DEFAULTS.openai!;
+      if (base) {
+        probeUrl = `${base.replace(/\/+$/, '')}/models`;
+        // BYOK OpenAI-compatible often runs on loopback — allow private for configured base only
+        allowPrivate = true;
+      } else {
+        probeUrl = PROVIDER_DEFAULTS.openai!;
+      }
     } else if (target === 'ollama') {
       const base = getSecretSetting('OLLAMA_BASE_URL') || 'http://127.0.0.1:11434';
       probeUrl = `${base.replace(/\/+$/, '')}/api/tags`;

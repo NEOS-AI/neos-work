@@ -2028,4 +2028,34 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/media\/jobs\/job1/);
   });
 
+
+  it('runPlugin accepts bare JSON SSE parts and exportProjectZip non-json errors', async () => {
+    const client = new EngineClient('http://engine.test');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // bare JSON without data: prefix
+        controller.enqueue(encoder.encode('{"type":"pipeline.started","runId":"run-bare"}\n\n'));
+        controller.enqueue(encoder.encode('data: {"type":"step","msg":"ok"}\n\n'));
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+    const events: unknown[] = [];
+    const { runIdPromise } = client.runPlugin('plug-1', {}, (e) => events.push(e));
+    await expect(runIdPromise).resolves.toBe('run-bare');
+    expect(events.some((e) => (e as { type?: string }).type === 'pipeline.started')).toBe(true);
+
+    // non-ok export with non-json body → HTTP status fallback
+    fetchMock.mockResolvedValueOnce(
+      new Response('not-json', { status: 502, headers: { 'Content-Type': 'text/plain' } }),
+    );
+    await expect(client.exportProjectZip('p1')).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/HTTP 502|Export/i),
+    });
+  });
+
 });

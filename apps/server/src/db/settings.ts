@@ -166,16 +166,17 @@ export function getWorkflowSecrets(): Record<string, string> {
  * Exported for unit tests.
  */
 export function isSafeHttpBaseUrl(url: string): boolean {
-  // Delegate scheme/control-char validation to shared SSRF helpers (private hosts allowed).
+  // Mirror isSafeHttpUrlScheme (ssrf) without static import — keeps settings free of ssrf deps.
   try {
-    // Lazy require pattern avoided — static import would create cycle risk with settings→ssrf.
-    // Inline mirror of isSafeHttpUrlScheme without importing ssrf into the settings hot path:
     if (typeof url !== 'string') return false;
     if (/[\0\r\n]/.test(url)) return false;
     const trimmed = url.trim();
     if (!trimmed || trimmed.length > 2_048) return false;
     const u = new URL(trimmed);
-    return u.protocol === 'http:' || u.protocol === 'https:';
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    // Reject credentials-in-URL (user:pass@host) for stored base URLs
+    if (u.username || u.password) return false;
+    return true;
   } catch {
     return false;
   }
