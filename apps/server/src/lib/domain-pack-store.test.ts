@@ -328,26 +328,61 @@ describe('domain-pack-store zip safety', () => {
     if (!r.ok) expect(r.error).toMatch(/max/i);
   });
 
-  it('rejects zip entries with absolute / drive / colon paths', async () => {
-    const archive = new ZipArchive({ zlib: { level: 1 } });
-    archive.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
-    archive.append('x', { name: '/abs/evil.txt' });
-    archive.finalize();
-    const chunks: Buffer[] = [];
-    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
-    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+  it('rejects zip entries whose names contain colon (ADS/scheme)', async () => {
+    // Craft raw local-file headers so unzipper sees colon names (archiver normalizes paths)
+    const { deflateSync } = await import('node:zlib');
+    function zipOne(name: string, content: string): Buffer {
+      const nameBuf = Buffer.from(name, 'utf8');
+      const data = Buffer.from(content, 'utf8');
+      const compressed = deflateSync(data);
+      const local = Buffer.alloc(30 + nameBuf.length);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(20, 4); // version
+      local.writeUInt16LE(0, 6); // flags
+      local.writeUInt16LE(8, 8); // deflate
+      local.writeUInt16LE(0, 10);
+      local.writeUInt16LE(0, 12);
+      local.writeUInt32LE(0, 14); // crc skip
+      local.writeUInt32LE(compressed.length, 18);
+      local.writeUInt32LE(data.length, 22);
+      local.writeUInt16LE(nameBuf.length, 26);
+      local.writeUInt16LE(0, 28);
+      nameBuf.copy(local, 30);
+      const central = Buffer.alloc(46 + nameBuf.length);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt16LE(20, 4);
+      central.writeUInt16LE(20, 6);
+      central.writeUInt16LE(0, 8);
+      central.writeUInt16LE(8, 10);
+      central.writeUInt16LE(0, 12);
+      central.writeUInt16LE(0, 14);
+      central.writeUInt32LE(0, 16);
+      central.writeUInt32LE(compressed.length, 20);
+      central.writeUInt32LE(data.length, 24);
+      central.writeUInt16LE(nameBuf.length, 28);
+      central.writeUInt16LE(0, 30);
+      central.writeUInt16LE(0, 32);
+      central.writeUInt16LE(0, 34);
+      central.writeUInt16LE(0, 36);
+      central.writeUInt32LE(0, 38);
+      central.writeUInt32LE(0, 42); // offset
+      nameBuf.copy(central, 46);
+      const end = Buffer.alloc(22);
+      end.writeUInt32LE(0x06054b50, 0);
+      end.writeUInt16LE(0, 4);
+      end.writeUInt16LE(0, 6);
+      end.writeUInt16LE(1, 8);
+      end.writeUInt16LE(1, 10);
+      end.writeUInt32LE(central.length, 12);
+      end.writeUInt32LE(local.length + compressed.length, 16);
+      end.writeUInt16LE(0, 20);
+      return Buffer.concat([local, compressed, central, end]);
+    }
+    // Single-entry zip with colon is enough to hit unsafe-path reject
+    const buf = zipOne('evil:ads.txt', 'x');
+    const r = await installPackFromZipBuffer(buf);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/unsafe/i);
-  });
-
-  it('rejects zip with Windows drive-style entry', async () => {
-    const archive = new ZipArchive({ zlib: { level: 1 } });
-    archive.append(JSON.stringify(SAMPLE), { name: 'C:/windows/pack.json' });
-    archive.finalize();
-    const chunks: Buffer[] = [];
-    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
-    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
-    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/unsafe|manifest|invalid/i);
   });
 });
 

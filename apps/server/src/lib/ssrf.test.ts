@@ -37,6 +37,30 @@ describe('isBlockedSsrfHost', () => {
     expect(isBlockedSsrfHost('fd12::1')).toBe(true);
     expect(isBlockedSsrfHost('fe80::1')).toBe(true);
   });
+
+  it('blocks IPv4-mapped IPv6 private/metadata (dotted + Node hex form)', () => {
+    // Dotted and expanded
+    expect(isBlockedSsrfHost('::ffff:127.0.0.1')).toBe(true);
+    expect(isBlockedSsrfHost('::ffff:10.0.0.1')).toBe(true);
+    expect(isBlockedSsrfHost('0:0:0:0:0:ffff:10.1.2.3')).toBe(true);
+    expect(isBlockedSsrfHost('0:0:0:0:0:ffff:127.0.0.1')).toBe(true);
+    // Node URL normalizes mapped addrs to hex words (metadata / RFC1918)
+    expect(isBlockedSsrfHost('::ffff:7f00:1')).toBe(true); // 127.0.0.1
+    expect(isBlockedSsrfHost('::ffff:a00:1')).toBe(true); // 10.0.0.1
+    expect(isBlockedSsrfHost('::ffff:c0a8:1')).toBe(true); // 192.168.0.1
+    expect(isBlockedSsrfHost('::ffff:a9fe:a9fe')).toBe(true); // 169.254.169.254
+    expect(isBlockedSsrfHost('[::ffff:a9fe:a9fe]')).toBe(true);
+    // Public mapped IPv4 must remain allowed
+    expect(isBlockedSsrfHost('::ffff:808:808')).toBe(false); // 8.8.8.8
+    expect(isBlockedSsrfHost('::ffff:8.8.8.8')).toBe(false);
+  });
+
+  it('parseHttpUrl rejects Node-normalized mapped metadata host', () => {
+    // URL constructor rewrites [::ffff:169.254.169.254] → [::ffff:a9fe:a9fe]
+    expect(() => parseHttpUrl('http://[::ffff:169.254.169.254]/latest')).toThrow(SsrfError);
+    expect(() => parseHttpUrl('http://[::ffff:10.0.0.1]/')).toThrow(SsrfError);
+    expect(() => parseHttpUrl('http://[::ffff:127.0.0.1]/')).toThrow(SsrfError);
+  });
 });
 
 describe('parseHttpUrl', () => {

@@ -41,6 +41,35 @@ function parseIpv4(hostname: string): [number, number, number, number] | null {
 }
 
 /**
+ * Extract embedded IPv4 from IPv4-mapped IPv6 forms.
+ * Covers dotted (`::ffff:10.0.0.1`, `0:0:0:0:0:ffff:10.0.0.1`) and
+ * Node URL-normalized hex (`::ffff:a00:1`, `[::ffff:a9fe:a9fe]`).
+ */
+function extractIpv4FromMapped(h: string): [number, number, number, number] | null {
+  // …:ffff:a.b.c.d (any compression / expansion before ffff)
+  const dotted = h.match(/(?:^|:)ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i);
+  if (dotted) {
+    const parts: [number, number, number, number] = [
+      Number(dotted[1]),
+      Number(dotted[2]),
+      Number(dotted[3]),
+      Number(dotted[4]),
+    ];
+    if (parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return parts;
+    return null;
+  }
+  // …:ffff:HHHH:HHHH (hex words → four octets). Node normalizes mapped addrs this way.
+  const hex = h.match(/(?:^|:)ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (hex) {
+    const hi = Number.parseInt(hex[1]!, 16);
+    const lo = Number.parseInt(hex[2]!, 16);
+    if (!Number.isFinite(hi) || !Number.isFinite(lo) || hi > 0xffff || lo > 0xffff) return null;
+    return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff];
+  }
+  return null;
+}
+
+/**
  * True if hostname must not be used for untrusted outbound fetches.
  * Literal IPs + known metadata hostnames + coarse IPv6 prefixes.
  */
@@ -60,15 +89,9 @@ export function isBlockedSsrfHost(hostname: string): boolean {
   const v4 = parseIpv4(h);
   if (v4) return isBlockedIpv4(...v4);
 
-  const v4mapped = h.match(/^:?:ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i);
-  if (v4mapped) {
-    return isBlockedIpv4(
-      Number(v4mapped[1]),
-      Number(v4mapped[2]),
-      Number(v4mapped[3]),
-      Number(v4mapped[4]),
-    );
-  }
+  // IPv4-mapped IPv6 (dotted or hex) — including Node URL-normalized forms
+  const mapped = extractIpv4FromMapped(h);
+  if (mapped) return isBlockedIpv4(...mapped);
 
   // IPv6 ULA / link-local / loopback — only when the string is address-shaped
   // (contains ':'). Prefix checks must not apply to DNS labels (fcm.*, fdic.gov, …).
@@ -79,7 +102,6 @@ export function isBlockedSsrfHost(hostname: string): boolean {
       || h.startsWith('fc')
       || h.startsWith('fd')
       || h.startsWith('fe80')
-      || h.startsWith('::ffff:7f')
     ) {
       return true;
     }
@@ -94,6 +116,9 @@ export function isBlockedSsrfHost(hostname: string): boolean {
     if (h === '::1' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) {
       return true;
     }
+    // Re-check mapped forms after net acceptance (defense in depth)
+    const mapped2 = extractIpv4FromMapped(h);
+    if (mapped2) return isBlockedIpv4(...mapped2);
   }
   return false;
 }
