@@ -36,6 +36,11 @@ vi.mock('react-i18next', () => ({
 }));
 
 const routeParams = { id: 'wf-1' as string };
+const blockerState = {
+  state: 'unblocked' as 'unblocked' | 'blocked',
+  proceed: vi.fn(),
+  reset: vi.fn(),
+};
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -43,7 +48,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => navigate,
     useParams: () => ({ id: routeParams.id }),
-    useBlocker: () => ({ state: 'unblocked' }),
+    useBlocker: () => blockerState,
   };
 });
 
@@ -95,7 +100,22 @@ vi.mock('../components/workflow/RunInputsDialog.js', () => ({
   ),
 }));
 vi.mock('../components/workflow/ConfirmLeaveModal.js', () => ({
-  ConfirmLeaveModal: () => <div data-testid="confirm-leave">leave</div>,
+  ConfirmLeaveModal: ({
+    onConfirm,
+    onCancel,
+  }: {
+    onConfirm: () => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="confirm-leave">
+      <button type="button" onClick={onConfirm}>
+        leave-confirm
+      </button>
+      <button type="button" onClick={onCancel}>
+        leave-cancel
+      </button>
+    </div>
+  ),
 }));
 vi.mock('../components/workflow/RevisionPanel.js', () => ({
   RevisionPanel: ({
@@ -158,17 +178,29 @@ vi.mock('../components/workflow/RevisionPanel.js', () => ({
   ),
 }));
 vi.mock('../components/workflow/ArtifactPreview.js', () => ({
-  ArtifactPreview: () => <div data-testid="artifact-preview">preview</div>,
+  ArtifactPreview: ({ onRerunWorkflow }: { onRerunWorkflow?: () => void }) => (
+    <div data-testid="artifact-preview">
+      preview
+      <button type="button" onClick={() => onRerunWorkflow?.()}>
+        rerun-from-preview
+      </button>
+    </div>
+  ),
 }));
 vi.mock('../components/workflow/RunLogPanel.js', () => ({
   RunLogPanel: () => <div data-testid="run-log-panel">run-log</div>,
 }));
-// Stable empty results so validation memos don't allocate every render
-const EMPTY_ISSUES: unknown[] = [];
-const EMPTY_SUMMARY = { total: 0, errors: 0, warnings: 0 };
+// Mutable validation results so tests can inject errors without remounting mocks
+const validationState: {
+  issues: Array<{ severity: string; message?: string; code: string; nodeId?: string }>;
+  summary: { total: number; errors: number; warnings: number };
+} = {
+  issues: [],
+  summary: { total: 0, errors: 0, warnings: 0 },
+};
 vi.mock('../components/workflow/WorkflowValidation.js', () => ({
-  validateWorkflowDraft: () => EMPTY_ISSUES,
-  summarizeValidationIssues: () => EMPTY_SUMMARY,
+  validateWorkflowDraft: () => validationState.issues,
+  summarizeValidationIssues: () => validationState.summary,
 }));
 vi.mock('../lib/layout.js', () => ({
   autoLayout: (nodes: unknown[]) => nodes,
@@ -214,6 +246,11 @@ function renderEditor() {
 describe('WorkflowEditor page', () => {
   beforeEach(() => {
     routeParams.id = 'wf-1';
+    blockerState.state = 'unblocked';
+    blockerState.proceed.mockReset();
+    blockerState.reset.mockReset();
+    validationState.issues = [];
+    validationState.summary = { total: 0, errors: 0, warnings: 0 };
     getWorkflow.mockReset().mockResolvedValue({ ok: true, data: sampleWorkflow });
     listBlocks.mockReset().mockResolvedValue({ ok: true, data: [] });
     updateWorkflow.mockReset().mockResolvedValue({ ok: true, data: sampleWorkflow });
@@ -1202,6 +1239,58 @@ describe('WorkflowEditor page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create routine' }));
     await waitFor(() => expect(createRoutine).toHaveBeenCalled());
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/routines'));
+  });
+
+  it('shows validation error badge and blocks run until config panel', async () => {
+    validationState.issues = [
+      { severity: 'error', message: 'missing edge', code: 'graph_error' },
+      { severity: 'warning', message: 'soft', code: 'soft_warn' },
+    ];
+    validationState.summary = { total: 2, errors: 1, warnings: 1 };
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /1 error/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /1 error/i }));
+    // Run should open inputs then refuse to start due to validation errors
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => {
+      expect(runWorkflow).not.toHaveBeenCalled();
+    });
+  });
+
+  it('shows leave modal when blocker is blocked and wires confirm/cancel', async () => {
+    blockerState.state = 'blocked';
+    renderEditor();
+    await waitFor(() => expect(screen.getByTestId('confirm-leave')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'leave-confirm' }));
+    expect(blockerState.proceed).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'leave-cancel' }));
+    expect(blockerState.reset).toHaveBeenCalled();
+  });
+
+  it('rerun from artifact preview calls handleRun without inputs dialog', async () => {
+    let onEvent: ((ev: Record<string, unknown>) => void) | undefined;
+    runWorkflow.mockImplementation(
+      (_id: string, cb: (ev: Record<string, unknown>) => void) => {
+        onEvent = cb;
+        return vi.fn();
+      },
+    );
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /▶\s*workflow\.run/i }));
+    await waitFor(() => expect(screen.getByTestId('run-inputs-dialog')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'confirm-run' }));
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
+    onEvent!({ type: 'run.completed', runId: 'r1', artifactId: 'art-9' });
+    await waitFor(() => expect(screen.getByTestId('artifact-preview')).toBeInTheDocument());
+    runWorkflow.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'rerun-from-preview' }));
+    await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
   });
 
 });

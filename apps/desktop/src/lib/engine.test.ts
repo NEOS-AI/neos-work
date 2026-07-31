@@ -2058,4 +2058,134 @@ describe('EngineClient', () => {
     });
   });
 
+  it('MCP install-info / codex install / domain-pack CRUD coverage', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.getMcpInstallInfo({ projectId: '  proj-1  ', includeToken: false });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp\/install-info\?/);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/projectId=proj-1/);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/includeToken=0/);
+
+    // control-char projectId ignored
+    await client.getMcpInstallInfo({ projectId: `p${'\n'}1` });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp\/install-info$/);
+
+    await client.listNeosMcpTools();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/mcp\/tools$/);
+
+    await client.getCodexMcpInstallStatus();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/install\/codex\/status/);
+
+    await client.installCodexMcp({
+      projectId: '  p1  ',
+      neosBin: '  /usr/local/bin/neos  ',
+    });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    const installBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(installBody.projectId).toBe('p1');
+    expect(installBody.neosBin).toBe('/usr/local/bin/neos');
+
+    // control-char params stripped
+    await client.installCodexMcp({ projectId: `x${'\0'}y`, neosBin: `bin${'\n'}` });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({});
+
+    await client.uninstallCodexMcp();
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await expect(client.getDomainPack(`p${'\n'}1`)).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/pack id/i),
+    });
+    await client.getDomainPack('legal');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/domain-packs\/legal/);
+
+    await client.installDomainPackFromPath('/tmp/pack');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
+      path: '/tmp/pack',
+    });
+
+    await client.validateDomainPackManifest({ id: 'x', schema: 'neos.domain-pack/1' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/domain-packs\/validate/);
+
+    await client.toggleDomainPack('legal', false);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/legal\/toggle/);
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ enabled: false });
+
+    await client.deleteDomainPack('legal');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await expect(client.toggleDomainPack('', true)).resolves.toMatchObject({ ok: false });
+    await expect(client.deleteDomainPack(`x${'\0'}`)).resolves.toMatchObject({ ok: false });
+  });
+
+  it('streamProjectFileEvents parses SSE and aborts cleanly', async () => {
+    const client = new EngineClient('http://engine.test');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'event: ready\ndata: {"projectId":"p1"}\n\nevent: file.changed\ndata: {"projectId":"p1","path":"index.html","source":"user","hash":"abc","ts":"t1"}\n\ndata: not-json\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+    const events: Array<{ type: string; path?: string }> = [];
+    const stop = client.streamProjectFileEvents('p1', (e) => events.push(e));
+    await vi.waitFor(() => {
+      expect(events.some((e) => e.type === 'file.changed' && e.path === 'index.html')).toBe(true);
+    });
+    stop();
+
+    // invalid id returns no-op abort
+    const noop = client.streamProjectFileEvents(`p${'\n'}1`, () => {});
+    expect(typeof noop).toBe('function');
+    noop();
+    // last successful fetch only (invalid id does not fetch)
+    expect(
+      fetchMock.mock.calls.some((c) => String(c[0]).includes('/events/stream')),
+    ).toBe(true);
+  });
+
+  it('listHarnesses falls back to /api/harness when workers fail', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'no workers' }, { status: 500 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: [{ id: 'h1', name: 'H' }] }));
+    const res = await client.listHarnesses();
+    expect(res.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/workers|harness/);
+    expect(String(fetchMock.mock.calls[1]![0])).toMatch(/\/api\/harness$/);
+  });
+
+  it('connectionTest rejects blank/control targets and posts valid ones', async () => {
+    const client = new EngineClient('http://engine.test');
+    await expect(
+      client.connectionTest({ target: '' as 'openai' }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid target',
+    });
+    await expect(
+      client.connectionTest({ target: `openai${'\n'}` as 'openai' }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid target' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { target: 'openai', reachable: true } }),
+    );
+    const ok = await client.connectionTest({ target: 'openai', url: 'https://api.openai.com' });
+    expect(ok.ok).toBe(true);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toMatchObject({
+      target: 'openai',
+      url: 'https://api.openai.com',
+    });
+  });
+
 });

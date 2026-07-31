@@ -197,6 +197,27 @@ describe('domain-pack-store additional branches', () => {
     expect((await uninstallInstalledPack('x\ny')).ok).toBe(false);
   });
 
+  it('rejects path-traversal pack ids (no rm outside domain-packs)', async () => {
+    const root = resolveDomainPacksDir();
+    const parent = path.dirname(root);
+    const marker = path.join(parent, `_pack_traversal_${process.pid}.marker`);
+    await fs.writeFile(marker, 'keep', 'utf8');
+    try {
+      for (const bad of ['..', '../', '../../tmp', 'a/b', '../db', '.'] as const) {
+        const off = await setInstalledPackEnabled(bad, false);
+        expect(off.ok).toBe(false);
+        if (!off.ok) expect(off.error).toMatch(/invalid/i);
+        const del = await uninstallInstalledPack(bad);
+        expect(del.ok).toBe(false);
+        if (!del.ok) expect(del.error).toMatch(/invalid/i);
+      }
+      // Parent marker must survive (would be deleted if `..` resolved + rm)
+      await expect(fs.readFile(marker, 'utf8')).resolves.toBe('keep');
+    } finally {
+      await fs.rm(marker, { force: true }).catch(() => undefined);
+    }
+  });
+
   it('resolveDomainPacksDir uses NEOS_DATA_DIR', () => {
     expect(resolveDomainPacksDir()).toContain(tmpRoot);
     expect(resolveDomainPacksDir()).toMatch(/domain-packs$/);

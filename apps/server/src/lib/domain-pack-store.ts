@@ -19,6 +19,7 @@ import {
   unregisterPack,
   setPackEnabled,
   isBuiltInPackId,
+  isSafePackId,
   listPacks,
   type ParsedPackManifest,
 } from '@neos-work/workflow-engine';
@@ -27,6 +28,32 @@ import { resolveDbDir } from '../db/schema.js';
 export const DOMAIN_PACK_ZIP_MAX_BYTES = 10 * 1024 * 1024;
 export const DOMAIN_PACK_ZIP_MAX_FILES = 100;
 export const DOMAIN_PACK_MANIFEST_MAX_CHARS = 500_000;
+
+/**
+ * Normalize + validate a pack id used for on-disk paths under domain-packs/.
+ * Rejects traversal (`..`, slashes) — safeRouteId alone is not sufficient.
+ */
+function normalizeInstalledPackId(packId: string): string | null {
+  if (typeof packId !== 'string' || /[\0\r\n]/.test(packId)) return null;
+  const id = packId.trim().toLowerCase();
+  if (!id || !isSafePackId(id)) return null;
+  return id;
+}
+
+/**
+ * Resolve installed pack directory; ensure it stays under domain-packs root.
+ */
+function resolveInstalledPackDir(packId: string): string | null {
+  const id = normalizeInstalledPackId(packId);
+  if (!id) return null;
+  const root = path.resolve(resolveDomainPacksDir());
+  const dir = path.resolve(root, id);
+  const rootPrefix = root.endsWith(path.sep) ? root : root + path.sep;
+  if (dir !== root && !dir.startsWith(rootPrefix)) return null;
+  // Single segment only (id is slug; belt-and-suspenders vs path.resolve quirks)
+  if (path.basename(dir) !== id) return null;
+  return dir;
+}
 
 export function resolveDomainPacksDir(): string {
   const raw = process.env.NEOS_DATA_DIR;
@@ -340,14 +367,17 @@ export async function setInstalledPackEnabled(
   packId: string,
   enabled: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
-  if (typeof packId !== 'string' || /[\0\r\n]/.test(packId)) {
+  const id = normalizeInstalledPackId(packId);
+  if (!id) {
     return { ok: false, error: 'invalid pack id', status: 400 };
   }
-  const id = packId.trim().toLowerCase();
   if (isBuiltInPackId(id)) {
     return { ok: false, error: 'cannot toggle a built-in pack', status: 400 };
   }
-  const dir = path.join(resolveDomainPacksDir(), id);
+  const dir = resolveInstalledPackDir(id);
+  if (!dir) {
+    return { ok: false, error: 'invalid pack id', status: 400 };
+  }
   if (!existsSync(dir)) {
     return { ok: false, error: 'pack not installed', status: 404 };
   }
@@ -372,14 +402,17 @@ export async function setInstalledPackEnabled(
 export async function uninstallInstalledPack(
   packId: string,
 ): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
-  if (typeof packId !== 'string' || /[\0\r\n]/.test(packId)) {
+  const id = normalizeInstalledPackId(packId);
+  if (!id) {
     return { ok: false, error: 'invalid pack id', status: 400 };
   }
-  const id = packId.trim().toLowerCase();
   if (isBuiltInPackId(id)) {
     return { ok: false, error: 'cannot uninstall a built-in pack', status: 400 };
   }
-  const dir = path.join(resolveDomainPacksDir(), id);
+  const dir = resolveInstalledPackDir(id);
+  if (!dir) {
+    return { ok: false, error: 'invalid pack id', status: 400 };
+  }
   unregisterPack(id);
   if (existsSync(dir)) {
     await fs.rm(dir, { recursive: true, force: true });
