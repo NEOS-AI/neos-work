@@ -25,6 +25,18 @@ describe('isBlockedSsrfHost', () => {
   it('blocks control-char hostnames', () => {
     expect(isBlockedSsrfHost('evil\nhost')).toBe(true);
   });
+
+  it('does not treat DNS labels starting with fc/fd/fe80 as IPv6 ULA', () => {
+    // Regression: ULA prefix checks used to apply to all hostnames.
+    expect(isBlockedSsrfHost('fcm.googleapis.com')).toBe(false);
+    expect(isBlockedSsrfHost('fdic.gov')).toBe(false);
+    expect(isBlockedSsrfHost('fda.gov')).toBe(false);
+    expect(isBlockedSsrfHost('fc.yahoo.com')).toBe(false);
+    // Actual IPv6 ULA / link-local still blocked
+    expect(isBlockedSsrfHost('fc00::1')).toBe(true);
+    expect(isBlockedSsrfHost('fd12::1')).toBe(true);
+    expect(isBlockedSsrfHost('fe80::1')).toBe(true);
+  });
 });
 
 describe('parseHttpUrl', () => {

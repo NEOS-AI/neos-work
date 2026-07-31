@@ -329,9 +329,11 @@ projects.get('/:id/events/stream', (c) => {
 
   return stream(c, async (s) => {
     const queue: ProjectFileEvent[] = [];
+    const MAX_QUEUE = 256;
     let closed = false;
     const unsub = subscribeProjectFileEvents(id, (ev) => {
       if (closed) return;
+      if (queue.length >= MAX_QUEUE) queue.shift(); // drop oldest under burst
       queue.push(ev);
     });
 

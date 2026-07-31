@@ -70,14 +70,19 @@ export function isBlockedSsrfHost(hostname: string): boolean {
     );
   }
 
-  if (
-    h === '0:0:0:0:0:0:0:1'
-    || h.startsWith('fc')
-    || h.startsWith('fd')
-    || h.startsWith('fe80')
-    || h.startsWith('::ffff:7f')
-  ) {
-    return true;
+  // IPv6 ULA / link-local / loopback — only when the string is address-shaped
+  // (contains ':'). Prefix checks must not apply to DNS labels (fcm.*, fdic.gov, …).
+  if (h.includes(':')) {
+    if (
+      h === '0:0:0:0:0:0:0:1'
+      || h === '::1'
+      || h.startsWith('fc')
+      || h.startsWith('fd')
+      || h.startsWith('fe80')
+      || h.startsWith('::ffff:7f')
+    ) {
+      return true;
+    }
   }
 
   // net.isIP for normalized forms
