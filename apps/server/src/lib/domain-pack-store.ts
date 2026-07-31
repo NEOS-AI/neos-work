@@ -335,7 +335,13 @@ export async function loadInstalledDomainPacks(): Promise<{ loaded: number; erro
 
   for (const name of entries) {
     if (!name || name.startsWith('.') || /[\0\r\n]/.test(name)) continue;
-    const dir = path.join(root, name);
+    // Only slug directory names — skip traversal-like or non-pack entries
+    if (!isSafePackId(name)) {
+      errors.push(`${name}: skipped (invalid pack directory name)`);
+      continue;
+    }
+    const dir = resolveInstalledPackDir(name);
+    if (!dir) continue;
     let st;
     try {
       st = await fs.stat(dir);

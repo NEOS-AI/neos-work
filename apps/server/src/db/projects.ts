@@ -18,6 +18,7 @@ import { getDb } from './schema.js';
 import {
   defaultProjectsRoot,
   PathSandboxError,
+  normalizeProjectRelativePath,
   validateImportBaseDir,
   defaultDataDir,
 } from '../lib/path-sandbox.js';
@@ -28,6 +29,32 @@ export const PROJECT_NAME_MAX = 200;
 export const FILE_REVISION_MAX_PER_PATH = 50;
 export const FILE_REVISION_CONTENT_MAX = 2 * 1024 * 1024;
 export const PREVIEW_COMMENT_BODY_MAX = 8_000;
+/** Align with project-archive entryFile cap. */
+const ENTRY_FILE_MAX = 500;
+
+/**
+ * Normalize entry file to a project-relative path (no `..`, absolute, controls).
+ * Returns null when raw is empty after trim; throws on invalid.
+ */
+function normalizeEntryFile(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'string' || hasControl(raw)) {
+    throw new Error('Invalid entryFile');
+  }
+  const trimmed = raw.trim().replace(/^\/+/, '');
+  if (!trimmed) return null;
+  if (trimmed.length > ENTRY_FILE_MAX) {
+    throw new Error('Invalid entryFile');
+  }
+  try {
+    return normalizeProjectRelativePath(trimmed);
+  } catch (err) {
+    if (err instanceof PathSandboxError) {
+      throw new Error('Invalid entryFile');
+    }
+    throw err;
+  }
+}
 
 interface ProjectRow {
   id: string;
@@ -169,8 +196,8 @@ export function createProject(input: CreateDesignProjectInput): DesignProject {
   }
 
   let entryFile: string | null =
-    typeof input.entryFile === 'string' && !hasControl(input.entryFile)
-      ? input.entryFile.trim().replace(/^\/+/, '') || null
+    input.entryFile !== undefined && input.entryFile !== null
+      ? normalizeEntryFile(input.entryFile)
       : null;
   if (entryFile === null) {
     entryFile = detectEntryFile(baseDir);
@@ -251,10 +278,8 @@ export function updateProject(
   if (input.entryFile !== undefined) {
     if (input.entryFile === null) {
       entryFile = null;
-    } else if (typeof input.entryFile === 'string' && !hasControl(input.entryFile)) {
-      entryFile = input.entryFile.trim().replace(/^\/+/, '') || null;
     } else {
-      throw new Error('Invalid entryFile');
+      entryFile = normalizeEntryFile(input.entryFile);
     }
   } else if (baseDir !== existing.baseDir) {
     entryFile = detectEntryFile(baseDir);

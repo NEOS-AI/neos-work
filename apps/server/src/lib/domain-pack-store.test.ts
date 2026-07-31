@@ -235,6 +235,17 @@ describe('domain-pack-store additional branches', () => {
     const r = await loadInstalledDomainPacks();
     expect(r.errors.some((e) => /does not match directory/i.test(e))).toBe(true);
   });
+
+  it('loadInstalledDomainPacks skips non-slug directory names', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const bad = path.join(packsDir, 'Bad Name');
+    await fs.mkdir(bad, { recursive: true });
+    await fs.writeFile(path.join(bad, 'pack.json'), JSON.stringify(SAMPLE), 'utf8');
+    const r = await loadInstalledDomainPacks();
+    expect(r.errors.some((e) => /invalid pack directory name/i.test(e))).toBe(true);
+    // Must not register under traversal-like names either
+    expect(listPacks().some((p) => p.id === 'Bad Name')).toBe(false);
+  });
 });
 
 describe('domain-pack-store install variants', () => {

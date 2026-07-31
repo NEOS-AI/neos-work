@@ -230,6 +230,13 @@ describe('projects update field validation', () => {
       updateProject(p.id, { entryFile: 'path\nhtml' }),
     ).toThrow(/entryFile/i);
 
+    expect(() =>
+      updateProject(p.id, { entryFile: '../escape.html' }),
+    ).toThrow(/entryFile/i);
+    expect(() =>
+      updateProject(p.id, { entryFile: 'foo/../../etc/passwd' }),
+    ).toThrow(/entryFile/i);
+
     const ok = updateProject(p.id, {
       designSystemId: '  ds-ok  ',
       entryFile: '  /nested/page.html  ',
