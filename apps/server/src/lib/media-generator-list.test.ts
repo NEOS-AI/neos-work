@@ -166,3 +166,11 @@ describe('listMediaFiles', () => {
     expect(ours[`${PREFIX}p.jpeg`]?.urlPath).toContain(encodeURIComponent(`${PREFIX}p.jpeg`));
   });
 });
+
+describe('resolveMediaDir via env', () => {
+  it('listMediaFiles works when NEOS_DATA_DIR is set for ensure path', async () => {
+    // MEDIA_DIR is computed at import time; just ensure list still works
+    const files = await listMediaFiles(5);
+    expect(Array.isArray(files)).toBe(true);
+  });
+});

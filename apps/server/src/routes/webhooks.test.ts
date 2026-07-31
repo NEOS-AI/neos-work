@@ -241,3 +241,19 @@ describe('webhook routes', () => {
     expect(runs.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+  it('rate-limit and regenerate 404 for missing workflow', async () => {
+    expect((await webhooks.request('/missing-wf/rate-limit')).status).toBe(404);
+    expect(
+      (await webhooks.request('/missing-wf/regenerate', { method: 'POST' })).status,
+    ).toBe(404);
+  });
+
+  it('trigger 404 for missing workflow after rate limit allows', async () => {
+    const res = await webhooks.request('/no-such-workflow-id', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-neos-signature': 'sha256=00' },
+      body: '{}',
+    });
+    expect(res.status).toBe(404);
+  });

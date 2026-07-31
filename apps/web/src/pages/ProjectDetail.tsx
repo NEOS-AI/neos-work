@@ -96,6 +96,36 @@ export function ProjectDetail() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
+  // Project file SSE — reload open buffer on agent/remote writes (disk-changed / conflict)
+  useEffect(() => {
+    if (!conn.token || !id) return;
+    const openPath = buffer.path;
+    const stop = client.streamProjectFileEvents(id, (ev) => {
+      if (ev.type !== 'file.changed' && ev.type !== 'file.created') return;
+      const p = typeof ev.path === 'string' ? ev.path : '';
+      if (!p || !openPath || p !== openPath) return;
+      void (async () => {
+        try {
+          const file = await client.readFile(id, p);
+          const content = (file.data as { content?: string })?.content ?? '';
+          const hash = (file.data as { hash?: string })?.hash ?? null;
+          setBuffer((prev) => {
+            if (prev.path !== p) return prev;
+            return reduceEditorBuffer(prev, {
+              type: 'disk-changed',
+              content,
+              hash,
+            });
+          });
+          setStatus((s) => s ?? 'File updated on disk');
+        } catch {
+          // best-effort
+        }
+      })();
+    });
+    return () => stop();
+  }, [client, conn.token, id, buffer.path]);
+
   const openFile = async (path: string) => {
     if (!id) return;
     if (dirty && buffer.path && buffer.path !== path) {
@@ -154,6 +184,24 @@ export function ProjectDetail() {
     }
   };
 
+  const reloadOpenFileFromDisk = async () => {
+    if (!id || !buffer.path) return;
+    try {
+      const file = await client.readFile(id, buffer.path);
+      const content = (file.data as { content?: string })?.content ?? '';
+      const hash = (file.data as { hash?: string })?.hash ?? null;
+      setBuffer((prev) =>
+        reduceEditorBuffer(prev, {
+          type: 'disk-changed',
+          content,
+          hash,
+        }),
+      );
+    } catch {
+      // best-effort; leave buffer as-is
+    }
+  };
+
   const runEditWithAi = async () => {
     if (!id || !aiPrompt.trim()) return;
     setAiBusy(true);
@@ -167,13 +215,44 @@ export function ProjectDetail() {
               mode: 'replace-selection',
             })
           : undefined;
-      await client.createRun({
+      const res = await client.createRun({
         projectId: id,
         prompt: aiPrompt.trim(),
         editContext,
       });
-      setStatus('Run started — refresh file after agent completes');
+      const runId =
+        res.data && typeof res.data === 'object' && typeof (res.data as { id?: string }).id === 'string'
+          ? (res.data as { id: string }).id
+          : '';
       setAiPrompt('');
+      if (!runId) {
+        setStatus('Run started');
+        return;
+      }
+      setStatus(`Run ${runId.slice(0, 8)}…`);
+      // Prefer project file SSE for disk-changed; still poll run status for UX.
+      // Fallback reload when run ends (covers agents that write without SSE gap).
+      const terminal = new Set(['succeeded', 'failed', 'canceled', 'cancelled', 'error']);
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          const st = await client.getRun(runId);
+          const status =
+            st.data && typeof st.data === 'object'
+              ? String((st.data as { status?: string }).status ?? '')
+              : '';
+          if (terminal.has(status.toLowerCase())) {
+            setStatus(status === 'succeeded' ? 'Run finished' : `Run ${status}`);
+            if (status.toLowerCase() === 'succeeded') {
+              await reloadOpenFileFromDisk();
+            }
+            return;
+          }
+        } catch {
+          break;
+        }
+      }
+      setStatus('Run still running — file SSE will refresh when disk changes');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Run failed');
     } finally {

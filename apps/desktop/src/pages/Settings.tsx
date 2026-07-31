@@ -218,6 +218,9 @@ export function Settings() {
       {/* MCP Servers */}
       <McpServersSection />
 
+      {/* NEOS as MCP server (expose to coding agents) */}
+      <NeosMcpExposeSection />
+
       {/* CLI Agents */}
       <CliAgentsSection />
 
@@ -1662,6 +1665,331 @@ function McpServersSection() {
               </div>
             );
           })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// --- NEOS MCP expose (install snippets + Codex one-click) ---
+
+function NeosMcpExposeSection() {
+  const { client } = useEngine();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<{
+    serverName?: string;
+    shellSnippet?: string;
+    codexAddCommand?: string;
+    codexRemoveCommand?: string;
+    claudeDesktop?: unknown;
+    tools?: Array<{ name: string; description?: string }>;
+    version?: string;
+  } | null>(null);
+  const [codexStatus, setCodexStatus] = useState<{
+    available: boolean;
+    installed: boolean;
+    detail: string | null;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [hideToken, setHideToken] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!client) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [infoRes, stRes] = await Promise.all([
+        client.getMcpInstallInfo({ includeToken: !hideToken }),
+        client.getCodexMcpInstallStatus(),
+      ]);
+      if (infoRes.ok && infoRes.data) {
+        setInfo(infoRes.data);
+      } else {
+        setInfo(null);
+        setError(
+          scrubDisplayText(infoRes.error, { collapseLines: true, maxChars: 300 })
+            || 'Failed to load install info',
+        );
+      }
+      if (stRes.ok && stRes.data) {
+        setCodexStatus({
+          available: Boolean(stRes.data.available),
+          installed: Boolean(stRes.data.installed),
+          detail:
+            typeof stRes.data.detail === 'string'
+              ? scrubDisplayText(stRes.data.detail, { collapseLines: true, maxChars: 200 })
+              : null,
+        });
+      } else {
+        setCodexStatus(null);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load MCP expose info';
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+      setInfo(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, hideToken]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const copyText = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      window.alert('Clipboard unavailable');
+    }
+  };
+
+  const handleInstallCodex = async () => {
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await client.installCodexMcp();
+      if (!res.ok) {
+        setError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || 'codex mcp add failed',
+        );
+      }
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Install failed';
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUninstallCodex = async () => {
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await client.uninstallCodexMcp();
+      if (!res.ok) {
+        setError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || 'codex mcp remove failed',
+        );
+      }
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Uninstall failed';
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section
+      id="mcp-expose"
+      className="rounded-xl border p-5"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+      data-testid="mcp-expose-section"
+    >
+      <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+        NEOS as MCP server
+      </h2>
+      <p className="mb-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+        Expose Design Project files and live artifacts to external coding agents via{' '}
+        <code className="font-mono text-[11px]">neos mcp serve</code> (stdio). Install snippets for
+        Claude Desktop / Cursor and optional Codex one-click.
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <input
+            type="checkbox"
+            checked={hideToken}
+            onChange={(e) => setHideToken(e.target.checked)}
+            data-testid="mcp-expose-hide-token"
+          />
+          Hide auth token in snippets
+        </label>
+        <button
+          type="button"
+          className="rounded-lg px-2.5 py-1 text-xs"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+          onClick={() => void load()}
+          disabled={loading || !client}
+          data-testid="mcp-expose-refresh"
+        >
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+      </div>
+
+      {error && (
+        <p className="mb-3 text-xs" style={{ color: '#f87171' }} role="alert" data-testid="mcp-expose-error">
+          {error}
+        </p>
+      )}
+
+      {info && (
+        <div className="flex flex-col gap-3">
+          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Server: <span className="font-mono">{info.serverName ?? 'neos-work'}</span>
+            {info.version ? ` · v${info.version}` : ''}
+            {info.tools && info.tools.length > 0
+              ? ` · ${info.tools.length} tools`
+              : ''}
+          </div>
+
+          {info.tools && info.tools.length > 0 && (
+            <div className="flex flex-wrap gap-1" data-testid="mcp-expose-tools">
+              {info.tools.map((t) => (
+                <span
+                  key={t.name}
+                  className="rounded px-1.5 py-0.5 font-mono text-[10px]"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                  title={t.description}
+                >
+                  {t.name}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {typeof info.shellSnippet === 'string' && info.shellSnippet && (
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Shell / env
+                </span>
+                <button
+                  type="button"
+                  className="text-[11px]"
+                  style={{ color: 'var(--accent, #818cf8)' }}
+                  onClick={() => void copyText('shell', info.shellSnippet!)}
+                  data-testid="mcp-expose-copy-shell"
+                >
+                  {copied === 'shell' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre
+                className="max-h-32 overflow-auto rounded-lg border p-2 font-mono text-[11px]"
+                style={{
+                  borderColor: 'var(--border-secondary)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+                data-testid="mcp-expose-shell"
+              >
+                {info.shellSnippet}
+              </pre>
+            </div>
+          )}
+
+          {info.claudeDesktop != null && (
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Claude Desktop / Cursor mcpServers
+                </span>
+                <button
+                  type="button"
+                  className="text-[11px]"
+                  style={{ color: 'var(--accent, #818cf8)' }}
+                  onClick={() =>
+                    void copyText('claude', JSON.stringify(info.claudeDesktop, null, 2))
+                  }
+                  data-testid="mcp-expose-copy-claude"
+                >
+                  {copied === 'claude' ? 'Copied' : 'Copy JSON'}
+                </button>
+              </div>
+              <pre
+                className="max-h-40 overflow-auto rounded-lg border p-2 font-mono text-[11px]"
+                style={{
+                  borderColor: 'var(--border-secondary)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+                data-testid="mcp-expose-claude"
+              >
+                {JSON.stringify(info.claudeDesktop, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {typeof info.codexAddCommand === 'string' && info.codexAddCommand && (
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Codex CLI
+                </span>
+                <button
+                  type="button"
+                  className="text-[11px]"
+                  style={{ color: 'var(--accent, #818cf8)' }}
+                  onClick={() => void copyText('codex', info.codexAddCommand!)}
+                  data-testid="mcp-expose-copy-codex"
+                >
+                  {copied === 'codex' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre
+                className="max-h-24 overflow-auto rounded-lg border p-2 font-mono text-[11px]"
+                style={{
+                  borderColor: 'var(--border-secondary)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+                data-testid="mcp-expose-codex-cmd"
+              >
+                {info.codexAddCommand}
+              </pre>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }} data-testid="mcp-expose-codex-status">
+              Codex:{' '}
+              {codexStatus == null
+                ? '…'
+                : !codexStatus.available
+                  ? 'CLI not found'
+                  : codexStatus.installed
+                    ? 'neos-work installed'
+                    : 'available (not installed)'}
+              {codexStatus?.detail ? ` — ${codexStatus.detail}` : ''}
+            </span>
+            <button
+              type="button"
+              className="rounded-lg px-2.5 py-1 text-xs"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+              disabled={busy || !client || codexStatus?.available === false}
+              onClick={() => void handleInstallCodex()}
+              data-testid="mcp-expose-codex-install"
+            >
+              {busy ? '…' : 'Install in Codex'}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg px-2.5 py-1 text-xs"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+              disabled={busy || !client || !codexStatus?.installed}
+              onClick={() => void handleUninstallCodex()}
+              data-testid="mcp-expose-codex-uninstall"
+            >
+              Remove from Codex
+            </button>
+          </div>
         </div>
       )}
     </section>

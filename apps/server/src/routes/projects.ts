@@ -1,5 +1,5 @@
 /**
- * Design Project routes (v0.5.0 M1 + v0.5.9 archive + v0.5.13 import token).
+ * Design Project routes (v0.5.0 M1 + v0.5.9 archive + v0.5.13 import token + v0.5.27 file SSE).
  *
  * GET    /api/projects
  * POST   /api/projects
@@ -10,10 +10,12 @@
  * GET    /api/projects/:id/export.zip
  * POST   /api/projects/import.zip
  * GET    /api/projects/:id/files
+ * GET    /api/projects/:id/events/stream — file.changed SSE
  * …
  */
 
 import { Hono } from 'hono';
+import { stream } from 'hono/streaming';
 import type { FileRevisionSource } from '@neos-work/shared';
 import * as db from '../db/projects.js';
 import {
@@ -39,6 +41,11 @@ import {
 } from '../lib/import-token.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
+import {
+  publishProjectFileEvent,
+  subscribeProjectFileEvents,
+  type ProjectFileEvent,
+} from '../lib/project-file-events.js';
 
 const projects = new Hono();
 
@@ -304,6 +311,51 @@ projects.delete('/:id', (c) => {
   return c.json({ ok: true });
 });
 
+// ── Project file events (SSE) ──────────────────────────────
+
+/**
+ * Long-lived SSE of project file mutations (write / delete / agent create).
+ * Clients reload open buffers on `file.changed` / `file.created` for the open path.
+ */
+projects.get('/:id/events/stream', (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  c.header('Content-Type', 'text/event-stream');
+  c.header('Cache-Control', 'no-cache');
+  c.header('Connection', 'keep-alive');
+  c.header('X-Accel-Buffering', 'no');
+
+  return stream(c, async (s) => {
+    const queue: ProjectFileEvent[] = [];
+    let closed = false;
+    const unsub = subscribeProjectFileEvents(id, (ev) => {
+      if (closed) return;
+      queue.push(ev);
+    });
+
+    try {
+      await s.write(`event: ready\ndata: ${JSON.stringify({ projectId: id })}\n\n`);
+      const started = Date.now();
+      const maxMs = 30 * 60 * 1000;
+      while (Date.now() - started < maxMs) {
+        if (c.req.raw.signal.aborted) break;
+        while (queue.length > 0) {
+          const ev = queue.shift()!;
+          await s.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+        }
+        // heartbeat keeps proxies alive
+        await s.write(`: ping\n\n`);
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
+    } finally {
+      closed = true;
+      unsub();
+    }
+  });
+});
+
 // ── Files ──────────────────────────────────────────────────
 
 projects.get('/:id/files', (c) => {
@@ -370,6 +422,13 @@ projects.put('/:id/files/*', async (c) => {
     });
     // touch project updated_at
     db.updateProject(project.id, {});
+    publishProjectFileEvent({
+      type: written.created ? 'file.created' : 'file.changed',
+      projectId: project.id,
+      path: written.path,
+      source,
+      hash: written.hash,
+    });
     return c.json({
       ok: true,
       data: {
@@ -396,6 +455,12 @@ projects.delete('/:id/files/*', (c) => {
   if (!rel) return c.json({ ok: false, error: 'path required' }, 400);
   try {
     const result = deleteProjectPath(project.baseDir, rel);
+    publishProjectFileEvent({
+      type: 'file.deleted',
+      projectId: project.id,
+      path: result.path || rel,
+      source: 'user',
+    });
     return c.json({ ok: true, data: result });
   } catch (err) {
     if (err instanceof PathSandboxError) {
@@ -462,6 +527,13 @@ projects.post('/:id/revisions/:revisionId/restore', (c) => {
       path: written.path,
       content: rev.content,
       source: 'restore',
+    });
+    publishProjectFileEvent({
+      type: 'file.changed',
+      projectId: project.id,
+      path: written.path,
+      source: 'restore',
+      hash: written.hash,
     });
     return c.json({ ok: true, data: { path: written.path, hash: written.hash } });
   } catch (err) {

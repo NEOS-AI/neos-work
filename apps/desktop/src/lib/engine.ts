@@ -975,6 +975,91 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  // --- NEOS as MCP server (Task 16 / OD §14.3–14.4) ---
+
+  async getMcpInstallInfo(query?: {
+    projectId?: string;
+    includeToken?: boolean;
+  }): Promise<
+    ApiResponse<{
+      serverName?: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      shellSnippet?: string;
+      codexAddCommand?: string;
+      codexRemoveCommand?: string;
+      claudeDesktop?: unknown;
+      tools?: Array<{ name: string; description?: string }>;
+      notes?: string[];
+      version?: string;
+    }>
+  > {
+    const qs = new URLSearchParams();
+    if (query?.projectId && !/[\0\r\n]/.test(query.projectId)) {
+      const p = query.projectId.trim().slice(0, 100);
+      if (p) qs.set('projectId', p);
+    }
+    if (query?.includeToken === false) qs.set('includeToken', '0');
+    const q = qs.toString();
+    const res = await fetch(`${this.baseUrl}/api/mcp/install-info${q ? `?${q}` : ''}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async listNeosMcpTools(): Promise<
+    ApiResponse<Array<{ name: string; description?: string; inputSchema?: unknown }>>
+  > {
+    const res = await fetch(`${this.baseUrl}/api/mcp/tools`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async getCodexMcpInstallStatus(): Promise<
+    ApiResponse<{
+      available: boolean;
+      installed: boolean;
+      codexPath: string | null;
+      detail: string | null;
+    }>
+  > {
+    const res = await fetch(`${this.baseUrl}/api/mcp/install/codex/status`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async installCodexMcp(params?: {
+    projectId?: string;
+    neosBin?: string;
+  }): Promise<ApiResponse<{ installed?: boolean; command?: string; stdout?: string; serverName?: string }>> {
+    const body: Record<string, string> = {};
+    if (params?.projectId && !/[\0\r\n]/.test(params.projectId)) {
+      const p = params.projectId.trim().slice(0, 100);
+      if (p) body.projectId = p;
+    }
+    if (params?.neosBin && !/[\0\r\n]/.test(params.neosBin)) {
+      const b = params.neosBin.trim().slice(0, 4096);
+      if (b) body.neosBin = b;
+    }
+    const res = await fetch(`${this.baseUrl}/api/mcp/install/codex`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
+  }
+
+  async uninstallCodexMcp(): Promise<ApiResponse<{ removed?: boolean; stdout?: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/mcp/install/codex`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   // --- CLI Agents ---
 
   async listCliAgents(): Promise<ApiResponse<{ id: string; name: string; path: string; version?: string }[]>> {
@@ -1160,6 +1245,77 @@ export class EngineClient {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
+  }
+
+  /**
+   * Project file SSE (`file.changed` / `file.created` / `file.deleted`).
+   * Returns abort callback. Uses fetch + Bearer (not EventSource).
+   */
+  streamProjectFileEvents(
+    projectId: string,
+    onEvent: (event: {
+      type: string;
+      projectId?: string;
+      path?: string;
+      source?: string;
+      hash?: string;
+      ts?: string;
+    }) => void,
+  ): () => void {
+    const controller = new AbortController();
+    const seg = this.pathSegment(projectId);
+    if (!seg) return () => {};
+    void (async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/projects/${seg}/events/stream`, {
+          method: 'GET',
+          headers: {
+            ...this.getHeaders(),
+            Accept: 'text/event-stream',
+          },
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventName = 'message';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventName = parseSseEventName(line) || 'message';
+            } else if (line.startsWith('data:')) {
+              const data = parseSseDataPayload(line);
+              if (!data) continue;
+              try {
+                const parsed = JSON.parse(data) as Record<string, unknown>;
+                onEvent({
+                  type: eventName,
+                  projectId: typeof parsed.projectId === 'string' ? parsed.projectId : undefined,
+                  path: typeof parsed.path === 'string' ? parsed.path : undefined,
+                  source: typeof parsed.source === 'string' ? parsed.source : undefined,
+                  hash: typeof parsed.hash === 'string' ? parsed.hash : undefined,
+                  ts: typeof parsed.ts === 'string' ? parsed.ts : undefined,
+                });
+              } catch {
+                // skip
+              }
+              eventName = 'message';
+            } else if (line === '') {
+              eventName = 'message';
+            }
+          }
+        }
+      } catch {
+        // aborted / network
+      }
+    })();
+    return () => controller.abort();
   }
 
   async readProjectFile(

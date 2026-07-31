@@ -102,7 +102,81 @@ export class WebApiClient {
     prompt: string;
     agentId?: string;
     editContext?: unknown;
-  }): Promise<ApiEnvelope<{ id?: string }>> {
+  }): Promise<ApiEnvelope<{ id?: string; status?: string }>> {
     return this.request('POST', '/api/runs', input);
+  }
+
+  getRun(runId: string): Promise<ApiEnvelope<{ id?: string; status?: string; projectId?: string }>> {
+    return this.request('GET', `/api/runs/${encodeURIComponent(runId)}`);
+  }
+
+  /**
+   * Subscribe to project file SSE (`file.changed` / `file.created` / `file.deleted`).
+   * Uses fetch + Bearer (EventSource cannot set Authorization).
+   * Returns an abort function.
+   */
+  streamProjectFileEvents(
+    projectId: string,
+    onEvent: (event: {
+      type: string;
+      projectId?: string;
+      path?: string;
+      source?: string;
+      hash?: string;
+    }) => void,
+  ): () => void {
+    const controller = new AbortController();
+    const id = encodeURIComponent(projectId);
+    void (async () => {
+      try {
+        const res = await fetch(this.url(`/api/projects/${id}/events/stream`), {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+            ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          },
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventName = 'message';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              const name = line.slice(6).trim();
+              eventName = name && !/[\0\r\n]/.test(name) ? name : 'message';
+            } else if (line.startsWith('data:')) {
+              const raw = line.slice(5).trim();
+              if (!raw || /[\0]/.test(raw)) continue;
+              try {
+                const data = JSON.parse(raw) as Record<string, unknown>;
+                onEvent({
+                  type: eventName,
+                  projectId: typeof data.projectId === 'string' ? data.projectId : undefined,
+                  path: typeof data.path === 'string' ? data.path : undefined,
+                  source: typeof data.source === 'string' ? data.source : undefined,
+                  hash: typeof data.hash === 'string' ? data.hash : undefined,
+                });
+              } catch {
+                // skip malformed
+              }
+              eventName = 'message';
+            } else if (line === '') {
+              eventName = 'message';
+            }
+          }
+        }
+      } catch {
+        // abort / network — silent
+      }
+    })();
+    return () => controller.abort();
   }
 }

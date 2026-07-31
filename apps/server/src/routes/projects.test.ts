@@ -926,4 +926,75 @@ describe('projects import-token and path validation', () => {
     const res = await app.request(`/api/projects/${encodeURIComponent('ab\0c')}/files`);
     expect([400, 404]).toContain(res.status);
   });
+
+  it('SSE events/stream emits ready and file.changed on write', async () => {
+    const project = await createViaApi();
+    const ac = new AbortController();
+    const streamPromise = (async () => {
+      const res = await app.request(`/api/projects/${project.id}/events/stream`, {
+        signal: ac.signal,
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type') ?? '').toMatch(/text\/event-stream/i);
+      // Concurrent write so the stream receives file.changed
+      await new Promise((r) => setTimeout(r, 50));
+      await app.request(`/api/projects/${project.id}/files/sse-probe.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '<html>sse</html>', source: 'agent' }),
+      });
+      // Read until we see file.changed or timeout
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('no body');
+      const decoder = new TextDecoder();
+      let buf = '';
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        if (buf.includes('file.changed') || buf.includes('file.created')) {
+          ac.abort();
+          return buf;
+        }
+      }
+      ac.abort();
+      return buf;
+    })();
+
+    const body = await streamPromise;
+    expect(body).toMatch(/event:\s*ready/);
+    expect(body).toMatch(/file\.(changed|created)/);
+    expect(body).toMatch(/sse-probe\.html/);
+  });
+
+  it('SSE events/stream 404 for missing project', async () => {
+    const res = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/events/stream',
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('projects import zip edge paths', () => {
+  it('rejects empty zip body on import.zip', async () => {
+    const res = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: Buffer.alloc(0),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/zip|archive|required/i);
+  });
+
+  it('rejects invalid zip payload on import.zip', async () => {
+    const res = await app.request('/api/projects/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: Buffer.from('not-a-zip'),
+    });
+    expect(res.status).toBe(400);
+  });
 });

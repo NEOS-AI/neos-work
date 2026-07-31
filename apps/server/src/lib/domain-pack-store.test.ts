@@ -311,3 +311,20 @@ describe('domain-pack-store resolve without NEOS_DATA_DIR', () => {
     await uninstallInstalledPack('legal');
   });
 });
+
+describe('domain-pack-store zip safety', () => {
+  it('rejects zip exceeding max file count', async () => {
+    const { DOMAIN_PACK_ZIP_MAX_FILES } = await import('./domain-pack-store.js');
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
+    for (let i = 0; i < DOMAIN_PACK_ZIP_MAX_FILES + 2; i++) {
+      archive.append(`f${i}`, { name: `extra-${i}.txt` });
+    }
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/max/i);
+  });
+});

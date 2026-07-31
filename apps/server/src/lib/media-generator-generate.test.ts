@@ -329,3 +329,39 @@ describe('generateAudio', () => {
     );
   });
 });
+
+  it('ignores invalid baseURL schemes and still generates with default', async () => {
+    generateMock.mockResolvedValue({
+      data: [{ url: 'https://cdn.example/img.png' }],
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetchImageOk([9, 9])));
+    const result = await generateImage({
+      prompt: 'baseurl test',
+      apiKey: 'sk-test',
+      baseURL: 'file:///etc',
+    });
+    expect(result.filePath.startsWith(MEDIA_DIR)).toBe(true);
+    created.push(result.filePath);
+
+    // control-char baseURL ignored
+    const r2 = await generateImage({
+      prompt: 'baseurl2',
+      apiKey: 'sk-test',
+      baseURL: 'https://api.example.com/\n',
+    });
+    created.push(r2.filePath);
+  });
+
+  it('accepts valid custom baseURL', async () => {
+    generateMock.mockResolvedValue({
+      data: [{ url: 'https://cdn.example/img2.png' }],
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(fetchImageOk([1])));
+    const result = await generateImage({
+      prompt: 'custom base',
+      apiKey: 'sk-test',
+      baseURL: 'https://api.example.com/v1/',
+    });
+    created.push(result.filePath);
+    expect(result.filePath).toBeTruthy();
+  });

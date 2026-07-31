@@ -344,3 +344,41 @@ describe('BlockSelector', () => {
     expect(document.body.textContent).not.toMatch(/badkey/);
   });
 });
+
+describe('BlockSelector load failures', () => {
+  beforeEach(() => {
+    listBlocks.mockReset();
+  });
+
+  it('shows scrubbed API error', async () => {
+    listBlocks.mockResolvedValue({ ok: false, error: `blocks${'\n'}down${'\0'}` });
+    render(<BlockSelector value="" onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText('blocks down')).toBeInTheDocument();
+    });
+  });
+
+  it('shows scrubbed thrown error', async () => {
+    listBlocks.mockRejectedValue(new Error(`load${'\0'}fail`));
+    render(<BlockSelector value="" onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText(/loadfail|load fail/i)).toBeInTheDocument();
+    });
+  });
+
+  it('onChange null when selecting empty or unknown option', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    listBlocks.mockResolvedValue({
+      ok: true,
+      data: [
+        block({ id: 'b1', name: 'One', domain: 'general', category: 'x' }),
+      ],
+    });
+    render(<BlockSelector value="b1" onChange={onChange} />);
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => expect(select.querySelectorAll('option').length).toBeGreaterThan(1));
+    await user.selectOptions(select, '');
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+});

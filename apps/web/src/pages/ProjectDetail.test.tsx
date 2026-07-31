@@ -3,7 +3,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const writeFile = vi.fn(async () => ({ ok: true, data: { contentHash: 'h1' } }));
-const createRun = vi.fn(async () => ({ ok: true, data: { id: 'run1' } }));
+const createRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'queued' } }));
+const getRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'succeeded' } }));
+const readFile = vi.fn(async (_pid: string, path: string) => ({
+  ok: true,
+  data: {
+    path,
+    content: path === 'index.html' ? '<html><body><h1 id="hero">Hi</h1></body></html>' : 'body{}',
+    hash: 'abc',
+  },
+}));
 
 vi.mock('../lib/auth.js', () => ({
   loadConnection: () => ({
@@ -34,16 +43,11 @@ vi.mock('../lib/api.js', () => {
           { path: 'style.css', type: 'file' },
         ],
       }));
-      readFile = vi.fn(async (_pid: string, path: string) => ({
-        ok: true,
-        data: {
-          path,
-          content: path === 'index.html' ? '<html><body><h1 id="hero">Hi</h1></body></html>' : 'body{}',
-          hash: 'abc',
-        },
-      }));
+      readFile = readFile;
       writeFile = writeFile;
       createRun = createRun;
+      getRun = getRun;
+      streamProjectFileEvents = () => () => {};
     },
   };
 });
@@ -91,6 +95,17 @@ describe('ProjectDetail Design Editor', () => {
   beforeEach(() => {
     writeFile.mockClear();
     createRun.mockClear();
+    getRun.mockClear();
+    readFile.mockClear();
+    readFile.mockImplementation(async (_pid: string, path: string) => ({
+      ok: true,
+      data: {
+        path,
+        content: path === 'index.html' ? '<html><body><h1 id="hero">Hi</h1></body></html>' : 'body{}',
+        hash: 'abc',
+      },
+    }));
+    getRun.mockResolvedValue({ ok: true, data: { id: 'run1', status: 'succeeded' } });
   });
 
   it('loads project and shows Design Editor for entry file', async () => {
@@ -119,7 +134,8 @@ describe('ProjectDetail Design Editor', () => {
     });
   });
 
-  it('runs Edit with AI with prompt', async () => {
+  it('runs Edit with AI with prompt and reloads after terminal status', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderProject();
     await waitFor(() => screen.getByTestId('ai-prompt'));
     fireEvent.change(screen.getByTestId('ai-prompt'), {
@@ -133,5 +149,13 @@ describe('ProjectDetail Design Editor', () => {
     const arg = calls[0]?.[0];
     expect(arg?.projectId).toBe('p1');
     expect(arg?.prompt).toMatch(/hero blue/i);
+    await waitFor(() => {
+      expect(getRun).toHaveBeenCalledWith('run1');
+    });
+    await waitFor(() => {
+      // initial load + post-run reload
+      expect(readFile.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    vi.useRealTimers();
   });
 });

@@ -18,6 +18,10 @@ const toggleMcpServer = vi.fn();
 const deleteMcpServer = vi.fn();
 const revokeMcpOAuth = vi.fn();
 const startMcpOAuth = vi.fn();
+const getMcpInstallInfo = vi.fn();
+const getCodexMcpInstallStatus = vi.fn();
+const installCodexMcp = vi.fn();
+const uninstallCodexMcp = vi.fn();
 const listCliAgents = vi.fn();
 const setAuthToken = vi.fn();
 const setTheme = vi.fn();
@@ -40,6 +44,10 @@ const clientApi = {
   deleteMcpServer,
   revokeMcpOAuth,
   startMcpOAuth,
+  getMcpInstallInfo,
+  getCodexMcpInstallStatus,
+  installCodexMcp,
+  uninstallCodexMcp,
   listCliAgents,
   setAuthToken,
 };
@@ -118,6 +126,26 @@ describe('Settings page', () => {
       ok: true,
       data: [{ id: 'tradingview', name: 'TradingView', domain: 'finance', toolHints: ['tv_health_check'] }],
     });
+    getMcpInstallInfo.mockReset().mockResolvedValue({
+      ok: true,
+      data: {
+        serverName: 'neos-work',
+        version: '0.5.27',
+        shellSnippet: 'export NEOS_SERVER_URL=http://127.0.0.1:3000\nneos mcp serve',
+        codexAddCommand: 'codex mcp add neos-work -- neos mcp serve',
+        claudeDesktop: { mcpServers: { 'neos-work': { command: 'neos', args: ['mcp', 'serve'] } } },
+        tools: [
+          { name: 'neos_files_read', description: 'Read file' },
+          { name: 'neos_files_write', description: 'Write file' },
+        ],
+      },
+    });
+    getCodexMcpInstallStatus.mockReset().mockResolvedValue({
+      ok: true,
+      data: { available: true, installed: false, codexPath: 'codex', detail: null },
+    });
+    installCodexMcp.mockReset().mockResolvedValue({ ok: true, data: { installed: true } });
+    uninstallCodexMcp.mockReset().mockResolvedValue({ ok: true, data: { removed: true } });
     checkTradingViewCdp.mockReset().mockResolvedValue({
       ok: true,
       data: { ok: true, cdpConnected: true, port: 9222, browser: 'Chrome/120', targetCount: 2 },
@@ -152,6 +180,7 @@ describe('Settings page', () => {
     expect(screen.getByText('Media generation')).toBeInTheDocument();
     expect(screen.getByText('MCP Servers')).toBeInTheDocument();
     expect(screen.getByText('TradingView MCP')).toBeInTheDocument();
+    expect(screen.getByText('NEOS as MCP server')).toBeInTheDocument();
     expect(screen.getByText('CLI Agents')).toBeInTheDocument();
     expect(screen.getByText('Dev Tools')).toBeInTheDocument();
 
@@ -1611,6 +1640,33 @@ describe('Settings page', () => {
       });
     }
     alertSpy.mockRestore();
+  });
+
+  it('loads NEOS MCP expose snippets and installs Codex', async () => {
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-expose-section')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-expose-shell')).toHaveTextContent('neos mcp serve');
+    });
+    expect(screen.getByTestId('mcp-expose-tools')).toHaveTextContent('neos_files_read');
+    expect(getMcpInstallInfo).toHaveBeenCalled();
+    expect(getCodexMcpInstallStatus).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('mcp-expose-codex-install'));
+    await waitFor(() => {
+      expect(installCodexMcp).toHaveBeenCalled();
+    });
+
+    getCodexMcpInstallStatus.mockResolvedValue({
+      ok: true,
+      data: { available: true, installed: true, codexPath: 'codex', detail: 'neos-work' },
+    });
+    fireEvent.click(screen.getByTestId('mcp-expose-refresh'));
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-expose-codex-status')).toHaveTextContent(/installed/i);
+    });
   });
 
 });

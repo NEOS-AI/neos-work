@@ -23,6 +23,7 @@ const listLiveArtifacts = vi.fn();
 const createLiveArtifact = vi.fn();
 const refreshLiveArtifact = vi.fn();
 const deleteLiveArtifact = vi.fn();
+const streamProjectFileEvents = vi.fn(() => () => {});
 
 const client = {
   getProject,
@@ -45,6 +46,7 @@ const client = {
   createLiveArtifact,
   refreshLiveArtifact,
   deleteLiveArtifact,
+  streamProjectFileEvents,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({

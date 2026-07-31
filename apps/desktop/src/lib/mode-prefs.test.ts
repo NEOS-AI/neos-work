@@ -57,3 +57,18 @@ describe('mode-prefs', () => {
     spy.mockRestore();
   });
 });
+
+  it('ignores stored values that fail URL parse', () => {
+    localStorage.setItem('neos-remote-url', 'http://[');
+    expect(loadRemoteUrl()).toBe('');
+    localStorage.setItem('neos-remote-url', 'not-a-url');
+    expect(loadRemoteUrl()).toBe('');
+  });
+
+  it('save removes key for invalid URL parse and non-string', () => {
+    saveRemoteUrl('http://ok:1');
+    saveRemoteUrl('http://[');
+    expect(loadRemoteUrl()).toBe('');
+    saveRemoteUrl(1 as unknown as string);
+    expect(localStorage.getItem('neos-remote-url')).toBeNull();
+  });

@@ -31,6 +31,7 @@ import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { listProjectFiles } from '../lib/project-files.js';
 import { exportMemories } from '../lib/memory-store.js';
+import { publishProjectFileEvent } from '../lib/project-file-events.js';
 
 const runs = new Hono();
 
@@ -85,17 +86,20 @@ async function executeCliRun(runId: string): Promise<void> {
   }
 
   let cwd: string | undefined;
-  let filesBefore: Set<string> | undefined;
+  /** path → size:mtime snapshot for change detection after CLI exit */
+  let filesBeforeMeta: Map<string, string> | undefined;
   if (run.projectId) {
     const project = getProject(run.projectId);
     if (project?.baseDir) {
       cwd = project.baseDir;
       try {
-        filesBefore = new Set(
-          listProjectFiles(project.baseDir).filter((f) => f.type === 'file').map((f) => f.path),
+        filesBeforeMeta = new Map(
+          listProjectFiles(project.baseDir)
+            .filter((f) => f.type === 'file')
+            .map((f) => [f.path, `${f.size ?? 0}:${f.mtimeMs ?? 0}`]),
         );
       } catch {
-        filesBefore = undefined;
+        filesBeforeMeta = undefined;
       }
     }
   }
@@ -124,18 +128,45 @@ async function executeCliRun(runId: string): Promise<void> {
     const current = reg.get(runId);
     if (!current || current.status === 'canceled') return;
 
-    // Detect new files under project (best-effort; content-hash compare is later)
-    if (cwd && filesBefore) {
+    // Detect new/modified files under project (size+mtime; best-effort)
+    if (cwd && filesBeforeMeta && run.projectId) {
       try {
-        const after = listProjectFiles(cwd)
-          .filter((f) => f.type === 'file')
-          .map((f) => f.path);
-        const created = after.filter((p) => !filesBefore!.has(p));
+        const after = listProjectFiles(cwd).filter((f) => f.type === 'file');
+        const created: string[] = [];
+        const changed: string[] = [];
+        for (const f of after) {
+          const sig = `${f.size ?? 0}:${f.mtimeMs ?? 0}`;
+          const prev = filesBeforeMeta.get(f.path);
+          if (prev === undefined) created.push(f.path);
+          else if (prev !== sig) changed.push(f.path);
+        }
         if (created.length > 0) {
           reg.appendEvent(runId, 'run.files_changed', {
             paths: created.slice(0, 200),
             kind: 'created',
           });
+          for (const p of created.slice(0, 200)) {
+            publishProjectFileEvent({
+              type: 'file.created',
+              projectId: run.projectId,
+              path: p,
+              source: 'agent',
+            });
+          }
+        }
+        if (changed.length > 0) {
+          reg.appendEvent(runId, 'run.files_changed', {
+            paths: changed.slice(0, 200),
+            kind: 'modified',
+          });
+          for (const p of changed.slice(0, 200)) {
+            publishProjectFileEvent({
+              type: 'file.changed',
+              projectId: run.projectId,
+              path: p,
+              source: 'agent',
+            });
+          }
         }
       } catch {
         // ignore listing errors

@@ -276,3 +276,36 @@ describe('domain-packs install-zip body read failure paths', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('domain-packs multipart install-zip', () => {
+  it('installs from multipart form file field', async () => {
+    const { ZipArchive } = await import('archiver');
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const buf = Buffer.concat(chunks);
+
+    const form = new FormData();
+    form.append('file', new Blob([buf], { type: 'application/zip' }), 'pack.zip');
+
+    const res = await domainPacks.request('/install-zip', {
+      method: 'POST',
+      body: form,
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { ok: boolean; data?: { id?: string } };
+    expect(body.ok).toBe(true);
+  });
+
+  it('multipart without file field returns 400', async () => {
+    const form = new FormData();
+    form.append('note', 'no-file');
+    const res = await domainPacks.request('/install-zip', {
+      method: 'POST',
+      body: form,
+    });
+    expect(res.status).toBe(400);
+  });
+});

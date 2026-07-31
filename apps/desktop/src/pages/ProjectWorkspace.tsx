@@ -150,6 +150,39 @@ export function ProjectWorkspace() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
+  // Project file SSE — agent/remote writes → disk-changed (conflict if dirty)
+  useEffect(() => {
+    if (!client || !projectId) return;
+    const openPath = buffer.path;
+    const stop = client.streamProjectFileEvents(projectId, (ev) => {
+      if (ev.type !== 'file.changed' && ev.type !== 'file.created') return;
+      const p = typeof ev.path === 'string' ? ev.path : '';
+      if (!p || !openPath || p !== openPath) return;
+      void (async () => {
+        try {
+          const res = await client.readProjectFile(projectId, p);
+          if (!res.ok || !res.data) return;
+          setBuffer((prev) => {
+            if (prev.path !== p) return prev;
+            return reduceEditorBuffer(prev, {
+              type: 'disk-changed',
+              content: res.data!.content,
+              hash: res.data!.hash,
+            });
+          });
+          // Refresh file list on create so tree stays accurate
+          if (ev.type === 'file.created') {
+            const filesRes = await client.listProjectFiles(projectId);
+            if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+          }
+        } catch {
+          // best-effort
+        }
+      })();
+    });
+    return () => stop();
+  }, [client, projectId, buffer.path]);
+
   const openFile = useCallback(
     async (path: string) => {
       if (!client || !projectId) return;
