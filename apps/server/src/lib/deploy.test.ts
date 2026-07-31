@@ -562,12 +562,20 @@ describe('maskSecret / scrubSecretsFromText', () => {
   it('masks secrets and scrubs bearer tokens', () => {
     expect(maskSecret('abcdefghij')).toMatch(/\*+ghij$/);
     expect(maskSecret('ab')).toMatch(/^\*+$/);
+    expect(maskSecret(`sec${'\n'}ret`)).toBe('***');
+    expect(maskSecret('')).toBe('');
+    expect(maskSecret(null)).toBe('');
     const scrubbed = scrubSecretsFromText(
       'Bearer sk-live-abcdefghijklmnopqrst and more',
       ['sk-live-abcdefghijklmnopqrst'],
     );
     expect(scrubbed).not.toContain('sk-live-abcdefghijklmnopqrst');
     expect(scrubbed).toMatch(/Bearer/i);
+    // null bytes stripped; xai tokens scrubbed to masked form
+    const scrub2 = scrubSecretsFromText(`ok${'\0'} xai-ABCDEFGH12345678 end`, []);
+    expect(scrub2).not.toContain('\0');
+    expect(scrub2).not.toContain('ABCDEFGH12345678');
+    expect(scrub2).toMatch(/\*+5678/);
   });
 });
 

@@ -1008,6 +1008,49 @@ describe('mcp oauth token exchange + refresh success', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('create rejects ftp url and overlong name/url; blank toggle id 404', async () => {
+    const ftp = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `_cov_mcp_ftp_${process.pid}`,
+        transport: 'http',
+        url: 'ftp://example.com/mcp',
+      }),
+    });
+    expect(ftp.status).toBe(400);
+    expect(((await ftp.json()) as { error: string }).error).toMatch(/http|url|invalid/i);
+
+    const longName = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'n'.repeat(201),
+        transport: 'stdio',
+        command: 'npx',
+      }),
+    });
+    expect(longName.status).toBe(400);
+
+    const longUrl = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: `_cov_mcp_longurl_${process.pid}`,
+        transport: 'http',
+        url: `https://example.com/${'a'.repeat(2100)}`,
+      }),
+    });
+    expect(longUrl.status).toBe(400);
+
+    expect((await mcp.request('/%20/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    })).status).toBe(404);
+    expect((await mcp.request('/%20', { method: 'DELETE' })).status).toBe(404);
+  });
 });
 
 describe('mcp oauth flow housekeeping', () => {

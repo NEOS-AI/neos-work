@@ -407,6 +407,72 @@ describe('listPlugins pipeline normalization', () => {
   });
 });
 
+describe('plugin-store pipeline/gates normalization', () => {
+  it('normalizes pipeline stages and capabilityGates with control-char filtering', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    await fs.writeFile(
+      path.join(DIR, 'open-design.json'),
+      JSON.stringify({
+        schemaVersion: 'od-plugin/v1',
+        id: DIR_NAME,
+        name: 'PipeNorm',
+        version: '1.0.0',
+        description: `long${'\n'}desc`.repeat(500),
+        capabilityGates: [
+          'ok-gate',
+          `bad${'\n'}gate`,
+          '',
+          'x'.repeat(200),
+          42,
+          '  trim-me  ',
+        ],
+        pipeline: [
+          {
+            id: `stage${'\n'}x`,
+            name: 'ignored',
+            kind: 'prompt',
+          },
+          {
+            id: 's1',
+            name: `Name${'\n'}X`,
+            kind: 'prompt',
+            prompt: 'hello\nworld',
+            outputKey: `out${'\0'}`,
+            humanInLoop: true,
+          },
+          {
+            id: 's2',
+            name: 'ok',
+            kind: 'not-a-kind',
+            prompt: 'p'.repeat(100_001),
+            outputKey: '  out2  ',
+          },
+          null,
+          { id: '  ' },
+          // overflow stages beyond max should be truncated in loop
+          ...Array.from({ length: 30 }, (_, i) => ({
+            id: `extra-${i}`,
+            kind: 'prompt',
+          })),
+        ],
+      }),
+      'utf8',
+    );
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), 'skill body\n', 'utf8');
+
+    const p = (await listPlugins()).find((x) => x.id === DIR_NAME);
+    expect(p).toBeTruthy();
+    expect(p!.capabilityGates).toEqual(expect.arrayContaining(['ok-gate', 'trim-me']));
+    expect(p!.capabilityGates?.every((g) => !/[\0\r\n]/.test(g))).toBe(true);
+    expect(p!.pipeline?.some((s) => s.id === 's1')).toBe(true);
+    expect(p!.pipeline?.find((s) => s.id === 's1')?.outputKey).toBeUndefined();
+    expect(p!.pipeline?.find((s) => s.id === 's2')?.outputKey).toBe('out2');
+    // prompt truncated
+    const s2 = p!.pipeline?.find((s) => s.id === 's2');
+    if (s2?.prompt) expect(s2.prompt.length).toBeLessThanOrEqual(100_000);
+  });
+});
+
 describe('bundled marketplace plugins', () => {
   it('discovers official/community stubs when plugins/ is present', async () => {
     const root =

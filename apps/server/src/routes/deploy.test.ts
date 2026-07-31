@@ -583,6 +583,40 @@ describe('deploy routes Task 10 polish', () => {
     expect(body.data.ok).toBe(false);
   });
 
+  it('POST /check-link rejects invalid JSON, non-string, and control-char urls', async () => {
+    const badJson = await deploy.request('/check-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const nonStr = await deploy.request('/check-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 42 }),
+    });
+    expect(nonStr.status).toBe(400);
+    expect(((await nonStr.json()) as { error: string }).error).toMatch(/url/i);
+
+    const ctrl = await deploy.request('/check-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: `https://ok.example${'\n'}/` }),
+    });
+    expect(ctrl.status).toBe(400);
+  });
+
+  it('list ignores control-char workflowId/projectId/limit filters', async () => {
+    const res = await deploy.request(
+      `/?workflowId=${encodeURIComponent('ab\nc')}&projectId=${encodeURIComponent('x\0y')}&limit=${encodeURIComponent('10\n')}`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.data)).toBe(true);
+  });
+
   it('list filters by projectId', async () => {
     // Use a fake project id string (no FK on deployments.project_id)
     const row = createDeployment({

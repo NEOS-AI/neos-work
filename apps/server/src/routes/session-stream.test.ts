@@ -705,6 +705,62 @@ describe('session agent SSE (mocked orchestrator)', () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/No adapter/i);
   });
+
+  it('rejects overlong and null-byte content after API key gate', async () => {
+    const id = await createSession();
+    const over = 'x'.repeat(100_001);
+    const chatOver = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: over }),
+    });
+    expect(chatOver.status).toBe(400);
+    expect(((await chatOver.json()) as { error: string }).error).toMatch(/max length/i);
+
+    const agentOver = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: over }),
+    });
+    expect(agentOver.status).toBe(400);
+    expect(((await agentOver.json()) as { error: string }).error).toMatch(/max length/i);
+
+    const chatNul = await session.request(`/${id}/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: `hi${'\0'}` }),
+    });
+    expect(chatNul.status).toBe(400);
+    expect(((await chatNul.json()) as { error: string }).error).toMatch(/control characters/i);
+
+    const agentNul = await session.request(`/${id}/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: `hi${'\0'}` }),
+    });
+    expect(agentNul.status).toBe(400);
+    expect(((await agentNul.json()) as { error: string }).error).toMatch(/control characters/i);
+
+    // blank session id path params
+    expect(
+      (
+        await session.request('/%20/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ content: 'x' }),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await session.request('/%20/agent', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ content: 'x' }),
+        })
+      ).status,
+    ).toBe(404);
+  });
 });
 
 describe('models registry with google key', () => {
