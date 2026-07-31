@@ -331,7 +331,9 @@ export function maskSecret(raw: unknown, visible = 4): string {
   const s = raw.trim();
   if (!s) return '';
   if (s.length <= visible) return '*'.repeat(Math.min(s.length, 8));
-  return `${'*'.repeat(Math.max(4, s.length - visible))}${s.slice(-visible)}`;
+  // Cap mask length so multi-KB tokens do not explode UI/log strings
+  const starCount = Math.min(Math.max(4, s.length - visible), 32);
+  return `${'*'.repeat(starCount)}${s.slice(-visible)}`;
 }
 
 /**
@@ -356,27 +358,55 @@ export function scrubSecretsFromText(raw: unknown, knownSecrets: string[] = []):
   return text.slice(0, 2_000);
 }
 
+/** True if dotted IPv4 is loopback / private / link-local / CGNAT. */
+function isBlockedIpv4(a: number, b: number, _c: number, _d: number): boolean {
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true; // link-local / cloud metadata
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
+  return false;
+}
+
 /** True if host looks like loopback / private / link-local (check-link SSRF light). */
 export function isBlockedDeployCheckHost(hostname: string): boolean {
   if (typeof hostname !== 'string' || /[\0\r\n]/.test(hostname)) return true;
-  const h = hostname.trim().toLowerCase().replace(/\.$/, '');
+  // Strip brackets used for IPv6 literals in URLs
+  let h = hostname.trim().toLowerCase().replace(/\.$/, '');
+  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1);
   if (!h) return true;
-  if (h === 'localhost' || h === '0.0.0.0' || h === '::1' || h === '[::1]') return true;
-  if (h.endsWith('.localhost') || h.endsWith('.local')) return true;
+  if (h === 'localhost' || h === '0.0.0.0' || h === '::' || h === '::1') return true;
+  if (h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  // metadata hostnames (common SSRF targets)
+  if (h === 'metadata.google.internal' || h === 'metadata') return true;
   // IPv4
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    if (a === 10) return true;
-    if (a === 127) return true;
-    if (a === 0) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
+    return isBlockedIpv4(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]));
   }
-  // IPv6 local/link-local (coarse)
-  if (h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true;
+  // IPv4-mapped IPv6 (:ffff:127.0.0.1 or :ffff:7f00:1 hex form coarse)
+  const v4mapped = h.match(/^:?:ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i);
+  if (v4mapped) {
+    return isBlockedIpv4(
+      Number(v4mapped[1]),
+      Number(v4mapped[2]),
+      Number(v4mapped[3]),
+      Number(v4mapped[4]),
+    );
+  }
+  // IPv6 unique-local / link-local / loopback (coarse prefix)
+  if (
+    h === '0:0:0:0:0:0:0:1'
+    || h.startsWith('fc')
+    || h.startsWith('fd')
+    || h.startsWith('fe80')
+    || h.startsWith('::ffff:7f') // ::ffff:127.x hex-ish
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -400,8 +430,13 @@ export async function checkDeployLink(
 ): Promise<CheckDeployLinkResult> {
   const normalized = safeDeployHostUrl(rawUrl);
   if (!normalized) {
+    // Never echo control chars from bad client input into the response body
+    const safeEcho =
+      typeof rawUrl === 'string'
+        ? rawUrl.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 200)
+        : '';
     return {
-      url: typeof rawUrl === 'string' ? rawUrl.slice(0, 200) : '',
+      url: safeEcho,
       reachable: false,
       blocked: false,
       ok: false,
@@ -435,20 +470,83 @@ export async function checkDeployLink(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // redirect:manual — avoid automatic hops onto private IPs via open redirects
     let res = await fetchFn(normalized, {
       method: 'HEAD',
-      redirect: 'follow',
+      redirect: 'manual',
       signal: controller.signal,
     });
     // Some CDNs reject HEAD — fall back to GET
     if (res.status === 405 || res.status === 501) {
       res = await fetchFn(normalized, {
         method: 'GET',
-        redirect: 'follow',
+        redirect: 'manual',
         signal: controller.signal,
         headers: { Range: 'bytes=0-0' },
       });
     }
+
+    // One-hop redirect: only follow when Location host is also public
+    if (res.status >= 300 && res.status < 400) {
+      const locRaw = res.headers?.get?.('location') ?? '';
+      if (locRaw && !/[\0\r\n]/.test(locRaw)) {
+        let nextUrl: string | undefined;
+        try {
+          nextUrl = safeDeployHostUrl(new URL(locRaw, normalized).href);
+        } catch {
+          nextUrl = undefined;
+        }
+        if (!nextUrl) {
+          return {
+            url: normalized,
+            reachable: false,
+            blocked: false,
+            status: res.status,
+            ok: false,
+            reason: 'Redirect target is not a valid http(s) URL',
+          };
+        }
+        const nextHost = new URL(nextUrl).hostname;
+        if (isBlockedDeployCheckHost(nextHost)) {
+          return {
+            url: normalized,
+            reachable: false,
+            blocked: true,
+            status: res.status,
+            ok: false,
+            reason: 'Redirect target host is blocked (private/loopback)',
+          };
+        }
+        // Follow one hop only
+        res = await fetchFn(nextUrl, {
+          method: 'GET',
+          redirect: 'manual',
+          signal: controller.signal,
+          headers: { Range: 'bytes=0-0' },
+        });
+        // Second redirect → report without further follow
+        if (res.status >= 300 && res.status < 400) {
+          return {
+            url: nextUrl,
+            reachable: true,
+            blocked: false,
+            status: res.status,
+            ok: true,
+            reason: 'Redirect (not followed further)',
+          };
+        }
+      } else {
+        return {
+          url: normalized,
+          reachable: true,
+          blocked: false,
+          status: res.status,
+          ok: true,
+          reason: 'Redirect without usable Location',
+        };
+      }
+    }
+
     const status = res.status;
     const reachable = status > 0 && status < 500;
     const contentType = res.headers?.get?.('content-type') ?? undefined;

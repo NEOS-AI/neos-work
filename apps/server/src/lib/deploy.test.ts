@@ -579,6 +579,11 @@ describe('isBlockedDeployCheckHost', () => {
     expect(isBlockedDeployCheckHost('192.168.1.1')).toBe(true);
     expect(isBlockedDeployCheckHost('172.16.0.1')).toBe(true);
     expect(isBlockedDeployCheckHost('169.254.1.1')).toBe(true);
+    expect(isBlockedDeployCheckHost('100.64.1.2')).toBe(true);
+    expect(isBlockedDeployCheckHost('::1')).toBe(true);
+    expect(isBlockedDeployCheckHost('[::1]')).toBe(true);
+    expect(isBlockedDeployCheckHost('::ffff:127.0.0.1')).toBe(true);
+    expect(isBlockedDeployCheckHost('metadata.google.internal')).toBe(true);
     expect(isBlockedDeployCheckHost('example.com')).toBe(false);
   });
 });
@@ -590,6 +595,25 @@ describe('checkDeployLink', () => {
 
   it('blocks private hosts without fetch', async () => {
     const r = await checkDeployLink('http://127.0.0.1/');
+    expect(r.blocked).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+
+  it('scrubs control chars from invalid url echo', async () => {
+    const r = await checkDeployLink('http://bad\nhost');
+    expect(r.ok).toBe(false);
+    expect(r.url).not.toMatch(/\n/);
+  });
+
+  it('blocks redirect to private host', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 302,
+        headers: { get: (h: string) => (h.toLowerCase() === 'location' ? 'http://127.0.0.1/secret' : null) },
+      }),
+    );
+    const r = await checkDeployLink('https://demo.example.app');
     expect(r.blocked).toBe(true);
     expect(r.ok).toBe(false);
   });

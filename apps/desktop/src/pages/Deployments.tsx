@@ -217,11 +217,13 @@ export function Deployments() {
   };
 
   const handleCheckLink = async (id: string, url: string | undefined) => {
-    if (!client || !url) return;
+    if (!client) return;
+    const safeUrl = safeDeployUrl(url);
+    if (!safeUrl) return;
     const entityId = safeEntityId(id) || id;
     setLinkCheck((prev) => ({ ...prev, [entityId]: '…' }));
     try {
-      const res = await client.checkDeployLink(url);
+      const res = await client.checkDeployLink(safeUrl);
       if (res.ok && res.data) {
         const label = res.data.blocked
           ? 'blocked'

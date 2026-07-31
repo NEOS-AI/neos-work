@@ -1,9 +1,12 @@
 {
-  "name": "@neos-work/mcp-client",
+  "name": "@neos-work/cli",
   "version": "0.5.17",
   "private": true,
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "neos": "./dist/index.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -14,16 +17,19 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch",
-    "clean": "rm -rf dist",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.15.0",
-    "@neos-work/core": "workspace:*"
+    "@neos-work/shared": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   }

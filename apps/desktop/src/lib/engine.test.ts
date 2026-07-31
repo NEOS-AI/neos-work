@@ -1930,4 +1930,61 @@ describe('EngineClient', () => {
     expect(liveBody.projectId).toBe('p1');
   });
 
+
+  it('live artifact refresh/delete and tool token APIs', async () => {
+    const client = new EngineClient('http://engine.test');
+
+    await expect(client.refreshLiveArtifact('', 'p1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid id',
+    });
+    await expect(client.refreshLiveArtifact('a1', `p${'\n'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid id',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { artifact: { id: 'a1' }, refresh: { id: 'r1' } } }),
+    );
+    const ref = await client.refreshLiveArtifact('a1', 'p1', { title: 'x' });
+    expect(ref.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/refresh/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    const body = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(body.inputs).toEqual({ title: 'x' });
+
+    await expect(client.deleteLiveArtifact(`a${'\0'}`, 'p1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid id',
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: null }));
+    const del = await client.deleteLiveArtifact('a1', 'p1');
+    expect(del.ok).toBe(true);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await expect(client.createProjectToolToken(`p${'\n'}1`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: {
+          token: 'tok',
+          projectId: 'p1',
+          capabilities: ['live-artifacts'],
+          expiresAt: 't',
+        },
+      }),
+    );
+    const tok = await client.createProjectToolToken('p1', {
+      capabilities: ['live-artifacts'],
+      runId: 'run-1',
+    });
+    expect(tok.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/tool-tokens/);
+    const tokBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(tokBody.projectId).toBe('p1');
+    expect(tokBody.runId).toBe('run-1');
+  });
+
 });

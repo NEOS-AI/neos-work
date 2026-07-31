@@ -118,7 +118,7 @@ app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.16',
+    version: '0.5.17',
   });
 });
 

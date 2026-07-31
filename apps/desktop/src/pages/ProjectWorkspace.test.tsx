@@ -19,6 +19,10 @@ const updateProject = vi.fn();
 const createProjectRun = vi.fn();
 const listProjectRunEvents = vi.fn();
 const getProjectRun = vi.fn();
+const listLiveArtifacts = vi.fn();
+const createLiveArtifact = vi.fn();
+const refreshLiveArtifact = vi.fn();
+const deleteLiveArtifact = vi.fn();
 
 const client = {
   getProject,
@@ -37,6 +41,10 @@ const client = {
   createProjectRun,
   listProjectRunEvents,
   getProjectRun,
+  listLiveArtifacts,
+  createLiveArtifact,
+  refreshLiveArtifact,
+  deleteLiveArtifact,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({
@@ -55,12 +63,14 @@ vi.mock('../components/workflow/ConfirmLeaveModal.js', () => ({
   ConfirmLeaveModal: () => <div data-testid="confirm-leave">leave</div>,
 }));
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, opts?: Record<string, string>) =>
-      opts?.selector ? `${key}:${opts.selector}` : key,
-  }),
-}));
+vi.mock('react-i18next', () => {
+  // Stable t identity — avoids re-creating loadLiveArtifacts/loadProject each render
+  const t = (key: string, opts?: Record<string, string>) =>
+    opts?.selector ? `${key}:${opts.selector}` : key;
+  return {
+    useTranslation: () => ({ t }),
+  };
+});
 
 // Lightweight mock — avoid requiring built dist for unit tests
 vi.mock('@neos-work/design-editor', () => {
@@ -231,6 +241,10 @@ describe('ProjectWorkspace', () => {
     createProjectRun.mockReset();
     listProjectRunEvents.mockReset();
     getProjectRun.mockReset();
+    listLiveArtifacts.mockReset().mockResolvedValue({ ok: true, data: [] });
+    createLiveArtifact.mockReset();
+    refreshLiveArtifact.mockReset();
+    deleteLiveArtifact.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -750,4 +764,189 @@ describe('ProjectWorkspace', () => {
       expect(listProjectFiles.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  it('loads live artifacts tab and creates a live artifact', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    let items: Array<Record<string, unknown>> = [];
+    listLiveArtifacts.mockImplementation(async () => ({ ok: true, data: items }));
+    createLiveArtifact.mockImplementation(async (input: {
+      projectId: string;
+      name: string;
+      sourceTemplate?: string;
+      inputs?: Record<string, unknown>;
+    }) => {
+      const row = {
+        id: 'live-1',
+        projectId: input.projectId,
+        name: input.name,
+        content: '<h1>Hello</h1><p>Live artifact</p>',
+        refreshCount: 0,
+        sidecarPath: '.neos/live/live-1.json',
+        createdAt: 't',
+        updatedAt: 't',
+      };
+      items = [row];
+      return { ok: true, data: row };
+    });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await waitFor(() => {
+      expect(listLiveArtifacts).toHaveBeenCalledWith('proj-1');
+      expect(screen.getByTestId('project-live')).toBeInTheDocument();
+    });
+    expect(screen.getByText('project.liveEmpty')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('live-create'));
+    await waitFor(() => {
+      expect(createLiveArtifact).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'proj-1',
+          name: 'Live card',
+          sourceTemplate: expect.stringContaining('{{title}}'),
+        }),
+      );
+      expect(screen.getByTestId('live-item-live-1')).toBeInTheDocument();
+    });
+    // select shows preview
+    await user.click(screen.getByText('Live card'));
+    await waitFor(() => expect(screen.getByTestId('live-preview')).toBeInTheDocument());
+  });
+
+  it('rejects invalid live name and invalid inputs JSON', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await waitFor(() => expect(screen.getByTestId('project-live')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId('live-name'), { target: { value: `bad${'\0'}name` } });
+    await user.click(screen.getByTestId('live-create'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('project.liveInvalidName'));
+    expect(createLiveArtifact).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('live-name'), { target: { value: 'Ok Live' } });
+    fireEvent.change(screen.getByTestId('live-inputs'), { target: { value: '{not-json' } });
+    await user.click(screen.getByTestId('live-create'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('project.liveInvalidInputs'));
+    expect(createLiveArtifact).not.toHaveBeenCalled();
+  });
+
+  it('shows live load error and create failure', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listLiveArtifacts.mockResolvedValue({ ok: false, error: `live${'\n'}load${'\0'}` });
+    createLiveArtifact.mockResolvedValue({ ok: false, error: 'create denied' });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('live load');
+    });
+
+    // recover list so create can be attempted
+    listLiveArtifacts.mockResolvedValue({ ok: true, data: [] });
+    fireEvent.change(screen.getByTestId('live-name'), { target: { value: 'X' } });
+    // clear error path still via create fail
+    await user.click(screen.getByTestId('live-create'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('create denied'));
+  });
+
+  it('shows live load error when list throws', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listLiveArtifacts.mockRejectedValue(new Error(`boom${'\n'}list`));
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('boom list'));
+  });
+
+  it('refreshes and deletes a live artifact', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    const row = {
+      id: 'live-2',
+      projectId: 'proj-1',
+      name: 'Card',
+      content: '<p>v1</p>',
+      refreshCount: 1,
+      createdAt: 't',
+      updatedAt: 't',
+    };
+    let items = [row];
+    listLiveArtifacts.mockImplementation(async () => ({ ok: true, data: items }));
+    refreshLiveArtifact.mockImplementation(async () => {
+      items = [{ ...row, content: '<p>v2</p>', refreshCount: 2 }];
+      return { ok: true, data: { artifact: items[0], refresh: { id: 'r1' } } };
+    });
+    deleteLiveArtifact.mockImplementation(async () => {
+      items = [];
+      return { ok: true, data: null };
+    });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await waitFor(() => expect(screen.getByTestId('live-item-live-2')).toBeInTheDocument());
+
+    await user.click(screen.getByText('project.liveRefresh'));
+    await waitFor(() => {
+      expect(refreshLiveArtifact).toHaveBeenCalledWith('live-2', 'proj-1');
+      expect(screen.getByText(/refreshes: 2/)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'common.delete' }));
+    await waitFor(() => {
+      expect(deleteLiveArtifact).toHaveBeenCalledWith('live-2', 'proj-1');
+      expect(screen.getByText('project.liveEmpty')).toBeInTheDocument();
+    });
+  });
+
+  it('shows live refresh and delete errors', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listLiveArtifacts.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'live-3',
+          projectId: 'proj-1',
+          name: 'Z',
+          content: '<p>z</p>',
+          refreshCount: 0,
+          createdAt: 't',
+          updatedAt: 't',
+        },
+      ],
+    });
+    refreshLiveArtifact.mockResolvedValue({ ok: false, error: 'refresh no' });
+    deleteLiveArtifact.mockResolvedValue({ ok: false, error: 'delete no' });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await waitFor(() => expect(screen.getByTestId('live-item-live-3')).toBeInTheDocument());
+
+    await user.click(screen.getByText('project.liveRefresh'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('refresh no'));
+
+    await user.click(screen.getByRole('button', { name: 'common.delete' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('delete no'));
+  });
+
+  it('shows live create throw error', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listLiveArtifacts.mockResolvedValue({ ok: true, data: [] });
+    createLiveArtifact.mockRejectedValue(new Error(`create${'\0'}boom`));
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-live'));
+    await user.click(screen.getByTestId('live-create'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('createboom'));
+  });
+
 });
