@@ -16,7 +16,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 export const NEOS_MCP_SERVER_NAME = 'neos-work';
-export const NEOS_MCP_DEFAULT_VERSION = '0.5.24';
+export const NEOS_MCP_DEFAULT_VERSION = '0.5.25';
 
 export interface NeosMcpProjectSummary {
   id: string;
@@ -100,12 +100,16 @@ function asPath(raw: unknown): string {
   if (/[\r\n]/.test(raw)) return '';
   const s = raw.trim();
   if (!s || s.length > 1024) return '';
-  if (s.includes('..')) return '';
+  // Reject absolute paths and parent-segment traversal (not bare "foo..bar")
+  if (s.startsWith('/') || /^[A-Za-z]:[\\/]/.test(s)) return '';
+  const parts = s.replace(/\\/g, '/').split('/');
+  if (parts.some((p) => p === '..')) return '';
   return s;
 }
 
 function asContent(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
+  if (/\0/.test(raw)) return null;
   if (raw.length > 2 * 1024 * 1024) return null;
   return raw;
 }

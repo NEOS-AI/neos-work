@@ -271,3 +271,43 @@ describe('domain-pack-store install variants', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe('domain-pack-store resolve without NEOS_DATA_DIR', () => {
+  it('falls back when NEOS_DATA_DIR unset', () => {
+    const prev = process.env.NEOS_DATA_DIR;
+    delete process.env.NEOS_DATA_DIR;
+    try {
+      const dir = resolveDomainPacksDir();
+      expect(dir).toMatch(/domain-packs$/);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_DATA_DIR;
+      else process.env.NEOS_DATA_DIR = prev;
+    }
+  });
+
+  it('video-like: zip with invalid nested traversal entries is skipped safely', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
+    archive.append('x', { name: '../evil.txt' });
+    archive.append('y', { name: 'nested/deep.md' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    unregisterPack('legal');
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(true);
+  });
+
+  it('setInstalledPackEnabled reloads from disk when not in registry', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const dir = path.join(packsDir, 'legal');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'pack.json'), JSON.stringify(SAMPLE), 'utf8');
+    await fs.writeFile(path.join(dir, 'state.json'), JSON.stringify({ enabled: true }), 'utf8');
+    unregisterPack('legal');
+    const r = await setInstalledPackEnabled('legal', false);
+    expect(r.ok).toBe(true);
+    // cleanup
+    await uninstallInstalledPack('legal');
+  });
+});

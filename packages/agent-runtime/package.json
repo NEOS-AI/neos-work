@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/agent-runtime",
-  "version": "0.5.24",
+  "version": "0.5.25",
   "private": true,
   "license": "MIT",
   "type": "module",

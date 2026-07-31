@@ -9,7 +9,7 @@ import {
 
 function mockBackend(partial: Partial<NeosMcpBackend> = {}): NeosMcpBackend {
   return {
-    status: vi.fn(async () => ({ status: 'ok', version: '0.5.24', serverUrl: 'http://127.0.0.1:3000' })),
+    status: vi.fn(async () => ({ status: 'ok', version: '0.5.25', serverUrl: 'http://127.0.0.1:3000' })),
     listProjects: vi.fn(async () => [{ id: 'p1', name: 'Demo', baseDir: '/tmp/p1' }]),
     listFiles: vi.fn(async () => [{ path: 'index.html', type: 'file', size: 12 }]),
     readFile: vi.fn(async (_pid, path) => ({ path, content: '<html/>' })),
@@ -92,6 +92,28 @@ describe('dispatchNeosMcpTool', () => {
     );
     expect(res.isError).toBe(true);
     expect(backend.readFile).not.toHaveBeenCalled();
+  });
+
+  it('neos_files_read allows dotted names that are not parent segments', async () => {
+    const backend = mockBackend();
+    const res = await dispatchNeosMcpTool(
+      backend,
+      'neos_files_read',
+      { projectId: 'p1', path: 'docs/foo..bar.html' },
+    );
+    expect(res.isError).toBeFalsy();
+    expect(backend.readFile).toHaveBeenCalledWith('p1', 'docs/foo..bar.html');
+  });
+
+  it('neos_files_write rejects null-byte content', async () => {
+    const backend = mockBackend();
+    const res = await dispatchNeosMcpTool(
+      backend,
+      'neos_files_write',
+      { projectId: 'p1', path: 'a.txt', content: 'hi\0there' },
+    );
+    expect(res.isError).toBe(true);
+    expect(backend.writeFile).not.toHaveBeenCalled();
   });
 
   it('neos_files_write writes content', async () => {

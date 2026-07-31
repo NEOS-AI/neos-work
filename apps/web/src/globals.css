@@ -66,3 +66,54 @@ button, input, textarea {
   background: var(--bg-elevated);
 }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+
+/* Design Editor workspace (Task 12 — full-bleed layout) */
+.editor-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.editor-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+.editor-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+.editor-files {
+  flex: 0 0 200px;
+  overflow: auto;
+  border-radius: 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  margin: 0;
+}
+.editor-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.editor-ai {
+  flex: 0 0 240px;
+  overflow: auto;
+  border-radius: 0;
+  border: none;
+  border-left: 1px solid var(--border);
+  margin: 0;
+}
+@media (max-width: 900px) {
+  .editor-body { flex-direction: column; }
+  .editor-files, .editor-ai { flex: none; max-height: 160px; border-right: none; border-left: none; border-bottom: 1px solid var(--border); }
+}

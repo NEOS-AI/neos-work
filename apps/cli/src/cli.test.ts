@@ -33,7 +33,7 @@ describe('runCli', () => {
       stdout: (s) => lines.push(s),
     });
     expect(code).toBe(EXIT.OK);
-    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.5.24' });
+    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.5.25' });
   });
 
   it('status when daemon healthy', async () => {

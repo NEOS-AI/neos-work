@@ -77,3 +77,30 @@ describe('resolveWebDist candidates', () => {
     expect(resolveWebDist({ NEOS_WEB_DIST: d }, { cwd: '/tmp', moduleDir: '/tmp' })).toBeNull();
   });
 });
+
+describe('resolveWebDist without moduleDir', () => {
+  it('resolves via import.meta moduleDir when candidates exist under package layout', () => {
+    // Calling without moduleDir exercises fileURLToPath(import.meta.url) path
+    const result = resolveWebDist({ NEOS_WEB_DIST: undefined });
+    // May be null in this workspace layout or a real dist — must not throw
+    expect(result === null || typeof result === 'string').toBe(true);
+  });
+
+  it('finds ../web/dist under cwd parent layout', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-web-parent-'));
+    dirs.push(root);
+    const monorepo = path.join(root, 'apps', 'server');
+    fs.mkdirSync(monorepo, { recursive: true });
+    const dist = path.join(root, 'apps', 'web', 'dist');
+    fs.mkdirSync(dist, { recursive: true });
+    fs.writeFileSync(path.join(dist, 'index.html'), '<html/>');
+    // cwd = apps/server → candidates include cwd/../web/dist? 
+    // candidates: moduleDir/../../web/dist, cwd/apps/web/dist, cwd/../web/dist
+    const resolved = resolveWebDist(
+      {},
+      { cwd: monorepo, moduleDir: path.join(monorepo, 'src', 'lib') },
+    );
+    // moduleDir ../../web/dist from apps/server/src/lib → apps/web/dist
+    expect(resolved).toBe(path.resolve(dist));
+  });
+});

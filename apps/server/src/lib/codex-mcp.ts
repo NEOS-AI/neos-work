@@ -96,23 +96,21 @@ export async function getCodexMcpStatus(
 
   const get = await runner(['mcp', 'get', CODEX_MCP_NAME], { timeoutMs: 8_000 });
   const combined = `${get.stdout}\n${get.stderr}`.toLowerCase();
+  const missingPhrase = /not found|unknown|no such|does not exist|missing/i.test(combined);
   const installed =
     get.code === 0
-    && !/not found|unknown|no such|does not exist|missing/i.test(combined)
-    && (combined.includes(CODEX_MCP_NAME) || combined.includes('neos') || get.stdout.trim().length > 0);
-
-  // Heuristic: if exit 0 with empty body, still treat as not clearly installed
-  const clearlyMissing =
-    get.code !== 0
-    || /not found|unknown|no such|does not exist|missing/i.test(combined);
+    && !missingPhrase
+    && get.stdout.trim().length > 0
+    && (combined.includes(CODEX_MCP_NAME) || combined.includes('neos'));
 
   return {
     available: true,
-    installed: installed && !clearlyMissing ? true : get.code === 0 && get.stdout.trim().length > 0,
+    installed,
     codexPath: 'codex',
-    detail: clearlyMissing && get.code !== 0
-      ? scrub(get.stderr || get.stdout || 'not installed')
-      : get.stdout.trim() || null,
+    detail:
+      !installed
+        ? scrub(get.stderr || get.stdout || 'not installed')
+        : get.stdout.trim() || null,
     raw: scrub(`${get.stdout}\n${get.stderr}`.trim(), 2000) || undefined,
   };
 }
@@ -121,6 +119,16 @@ export interface CodexMcpInstallInput {
   command: string;
   args: string[];
   env: Record<string, string>;
+}
+
+/** Redact secret env values for API / log display. */
+export function redactCodexCommandLine(cmdline: string): string {
+  if (typeof cmdline !== 'string' || !cmdline) return '';
+  return cmdline
+    .replace(/(NEOS_AUTH_TOKEN=)([^\s]+)/g, '$1***')
+    .replace(/(--env\s+NEOS_AUTH_TOKEN=)([^\s]+)/g, '$1***')
+    .replace(/[\0\r\n]+/g, ' ')
+    .slice(0, 2_000);
 }
 
 export async function installCodexMcp(
@@ -139,17 +147,19 @@ export async function installCodexMcp(
   const cliArgs = ['mcp', 'add', CODEX_MCP_NAME];
   for (const [k, v] of Object.entries(input.env ?? {})) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) continue;
-    if (typeof v !== 'string' || /[\0\r\n]/.test(v) || v.length > 500) continue;
+    // Allow longer tokens (daemon auth can be 64+ hex); still cap reasonably
+    if (typeof v !== 'string' || /[\0\r\n]/.test(v) || v.length > 8_192) continue;
     cliArgs.push('--env', `${k}=${v}`);
   }
   cliArgs.push('--', command, ...args);
 
   const result = await runner(cliArgs, { timeoutMs: 20_000 });
+  // Never return the raw token-bearing command line to API clients
   return {
     ok: result.code === 0,
     stdout: result.stdout,
     stderr: result.stderr,
-    command: ['codex', ...cliArgs].join(' '),
+    command: redactCodexCommandLine(['codex', ...cliArgs].join(' ')),
   };
 }
 

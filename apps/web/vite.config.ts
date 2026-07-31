@@ -3,6 +3,21 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
+  optimizeDeps: {
+    include: [
+      'codemirror',
+      '@codemirror/view',
+      '@codemirror/state',
+      '@codemirror/commands',
+      '@codemirror/language',
+      '@codemirror/lang-html',
+      '@codemirror/lang-css',
+      '@codemirror/lang-javascript',
+    ],
+  },
   server: {
     port: 5173,
     strictPort: true,

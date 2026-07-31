@@ -28,3 +28,20 @@ describe('resolveDbDir / resolveDbPath', () => {
     expect(resolveDbDir()).toBe(path.join(os.homedir(), '.neos-work'));
   });
 });
+
+describe('closeDb', () => {
+  it('closes singleton safely and can re-open', async () => {
+    const { closeDb, getDb } = await import('./schema.js');
+    // getDb may already be open from other tests
+    const db1 = getDb();
+    expect(db1).toBeTruthy();
+    closeDb();
+    const db2 = getDb();
+    expect(db2).toBeTruthy();
+    // second close is no-op
+    closeDb();
+    closeDb();
+    // reopen for rest of suite
+    getDb();
+  });
+});

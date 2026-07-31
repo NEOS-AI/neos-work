@@ -43,3 +43,12 @@ describe('hmacSha256Hex', () => {
     expect(a).toBe(b);
   });
 });
+
+  it('rejects non-string secret/message', async () => {
+    await expect(hmacSha256Hex(1 as unknown as string, 'body')).rejects.toThrow(
+      /must be strings/i,
+    );
+    await expect(hmacSha256Hex('secret', null as unknown as string)).rejects.toThrow(
+      /must be strings/i,
+    );
+  });

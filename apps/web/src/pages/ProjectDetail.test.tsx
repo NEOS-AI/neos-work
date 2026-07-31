@@ -1,0 +1,137 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+const writeFile = vi.fn(async () => ({ ok: true, data: { contentHash: 'h1' } }));
+const createRun = vi.fn(async () => ({ ok: true, data: { id: 'run1' } }));
+
+vi.mock('../lib/auth.js', () => ({
+  loadConnection: () => ({
+    serverUrl: 'http://127.0.0.1:3000',
+    token: 'test-token',
+  }),
+}));
+
+vi.mock('../lib/api.js', () => {
+  class ApiError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  }
+  return {
+    ApiError,
+    WebApiClient: class {
+      getProject = vi.fn(async () => ({
+        ok: true,
+        data: { id: 'p1', name: 'Demo', entryFile: 'index.html' },
+      }));
+      listFiles = vi.fn(async () => ({
+        ok: true,
+        data: [
+          { path: 'index.html', type: 'file' },
+          { path: 'style.css', type: 'file' },
+        ],
+      }));
+      readFile = vi.fn(async (_pid: string, path: string) => ({
+        ok: true,
+        data: {
+          path,
+          content: path === 'index.html' ? '<html><body><h1 id="hero">Hi</h1></body></html>' : 'body{}',
+          hash: 'abc',
+        },
+      }));
+      writeFile = writeFile;
+      createRun = createRun;
+    },
+  };
+});
+
+vi.mock('@neos-work/design-editor', async () => {
+  const actual = await vi.importActual<typeof import('@neos-work/design-editor')>(
+    '@neos-work/design-editor',
+  );
+  return {
+    ...actual,
+    DesignEditor: (props: {
+      buffer: { path: string | null; local: string };
+      onEdit?: (c: string) => void;
+      onSave?: () => void;
+      saving?: boolean;
+    }) => (
+      <div data-testid="design-editor">
+        <div data-testid="editor-path">{props.buffer.path}</div>
+        <textarea
+          data-testid="file-editor"
+          value={props.buffer.local}
+          onChange={(e) => props.onEdit?.(e.target.value)}
+        />
+        <button type="button" data-testid="file-save" onClick={() => props.onSave?.()}>
+          {props.saving ? '…' : 'Save'}
+        </button>
+      </div>
+    ),
+  };
+});
+
+const { ProjectDetail } = await import('./ProjectDetail.js');
+
+function renderProject() {
+  return render(
+    <MemoryRouter initialEntries={['/projects/p1']}>
+      <Routes>
+        <Route path="/projects/:id" element={<ProjectDetail />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe('ProjectDetail Design Editor', () => {
+  beforeEach(() => {
+    writeFile.mockClear();
+    createRun.mockClear();
+  });
+
+  it('loads project and shows Design Editor for entry file', async () => {
+    renderProject();
+    await waitFor(() => {
+      expect(screen.getByTestId('design-editor')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('editor-path').textContent).toBe('index.html');
+    expect(screen.getByTestId('file-tree')).toBeInTheDocument();
+    expect(screen.getByText('Demo')).toBeInTheDocument();
+  });
+
+  it('edits and saves via Design Editor host', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('file-editor'));
+    const ta = screen.getByTestId('file-editor') as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: '<html><body>v2</body></html>' } });
+    await waitFor(() => expect(screen.getByTestId('web-dirty')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('file-save'));
+    await waitFor(() => {
+      expect(writeFile).toHaveBeenCalledWith(
+        'p1',
+        'index.html',
+        '<html><body>v2</body></html>',
+      );
+    });
+  });
+
+  it('runs Edit with AI with prompt', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('ai-prompt'));
+    fireEvent.change(screen.getByTestId('ai-prompt'), {
+      target: { value: 'Make the hero blue' },
+    });
+    fireEvent.click(screen.getByTestId('ai-run'));
+    await waitFor(() => {
+      expect(createRun).toHaveBeenCalled();
+    });
+    const calls = createRun.mock.calls as unknown as Array<[ { projectId: string; prompt: string } ]>;
+    const arg = calls[0]?.[0];
+    expect(arg?.projectId).toBe('p1');
+    expect(arg?.prompt).toMatch(/hero blue/i);
+  });
+});

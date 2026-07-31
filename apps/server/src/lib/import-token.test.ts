@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearImportTokens,
   consumeImportToken,
@@ -110,5 +110,19 @@ describe('import-token additional paths', () => {
 
   it('required whitespace-only token treated as missing', () => {
     expect(() => consumeImportToken('\t  ', '/tmp', { required: true })).toThrow(/required/);
+  });
+});
+
+describe('import-token expire and purge', () => {
+  it('rejects expired token via system time advance', () => {
+    const dir = makeDir();
+    vi.useFakeTimers();
+    try {
+      const issued = issueImportToken(dir, { ttlMs: 5_000 });
+      vi.advanceTimersByTime(6_000);
+      expect(() => consumeImportToken(issued.token, dir)).toThrow(/expired|Unknown/i);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

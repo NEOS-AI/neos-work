@@ -218,3 +218,56 @@ describe('HarnessSelector', () => {
     expect(document.body.textContent).not.toMatch(/badtool/);
   });
 });
+
+describe('HarnessSelector load errors and control-char', () => {
+  beforeEach(() => {
+    listHarnesses.mockReset();
+  });
+
+  it('shows API error when list fails', async () => {
+    listHarnesses.mockResolvedValue({ ok: false, error: `workers${'\n'}down` });
+    render(<HarnessSelector nodeType="agent_coding" value="" onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText('workers down')).toBeInTheDocument();
+    });
+  });
+
+  it('shows scrubbed error when list throws', async () => {
+    listHarnesses.mockRejectedValue(new Error(`boom${'\0'}!`));
+    render(<HarnessSelector nodeType="agent_coding" value="" onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getByText(/boom/)).toBeInTheDocument();
+    });
+  });
+
+  it('uses listWorkers when available and ignores control-char value', async () => {
+    const listWorkers = vi.fn().mockResolvedValue({ ok: true, data: harnesses });
+    const clientWithWorkers = { listHarnesses, listWorkers };
+    vi.doMock('../../hooks/useEngine.js', () => ({
+      useEngine: () => ({ client: clientWithWorkers }),
+    }));
+    // Re-render with patched client by replacing client module binding:
+    // The mock is already set; mutate client object instead
+    Object.assign(client, { listWorkers });
+    render(
+      <HarnessSelector nodeType="agent_coding" value={`h-code${'\0'}`} onChange={() => {}} />,
+    );
+    await waitFor(() => expect(listWorkers).toHaveBeenCalled());
+    const select = await screen.findByRole('combobox');
+    expect((select as HTMLSelectElement).value).toBe('');
+    delete (client as { listWorkers?: unknown }).listWorkers;
+  });
+
+  it('clears selection when empty option chosen', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    listHarnesses.mockResolvedValue({ ok: true, data: harnesses });
+    render(
+      <HarnessSelector nodeType="agent_coding" value="h-code" onChange={onChange} />,
+    );
+    const select = await screen.findByRole('combobox');
+    await waitFor(() => expect(select.querySelectorAll('option').length).toBeGreaterThan(1));
+    await user.selectOptions(select, '');
+    expect(onChange).toHaveBeenCalledWith('');
+  });
+});

@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/web",
-  "version": "0.5.24",
+  "version": "0.5.25",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,6 +13,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@neos-work/design-editor": "workspace:*",
     "@neos-work/shared": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

@@ -266,3 +266,18 @@ describe('project-archive symlink guards (Task 14)', () => {
     }
   });
 });
+
+describe('project-archive edge cases', () => {
+  it('rejects empty and invalid zip buffers', async () => {
+    expect(await parseProjectZipBuffer(Buffer.alloc(0))).toMatchObject({ ok: false });
+    expect(await parseProjectZipBuffer(Buffer.from('not-a-zip'))).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it('projectZipFilename sanitizes name', () => {
+    expect(projectZipFilename('My Project!')).toMatch(/\.zip$/i);
+    expect(projectZipFilename('')).toBe('project.neos-project.zip');
+    expect(projectZipFilename('a/b\\c')).toMatch(/^a_b_c\.neos-project\.zip$/);
+  });
+});

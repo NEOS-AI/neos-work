@@ -347,3 +347,68 @@ describe('live video poll path', () => {
     ).rejects.toThrow(/prompt is required/i);
   });
 });
+
+describe('media-generator more edge paths', () => {
+  it('marks job failed when polled status is failed', async () => {
+    vi.spyOn(mediaProviders, 'resolveMediaProvider').mockReturnValue({
+      def: mediaProviders.getProviderDef('xai')!,
+      configured: true,
+      apiKey: 'xkey',
+      baseURL: 'https://api.x.ai/v1',
+    } as ReturnType<typeof mediaProviders.resolveMediaProvider>);
+
+    const fetchImpl = vi.fn(async (url: string, init?: { method?: string }) => {
+      const u = String(url);
+      if (init?.method === 'POST' || (u.endsWith('/videos/generations') && !u.includes('job-'))) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 'job-fail-1', status: 'running' }),
+          text: async () => '',
+          headers: { get: () => null },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'failed', error: { message: 'provider boom' } }),
+        text: async () => '',
+        headers: { get: () => null },
+      };
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+
+    const out = await generateMediaUnified({
+      surface: 'video',
+      provider: 'xai',
+      prompt: 'will fail',
+    });
+    if (out.surface === 'video') {
+      let job = getMediaJob(out.jobId);
+      for (let i = 0; i < 40 && job && (job.status === 'pending' || job.status === 'running'); i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        job = getMediaJob(out.jobId);
+      }
+      expect(job?.status).toBe('failed');
+      expect(job?.error).toMatch(/boom|failed/i);
+    }
+  }, 15_000);
+
+  it('google image fails when base64 exceeds size', async () => {
+    // 16MB+1 decoded size
+    const big = Buffer.alloc(16 * 1024 * 1024 + 10, 1);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          predictions: [{ bytesBase64Encoded: big.toString('base64') }],
+        }),
+        text: async () => '',
+      }),
+    );
+    await expect(generateGoogleImage({ prompt: 'big', apiKey: 'k' })).rejects.toThrow(
+      /max size/i,
+    );
+  });
+});

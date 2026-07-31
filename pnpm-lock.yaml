@@ -251,6 +251,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@neos-work/design-editor':
+        specifier: workspace:*
+        version: link:../../packages/design-editor
       '@neos-work/shared':
         specifier: workspace:*
         version: link:../../packages/shared

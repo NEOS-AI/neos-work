@@ -42,7 +42,7 @@ describe('codex-mcp', () => {
       {
         command: '/usr/bin/neos',
         args: ['mcp', 'serve'],
-        env: { NEOS_SERVER_URL: 'http://127.0.0.1:3000', NEOS_AUTH_TOKEN: 't' },
+        env: { NEOS_SERVER_URL: 'http://127.0.0.1:3000', NEOS_AUTH_TOKEN: 'secret-token-value' },
       },
       runner,
     );
@@ -54,12 +54,15 @@ describe('codex-mcp', () => {
       '--env',
       'NEOS_SERVER_URL=http://127.0.0.1:3000',
       '--env',
-      'NEOS_AUTH_TOKEN=t',
+      'NEOS_AUTH_TOKEN=secret-token-value',
       '--',
       '/usr/bin/neos',
       'mcp',
       'serve',
     ]);
+    // API-facing command line must not leak the token
+    expect(res.command).toContain('NEOS_AUTH_TOKEN=***');
+    expect(res.command).not.toContain('secret-token-value');
   });
 
   it('rejects bad command on install', async () => {

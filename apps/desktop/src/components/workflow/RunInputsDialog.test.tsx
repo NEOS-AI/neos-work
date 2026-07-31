@@ -186,3 +186,55 @@ describe('RunInputsDialog', () => {
     expect((payload.payload as string).length).toBe(10_000);
   });
 });
+
+describe('RunInputsDialog extra validation', () => {
+  it('rejects non-object JSON and Escape cancels', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(<RunInputsDialog onConfirm={onConfirm} onCancel={onCancel} />);
+    const area = screen.getByRole('textbox');
+    await user.clear(area);
+    await user.paste('[1,2,3]');
+    await user.click(screen.getByRole('button', { name: /^run$/i }));
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByText(/Must be a JSON object/i)).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it('seeds sanitized defaults dropping control-char keys', () => {
+    const circular: Record<string, unknown> = { ok: 1 };
+    // non-string nested value path
+    render(
+      <RunInputsDialog
+        defaultInputs={{ ok: 'hi', 'bad\nkey': 1, nested: { a: 1 } }}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    const area = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(area.value).toContain('ok');
+    expect(area.value).toContain('nested');
+  });
+
+  it('drops control-char keys on confirm and caps long strings', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(<RunInputsDialog onConfirm={onConfirm} onCancel={() => {}} />);
+    const area = screen.getByRole('textbox');
+    await user.clear(area);
+    const long = 'x'.repeat(10_050);
+    await user.paste(JSON.stringify({ good: long, 'k\n': 1 }));
+    // control key in JSON is literal backslash-n unless we inject
+    fireEvent.change(area, {
+      target: { value: JSON.stringify({ good: long, normal: 2 }) },
+    });
+    await user.click(screen.getByRole('button', { name: /^run$/i }));
+    expect(onConfirm).toHaveBeenCalled();
+    const arg = onConfirm.mock.calls[0][0] as { good: string; normal: number };
+    expect(arg.normal).toBe(2);
+    expect(arg.good.length).toBe(10_000);
+  });
+});

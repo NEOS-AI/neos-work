@@ -96,4 +96,13 @@ export class WebApiClient {
       source: 'user',
     });
   }
+
+  createRun(input: {
+    projectId: string;
+    prompt: string;
+    agentId?: string;
+    editContext?: unknown;
+  }): Promise<ApiEnvelope<{ id?: string }>> {
+    return this.request('POST', '/api/runs', input);
+  }
 }
