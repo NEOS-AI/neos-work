@@ -303,7 +303,7 @@ export interface Routine {
 export interface MediaFileInfo {
   filename: string;
   size: number;
-  kind: 'image' | 'audio' | 'other';
+  kind: 'image' | 'audio' | 'video' | 'other';
   mimeType: string;
   createdAt: string;
   urlPath: string;
@@ -1589,7 +1589,7 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  /** Media generation readiness (no secrets returned). */
+  /** Media generation readiness (no secrets returned). Task 8 multi-provider. */
   async getMediaConfig(): Promise<
     ApiResponse<{
       openaiConfigured: boolean;
@@ -1597,9 +1597,55 @@ export class EngineClient {
       surfaces: string[];
       imageModels: string[];
       audioModels: string[];
+      videoModels?: string[];
+      stubsAllowed?: boolean;
+      providers?: Array<{
+        id: string;
+        label: string;
+        surfaces: string[];
+        configured: boolean;
+        isStub?: boolean;
+      }>;
     }>
   > {
     const res = await fetch(`${this.baseUrl}/api/media/config`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async listMediaProviders(): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        label: string;
+        surfaces: string[];
+        configured: boolean;
+        isStub?: boolean;
+      }>
+    >
+  > {
+    const res = await fetch(`${this.baseUrl}/api/media/providers`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async getMediaJob(
+    id: string,
+  ): Promise<
+    ApiResponse<{
+      id: string;
+      surface: string;
+      provider: string;
+      status: string;
+      filename?: string;
+      error?: string;
+    }>
+  > {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('job id');
+    const res = await fetch(`${this.baseUrl}/api/media/jobs/${seg}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);

@@ -200,7 +200,7 @@ export function Media() {
 
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {(['all', 'image', 'audio', 'other'] as const).map((k) => (
+          {(['all', 'image', 'audio', 'video', 'other'] as const).map((k) => (
             <button
               key={k}
               type="button"
@@ -227,7 +227,7 @@ export function Media() {
           className="rounded-xl border p-8 text-center text-sm"
           style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}
         >
-          No media files yet. Run a workflow with a Media node (image/audio).
+          No media files yet. Run a workflow with a Media node (image/audio/video).
         </div>
       ) : visibleFiles.length === 0 ? (
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No files match the current filters.</p>

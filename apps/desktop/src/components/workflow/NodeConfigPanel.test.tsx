@@ -815,7 +815,9 @@ describe('NodeConfigPanel', () => {
     );
     expect(screen.getByDisplayValue('hello world')).toBeInTheDocument();
     expect(screen.getByText('Voice')).toBeInTheDocument();
-    expect(screen.getByText(/Requires OPENAI_API_KEY/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Configure provider keys in Settings/i),
+    ).toBeInTheDocument();
     await waitFor(() => expect(listDesignSystems).toHaveBeenCalled());
   });
 

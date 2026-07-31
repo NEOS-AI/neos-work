@@ -47,8 +47,62 @@ describe('media routes', () => {
     }
     expect(body.data.surfaces).toContain('image');
     expect(body.data.surfaces).toContain('audio');
+    expect(body.data.surfaces).toContain('video');
     const raw = JSON.stringify(body);
     expect(raw).not.toContain(SECRET);
+  });
+
+  it('GET /providers returns multi-provider catalog', async () => {
+    const res = await media.request('/providers');
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      ok: boolean;
+      data: Array<{ id: string; surfaces: string[] }>;
+      meta?: { count: number };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.length).toBeGreaterThanOrEqual(4);
+    expect(body.data.some((p) => p.id === 'openai')).toBe(true);
+    expect(body.data.some((p) => p.id === 'xai')).toBe(true);
+  });
+
+  it('POST /generate video with stub returns job when stubs allowed', async () => {
+    process.env.NEOS_MEDIA_ALLOW_STUBS = '1';
+    try {
+      const res = await media.request('/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ surface: 'video', provider: 'stub', prompt: 'orbit' }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as {
+        ok: boolean;
+        data: { surface: string; jobId: string; async: boolean };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.data.surface).toBe('video');
+      expect(body.data.async).toBe(true);
+      expect(body.data.jobId).toBeTruthy();
+
+      // poll job
+      await new Promise((r) => setTimeout(r, 30));
+      const jobRes = await media.request(`/jobs/${body.data.jobId}`);
+      expect(jobRes.status).toBe(200);
+      const job = await jobRes.json() as { data: { status: string } };
+      expect(['queued', 'running', 'succeeded']).toContain(job.data.status);
+    } finally {
+      delete process.env.NEOS_MEDIA_ALLOW_STUBS;
+    }
+  });
+
+  it('POST /generate stub image rejected when stubs off', async () => {
+    delete process.env.NEOS_MEDIA_ALLOW_STUBS;
+    const res = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ surface: 'image', provider: 'stub', prompt: 'x' }),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('GET /config is false when key missing', async () => {
@@ -310,10 +364,21 @@ describe('media routes', () => {
     const badSurface = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ surface: 'video', prompt: 'x' }),
+      body: JSON.stringify({ surface: 'animation', prompt: 'x' }),
     });
     expect(badSurface.status).toBe(400);
     expect(((await badSurface.json()) as { error: string }).error).toMatch(/surface/i);
+
+    // video is a valid surface but needs a configured provider
+    const videoNoProvider = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'video', prompt: 'x' }),
+    });
+    expect(videoNoProvider.status).toBe(400);
+    expect(((await videoNoProvider.json()) as { error: string }).error).toMatch(
+      /not configured|disabled|XAI|stub/i,
+    );
 
     setSetting('OPENAI_API_KEY', 'sk-audio');
     const noText = await media.request('/generate', {

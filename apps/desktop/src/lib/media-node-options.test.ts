@@ -3,12 +3,16 @@ import {
   DISCORD_CONTENT_MAX_LENGTH,
   isMediaImageQuality,
   isMediaImageSize,
+  isMediaProvider,
   isMediaTtsModel,
+  isMediaType,
   isMediaVoice,
   isValidDeployProjectName,
   MEDIA_IMAGE_QUALITIES,
   MEDIA_IMAGE_SIZES,
+  MEDIA_PROVIDERS,
   MEDIA_TTS_MODELS,
+  MEDIA_TYPES,
   MEDIA_VOICES,
   SLACK_CONTENT_MAX_LENGTH,
 } from './media-node-options.js';
@@ -19,8 +23,19 @@ describe('media-node-options', () => {
     expect([...MEDIA_VOICES]).toEqual(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
     expect([...MEDIA_IMAGE_QUALITIES]).toEqual(['standard', 'hd']);
     expect([...MEDIA_TTS_MODELS]).toEqual(['tts-1', 'tts-1-hd']);
+    expect(MEDIA_PROVIDERS.length).toBeGreaterThanOrEqual(4);
+    expect([...MEDIA_TYPES]).toEqual(['image', 'audio', 'video']);
     expect(DISCORD_CONTENT_MAX_LENGTH).toBe(2000);
     expect(SLACK_CONTENT_MAX_LENGTH).toBe(4000);
+  });
+
+  it('validates media providers and types', () => {
+    expect(isMediaProvider('openai')).toBe(true);
+    expect(isMediaProvider('azure-openai')).toBe(true);
+    expect(isMediaProvider('nope')).toBe(false);
+    expect(isMediaProvider('\nopenai')).toBe(false);
+    expect(isMediaType('video')).toBe(true);
+    expect(isMediaType('hologram')).toBe(false);
   });
 
   it('validates image sizes', () => {

@@ -117,6 +117,12 @@ const WORKFLOW_SECRET_KEYS = [
   'GOOGLE_API_KEY',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
+  'AZURE_OPENAI_API_KEY',
+  'AZURE_OPENAI_ENDPOINT',
+  'XAI_API_KEY',
+  'XAI_BASE_URL',
+  'MEDIA_COMPAT_API_KEY',
+  'MEDIA_COMPAT_BASE_URL',
   'OLLAMA_BASE_URL',
   'TAVILY_API_KEY',
   'SLACK_BOT_TOKEN',
@@ -184,7 +190,13 @@ export function getExecutionSettings(runtime?: {
   const result = getWorkflowSecrets();
 
   // Drop unsafe custom base URLs rather than sending them to adapters
-  for (const key of ['OPENAI_BASE_URL', 'OLLAMA_BASE_URL'] as const) {
+  for (const key of [
+    'OPENAI_BASE_URL',
+    'OLLAMA_BASE_URL',
+    'AZURE_OPENAI_ENDPOINT',
+    'XAI_BASE_URL',
+    'MEDIA_COMPAT_BASE_URL',
+  ] as const) {
     if (result[key] && !isSafeHttpBaseUrl(result[key]!)) {
       delete result[key];
     }

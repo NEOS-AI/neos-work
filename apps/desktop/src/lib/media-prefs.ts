@@ -2,9 +2,9 @@
 
 const KIND_KEY = 'neos-media-kind';
 
-export type MediaKindFilter = 'all' | 'image' | 'audio' | 'other';
+export type MediaKindFilter = 'all' | 'image' | 'audio' | 'video' | 'other';
 
-const ALLOWED = new Set<string>(['all', 'image', 'audio', 'other']);
+const ALLOWED = new Set<string>(['all', 'image', 'audio', 'video', 'other']);
 
 function parseKind(raw: unknown): MediaKindFilter | null {
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;

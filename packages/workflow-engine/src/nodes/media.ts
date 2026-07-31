@@ -51,6 +51,14 @@ export const MediaNode: ExecutableNode = {
         ? ''
         : rawServerToken.trim();
 
+    // Optional multi-provider id (Task 8); control-char → omit
+    const providerRaw0 =
+      typeof config?.mediaProvider === 'string' ? config.mediaProvider : '';
+    const mediaProvider =
+      providerRaw0 && !/[\0\r\n]/.test(providerRaw0)
+        ? providerRaw0.trim().toLowerCase() || undefined
+        : undefined;
+
     if (mediaType === 'image') {
       const promptRaw = resolvePromptRaw(config, inputs);
       if (/[\0\r\n]/.test(promptRaw)) {
@@ -98,7 +106,12 @@ export const MediaNode: ExecutableNode = {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${serverToken}`,
           },
-          body: JSON.stringify({ prompt, size, quality }),
+          body: JSON.stringify({
+            prompt,
+            size,
+            quality,
+            ...(mediaProvider ? { provider: mediaProvider } : {}),
+          }),
           signal: ctx.signal,
         });
 
@@ -206,7 +219,12 @@ export const MediaNode: ExecutableNode = {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${serverToken}`,
           },
-          body: JSON.stringify({ text, voice, model }),
+          body: JSON.stringify({
+            text,
+            voice,
+            model,
+            ...(mediaProvider ? { provider: mediaProvider } : {}),
+          }),
           signal: ctx.signal,
         });
 
@@ -255,6 +273,106 @@ export const MediaNode: ExecutableNode = {
           ok: false,
           output: null,
           error: scrubErrorMessage(err instanceof Error ? err.message : 'Audio generation failed') || 'Audio generation failed',
+          durationMs: Date.now() - start,
+        };
+      }
+    }
+
+    if (mediaType === 'video') {
+      const promptRaw = resolvePromptRaw(config, inputs);
+      if (/[\0\r\n]/.test(promptRaw)) {
+        return {
+          ok: false,
+          output: null,
+          error: 'Video prompt contains invalid control characters',
+          durationMs: Date.now() - start,
+        };
+      }
+      const prompt = promptRaw.trim();
+      if (!prompt) {
+        return {
+          ok: false,
+          output: null,
+          error: 'No prompt provided for video generation',
+          durationMs: Date.now() - start,
+        };
+      }
+      if (prompt.length > IMAGE_PROMPT_MAX) {
+        return {
+          ok: false,
+          output: null,
+          error: `Video prompt exceeds ${IMAGE_PROMPT_MAX} characters`,
+          durationMs: Date.now() - start,
+        };
+      }
+      try {
+        const res = await fetch(`${serverUrl}/api/media/generate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${serverToken}`,
+          },
+          body: JSON.stringify({
+            surface: 'video',
+            prompt,
+            ...(mediaProvider ? { provider: mediaProvider } : {}),
+          }),
+          signal: ctx.signal,
+        });
+        const httpFailed =
+          res.ok === false
+          || (typeof res.status === 'number' && res.status >= 400);
+        if (httpFailed) {
+          const body = await res.text().catch(() => '');
+          const detail = body.replace(/[\0\r\n]+/g, ' ').trim().slice(0, 500);
+          const status = typeof res.status === 'number' ? res.status : 0;
+          return {
+            ok: false,
+            output: null,
+            error: detail
+              ? `Video generation failed: ${status}: ${detail}`
+              : `Video generation failed: ${status}`,
+            durationMs: Date.now() - start,
+          };
+        }
+        const data = await res.json() as {
+          ok?: boolean;
+          data?: { jobId?: string; status?: string; filename?: string; async?: boolean };
+          error?: string;
+        };
+        if (data.ok === false) {
+          let errMsg = 'Video generation failed';
+          if (typeof data.error === 'string' && !/[\0\r\n]/.test(data.error)) {
+            const e = data.error.trim();
+            if (e) errMsg = e;
+          }
+          return {
+            ok: false,
+            output: null,
+            error: errMsg,
+            durationMs: Date.now() - start,
+          };
+        }
+        const jobId =
+          typeof data.data?.jobId === 'string' && !/[\0\r\n]/.test(data.data.jobId)
+            ? data.data.jobId.trim()
+            : '';
+        const st =
+          typeof data.data?.status === 'string' && !/[\0\r\n]/.test(data.data.status)
+            ? data.data.status.trim()
+            : 'queued';
+        return {
+          ok: true,
+          output: jobId
+            ? `Video job started: ${jobId} (status=${st})`
+            : `Video generation accepted (status=${st})`,
+          durationMs: Date.now() - start,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          output: null,
+          error: scrubErrorMessage(err instanceof Error ? err.message : 'Video generation failed') || 'Video generation failed',
           durationMs: Date.now() - start,
         };
       }

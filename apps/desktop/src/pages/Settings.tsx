@@ -96,6 +96,36 @@ export function Settings() {
             settingKey="OPENAI_BASE_URL"
           />
           <SimpleKeyInput
+            label="Azure OpenAI API Key"
+            placeholder="..."
+            settingKey="AZURE_OPENAI_API_KEY"
+          />
+          <SimpleKeyInput
+            label="Azure OpenAI Endpoint"
+            placeholder="https://YOUR.openai.azure.com/openai/deployments/..."
+            settingKey="AZURE_OPENAI_ENDPOINT"
+          />
+          <SimpleKeyInput
+            label="xAI API Key"
+            placeholder="xai-..."
+            settingKey="XAI_API_KEY"
+          />
+          <SimpleKeyInput
+            label="xAI Base URL"
+            placeholder="https://api.x.ai/v1"
+            settingKey="XAI_BASE_URL"
+          />
+          <SimpleKeyInput
+            label="Media OpenAI-compatible API Key"
+            placeholder="sk-..."
+            settingKey="MEDIA_COMPAT_API_KEY"
+          />
+          <SimpleKeyInput
+            label="Media OpenAI-compatible Base URL"
+            placeholder="https://api.example.com/v1"
+            settingKey="MEDIA_COMPAT_BASE_URL"
+          />
+          <SimpleKeyInput
             label="Ollama Base URL"
             placeholder="http://localhost:11434"
             settingKey="OLLAMA_BASE_URL"
@@ -250,6 +280,11 @@ function MediaStatusSection() {
   const [surfaces, setSurfaces] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [audioModels, setAudioModels] = useState<string[]>([]);
+  const [videoModels, setVideoModels] = useState<string[]>([]);
+  const [stubsAllowed, setStubsAllowed] = useState(false);
+  const [providers, setProviders] = useState<
+    Array<{ id: string; label: string; configured: boolean; isStub?: boolean }>
+  >([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -259,6 +294,9 @@ function MediaStatusSection() {
       setSurfaces([]);
       setImageModels([]);
       setAudioModels([]);
+      setVideoModels([]);
+      setStubsAllowed(false);
+      setProviders([]);
       setLoadError(null);
       return;
     }
@@ -274,6 +312,9 @@ function MediaStatusSection() {
           setSurfaces([]);
           setImageModels([]);
           setAudioModels([]);
+          setVideoModels([]);
+          setStubsAllowed(false);
+          setProviders([]);
           setLoadError(
             scrubDisplayText((res as { error?: string }).error, {
               collapseLines: true,
@@ -304,6 +345,20 @@ function MediaStatusSection() {
             .map((s) => scrubDisplayText(s, { collapseLines: true, maxChars: 80 }))
             .filter(Boolean) as string[],
         );
+        setVideoModels(
+          (res.data.videoModels ?? [])
+            .map((s) => scrubDisplayText(s, { collapseLines: true, maxChars: 80 }))
+            .filter(Boolean) as string[],
+        );
+        setStubsAllowed(!!res.data.stubsAllowed);
+        setProviders(
+          (res.data.providers ?? []).map((p) => ({
+            id: scrubDisplayText(p.id, { collapseLines: true, maxChars: 40 }) || p.id,
+            label: scrubDisplayText(p.label, { collapseLines: true, maxChars: 80 }) || p.id,
+            configured: !!p.configured,
+            isStub: !!p.isStub,
+          })),
+        );
       })
       .catch((err) => {
         if (cancelled) return;
@@ -312,6 +367,9 @@ function MediaStatusSection() {
         setSurfaces([]);
         setImageModels([]);
         setAudioModels([]);
+        setVideoModels([]);
+        setStubsAllowed(false);
+        setProviders([]);
         const msg = err instanceof Error ? err.message : 'Failed to load media config';
         setLoadError(
           scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
@@ -336,7 +394,8 @@ function MediaStatusSection() {
         Media generation
       </h2>
       <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-        Status for Media nodes (DALL·E / TTS). Keys are configured under API Keys above.
+        Multi-provider catalog (image / audio / video). Keys under API Keys &amp; media settings below.
+        Stubs default off (NEOS_MEDIA_ALLOW_STUBS).
       </p>
       {loadError && (
         <p className="mb-3 text-xs text-red-400">
@@ -358,9 +417,28 @@ function MediaStatusSection() {
         </dd>
         <dt style={{ color: 'var(--text-muted)' }}>Models</dt>
         <dd style={{ color: 'var(--text-primary)' }}>
-          {[...imageModels, ...audioModels].join(', ') || '—'}
+          {[...imageModels, ...audioModels, ...videoModels].join(', ') || '—'}
+        </dd>
+        <dt style={{ color: 'var(--text-muted)' }}>Stubs</dt>
+        <dd style={{ color: stubsAllowed ? '#fbbf24' : 'var(--text-primary)' }}>
+          {stubsAllowed ? 'Allowed' : 'Disabled (default)'}
         </dd>
       </dl>
+      {providers.length > 0 && (
+        <ul className="mt-3 space-y-1 text-xs" data-testid="media-provider-list">
+          {providers.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2">
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {p.label}
+                {p.isStub ? ' (stub)' : ''}
+              </span>
+              <span style={{ color: p.configured ? '#34d399' : 'var(--text-muted)' }}>
+                {p.configured ? 'ready' : 'not configured'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

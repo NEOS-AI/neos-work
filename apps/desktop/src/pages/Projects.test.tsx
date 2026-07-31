@@ -37,14 +37,16 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => navigate };
 });
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, opts?: { name?: string }) => {
-      if (key === 'project.confirmDelete' && opts?.name) return `Delete ${opts.name}?`;
-      return key;
-    },
-  }),
-}));
+vi.mock('react-i18next', () => {
+  // Stable t identity — avoids re-creating load() each render and wiping pageError
+  const t = (key: string, opts?: { name?: string }) => {
+    if (key === 'project.confirmDelete' && opts?.name) return `Delete ${opts.name}?`;
+    return key;
+  };
+  return {
+    useTranslation: () => ({ t }),
+  };
+});
 
 const { Projects } = await import('./Projects.js');
 
@@ -229,4 +231,205 @@ describe('Projects page', () => {
       expect(navigate).toHaveBeenCalledWith('/projects/imp1');
     });
   });
+
+  it('shows scrubbed error when listProjects throws', async () => {
+    listProjects.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('net down!');
+    });
+  });
+
+  it('Escape closes create modal and clears search', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: sample });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
+
+    await user.click(screen.getByText('project.new'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    const search = screen.getByLabelText('project.searchPlaceholder');
+    await user.type(search, 'Landing');
+    expect((search as HTMLInputElement).value).toBe('Landing');
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect((screen.getByLabelText('project.searchPlaceholder') as HTMLInputElement).value).toBe(
+        '',
+      );
+    });
+  });
+
+  it('filters projects by search text', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({
+      ok: true,
+      data: [
+        sample[0],
+        {
+          id: 'p2',
+          name: 'Dashboard',
+          baseDir: '/tmp/dash',
+          entryFile: null,
+          designSystemId: null,
+          meta: {},
+          createdAt: '2026-01-02T00:00:00.000Z',
+          updatedAt: '2026-01-03T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('project.searchPlaceholder'), 'dash');
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('Landing')).not.toBeInTheDocument();
+  });
+
+  it('rejects create name containing null bytes', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('project.empty')).toBeInTheDocument());
+    await user.click(screen.getByText('project.new'));
+
+    const name = screen.getByPlaceholderText('project.namePlaceholder') as HTMLInputElement;
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.change(name, { target: { value: `bad${'\0'}name` } });
+    await user.click(screen.getByText('common.create'));
+    await waitFor(() => expect(screen.getByText('project.invalidName')).toBeInTheDocument());
+    expect(createProject).not.toHaveBeenCalled();
+  });
+
+  it('shows create error when import token fails', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    createImportToken.mockResolvedValue({ ok: false, error: 'token denied' });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('project.empty')).toBeInTheDocument());
+    await user.click(screen.getByText('project.new'));
+    await user.type(screen.getByPlaceholderText('project.namePlaceholder'), 'Imported');
+    await user.type(screen.getByTestId('project-base-dir-input'), '/tmp/landing');
+    await user.click(screen.getByText('common.create'));
+    await waitFor(() => expect(screen.getByText('token denied')).toBeInTheDocument());
+    expect(createProject).not.toHaveBeenCalled();
+  });
+
+  it('shows create error when createProject fails or throws', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    createProject
+      .mockResolvedValueOnce({ ok: false, error: `create${'\n'}blocked` })
+      .mockRejectedValueOnce(new Error(`boom${'\0'}create`));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('project.empty')).toBeInTheDocument());
+    await user.click(screen.getByText('project.new'));
+    await user.type(screen.getByPlaceholderText('project.namePlaceholder'), 'Hero');
+    await user.click(screen.getByText('common.create'));
+    await waitFor(() => expect(screen.getByText('create blocked')).toBeInTheDocument());
+
+    await user.click(screen.getByText('common.create'));
+    await waitFor(() => expect(screen.getByText('boomcreate')).toBeInTheDocument());
+  });
+
+  it('shows pickFolder error', async () => {
+    const user = userEvent.setup();
+    isTauri.mockReturnValue(true);
+    pickFolder.mockRejectedValue(new Error(`pick${'\n'}fail`));
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('project.empty')).toBeInTheDocument());
+    await user.click(screen.getByText('project.new'));
+    await user.click(screen.getByTestId('project-browse-folder'));
+    await waitFor(() => expect(screen.getByText('pick fail')).toBeInTheDocument());
+  });
+
+  it('shows export zip error and throw', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: sample });
+    exportProjectZip
+      .mockResolvedValueOnce({ ok: false, error: `export${'\n'}nope` })
+      .mockRejectedValueOnce(new Error(`zip${'\0'}crash`));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
+    await user.click(screen.getByTestId('project-export-p1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-zip-error')).toHaveTextContent('export nope');
+    });
+    await user.click(screen.getByTestId('project-export-p1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-zip-error')).toHaveTextContent('zipcrash');
+    });
+  });
+
+  it('rejects non-zip import and oversized zip', async () => {
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('project-zip-input')).toBeInTheDocument());
+    const input = screen.getByTestId('project-zip-input') as HTMLInputElement;
+    const { fireEvent } = await import('@testing-library/react');
+
+    // Bypass accept= filter by dispatching change with FileList-like value
+    const txt = new File([new Uint8Array([1, 2, 3])], 'notes.txt', { type: 'text/plain' });
+    fireEvent.change(input, { target: { files: [txt] } });
+    await waitFor(() => {
+      expect(screen.getByTestId('project-zip-error')).toHaveTextContent('project.importZipInvalid');
+    });
+    expect(importProjectZip).not.toHaveBeenCalled();
+
+    const big = new File([new Uint8Array(10)], 'huge.zip', { type: 'application/zip' });
+    Object.defineProperty(big, 'size', { value: 51 * 1024 * 1024 });
+    fireEvent.change(input, { target: { files: [big] } });
+    await waitFor(() => {
+      expect(screen.getByTestId('project-zip-error')).toHaveTextContent('project.importZipTooLarge');
+    });
+    expect(importProjectZip).not.toHaveBeenCalled();
+  });
+
+  it('shows import zip API failure', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    importProjectZip.mockResolvedValue({ ok: false, error: 'import blocked' });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('project-zip-input')).toBeInTheDocument());
+    const input = screen.getByTestId('project-zip-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x50, 0x4b])], 'demo.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+    await waitFor(() => {
+      expect(screen.getByTestId('project-zip-error')).toHaveTextContent('import blocked');
+    });
+  });
+
+  it('shows delete error and respects cancel', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: sample });
+    deleteProject.mockResolvedValue({ ok: false, error: `del${'\n'}no` });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
+    await user.click(screen.getByText('common.delete'));
+    await waitFor(() => expect(deleteProject).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('del no');
+
+    confirmSpy.mockReturnValue(false);
+    deleteProject.mockClear();
+    await user.click(screen.getByText('common.delete'));
+    expect(deleteProject).not.toHaveBeenCalled();
+  });
+
+  it('shows delete throw error', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: sample });
+    deleteProject.mockRejectedValue(new Error(`delete${'\0'}boom`));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Landing')).toBeInTheDocument());
+    await user.click(screen.getByText('common.delete'));
+    await waitFor(() => expect(deleteProject).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('deleteboom');
+  });
+
 });

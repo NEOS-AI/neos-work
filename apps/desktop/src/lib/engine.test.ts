@@ -1608,4 +1608,243 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/claude|import/i);
     expect(fetchMock.mock.calls.at(-1)![1].body).toBeInstanceOf(FormData);
   });
+
+  it('design project validation and CRUD paths', async () => {
+    const client = new EngineClient('http://engine.test');
+
+    // createImportToken validation
+    await expect(client.createImportToken('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid path',
+    });
+    await expect(client.createImportToken(`bad${'\n'}path`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid path',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { token: 't1', path: '/tmp/x', expiresAt: 't', expiresInMs: 1 },
+      }),
+    );
+    const tok = await client.createImportToken('/tmp/x');
+    expect(tok.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/import-token/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    // createProject validation
+    await expect(client.createProject({ name: '' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid name',
+    });
+    await expect(client.createProject({ name: `n${'\0'}x` })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid name',
+    });
+    await expect(
+      client.createProject({ name: 'ok', baseDir: `b${'\n'}d` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid baseDir' });
+    await expect(
+      client.createProject({ name: 'ok', importToken: `tok${'\0'}` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid importToken' });
+
+    // get/update/delete project
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'p1' } }));
+    await client.getProject('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/projects\/p1$/);
+
+    await expect(client.getProject(`p${'\n'}1`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+
+    await expect(
+      client.updateProject('p1', { name: `bad${'\n'}` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid name' });
+    await expect(
+      client.updateProject('p1', { baseDir: `b${'\0'}` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid baseDir' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'p1', name: 'U' } }));
+    await client.updateProject('p1', { name: 'U', designSystemId: 'ds1' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: null }));
+    await client.deleteProject('p1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+    await expect(client.deleteProject('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+  });
+
+  it('export/import project zip and file helpers', async () => {
+    const client = new EngineClient('http://engine.test');
+
+    await expect(client.exportProjectZip(`p${'\n'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'nope' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    await expect(client.exportProjectZip('p1')).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/nope|HTTP|Export/i),
+    });
+
+    const emptyBlob = { size: 0 } as Blob;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      blob: async () => emptyBlob,
+      json: async () => ({}),
+    } as Response);
+    await expect(client.exportProjectZip('p1')).resolves.toMatchObject({
+      ok: false,
+      error: 'Empty export',
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Blob(['PK'], { type: 'application/zip' }), { status: 200 }),
+    );
+    const zipOk = await client.exportProjectZip('p1');
+    expect(zipOk.ok).toBe(true);
+    if (zipOk.ok) expect(zipOk.blob.size).toBeGreaterThan(0);
+
+    fetchMock.mockRejectedValueOnce(new Error('network'));
+    await expect(client.exportProjectZip('p1')).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/network|Export/i),
+    });
+
+    // import zip
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { project: { id: 'p2' }, filesImported: 1 } }),
+    );
+    const imp = await client.importProjectZip(new Blob(['PK'], { type: 'application/zip' }));
+    expect(imp.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/import\.zip/);
+    expect((fetchMock.mock.calls.at(-1)![1].headers as Record<string, string>)['Content-Type']).toBe(
+      'application/zip',
+    );
+
+    fetchMock.mockRejectedValueOnce(new Error('import down'));
+    await expect(client.importProjectZip(new ArrayBuffer(2))).resolves.toMatchObject({
+      ok: false,
+      error: 'import down',
+    });
+
+    // list files / mkdir / revisions / comments / runs
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+    await client.listProjectFiles('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/files$/);
+
+    await expect(client.mkdirProjectPath('p1', '')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid path',
+    });
+    await expect(client.mkdirProjectPath('p1', `d${'\n'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid path',
+    });
+    await client.mkdirProjectPath('p1', 'src/components');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.listProjectRevisions('p1', 'index.html');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('path=index.html');
+    await expect(client.listProjectRevisions('p1', `x${'\n'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid file path',
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'index.html', hash: 'h' } }));
+    await client.restoreProjectRevision('p1', 'rev1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/restore/);
+    await expect(client.restoreProjectRevision('p1', `r${'\0'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid revision id',
+    });
+
+    await client.listProjectPreviewComments('p1', 'index.html');
+    await expect(client.listProjectPreviewComments('p1', `f${'\n'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid file path',
+    });
+
+    await expect(
+      client.createProjectPreviewComment('p1', {
+        filePath: 'a.html',
+        selector: '#x',
+        body: `bad${'\0'}`,
+      }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid comment fields' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'c1' } }));
+    await client.createProjectPreviewComment('p1', {
+      filePath: 'a.html',
+      selector: '#x',
+      body: 'note',
+    });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: null }));
+    await client.deleteProjectPreviewComment('p1', 'c1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+    await expect(client.deleteProjectPreviewComment('p1', '')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid comment id',
+    });
+
+    // writeProjectFile content validation
+    await expect(client.writeProjectFile('p1', 'a.html', `x${'\0'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid content',
+    });
+  });
+
+  it('project run endpoints', async () => {
+    const client = new EngineClient('http://engine.test');
+
+    await expect(
+      client.createProjectRun({ projectId: 'p1', prompt: `bad${'\0'}prompt` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid prompt' });
+
+    await expect(
+      client.createProjectRun({ projectId: `p${'\n'}1`, prompt: 'hi' }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid project id' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'run1', status: 'running' } }),
+    );
+    const run = await client.createProjectRun({
+      projectId: 'p1',
+      prompt: 'Improve hero',
+      dryRun: true,
+      editContext: { filePath: 'index.html', mode: 'patch', snippet: '<html/>' },
+    });
+    expect(run.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/runs/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+    await client.listProjectRuns('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/runs\?projectId=p1/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'run1', status: 'succeeded' } }));
+    await client.getProjectRun('run1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/project-runs|runs/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listProjectRunEvents('run1', 'ev0');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/events/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: null }));
+    await client.cancelProjectRun('run1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    await expect(client.cancelProjectRun(`r${'\n'}`)).resolves.toMatchObject({ ok: false });
+  });
+
 });

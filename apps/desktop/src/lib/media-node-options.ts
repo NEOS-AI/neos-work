@@ -10,6 +10,20 @@ export type MediaVoice = (typeof MEDIA_VOICES)[number];
 export const MEDIA_IMAGE_QUALITIES = ['standard', 'hd'] as const;
 export type MediaImageQuality = (typeof MEDIA_IMAGE_QUALITIES)[number];
 
+/** Multi-provider catalog ids (Task 8). */
+export const MEDIA_PROVIDERS = [
+  'openai',
+  'azure-openai',
+  'google',
+  'xai',
+  'openai-compatible',
+  'stub',
+] as const;
+export type MediaProviderOption = (typeof MEDIA_PROVIDERS)[number];
+
+export const MEDIA_TYPES = ['image', 'audio', 'video'] as const;
+export type MediaTypeOption = (typeof MEDIA_TYPES)[number];
+
 export function isMediaImageSize(value: unknown): value is MediaImageSize {
   if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
   // Normalize case so "1024X1024" matches panel/server allow-lists
@@ -27,6 +41,18 @@ export function isMediaImageQuality(value: unknown): value is MediaImageQuality 
   if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
   const v = value.trim().toLowerCase();
   return (MEDIA_IMAGE_QUALITIES as readonly string[]).includes(v);
+}
+
+export function isMediaProvider(value: unknown): value is MediaProviderOption {
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
+  const v = value.trim().toLowerCase();
+  return (MEDIA_PROVIDERS as readonly string[]).includes(v);
+}
+
+export function isMediaType(value: unknown): value is MediaTypeOption {
+  if (typeof value !== 'string' || /[\0\r\n]/.test(value)) return false;
+  const v = value.trim().toLowerCase();
+  return (MEDIA_TYPES as readonly string[]).includes(v);
 }
 
 /** OpenAI TTS model options (server media-generator). */

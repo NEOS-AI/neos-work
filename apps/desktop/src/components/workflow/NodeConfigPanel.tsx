@@ -470,8 +470,25 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
               value={typeof config.mediaType === 'string' ? config.mediaType : 'image'}
               onChange={(e) => patchConfig({ mediaType: e.target.value })}
             >
-              <option value="image">Image (DALL·E 3)</option>
+              <option value="image">Image</option>
               <option value="audio">Audio (TTS)</option>
+              <option value="video">Video (async)</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Provider</label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-xs"
+              style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+              value={typeof config.mediaProvider === 'string' ? config.mediaProvider : 'openai'}
+              onChange={(e) => patchConfig({ mediaProvider: e.target.value })}
+            >
+              <option value="openai">OpenAI</option>
+              <option value="azure-openai">Azure OpenAI</option>
+              <option value="google">Google</option>
+              <option value="xai">xAI</option>
+              <option value="openai-compatible">OpenAI-compatible</option>
+              <option value="stub">Stub (dev)</option>
             </select>
           </div>
           {(config.mediaType !== 'audio') && (
@@ -555,7 +572,8 @@ export function NodeConfigPanel({ selectedNode, validationIssues, onPatchNodeDat
             </>
           )}
           <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-            Requires OPENAI_API_KEY in Settings.
+            Configure provider keys in Settings (OpenAI / Azure / Google / xAI / compat).
+            Stub requires NEOS_MEDIA_ALLOW_STUBS=1. Video jobs are async.
           </p>
         </div>
       )}

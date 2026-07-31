@@ -15,12 +15,14 @@ describe('media-prefs', () => {
     expect(loadMediaKindFilter()).toBe('image');
     saveMediaKindFilter('audio');
     expect(loadMediaKindFilter()).toBe('audio');
+    saveMediaKindFilter('video');
+    expect(loadMediaKindFilter()).toBe('video');
     saveMediaKindFilter('all');
     expect(loadMediaKindFilter()).toBe('all');
   });
 
   it('ignores invalid stored values', () => {
-    localStorage.setItem('neos-media-kind', 'video');
+    localStorage.setItem('neos-media-kind', 'not-a-kind');
     expect(loadMediaKindFilter()).toBe('all');
   });
 

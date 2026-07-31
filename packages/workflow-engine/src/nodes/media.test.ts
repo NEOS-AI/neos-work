@@ -76,9 +76,49 @@ describe('MediaNode', () => {
   });
 
   it('rejects unknown media type', async () => {
-    const result = await MediaNode.execute(ctx({ config: { mediaType: 'video' } }));
+    const result = await MediaNode.execute(ctx({ config: { mediaType: 'hologram' } }));
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/Unknown media type/);
+  });
+
+  it('starts async video job via /api/media/generate', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        data: { jobId: 'mjob_abc', status: 'queued', async: true, surface: 'video' },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await MediaNode.execute(
+      ctx({
+        config: {
+          mediaType: 'video',
+          prompt: 'drone orbit',
+          mediaProvider: 'xai',
+        },
+        settings: { SERVER_URL: 'http://localhost:3001', SERVER_TOKEN: 'tok' },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.output).toMatch(/mjob_abc/);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/media/generate',
+      expect.objectContaining({
+        body: expect.stringContaining('"surface":"video"'),
+      }),
+    );
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as {
+      provider?: string;
+    };
+    expect(body.provider).toBe('xai');
+  });
+
+  it('video without prompt fails closed', async () => {
+    const result = await MediaNode.execute(ctx({ config: { mediaType: 'video' } }));
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/No prompt|prompt/i);
   });
 
   it('normalizes mediaType case and whitespace', async () => {

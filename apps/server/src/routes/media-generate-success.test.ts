@@ -32,10 +32,36 @@ vi.mock('../lib/media-generator.js', async (importOriginal) => {
     generateAudio: vi.fn(async () => ({
       filePath: `${actual.MEDIA_DIR}/mock-audio.mp3`,
     })),
+    generateMediaUnified: vi.fn(async (input: { surface: string; prompt?: string; text?: string }) => {
+      if (input.surface === 'image') {
+        return {
+          surface: 'image' as const,
+          provider: 'openai',
+          filePath: `${actual.MEDIA_DIR}/mock-image.png`,
+          filename: 'mock-image.png',
+          revisedPrompt: 'a refined cat',
+        };
+      }
+      if (input.surface === 'audio') {
+        return {
+          surface: 'audio' as const,
+          provider: 'openai',
+          filePath: `${actual.MEDIA_DIR}/mock-audio.mp3`,
+          filename: 'mock-audio.mp3',
+        };
+      }
+      return {
+        surface: 'video' as const,
+        provider: 'xai',
+        jobId: 'mjob_mock',
+        status: 'queued',
+        async: true as const,
+      };
+    }),
   };
 });
 
-import { generateAudio, generateImage, MEDIA_DIR } from '../lib/media-generator.js';
+import { generateMediaUnified, MEDIA_DIR } from '../lib/media-generator.js';
 import media from './media.js';
 
 beforeEach(() => {
@@ -43,14 +69,49 @@ beforeEach(() => {
     if (key === 'OPENAI_API_KEY') return SECRET;
     return undefined;
   });
-  vi.mocked(generateImage).mockReset();
-  vi.mocked(generateAudio).mockReset();
-  vi.mocked(generateImage).mockResolvedValue({
-    filePath: `${MEDIA_DIR}/mock-image.png`,
-    revisedPrompt: 'a refined cat',
-  });
-  vi.mocked(generateAudio).mockResolvedValue({
-    filePath: `${MEDIA_DIR}/mock-audio.mp3`,
+  vi.mocked(generateMediaUnified).mockReset();
+  vi.mocked(generateMediaUnified).mockImplementation(async (input) => {
+    if (input.surface === 'image') {
+      const prompt = input.prompt ?? input.text ?? '';
+      if (typeof prompt === 'string' && /[\0\r\n]/.test(prompt)) {
+        throw new Error('prompt contains invalid control characters');
+      }
+      if (typeof prompt === 'string' && prompt.trim().length > 4000) {
+        throw new Error('prompt too long (max 4000)');
+      }
+      if (typeof prompt === 'string' && !prompt.trim()) {
+        throw new Error('prompt is required for image');
+      }
+      return {
+        surface: 'image',
+        provider: 'openai',
+        filePath: `${MEDIA_DIR}/mock-image.png`,
+        filename: 'mock-image.png',
+        revisedPrompt: 'a refined cat',
+      };
+    }
+    if (input.surface === 'audio') {
+      const text = input.text ?? input.prompt ?? '';
+      if (typeof text === 'string' && /\0/.test(text)) {
+        throw new Error('text contains invalid control characters');
+      }
+      if (typeof text === 'string' && !text.trim()) {
+        throw new Error('text is required for audio');
+      }
+      return {
+        surface: 'audio',
+        provider: 'openai',
+        filePath: `${MEDIA_DIR}/mock-audio.mp3`,
+        filename: 'mock-audio.mp3',
+      };
+    }
+    return {
+      surface: 'video',
+      provider: 'xai',
+      jobId: 'mjob_mock',
+      status: 'queued',
+      async: true,
+    };
   });
 });
 
@@ -69,7 +130,7 @@ describe('media generate success paths', () => {
     expect(body.ok).toBe(true);
     expect(body.data.filename).toBe('mock-image.png');
     expect(body.data.revisedPrompt).toBe('a refined cat');
-    expect(generateImage).toHaveBeenCalledOnce();
+    expect(generateMediaUnified).toHaveBeenCalledOnce();
   });
 
   it('POST /audio returns mocked generator result', async () => {
@@ -82,7 +143,7 @@ describe('media generate success paths', () => {
     const body = (await res.json()) as { ok: boolean; data: { filename: string } };
     expect(body.ok).toBe(true);
     expect(body.data.filename).toBe('mock-audio.mp3');
-    expect(generateAudio).toHaveBeenCalledOnce();
+    expect(generateMediaUnified).toHaveBeenCalledOnce();
   });
 
   it('POST /generate image and audio surfaces', async () => {
@@ -114,13 +175,14 @@ describe('media generate success paths', () => {
       body: JSON.stringify({ surface: 'image', text: 'from text field' }),
     });
     expect(res.status).toBe(200);
-    expect(vi.mocked(generateImage).mock.calls[0]?.[0]).toMatchObject({
-      prompt: 'from text field',
+    expect(vi.mocked(generateMediaUnified).mock.calls[0]?.[0]).toMatchObject({
+      surface: 'image',
+      text: 'from text field',
     });
   });
 
   it('POST /image returns 500 when generator throws', async () => {
-    vi.mocked(generateImage).mockRejectedValueOnce(new Error('upstream down'));
+    vi.mocked(generateMediaUnified).mockRejectedValueOnce(new Error('upstream down'));
     const res = await media.request('/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -148,6 +210,9 @@ describe('media generate success paths', () => {
 
   it('POST /image returns 400 when API key missing', async () => {
     getSecretSettingMock.mockReturnValue(undefined);
+    vi.mocked(generateMediaUnified).mockRejectedValueOnce(
+      new Error('OPENAI_API_KEY is not configured'),
+    );
     const res = await media.request('/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

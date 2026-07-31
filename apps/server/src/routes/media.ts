@@ -1,20 +1,42 @@
 /**
- * Media Generation routes
- * POST /api/media/image  — Generate image via DALL-E 3
- * POST /api/media/audio  — Generate audio via TTS
+ * Media Generation routes (Task 8 multi-provider).
+ * POST /api/media/image  — Generate image
+ * POST /api/media/audio  — Generate audio
+ * POST /api/media/generate — Unified image|audio|video (+ provider)
+ * GET  /api/media/jobs/:id — Video job poll
+ * GET  /api/media/providers — Provider catalog
+ * GET  /api/media/config — Readiness (no secrets)
  * GET  /api/media/file   — Serve a saved media file
  */
 
 import { Hono } from 'hono';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getSecretSetting } from '../db/settings.js';
 import { publicErrorMessage } from '../lib/errors.js';
-import { generateImage, generateAudio, listMediaFiles, MEDIA_DIR as MEDIA_DIR_EXPORT } from '../lib/media-generator.js';
+import {
+  generateMediaUnified,
+  getVideoJob,
+  listMediaFiles,
+  MEDIA_DIR as MEDIA_DIR_EXPORT,
+} from '../lib/media-generator.js';
+import { buildMediaConfigPublic, listProviderCatalog } from '../lib/media-providers.js';
+import { listMediaJobs } from '../lib/media-jobs.js';
 import { isSafeMediaFilename } from '../lib/media-filename.js';
 
 const media = new Hono();
 const MEDIA_DIR = MEDIA_DIR_EXPORT;
+
+/** Map validation / config errors to 400; provider/network failures stay 500. */
+function mediaClientErrorStatus(msg: string): 400 | 500 {
+  if (
+    /not configured|disabled|does not support|required|too long|control characters|invalid|must be|unknown media provider/i.test(
+      msg,
+    )
+  ) {
+    return 400;
+  }
+  return 500;
+}
 
 /** List generated media files for FileViewer */
 media.get('/files', async (c) => {
@@ -28,21 +50,64 @@ media.get('/files', async (c) => {
 });
 
 /**
- * Media config status (plan Task 7) — does not return the secret value.
+ * Media config status (plan Task 7/8) — does not return secret values.
  */
 media.get('/config', (c) => {
-  const hasOpenAi = !!getSecretSetting('OPENAI_API_KEY');
-  const baseUrl = getSecretSetting('OPENAI_BASE_URL');
+  return c.json({
+    ok: true,
+    data: buildMediaConfigPublic(),
+  });
+});
+
+/** Provider catalog with configured flags (no secrets). */
+media.get('/providers', (c) => {
+  const providers = listProviderCatalog();
+  return c.json({
+    ok: true,
+    data: providers,
+    meta: { count: providers.length },
+  });
+});
+
+/** Video / async job poll */
+media.get('/jobs/:id', (c) => {
+  const idRaw = c.req.param('id');
+  if (typeof idRaw !== 'string' || /[\0\r\n]/.test(idRaw) || !idRaw.trim()) {
+    return c.json({ ok: false, error: 'Invalid job id' }, 400);
+  }
+  const job = getVideoJob(idRaw.trim());
+  if (!job) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({
     ok: true,
     data: {
-      openaiConfigured: hasOpenAi,
-      openaiBaseUrl: baseUrl ?? null,
-      surfaces: ['image', 'audio'] as const,
-      imageModels: ['dall-e-3'],
-      audioModels: ['tts-1', 'tts-1-hd'],
+      id: job.id,
+      surface: job.surface,
+      provider: job.provider,
+      status: job.status,
+      filename: job.filename,
+      error: job.error,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
     },
   });
+});
+
+media.get('/jobs', (c) => {
+  const limitQuery = c.req.query('limit') ?? '';
+  const limitRaw =
+    limitQuery && !/[\0\r\n]/.test(limitQuery) ? limitQuery.trim() : '';
+  const limit = limitRaw ? Math.min(Math.max(Number(limitRaw) || 50, 1), 200) : 50;
+  const jobs = listMediaJobs(limit).map((job) => ({
+    id: job.id,
+    surface: job.surface,
+    provider: job.provider,
+    status: job.status,
+    filename: job.filename,
+    error: job.error,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  }));
+  return c.json({ ok: true, data: jobs });
 });
 
 media.post('/image', async (c) => {
@@ -50,6 +115,8 @@ media.post('/image', async (c) => {
     prompt: string;
     size?: '1024x1024' | '1792x1024' | '1024x1792';
     quality?: 'standard' | 'hd';
+    provider?: string;
+    model?: string;
   }>().catch(() => null);
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
@@ -66,27 +133,30 @@ media.post('/image', async (c) => {
     return c.json({ ok: false, error: 'prompt too long' }, 400);
   }
 
-  const apiKey = getSecretSetting('OPENAI_API_KEY');
-  if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
-
   try {
-    const result = await generateImage({
+    const result = await generateMediaUnified({
+      surface: 'image',
+      provider: typeof body.provider === 'string' ? body.provider : undefined,
       prompt,
       size: body.size,
       quality: body.quality,
-      apiKey,
+      model: typeof body.model === 'string' ? body.model : undefined,
     });
+    if (result.surface !== 'image') {
+      return c.json({ ok: false, error: 'Unexpected surface' }, 500);
+    }
     return c.json({
       ok: true,
       data: {
         filePath: result.filePath,
-        filename: path.basename(result.filePath),
+        filename: result.filename,
         revisedPrompt: result.revisedPrompt,
+        provider: result.provider,
       },
     });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to generate image');
-    return c.json({ ok: false, error: msg }, 500);
+    return c.json({ ok: false, error: msg }, mediaClientErrorStatus(msg));
   }
 });
 
@@ -95,6 +165,7 @@ media.post('/audio', async (c) => {
     text: string;
     voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
     model?: 'tts-1' | 'tts-1-hd';
+    provider?: string;
   }>().catch(() => null);
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
@@ -111,23 +182,28 @@ media.post('/audio', async (c) => {
     return c.json({ ok: false, error: 'text too long (max 4096 chars)' }, 400);
   }
 
-  const apiKey = getSecretSetting('OPENAI_API_KEY');
-  if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
-
   try {
-    const result = await generateAudio({
+    const result = await generateMediaUnified({
+      surface: 'audio',
+      provider: typeof body.provider === 'string' ? body.provider : undefined,
       text,
       voice: body.voice,
       model: body.model,
-      apiKey,
     });
+    if (result.surface !== 'audio') {
+      return c.json({ ok: false, error: 'Unexpected surface' }, 500);
+    }
     return c.json({
       ok: true,
-      data: { filePath: result.filePath, filename: path.basename(result.filePath) },
+      data: {
+        filePath: result.filePath,
+        filename: result.filename,
+        provider: result.provider,
+      },
     });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to generate audio');
-    return c.json({ ok: false, error: msg }, 500);
+    return c.json({ ok: false, error: msg }, mediaClientErrorStatus(msg));
   }
 });
 
@@ -150,6 +226,7 @@ media.get('/file/:filename', (c) => {
     '.jpeg': 'image/jpeg',
     '.mp3': 'audio/mpeg',
     '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
     '.webp': 'image/webp',
   };
   const mimeType = mimeTypes[ext] ?? 'application/octet-stream';
@@ -159,18 +236,19 @@ media.get('/file/:filename', (c) => {
 });
 
 /**
- * Unified media generate endpoint (plan Task 7).
- * Body: { surface: 'image' | 'audio', prompt|text, size?, quality?, voice?, model? }
+ * Unified media generate endpoint (plan Task 7/8).
+ * Body: { surface: 'image' | 'audio' | 'video', provider?, prompt|text, size?, quality?, voice?, model? }
  */
 media.post('/generate', async (c) => {
   const body = await c.req.json<{
-    surface?: 'image' | 'audio';
+    surface?: 'image' | 'audio' | 'video';
+    provider?: string;
     prompt?: string;
     text?: string;
     size?: '1024x1024' | '1792x1024' | '1024x1792';
     quality?: 'standard' | 'hd';
     voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
-    model?: 'tts-1' | 'tts-1-hd';
+    model?: string;
   }>().catch(() => null);
 
   if (!body || typeof body !== 'object') {
@@ -183,72 +261,30 @@ media.post('/generate', async (c) => {
     return c.json({ ok: false, error: 'surface contains invalid control characters' }, 400);
   }
   const surface = surfaceRaw.trim().toLowerCase();
-  if (surface !== 'image' && surface !== 'audio') {
-    return c.json({ ok: false, error: 'surface must be image or audio' }, 400);
+  if (surface !== 'image' && surface !== 'audio' && surface !== 'video') {
+    return c.json({ ok: false, error: 'surface must be image, audio, or video' }, 400);
   }
 
-  const apiKey = getSecretSetting('OPENAI_API_KEY');
-  if (!apiKey) return c.json({ ok: false, error: 'OpenAI API key not configured' }, 400);
+  const providerRaw = typeof body.provider === 'string' ? body.provider : '';
+  if (providerRaw && /[\0\r\n]/.test(providerRaw)) {
+    return c.json({ ok: false, error: 'provider contains invalid control characters' }, 400);
+  }
 
   try {
-    if (surface === 'image') {
-      const rawPrompt = body.prompt ?? body.text;
-      if (typeof rawPrompt === 'string' && /[\0\r\n]/.test(rawPrompt)) {
-        return c.json({ ok: false, error: 'prompt contains invalid control characters' }, 400);
-      }
-      const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
-      if (!prompt) {
-        return c.json({ ok: false, error: 'prompt is required for image' }, 400);
-      }
-      if (prompt.length > 4000) {
-        return c.json({ ok: false, error: 'prompt too long' }, 400);
-      }
-      const result = await generateImage({
-        prompt,
-        size: body.size,
-        quality: body.quality,
-        apiKey,
-      });
-      return c.json({
-        ok: true,
-        data: {
-          surface: 'image',
-          filePath: result.filePath,
-          filename: path.basename(result.filePath),
-          revisedPrompt: result.revisedPrompt,
-        },
-      });
-    }
-
-    const rawText = body.text ?? body.prompt;
-    // TTS allows newlines; only null-byte is rejected
-    if (typeof rawText === 'string' && /[\0]/.test(rawText)) {
-      return c.json({ ok: false, error: 'text contains invalid control characters' }, 400);
-    }
-    const text = typeof rawText === 'string' ? rawText.trim() : '';
-    if (!text) {
-      return c.json({ ok: false, error: 'text is required for audio' }, 400);
-    }
-    if (text.length > 4096) {
-      return c.json({ ok: false, error: 'text too long (max 4096 chars)' }, 400);
-    }
-    const result = await generateAudio({
-      text,
+    const result = await generateMediaUnified({
+      surface: surface as 'image' | 'audio' | 'video',
+      provider: providerRaw.trim() || undefined,
+      prompt: body.prompt,
+      text: body.text,
+      size: body.size,
+      quality: body.quality,
       voice: body.voice,
-      model: body.model,
-      apiKey,
+      model: typeof body.model === 'string' ? body.model : undefined,
     });
-    return c.json({
-      ok: true,
-      data: {
-        surface: 'audio',
-        filePath: result.filePath,
-        filename: path.basename(result.filePath),
-      },
-    });
+    return c.json({ ok: true, data: result });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to generate media');
-    return c.json({ ok: false, error: msg }, 500);
+    return c.json({ ok: false, error: msg }, mediaClientErrorStatus(msg));
   }
 });
 
