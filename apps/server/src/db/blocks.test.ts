@@ -376,5 +376,42 @@ describe('custom blocks CRUD', () => {
     const all = listCustomBlocks('\ncoding');
     expect(all.some((b) => b.id === IDS[0])).toBe(true);
   });
+
+  it('coerces non-string IO descriptions, truncates, and rejects overlong skillId', () => {
+    const created = createCustomBlock({
+      ...sampleBlock(IDS[1]!),
+      inputDescription: 42 as unknown as string,
+      outputDescription: true as unknown as string,
+      skillId: 'skill-ok',
+      paramDefs: Array.from({ length: 200 }, (_, i) => ({
+        key: `k${i}`,
+        type: 'string' as const,
+        label: `L${i}`,
+        default: 'x'.repeat(500),
+      })),
+    });
+    expect(created.inputDescription.length).toBeGreaterThan(0);
+    expect(created.outputDescription.length).toBeGreaterThan(0);
+    // oversized paramDefs JSON may be dropped to []
+    expect(Array.isArray(created.paramDefs)).toBe(true);
+
+    expect(() =>
+      createCustomBlock({
+        ...sampleBlock('_cov_blk_skilllong'),
+        skillId: 's'.repeat(500),
+      }),
+    ).toThrow(/skillId is invalid/i);
+
+    // Truncate long IO descriptions
+    const longIo = createCustomBlock({
+      ...sampleBlock('_cov_blk_longio'),
+      id: '_cov_blk_longio',
+      inputDescription: 'i'.repeat(50_000),
+      outputDescription: 'o'.repeat(50_000),
+    });
+    expect(longIo.inputDescription.length).toBeLessThan(50_000);
+    expect(longIo.outputDescription.length).toBeLessThan(50_000);
+    deleteCustomBlock('_cov_blk_longio');
+  });
 });
 

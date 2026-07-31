@@ -220,4 +220,65 @@ describe('live-artifacts db edge cases', () => {
       }),
     ).toThrow(/inputs exceed/i);
   });
+
+  it('rejects invalid project/name/template and wrong-project get', () => {
+    expect(() =>
+      createLiveArtifact({
+        projectId: '00000000-0000-0000-0000-000000000099',
+        name: 'X',
+        sourceTemplate: 't',
+      }),
+    ).toThrow(/Project not found|Invalid project/i);
+
+    expect(() =>
+      createLiveArtifact({
+        projectId: '',
+        name: 'X',
+        sourceTemplate: 't',
+      }),
+    ).toThrow(/project/i);
+
+    const p = projects.createProject({ name: `${NAME}_inv` });
+    ids.push(p.id);
+    expect(() =>
+      createLiveArtifact({
+        projectId: p.id,
+        name: '',
+        sourceTemplate: 't',
+      }),
+    ).toThrow(/name/i);
+    expect(() =>
+      createLiveArtifact({
+        projectId: p.id,
+        name: `n${'\n'}x`,
+        sourceTemplate: 't',
+      }),
+    ).toThrow(/name/i);
+    expect(() =>
+      createLiveArtifact({
+        projectId: p.id,
+        name: 'Ok',
+        sourceTemplate: `t${'\0'}x`,
+      }),
+    ).toThrow(/control/i);
+    expect(() =>
+      createLiveArtifact({
+        projectId: p.id,
+        name: 'Ok',
+        sourceTemplate: 'x'.repeat(2 * 1024 * 1024 + 1),
+      }),
+    ).toThrow(/sourceTemplate exceeds|max size/i);
+
+    const art = createLiveArtifact({
+      projectId: p.id,
+      name: 'Owned',
+      sourceTemplate: 'hi',
+    });
+    expect(getLiveArtifact(art.id)).toBeTruthy();
+    expect(getLiveArtifact(art.id, '00000000-0000-0000-0000-000000000001')).toBeNull();
+    expect(getLiveArtifact('')).toBeNull();
+    expect(getLiveArtifact(`bad${'\n'}id`)).toBeNull();
+    expect(deleteLiveArtifact(art.id, p.id)).toBe(true);
+    expect(deleteLiveArtifact(art.id, p.id)).toBe(false);
+  });
 });

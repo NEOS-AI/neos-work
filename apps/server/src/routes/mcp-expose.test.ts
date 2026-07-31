@@ -102,4 +102,84 @@ describe('mcp-expose routes', () => {
     expect(body.ok).toBe(true);
     expect(body.data.removed).toBe(true);
   });
+
+  it('install-info uses runtime token, env URLs, and drops control-char query', async () => {
+    const { setRuntimeContext } = await import('../lib/runtime-context.js');
+    const prevPublic = process.env.NEOS_PUBLIC_URL;
+    const prevWeb = process.env.NEOS_WEB_URL;
+    const prevBin = process.env.NEOS_BIN;
+    const prevPort = process.env.PORT;
+    try {
+      setRuntimeContext({ authToken: 'runtime-tok-abc', port: 3456 });
+      process.env.NEOS_PUBLIC_URL = 'https://public.example/';
+      process.env.NEOS_WEB_URL = 'https://web.example/';
+      process.env.NEOS_BIN = '/opt/neos/bin/neos';
+      process.env.PORT = '9999';
+
+      const res = await app.request(
+        `/api/mcp/install-info?projectId=${encodeURIComponent('bad\nid')}&neosBin=${encodeURIComponent('x'.repeat(5000))}`,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        ok: boolean;
+        data: { env?: { NEOS_AUTH_TOKEN?: string }; command?: string; args?: string[] };
+      };
+      expect(body.ok).toBe(true);
+      // runtime token preferred over missing Bearer
+      expect(body.data.env?.NEOS_AUTH_TOKEN).toBe('runtime-tok-abc');
+    } finally {
+      setRuntimeContext({ authToken: '', port: 3000 });
+      if (prevPublic === undefined) delete process.env.NEOS_PUBLIC_URL;
+      else process.env.NEOS_PUBLIC_URL = prevPublic;
+      if (prevWeb === undefined) delete process.env.NEOS_WEB_URL;
+      else process.env.NEOS_WEB_URL = prevWeb;
+      if (prevBin === undefined) delete process.env.NEOS_BIN;
+      else process.env.NEOS_BIN = prevBin;
+      if (prevPort === undefined) delete process.env.PORT;
+      else process.env.PORT = prevPort;
+    }
+  });
+
+  it('POST install/codex accepts body authToken and DELETE surfaces failure', async () => {
+    setCodexRunnerForTests(async (args) => {
+      if (args[0] === 'mcp' && args[1] === 'add') {
+        return { stdout: 'ok', stderr: '', code: 0 };
+      }
+      return { stdout: '', stderr: 'remove failed', code: 1 };
+    });
+    const add = await app.request('/api/mcp/install/codex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        authToken: '  body-tok  ',
+        projectId: 'proj-1',
+        neosBin: '/usr/local/bin/neos',
+      }),
+    });
+    expect(add.status).toBe(200);
+    const addBody = (await add.json()) as { ok: boolean };
+    expect(addBody.ok).toBe(true);
+
+    const del = await app.request('/api/mcp/install/codex', { method: 'DELETE' });
+    expect(del.status).toBe(400);
+    const delBody = (await del.json()) as { ok: boolean; error?: string };
+    expect(delBody.ok).toBe(false);
+    expect(delBody.error).toMatch(/remove failed|codex/i);
+  });
+
+  it('codex status/install catch runner throws as 500', async () => {
+    setCodexRunnerForTests(async () => {
+      throw new Error('runner boom');
+    });
+    const status = await app.request('/api/mcp/install/codex/status');
+    expect(status.status).toBe(500);
+    const install = await app.request('/api/mcp/install/codex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(install.status).toBe(500);
+    const remove = await app.request('/api/mcp/install/codex', { method: 'DELETE' });
+    expect(remove.status).toBe(500);
+  });
 });

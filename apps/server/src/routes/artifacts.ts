@@ -253,10 +253,15 @@ artifacts.post('/:id/refresh', async (c) => {
     try {
       const fs = await import('node:fs/promises');
       const pathMod = await import('node:path');
-      // Only allow reading under home config / media dirs (path traversal defense)
+      // Only allow reading under home (path traversal + sibling-prefix defense)
       const resolved = pathMod.resolve(artifact.filePath);
-      const home = (await import('node:os')).homedir();
-      if (!resolved.startsWith(pathMod.resolve(home))) {
+      if (/[\0\r\n]/.test(artifact.filePath) || resolved.length > 4_096) {
+        return c.json({ ok: false, error: 'Invalid file path' }, 400);
+      }
+      const home = pathMod.resolve((await import('node:os')).homedir());
+      const homePrefix = home.endsWith(pathMod.sep) ? home : home + pathMod.sep;
+      // Require path.sep after home — bare startsWith(home) allows /home/user-evil/...
+      if (resolved !== home && !resolved.startsWith(homePrefix)) {
         return c.json({ ok: false, error: 'Invalid file path' }, 400);
       }
       const content = await fs.readFile(resolved, 'utf8');

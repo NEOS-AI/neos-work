@@ -520,6 +520,26 @@ describe('artifacts refresh filePath reload', () => {
         await artifacts.request(`/${outside.id}`, { method: 'DELETE' });
       }
 
+      // Sibling-prefix of home must not pass (e.g. /Users/u-evil vs /Users/u)
+      // Path need not exist — rejection is pre-read boundary check.
+      const homeResolved = path.resolve(os.homedir());
+      const siblingFile = `${homeResolved}-evil-neos-${process.pid}/x.html`;
+      const sibArt = createArtifact({
+        workflowId: wf.id,
+        name: 'sibling.html',
+        contentType: 'text/html',
+        content: 'x',
+        filePath: siblingFile,
+      });
+      const sibRes = await artifacts.request(`/${sibArt.id}/refresh`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'reload' }),
+      });
+      expect(sibRes.status).toBe(400);
+      expect(((await sibRes.json()) as { error: string }).error).toMatch(/Invalid file path/i);
+      await artifacts.request(`/${sibArt.id}`, { method: 'DELETE' });
+
       await artifacts.request(`/${art.id}`, { method: 'DELETE' });
     } finally {
       try { fs.unlinkSync(homeFile); } catch { /* ignore */ }
