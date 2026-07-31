@@ -72,4 +72,59 @@ describe('media-jobs', () => {
     }
     expect(listMediaJobs(500).length).toBeLessThanOrEqual(200);
   });
+
+  it('enforceJobCap prefers dropping finished jobs before active ones', () => {
+    // Fill near cap with a mix of finished + active
+    const finished: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      const j = createMediaJob({ surface: 'video', provider: 'stub', prompt: `fin${i}` });
+      updateMediaJob(j.id, { status: i % 2 === 0 ? 'succeeded' : 'failed' });
+      finished.push(j.id);
+    }
+    for (let i = 0; i < 180; i++) {
+      createMediaJob({ surface: 'video', provider: 'stub', prompt: `act${i}` });
+    }
+    // Trigger cap by creating more
+    for (let i = 0; i < 30; i++) {
+      createMediaJob({ surface: 'video', provider: 'stub', prompt: `more${i}` });
+    }
+    expect(listMediaJobs(500).length).toBeLessThanOrEqual(200);
+    // Many finished should have been dropped
+    const stillFinished = finished.filter((id) => getMediaJob(id)).length;
+    expect(stillFinished).toBeLessThan(finished.length);
+  });
+
+  it('updateMediaJob sanitizes filename/filePath/model and rejects unknown ids', () => {
+    expect(updateMediaJob('missing', { status: 'running' })).toBeUndefined();
+    expect(getMediaJob('x'.repeat(100))).toBeUndefined();
+
+    const job = createMediaJob({
+      surface: 'video',
+      provider: 'stub',
+      prompt: 'p',
+      model: undefined,
+    });
+    updateMediaJob(job.id, {
+      filename: 'bad\nname.mp4',
+      filePath: 'bad\npath',
+      model: 'ok-model',
+    });
+    const u = getMediaJob(job.id)!;
+    expect(u.filename).toBeUndefined();
+    expect(u.filePath).toBeUndefined();
+    expect(u.model).toBe('ok-model');
+
+    updateMediaJob(job.id, {
+      filename: '  clip.mp4  ',
+      filePath: '  /tmp/clip.mp4  ',
+      model: 'bad\nmodel',
+    });
+    const u2 = getMediaJob(job.id)!;
+    expect(u2.filename).toBe('clip.mp4');
+    expect(u2.filePath).toBe('/tmp/clip.mp4');
+    expect(u2.model).toBeUndefined();
+
+    updateMediaJob(job.id, { error: 123 as never });
+    expect(getMediaJob(job.id)?.error).toBeUndefined();
+  });
 });

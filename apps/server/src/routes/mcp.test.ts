@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../db/schema.js';
-import { mcp } from './mcp.js';
+import { createMcpServer, mcp, safeMcpLookupId } from './mcp.js';
 
 const NAME = `_cov_mcp_route_${process.pid}`;
 
@@ -1110,5 +1110,410 @@ describe('mcp oauth flow housekeeping', () => {
       }),
     });
     expect(longCid.status).toBe(400);
+  });
+
+  it('cleanExpiredFlows drops flows older than 10 minutes', async () => {
+    let now = 1_700_000_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    try {
+      const start = await mcp.request('/oauth/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          serverId: `oauth-exp-${process.pid}`,
+          authorizationEndpoint: 'https://auth.example/oauth',
+          tokenEndpoint: 'https://auth.example/token',
+          clientId: 'cid',
+          redirectUri: 'http://localhost:3000/cb',
+        }),
+      });
+      expect(start.status).toBe(200);
+      const state = ((await start.json()) as { data: { state: string } }).data.state;
+
+      // Advance past 10-minute TTL so next start expires the pending flow
+      now += 11 * 60 * 1000;
+      const start2 = await mcp.request('/oauth/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          serverId: `oauth-exp2-${process.pid}`,
+          authorizationEndpoint: 'https://auth.example/oauth',
+          tokenEndpoint: 'https://auth.example/token',
+          clientId: 'cid',
+          redirectUri: 'http://localhost:3000/cb',
+        }),
+      });
+      expect(start2.status).toBe(200);
+
+      const cb = await mcp.request(
+        `/oauth/callback?code=c1&state=${encodeURIComponent(state)}`,
+      );
+      expect(cb.status).toBe(400);
+      expect(await cb.text()).toMatch(/Invalid or expired state/i);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('mcp oauth callback/refresh remaining edges', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function startFlow(serverId: string): Promise<string> {
+    const start = await mcp.request('/oauth/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        serverId,
+        authorizationEndpoint: 'https://auth.example/oauth',
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+        redirectUri: 'http://localhost:3000/cb',
+      }),
+    });
+    expect(start.status).toBe(200);
+    return ((await start.json()) as { data: { state: string } }).data.state;
+  }
+
+  it('oauth/callback non-ok token response tolerates text() failure', async () => {
+    const state = await startFlow(`oauth-text-throw-${process.pid}`);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        text: async () => {
+          throw new Error('body unavailable');
+        },
+        json: async () => ({}),
+      }),
+    );
+    const cb = await mcp.request(
+      `/oauth/callback?code=c1&state=${encodeURIComponent(state)}`,
+    );
+    expect(cb.status).toBe(500);
+    expect(await cb.text()).toMatch(/Token exchange failed/i);
+  });
+
+  it('oauth/callback rejects control-char and overlong access_token', async () => {
+    const state1 = await startFlow(`oauth-at-ctrl-${process.pid}`);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: 'bad\ntoken' }),
+        text: async () => '',
+      }),
+    );
+    const cb1 = await mcp.request(
+      `/oauth/callback?code=c1&state=${encodeURIComponent(state1)}`,
+    );
+    expect(cb1.status).toBe(500);
+    expect(await cb1.text()).toMatch(/access_token/i);
+
+    const state2 = await startFlow(`oauth-at-long-${process.pid}`);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: 'a'.repeat(20_000) }),
+        text: async () => '',
+      }),
+    );
+    const cb2 = await mcp.request(
+      `/oauth/callback?code=c2&state=${encodeURIComponent(state2)}`,
+    );
+    expect(cb2.status).toBe(500);
+    expect(await cb2.text()).toMatch(/access_token|Invalid/i);
+  });
+
+  it('oauth/callback truncates overlong OAuth error query and handles token parse throw', async () => {
+    const longErr = 'e'.repeat(600);
+    const errRes = await mcp.request(
+      `/oauth/callback?error=${encodeURIComponent(longErr)}&state=s`,
+    );
+    expect(errRes.status).toBe(400);
+    const html = await errRes.text();
+    expect(html).toMatch(/OAuth Error/i);
+    // truncated to OAUTH_ERROR_MAX (500)
+    expect(html).not.toContain('e'.repeat(520));
+
+    const state = await startFlow(`oauth-json-throw-${process.pid}`);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => {
+          throw new Error('malformed token body');
+        },
+        text: async () => '',
+      }),
+    );
+    const cb = await mcp.request(
+      `/oauth/callback?code=c1&state=${encodeURIComponent(state)}`,
+    );
+    expect(cb.status).toBe(500);
+    expect(await cb.text()).toMatch(/Error|malformed|token/i);
+  });
+
+  it('oauth refresh rejects invalid JSON body and missing fields', async () => {
+    const sid = `oauth-ref-body-${process.pid}`;
+    const state = await startFlow(sid);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: 'at', refresh_token: 'rt' }),
+        text: async () => '',
+      }),
+    );
+    await mcp.request(`/oauth/callback?code=c1&state=${encodeURIComponent(state)}`);
+
+    const badJson = await mcp.request(`/oauth/${sid}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const empty = await mcp.request(`/oauth/${sid}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(empty.status).toBe(400);
+
+    await mcp.request(`/oauth/${sid}`, { method: 'DELETE' });
+  });
+
+  it('oauth refresh returns 502 on network error and 500 when response body throws', async () => {
+    const sid = `oauth-ref-net-${process.pid}`;
+    const state = await startFlow(sid);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: 'at',
+          refresh_token: 'rt',
+        }),
+        text: async () => '',
+      }),
+    );
+    await mcp.request(`/oauth/callback?code=c1&state=${encodeURIComponent(state)}`);
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNRESET')));
+    const net = await mcp.request(`/oauth/${sid}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+      }),
+    });
+    expect(net.status).toBe(502);
+    expect(((await net.json()) as { error: string }).error).toMatch(/network|ECONNRESET|refresh/i);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error('broken json');
+        },
+        text: async () => '',
+      }),
+    );
+    const boom = await mcp.request(`/oauth/${sid}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenEndpoint: 'https://auth.example/token',
+        clientId: 'cid',
+      }),
+    });
+    expect(boom.status).toBe(500);
+
+    await mcp.request(`/oauth/${sid}`, { method: 'DELETE' });
+  });
+
+  it('from-preset returns 409 when name already exists', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const name = `_cov_tv_dup_${process.pid}`;
+    // Pre-create server with the same display name
+    const create = await mcp.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'x'],
+      }),
+    });
+    expect(create.status).toBe(201);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-tv-dup-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'src', 'server.js'), 'export default {}\n');
+      const res = await mcp.request('/from-preset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'tradingview',
+          installPath: dir,
+          name,
+        }),
+      });
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { error: string }).error).toMatch(/already exists/i);
+    } finally {
+      getDb().prepare('DELETE FROM mcp_server WHERE name = ?').run(name);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('safeMcpLookupId rejects non-string, control, blank, and overlong ids', () => {
+    expect(safeMcpLookupId(null)).toBe('');
+    expect(safeMcpLookupId(42)).toBe('');
+    expect(safeMcpLookupId('bad\nid')).toBe('');
+    expect(safeMcpLookupId('  ')).toBe('');
+    expect(safeMcpLookupId('x'.repeat(101))).toBe('');
+    expect(safeMcpLookupId('  ok-id  ')).toBe('ok-id');
+  });
+
+  it('createMcpServer unit validation covers control-char and url edges', () => {
+    const base = `_cov_mcp_unit_${process.pid}`;
+    expect(() => createMcpServer({ name: 'bad\n', transport: 'stdio', command: 'npx' })).toThrow(
+      /control/i,
+    );
+    expect(() => createMcpServer({ name: '   ', transport: 'stdio', command: 'npx' })).toThrow(
+      /required/i,
+    );
+    expect(() =>
+      createMcpServer({ name: 'n'.repeat(201), transport: 'stdio', command: 'npx' }),
+    ).toThrow(/max length/i);
+    expect(() =>
+      createMcpServer({ name: base, transport: 'stdio\n' as 'stdio', command: 'npx' }),
+    ).toThrow(/transport/i);
+    expect(() =>
+      createMcpServer({ name: base, transport: 'ftp' as 'stdio', command: 'npx' }),
+    ).toThrow(/transport/i);
+    expect(() =>
+      createMcpServer({ name: base, transport: 'stdio', command: 'npx\nbad' }),
+    ).toThrow(/control/i);
+    expect(() =>
+      createMcpServer({
+        name: base,
+        transport: 'stdio',
+        command: 'c'.repeat(501),
+      }),
+    ).toThrow(/max length/i);
+    // non-string command coerced to null
+    const rowNullCmd = createMcpServer({
+      name: `${base}_nullcmd`,
+      transport: 'http',
+      command: 123 as unknown as string,
+      url: 'https://example.com/mcp',
+    });
+    expect(rowNullCmd.command).toBeNull();
+    getDb().prepare('DELETE FROM mcp_server WHERE id = ?').run(rowNullCmd.id);
+
+    expect(() =>
+      createMcpServer({
+        name: base,
+        transport: 'http',
+        url: 'https://example.com/\n',
+      }),
+    ).toThrow(/control/i);
+    expect(() =>
+      createMcpServer({
+        name: base,
+        transport: 'http',
+        url: `https://example.com/${'a'.repeat(2100)}`,
+      }),
+    ).toThrow(/max length/i);
+    expect(() =>
+      createMcpServer({
+        name: base,
+        transport: 'http',
+        url: 'ftp://example.com/x',
+      }),
+    ).toThrow(/http|url/i);
+    expect(() =>
+      createMcpServer({
+        name: base,
+        transport: 'http',
+        url: 'not a url',
+      }),
+    ).toThrow(/invalid/i);
+
+    // success with whitespace command trim → null-ish empty becomes null
+    const ok = createMcpServer({
+      name: `${base}_ok`,
+      transport: 'http',
+      command: '   ',
+      url: 'https://example.com/ok',
+      args: ['a', 'bad\nb', '', 'c'.repeat(600), 'd'],
+    });
+    expect(ok.url).toContain('example.com');
+    getDb().prepare('DELETE FROM mcp_server WHERE id = ?').run(ok.id);
+  });
+
+  it('list/toggle/delete tolerate corrupt args JSON and control-char args', async () => {
+    const db = getDb();
+    const ids = [
+      `_args_bad_${process.pid}`,
+      `_args_obj_${process.pid}`,
+      `_args_ctrl_${process.pid}`,
+    ];
+    const names = ids.map((id) => `${NAME}_${id}`);
+    try {
+      db.prepare(
+        `INSERT INTO mcp_server (id, name, transport, command, args, url, enabled)
+         VALUES (?, ?, 'stdio', 'npx', ?, NULL, 1)`,
+      ).run(ids[0], names[0], 'not-json');
+      db.prepare(
+        `INSERT INTO mcp_server (id, name, transport, command, args, url, enabled)
+         VALUES (?, ?, 'stdio', 'npx', ?, NULL, 1)`,
+      ).run(ids[1], names[1], JSON.stringify({ not: 'array' }));
+      db.prepare(
+        `INSERT INTO mcp_server (id, name, transport, command, args, url, enabled)
+         VALUES (?, ?, 'stdio', 'npx', ?, NULL, 1)`,
+      ).run(ids[2], names[2], JSON.stringify(['ok', 'bad\narg', '']));
+
+      const list = await mcp.request('/');
+      expect(list.status).toBe(200);
+      const body = (await list.json()) as {
+        data: Array<{ id: string; args: string[] | null }>;
+      };
+      const bad = body.data.find((r) => r.id === ids[0]);
+      const obj = body.data.find((r) => r.id === ids[1]);
+      const ctrl = body.data.find((r) => r.id === ids[2]);
+      expect(bad?.args).toBeNull();
+      expect(obj?.args).toBeNull();
+      expect(ctrl?.args).toEqual(['ok']);
+
+      const toggle = await mcp.request(`/${ids[0]}/toggle`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled: false }),
+      });
+      expect(toggle.status).toBe(200);
+      expect((await mcp.request(`/${ids[0]}`, { method: 'DELETE' })).status).toBe(200);
+    } finally {
+      for (const id of ids) {
+        db.prepare('DELETE FROM mcp_server WHERE id = ?').run(id);
+      }
+      for (const n of names) {
+        db.prepare('DELETE FROM mcp_server WHERE name = ?').run(n);
+      }
+    }
   });
 });

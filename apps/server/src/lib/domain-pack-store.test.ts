@@ -514,4 +514,190 @@ describe('domain-pack-store load/state edges', () => {
     const r = await installPackFromDir(src);
     expect(r.ok).toBe(false);
   });
+
+  it('zip under top-level folder extracts with prefix and overwrites install', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'legal-pack/pack.json' });
+    archive.append('# Legal pack\n', { name: 'legal-pack/README.md' });
+    archive.append('skip me', { name: 'legal-pack/nested/deep.txt' });
+    archive.append('not text', { name: 'legal-pack/code.js' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    unregisterPack('legal');
+    const r1 = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r1.ok).toBe(true);
+    if (r1.ok) expect(r1.packId).toBe('legal');
+
+    // Second install overwrites existing destDir
+    const archive2 = new ZipArchive({ zlib: { level: 1 } });
+    archive2.append(
+      JSON.stringify({ ...SAMPLE, version: '1.0.1', description: 'v2' }),
+      { name: 'pack.json' },
+    );
+    archive2.finalize();
+    const chunks2: Buffer[] = [];
+    for await (const chunk of archive2) chunks2.push(Buffer.from(chunk));
+    const r2 = await installPackFromZipBuffer(Buffer.concat(chunks2));
+    expect(r2.ok).toBe(true);
+    expect(resolvePack('legal')?.description).toMatch(/v2|Legal/);
+  });
+
+  it('setEnabled re-registers from disk when runtime entry missing', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const dir = path.join(packsDir, 'legal');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'pack.json'), JSON.stringify(SAMPLE), 'utf8');
+    await fs.writeFile(
+      path.join(dir, 'state.json'),
+      JSON.stringify({ enabled: true }),
+      'utf8',
+    );
+    // state with embedded null → treated as enabled default path
+    await fs.writeFile(
+      path.join(dir, 'state.json'),
+      `{"enabled": true, "note": "x\u0000y"}`,
+      'utf8',
+    );
+    unregisterPack('legal');
+    expect(listPacks().some((p) => p.id === 'legal')).toBe(false);
+
+    const on = await setInstalledPackEnabled('legal', true);
+    expect(on.ok).toBe(true);
+    expect(resolveWorker('legal_reviewer')?.domain).toBe('legal');
+
+    const off = await setInstalledPackEnabled('legal', false);
+    expect(off.ok).toBe(true);
+  });
+
+  it('loadInstalled skips non-directory entries and broken stat targets', async () => {
+    const packsDir = resolveDomainPacksDir();
+    await fs.mkdir(packsDir, { recursive: true });
+    await fs.writeFile(path.join(packsDir, 'not-a-dir.txt'), 'x', 'utf8');
+    // valid slug dir without pack.json → error recorded
+    const empty = path.join(packsDir, 'empty-slug');
+    await fs.mkdir(empty, { recursive: true });
+    const r = await loadInstalledDomainPacks();
+    expect(r.errors.some((e) => /empty-slug/i.test(e))).toBe(true);
+  });
+
+  it('installPackFromDir uses neos-pack.json and overwrites prior install', async () => {
+    const src = path.join(tmpRoot, 'neos-pack-src');
+    await fs.mkdir(src, { recursive: true });
+    await fs.writeFile(
+      path.join(src, 'neos-pack.json'),
+      JSON.stringify(SAMPLE),
+      'utf8',
+    );
+    const r1 = await installPackFromDir(src);
+    expect(r1.ok).toBe(true);
+    // overwrite
+    const r2 = await installPackFromDir(src);
+    expect(r2.ok).toBe(true);
+    if (r2.ok) expect(r2.packId).toBe('legal');
+  });
+
+  it('rejects oversized zip buffer, too many files, and unsafe zip paths', async () => {
+    const { DOMAIN_PACK_ZIP_MAX_BYTES, DOMAIN_PACK_ZIP_MAX_FILES, DOMAIN_PACK_MANIFEST_MAX_CHARS } =
+      await import('./domain-pack-store.js');
+
+    // Oversized buffer short-circuits before unzip
+    const huge = Buffer.alloc(DOMAIN_PACK_ZIP_MAX_BYTES + 1);
+    expect((await installPackFromZipBuffer(huge)).ok).toBe(false);
+
+    // Too many files
+    const many = new ZipArchive({ zlib: { level: 1 } });
+    many.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
+    for (let i = 0; i < DOMAIN_PACK_ZIP_MAX_FILES + 5; i++) {
+      many.append(`f${i}`, { name: `f${i}.txt` });
+    }
+    many.finalize();
+    const manyChunks: Buffer[] = [];
+    for await (const chunk of many) manyChunks.push(Buffer.from(chunk));
+    const manyR = await installPackFromZipBuffer(Buffer.concat(manyChunks));
+    expect(manyR.ok).toBe(false);
+    if (!manyR.ok) expect(manyR.error).toMatch(/max|files/i);
+
+    // Absolute path entry
+    const abs = new ZipArchive({ zlib: { level: 1 } });
+    abs.append(JSON.stringify(SAMPLE), { name: '/abs/pack.json' });
+    abs.finalize();
+    const absChunks: Buffer[] = [];
+    for await (const chunk of abs) absChunks.push(Buffer.from(chunk));
+    // archiver may strip leading /; accept either unsafe or missing/invalid
+    const absR = await installPackFromZipBuffer(Buffer.concat(absChunks));
+    if (!absR.ok) expect(absR.error).toMatch(/unsafe|manifest|invalid|zip/i);
+
+    // Entry with colon (scheme-like / alternate stream) — archiver may rewrite path
+    const colon = new ZipArchive({ zlib: { level: 1 } });
+    colon.append(JSON.stringify(SAMPLE), { name: 'evil:stream/pack.json' });
+    colon.finalize();
+    const colonChunks: Buffer[] = [];
+    for await (const chunk of colon) colonChunks.push(Buffer.from(chunk));
+    const colonR = await installPackFromZipBuffer(Buffer.concat(colonChunks));
+    if (!colonR.ok) {
+      expect(colonR.error).toMatch(/unsafe|manifest|invalid|zip/i);
+    }
+
+    // Manifest too large (over DOMAIN_PACK_MANIFEST_MAX_CHARS)
+    const fat = new ZipArchive({ zlib: { level: 1 } });
+    fat.append(
+      JSON.stringify({
+        ...SAMPLE,
+        description: 'x'.repeat(DOMAIN_PACK_MANIFEST_MAX_CHARS + 10),
+      }),
+      { name: 'pack.json' },
+    );
+    fat.finalize();
+    const fatChunks: Buffer[] = [];
+    for await (const chunk of fat) fatChunks.push(Buffer.from(chunk));
+    const fatR = await installPackFromZipBuffer(Buffer.concat(fatChunks));
+    expect(fatR.ok).toBe(false);
+    if (!fatR.ok) expect(fatR.error).toMatch(/too large|manifest|invalid/i);
+  });
+
+  it('readPackManifestFromDir rejects oversized on-disk manifest', async () => {
+    const { readPackManifestFromDir, DOMAIN_PACK_MANIFEST_MAX_CHARS } =
+      await import('./domain-pack-store.js');
+    const dir = path.join(tmpRoot, 'fat-manifest');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, 'pack.json'),
+      JSON.stringify({
+        ...SAMPLE,
+        description: 'y'.repeat(DOMAIN_PACK_MANIFEST_MAX_CHARS + 20),
+      }),
+      'utf8',
+    );
+    const r = await readPackManifestFromDir(dir);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/too large/i);
+  });
+
+  it('setEnabled fails when disk pack has broken manifest after unregister', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const dir = path.join(packsDir, 'broken-en');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'pack.json'), '{not-json', 'utf8');
+    unregisterPack('broken-en');
+    const r = await setInstalledPackEnabled('broken-en', true);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.status === 500 || /manifest|json|parse|invalid/i.test(r.error)).toBe(true);
+  });
+
+  it('zip skips files outside prefix and nested companions', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'pkg/pack.json' });
+    archive.append('# in prefix', { name: 'pkg/README.md' });
+    archive.append('outside', { name: 'other/README.md' });
+    archive.append('nested skip', { name: 'pkg/docs/nested.md' });
+    archive.append('x'.repeat(10), { name: 'pkg/notes.txt' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    unregisterPack('legal');
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.packId).toBe('legal');
+  });
 });

@@ -66,4 +66,43 @@ describe('project-file-events', () => {
     expect(bad).toHaveBeenCalled();
     expect(good).toHaveBeenCalled();
   });
+
+  it('caps listeners per project and ignores invalid subscribe ids', () => {
+    // invalid id → no-op unsubscribe
+    const unsubBad = subscribeProjectFileEvents('bad\nid', () => {});
+    unsubBad();
+    const unsubBlank = subscribeProjectFileEvents('   ', () => {});
+    unsubBlank();
+    const unsubLong = subscribeProjectFileEvents('x'.repeat(200), () => {});
+    unsubLong();
+
+    const kept = vi.fn();
+    // Exceed MAX_LISTENERS_PER_PROJECT (64) — oldest dropped
+    const unsubs: Array<() => void> = [];
+    for (let i = 0; i < 70; i++) {
+      unsubs.push(subscribeProjectFileEvents('cap-proj', i === 69 ? kept : () => {}));
+    }
+    expect(projectFileEventListenerCount('cap-proj')).toBeLessThanOrEqual(64);
+
+    publishProjectFileEvent({
+      type: 'file.changed',
+      projectId: 'cap-proj',
+      path: 'a.html',
+    });
+    expect(kept).toHaveBeenCalled();
+
+    // unsubscribe after clear path
+    for (const u of unsubs) u();
+    expect(projectFileEventListenerCount('cap-proj')).toBe(0);
+
+    // overlong / traversal path rejected
+    const fn = vi.fn();
+    subscribeProjectFileEvents('cap-proj', fn);
+    publishProjectFileEvent({
+      type: 'file.changed',
+      projectId: 'cap-proj',
+      path: 'p'.repeat(1_001),
+    });
+    expect(fn).not.toHaveBeenCalled();
+  });
 });

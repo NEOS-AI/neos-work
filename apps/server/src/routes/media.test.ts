@@ -433,4 +433,55 @@ describe('media routes', () => {
     expect(del.status).toBe(200);
     expect(fs.existsSync(TMP)).toBe(false);
   });
+
+  it('GET /jobs validates id and limit query edges', async () => {
+    // control-char job id → 400 (path encoding)
+    const ctrl = await media.request('/jobs/%0abad');
+    expect([400, 404]).toContain(ctrl.status);
+
+    const blank = await media.request('/jobs/%20');
+    expect(blank.status).toBe(400);
+
+    const missing = await media.request('/jobs/no-such-job-id-xyz');
+    expect(missing.status).toBe(404);
+
+    // list with control-char limit falls back to default; numeric clamps
+    const listCtrl = await media.request('/jobs?limit=%0a9');
+    expect(listCtrl.status).toBe(200);
+    const listOk = await media.request('/jobs?limit=3');
+    expect(listOk.status).toBe(200);
+    const body = (await listOk.json()) as { ok: boolean; data: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.data)).toBe(true);
+
+    const listHigh = await media.request('/jobs?limit=9999');
+    expect(listHigh.status).toBe(200);
+  });
+
+  it('POST /image and /generate reject control-char prompt/provider', async () => {
+    setSetting('OPENAI_API_KEY', 'sk-ctrl');
+    const img = await media.request('/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hi\nthere' }),
+    });
+    expect(img.status).toBe(400);
+    expect(((await img.json()) as { error: string }).error).toMatch(/control/i);
+
+    const gen = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'image\n', prompt: 'x' }),
+    });
+    expect(gen.status).toBe(400);
+    expect(((await gen.json()) as { error: string }).error).toMatch(/control|surface/i);
+
+    const prov = await media.request('/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'image', provider: 'openai\n', prompt: 'x' }),
+    });
+    expect(prov.status).toBe(400);
+    expect(((await prov.json()) as { error: string }).error).toMatch(/control|provider/i);
+  });
 });

@@ -280,4 +280,108 @@ describe('project-archive edge cases', () => {
     expect(projectZipFilename('')).toBe('project.neos-project.zip');
     expect(projectZipFilename('a/b\\c')).toMatch(/^a_b_c\.neos-project\.zip$/);
   });
+
+  it('parse rejects unsafe paths, null content, and bad manifest names', async () => {
+    const { ZipArchive } = await import('archiver');
+
+    async function zip(entries: Array<{ name: string; content: string | Buffer }>): Promise<Buffer> {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      for (const e of entries) archive.append(e.content, { name: e.name });
+      archive.finalize();
+      const chunks: Buffer[] = [];
+      for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks);
+    }
+
+    const traversal = await zip([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          format: PROJECT_ZIP_FORMAT,
+          project: { name: 'ok' },
+        }),
+      },
+      { name: 'files/../escape.txt', content: 'x' },
+    ]);
+    // archiver may normalize path; if entry preserved, reject
+    const t = await parseProjectZipBuffer(traversal);
+    if (!t.ok) expect(t.error).toMatch(/unsafe|path|Invalid|Missing/i);
+
+    const nullContent = await zip([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          format: PROJECT_ZIP_FORMAT,
+          project: { name: 'ok' },
+        }),
+      },
+      { name: 'files/bin.txt', content: Buffer.from('a\0b', 'utf8') },
+    ]);
+    const n = await parseProjectZipBuffer(nullContent);
+    expect(n.ok).toBe(false);
+    if (!n.ok) expect(n.error).toMatch(/null|Binary|not allowed/i);
+
+    const ctrlName = await zip([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          format: PROJECT_ZIP_FORMAT,
+          project: { name: 'bad\nname' },
+        }),
+      },
+    ]);
+    const c = await parseProjectZipBuffer(ctrlName);
+    expect(c.ok).toBe(false);
+    if (!c.ok) expect(c.error).toMatch(/name|Invalid/i);
+
+    const badFormat = await zip([
+      {
+        name: 'project.json',
+        content: JSON.stringify({
+          format: 'other',
+          project: { name: 'x' },
+        }),
+      },
+    ]);
+    const f = await parseProjectZipBuffer(badFormat);
+    expect(f.ok).toBe(false);
+    if (!f.ok) expect(f.error).toMatch(/format|Unsupported/i);
+
+    // Null byte in project.json text
+    const nullManifest = await zip([
+      {
+        name: 'project.json',
+        content: Buffer.from('{"format":"neos-project","project":{"name":"a\0b"}}', 'utf8'),
+      },
+    ]);
+    const nm = await parseProjectZipBuffer(nullManifest);
+    expect(nm.ok).toBe(false);
+
+    // Missing name
+    const noName = await zip([
+      {
+        name: 'project.json',
+        content: JSON.stringify({ format: PROJECT_ZIP_FORMAT, project: { name: '  ' } }),
+      },
+    ]);
+    const nn = await parseProjectZipBuffer(noName);
+    expect(nn.ok).toBe(false);
+    if (!nn.ok) expect(nn.error).toMatch(/name/i);
+
+    // Oversize buffer short-circuit
+    const { PROJECT_ZIP_MAX_BYTES } = await import('./project-archive.js');
+    const huge = Buffer.alloc(Math.min(PROJECT_ZIP_MAX_BYTES + 1, PROJECT_ZIP_MAX_BYTES + 8));
+    // Only allocate slightly over max when max is huge — use direct check path
+    if (PROJECT_ZIP_MAX_BYTES <= 64 * 1024 * 1024) {
+      // Avoid allocating 50MiB+ in CI: spy length via a Buffer subclass-like object is not accepted
+      // (isBuffer check). Skip if too large; project-archive rejects non-buffers already covered.
+      const over = Buffer.alloc(1024);
+      // Force the max-bytes branch via Object.defineProperty on a real Buffer
+      Object.defineProperty(over, 'length', { value: PROJECT_ZIP_MAX_BYTES + 1 });
+      const overR = await parseProjectZipBuffer(over);
+      expect(overR.ok).toBe(false);
+      if (!overR.ok) expect(overR.error).toMatch(/max size|exceeds/i);
+    }
+    void huge;
+  });
 });

@@ -257,3 +257,21 @@ describe('webhook routes', () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it('trigger rejects body larger than 1 MiB without relying on Content-Length', async () => {
+    const wf = makeWf();
+    const secret = workflows.getOrCreateWebhookSecret(wf.id);
+    // Body over MAX_WEBHOOK_BODY_BYTES (1 MiB) — omit Content-Length so body-length check runs
+    const body = 'x'.repeat(1_048_576 + 64);
+    const sig = createHmac('sha256', secret).update(body).digest('hex');
+    const res = await webhooks.request(`/${wf.id}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain',
+        'x-neos-signature': `sha256=${sig}`,
+      },
+      body,
+    });
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as { error: string }).error).toMatch(/too large/i);
+  });

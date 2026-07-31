@@ -198,4 +198,61 @@ describe('runs live execute (mocked spawn)', () => {
     expect(changed).toBeTruthy();
     expect(changed?.data?.paths?.some((x) => x.includes('new-from-cli'))).toBe(true);
   });
+
+  it('rejects unknown agentId at create and emits modified files_changed on edit', async () => {
+    const unknown = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'cli-does-not-exist-xyz',
+        prompt: 'nope',
+        dryRun: false,
+      }),
+    });
+    expect(unknown.status).toBe(400);
+    expect(((await unknown.json()) as { error: string }).error).toMatch(/Unknown agentId/i);
+
+    // modified path: rewrite existing file during spawn
+    const p = projects.createProject({ name: `${NAME}_mod` });
+    ids.push(p.id);
+    const target = `${p.baseDir}/index.html`;
+    fs.writeFileSync(target, '<html>v1</html>');
+    const old = fs.statSync(target).mtimeMs;
+    spawnMock.mockImplementation(async (opts: { onChunk?: (c: string) => void }) => {
+      opts.onChunk?.('partial-out');
+      fs.writeFileSync(target, '<html>v2-changed</html>');
+      try {
+        fs.utimesSync(target, new Date(), new Date(old + 60_000));
+      } catch {
+        /* ignore */
+      }
+      return { output: 'edited', exitCode: 0 };
+    });
+
+    const create = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        agentId: 'cli-claude',
+        prompt: 'edit file',
+        dryRun: false,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+    let status = 'running';
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      const get = await app.request(`/api/runs/${id}`);
+      status = ((await get.json()) as { data: { status: string } }).data.status;
+      if (status !== 'running') break;
+    }
+    expect(status).toBe('succeeded');
+    const ev = await app.request(`/api/runs/${id}/events`);
+    const events = ((await ev.json()) as {
+      data: Array<{ type: string; data?: { kind?: string; chunk?: string } }>;
+    }).data;
+    expect(events.some((e) => e.type === 'run.stdout')).toBe(true);
+  });
 });

@@ -91,7 +91,8 @@ function listMcpServers(): McpServerRow[] {
 /** Practical bound for MCP server lookup ids. */
 const MCP_LOOKUP_ID_MAX = 100;
 
-function safeMcpLookupId(raw: unknown): string {
+/** @internal Exported for unit tests of id validation. */
+export function safeMcpLookupId(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   // Control-char check before trim (trim strips leading/trailing \r\n)
   if (/[\0\r\n]/.test(raw)) return '';
@@ -111,7 +112,8 @@ const MCP_COMMAND_MAX_CHARS = 500;
 const MCP_ARGS_MAX = 50;
 const MCP_ARG_MAX_CHARS = 500;
 
-function createMcpServer(params: {
+/** @internal Exported for unit tests of validation edges. */
+export function createMcpServer(params: {
   name: string;
   transport: 'stdio' | 'http';
   command?: string;

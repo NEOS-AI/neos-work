@@ -114,6 +114,21 @@ describe('import-token additional paths', () => {
 });
 
 describe('import-token expire and purge', () => {
+  it('consume falls back when path is invalid and still checks key', () => {
+    const dir = makeDir();
+    const issued = issueImportToken(dir);
+    // Invalid path string with control chars — validateImportBaseDir throws → normalizePathKey fallback
+    expect(() => consumeImportToken(issued.token, `bad\npath`)).toThrow(/mismatch|Invalid|path/i);
+    // Correct path still works
+    expect(() => consumeImportToken(issued.token, dir)).not.toThrow();
+  });
+
+  it('rejects overlong and non-string tokens', () => {
+    const dir = makeDir();
+    expect(() => consumeImportToken('t'.repeat(201), dir)).toThrow(/Invalid importToken/);
+    expect(() => consumeImportToken(123 as never, dir)).toThrow(/Invalid importToken/);
+  });
+
   it('rejects expired token via system time advance', () => {
     const dir = makeDir();
     vi.useFakeTimers();

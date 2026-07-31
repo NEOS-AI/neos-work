@@ -111,10 +111,18 @@ describe('tool-tokens edge cases', () => {
   });
 
   it('evicts oldest when store is full', () => {
-    // Fill beyond MAX_TOKENS=500 is heavy; issue a few and ensure count tracks
-    for (let i = 0; i < 3; i++) {
-      issueToolToken({ projectId: `p${i}`, capabilities: ['media'] });
+    // MAX_TOKENS = 500 — fill past cap so oldest is dropped
+    for (let i = 0; i < 505; i++) {
+      issueToolToken({ projectId: `p${i % 50}`, capabilities: ['media'] });
     }
-    expect(toolTokenCount()).toBeGreaterThanOrEqual(3);
+    expect(toolTokenCount()).toBeLessThanOrEqual(500);
+  });
+
+  it('normalizeCaps drops non-array and control-char entries', () => {
+    const issued = issueToolToken({
+      projectId: 'p1',
+      capabilities: ['media', 'bad\ncap', 'LIVE-ARTIFACTS', 12 as never, ''],
+    });
+    expect(issued.capabilities).toEqual(['media', 'live-artifacts']);
   });
 });

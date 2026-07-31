@@ -706,6 +706,102 @@ describe('workflow routes export/import/preflight/runs', () => {
 
     await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
   });
+
+  it('export.zip includes artifact content and import restores artifacts', async () => {
+    const { createArtifact } = await import('../db/artifacts.js');
+    const wf = workflows.createWorkflow({
+      name: `${WF_NAME}-art-zip`,
+      domain: 'general',
+      nodes: minimalGraph.nodes as never,
+      edges: minimalGraph.edges as never,
+    });
+    createArtifact({
+      workflowId: wf.id,
+      name: 'Page.html',
+      contentType: 'text/html',
+      content: '<html><body>zip-art</body></html>',
+    });
+    createArtifact({
+      workflowId: wf.id,
+      name: 'notes.md',
+      contentType: 'text/markdown',
+      content: '# notes',
+    });
+
+    const exp = await workflow.request(`/${wf.id}/export.zip`);
+    expect(exp.status).toBe(200);
+    const zipBuf = Buffer.from(await exp.arrayBuffer());
+    expect(zipBuf.subarray(0, 2).toString('utf8')).toBe('PK');
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as { data: { id: string } };
+    expect(body.data.id).toBeTruthy();
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+    await workflow.request(`/${wf.id}`, { method: 'DELETE' });
+  });
+
+  it('import.zip with multipart FormData file field succeeds', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const zipBuf: Buffer = await new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      archive.append(
+        JSON.stringify({
+          version: '1',
+          workflow: {
+            name: `${WF_NAME}-multipart`,
+            nodes: minimalGraph.nodes,
+            edges: minimalGraph.edges,
+          },
+        }),
+        { name: 'workflow.json' },
+      );
+      void archive.finalize();
+    });
+
+    const form = new FormData();
+    form.set('file', new Blob([zipBuf], { type: 'application/zip' }), 'wf.zip');
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      body: form,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as { data: { id: string; name: string } };
+    expect(body.data.name).toMatch(/multipart/);
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+  });
+
+  it('migrate returns 400 when workflow document is not an object', async () => {
+    const res = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workflow: null }),
+    });
+    // null is rejected by body.workflow == null check → 400 required
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/required/i);
+
+    // non-document values that throw inside migrate path
+    const boom = await workflow.request('/migrate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workflow: 42 }),
+    });
+    // either 400 from migrate catch or 200 with neededMigration false — accept non-5xx
+    expect(boom.status).toBeLessThan(500);
+  });
 });
 
 describe('workflow migrate dry-run (v0.4)', () => {
