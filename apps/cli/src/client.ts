@@ -39,7 +39,7 @@ export class NeosApiClient {
   private headers(json = true): Record<string, string> {
     const h: Record<string, string> = {
       Accept: 'application/json',
-      'User-Agent': 'neos-cli/0.5.17',
+      'User-Agent': 'neos-cli/0.5.18',
     };
     if (json) h['Content-Type'] = 'application/json';
     if (this.config.authToken) {
@@ -127,7 +127,7 @@ export class NeosApiClient {
     try {
       const res = await this.fetchImpl(url, {
         method: 'GET',
-        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.5.17' },
+        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.5.18' },
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -222,5 +222,59 @@ export class NeosApiClient {
     return this.request('GET', '/api/deploy', {
       query: { projectId: opts?.projectId, workflowId: opts?.workflowId },
     });
+  }
+
+  listSkills(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/skills');
+  }
+
+  scanSkills(): Promise<ApiEnvelope<unknown>> {
+    return this.request('POST', '/api/skills/scan', { body: {} });
+  }
+
+  listDesignSystems(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/design-systems');
+  }
+
+  listMemories(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/memory');
+  }
+
+  createMemory(input: {
+    name: string;
+    type: string;
+    content: string;
+    enabled?: boolean;
+  }): Promise<ApiEnvelope<unknown>> {
+    return this.request('POST', '/api/memory', { body: input });
+  }
+
+  listMcpServers(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/mcp-servers');
+  }
+
+  listPluginAtoms(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/plugins/atoms');
+  }
+
+  generateMedia(input: {
+    surface: 'image' | 'audio' | 'video';
+    prompt?: string;
+    text?: string;
+    provider?: string;
+    model?: string;
+    size?: string;
+    quality?: string;
+    voice?: string;
+  }): Promise<ApiEnvelope<unknown>> {
+    return this.request('POST', '/api/media/generate', { body: input });
+  }
+
+  mediaConfig(): Promise<ApiEnvelope<unknown>> {
+    return this.request('GET', '/api/media/config');
+  }
+
+  listCliAgents(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/cli-agents');
   }
 }

@@ -7,6 +7,7 @@ const listDeployments = vi.fn();
 const listWorkflows = vi.fn();
 const deleteDeployment = vi.fn();
 const refreshDeployment = vi.fn();
+const checkDeployLink = vi.fn();
 
 // Stable client identity — avoids load() re-firing every render via useCallback deps
 const engineClient = {
@@ -14,6 +15,7 @@ const engineClient = {
   listWorkflows,
   deleteDeployment,
   refreshDeployment,
+  checkDeployLink,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({
@@ -83,6 +85,7 @@ describe('Deployments page', () => {
     listWorkflows.mockReset();
     deleteDeployment.mockReset();
     refreshDeployment.mockReset();
+    checkDeployLink.mockReset();
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -510,4 +513,104 @@ describe('Deployments page', () => {
     expect(alertSpy).toHaveBeenCalledWith('Deployment id contains invalid control characters');
     alertSpy.mockRestore();
   });
+
+  it('checks deployment link and shows ok / blocked / HTTP labels', async () => {
+    const user = userEvent.setup();
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    checkDeployLink
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { url: 'https://my-app.vercel.app', reachable: true, blocked: false, ok: true, status: 200 },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { url: 'https://my-app.vercel.app', reachable: false, blocked: true, ok: false, reason: 'private' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { url: 'https://my-app.vercel.app', reachable: true, blocked: false, ok: false, status: 503 },
+      });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('deploy-check-link-d1')).toBeInTheDocument());
+
+    await user.click(screen.getByTestId('deploy-check-link-d1'));
+    await waitFor(() => {
+      expect(checkDeployLink).toHaveBeenCalledWith('https://my-app.vercel.app');
+      expect(screen.getByTestId('deploy-check-link-d1')).toHaveTextContent(/ok 200/);
+    });
+
+    await user.click(screen.getByTestId('deploy-check-link-d1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('deploy-check-link-d1')).toHaveTextContent(/blocked/);
+    });
+
+    await user.click(screen.getByTestId('deploy-check-link-d1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('deploy-check-link-d1')).toHaveTextContent(/HTTP 503/);
+    });
+  });
+
+  it('shows down reason and failed/throw labels for link check', async () => {
+    const user = userEvent.setup();
+    listDeployments.mockResolvedValue({ ok: true, data: deployments });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    checkDeployLink
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          url: 'https://my-app.vercel.app',
+          reachable: false,
+          blocked: false,
+          ok: false,
+          reason: `dns${'\n'}fail${'\0'}`,
+        },
+      })
+      .mockResolvedValueOnce({ ok: false, error: `probe${'\n'}err` })
+      .mockRejectedValueOnce(new Error(`net${'\0'}down`));
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('deploy-check-link-d1')).toBeInTheDocument());
+
+    await user.click(screen.getByTestId('deploy-check-link-d1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('deploy-check-link-d1')).toHaveTextContent(/dns fail/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    await user.click(screen.getByTestId('deploy-check-link-d1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('deploy-check-link-d1')).toHaveTextContent(/probe err/);
+    });
+
+    await user.click(screen.getByTestId('deploy-check-link-d1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('deploy-check-link-d1')).toHaveTextContent(/netdown/);
+    });
+  });
+
+  it('does not check link for invalid deploy url', async () => {
+    listDeployments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'd-bad',
+          workflowId: 'wf-1',
+          provider: 'vercel' as const,
+          status: 'success' as const,
+          projectName: 'bad-url',
+          url: 'javascript:alert(1)',
+          deploymentId: 'dep-x',
+          createdAt: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+    });
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('bad-url')).toBeInTheDocument());
+    expect(screen.queryByTestId('deploy-check-link-d-bad')).not.toBeInTheDocument();
+    expect(checkDeployLink).not.toHaveBeenCalled();
+  });
+
 });

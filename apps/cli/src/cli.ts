@@ -4,14 +4,18 @@
 
 import { NeosApiClient } from './client.js';
 import { resolveConfig } from './config.js';
-import { cmdDaemon } from './commands/daemon.js';
+import { cmdDaemon, type DaemonCmdDeps } from './commands/daemon.js';
 import { cmdDeploy } from './commands/deploy.js';
+import { cmdDesignSystems } from './commands/design-systems.js';
 import { cmdDoctor } from './commands/doctor.js';
 import { cmdFiles } from './commands/files.js';
+import { cmdMcp } from './commands/mcp.js';
 import { cmdMedia } from './commands/media.js';
+import { cmdMemory } from './commands/memory.js';
 import { cmdPlugin } from './commands/plugin.js';
 import { cmdProject } from './commands/project.js';
 import { cmdRun } from './commands/run.js';
+import { cmdSkills } from './commands/skills.js';
 import { cmdStatus } from './commands/status.js';
 import { CLI_VERSION, cmdVersion } from './commands/version.js';
 import { buildAgentEnv, formatAgentEnvExports } from './env-inject.js';
@@ -27,12 +31,16 @@ Commands:
   version                 Print CLI version
   status                  Daemon health + auth
   doctor                  Connectivity checks
-  daemon status           Discover daemon
+  daemon status|start|stop
   project list|create|get
   files ls|read|write     Project files (NEOS_PROJECT_ID)
   run create|status|cancel
-  media list
-  plugin list
+  skills list|scan
+  design-systems list
+  memory list|add
+  mcp list
+  media list|config|generate
+  plugin list|atoms
   deploy list
   env                     Print agent env exports
 
@@ -56,6 +64,7 @@ export async function runCli(
     fetchImpl?: typeof fetch;
     stdout?: (s: string) => void;
     stderr?: (s: string) => void;
+    daemon?: DaemonCmdDeps;
   },
 ): Promise<ExitCode> {
   const out = opts?.stdout ?? ((s: string) => {
@@ -65,7 +74,6 @@ export async function runCli(
     process.stderr.write(s.endsWith('\n') ? s : `${s}\n`);
   });
 
-  // strip node + script
   const args = [...argv];
   const json = hasFlag(args, '--json');
   const cleaned = args.filter((a) => a !== '--json');
@@ -91,7 +99,7 @@ export async function runCli(
     case 'doctor':
       return cmdDoctor(ctx, client, cfg);
     case 'daemon':
-      return cmdDaemon(ctx, client, cfg, rest);
+      return cmdDaemon(ctx, client, cfg, rest, opts?.daemon);
     case 'project':
     case 'projects':
       return cmdProject(ctx, client, cfg, rest);
@@ -101,6 +109,18 @@ export async function runCli(
     case 'run':
     case 'runs':
       return cmdRun(ctx, client, cfg, rest);
+    case 'skills':
+    case 'skill':
+      return cmdSkills(ctx, client, rest);
+    case 'design-systems':
+    case 'design-system':
+    case 'ds':
+      return cmdDesignSystems(ctx, client, rest);
+    case 'memory':
+    case 'memories':
+      return cmdMemory(ctx, client, rest);
+    case 'mcp':
+      return cmdMcp(ctx, client, rest);
     case 'media':
       return cmdMedia(ctx, client, rest);
     case 'plugin':

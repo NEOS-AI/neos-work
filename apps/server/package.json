@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/server",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -41,5 +41,10 @@
     "tsx": "^4.19.0",
     "typescript": "^5.8.2",
     "vitest": "^4.1.10"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
   }
 }

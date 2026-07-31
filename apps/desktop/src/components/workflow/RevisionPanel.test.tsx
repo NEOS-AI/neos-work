@@ -842,4 +842,21 @@ describe('RevisionPanel', () => {
     expect(listRevisions).not.toHaveBeenCalled();
   });
 
+
+  it('shows scrubbed load error when listRevisions throws', async () => {
+    listRevisions.mockRejectedValue(new Error(`rev${'\n'}down${'\0'}!`));
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('rev down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
 });

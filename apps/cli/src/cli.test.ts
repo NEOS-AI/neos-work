@@ -33,7 +33,7 @@ describe('runCli', () => {
       stdout: (s) => lines.push(s),
     });
     expect(code).toBe(EXIT.OK);
-    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.5.17' });
+    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.5.18' });
   });
 
   it('status when daemon healthy', async () => {
@@ -150,5 +150,147 @@ describe('runCli', () => {
       stderr: () => {},
     });
     expect(code).toBe(EXIT.UNAUTHORIZED);
+  });
+});
+
+describe('runCli expanded commands', () => {
+  function mockFetch(handler: (url: string, init?: RequestInit) => Promise<Response> | Response) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return handler(url, init);
+    }) as unknown as typeof fetch;
+  }
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  it('skills list', async () => {
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/skills')) {
+        return jsonResponse({ ok: true, data: [{ id: 's1', name: 'web-landing', enabled: true }] });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['skills', 'list'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('web-landing');
+  });
+
+  it('memory add', async () => {
+    const fetchImpl = mockFetch((url, init) => {
+      if (url.endsWith('/api/memory') && init?.method === 'POST') {
+        return jsonResponse({ ok: true, data: { id: 'm1', name: 'note' } }, 201);
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(
+      ['memory', 'add', '--name', 'note', '--type', 'user', '--content', 'hello'],
+      {
+        fetchImpl,
+        env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+        stdout: (s) => lines.push(s),
+        stderr: () => {},
+      },
+    );
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('m1');
+  });
+
+  it('media generate image', async () => {
+    const fetchImpl = mockFetch((url, init) => {
+      if (url.includes('/api/media/generate') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          data: { surface: 'image', filename: 'img_x.png', provider: 'stub' },
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(
+      ['media', 'generate', '--surface', 'image', '--prompt', 'a cat', '--provider', 'stub'],
+      {
+        fetchImpl,
+        env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+        stdout: (s) => lines.push(s),
+        stderr: () => {},
+      },
+    );
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('img_x.png');
+  });
+
+  it('plugin atoms', async () => {
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/plugins/atoms')) {
+        return jsonResponse({ ok: true, data: [{ id: 'prompt.system', name: 'System' }] });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['plugin', 'atoms'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('prompt.system');
+  });
+
+  it('daemon start uses injectable starter', async () => {
+    const lines: string[] = [];
+    const code = await runCli(['daemon', 'start'], {
+      env: { NEOS_SERVER_URL: 'http://127.0.0.1:3999' },
+      fetchImpl: mockFetch(async () => {
+        throw new Error('fetch failed');
+      }),
+      daemon: {
+        startDaemon: async () => ({
+          port: 3999,
+          token: 'new-token',
+          pid: 99,
+          serverUrl: 'http://127.0.0.1:3999',
+        }),
+        sessionPath: '/tmp/neos-cli-test-session.json',
+      },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('NEOS_AUTH_TOKEN');
+    expect(lines.join('')).toContain('new-token');
+  });
+
+  it('mcp list', async () => {
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/mcp-servers')) {
+        return jsonResponse({
+          ok: true,
+          data: [{ id: 'mcp1', name: 'demo', transport: 'stdio', enabled: true }],
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['mcp', 'list'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('demo');
   });
 });

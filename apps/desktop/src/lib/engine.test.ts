@@ -1987,4 +1987,45 @@ describe('EngineClient', () => {
     expect(tokBody.runId).toBe('run-1');
   });
 
+
+  it('checkDeployLink, getMediaJob, and listMediaProviders', async () => {
+    const client = new EngineClient('http://engine.test');
+
+    await expect(client.checkDeployLink('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid url',
+    });
+    await expect(client.checkDeployLink(`https://x${'\n'}.example`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid url',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { url: 'https://ok.example', reachable: true, blocked: false, ok: true, status: 200 },
+      }),
+    );
+    const chk = await client.checkDeployLink('  https://ok.example  ');
+    expect(chk.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/check-link/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    const body = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(body.url).toBe('https://ok.example');
+
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
+    await client.listMediaProviders();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/media\/providers/);
+
+    await expect(client.getMediaJob(`j${'\0'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid job id',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'job1', status: 'succeeded', provider: 'openai', surface: 'workflow' } }),
+    );
+    const job = await client.getMediaJob('job1');
+    expect(job.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/media\/jobs\/job1/);
+  });
+
 });

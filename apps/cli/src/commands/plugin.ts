@@ -21,7 +21,19 @@ export async function cmdPlugin(
       }
       return EXIT.OK;
     }
-    ctx.err('usage: neos plugin list');
+    if (sub === 'atoms') {
+      const res = await client.listPluginAtoms();
+      const atoms = (res.data ?? []) as Array<{ id: string; name?: string; category?: string }>;
+      if (ctx.json) printJson(ctx, atoms);
+      else {
+        printLines(
+          ctx,
+          atoms.map((a) => `${a.id}\t${a.name ?? ''}\t${a.category ?? ''}`),
+        );
+      }
+      return EXIT.OK;
+    }
+    ctx.err('usage: neos plugin list|atoms');
     return EXIT.USAGE;
   } catch (err) {
     return fail(err);
