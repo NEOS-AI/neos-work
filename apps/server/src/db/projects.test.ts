@@ -158,6 +158,15 @@ describe('projects db edge cases', () => {
     expect(() =>
       createPreviewComment({
         projectId: p.id,
+        filePath: '../escape.html',
+        selector: 'h1',
+        body: 'x',
+      }),
+    ).toThrow(/filePath|path/i);
+
+    expect(() =>
+      createPreviewComment({
+        projectId: p.id,
         filePath: 'index.html',
         selector: 'h1\n',
         body: 'x',
@@ -199,6 +208,15 @@ describe('projects db edge cases', () => {
 
     expect(() =>
       recordFileRevision({
+        projectId: p.id,
+        path: '../escape.txt',
+        content: 'x',
+        source: 'user',
+      }),
+    ).toThrow(/path/i);
+
+    expect(() =>
+      recordFileRevision({
         projectId: 'no-such',
         path: 'a.html',
         content: 'x',
@@ -208,12 +226,14 @@ describe('projects db edge cases', () => {
 
     const rev = recordFileRevision({
       projectId: p.id,
-      path: 'notes.txt',
+      path: '  /notes.txt  ',
       content: 'hello',
       source: 'import',
     });
     expect(rev.path).toBe('notes.txt');
     expect(getFileRevision(rev.id)?.content).toBe('hello');
+    expect(listFileRevisions(p.id, 'notes.txt').some((r) => r.id === rev.id)).toBe(true);
+    expect(listFileRevisions(p.id, '../escape.txt')).toEqual([]);
   });
 });
 

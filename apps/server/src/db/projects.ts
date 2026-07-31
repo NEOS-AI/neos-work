@@ -347,6 +347,28 @@ function rowToRevision(row: FileRevisionRow, includeContent: boolean): FileRevis
   };
 }
 
+/**
+ * Normalize a project-relative file path for DB storage/lookup.
+ * Rejects `..`, absolute, controls (same rules as entryFile / path sandbox).
+ */
+function normalizeStoredRelPath(raw: unknown, label = 'path'): string {
+  try {
+    const p = normalizeEntryFile(raw);
+    if (!p) throw new Error(`Invalid ${label}`);
+    return p;
+  } catch {
+    throw new Error(`Invalid ${label}`);
+  }
+}
+
+function tryNormalizeStoredRelPath(raw: unknown): string | null {
+  try {
+    return normalizeEntryFile(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function recordFileRevision(input: {
   projectId: string;
   path: string;
@@ -355,9 +377,7 @@ export function recordFileRevision(input: {
 }): FileRevision {
   const projectId = safeLookupId(input.projectId);
   if (!projectId) throw new Error('Invalid projectId');
-  if (typeof input.path !== 'string' || hasControl(input.path) || !input.path.trim()) {
-    throw new Error('Invalid path');
-  }
+  const relPath = normalizeStoredRelPath(input.path, 'path');
   if (typeof input.content !== 'string' || /\0/.test(input.content)) {
     throw new Error('Invalid content');
   }
@@ -375,7 +395,7 @@ export function recordFileRevision(input: {
   db.prepare(
     `INSERT INTO file_revisions (id, project_id, path, content_hash, content, source)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, projectId, input.path.trim(), hash, input.content, source);
+  ).run(id, projectId, relPath, hash, input.content, source);
 
   // Cap per path (rowid breaks ties when created_at shares second precision)
   const overflow = db
@@ -385,7 +405,7 @@ export function recordFileRevision(input: {
        ORDER BY rowid DESC
        LIMIT -1 OFFSET ?`,
     )
-    .all(projectId, input.path.trim(), FILE_REVISION_MAX_PER_PATH) as Array<{ id: string }>;
+    .all(projectId, relPath, FILE_REVISION_MAX_PER_PATH) as Array<{ id: string }>;
   if (overflow.length > 0) {
     const del = db.prepare('DELETE FROM file_revisions WHERE id = ?');
     for (const r of overflow) del.run(r.id);
@@ -410,14 +430,15 @@ export function listFileRevisions(
   if (!pid) return [];
   const db = getDb();
   if (filePath) {
-    if (typeof filePath !== 'string' || hasControl(filePath)) return [];
+    const rel = tryNormalizeStoredRelPath(filePath);
+    if (!rel) return [];
     const rows = db
       .prepare(
         `SELECT id, project_id, path, content_hash, content, source, created_at
          FROM file_revisions WHERE project_id = ? AND path = ?
          ORDER BY rowid DESC`,
       )
-      .all(pid, filePath.trim()) as FileRevisionRow[];
+      .all(pid, rel) as FileRevisionRow[];
     return rows.map((r) => rowToRevision(r, false));
   }
   const rows = db
@@ -461,14 +482,15 @@ export function listPreviewComments(projectId: string, filePath?: string): Previ
   if (!pid) return [];
   const db = getDb();
   if (filePath) {
-    if (typeof filePath !== 'string' || hasControl(filePath)) return [];
+    const rel = tryNormalizeStoredRelPath(filePath);
+    if (!rel) return [];
     const rows = db
       .prepare(
         `SELECT id, project_id, file_path, selector, body, created_at, updated_at
          FROM preview_comments WHERE project_id = ? AND file_path = ?
          ORDER BY created_at ASC`,
       )
-      .all(pid, filePath.trim()) as PreviewCommentRow[];
+      .all(pid, rel) as PreviewCommentRow[];
     return rows.map(rowToComment);
   }
   const rows = db
@@ -489,9 +511,7 @@ export function createPreviewComment(input: {
 }): PreviewComment {
   const projectId = safeLookupId(input.projectId);
   if (!projectId) throw new Error('Invalid projectId');
-  if (typeof input.filePath !== 'string' || hasControl(input.filePath) || !input.filePath.trim()) {
-    throw new Error('Invalid filePath');
-  }
+  const filePath = normalizeStoredRelPath(input.filePath, 'filePath');
   if (typeof input.selector !== 'string' || hasControl(input.selector) || !input.selector.trim()) {
     throw new Error('Invalid selector');
   }
@@ -506,7 +526,7 @@ export function createPreviewComment(input: {
   db.prepare(
     `INSERT INTO preview_comments (id, project_id, file_path, selector, body)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, projectId, input.filePath.trim(), input.selector.trim(), input.body.trim());
+  ).run(id, projectId, filePath, input.selector.trim(), input.body.trim());
   const row = db
     .prepare(
       'SELECT id, project_id, file_path, selector, body, created_at, updated_at FROM preview_comments WHERE id = ?',

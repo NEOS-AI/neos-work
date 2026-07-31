@@ -980,6 +980,34 @@ describe('mcp oauth token exchange + refresh success', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('from-preset rejects missing entry file under installPath', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const name = `_cov_tv_missing_entry_${process.pid}`;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-tv-empty-'));
+    try {
+      // package root without src/server.js
+      fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"empty"}\n');
+      const res = await mcp.request('/from-preset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          presetId: 'tradingview',
+          installPath: dir,
+          name,
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(
+        /Entry not found|installPath|entry/i,
+      );
+    } finally {
+      getDb().prepare('DELETE FROM mcp_server WHERE name = ?').run(name);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('mcp oauth flow housekeeping', () => {

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDb } from '../db/schema.js';
 import * as workflows from '../db/workflows.js';
@@ -1343,4 +1344,74 @@ describe('workflow import.zip artifacts + design systems', () => {
 
     await workflow.request(`/${id}`, { method: 'DELETE' });
   });
+});
+
+describe('workflow import/readZip edge branches', () => {
+  async function makeZip(files: Record<string, string | Buffer>): Promise<Buffer> {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    return new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      for (const [name, content] of Object.entries(files)) {
+        archive.append(content, { name });
+      }
+      void archive.finalize();
+    });
+  }
+
+  it('rejects Claude Design HTML containing null bytes', async () => {
+    const zip = await makeZip({
+      'index.html': Buffer.from(`<html>bad${'\0'}html</html>`, 'utf8'),
+    });
+    const res = await workflow.request('/import/claude-design', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zip,
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/HTML entry/i);
+  });
+
+  it('DELETE run 404 for blank ids and cross-workflow ownership', async () => {
+    const create = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_delrun`, ...minimalGraph }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+    const runId = crypto.randomUUID();
+    workflows.saveRun({
+      id: runId,
+      workflowId: id,
+      status: 'completed',
+      nodeResults: {},
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    });
+
+    expect((await workflow.request('/%20/runs', { method: 'DELETE' })).status).toBe(404);
+    expect(
+      (await workflow.request(`/${id}/runs/%20`, { method: 'DELETE' })).status,
+    ).toBe(404);
+
+    const other = await workflow.request('/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `${WF_NAME}_delrun2`, ...minimalGraph }),
+    });
+    const otherId = ((await other.json()) as { data: { id: string } }).data.id;
+    expect(
+      (await workflow.request(`/${otherId}/runs/${runId}`, { method: 'DELETE' })).status,
+    ).toBe(404);
+
+    await workflow.request(`/${id}`, { method: 'DELETE' });
+    await workflow.request(`/${otherId}`, { method: 'DELETE' });
+  });
+
 });
