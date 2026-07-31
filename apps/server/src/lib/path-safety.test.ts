@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -65,5 +66,23 @@ describe('validateWorkspacePath', () => {
   it('rejects overlong paths', () => {
     const home = homedir();
     expect(validateWorkspacePath(home + '/x'.repeat(5_000))).toBe(false);
+  });
+
+  it('rejects sibling-prefix of home and symlink escape outside home', () => {
+    const home = path.resolve(homedir());
+    // /Users/u-evil is not under /Users/u/
+    expect(validateWorkspacePath(`${home}-evil-neos/projects`)).toBe(false);
+
+    const link = path.join(home, `.neos-ws-link-${process.pid}`);
+    try {
+      fs.symlinkSync('/tmp', link);
+      expect(validateWorkspacePath(link)).toBe(false);
+    } finally {
+      try {
+        fs.unlinkSync(link);
+      } catch {
+        /* ignore */
+      }
+    }
   });
 });

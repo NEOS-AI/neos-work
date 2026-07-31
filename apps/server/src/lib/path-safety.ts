@@ -2,7 +2,8 @@
  * Path safety helpers for workspace / file sandbox checks.
  */
 
-import { resolve } from 'node:path';
+import fs from 'node:fs';
+import { resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 /** Cap workspace path length (path API hygiene). */
@@ -25,6 +26,11 @@ export function safeRouteId(raw: unknown, max = ROUTE_ID_MAX_CHARS): string {
   return id;
 }
 
+function underHomeDir(abs: string, homeAbs: string): boolean {
+  const homePrefix = homeAbs.endsWith(sep) ? homeAbs : homeAbs + sep;
+  return abs === homeAbs || abs.startsWith(homePrefix);
+}
+
 /** Validate that a workspace path is within the user's home directory. */
 export function validateWorkspacePath(path: string): boolean {
   if (!path || typeof path !== 'string') return false;
@@ -35,8 +41,25 @@ export function validateWorkspacePath(path: string): boolean {
   if (trimmed.length > WORKSPACE_PATH_MAX_CHARS) return false;
   try {
     const resolved = resolve(trimmed);
-    const home = homedir();
-    return resolved.startsWith(home + '/') || resolved === home;
+    // Prefer realpath(home) so macOS /var vs /private/var forms match
+    let homeAbs: string;
+    try {
+      homeAbs = fs.realpathSync(resolve(homedir()));
+    } catch {
+      homeAbs = resolve(homedir());
+    }
+    // Lexical containment (sibling-prefix safe via path.sep)
+    if (!underHomeDir(resolved, homeAbs) && !underHomeDir(resolved, resolve(homedir()))) {
+      return false;
+    }
+    // If path exists, realpath must still stay under home (block ~/link → /tmp)
+    try {
+      const real = fs.realpathSync(resolved);
+      if (!underHomeDir(real, homeAbs)) return false;
+    } catch {
+      // ENOENT — allow creating new dirs that are lexically under home
+    }
+    return true;
   } catch {
     return false;
   }
