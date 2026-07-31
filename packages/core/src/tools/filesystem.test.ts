@@ -66,6 +66,14 @@ describe('filesystem tools', () => {
     const escape = await read.execute({ path: '../outside.txt' });
     expect(escape.success).toBe(false);
     expect(escape.error).toMatch(/outside the workspace/);
+
+    // Filenames starting with ".." must not be treated as traversal
+    const dotdotName = await write.execute({ path: '..foo.txt', content: 'ok-dots' });
+    expect(dotdotName.success).toBe(true);
+    expect((await read.execute({ path: '..foo.txt' })).output).toBe('ok-dots');
+    const triple = await write.execute({ path: '...hidden.txt', content: 'triple' });
+    expect(triple.success).toBe(true);
+    expect((await read.execute({ path: '...hidden.txt' })).output).toBe('triple');
   });
 
   it('write rejects oversized content and protected .env paths', async () => {

@@ -5,7 +5,7 @@
 
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 import { scrubErrorMessage, type Tool, type ToolResult } from './base.js';
 
@@ -185,7 +185,8 @@ export function createShellTool(workspaceRoot: string): Tool {
           } catch {
             return { success: false, output: null, error: `cwd does not exist: ${cwdRel}` };
           }
-          if (!realCwd.startsWith(absoluteRoot + '/') && realCwd !== absoluteRoot) {
+          const rootPrefix = absoluteRoot.endsWith(sep) ? absoluteRoot : absoluteRoot + sep;
+          if (realCwd !== absoluteRoot && !realCwd.startsWith(rootPrefix)) {
             return { success: false, output: null, error: `cwd is outside the workspace: ${cwdRel}` };
           }
           cwdPath = realCwd;

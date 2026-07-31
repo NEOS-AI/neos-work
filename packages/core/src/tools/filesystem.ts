@@ -5,7 +5,7 @@
 
 import { readFile, writeFile, readdir, stat, rename, glob } from 'node:fs/promises';
 import { realpathSync, createReadStream } from 'node:fs';
-import { resolve, relative, join } from 'node:path';
+import { resolve, relative, join, sep, isAbsolute } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { scrubErrorMessage, type Tool, type ToolResult } from './base.js';
@@ -30,6 +30,23 @@ function isProtectedPath(relativePath: string): boolean {
   return PROTECTED_PATTERNS.some((p) => p.test(relativePath));
 }
 
+/**
+ * True when `abs` is outside `root` (after resolve/realpath).
+ * Uses path.sep boundary — bare startsWith(root) allows sibling-prefix escapes.
+ * Relative `rel` from path.relative: only `..` / `../` escape (not `...hidden` / `..foo`).
+ */
+function isOutsideWorkspace(root: string, abs: string, rel?: string): boolean {
+  if (abs === root) return false;
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  if (!abs.startsWith(prefix)) return true;
+  if (rel !== undefined) {
+    // Do not treat filenames like "...hidden" or "..foo" as traversal
+    if (rel === '..' || rel.startsWith(`..${sep}`) || rel.startsWith('../')) return true;
+    if (isAbsolute(rel)) return true;
+  }
+  return false;
+}
+
 /** Resolve a user-provided path within the workspace, preventing traversal and symlink escape. */
 function safePath(workspaceRoot: string, userPath: string): string {
   if (typeof userPath !== 'string') {
@@ -50,8 +67,8 @@ function safePath(workspaceRoot: string, userPath: string): string {
   const resolved = resolve(absoluteRoot, trimmed);
   const rel = relative(absoluteRoot, resolved);
 
-  // Logical path check (prevents .. traversal)
-  if (rel.startsWith('..') || (!resolved.startsWith(absoluteRoot + '/') && resolved !== absoluteRoot)) {
+  // Logical path check (prevents .. traversal; allows "..foo" / "...hidden" names)
+  if (isOutsideWorkspace(absoluteRoot, resolved, rel)) {
     throw new Error(`Path "${trimmed}" is outside the workspace`);
   }
 
@@ -64,16 +81,17 @@ function safePath(workspaceRoot: string, userPath: string): string {
     const parentDir = resolve(resolved, '..');
     try {
       const realParent = realpathSync(parentDir);
-      if (!realParent.startsWith(absoluteRoot + '/') && realParent !== absoluteRoot) {
+      if (isOutsideWorkspace(absoluteRoot, realParent)) {
         throw new Error(`Path "${trimmed}" resolves outside the workspace via symlink`);
       }
       return resolved;
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && /outside the workspace/.test(err.message)) throw err;
       throw new Error(`Parent directory for "${trimmed}" does not exist`);
     }
   }
 
-  if (!realPath.startsWith(absoluteRoot + '/') && realPath !== absoluteRoot) {
+  if (isOutsideWorkspace(absoluteRoot, realPath)) {
     throw new Error(`Path "${trimmed}" resolves outside the workspace via symlink`);
   }
   return realPath;
@@ -264,7 +282,7 @@ export function createSearchFilesTool(workspaceRoot: string): Tool {
           } catch {
             return { success: false, output: null, error: `Directory does not exist: ${dir}` };
           }
-          if (!realDir.startsWith(absoluteRoot + '/') && realDir !== absoluteRoot) {
+          if (isOutsideWorkspace(absoluteRoot, realDir)) {
             return { success: false, output: null, error: `Directory is outside the workspace: ${dir}` };
           }
           searchRoot = realDir;
@@ -370,7 +388,7 @@ export function createMoveFileTool(workspaceRoot: string): Tool {
         // Destination may not exist yet — validate via parent resolve
         const destResolved = resolve(absoluteRoot, destTrimmed);
         const destRel = relative(absoluteRoot, destResolved);
-        if (destRel.startsWith('..')) {
+        if (isOutsideWorkspace(absoluteRoot, destResolved, destRel)) {
           return { success: false, output: null, error: `Destination is outside the workspace: ${destTrimmed}` };
         }
         if (isProtectedPath(destRel)) {
