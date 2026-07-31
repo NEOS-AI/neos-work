@@ -127,3 +127,25 @@ PORT=3000 pnpm dev
 | `pnpm typecheck` | TypeScript 타입 검사 |
 | `pnpm format` | Prettier 포맷팅 |
 | `pnpm clean` | 빌드 산출물 및 node_modules 제거 |
+
+## 셀프호스트 (Docker)
+
+단일 프로세스 엔진 + 영구 볼륨 (v0.5.19 / Task 13):
+
+```bash
+cp deploy/.env.example deploy/.env
+# NEOS_AUTH_TOKEN 설정 (openssl rand -hex 32)
+docker compose -f deploy/docker-compose.yml up -d --build
+curl -s http://127.0.0.1:3000/api/health
+```
+
+자세한 내용은 [deploy/README.md](deploy/README.md)를 참고하세요.
+
+### 로컬 tools/dev
+
+```bash
+node tools/dev/dev.mjs start
+node tools/dev/dev.mjs status
+node tools/dev/dev.mjs stop
+```
+

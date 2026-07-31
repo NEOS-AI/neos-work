@@ -7,16 +7,43 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 
-const DB_DIR = path.join(os.homedir(), '.neos-work');
-const DB_PATH = path.join(DB_DIR, 'data.db');
+/**
+ * Data directory for SQLite + durable state.
+ * Prefer NEOS_DATA_DIR (Docker volume); else legacy ~/.neos-work.
+ */
+export function resolveDbDir(): string {
+  const raw = process.env.NEOS_DATA_DIR;
+  if (typeof raw === 'string' && !/[\0\r\n]/.test(raw)) {
+    const trimmed = raw.trim();
+    if (trimmed) return path.resolve(trimmed);
+  }
+  return path.join(os.homedir(), '.neos-work');
+}
+
+export function resolveDbPath(): string {
+  return path.join(resolveDbDir(), 'data.db');
+}
 
 let _db: Database.Database | null = null;
+
+/** Test helper: close singleton (e.g. after changing NEOS_DATA_DIR). */
+export function closeDb(): void {
+  if (_db) {
+    try {
+      _db.close();
+    } catch {
+      // ignore
+    }
+    _db = null;
+  }
+}
 
 export function getDb(): Database.Database {
   if (_db) return _db;
 
-  fs.mkdirSync(DB_DIR, { recursive: true });
-  _db = new Database(DB_PATH);
+  const dbDir = resolveDbDir();
+  fs.mkdirSync(dbDir, { recursive: true });
+  _db = new Database(resolveDbPath());
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
 

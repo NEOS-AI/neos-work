@@ -55,7 +55,18 @@ function getClient(apiKey: string, baseURL?: string) {
   return new OpenAI(opts);
 }
 
-export const MEDIA_DIR = path.join(os.homedir(), '.neos-work', 'media');
+/** Media storage root (respects NEOS_DATA_DIR for Docker volumes). */
+export function resolveMediaDir(): string {
+  const raw = process.env.NEOS_DATA_DIR;
+  if (typeof raw === 'string' && !/[\0\r\n]/.test(raw)) {
+    const trimmed = raw.trim();
+    if (trimmed) return path.join(path.resolve(trimmed), 'media');
+  }
+  return path.join(os.homedir(), '.neos-work', 'media');
+}
+
+/** Resolved at module load; override NEOS_DATA_DIR before import in tests if needed. */
+export const MEDIA_DIR = resolveMediaDir();
 
 async function ensureMediaDir() {
   await fs.mkdir(MEDIA_DIR, { recursive: true });

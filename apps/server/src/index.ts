@@ -36,8 +36,20 @@ import { listCustomWorkers } from './db/workers.js';
 import { initScheduler } from './lib/routine-scheduler.js';
 import { setRuntimeContext } from './lib/runtime-context.js';
 
-// Generate per-session auth token (VULN-002)
-const AUTH_TOKEN = randomBytes(32).toString('hex');
+/**
+ * Auth token: fixed via NEOS_AUTH_TOKEN (Docker / stable CLI) or random per process.
+ * Min 16 chars when provided from env.
+ */
+function resolveAuthToken(): string {
+  const raw = process.env.NEOS_AUTH_TOKEN;
+  if (typeof raw === 'string' && !/[\0\r\n]/.test(raw)) {
+    const t = raw.trim();
+    if (t.length >= 16 && t.length <= 8_192) return t;
+  }
+  return randomBytes(32).toString('hex');
+}
+
+const AUTH_TOKEN = resolveAuthToken();
 // Seed early so CLI spawn during startup paths has a token; port updated after listen
 setRuntimeContext({ authToken: AUTH_TOKEN, port: parseInt(process.env.NEOS_PORT ?? process.env.PORT ?? '3000', 10) });
 
@@ -45,20 +57,40 @@ const app = new Hono();
 
 // Middleware
 app.use('*', logger());
+
+const CORS_ORIGINS = (() => {
+  const extra = process.env.NEOS_CORS_ORIGINS;
+  const base = ['http://localhost:1420', 'http://localhost:5173', 'tauri://localhost'];
+  if (typeof extra === 'string' && !/[\0\r\n]/.test(extra)) {
+    for (const o of extra.split(',')) {
+      const t = o.trim();
+      if (t && (t.startsWith('http://') || t.startsWith('https://') || t.startsWith('tauri://'))) {
+        base.push(t);
+      }
+    }
+  }
+  return base;
+})();
+
 app.use(
   '*',
   cors({
-    origin: ['http://localhost:1420', 'http://localhost:5173', 'tauri://localhost'],
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: CORS_ORIGINS,
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowHeaders: ['Content-Type', 'Authorization'],
   }),
 );
 
 // Host header validation to prevent DNS rebinding (VULN-007)
 // Note: ALLOWED_HOSTS is populated after port is known; middleware reads it dynamically.
+// Docker/self-host: NEOS_ALLOW_ANY_HOST=1 or NEOS_ALLOWED_HOSTS=host1,host2:port
 const ALLOWED_HOSTS = new Set<string>();
+const ALLOW_ANY_HOST =
+  process.env.NEOS_ALLOW_ANY_HOST === '1'
+  || process.env.NEOS_ALLOW_ANY_HOST === 'true';
 
 app.use('*', async (c, next) => {
+  if (ALLOW_ANY_HOST) return next();
   const host = c.req.header('Host');
   if (host && !ALLOWED_HOSTS.has(host)) {
     return c.json({ ok: false, error: 'Forbidden' }, 403);
@@ -118,7 +150,7 @@ app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 app.get('/', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.18',
+    version: '0.5.19',
   });
 });
 
@@ -136,12 +168,19 @@ registerCodingBlocks();
 // Initialize automation routine scheduler
 initScheduler();
 
-// Start server — use NEOS_PORT or PORT env var, defaulting to 3000
+// Start server — NEOS_HOST (default 127.0.0.1; Docker: 0.0.0.0), NEOS_PORT/PORT
 const requestedPort = parseInt(process.env.NEOS_PORT ?? process.env.PORT ?? '3000', 10);
+const listenHostRaw = process.env.NEOS_HOST;
+const listenHost =
+  typeof listenHostRaw === 'string'
+  && !/[\0\r\n]/.test(listenHostRaw)
+  && listenHostRaw.trim()
+    ? listenHostRaw.trim()
+    : '127.0.0.1';
 
 const server = serve({
   fetch: app.fetch,
-  hostname: '127.0.0.1',
+  hostname: listenHost,
   port: requestedPort,
 });
 
@@ -153,11 +192,28 @@ ALLOWED_HOSTS.add('127.0.0.1');
 ALLOWED_HOSTS.add('localhost');
 ALLOWED_HOSTS.add(`127.0.0.1:${actualPort}`);
 ALLOWED_HOSTS.add(`localhost:${actualPort}`);
+if (listenHost !== '127.0.0.1' && listenHost !== '0.0.0.0') {
+  ALLOWED_HOSTS.add(listenHost);
+  ALLOWED_HOSTS.add(`${listenHost}:${actualPort}`);
+}
+// Extra hosts for reverse proxies / Docker published ports
+const extraHosts = process.env.NEOS_ALLOWED_HOSTS;
+if (typeof extraHosts === 'string' && !/[\0\r\n]/.test(extraHosts)) {
+  for (const h of extraHosts.split(',')) {
+    const t = h.trim();
+    if (t) ALLOWED_HOSTS.add(t);
+  }
+}
+
 setRuntimeContext({ authToken: AUTH_TOKEN, port: actualPort });
 
-// Output structured metadata for Tauri sidecar to parse
+// Output structured metadata for Tauri sidecar / CLI / Docker logs
 console.log(`NEOS_PORT=${actualPort}`);
+console.log(`NEOS_HOST=${listenHost}`);
 console.log(`NEOS_AUTH_TOKEN=${AUTH_TOKEN}`);
-console.log(`NEOS Work Engine started on http://127.0.0.1:${actualPort}`);
+if (process.env.NEOS_DATA_DIR) {
+  console.log(`NEOS_DATA_DIR=${process.env.NEOS_DATA_DIR}`);
+}
+console.log(`NEOS Work Engine started on http://${listenHost === '0.0.0.0' ? '127.0.0.1' : listenHost}:${actualPort}`);
 
-export { app };
+export { app, AUTH_TOKEN, resolveAuthToken };

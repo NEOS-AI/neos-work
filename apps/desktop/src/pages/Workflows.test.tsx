@@ -597,4 +597,55 @@ describe('Workflows page', () => {
     expect(alertSpy).toHaveBeenCalledWith('Workflow id contains invalid control characters');
     alertSpy.mockRestore();
   });
+
+  it('shows scrubbed load error when listWorkflows throws', async () => {
+    listWorkflows.mockRejectedValue(new Error(`list${'\n'}boom${'\0'}!`));
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('list boom!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('alerts scrubbed delete API failure and keeps workflow', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    deleteWorkflow.mockResolvedValue({ ok: false, error: `del${'\n'}nope` });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle('common.delete')[0]!);
+    await waitFor(() => {
+      expect(deleteWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('del nope');
+    });
+    expect(screen.getByText('Alpha Flow')).toBeInTheDocument();
+  });
+
+  it('alerts scrubbed duplicate throw', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    duplicateWorkflow.mockRejectedValue(new Error(`dup${'\0'}crash`));
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByTitle(/duplicate|workflow\.duplicate/i)[0]!);
+    await waitFor(() => {
+      expect(duplicateWorkflow).toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith('dupcrash');
+    });
+  });
+
+  it('sorts by name and persists sort mode', async () => {
+    listWorkflows.mockResolvedValue({ ok: true, data: workflows });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Flow')).toBeInTheDocument());
+    const sort = screen.getByTitle('Sort order') as HTMLSelectElement;
+    fireEvent.change(sort, { target: { value: 'name' } });
+    expect(localStorage.getItem('neos-workflows-sort')).toBe('name');
+    // Alpha before Beta alphabetically (list order)
+    await waitFor(() => {
+      const items = screen.getAllByText(/Alpha Flow|Beta Flow/);
+      expect(items[0]?.textContent).toMatch(/Alpha/);
+      expect(items[items.length - 1]?.textContent).toMatch(/Beta/);
+    });
+  });
+
 });

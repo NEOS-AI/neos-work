@@ -837,3 +837,93 @@ describe('projects export/import zip', () => {
     createdIds.push(body.data.project.id);
   });
 });
+
+describe('projects import-token and path validation', () => {
+  it('import-token rejects blank and invalid paths', async () => {
+    const blank = await app.request('/api/projects/import-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '' }),
+    });
+    expect(blank.status).toBe(400);
+
+    const badJson = await app.request('/api/projects/import-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const root = await app.request('/api/projects/import-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/' }),
+    });
+    expect([400, 403]).toContain(root.status);
+  });
+
+  it('create rejects mismatched or spent import token', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-import-'));
+    try {
+      const tokRes = await app.request('/api/projects/import-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: dir }),
+      });
+      // may fail on sandbox if dir not allowed — skip if so
+      if (tokRes.status !== 201) {
+        expect([400, 403, 404]).toContain(tokRes.status);
+        return;
+      }
+      const tokBody = (await tokRes.json()) as { data: { token: string } };
+
+      const mismatch = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_tok_mismatch`,
+          baseDir: dir,
+          importToken: 'not-the-token',
+        }),
+      });
+      expect([400, 403]).toContain(mismatch.status);
+
+      const ok = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_tok_ok`,
+          baseDir: dir,
+          importToken: tokBody.data.token,
+        }),
+      });
+      if (ok.status === 201) {
+        const body = (await ok.json()) as { data: { id: string } };
+        createdIds.push(body.data.id);
+      }
+
+      // spent token
+      const spent = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_tok_spent`,
+          baseDir: dir,
+          importToken: tokBody.data.token,
+        }),
+      });
+      expect([400, 403]).toContain(spent.status);
+    } finally {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it('rejects control-char project ids in path params', async () => {
+    const res = await app.request(`/api/projects/${encodeURIComponent('ab\0c')}/files`);
+    expect([400, 404]).toContain(res.status);
+  });
+});

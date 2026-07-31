@@ -181,13 +181,65 @@ export function writeDaemonSession(
   filePath: string,
   session: { pid: number; port: number; token: string; serverUrl: string },
 ): void {
+  const pid = Math.trunc(Number(session.pid));
+  const port = Math.trunc(Number(session.port));
+  if (!Number.isFinite(pid) || pid <= 0) {
+    throw new Error('Invalid daemon pid');
+  }
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    throw new Error('Invalid daemon port');
+  }
+  if (
+    typeof session.token !== 'string'
+    || !session.token
+    || /[\0\r\n]/.test(session.token)
+    || session.token.length > 8_192
+  ) {
+    throw new Error('Invalid daemon token');
+  }
+  if (
+    typeof session.serverUrl !== 'string'
+    || !session.serverUrl
+    || /[\0\r\n]/.test(session.serverUrl)
+    || session.serverUrl.length > 2_048
+  ) {
+    throw new Error('Invalid daemon serverUrl');
+  }
   const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    JSON.stringify({ ...session, startedAt: new Date().toISOString() }, null, 2),
-    { mode: 0o600 },
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const body = JSON.stringify(
+    {
+      pid,
+      port,
+      token: session.token,
+      serverUrl: session.serverUrl,
+      startedAt: new Date().toISOString(),
+    },
+    null,
+    2,
   );
+  // Atomic-ish write + force mode 0600 (mode in writeFileSync is create-only on some platforms)
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, body, { mode: 0o600 });
+  try {
+    fs.chmodSync(tmp, 0o600);
+  } catch {
+    // ignore (windows)
+  }
+  fs.renameSync(tmp, filePath);
+  try {
+    fs.chmodSync(filePath, 0o600);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearDaemonSession(filePath: string): void {
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch {
+    // ignore
+  }
 }
 
 export function defaultDaemonSessionPath(home = process.env.HOME || process.env.USERPROFILE || ''): string {
@@ -204,13 +256,25 @@ export function readDaemonSession(filePath: string): {
   try {
     if (!fs.existsSync(filePath)) return null;
     const raw = fs.readFileSync(filePath, 'utf8');
+    if (/\0/.test(raw) || raw.length > 64_000) return null;
     const j = JSON.parse(raw) as Record<string, unknown>;
     const pid = Number(j.pid);
     const port = Number(j.port);
     const token = typeof j.token === 'string' ? j.token : '';
     const serverUrl = typeof j.serverUrl === 'string' ? j.serverUrl : '';
-    if (!Number.isFinite(pid) || !Number.isFinite(port) || !token || !serverUrl) return null;
+    if (!Number.isFinite(pid) || pid <= 0) return null;
+    if (!Number.isFinite(port) || port < 1 || port > 65535) return null;
+    if (!token || token.length > 8_192 || !serverUrl || serverUrl.length > 2_048) return null;
     if (/[\0\r\n]/.test(token) || /[\0\r\n]/.test(serverUrl)) return null;
+    // Only allow local http(s) URLs in session (defense if file is tampered)
+    try {
+      const u = new URL(serverUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+      const host = u.hostname.toLowerCase();
+      if (host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') return null;
+    } catch {
+      return null;
+    }
     return { pid: Math.trunc(pid), port: Math.trunc(port), token, serverUrl };
   } catch {
     return null;

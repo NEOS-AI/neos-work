@@ -126,3 +126,26 @@ PORT=3000 pnpm dev
 | `pnpm typecheck` | TypeScript type checking |
 | `pnpm format` | Format with Prettier |
 | `pnpm clean` | Remove build artifacts and node_modules |
+
+## Self-host (Docker)
+
+Single-process engine with a persistent volume (v0.5.19 / Task 13):
+
+```bash
+cp deploy/.env.example deploy/.env
+# set NEOS_AUTH_TOKEN (openssl rand -hex 32)
+docker compose -f deploy/docker-compose.yml up -d --build
+curl -s http://127.0.0.1:3000/api/health
+```
+
+See [deploy/README.md](deploy/README.md) for volumes, env vars, and CLI usage.
+
+### Local tools/dev lifecycle
+
+```bash
+node tools/dev/dev.mjs start
+node tools/dev/dev.mjs status
+node tools/dev/dev.mjs logs -f
+node tools/dev/dev.mjs stop
+```
+

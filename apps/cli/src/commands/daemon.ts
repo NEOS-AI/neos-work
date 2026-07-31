@@ -2,6 +2,7 @@ import type { NeosApiClient } from '../client.js';
 import type { CliConfig } from '../config.js';
 import { formatServerLabel } from '../config.js';
 import {
+  clearDaemonSession,
   defaultDaemonSessionPath,
   readDaemonSession,
   startDaemonProcess,
@@ -15,6 +16,8 @@ export interface DaemonCmdDeps {
   startDaemon?: typeof startDaemonProcess;
   sessionPath?: string;
   spawnFn?: SpawnFn;
+  /** Inject kill for tests (defaults to process.kill). */
+  killFn?: (pid: number, signal?: NodeJS.Signals | number) => true;
 }
 
 /**
@@ -30,6 +33,7 @@ export async function cmdDaemon(
 ): Promise<ExitCode> {
   const sub = rest[0] ?? 'status';
   const sessionPath = deps.sessionPath ?? defaultDaemonSessionPath();
+  const killFn = deps.killFn ?? ((pid, signal) => process.kill(pid, signal));
 
   if (sub === 'status') {
     try {
@@ -63,13 +67,25 @@ export async function cmdDaemon(
     }
 
     const portRaw = flagValue(rest, '--port');
-    const port = portRaw ? Number(portRaw) : undefined;
+    let port: number | undefined;
+    if (portRaw != null) {
+      const n = Number(portRaw);
+      if (!Number.isFinite(n) || n < 1 || n > 65535) {
+        ctx.err('invalid --port (expected 1–65535)');
+        return EXIT.VALIDATION;
+      }
+      port = Math.trunc(n);
+    }
     const entry = flagValue(rest, '--entry');
+    if (entry != null && (entry.length > 4_096 || !pathIsSafeEntry(entry))) {
+      ctx.err('invalid --entry path');
+      return EXIT.VALIDATION;
+    }
     const start = deps.startDaemon ?? startDaemonProcess;
 
     try {
       const result = await start({
-        port: Number.isFinite(port) ? port : undefined,
+        port,
         serverEntry: entry,
         spawnFn: deps.spawnFn,
         onLine: (line) => {
@@ -86,7 +102,7 @@ export async function cmdDaemon(
           serverUrl: result.serverUrl,
         });
       } catch {
-        // non-fatal
+        // non-fatal — user still has exports printed below
       }
       if (ctx.json) {
         printJson(ctx, {
@@ -98,9 +114,11 @@ export async function cmdDaemon(
           sessionPath,
         });
       } else {
+        // shell-safe single-quoted exports (token is hex; still escape ' if present)
+        const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
         ctx.out(`started  pid=${result.pid}  ${result.serverUrl}`);
-        ctx.out(`export NEOS_SERVER_URL='${result.serverUrl}'`);
-        ctx.out(`export NEOS_AUTH_TOKEN='${result.token}'`);
+        ctx.out(`export NEOS_SERVER_URL=${q(result.serverUrl)}`);
+        ctx.out(`export NEOS_AUTH_TOKEN=${q(result.token)}`);
         ctx.out(`# session: ${sessionPath}`);
       }
       return EXIT.OK;
@@ -118,17 +136,34 @@ export async function cmdDaemon(
       return EXIT.NOT_FOUND;
     }
     try {
-      process.kill(session.pid, 'SIGTERM');
+      try {
+        killFn(session.pid, 'SIGTERM');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'kill failed';
+        // ESRCH / already dead → treat as stopped and clear session
+        if (!/ESRCH|No such process|not running/i.test(msg)) {
+          ctx.err(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
+          return EXIT.INTERNAL;
+        }
+      }
+      clearDaemonSession(sessionPath);
       if (ctx.json) printJson(ctx, { stopped: true, pid: session.pid });
       else ctx.out(`stopped  pid=${session.pid}`);
       return EXIT.OK;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'kill failed';
-      ctx.err(msg);
+      const msg = err instanceof Error ? err.message : 'stop failed';
+      ctx.err(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
       return EXIT.INTERNAL;
     }
   }
 
   ctx.err('usage: neos daemon status|start|stop');
   return EXIT.USAGE;
+}
+
+/** Reject control/relative-escape weirdness for --entry. */
+function pathIsSafeEntry(p: string): boolean {
+  if (!p || /[\0\r\n]/.test(p)) return false;
+  // Absolute or simple relative path; no newline already checked
+  return p.length > 0 && p.length <= 4_096;
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RunLogPanel, filterRunLogEvents, linkifyText, safeLogHref } from './RunLogPanel.js';
 import type { WorkflowSSEEvent } from '../../lib/engine.js';
@@ -293,5 +293,65 @@ describe('RunLogPanel copy', () => {
     expect(payload).toContain('line');
     expect(payload).toContain('a');
   });
-});
 
+  it('renders worker lifecycle rows and node.warning in the panel', () => {
+    const workerEvents: WorkflowSSEEvent[] = [
+      { type: 'run.started', runId: 'run-abc' },
+      { type: 'node.started', nodeId: 'n1', nodeType: 'agent' },
+      { type: 'node.warning', nodeId: 'n1', message: 'soft warn' },
+      { type: 'worker.started', nodeId: 'n1', workerId: 'finance_analyst', workerRunId: 'wr-longid' },
+      { type: 'worker.progress', nodeId: 'n1', workerRunId: 'wr-longid', chunk: 'tick' },
+      { type: 'worker.completed', nodeId: 'n1', workerRunId: 'wr-longid', output: { ok: true } },
+      { type: 'worker.failed', nodeId: 'n1', workerRunId: 'wr-fail', error: 'spawn failed' },
+      { type: 'node.progress', nodeId: 'n1', accumulated: 'stream body', chunk: 'x' },
+    ];
+    render(
+      <RunLogPanel
+        events={workerEvents}
+        nodeLabelMap={{ n1: 'Agent Node' }}
+      />,
+    );
+    expect(screen.getByText(/soft warn/)).toBeInTheDocument();
+    expect(screen.getByText(/worker finance_analyst/)).toBeInTheDocument();
+    expect(screen.getAllByText(/worker wr-longi/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/spawn failed/)).toBeInTheDocument();
+    expect(screen.getAllByText(/streaming/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('expands progress stream and copies scrubbed text', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const events: WorkflowSSEEvent[] = [
+      {
+        type: 'node.progress',
+        nodeId: 'n1',
+        accumulated: `hello${'\0'}stream`,
+        chunk: 'x',
+      },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{ n1: 'Coder' }} />);
+    // click progress row to expand
+    fireEvent.click(screen.getByText(/streaming/));
+    await waitFor(() => expect(screen.getByText('Copy')).toBeInTheDocument());
+    await user.click(screen.getByText('Copy'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalled();
+      expect(String(writeText.mock.calls[0]?.[0])).toBe('hellostream');
+    });
+  });
+
+  it('shows empty filter message when chip matches nothing', async () => {
+    const user = userEvent.setup();
+    const events: WorkflowSSEEvent[] = [
+      { type: 'run.started', runId: 'r1' },
+    ];
+    render(<RunLogPanel events={events} nodeLabelMap={{}} />);
+    await user.click(screen.getByRole('button', { name: 'Progress' }));
+    expect(screen.getByText(/No events match this filter/i)).toBeInTheDocument();
+  });
+
+});

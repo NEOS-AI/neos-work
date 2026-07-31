@@ -34,16 +34,22 @@ export async function cmdMemory(
       const type = flagValue(rest, '--type') || 'user';
       const content = flagValue(rest, '--content') || rest.slice(2).filter((a) => !a.startsWith('-')).join(' ');
       if (!name?.trim() || !content?.trim()) {
-        ctx.err('usage: neos memory add --name <n> --type <user|feedback|project|reference> --content <text>');
+        ctx.err('usage: neos memory add --name <n> --type <user|session|skill|reference> --content <text>');
         return EXIT.USAGE;
       }
-      if (/[\0\r\n]/.test(name) || /\0/.test(content)) {
-        ctx.err('invalid control characters in name/content');
+      if (/[\0\r\n]/.test(name) || /\0/.test(content) || /[\0\r\n]/.test(type)) {
+        ctx.err('invalid control characters in name/type/content');
+        return EXIT.VALIDATION;
+      }
+      // Align with @neos-work/shared MemoryType
+      const typeNorm = type.trim().toLowerCase();
+      if (!['user', 'session', 'skill', 'reference'].includes(typeNorm)) {
+        ctx.err('type must be user|session|skill|reference');
         return EXIT.VALIDATION;
       }
       const res = await client.createMemory({
         name: name.trim(),
-        type: type.trim(),
+        type: typeNorm,
         content: content.trim(),
       });
       if (ctx.json) printJson(ctx, res.data);
