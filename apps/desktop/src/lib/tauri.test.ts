@@ -1,5 +1,12 @@
 import { describe, expect, it, afterEach } from 'vitest';
-import { isTauri, startEngine, stopEngine, getAuthToken, getEnginePort } from './tauri.js';
+import {
+  isTauri,
+  startEngine,
+  stopEngine,
+  getAuthToken,
+  getEnginePort,
+  pickFolder,
+} from './tauri.js';
 
 describe('tauri helpers outside Tauri', () => {
   afterEach(() => {
@@ -28,6 +35,10 @@ describe('tauri helpers outside Tauri', () => {
     expect(await getEnginePort()).toBeNull();
   });
 
+  it('pickFolder returns null outside Tauri', async () => {
+    expect(await pickFolder()).toBeNull();
+  });
+
   it('startEngine returns false when Tauri flag set but invoke unavailable', async () => {
     // @ts-expect-error stub
     window.__TAURI_INTERNALS__ = {};
@@ -42,5 +53,11 @@ describe('tauri helpers outside Tauri', () => {
     await expect(stopEngine()).resolves.toBeUndefined();
     expect(await getAuthToken()).toBeNull();
     expect(await getEnginePort()).toBeNull();
+  });
+
+  it('pickFolder returns null when Tauri-flagged but dialog plugin unavailable', async () => {
+    // @ts-expect-error stub
+    window.__TAURI_INTERNALS__ = {};
+    expect(await pickFolder({ title: 'Pick' })).toBeNull();
   });
 });

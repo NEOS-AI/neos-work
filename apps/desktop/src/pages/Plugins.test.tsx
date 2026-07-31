@@ -31,6 +31,7 @@ const samplePlugins = [
     name: 'Beta Plugin',
     version: '1.0.0',
     description: 'Second',
+    channel: 'community' as const,
     pipeline: [{ id: 'a', name: 'A', kind: 'discovery' }],
   },
   {
@@ -38,6 +39,7 @@ const samplePlugins = [
     name: 'Alpha Plugin',
     version: '2.0.0',
     description: 'First alphabetically',
+    channel: 'official' as const,
     pipeline: [
       { id: 'a', name: 'A', kind: 'discovery' },
       { id: 'b', name: 'B', kind: 'plan' },
@@ -74,7 +76,11 @@ describe('Plugins page', () => {
 
   it('lists plugins sorted by name and opens runner', async () => {
     const user = userEvent.setup();
-    listPlugins.mockResolvedValue({ ok: true, data: samplePlugins });
+    listPlugins.mockResolvedValue({
+      ok: true,
+      data: samplePlugins,
+      meta: { total: 2, channels: { official: 1, community: 1, user: 0, bundled: 0 } },
+    });
     render(<Plugins />);
 
     await waitFor(() => {
@@ -85,12 +91,39 @@ describe('Plugins page', () => {
     expect(names[0]).toBe('Alpha Plugin');
     expect(names[1]).toBe('Beta Plugin');
     expect(screen.getByText(/v2\.0\.0 · 2 stages/)).toBeInTheDocument();
+    expect(screen.getByTestId('plugin-channel-filters')).toBeInTheDocument();
+    expect(screen.getByTestId('plugin-badge-p-a')).toHaveTextContent('Official');
+    expect(screen.getByTestId('plugin-badge-p-b')).toHaveTextContent('Community');
 
     await user.click(screen.getAllByRole('button', { name: 'Run' })[0]!);
     expect(screen.getByTestId('pipeline-runner')).toHaveTextContent('Running Alpha Plugin');
 
     await user.click(screen.getByRole('button', { name: 'close-runner' }));
     expect(screen.queryByTestId('pipeline-runner')).not.toBeInTheDocument();
+  });
+
+  it('filters by marketplace channel', async () => {
+    const user = userEvent.setup();
+    listPlugins.mockResolvedValue({
+      ok: true,
+      data: samplePlugins,
+      meta: { total: 2, channels: { official: 1, community: 1 } },
+    });
+    render(<Plugins />);
+    await waitFor(() => expect(screen.getByText('Alpha Plugin')).toBeInTheDocument());
+
+    await user.click(screen.getByTestId('plugin-channel-official'));
+    expect(screen.getByText('Alpha Plugin')).toBeInTheDocument();
+    expect(screen.queryByText('Beta Plugin')).not.toBeInTheDocument();
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('plugin-channel-community'));
+    expect(screen.getByText('Beta Plugin')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha Plugin')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('plugin-channel-all'));
+    expect(screen.getByText('Alpha Plugin')).toBeInTheDocument();
+    expect(screen.getByText('Beta Plugin')).toBeInTheDocument();
   });
 
   it('filters by search and Escape clears search', async () => {
@@ -138,6 +171,19 @@ describe('Plugins page', () => {
     await user.click(screen.getAllByRole('button', { name: 'Run' })[0]!);
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect((screen.getByPlaceholderText('Search plugins…') as HTMLInputElement).value).toBe('Alpha');
+  });
+
+  it('Escape clears channel filter when search empty', async () => {
+    const user = userEvent.setup();
+    listPlugins.mockResolvedValue({ ok: true, data: samplePlugins });
+    render(<Plugins />);
+    await waitFor(() => expect(screen.getByText('Alpha Plugin')).toBeInTheDocument());
+    await user.click(screen.getByTestId('plugin-channel-official'));
+    expect(screen.queryByText('Beta Plugin')).not.toBeInTheDocument();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await waitFor(() => {
+      expect(screen.getByText('Beta Plugin')).toBeInTheDocument();
+    });
   });
 
   it('shows zero stages and description for empty pipeline plugins', async () => {

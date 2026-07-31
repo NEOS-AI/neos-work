@@ -359,4 +359,129 @@ describe('RunHistoryPanel', () => {
     // Empty/error state does not mount clear buttons (no accidental clear on bad id)
     expect(screen.queryByTitle('Clear completed runs')).not.toBeInTheDocument();
   });
+
+  it('clears failed and cancelled runs on confirm success', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [
+        makeRun('run-f1', 'failed'),
+        makeRun('run-x1', 'cancelled'),
+        makeRun('run-c1', 'completed'),
+      ],
+    });
+    clearWorkflowRuns.mockResolvedValue({ ok: true, data: { deleted: 1 } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('failed')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Clear failed/i }));
+    await waitFor(() => {
+      expect(clearWorkflowRuns).toHaveBeenCalledWith('wf-1', 'failed');
+      expect(screen.queryByText('failed')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Clear cancelled/i }));
+    await waitFor(() => {
+      expect(clearWorkflowRuns).toHaveBeenCalledWith('wf-1', 'cancelled');
+      expect(screen.queryByText('cancelled')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('completed')).toBeInTheDocument();
+  });
+
+  it('deletes a single run on success', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed'), makeRun('run-c2', 'completed')],
+    });
+    deleteWorkflowRun.mockResolvedValue({ ok: true, data: { deleted: true } });
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getAllByText('completed').length).toBe(2));
+    const deleteBtns = screen.getAllByTitle(/delete|run\.delete/i);
+    await user.click(deleteBtns[0]!);
+    await waitFor(() => {
+      expect(deleteWorkflowRun).toHaveBeenCalledWith('wf-1', 'run-c1');
+      expect(screen.getAllByText('completed').length).toBe(1);
+    });
+  });
+
+  it('exports run JSON via object URL download', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed')],
+    });
+    getWorkflowRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-c1', status: 'completed', nodeResults: {} },
+    });
+    const createObjectURL = vi.fn(() => 'blob:mock-url');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument());
+    await user.click(screen.getByTitle('Export run JSON'));
+    await waitFor(() => {
+      expect(getWorkflowRun).toHaveBeenCalledWith('wf-1', 'run-c1');
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(clickSpy).toHaveBeenCalled();
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+    });
+    clickSpy.mockRestore();
+  });
+
+  it('shows failed node count from nodeResults', async () => {
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [
+        makeRun('run-n1', 'failed', '2020-01-01T00:00:00.000Z', {
+          nodeResults: {
+            a: { status: 'failed', error: 'node a boom' },
+            b: { status: 'completed' },
+          },
+        }),
+      ],
+    });
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => {
+      expect(screen.getByText(/1 failed nodes/i)).toBeInTheDocument();
+      expect(screen.getByText(/node a boom/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows load error when listWorkflowRuns throws', async () => {
+    listWorkflowRuns.mockRejectedValue(new Error(`db${'\n'}offline${'\0'}!`));
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => {
+      expect(screen.getByText('db offline!')).toBeInTheDocument();
+    });
+  });
+
+  it('alerts when single run delete throws and keeps the run', async () => {
+    const user = userEvent.setup();
+    listWorkflowRuns.mockResolvedValue({
+      ok: true,
+      data: [makeRun('run-c1', 'completed')],
+    });
+    deleteWorkflowRun.mockRejectedValue(new Error(`del${'\n'}err${'\0'}!`));
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<RunHistoryPanel workflowId="wf-1" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument());
+    await user.click(screen.getByTitle(/delete|run\.delete/i));
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith('del err!');
+    });
+    expect(screen.getByText('completed')).toBeInTheDocument();
+  });
+
 });

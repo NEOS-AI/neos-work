@@ -479,16 +479,7 @@ export function Skills() {
                   style={{ color: 'var(--text-secondary)' }}
                   title={scrubDisplayText(detailSkill.path, { collapseLines: true, maxChars: 240 })}
                 >
-                  {(() => {
-                    const raw = scrubDisplayText(detailSkill.path, {
-                      collapseLines: true,
-                      maxChars: 240,
-                    });
-                    if (!raw) return '—';
-                    // Prefer trailing package-relative segments over full host path
-                    const parts = raw.replace(/\\/g, '/').split('/').filter(Boolean);
-                    return parts.slice(-3).join('/') || raw;
-                  })()}
+                  {formatSkillPathDisplay(detailSkill.path)}
                 </dd>
               </dl>
               {detailSkill.triggers && detailSkill.triggers.length > 0 && (
@@ -651,6 +642,14 @@ export function Skills() {
       )}
     </div>
   );
+}
+
+/** Prefer trailing package-relative segments over full host paths in the drawer. */
+function formatSkillPathDisplay(path: string | undefined | null): string {
+  const raw = scrubDisplayText(path ?? '', { collapseLines: true, maxChars: 240 });
+  if (!raw) return '—';
+  const parts = raw.replace(/\\/g, '/').split('/').filter(Boolean);
+  return parts.slice(-3).join('/') || raw;
 }
 
 function SkillCard({

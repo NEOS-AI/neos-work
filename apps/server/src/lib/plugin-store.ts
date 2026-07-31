@@ -3,7 +3,7 @@
  * Skills directory: ~/.config/neos-work/skills/<plugin-name>/
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, type Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -175,8 +175,22 @@ async function loadPluginFromDir(
     if (typeof manifest.version === 'string' && !/[\0\r\n]/.test(manifest.version)) {
       const v = manifest.version.trim() || '0.0.0';
       manifest.version = v.length > 64 ? v.slice(0, 64) : v;
-    } else if (typeof manifest.version === 'string') {
+    } else {
+      // Missing / non-string / control-char versions default for type + UI safety
       manifest.version = '0.0.0';
+    }
+    if (manifest.capabilityGates !== undefined) {
+      if (Array.isArray(manifest.capabilityGates)) {
+        const gates: string[] = [];
+        for (const c of manifest.capabilityGates.slice(0, 50)) {
+          if (typeof c !== 'string' || /[\0\r\n]/.test(c)) continue;
+          const t = c.trim();
+          if (t && t.length <= 120) gates.push(t);
+        }
+        manifest.capabilityGates = gates;
+      } else {
+        delete manifest.capabilityGates;
+      }
     }
     if (manifest.pipeline !== undefined) {
       const stages = normalizePipelineStages(manifest.pipeline);
@@ -216,8 +230,9 @@ async function scanPluginRoot(
   channel: PluginChannel,
 ): Promise<PluginManifest[]> {
   const out: PluginManifest[] = [];
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let entries: Dirent[];
   try {
+    // Explicit Dirent[] — Node overloads make ReturnType<typeof fs.readdir> resolve to Buffer names
     entries = await fs.readdir(root, { withFileTypes: true });
   } catch {
     return out;
@@ -231,8 +246,8 @@ async function scanPluginRoot(
       out.push(direct);
       continue;
     }
-    // Try as group folder
-    let children: Awaited<ReturnType<typeof fs.readdir>>;
+    // Try as group folder (_official / community / …)
+    let children: Dirent[];
     try {
       children = await fs.readdir(dir, { withFileTypes: true });
     } catch {
@@ -271,10 +286,8 @@ export async function listPlugins(opts?: {
     byId.set(p.id, p);
   }
 
-  // 2) Bundled marketplace
-  const bundled =
-    resolveBundledPluginsDir(opts?.bundledRoot ?? null)
-    ?? resolveBundledPluginsDir(null);
+  // 2) Bundled marketplace (cwd/env/explicit; group folders set official/community)
+  const bundled = resolveBundledPluginsDir(opts?.bundledRoot ?? null);
   if (bundled) {
     for (const p of await scanPluginRoot(bundled, 'bundled')) {
       if (!byId.has(p.id)) byId.set(p.id, p);
@@ -412,5 +425,6 @@ export async function upgradeSkillToPlugin(options: {
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
   manifest.skillContent = skillBody;
   manifest.dir = dir;
+  manifest.channel = 'user';
   return manifest;
 }

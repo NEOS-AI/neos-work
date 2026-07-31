@@ -1,8 +1,9 @@
 /**
- * Design Project routes (v0.5.0 M1 + v0.5.9 archive).
+ * Design Project routes (v0.5.0 M1 + v0.5.9 archive + v0.5.13 import token).
  *
  * GET    /api/projects
  * POST   /api/projects
+ * POST   /api/projects/import-token
  * GET    /api/projects/:id
  * PUT    /api/projects/:id
  * DELETE /api/projects/:id
@@ -31,6 +32,11 @@ import {
   PROJECT_ZIP_MAX_BYTES,
 } from '../lib/project-archive.js';
 import { PathSandboxError } from '../lib/path-sandbox.js';
+import {
+  consumeImportToken,
+  ImportTokenError,
+  issueImportToken,
+} from '../lib/import-token.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
@@ -67,15 +73,48 @@ projects.get('/', (c) => {
   return c.json({ ok: true, data: db.listProjects() });
 });
 
+/**
+ * Issue a single-use desktop import token bound to a folder path.
+ * Used after Tauri folder picker before create/update with baseDir.
+ */
+projects.post('/import-token', async (c) => {
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  const rawPath = typeof body.path === 'string' ? body.path : '';
+  try {
+    const issued = issueImportToken(rawPath);
+    return c.json({ ok: true, data: issued }, 201);
+  } catch (err) {
+    if (err instanceof ImportTokenError) {
+      return c.json({ ok: false, error: publicErrorMessage(err, 'Invalid import path') }, 400);
+    }
+    if (err instanceof PathSandboxError) {
+      return c.json(
+        { ok: false, error: publicErrorMessage(err, 'Invalid import path') },
+        sandboxStatus(err),
+      );
+    }
+    return c.json({ ok: false, error: publicErrorMessage(err, 'Failed to issue import token') }, 400);
+  }
+});
+
 projects.post('/', async (c) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => null);
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
   try {
+    const baseDir = typeof body.baseDir === 'string' ? body.baseDir : undefined;
+    if (baseDir) {
+      // When importToken is provided, enforce single-use path binding (desktop gate).
+      // Absent token remains allowed for API/tests (compat); desktop always sends token.
+      consumeImportToken(body.importToken, baseDir);
+    }
     const project = db.createProject({
       name: typeof body.name === 'string' ? body.name : '',
-      baseDir: typeof body.baseDir === 'string' ? body.baseDir : undefined,
+      baseDir,
       entryFile:
         body.entryFile === null
           ? null
@@ -95,6 +134,9 @@ projects.post('/', async (c) => {
     });
     return c.json({ ok: true, data: project }, 201);
   } catch (err) {
+    if (err instanceof ImportTokenError) {
+      return c.json({ ok: false, error: publicErrorMessage(err, 'Invalid importToken') }, 403);
+    }
     if (err instanceof PathSandboxError) {
       return c.json({ ok: false, error: publicErrorMessage(err, 'Invalid baseDir') }, sandboxStatus(err));
     }
@@ -217,9 +259,13 @@ projects.put('/:id', async (c) => {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
   try {
+    const baseDir = typeof body.baseDir === 'string' ? body.baseDir : undefined;
+    if (baseDir) {
+      consumeImportToken(body.importToken, baseDir);
+    }
     const updated = db.updateProject(id, {
       name: typeof body.name === 'string' ? body.name : undefined,
-      baseDir: typeof body.baseDir === 'string' ? body.baseDir : undefined,
+      baseDir,
       entryFile:
         body.entryFile === null
           ? null
@@ -240,6 +286,9 @@ projects.put('/:id', async (c) => {
     if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
     return c.json({ ok: true, data: updated });
   } catch (err) {
+    if (err instanceof ImportTokenError) {
+      return c.json({ ok: false, error: publicErrorMessage(err, 'Invalid importToken') }, 403);
+    }
     if (err instanceof PathSandboxError) {
       return c.json({ ok: false, error: publicErrorMessage(err, 'Invalid baseDir') }, sandboxStatus(err));
     }

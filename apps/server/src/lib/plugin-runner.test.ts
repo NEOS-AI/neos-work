@@ -137,6 +137,98 @@ describe('plugin-runner', () => {
     expect(events.some((e) => e.type === 'pipeline.completed')).toBe(true);
   });
 
+  it('pins atom snapshot on pipeline.started', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'snap-pin',
+      name: 'Snap Pin',
+      version: '0.0.1',
+      skillContent: '# skill body for pin',
+      pipeline: [
+        {
+          id: 'plan',
+          name: 'Plan',
+          kind: 'plan',
+          prompt: 'x',
+          outputKey: 'plan',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: { goal: 'pin' },
+      settings: {},
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const started = events.find((e) => e.type === 'pipeline.started');
+    expect(typeof started?.snapshotId).toBe('string');
+    expect(String(started?.snapshotId ?? '').length).toBeGreaterThan(8);
+    expect(Array.isArray(started?.atomIds)).toBe(true);
+    expect((started?.atomIds as string[]).length).toBeGreaterThan(0);
+  });
+
+  it('fails pipeline when PLUGIN_DENY_CAPS blocks stage atoms', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'deny-caps',
+      name: 'Deny Caps',
+      version: '0.0.1',
+      capabilityGates: ['tool.fs'],
+      pipeline: [
+        {
+          id: 'exec',
+          name: 'Exec',
+          kind: 'execute',
+          prompt: 'run',
+          outputKey: 'out',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: {},
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    const failed = events.find((e) => e.type === 'pipeline.failed');
+    expect(failed).toBeTruthy();
+    expect(String(failed?.error ?? '')).toMatch(/Capability deny/i);
+    expect(events.some((e) => e.type === 'pipeline.started')).toBe(false);
+    expect(events.some((e) => e.type === 'pipeline.completed')).toBe(false);
+  });
+
+  it('honors PLUGIN_DENY_CAPS setting override', async () => {
+    const plugin: PluginManifest = {
+      schemaVersion: 'od-plugin/v1',
+      id: 'deny-setting',
+      name: 'Deny Setting',
+      version: '0.0.1',
+      pipeline: [
+        {
+          id: 'exec',
+          name: 'Exec',
+          kind: 'execute',
+          prompt: 'run',
+          outputKey: 'out',
+        },
+      ],
+    };
+    const events: Array<Record<string, unknown>> = [];
+    await runPlugin({
+      plugin,
+      inputs: {},
+      settings: { PLUGIN_DENY_CAPS: 'prompt.write, tool.fs' },
+      onEvent: (e) => events.push(e as unknown as Record<string, unknown>),
+    });
+    expect(events.some((e) => e.type === 'pipeline.failed')).toBe(true);
+    expect(String(events.find((e) => e.type === 'pipeline.failed')?.error ?? '')).toMatch(
+      /Capability deny/i,
+    );
+  });
+
+
   it('falls back when stage prompt is blank/whitespace', async () => {
     const plugin: PluginManifest = {
       schemaVersion: 'od-plugin/v1',

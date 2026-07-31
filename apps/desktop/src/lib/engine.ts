@@ -248,11 +248,16 @@ export interface ProjectPreviewComment {
   updatedAt?: string;
 }
 
+/** Marketplace channel for plugin list filters (server plugin-store). */
+export type PluginChannel = 'user' | 'official' | 'community' | 'bundled';
+
 export interface Plugin {
   id: string;
   name: string;
   description?: string;
   version: string;
+  /** Marketplace channel when known. */
+  channel?: PluginChannel;
   pipeline?: Array<{
     id: string;
     name: string;
@@ -261,6 +266,11 @@ export interface Plugin {
     schema?: unknown;
   }>;
   inputFields?: Array<{ key: string; label: string; type: string; placeholder?: string }>;
+}
+
+export interface PluginListMeta {
+  total?: number;
+  channels?: Partial<Record<PluginChannel, number>>;
 }
 
 export interface Artifact {
@@ -982,9 +992,28 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /**
+   * Issue a single-use import token for a folder path (desktop folder import gate).
+   */
+  async createImportToken(
+    path: string,
+  ): Promise<ApiResponse<{ token: string; path: string; expiresAt: string; expiresInMs: number }>> {
+    if (typeof path !== 'string' || /[\0\r\n]/.test(path) || !path.trim()) {
+      return { ok: false, error: 'Invalid path' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/import-token`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ path: path.trim() }),
+    });
+    return readApiResponse(res);
+  }
+
   async createProject(input: {
     name: string;
     baseDir?: string;
+    /** Single-use token from createImportToken when setting baseDir. */
+    importToken?: string;
     entryFile?: string | null;
     designSystemId?: string | null;
     meta?: Record<string, unknown>;
@@ -995,12 +1024,19 @@ export class EngineClient {
     if (input.baseDir != null && (typeof input.baseDir !== 'string' || /[\0\r\n]/.test(input.baseDir))) {
       return { ok: false, error: 'Invalid baseDir' };
     }
+    if (
+      input.importToken != null
+      && (typeof input.importToken !== 'string' || /[\0\r\n]/.test(input.importToken))
+    ) {
+      return { ok: false, error: 'Invalid importToken' };
+    }
     const res = await fetch(`${this.baseUrl}/api/projects`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
         name: input.name.trim(),
         baseDir: input.baseDir?.trim() || undefined,
+        importToken: input.importToken?.trim() || undefined,
         entryFile: input.entryFile,
         designSystemId: input.designSystemId,
         meta: input.meta,
@@ -1653,9 +1689,9 @@ export class EngineClient {
 
   // --- Plugins ---
 
-  async listPlugins(): Promise<ApiResponse<Plugin[]>> {
+  async listPlugins(): Promise<ApiResponse<Plugin[]> & { meta?: PluginListMeta }> {
     const res = await fetch(`${this.baseUrl}/api/plugins`, { headers: this.getHeaders() });
-    return readApiResponse(res);
+    return readApiResponse(res) as Promise<ApiResponse<Plugin[]> & { meta?: PluginListMeta }>;
   }
 
   async getPlugin(id: string): Promise<ApiResponse<Plugin>> {

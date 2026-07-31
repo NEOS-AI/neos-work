@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 const listProjects = vi.fn();
 const createProject = vi.fn();
+const createImportToken = vi.fn();
 const deleteProject = vi.fn();
 const exportProjectZip = vi.fn();
 const importProjectZip = vi.fn();
@@ -13,10 +14,19 @@ const navigate = vi.fn();
 const client = {
   listProjects,
   createProject,
+  createImportToken,
   deleteProject,
   exportProjectZip,
   importProjectZip,
 };
+
+const pickFolder = vi.fn();
+const isTauri = vi.fn(() => false);
+
+vi.mock('../lib/tauri.js', () => ({
+  pickFolder: (...args: unknown[]) => pickFolder(...args),
+  isTauri: () => isTauri(),
+}));
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({ client }),
@@ -63,9 +73,12 @@ describe('Projects page', () => {
   beforeEach(() => {
     listProjects.mockReset();
     createProject.mockReset();
+    createImportToken.mockReset();
     deleteProject.mockReset();
     exportProjectZip.mockReset();
     importProjectZip.mockReset();
+    pickFolder.mockReset().mockResolvedValue(null);
+    isTauri.mockReset().mockReturnValue(false);
     navigate.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -103,7 +116,55 @@ describe('Projects page', () => {
       expect(createProject).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Hero' }),
       );
+      expect(createImportToken).not.toHaveBeenCalled();
       expect(navigate).toHaveBeenCalledWith('/projects/new1');
+    });
+  });
+
+  it('creates project with baseDir after import token', async () => {
+    const user = userEvent.setup();
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    createImportToken.mockResolvedValue({
+      ok: true,
+      data: { token: 'tok-1', path: '/tmp/landing', expiresAt: '2099-01-01T00:00:00.000Z', expiresInMs: 300000 },
+    });
+    createProject.mockResolvedValue({
+      ok: true,
+      data: { ...sample[0], id: 'new2', name: 'Imported' },
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('project.empty')).toBeInTheDocument());
+    await user.click(screen.getByText('project.new'));
+    await user.type(screen.getByPlaceholderText('project.namePlaceholder'), 'Imported');
+    await user.type(screen.getByTestId('project-base-dir-input'), '/tmp/landing');
+    await user.click(screen.getByText('common.create'));
+    await waitFor(() => {
+      expect(createImportToken).toHaveBeenCalledWith('/tmp/landing');
+      expect(createProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Imported',
+          baseDir: '/tmp/landing',
+          importToken: 'tok-1',
+        }),
+      );
+      expect(navigate).toHaveBeenCalledWith('/projects/new2');
+    });
+  });
+
+  it('browse folder uses pickFolder when available', async () => {
+    const user = userEvent.setup();
+    isTauri.mockReturnValue(true);
+    pickFolder.mockResolvedValue('/Users/me/design');
+    listProjects.mockResolvedValue({ ok: true, data: [] });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('project.empty')).toBeInTheDocument());
+    await user.click(screen.getByText('project.new'));
+    await user.click(screen.getByTestId('project-browse-folder'));
+    await waitFor(() => {
+      expect(pickFolder).toHaveBeenCalled();
+      expect((screen.getByTestId('project-base-dir-input') as HTMLInputElement).value).toBe(
+        '/Users/me/design',
+      );
     });
   });
 

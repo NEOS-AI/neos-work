@@ -117,6 +117,7 @@ async fn get_engine_port(state: tauri::State<'_, EngineState>) -> Result<Option<
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(EngineState {
             child: Mutex::new(None),
             auth_token: Mutex::new(None),

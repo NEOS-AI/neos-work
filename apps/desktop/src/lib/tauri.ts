@@ -73,3 +73,33 @@ export async function getEnginePort(): Promise<number | null> {
     return null;
   }
 }
+
+/**
+ * Native folder picker (Tauri dialog plugin).
+ * Returns absolute path or null if cancelled / not in Tauri / plugin unavailable.
+ * Browser dev keeps path-string entry on Projects UI.
+ */
+export async function pickFolder(opts?: {
+  title?: string;
+  defaultPath?: string;
+}): Promise<string | null> {
+  if (!isTauri()) return null;
+
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: opts?.title,
+      defaultPath: opts?.defaultPath,
+    });
+    if (selected == null) return null;
+    // multiple:false → string | null; multiple:true would be string[]
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    if (typeof path !== 'string' || !path.trim() || /[\0\r\n]/.test(path)) return null;
+    return path;
+  } catch (error) {
+    console.warn('[tauri] Failed to open folder dialog:', error);
+    return null;
+  }
+}

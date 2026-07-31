@@ -1,9 +1,12 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import projects from './projects.js';
 import * as db from '../db/projects.js';
 import { getDb } from '../db/schema.js';
+import { clearImportTokens } from '../lib/import-token.js';
 
 const app = new Hono();
 app.route('/api/projects', projects);
@@ -31,7 +34,10 @@ function cleanup() {
   createdIds.length = 0;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  clearImportTokens();
+  cleanup();
+});
 
 async function createViaApi() {
   const res = await app.request('/api/projects', {
@@ -442,6 +448,88 @@ describe('projects missing-id branches', () => {
 
     const missing = await app.request(`/api/projects/${project.id}/files/nope.txt`);
     expect([400, 404]).toContain(missing.status);
+  });
+});
+
+describe('projects import-token gate', () => {
+  it('POST /import-token issues single-use token; create with token works', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-proj-import-'));
+    try {
+      const tokRes = await app.request('/api/projects/import-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: dir }),
+      });
+      expect(tokRes.status).toBe(201);
+      const tokJson = (await tokRes.json()) as {
+        ok: boolean;
+        data: { token: string; path: string };
+      };
+      expect(tokJson.ok).toBe(true);
+      expect(tokJson.data.token.length).toBeGreaterThan(8);
+
+      const createRes = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_tok`,
+          baseDir: dir,
+          importToken: tokJson.data.token,
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = (await createRes.json()) as { ok: boolean; data: { id: string } };
+      createdIds.push(created.data.id);
+
+      // reuse → 403
+      const reuse = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_tok2`,
+          baseDir: dir,
+          importToken: tokJson.data.token,
+        }),
+      });
+      expect(reuse.status).toBe(403);
+    } finally {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  it('POST /import-token rejects invalid path', async () => {
+    const res = await app.request('/api/projects/import-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('create with bogus importToken is rejected', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-proj-import-bad-'));
+    try {
+      const res = await app.request('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${NAME}_bogus_tok`,
+          baseDir: dir,
+          importToken: 'not-a-real-token',
+        }),
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
   });
 });
 

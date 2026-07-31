@@ -8,6 +8,7 @@ import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format-relative-time.js';
 import { formatListCount } from '../lib/list-count.js';
 import { sortByDateDesc } from '../lib/list-sort.js';
+import { isTauri, pickFolder } from '../lib/tauri.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
 export function Projects() {
@@ -23,9 +24,11 @@ export function Projects() {
   const [importBaseDir, setImportBaseDir] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [pickingFolder, setPickingFolder] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+  const canNativeFolderPick = isTauri();
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -87,6 +90,24 @@ export function Projects() {
     return sortByDateDesc(list, (p) => p.updatedAt);
   }, [projects, search]);
 
+  const handleBrowseFolder = async () => {
+    setCreateError(null);
+    setPickingFolder(true);
+    try {
+      const selected = await pickFolder({ title: t('project.pickFolderTitle') });
+      if (selected) {
+        setImportBaseDir(selected);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.pickFolderFailed');
+      setCreateError(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || t('project.pickFolderFailed'),
+      );
+    } finally {
+      setPickingFolder(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!client) return;
     if (/[\0\r\n]/.test(newName)) {
@@ -101,9 +122,23 @@ export function Projects() {
     setCreating(true);
     setCreateError(null);
     try {
+      const baseDir = importBaseDir.trim() || undefined;
+      let importToken: string | undefined;
+      if (baseDir) {
+        const tok = await client.createImportToken(baseDir);
+        if (!tok.ok || !tok.data?.token) {
+          setCreateError(
+            scrubDisplayText(tok.error, { collapseLines: true, maxChars: 300 })
+              || t('project.importTokenFailed'),
+          );
+          return;
+        }
+        importToken = tok.data.token;
+      }
       const res = await client.createProject({
         name: newName.trim(),
-        baseDir: importBaseDir.trim() || undefined,
+        baseDir,
+        importToken,
       });
       if (res.ok && res.data) {
         closeModal();
@@ -429,20 +464,40 @@ export function Projects() {
             </label>
             <label className="mt-3 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
               {t('project.importBaseDir')}
-              <input
-                value={importBaseDir}
-                onChange={(e) => setImportBaseDir(e.target.value)}
-                placeholder={t('project.importBaseDirPlaceholder')}
-                className="mt-1 w-full rounded-lg border px-3 py-2 font-mono text-sm"
-                style={{
-                  borderColor: 'var(--border-primary)',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                }}
-              />
+              <div className="mt-1 flex gap-2">
+                <input
+                  value={importBaseDir}
+                  onChange={(e) => setImportBaseDir(e.target.value)}
+                  placeholder={t('project.importBaseDirPlaceholder')}
+                  data-testid="project-base-dir-input"
+                  className="min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-sm"
+                  style={{
+                    borderColor: 'var(--border-primary)',
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                <button
+                  type="button"
+                  data-testid="project-browse-folder"
+                  disabled={pickingFolder || creating}
+                  onClick={() => void handleBrowseFolder()}
+                  title={
+                    canNativeFolderPick
+                      ? t('project.browseFolder')
+                      : t('project.browseFolderUnavailable')
+                  }
+                  className="shrink-0 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+                  style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                >
+                  {pickingFolder ? t('common.loading') : t('project.browseFolder')}
+                </button>
+              </div>
             </label>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              {t('project.importBaseDirHint')}
+              {canNativeFolderPick
+                ? t('project.importBaseDirHintNative')
+                : t('project.importBaseDirHint')}
             </p>
             {createError && (
               <p className="mt-2 text-sm text-red-400" role="alert">

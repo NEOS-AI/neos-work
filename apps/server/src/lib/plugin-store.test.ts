@@ -423,5 +423,13 @@ describe('bundled marketplace plugins', () => {
     expect(ids).toContain('hello-plugin');
     const official = list.find((p) => p.id === 'landing-gen');
     expect(official?.channel).toBe('official');
+    const community = list.find((p) => p.id === 'hello-plugin');
+    expect(community?.channel).toBe('community');
+    // Control-char explicit is ignored; may still fall back to cwd candidates
+    const ctrl = resolveBundledPluginsDir('bad\npath');
+    expect(ctrl === null || !ctrl.includes('\n')).toBe(true);
+    // Missing path falls through to cwd search (often finds monorepo plugins/)
+    const missing = resolveBundledPluginsDir('/no/such/plugins-root-xyz-neos');
+    expect(missing === null || typeof missing === 'string').toBe(true);
   });
 });

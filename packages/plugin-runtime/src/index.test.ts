@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   AtomRegistry,
   BUILTIN_ATOMS,
+  atomIdsForStageKind,
+  collectAtomIdsForPipeline,
   getGlobalAtomRegistry,
   listBuiltinAtomIds,
   resetGlobalAtomRegistry,
+  stageKindToAtomKind,
 } from './index.js';
 
 describe('@neos-work/plugin-runtime', () => {
@@ -81,12 +84,18 @@ describe('@neos-work/plugin-runtime', () => {
   });
 });
 
-import { atomIdsForStageKind, collectAtomIdsForPipeline } from './stage-atoms.js';
-
 describe('stage → atom mapping', () => {
   it('maps known stage kinds', () => {
     expect(atomIdsForStageKind('form')).toContain('genui.form');
+    expect(atomIdsForStageKind('choice')).toContain('genui.choice');
+    expect(atomIdsForStageKind('plan')).toContain('prompt.system');
+    expect(atomIdsForStageKind('critique')).toContain('prompt.user');
+    expect(atomIdsForStageKind('Discovery')).toContain('prompt.user');
     expect(atomIdsForStageKind('execute')).toContain('editor.apply_patch');
+    expect(atomIdsForStageKind('unknown-stage')).toContain('editor.apply_patch');
+    expect(atomIdsForStageKind('bad\nkind')).toContain('prompt.user');
+    expect(atomIdsForStageKind(null)).toContain('editor.apply_patch');
+    expect(atomIdsForStageKind(42)).toContain('editor.apply_patch');
   });
 
   it('collects unique pipeline atoms', () => {
@@ -94,10 +103,24 @@ describe('stage → atom mapping', () => {
       { kind: 'discovery' },
       { kind: 'execute' },
       { kind: 'form' },
+      null,
+      undefined,
     ]);
     expect(ids).toContain('gate.capability');
     expect(ids).toContain('genui.form');
     expect(ids).toContain('editor.apply_patch');
     expect(new Set(ids).size).toBe(ids.length);
+    expect(collectAtomIdsForPipeline(null as never)).toEqual([]);
+    // Empty stage list still pins capability gate for plugin pipelines
+    expect(collectAtomIdsForPipeline([])).toEqual(['gate.capability']);
+  });
+
+  it('maps stage kinds to atom kinds', () => {
+    expect(stageKindToAtomKind('form')).toBe('genui');
+    expect(stageKindToAtomKind('choice')).toBe('genui');
+    expect(stageKindToAtomKind('execute')).toBe('tool');
+    expect(stageKindToAtomKind('plan')).toBe('prompt');
+    expect(stageKindToAtomKind(null)).toBe('prompt');
+    expect(stageKindToAtomKind(1)).toBe('prompt');
   });
 });
