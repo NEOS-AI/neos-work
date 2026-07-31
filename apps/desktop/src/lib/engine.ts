@@ -1840,12 +1840,39 @@ export class EngineClient {
   }
 
   async deployPreflight(provider: 'vercel' | 'cloudflare', projectName?: string): Promise<
-    ApiResponse<{ provider: string; ready: boolean; checks: Array<{ key: string; ok: boolean; message: string }> }>
+    ApiResponse<{
+      provider: string;
+      ready: boolean;
+      checks: Array<{ key: string; ok: boolean; message: string; severity?: string }>;
+    }>
   > {
     const res = await fetch(`${this.baseUrl}/api/deploy/preflight`, {
       method: 'POST',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, projectName }),
+    });
+    return readApiResponse(res);
+  }
+
+  /** Check public deployment URL reachability (Task 10). */
+  async checkDeployLink(url: string): Promise<
+    ApiResponse<{
+      url: string;
+      reachable: boolean;
+      blocked: boolean;
+      ok: boolean;
+      status?: number;
+      reason?: string;
+      contentType?: string;
+    }>
+  > {
+    if (typeof url !== 'string' || /[\0\r\n]/.test(url) || !url.trim()) {
+      return { ok: false, error: 'Invalid url' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/deploy/check-link`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url.trim() }),
     });
     return readApiResponse(res);
   }
@@ -2381,12 +2408,21 @@ export class EngineClient {
 
   // --- Deployments ---
 
-  async listDeployments(workflowId?: string, limit = 100): Promise<ApiResponse<Deployment[]>> {
+  async listDeployments(
+    workflowId?: string,
+    limit = 100,
+    projectId?: string,
+  ): Promise<ApiResponse<Deployment[]>> {
     const params = new URLSearchParams();
     if (workflowId) {
       const safeId = this.sanitizeId(workflowId);
       if (!safeId) return this.invalidIdResponse('workflow id');
       params.set('workflowId', safeId);
+    }
+    if (projectId) {
+      const safePid = this.sanitizeId(projectId);
+      if (!safePid) return this.invalidIdResponse('project id');
+      params.set('projectId', safePid);
     }
     if (limit) params.set('limit', String(limit));
     const qs = params.toString();
@@ -2675,6 +2711,8 @@ export interface Deployment {
   id: string;
   workflowId?: string;
   runId?: string;
+  /** Design Project id when deploy is project-scoped (Task 10). */
+  projectId?: string;
   provider: string;
   projectName?: string;
   url?: string;

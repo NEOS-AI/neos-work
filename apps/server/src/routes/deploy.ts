@@ -1,9 +1,11 @@
 /**
- * Deploy routes
+ * Deploy routes (Task 10 polish)
  * POST /api/deploy              — Deploy content to Vercel or Cloudflare (records history)
- * GET  /api/deploy              — List deployment history (?workflowId= optional)
+ * GET  /api/deploy              — List history (?workflowId= & projectId= optional)
  * GET  /api/deploy/:id          — Single deployment
  * DELETE /api/deploy/:id        — Delete history entry
+ * POST /api/deploy/preflight    — Richer credential/format checks
+ * POST /api/deploy/check-link   — Reachability check for a deployment URL
  */
 
 import { Hono } from 'hono';
@@ -14,6 +16,9 @@ import {
   getVercelDeploymentStatus,
   getCloudflareDeploymentStatus,
   isValidDeployProjectName,
+  buildDeployPreflight,
+  checkDeployLink,
+  scrubSecretsFromText,
 } from '../lib/deploy.js';
 import {
   createDeployment,
@@ -22,6 +27,7 @@ import {
   listDeployments,
   updateDeployment,
 } from '../db/deployments.js';
+import { getProject } from '../db/projects.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
@@ -31,9 +37,19 @@ function paramId(c: { req: { param: (k: string) => string } }): string {
   return safeRouteId(c.req.param('id'));
 }
 
+function knownDeploySecrets(): string[] {
+  const keys = ['VERCEL_API_TOKEN', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] as const;
+  const out: string[] = [];
+  for (const k of keys) {
+    const v = getSecretSetting(k);
+    if (v) out.push(v);
+  }
+  return out;
+}
+
 /**
  * Preflight: check whether deploy credentials/config look ready for a provider.
- * Does not create a deployment.
+ * Does not create a deployment. Never returns secret values.
  */
 deploy.post('/preflight', async (c) => {
   const body = await c.req.json<{ provider?: 'vercel' | 'cloudflare'; projectName?: string }>().catch(() => ({} as { provider?: string }));
@@ -50,30 +66,6 @@ deploy.post('/preflight', async (c) => {
     return c.json({ ok: false, error: 'provider must be vercel or cloudflare' }, 400);
   }
 
-  const checks: Array<{ key: string; ok: boolean; message: string }> = [];
-
-  if (provider === 'vercel') {
-    const token = getSecretSetting('VERCEL_API_TOKEN');
-    checks.push({
-      key: 'VERCEL_API_TOKEN',
-      ok: Boolean(token),
-      message: token ? 'Vercel API token configured' : 'Missing Vercel API token in Settings',
-    });
-  } else {
-    const token = getSecretSetting('CLOUDFLARE_API_TOKEN');
-    const accountId = getSecretSetting('CLOUDFLARE_ACCOUNT_ID');
-    checks.push({
-      key: 'CLOUDFLARE_API_TOKEN',
-      ok: Boolean(token),
-      message: token ? 'Cloudflare API token configured' : 'Missing Cloudflare API token in Settings',
-    });
-    checks.push({
-      key: 'CLOUDFLARE_ACCOUNT_ID',
-      ok: Boolean(accountId),
-      message: accountId ? 'Cloudflare Account ID configured' : 'Missing Cloudflare Account ID in Settings',
-    });
-  }
-
   const rawProject = (body as { projectName?: string }).projectName;
   let projectName = 'neos-deploy';
   if (typeof rawProject === 'string') {
@@ -82,23 +74,48 @@ deploy.post('/preflight', async (c) => {
     }
     projectName = rawProject.trim() || 'neos-deploy';
   }
-  const projectOk = isValidDeployProjectName(projectName);
-  checks.push({
-    key: 'projectName',
-    ok: projectOk,
-    message: projectOk
-      ? `Project name: ${projectName}`
-      : 'Project name must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63).',
+
+  const result = buildDeployPreflight({
+    provider,
+    projectName,
+    vercelToken: getSecretSetting('VERCEL_API_TOKEN'),
+    cloudflareToken: getSecretSetting('CLOUDFLARE_API_TOKEN'),
+    cloudflareAccountId: getSecretSetting('CLOUDFLARE_ACCOUNT_ID'),
   });
 
-  const ready = checks.every((ch) => ch.ok);
+  // Defense: ensure no secret substrings leak into check messages
+  const secrets = knownDeploySecrets();
+  const checks = result.checks.map((ch) => ({
+    ...ch,
+    message: scrubSecretsFromText(ch.message, secrets),
+  }));
+
   return c.json({
     ok: true,
     data: {
-      provider,
-      ready,
+      provider: result.provider,
+      ready: result.ready,
       checks,
     },
+  });
+});
+
+/**
+ * Check whether a public deployment URL is reachable (HEAD/GET).
+ * Blocks private/loopback hosts.
+ */
+deploy.post('/check-link', async (c) => {
+  const body = await c.req.json<{ url?: string }>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  if (typeof body.url !== 'string' || /[\0\r\n]/.test(body.url)) {
+    return c.json({ ok: false, error: 'url is required' }, 400);
+  }
+  const result = await checkDeployLink(body.url);
+  return c.json({
+    ok: true,
+    data: result,
   });
 });
 
@@ -107,6 +124,8 @@ deploy.get('/', (c) => {
   // safeRouteId checks control chars before trim
   const workflowIdRaw = c.req.query('workflowId') ?? '';
   const workflowId = workflowIdRaw ? safeRouteId(workflowIdRaw) || undefined : undefined;
+  const projectIdRaw = c.req.query('projectId') ?? '';
+  const projectId = projectIdRaw ? safeRouteId(projectIdRaw) || undefined : undefined;
   // Ignore control-char / non-numeric limit → default 100 (align with media list)
   const limitQuery = c.req.query('limit') ?? '';
   const limitRaw =
@@ -114,7 +133,7 @@ deploy.get('/', (c) => {
   const limit = limitRaw
     ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500)
     : 100;
-  const rows = listDeployments({ workflowId, limit });
+  const rows = listDeployments({ workflowId, projectId, limit });
   return c.json({ ok: true, data: rows });
 });
 
@@ -146,7 +165,7 @@ deploy.post('/:id/refresh', async (c) => {
       const updated = updateDeployment(row.id, {
         status: remote.status,
         url: remote.url ?? row.url,
-        statusMessage: remote.statusMessage,
+        statusMessage: scrubSecretsFromText(remote.statusMessage, knownDeploySecrets()),
       });
       return c.json({ ok: true, data: updated });
     }
@@ -167,14 +186,17 @@ deploy.post('/:id/refresh', async (c) => {
       const updated = updateDeployment(row.id, {
         status: remote.status,
         url: remote.url ?? row.url,
-        statusMessage: remote.statusMessage,
+        statusMessage: scrubSecretsFromText(remote.statusMessage, knownDeploySecrets()),
       });
       return c.json({ ok: true, data: updated });
     }
 
     return c.json({ ok: false, error: `Unsupported provider: ${row.provider}` }, 400);
   } catch (err) {
-    const msg = publicErrorMessage(err, 'Status refresh failed');
+    const msg = scrubSecretsFromText(
+      publicErrorMessage(err, 'Status refresh failed'),
+      knownDeploySecrets(),
+    );
     return c.json({ ok: false, error: msg }, 500);
   }
 });
@@ -194,6 +216,7 @@ deploy.post('/', async (c) => {
     projectName?: string;
     workflowId?: string;
     runId?: string;
+    projectId?: string;
   }>().catch(() => null);
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
@@ -250,10 +273,21 @@ deploy.post('/', async (c) => {
     }
     runId = body.runId.trim() || undefined;
   }
+  let projectId: string | undefined;
+  if (typeof body.projectId === 'string' && body.projectId) {
+    if (/[\0\r\n]/.test(body.projectId) || body.projectId.trim().length > 100) {
+      return c.json({ ok: false, error: 'Invalid projectId' }, 400);
+    }
+    projectId = body.projectId.trim() || undefined;
+    if (projectId && !getProject(projectId)) {
+      return c.json({ ok: false, error: 'Design project not found' }, 404);
+    }
+  }
 
   const record = createDeployment({
     workflowId,
     runId,
+    projectId,
     provider: provider,
     projectName,
     status: 'deploying',
@@ -297,7 +331,10 @@ deploy.post('/', async (c) => {
       return c.json({ ok: true, data: { ...result, recordId: updated?.id ?? record.id } });
     }
   } catch (err) {
-    const msg = publicErrorMessage(err, 'Deploy failed');
+    const msg = scrubSecretsFromText(
+      publicErrorMessage(err, 'Deploy failed'),
+      knownDeploySecrets(),
+    );
     updateDeployment(record.id, { status: 'failed', statusMessage: msg });
     return c.json({ ok: false, error: msg }, 500);
   }

@@ -488,34 +488,36 @@ describe('ProjectWorkspace', () => {
   it('adds and deletes a preview comment after selection', async () => {
     const user = userEvent.setup();
     mockLoadedProject();
-    listProjectPreviewComments
-      .mockResolvedValueOnce({ ok: true, data: [] })
-      .mockResolvedValueOnce({
-        ok: true,
-        data: [
-          {
-            id: 'c1',
-            projectId: 'proj-1',
-            filePath: 'index.html',
-            selector: '#hero',
-            body: 'tighten spacing',
-            createdAt: 't',
-          },
-        ],
-      })
-      .mockResolvedValue({ ok: true, data: [] });
-    createProjectPreviewComment.mockResolvedValue({
-      ok: true,
-      data: {
+    // Stateful list so StrictMode double-fetch / post-create reload stay consistent
+    let comments: Array<{
+      id: string;
+      projectId: string;
+      filePath: string;
+      selector: string;
+      body: string;
+      createdAt: string;
+    }> = [];
+    listProjectPreviewComments.mockImplementation(async () => ({ ok: true, data: comments }));
+    createProjectPreviewComment.mockImplementation(async (_id: string, input: {
+      filePath: string;
+      selector: string;
+      body: string;
+    }) => {
+      const row = {
         id: 'c1',
         projectId: 'proj-1',
-        filePath: 'index.html',
-        selector: '#hero',
-        body: 'tighten spacing',
+        filePath: input.filePath,
+        selector: input.selector,
+        body: input.body,
         createdAt: 't',
-      },
+      };
+      comments = [row];
+      return { ok: true, data: row };
     });
-    deleteProjectPreviewComment.mockResolvedValue({ ok: true, data: { deleted: true } });
+    deleteProjectPreviewComment.mockImplementation(async () => {
+      comments = [];
+      return { ok: true, data: { deleted: true } };
+    });
 
     renderWorkspace();
     await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());

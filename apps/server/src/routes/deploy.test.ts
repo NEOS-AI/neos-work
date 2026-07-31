@@ -550,3 +550,56 @@ describe('deploy POST success paths (mocked fetch)', () => {
     expect(missing.status).toBe(404);
   });
 });
+
+describe('deploy routes Task 10 polish', () => {
+  it('POST /preflight returns format checks without leaking secrets', async () => {
+    setSetting('VERCEL_API_TOKEN', 'vercel_secret_token_abc123xyz');
+    const res = await deploy.request('/preflight', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'vercel', projectName: 'neos-app' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      ok: boolean;
+      data: { ready: boolean; checks: Array<{ key: string; message: string }> };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.ready).toBe(true);
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain('vercel_secret_token_abc123xyz');
+    expect(body.data.checks.some((c) => c.key === 'VERCEL_API_TOKEN_FORMAT')).toBe(true);
+  });
+
+  it('POST /check-link blocks localhost', async () => {
+    const res = await deploy.request('/check-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'http://127.0.0.1/' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data: { blocked: boolean; ok: boolean } };
+    expect(body.data.blocked).toBe(true);
+    expect(body.data.ok).toBe(false);
+  });
+
+  it('list filters by projectId', async () => {
+    // Use a fake project id string (no FK on deployments.project_id)
+    const row = createDeployment({
+      provider: 'vercel',
+      projectName: `${MARKER}-proj-scoped`,
+      status: 'success',
+      projectId: 'proj-filter-test-id',
+      url: 'https://example.vercel.app',
+    });
+    const res = await deploy.request('/?projectId=proj-filter-test-id');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data: Array<{ id: string; projectId?: string }> };
+    expect(body.data.some((d) => d.id === row.id)).toBe(true);
+    expect(body.data.every((d) => d.projectId === 'proj-filter-test-id' || d.id === row.id)).toBe(true);
+
+    const other = await deploy.request('/?projectId=no-such-project-zzzz');
+    const otherBody = await other.json() as { data: Array<{ id: string }> };
+    expect(otherBody.data.some((d) => d.id === row.id)).toBe(false);
+  });
+});

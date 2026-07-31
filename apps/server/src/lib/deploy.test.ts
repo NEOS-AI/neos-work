@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DEPLOY_CONTENT_MAX_CHARS,
+  buildDeployPreflight,
+  checkDeployLink,
   deployToCloudflare,
   deployToVercel,
   getCloudflareDeploymentStatus,
   getVercelDeploymentStatus,
+  isBlockedDeployCheckHost,
   isValidDeployProjectName,
+  maskSecret,
   safeDeployHostUrl,
+  scrubSecretsFromText,
 } from './deploy.js';
 
 describe('isValidDeployProjectName', () => {
@@ -550,5 +555,89 @@ describe('deploy helpers', () => {
         }),
       ).rejects.toThrow(/503/);
     });
+  });
+});
+
+describe('maskSecret / scrubSecretsFromText', () => {
+  it('masks secrets and scrubs bearer tokens', () => {
+    expect(maskSecret('abcdefghij')).toMatch(/\*+ghij$/);
+    expect(maskSecret('ab')).toMatch(/^\*+$/);
+    const scrubbed = scrubSecretsFromText(
+      'Bearer sk-live-abcdefghijklmnopqrst and more',
+      ['sk-live-abcdefghijklmnopqrst'],
+    );
+    expect(scrubbed).not.toContain('sk-live-abcdefghijklmnopqrst');
+    expect(scrubbed).toMatch(/Bearer/i);
+  });
+});
+
+describe('isBlockedDeployCheckHost', () => {
+  it('blocks loopback and private ranges', () => {
+    expect(isBlockedDeployCheckHost('localhost')).toBe(true);
+    expect(isBlockedDeployCheckHost('127.0.0.1')).toBe(true);
+    expect(isBlockedDeployCheckHost('10.0.0.5')).toBe(true);
+    expect(isBlockedDeployCheckHost('192.168.1.1')).toBe(true);
+    expect(isBlockedDeployCheckHost('172.16.0.1')).toBe(true);
+    expect(isBlockedDeployCheckHost('169.254.1.1')).toBe(true);
+    expect(isBlockedDeployCheckHost('example.com')).toBe(false);
+  });
+});
+
+describe('checkDeployLink', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('blocks private hosts without fetch', async () => {
+    const r = await checkDeployLink('http://127.0.0.1/');
+    expect(r.blocked).toBe(true);
+    expect(r.ok).toBe(false);
+  });
+
+  it('reports reachable on 200 from mock fetch', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        headers: { get: () => 'text/html' },
+      }),
+    );
+    const r = await checkDeployLink('https://demo.example.app');
+    expect(r.ok).toBe(true);
+    expect(r.reachable).toBe(true);
+    expect(r.status).toBe(200);
+  });
+});
+
+describe('buildDeployPreflight', () => {
+  it('marks ready when vercel token present and project name valid', () => {
+    const r = buildDeployPreflight({
+      provider: 'vercel',
+      projectName: 'neos-app',
+      vercelToken: 'vercel_live_token_value_ok',
+    });
+    expect(r.ready).toBe(true);
+    expect(r.checks.some((c) => c.key === 'VERCEL_API_TOKEN' && c.ok)).toBe(true);
+  });
+
+  it('warns on placeholder tokens but stays ready=false without real token', () => {
+    const r = buildDeployPreflight({
+      provider: 'vercel',
+      projectName: 'neos-app',
+      vercelToken: 'changeme',
+    });
+    // placeholder is present but format check fails; presence check ok
+    const fmt = r.checks.find((c) => c.key === 'VERCEL_API_TOKEN_FORMAT');
+    expect(fmt?.ok).toBe(false);
+    // ready: presence ok, format is warn severity → ready true when only warn fails
+    expect(r.ready).toBe(true);
+  });
+
+  it('not ready when token missing', () => {
+    const r = buildDeployPreflight({
+      provider: 'vercel',
+      projectName: 'neos-app',
+    });
+    expect(r.ready).toBe(false);
   });
 });

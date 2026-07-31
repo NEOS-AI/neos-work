@@ -9,6 +9,7 @@ export interface DeploymentRow {
   id: string;
   workflow_id: string | null;
   run_id: string | null;
+  project_id: string | null;
   provider: string;
   project_name: string | null;
   url: string | null;
@@ -23,6 +24,8 @@ export interface Deployment {
   id: string;
   workflowId?: string;
   runId?: string;
+  /** Design Project id (Task 10 project-scoped history). */
+  projectId?: string;
   provider: string;
   projectName?: string;
   url?: string;
@@ -36,6 +39,7 @@ export interface Deployment {
 export interface CreateDeploymentInput {
   workflowId?: string;
   runId?: string;
+  projectId?: string;
   provider: string;
   projectName?: string;
   url?: string;
@@ -49,6 +53,7 @@ function rowToDeployment(row: DeploymentRow): Deployment {
     id: row.id,
     workflowId: row.workflow_id ?? undefined,
     runId: row.run_id ?? undefined,
+    projectId: row.project_id ?? undefined,
     provider: row.provider,
     projectName: row.project_name ?? undefined,
     url: row.url ?? undefined,
@@ -110,6 +115,7 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
   if (!provider) throw new Error('provider is required');
   const workflowId = safeLookupId(input.workflowId) || null;
   const runId = safeLookupId(input.runId) || null;
+  const projectId = safeLookupId(input.projectId) || null;
   let projectName: string | null = null;
   if (typeof input.projectName === 'string') {
     // Drop control-char project names rather than persist them (check before trim)
@@ -130,12 +136,13 @@ export function createDeployment(input: CreateDeploymentInput): Deployment {
   const id = crypto.randomUUID();
   db.prepare(`
     INSERT INTO deployments (
-      id, workflow_id, run_id, provider, project_name, url, deployment_id, status, status_message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, workflow_id, run_id, project_id, provider, project_name, url, deployment_id, status, status_message
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     workflowId,
     runId,
+    projectId,
     provider,
     projectName,
     url,
@@ -154,14 +161,31 @@ export function getDeployment(id: string): Deployment | undefined {
   return row ? rowToDeployment(row) : undefined;
 }
 
-export function listDeployments(opts?: { workflowId?: string; limit?: number }): Deployment[] {
+export function listDeployments(opts?: {
+  workflowId?: string;
+  projectId?: string;
+  limit?: number;
+}): Deployment[] {
   const db = getDb();
   const limit = Math.min(Math.max(Number(opts?.limit) || 100, 1), 500);
   const workflowId = safeLookupId(opts?.workflowId) || undefined;
+  const projectId = safeLookupId(opts?.projectId) || undefined;
+  if (workflowId && projectId) {
+    const rows = db.prepare(
+      'SELECT * FROM deployments WHERE workflow_id = ? AND project_id = ? ORDER BY created_at DESC LIMIT ?',
+    ).all(workflowId, projectId, limit) as DeploymentRow[];
+    return rows.map(rowToDeployment);
+  }
   if (workflowId) {
     const rows = db.prepare(
       'SELECT * FROM deployments WHERE workflow_id = ? ORDER BY created_at DESC LIMIT ?',
     ).all(workflowId, limit) as DeploymentRow[];
+    return rows.map(rowToDeployment);
+  }
+  if (projectId) {
+    const rows = db.prepare(
+      'SELECT * FROM deployments WHERE project_id = ? ORDER BY created_at DESC LIMIT ?',
+    ).all(projectId, limit) as DeploymentRow[];
     return rows.map(rowToDeployment);
   }
   const rows = db.prepare(

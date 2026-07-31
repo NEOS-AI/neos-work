@@ -1847,4 +1847,87 @@ describe('EngineClient', () => {
     await expect(client.cancelProjectRun(`r${'\n'}`)).resolves.toMatchObject({ ok: false });
   });
 
+
+  it('createProjectRun rejects overlong prompt and bad agentId', async () => {
+    const client = new EngineClient('http://engine.test');
+    await expect(
+      client.createProjectRun({ prompt: 'x'.repeat(100_001) }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'prompt exceeds max length (100000)',
+    });
+    await expect(
+      client.createProjectRun({ prompt: 'hi', agentId: `cli${'\n'}x` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid agentId' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'run2', status: 'running' } }),
+    );
+    const res = await client.createProjectRun({
+      prompt: 'ok',
+      agentId: 'cli-claude',
+      execute: false,
+      dryRun: true,
+    });
+    expect(res.ok).toBe(true);
+    const body = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(body.agentId).toBe('cli-claude');
+    expect(body.execute).toBe(false);
+    expect(body.dryRun).toBe(true);
+  });
+
+  it('design system content/tokens/save and live artifact APIs', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.createDesignSystem('Brand', 'desc');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/design-systems/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.getDesignSystemContent('ds1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/content/);
+    await client.getDesignSystemTokens('ds1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/tokens/);
+    await client.saveDesignSystemContent('ds1', '# hello');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+    await client.deleteDesignSystem('ds1');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    await expect(client.getDesignSystemTokens(`d${'\n'}s`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemContent('', 'x')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+
+    // live artifacts
+    await expect(client.listLiveArtifacts(`p${'\0'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+    await client.listLiveArtifacts('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/live-artifacts/);
+
+    await expect(
+      client.createLiveArtifact({ projectId: 'p1', name: `bad${'\n'}` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid name' });
+    await expect(
+      client.createLiveArtifact({ projectId: `p${'\n'}1`, name: 'ok' }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid project id' });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'la1', name: 'Live' } }));
+    const created = await client.createLiveArtifact({
+      projectId: 'p1',
+      name: '  Live  ',
+      sourceTemplate: 'tpl',
+      contentType: 'text/html',
+    });
+    expect(created.ok).toBe(true);
+    const liveBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(liveBody.name).toBe('Live');
+    expect(liveBody.projectId).toBe('p1');
+  });
+
 });

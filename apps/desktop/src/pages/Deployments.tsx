@@ -59,6 +59,7 @@ export function Deployments() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
+  const [linkCheck, setLinkCheck] = useState<Record<string, string>>({});
 
   const handleStatusFilter = (status: DeploymentStatusFilter) => {
     setStatusFilter(status);
@@ -212,6 +213,40 @@ export function Deployments() {
       setError(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Status refresh failed',
       );
+    }
+  };
+
+  const handleCheckLink = async (id: string, url: string | undefined) => {
+    if (!client || !url) return;
+    const entityId = safeEntityId(id) || id;
+    setLinkCheck((prev) => ({ ...prev, [entityId]: '…' }));
+    try {
+      const res = await client.checkDeployLink(url);
+      if (res.ok && res.data) {
+        const label = res.data.blocked
+          ? 'blocked'
+          : res.data.ok
+            ? `ok ${res.data.status ?? ''}`.trim()
+            : res.data.reachable
+              ? `HTTP ${res.data.status ?? '?'}`
+              : scrubDisplayText(res.data.reason, { collapseLines: true, maxChars: 80 }) || 'down';
+        setLinkCheck((prev) => ({ ...prev, [entityId]: label }));
+      } else {
+        setLinkCheck((prev) => ({
+          ...prev,
+          [entityId]:
+            scrubDisplayText((res as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 80,
+            }) || 'failed',
+        }));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'check failed';
+      setLinkCheck((prev) => ({
+        ...prev,
+        [entityId]: scrubDisplayText(msg, { collapseLines: true, maxChars: 80 }) || 'failed',
+      }));
     }
   };
 
@@ -464,6 +499,20 @@ export function Deployments() {
                       {formatRelativeTime(d.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
+                      {d.url && safeDeployUrl(d.url) && (
+                        <button
+                          type="button"
+                          data-testid={`deploy-check-link-${d.id}`}
+                          onClick={() => void handleCheckLink(d.id, d.url)}
+                          className="text-xs text-emerald-400 hover:underline"
+                          title="HEAD/GET reachability check (blocks private hosts)"
+                        >
+                          Check
+                          {linkCheck[d.id] || linkCheck[safeEntityId(d.id) || '']
+                            ? ` (${linkCheck[d.id] || linkCheck[safeEntityId(d.id) || '']})`
+                            : ''}
+                        </button>
+                      )}
                       {d.deploymentId && (
                         <button
                           type="button"

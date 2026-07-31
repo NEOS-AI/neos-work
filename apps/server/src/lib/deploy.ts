@@ -4,9 +4,10 @@
  */
 
 import { scrubErrorMessage } from '@neos-work/core';
+import { isValidDeployProjectName } from '@neos-work/shared';
 
 /** Re-export shared deploy project name validator (single source of truth). */
-export { isValidDeployProjectName } from '@neos-work/shared';
+export { isValidDeployProjectName };
 
 export interface DeployResult {
   url: string;
@@ -315,4 +316,274 @@ async function sha256Hex(text: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── Task 10 polish: secret mask, check-link, richer preflight ──
+
+/**
+ * Mask a secret for logs/UI (keep last `visible` chars when long enough).
+ * Never returns the full secret.
+ */
+export function maskSecret(raw: unknown, visible = 4): string {
+  if (typeof raw !== 'string' || !raw) return '';
+  // Control chars → empty (do not leak multi-line secrets into UI)
+  if (/[\0\r\n]/.test(raw)) return '***';
+  const s = raw.trim();
+  if (!s) return '';
+  if (s.length <= visible) return '*'.repeat(Math.min(s.length, 8));
+  return `${'*'.repeat(Math.max(4, s.length - visible))}${s.slice(-visible)}`;
+}
+
+/**
+ * Scrub known secret substrings and common token patterns from free text
+ * (status messages, provider errors).
+ */
+export function scrubSecretsFromText(raw: unknown, knownSecrets: string[] = []): string {
+  let text = typeof raw === 'string' ? raw : raw == null ? '' : String(raw);
+  if (!text) return '';
+  if (/\0/.test(text)) text = text.replace(/\0/g, '');
+  text = text.replace(/[\r\n]+/g, ' ').trim();
+  for (const secret of knownSecrets) {
+    if (typeof secret !== 'string' || secret.length < 6) continue;
+    if (text.includes(secret)) {
+      text = text.split(secret).join(maskSecret(secret));
+    }
+  }
+  // Common API token shapes
+  text = text.replace(/\b(Bearer\s+)[A-Za-z0-9._\-]{8,}/gi, '$1***');
+  text = text.replace(/\b(sk-[A-Za-z0-9]{8,})/g, (m) => maskSecret(m));
+  text = text.replace(/\b(xai-[A-Za-z0-9]{8,})/g, (m) => maskSecret(m));
+  return text.slice(0, 2_000);
+}
+
+/** True if host looks like loopback / private / link-local (check-link SSRF light). */
+export function isBlockedDeployCheckHost(hostname: string): boolean {
+  if (typeof hostname !== 'string' || /[\0\r\n]/.test(hostname)) return true;
+  const h = hostname.trim().toLowerCase().replace(/\.$/, '');
+  if (!h) return true;
+  if (h === 'localhost' || h === '0.0.0.0' || h === '::1' || h === '[::1]') return true;
+  if (h.endsWith('.localhost') || h.endsWith('.local')) return true;
+  // IPv4
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+  }
+  // IPv6 local/link-local (coarse)
+  if (h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true;
+  return false;
+}
+
+export interface CheckDeployLinkResult {
+  url: string;
+  reachable: boolean;
+  blocked: boolean;
+  status?: number;
+  ok: boolean;
+  reason?: string;
+  contentType?: string;
+}
+
+/**
+ * HEAD (fallback GET) reachability check for a deployment URL.
+ * Blocks private/loopback hosts. Does not follow more than default redirect policy.
+ */
+export async function checkDeployLink(
+  rawUrl: unknown,
+  opts?: { timeoutMs?: number; fetchImpl?: typeof fetch },
+): Promise<CheckDeployLinkResult> {
+  const normalized = safeDeployHostUrl(rawUrl);
+  if (!normalized) {
+    return {
+      url: typeof rawUrl === 'string' ? rawUrl.slice(0, 200) : '',
+      reachable: false,
+      blocked: false,
+      ok: false,
+      reason: 'Invalid or non-http(s) URL',
+    };
+  }
+  let host: string;
+  try {
+    host = new URL(normalized).hostname;
+  } catch {
+    return {
+      url: normalized,
+      reachable: false,
+      blocked: false,
+      ok: false,
+      reason: 'Invalid URL',
+    };
+  }
+  if (isBlockedDeployCheckHost(host)) {
+    return {
+      url: normalized,
+      reachable: false,
+      blocked: true,
+      ok: false,
+      reason: 'Host is blocked (private/loopback/link-local)',
+    };
+  }
+
+  const timeoutMs = Math.min(Math.max(opts?.timeoutMs ?? 8_000, 1_000), 30_000);
+  const fetchFn = opts?.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let res = await fetchFn(normalized, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    // Some CDNs reject HEAD — fall back to GET
+    if (res.status === 405 || res.status === 501) {
+      res = await fetchFn(normalized, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: { Range: 'bytes=0-0' },
+      });
+    }
+    const status = res.status;
+    const reachable = status > 0 && status < 500;
+    const contentType = res.headers?.get?.('content-type') ?? undefined;
+    return {
+      url: normalized,
+      reachable,
+      blocked: false,
+      status,
+      ok: status >= 200 && status < 400,
+      contentType: contentType ? contentType.split(';')[0]?.trim().slice(0, 100) : undefined,
+      reason: reachable ? undefined : `HTTP ${status}`,
+    };
+  } catch (err) {
+    const msg = scrubErrorMessage(err instanceof Error ? err.message : 'network error', 200);
+    return {
+      url: normalized,
+      reachable: false,
+      blocked: false,
+      ok: false,
+      reason: msg || 'Network error',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface PreflightCheck {
+  key: string;
+  ok: boolean;
+  message: string;
+  /** Optional severity for UI (info|warn|error). */
+  severity?: 'info' | 'warn' | 'error';
+}
+
+/** Placeholder / demo token patterns that should not pass preflight. */
+export function looksLikePlaceholderToken(raw: unknown): boolean {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return true;
+  const t = raw.trim().toLowerCase();
+  if (!t) return true;
+  if (t.length < 8) return true;
+  if (
+    /^(x+|your[-_]?token|changeme|todo|xxx|test|dummy|placeholder|example)/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function buildDeployPreflight(options: {
+  provider: 'vercel' | 'cloudflare';
+  projectName: string;
+  vercelToken?: string;
+  cloudflareToken?: string;
+  cloudflareAccountId?: string;
+}): { provider: 'vercel' | 'cloudflare'; ready: boolean; checks: PreflightCheck[] } {
+  const checks: PreflightCheck[] = [];
+  const provider = options.provider;
+
+  if (provider === 'vercel') {
+    const token = options.vercelToken;
+    const present = Boolean(token);
+    checks.push({
+      key: 'VERCEL_API_TOKEN',
+      ok: present,
+      message: present ? 'Vercel API token configured' : 'Missing Vercel API token in Settings',
+      severity: present ? 'info' : 'error',
+    });
+    if (present) {
+      const placeholder = looksLikePlaceholderToken(token);
+      checks.push({
+        key: 'VERCEL_API_TOKEN_FORMAT',
+        ok: !placeholder,
+        message: placeholder
+          ? 'Vercel token looks like a placeholder (too short or demo value)'
+          : 'Vercel token format looks acceptable',
+        severity: placeholder ? 'warn' : 'info',
+      });
+    }
+  } else {
+    const token = options.cloudflareToken;
+    const accountId = options.cloudflareAccountId;
+    checks.push({
+      key: 'CLOUDFLARE_API_TOKEN',
+      ok: Boolean(token),
+      message: token ? 'Cloudflare API token configured' : 'Missing Cloudflare API token in Settings',
+      severity: token ? 'info' : 'error',
+    });
+    checks.push({
+      key: 'CLOUDFLARE_ACCOUNT_ID',
+      ok: Boolean(accountId),
+      message: accountId
+        ? 'Cloudflare Account ID configured'
+        : 'Missing Cloudflare Account ID in Settings',
+      severity: accountId ? 'info' : 'error',
+    });
+    if (token) {
+      const placeholder = looksLikePlaceholderToken(token);
+      checks.push({
+        key: 'CLOUDFLARE_API_TOKEN_FORMAT',
+        ok: !placeholder,
+        message: placeholder
+          ? 'Cloudflare token looks like a placeholder'
+          : 'Cloudflare token format looks acceptable',
+        severity: placeholder ? 'warn' : 'info',
+      });
+    }
+    if (accountId) {
+      const idOk =
+        typeof accountId === 'string'
+        && !/[\0\r\n]/.test(accountId)
+        && accountId.trim().length >= 8
+        && accountId.trim().length <= 100;
+      checks.push({
+        key: 'CLOUDFLARE_ACCOUNT_ID_FORMAT',
+        ok: idOk,
+        message: idOk
+          ? 'Cloudflare Account ID length looks acceptable'
+          : 'Cloudflare Account ID length looks invalid',
+        severity: idOk ? 'info' : 'warn',
+      });
+    }
+  }
+
+  const projectOk = isValidDeployProjectName(options.projectName);
+  checks.push({
+    key: 'projectName',
+    ok: projectOk,
+    message: projectOk
+      ? `Project name: ${options.projectName}`
+      : 'Project name must start with a letter or digit and use only letters, digits, hyphens, or underscores (max 63).',
+    severity: projectOk ? 'info' : 'error',
+  });
+
+  // ready when every non-warning check is ok (warnings never block)
+  const ready = checks.every((ch) => ch.ok || ch.severity === 'warn');
+
+  return { provider, ready, checks };
 }

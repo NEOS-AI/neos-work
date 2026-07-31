@@ -249,6 +249,7 @@ function initSchema(db: Database.Database): void {
       id              TEXT PRIMARY KEY,
       workflow_id     TEXT,
       run_id          TEXT,
+      project_id      TEXT,
       provider        TEXT NOT NULL,
       project_name    TEXT,
       url             TEXT,
@@ -260,6 +261,7 @@ function initSchema(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_deployments_workflow_id ON deployments(workflow_id);
+    CREATE INDEX IF NOT EXISTS idx_deployments_project_id ON deployments(project_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_created_at ON deployments(created_at);
 
     -- Design Project tables (v0.5.0 M1 / PLAN_FOR_V0_5_0 Task 1)
@@ -351,6 +353,17 @@ function initSchema(db: Database.Database): void {
   if (!skillCols.includes('manifest_json')) {
     db.exec("ALTER TABLE skill ADD COLUMN manifest_json TEXT");
   }
+
+  // v0.5.16 — project-scoped deployments (Task 10)
+  const deploymentCols = (
+    db.prepare('PRAGMA table_info(deployments)').all() as Array<{ name: string }>
+  ).map((c) => c.name);
+  if (!deploymentCols.includes('project_id')) {
+    db.exec('ALTER TABLE deployments ADD COLUMN project_id TEXT');
+  }
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deployments_project_id ON deployments(project_id)',
+  );
 
   // v0.3.0 migrations
   const workflowCols = (db.prepare("PRAGMA table_info(workflow)").all() as Array<{ name: string }>).map((c) => c.name);

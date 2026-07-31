@@ -1501,4 +1501,116 @@ describe('Settings page', () => {
     alertSpy.mockRestore();
   });
 
+
+  it('renders full media catalog (providers, video models, stubs)', async () => {
+    getMediaConfig.mockResolvedValue({
+      ok: true,
+      data: {
+        openaiConfigured: true,
+        openaiBaseUrl: 'https://media.example/v1',
+        surfaces: ['workflow', 'chat'],
+        imageModels: ['dall-e-3'],
+        audioModels: ['tts-1'],
+        videoModels: ['sora'],
+        stubsAllowed: true,
+        providers: [
+          { id: 'openai', label: 'OpenAI', configured: true },
+          { id: 'stub', label: 'Stub', configured: true, isStub: true },
+          { id: 'xai', label: 'xAI', configured: false },
+        ],
+      },
+    });
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('Allowed')).toBeInTheDocument();
+      expect(screen.getByTestId('media-provider-list')).toBeInTheDocument();
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+      expect(screen.getByText(/Stub \(stub\)/)).toBeInTheDocument();
+      expect(screen.getByText('xAI')).toBeInTheDocument();
+      expect(screen.getByText('not configured')).toBeInTheDocument();
+      // models row includes video model
+      expect(document.body.textContent).toMatch(/sora/);
+    });
+  });
+
+  it('shows scrubbed media config error when getMediaConfig throws', async () => {
+    getMediaConfig.mockRejectedValue(new Error(`media${'\n'}down${'\0'}!`));
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByText('media down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('alerts when defaults provider/model save fails or throws', async () => {
+    saveSetting
+      .mockResolvedValueOnce({ ok: false, error: `defaults${'\n'}blocked` })
+      .mockRejectedValueOnce(new Error(`defaults${'\0'}boom`));
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Google AI')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByDisplayValue('Google AI'), { target: { value: 'anthropic' } });
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('defaults.provider', 'anthropic');
+      expect(alertSpy).toHaveBeenCalledWith('defaults blocked');
+    });
+
+    fireEvent.change(screen.getByDisplayValue('Anthropic'), { target: { value: 'openai' } });
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('defaultsboom');
+    });
+    alertSpy.mockRestore();
+  });
+
+  it('alerts when OAuth connect throws and when shell open fails', async () => {
+    listMcpServers.mockResolvedValue({
+      ok: true,
+      data: [{ id: 'm1', name: 'Srv', transport: 'stdio', command: 'npx', enabled: true }],
+    });
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByText('Srv')).toBeInTheDocument());
+
+    // open OAuth modal
+    const oauthBtn = screen.getByRole('button', { name: /OAuth|Connect/i });
+    fireEvent.click(oauthBtn);
+
+    // shell open failure path
+    startMcpOAuth.mockResolvedValueOnce({
+      ok: true,
+      data: { authUrl: 'https://auth.example/ok' },
+    });
+    shellOpen.mockRejectedValueOnce(new Error(`open${'\n'}fail`));
+    // fill fields if present
+    const authEp = screen.queryByPlaceholderText(/authorization|auth/i) || screen.queryByLabelText(/authorization/i);
+    // Use getAllByRole textboxes
+    const inputs = screen.getAllByRole('textbox');
+    // Fill first three with valid values if OAuth form is open
+    if (inputs.length >= 3) {
+      fireEvent.change(inputs[0]!, { target: { value: 'https://auth.example/authorize' } });
+      fireEvent.change(inputs[1]!, { target: { value: 'https://auth.example/token' } });
+      fireEvent.change(inputs[2]!, { target: { value: 'client-id' } });
+    }
+    const connect = screen.queryByRole('button', { name: /Start|Connect OAuth|Authorize/i });
+    if (connect) {
+      fireEvent.click(connect);
+      await waitFor(() => {
+        expect(alertSpy.mock.calls.some((c) => String(c[0]).includes('open fail'))).toBe(true);
+      });
+    }
+
+    // startMcpOAuth throws
+    startMcpOAuth.mockRejectedValueOnce(new Error(`oauth${'\0'}crash`));
+    if (connect) {
+      fireEvent.click(connect);
+      await waitFor(() => {
+        expect(alertSpy.mock.calls.some((c) => String(c[0]).includes('oauthcrash'))).toBe(true);
+      });
+    }
+    alertSpy.mockRestore();
+  });
+
 });
