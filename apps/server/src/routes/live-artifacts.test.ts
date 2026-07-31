@@ -159,3 +159,258 @@ describe('live-artifacts routes', () => {
     expect(badAuth.status).toBe(401);
   });
 });
+
+describe('live-artifacts routes error and edge paths', () => {
+  it('list requires projectId and existing project', async () => {
+    const missing = await app.request('/api/live-artifacts');
+    expect(missing.status).toBe(400);
+
+    const unknown = await app.request('/api/live-artifacts?projectId=no-such-project');
+    expect(unknown.status).toBe(404);
+  });
+
+  it('create rejects invalid body and missing project', async () => {
+    const badJson = await app.request('/api/live-artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badJson.status).toBe(400);
+
+    const noPid = await app.request('/api/live-artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(noPid.status).toBe(400);
+
+    const noProject = await app.request('/api/live-artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: 'missing-proj', name: 'x' }),
+    });
+    expect(noProject.status).toBe(404);
+
+    const p = await makeProject();
+    const badName = await app.request('/api/live-artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: p.id, name: '' }),
+    });
+    expect(badName.status).toBe(400);
+  });
+
+  it('get, patch, delete, refreshes validation and success', async () => {
+    const p = await makeProject();
+    const create = await app.request('/api/live-artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        name: 'Edge',
+        sourceTemplate: '<b>{{n}}</b>',
+        inputs: { n: '1' },
+        contentType: 'text/html',
+      }),
+    });
+    expect(create.status).toBe(201);
+    const art = (await create.json()) as { data: { id: string } };
+
+    const getNoPid = await app.request(`/api/live-artifacts/${art.data.id}`);
+    expect(getNoPid.status).toBe(400);
+
+    const getMissing = await app.request(
+      `/api/live-artifacts/00000000-0000-0000-0000-000000000000?projectId=${p.id}`,
+    );
+    expect(getMissing.status).toBe(404);
+
+    const getOk = await app.request(`/api/live-artifacts/${art.data.id}?projectId=${p.id}`);
+    expect(getOk.status).toBe(200);
+
+    const previewNoPid = await app.request(`/api/live-artifacts/${art.data.id}/preview`);
+    expect(previewNoPid.status).toBe(400);
+
+    const patchBadJson = await app.request(
+      `/api/live-artifacts/${art.data.id}?projectId=${p.id}`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: 'x' },
+    );
+    expect(patchBadJson.status).toBe(400);
+
+    const patchOk = await app.request(`/api/live-artifacts/${art.data.id}?projectId=${p.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Edge2',
+        sourceTemplate: '<i>{{n}}</i>',
+        inputs: { n: '2' },
+        contentType: 'text/plain',
+      }),
+    });
+    expect(patchOk.status).toBe(200);
+    const patched = (await patchOk.json()) as { data: { name: string; content: string } };
+    expect(patched.data.name).toBe('Edge2');
+    expect(patched.data.content).toContain('2');
+
+    const patchMissing = await app.request(
+      `/api/live-artifacts/00000000-0000-0000-0000-000000000000?projectId=${p.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'nope' }),
+      },
+    );
+    expect(patchMissing.status).toBe(404);
+
+    const refreshes = await app.request(
+      `/api/live-artifacts/${art.data.id}/refreshes?projectId=${p.id}&limit=5`,
+    );
+    expect(refreshes.status).toBe(200);
+
+    const refreshesNoArt = await app.request(
+      `/api/live-artifacts/00000000-0000-0000-0000-000000000000/refreshes?projectId=${p.id}`,
+    );
+    expect(refreshesNoArt.status).toBe(404);
+
+    const refreshesNoPid = await app.request(`/api/live-artifacts/${art.data.id}/refreshes`);
+    expect(refreshesNoPid.status).toBe(400);
+
+    const refreshFail = await app.request(
+      `/api/live-artifacts/00000000-0000-0000-0000-000000000000/refresh?projectId=${p.id}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(refreshFail.status).toBe(404);
+
+    const delNoPid = await app.request(`/api/live-artifacts/${art.data.id}`, { method: 'DELETE' });
+    expect(delNoPid.status).toBe(400);
+
+    const delMissing = await app.request(
+      `/api/live-artifacts/00000000-0000-0000-0000-000000000000?projectId=${p.id}`,
+      { method: 'DELETE' },
+    );
+    expect(delMissing.status).toBe(404);
+  });
+
+  it('tool-tokens validates project and handles bad caps', async () => {
+    const noPid = await app.request('/api/live-artifacts/tool-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(noPid.status).toBe(400);
+
+    const noProj = await app.request('/api/live-artifacts/tool-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: 'missing' }),
+    });
+    expect(noProj.status).toBe(404);
+
+    const p = await makeProject();
+    const badCaps = await app.request('/api/live-artifacts/tool-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: p.id, capabilities: ['not-a-cap'] }),
+    });
+    expect(badCaps.status).toBe(400);
+
+    const withQuery = await app.request(`/api/live-artifacts/tool-tokens?projectId=${p.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: 'run-1', ttlMs: 60_000 }),
+    });
+    expect(withQuery.status).toBe(201);
+  });
+
+  it('tools update/list override and refresh validation', async () => {
+    const p = await makeProject();
+    const tokRes = await app.request('/api/live-artifacts/tool-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: p.id, capabilities: ['live-artifacts'] }),
+    });
+    const tok = (await tokRes.json()) as { data: { token: string } };
+    const auth = { Authorization: `Bearer ${tok.data.token}`, 'Content-Type': 'application/json' };
+
+    const created = await app.request('/api/tools/live-artifacts/create', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({
+        name: 'T',
+        sourceTemplate: 'v={{v}}',
+        inputs: { v: 'a' },
+      }),
+    });
+    expect(created.status).toBe(201);
+    const art = (await created.json()) as { data: { id: string } };
+
+    const updateOk = await app.request('/api/tools/live-artifacts/update', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({
+        id: art.data.id,
+        name: 'T2',
+        sourceTemplate: 'v={{v}}',
+        inputs: { v: 'b' },
+      }),
+    });
+    expect(updateOk.status).toBe(200);
+
+    const updateByArtifactId = await app.request('/api/tools/live-artifacts/update', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ artifactId: art.data.id, contentType: 'text/plain' }),
+    });
+    expect(updateByArtifactId.status).toBe(200);
+
+    const updateNoId = await app.request('/api/tools/live-artifacts/update', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(updateNoId.status).toBe(400);
+
+    const updateBadJson = await app.request('/api/tools/live-artifacts/update', {
+      method: 'POST',
+      headers: auth,
+      body: 'not-json',
+    });
+    expect(updateBadJson.status).toBe(400);
+
+    const updateMissing = await app.request('/api/tools/live-artifacts/update', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ id: '00000000-0000-0000-0000-000000000000', name: 'x' }),
+    });
+    expect(updateMissing.status).toBe(404);
+
+    const listOverride = await app.request('/api/tools/live-artifacts/list?projectId=other', {
+      headers: { Authorization: `Bearer ${tok.data.token}` },
+    });
+    expect(listOverride.status).toBe(403);
+
+    const refreshNoId = await app.request('/api/tools/live-artifacts/refresh', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({}),
+    });
+    expect(refreshNoId.status).toBe(400);
+
+    const refreshMissing = await app.request('/api/tools/live-artifacts/refresh', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ id: '00000000-0000-0000-0000-000000000000' }),
+    });
+    expect(refreshMissing.status).toBe(404);
+
+    const createFail = await app.request('/api/tools/live-artifacts/create', {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ name: '' }),
+    });
+    expect(createFail.status).toBe(400);
+  });
+});

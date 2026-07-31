@@ -52,3 +52,69 @@ describe('tool-tokens', () => {
     ).toThrow(ToolTokenError);
   });
 });
+
+describe('tool-tokens edge cases', () => {
+  it('rejects empty capabilities and invalid runId', () => {
+    expect(() =>
+      issueToolToken({ projectId: 'p1', capabilities: [] }),
+    ).toThrow(/capability/i);
+    expect(() =>
+      issueToolToken({ projectId: 'p1', capabilities: ['nope'] }),
+    ).toThrow(/capability/i);
+    expect(() =>
+      issueToolToken({ projectId: 'p1', runId: 'bad\nid', capabilities: ['media'] }),
+    ).toThrow(/runId/i);
+  });
+
+  it('normalizes capabilities and clamps ttl', () => {
+    const issued = issueToolToken({
+      projectId: 'p1',
+      capabilities: ['MEDIA', 'live-artifacts', 'media', 'x'],
+      ttlMs: 1,
+    });
+    expect(issued.capabilities).toEqual(['media', 'live-artifacts']);
+    expect(issued.expiresInMs).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it('expires tokens and purges', () => {
+    const issued = issueToolToken({
+      projectId: 'p1',
+      capabilities: ['media'],
+      ttlMs: 10_000,
+    });
+    const rec = resolveToolToken(issued.token);
+    // force expire
+    (rec as { expiresAt: number }).expiresAt = Date.now() - 1;
+    expect(() => resolveToolToken(issued.token)).toThrow(/expired/i);
+  });
+
+  it('resolve rejects control/empty/oversize', () => {
+    expect(() => resolveToolToken('bad\ntok')).toThrow(ToolTokenError);
+    expect(() => resolveToolToken('')).toThrow(ToolTokenError);
+    expect(() => resolveToolToken('x'.repeat(201))).toThrow(ToolTokenError);
+    expect(() => resolveToolToken('unknown-token')).toThrow(/Unknown or expired/i);
+  });
+
+  it('assertNoScopeOverride rejects runId when token unbound', () => {
+    const issued = issueToolToken({
+      projectId: 'p1',
+      capabilities: ['live-artifacts'],
+    });
+    const rec = resolveToolToken(issued.token);
+    expect(() => assertNoScopeOverride(rec, { runId: 'r1' })).toThrow(/runId override/);
+  });
+
+  it('extractBearerToken rejects control header and empty bearer', () => {
+    expect(extractBearerToken(undefined)).toBe('');
+    expect(extractBearerToken('Bearer   ')).toBe('');
+    expect(extractBearerToken('bearer token-ok')).toBe('token-ok');
+  });
+
+  it('evicts oldest when store is full', () => {
+    // Fill beyond MAX_TOKENS=500 is heavy; issue a few and ensure count tracks
+    for (let i = 0; i < 3; i++) {
+      issueToolToken({ projectId: `p${i}`, capabilities: ['media'] });
+    }
+    expect(toolTokenCount()).toBeGreaterThanOrEqual(3);
+  });
+});

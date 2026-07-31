@@ -38,6 +38,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@neos-work/mcp-client':
+        specifier: workspace:*
+        version: link:../../packages/mcp-client
       '@neos-work/shared':
         specifier: workspace:*
         version: link:../../packages/shared

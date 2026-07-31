@@ -66,3 +66,40 @@ describe('layout-prefs right panel tab', () => {
   });
 
 });
+
+describe('layout-prefs storage failures', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('load falls back when getItem throws', () => {
+    const orig = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => {
+      throw new Error('denied');
+    };
+    try {
+      expect(loadLayoutDirection()).toBe('TB');
+      expect(loadEditorRightPanelTab()).toBe('config');
+    } finally {
+      Storage.prototype.getItem = orig;
+    }
+  });
+
+  it('save ignores setItem failures and invalid values', () => {
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error('quota');
+    };
+    try {
+      expect(() => saveLayoutDirection('LR')).not.toThrow();
+      expect(() => saveEditorRightPanelTab('run')).not.toThrow();
+    } finally {
+      Storage.prototype.setItem = orig;
+    }
+    // invalid cast values are ignored without write
+    saveLayoutDirection('ZZ' as 'TB');
+    expect(loadLayoutDirection()).toBe('TB');
+    saveEditorRightPanelTab('nope' as 'config');
+    expect(loadEditorRightPanelTab()).toBe('config');
+  });
+});

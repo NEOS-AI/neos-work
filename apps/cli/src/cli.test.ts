@@ -33,7 +33,7 @@ describe('runCli', () => {
       stdout: (s) => lines.push(s),
     });
     expect(code).toBe(EXIT.OK);
-    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.5.18' });
+    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.5.23' });
   });
 
   it('status when daemon healthy', async () => {
@@ -292,5 +292,65 @@ describe('runCli expanded commands', () => {
     });
     expect(code).toBe(EXIT.OK);
     expect(lines.join('')).toContain('demo');
+  });
+
+  it('mcp install-info --json via API', async () => {
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/mcp/install-info')) {
+        return jsonResponse({
+          ok: true,
+          data: {
+            serverName: 'neos-work',
+            shellSnippet: 'export NEOS_SERVER_URL=http://127.0.0.1:3000\nneos mcp serve',
+            codexAddCommand: 'codex mcp add neos-work -- neos mcp serve',
+            claudeDesktop: { mcpServers: { 'neos-work': { command: 'neos', args: ['mcp', 'serve'] } } },
+          },
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['mcp', 'install-info', '--json'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    const body = JSON.parse(lines.join(''));
+    expect(body.serverName).toBe('neos-work');
+    expect(body.codexAddCommand).toMatch(/codex mcp add/);
+  });
+
+  it('mcp install-info falls back locally when API down', async () => {
+    const fetchImpl = mockFetch(async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    const lines: string[] = [];
+    const code = await runCli(['mcp', 'install-info', '--json'], {
+      fetchImpl,
+      env: {
+        NEOS_AUTH_TOKEN: 'tok',
+        NEOS_SERVER_URL: 'http://127.0.0.1:9',
+        NEOS_PROJECT_ID: 'p1',
+      },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    const body = JSON.parse(lines.join(''));
+    expect(body.env.NEOS_AUTH_TOKEN).toBe('tok');
+    expect(body.env.NEOS_PROJECT_ID).toBe('p1');
+    expect(body.args).toEqual(['mcp', 'serve']);
+  });
+
+  it('mcp live-artifacts requires project id', async () => {
+    const code = await runCli(['mcp', 'live-artifacts'], {
+      fetchImpl: mockFetch(() => jsonResponse({ ok: true, data: [] })),
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.USAGE);
   });
 });

@@ -116,7 +116,7 @@ describe('harness registry', () => {
     expect(cd?.domain).toBe('general');
     expect(cd?.description).toBe('line1 line2');
     expect(cd?.allowedTools).toEqual(['ok', 'write']);
-    // Control-char systemPrompt → no-op
+    // Multi-line systemPrompt allowed; null-byte rejected
     registerHarness({
       id: 'ctrl-prompt-h',
       name: 'CP',
@@ -125,7 +125,16 @@ describe('harness registry', () => {
       systemPrompt: 'p\nbad',
       allowedTools: [],
     });
-    expect(resolveHarness('ctrl-prompt-h')).toBeUndefined();
+    expect(resolveHarness('ctrl-prompt-h')?.systemPrompt).toBe('p\nbad');
+    registerHarness({
+      id: 'null-prompt-h',
+      name: 'NP',
+      domain: 'general',
+      description: '',
+      systemPrompt: 'p\0bad',
+      allowedTools: [],
+    });
+    expect(resolveHarness('null-prompt-h')).toBeUndefined();
     // Control-char domain filter → list all
     expect(listHarnesses('\ncoding').length).toBe(listHarnesses().length);
 
@@ -274,13 +283,23 @@ describe('built-in coding and finance harness catalogs', () => {
     expect(d?.description).toBe('line1 line2 x');
     expect(d?.description).not.toMatch(/[\r\n\0]/);
 
-    // Reject control-char systemPrompt entirely
+    // Multi-line systemPrompt is valid (domain packs / built-ins); null-byte is not
+    registerHarness({
+      id: 'cov_harness_multiline_prompt',
+      name: 'Multi',
+      domain: 'coding',
+      description: 'd',
+      systemPrompt: 'line1\nline2',
+      allowedTools: [],
+    });
+    expect(resolveHarness('cov_harness_multiline_prompt')?.systemPrompt).toBe('line1\nline2');
+
     registerHarness({
       id: 'cov_harness_bad_prompt',
       name: 'Bad',
       domain: 'coding',
       description: 'd',
-      systemPrompt: 'bad\nprompt',
+      systemPrompt: 'bad\0prompt',
       allowedTools: [],
     });
     expect(resolveHarness('cov_harness_bad_prompt')).toBeUndefined();

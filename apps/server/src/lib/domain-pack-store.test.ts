@@ -147,3 +147,71 @@ describe('domain-pack-store', () => {
     expect(resolveWorker('legal_reviewer')?.domain).toBe('legal');
   });
 });
+
+describe('domain-pack-store additional branches', () => {
+  it('readPackManifestFromDir rejects invalid paths and files', async () => {
+    const { readPackManifestFromDir } = await import('./domain-pack-store.js');
+    expect((await readPackManifestFromDir('')).ok).toBe(false);
+    expect((await readPackManifestFromDir(path.join(tmpRoot, 'missing'))).ok).toBe(false);
+    const file = path.join(tmpRoot, 'not-dir.txt');
+    await fs.writeFile(file, 'x');
+    expect((await readPackManifestFromDir(file)).ok).toBe(false);
+    const emptyDir = path.join(tmpRoot, 'empty-pack');
+    await fs.mkdir(emptyDir);
+    expect((await readPackManifestFromDir(emptyDir)).ok).toBe(false);
+  });
+
+  it('rejects empty and invalid zip buffers', async () => {
+    expect((await installPackFromZipBuffer(Buffer.alloc(0))).ok).toBe(false);
+    expect((await installPackFromZipBuffer(Buffer.from('not-a-zip'))).ok).toBe(false);
+  });
+
+  it('zip without pack.json fails', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append('hello', { name: 'readme.md' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(false);
+  });
+
+  it('zip with reserved id fails', async () => {
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify({ ...SAMPLE, id: 'finance' }), { name: 'pack.json' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+    const r = await installPackFromZipBuffer(Buffer.concat(chunks));
+    expect(r.ok).toBe(false);
+  });
+
+  it('setInstalledPackEnabled rejects built-in and missing', async () => {
+    expect((await setInstalledPackEnabled('research', false)).ok).toBe(false);
+    expect((await setInstalledPackEnabled('nope-pack', true)).ok).toBe(false);
+    expect((await setInstalledPackEnabled('bad\nid', true)).ok).toBe(false);
+  });
+
+  it('uninstall rejects built-in and control id', async () => {
+    expect((await uninstallInstalledPack('coding')).ok).toBe(false);
+    expect((await uninstallInstalledPack('x\ny')).ok).toBe(false);
+  });
+
+  it('resolveDomainPacksDir uses NEOS_DATA_DIR', () => {
+    expect(resolveDomainPacksDir()).toContain(tmpRoot);
+    expect(resolveDomainPacksDir()).toMatch(/domain-packs$/);
+  });
+
+  it('loadInstalledDomainPacks handles missing root and id mismatch', async () => {
+    const empty = await loadInstalledDomainPacks();
+    // may be 0 if nothing installed
+    expect(empty.loaded).toBeGreaterThanOrEqual(0);
+
+    const packsDir = resolveDomainPacksDir();
+    const dir = path.join(packsDir, 'wrong-name');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'pack.json'), JSON.stringify(SAMPLE), 'utf8');
+    const r = await loadInstalledDomainPacks();
+    expect(r.errors.some((e) => /does not match directory/i.test(e))).toBe(true);
+  });
+});

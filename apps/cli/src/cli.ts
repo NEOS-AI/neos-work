@@ -38,7 +38,7 @@ Commands:
   skills list|scan
   design-systems list
   memory list|add
-  mcp list
+  mcp list|serve|install-info|live-artifacts
   media list|config|generate
   plugin list|atoms
   deploy list
@@ -120,7 +120,7 @@ export async function runCli(
     case 'memories':
       return cmdMemory(ctx, client, rest);
     case 'mcp':
-      return cmdMcp(ctx, client, rest);
+      return cmdMcp(ctx, client, rest, cfg);
     case 'media':
       return cmdMedia(ctx, client, rest);
     case 'plugin':

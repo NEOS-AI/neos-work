@@ -114,7 +114,8 @@ export function DomainPacks() {
 
   const handleDelete = async (id: string) => {
     if (!client || busy) return;
-    if (!window.confirm(`Uninstall domain pack “${id}”?`)) return;
+    const safeId = scrubDisplayText(id, { collapseLines: true, maxChars: 64 }) || 'pack';
+    if (!window.confirm(`Uninstall domain pack “${safeId}”?`)) return;
     setBusy(true);
     setMessage(null);
     try {

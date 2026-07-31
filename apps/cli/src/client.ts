@@ -39,7 +39,7 @@ export class NeosApiClient {
   private headers(json = true): Record<string, string> {
     const h: Record<string, string> = {
       Accept: 'application/json',
-      'User-Agent': 'neos-cli/0.5.18',
+      'User-Agent': 'neos-cli/0.5.23',
     };
     if (json) h['Content-Type'] = 'application/json';
     if (this.config.authToken) {
@@ -127,7 +127,7 @@ export class NeosApiClient {
     try {
       const res = await this.fetchImpl(url, {
         method: 'GET',
-        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.5.18' },
+        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.5.23' },
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -251,6 +251,44 @@ export class NeosApiClient {
 
   listMcpServers(): Promise<ApiEnvelope<unknown[]>> {
     return this.request('GET', '/api/mcp-servers');
+  }
+
+  mcpInstallInfo(query?: {
+    projectId?: string;
+    neosBin?: string;
+  }): Promise<ApiEnvelope<unknown>> {
+    return this.request('GET', '/api/mcp/install-info', {
+      query: {
+        projectId: query?.projectId,
+        neosBin: query?.neosBin,
+      },
+    });
+  }
+
+  listLiveArtifacts(projectId: string): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/live-artifacts', {
+      query: { projectId },
+    });
+  }
+
+  createLiveArtifact(input: {
+    projectId: string;
+    name: string;
+    sourceTemplate?: string | null;
+    contentType?: string;
+  }): Promise<ApiEnvelope<unknown>> {
+    return this.request('POST', '/api/live-artifacts', { body: input });
+  }
+
+  refreshLiveArtifact(
+    projectId: string,
+    artifactId: string,
+  ): Promise<ApiEnvelope<unknown>> {
+    return this.request(
+      'POST',
+      `/api/live-artifacts/${encodeURIComponent(artifactId)}/refresh`,
+      { query: { projectId }, body: {} },
+    );
   }
 
   listPluginAtoms(): Promise<ApiEnvelope<unknown[]>> {

@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/cli",
-  "version": "0.5.22",
+  "version": "0.5.23",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -25,6 +25,7 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@neos-work/mcp-client": "workspace:*",
     "@neos-work/shared": "workspace:*"
   },
   "devDependencies": {

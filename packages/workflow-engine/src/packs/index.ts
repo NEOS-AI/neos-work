@@ -234,7 +234,9 @@ export function registerWorker(
     description = description.slice(0, WORKER_DESCRIPTION_MAX);
   }
 
-  if (typeof worker.systemPrompt !== 'string' || /[\0\r\n]/.test(worker.systemPrompt)) {
+  // Allow multi-line system prompts (built-in packs + domain pack manifests use them).
+  // Reject only null bytes — CR/LF are valid prompt content.
+  if (typeof worker.systemPrompt !== 'string' || /\0/.test(worker.systemPrompt)) {
     return;
   }
   let systemPrompt = worker.systemPrompt.trim();

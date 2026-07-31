@@ -13,6 +13,7 @@ import { session, workspace, models } from './routes/session.js';
 import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
 import { mcp } from './routes/mcp.js';
+import { mcpExpose } from './routes/mcp-expose.js';
 import workflow from './routes/workflow.js';
 import harness from './routes/harness.js';
 import workers from './routes/workers.js';
@@ -130,6 +131,7 @@ app.route('/api/session', session);
 app.route('/api/settings', settings);
 app.route('/api/skills', skills);
 app.route('/api/mcp-servers', mcp);
+app.route('/api/mcp', mcpExpose);
 app.route('/api/workflow', workflow);
 app.route('/api/workers', workers);
 app.route('/api/domain-packs', domainPacks);
@@ -157,7 +159,7 @@ app.route('/api/connection-test', connectionTest);
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.22',
+    version: '0.5.23',
   });
 });
 
@@ -187,7 +189,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.5.22',
+      version: '0.5.23',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });

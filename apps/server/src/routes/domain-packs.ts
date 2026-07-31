@@ -92,14 +92,25 @@ domainPacks.post('/install', async (c) => {
 
 domainPacks.post('/install-zip', async (c) => {
   const contentType = c.req.header('content-type') ?? '';
+  // Early reject via Content-Length when present (avoid buffering huge bodies)
+  const clHeader = c.req.header('content-length');
+  if (clHeader && !/[\0\r\n]/.test(clHeader)) {
+    const cl = Number(clHeader.trim());
+    if (Number.isFinite(cl) && cl > DOMAIN_PACK_ZIP_MAX_BYTES) {
+      return c.json({ ok: false, error: 'zip too large' }, 400);
+    }
+  }
   let buf: Buffer | null = null;
 
   if (contentType.includes('multipart/form-data')) {
     try {
-      const form = await c.req.parseBody();
+      const form = await c.req.parseBody({ all: false });
       const file = form['file'] ?? form['zip'] ?? form['pack'];
       if (file && typeof file === 'object' && 'arrayBuffer' in file) {
         const ab = await (file as File).arrayBuffer();
+        if (ab.byteLength > DOMAIN_PACK_ZIP_MAX_BYTES) {
+          return c.json({ ok: false, error: 'zip too large' }, 400);
+        }
         buf = Buffer.from(ab);
       }
     } catch {
@@ -108,6 +119,9 @@ domainPacks.post('/install-zip', async (c) => {
   } else {
     try {
       const ab = await c.req.arrayBuffer();
+      if (ab.byteLength > DOMAIN_PACK_ZIP_MAX_BYTES) {
+        return c.json({ ok: false, error: 'zip too large' }, 400);
+      }
       if (ab.byteLength > 0) buf = Buffer.from(ab);
     } catch {
       return c.json({ ok: false, error: 'failed to read body' }, 400);

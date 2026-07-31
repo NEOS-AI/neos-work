@@ -172,6 +172,33 @@ describe('registerPackFromManifest / unregister / enable', () => {
     expect(listPacks().some((p) => p.id === 'legal')).toBe(true);
   });
 
+  it('registers multi-line systemPrompt from domain pack manifests', () => {
+    const r = registerPackFromManifest({
+      ...validManifest,
+      id: 'legal2',
+      workers: [
+        {
+          id: 'legal2_multi',
+          name: 'Multi',
+          systemPrompt: 'You are a legal reviewer.\nFollow the style guide.\nBe concise.',
+          permissionProfile: 'read_only',
+        },
+      ],
+      blocks: [
+        {
+          id: 'legal2_block',
+          name: 'B',
+          implementationType: 'prompt',
+          promptTemplate: 'Check:\n{{input}}',
+        },
+      ],
+    });
+    expect(r.ok).toBe(true);
+    const w = resolveWorker('legal2_multi');
+    expect(w?.systemPrompt).toContain('\n');
+    expect(w?.domain).toBe('legal2');
+  });
+
   it('rejects built-in overwrite via register', () => {
     const r = registerPackFromManifest({
       ...validManifest,

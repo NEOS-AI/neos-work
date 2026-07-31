@@ -184,10 +184,17 @@ export async function installPackFromZipBuffer(
     return { ok: false, error: `zip exceeds max ${DOMAIN_PACK_ZIP_MAX_FILES} files` };
   }
 
-  // Reject path traversal / absolute / symlink-ish
+  // Reject path traversal / absolute / Windows drive / control chars
   for (const f of files) {
     const n = f.path.replace(/\\/g, '/');
-    if (!n || n.startsWith('/') || n.includes('..') || /[\0]/.test(n)) {
+    if (
+      !n
+      || n.startsWith('/')
+      || n.includes('..')
+      || /[\0\r\n]/.test(n)
+      || /^[a-zA-Z]:/.test(n) // Windows absolute
+      || n.includes(':') // scheme-like or alternate streams
+    ) {
       return { ok: false, error: `unsafe zip entry: ${n.slice(0, 80)}` };
     }
   }

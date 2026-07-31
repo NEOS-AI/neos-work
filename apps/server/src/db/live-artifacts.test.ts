@@ -90,3 +90,100 @@ describe('live-artifacts db', () => {
     expect(getLiveArtifact(art.id, b.id)).toBeNull();
   });
 });
+
+describe('live-artifacts db edge cases', () => {
+  it('rejects invalid name/project and null-byte template', () => {
+    const p = projects.createProject({ name: `${NAME}_edge` });
+    ids.push(p.id);
+    expect(() =>
+      createLiveArtifact({ projectId: '', name: 'x' }),
+    ).toThrow(/projectId/i);
+    expect(() =>
+      createLiveArtifact({ projectId: p.id, name: '' }),
+    ).toThrow(/name/i);
+    expect(() =>
+      createLiveArtifact({
+        projectId: p.id,
+        name: 'bad',
+        sourceTemplate: 'hi\0there',
+      }),
+    ).toThrow(/control/i);
+  });
+
+  it('supports contentType, writeSidecar false, null template clear', () => {
+    const p = projects.createProject({ name: `${NAME}_side` });
+    ids.push(p.id);
+    const art = createLiveArtifact({
+      projectId: p.id,
+      name: 'Plain',
+      sourceTemplate: 'hello {{x}}',
+      inputs: { x: 'world', 'bad\nkey': 1 },
+      contentType: 'text/plain',
+      writeSidecar: false,
+    });
+    expect(art.contentType).toBe('text/plain');
+    expect(art.sidecarPath).toBeNull();
+    expect(art.content).toBe('hello world');
+
+    const cleared = updateLiveArtifact(art.id, p.id, { sourceTemplate: null });
+    expect(cleared?.sourceTemplate).toBeNull();
+    expect(cleared?.content).toBeNull();
+
+    expect(() =>
+      refreshLiveArtifact(art.id, p.id),
+    ).toThrow(/sourceTemplate is required/i);
+  });
+
+  it('renderLiveTemplate stringifies objects and drops nulls', () => {
+    expect(renderLiveTemplate('{{obj}}', { obj: { a: 1 } })).toBe('{"a":1}');
+    expect(renderLiveTemplate('{{n}}', { n: null })).toBe('');
+    expect(renderLiveTemplate('{{s}}', { s: 'a\0b' })).toBe('ab');
+  });
+
+  it('list returns empty for bad project id; refresh history list limits', () => {
+    expect(listLiveArtifacts('')).toEqual([]);
+    expect(listLiveArtifactRefreshes('')).toEqual([]);
+    const p = projects.createProject({ name: `${NAME}_lim` });
+    ids.push(p.id);
+    const art = createLiveArtifact({
+      projectId: p.id,
+      name: 'R',
+      sourceTemplate: '{{n}}',
+      inputs: { n: 1 },
+    });
+    for (let i = 0; i < 3; i++) {
+      refreshLiveArtifact(art.id, p.id, { n: i });
+    }
+    expect(listLiveArtifactRefreshes(art.id, 2).length).toBe(2);
+    expect(listLiveArtifactRefreshes(art.id, 0).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('update rejects invalid name and control template', () => {
+    const p = projects.createProject({ name: `${NAME}_upd` });
+    ids.push(p.id);
+    const art = createLiveArtifact({
+      projectId: p.id,
+      name: 'U',
+      sourceTemplate: 't',
+    });
+    expect(() => updateLiveArtifact(art.id, p.id, { name: '' })).toThrow(/name/i);
+    expect(() =>
+      updateLiveArtifact(art.id, p.id, { sourceTemplate: 'x\0y' }),
+    ).toThrow(/control/i);
+    expect(updateLiveArtifact('missing', p.id, { name: 'z' })).toBeNull();
+  });
+
+  it('rejects oversized inputs', () => {
+    const p = projects.createProject({ name: `${NAME}_big` });
+    ids.push(p.id);
+    const big = { data: 'x'.repeat(300_000) };
+    expect(() =>
+      createLiveArtifact({
+        projectId: p.id,
+        name: 'Big',
+        sourceTemplate: 't',
+        inputs: big,
+      }),
+    ).toThrow(/inputs exceed/i);
+  });
+});

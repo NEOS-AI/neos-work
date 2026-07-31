@@ -155,3 +155,104 @@ describe('domain-packs routes', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('domain-packs routes additional branches', () => {
+  it('validate rejects empty body and accepts wrapped manifest', async () => {
+    const empty = await domainPacks.request('/validate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'null',
+    });
+    expect(empty.status).toBe(400);
+
+    const wrapped = await domainPacks.request('/validate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ manifest: SAMPLE }),
+    });
+    expect(wrapped.status).toBe(200);
+  });
+
+  it('install fails for missing directory', async () => {
+    const res = await domainPacks.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: path.join(tmpRoot, 'no-such-dir') }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('install-zip accepts raw zip body', async () => {
+    const { ZipArchive } = await import('archiver');
+    const archive = new ZipArchive({ zlib: { level: 1 } });
+    archive.append(JSON.stringify(SAMPLE), { name: 'pack.json' });
+    archive.finalize();
+    const chunks: Buffer[] = [];
+    for await (const chunk of archive) {
+      chunks.push(Buffer.from(chunk));
+    }
+    const buf = Buffer.concat(chunks);
+
+    const res = await domainPacks.request('/install-zip', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/zip',
+        'content-length': String(buf.length),
+      },
+      body: buf,
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { ok: boolean; data: { id?: string } };
+    expect(body.ok).toBe(true);
+  });
+
+  it('install-zip rejects empty body and oversized content-length', async () => {
+    const empty = await domainPacks.request('/install-zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: Buffer.alloc(0),
+    });
+    expect(empty.status).toBe(400);
+
+    const tooBig = await domainPacks.request('/install-zip', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/zip',
+        'content-length': String(20 * 1024 * 1024),
+      },
+      body: Buffer.from('x'),
+    });
+    expect(tooBig.status).toBe(400);
+  });
+
+  it('toggle validates body and rejects built-in', async () => {
+    const missing = await domainPacks.request('/research/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(missing.status).toBe(400);
+
+    const builtin = await domainPacks.request('/research/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(builtin.status).toBe(400);
+
+    const badId = await domainPacks.request('/%20/toggle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(badId.status).toBe(404);
+  });
+
+  it('delete rejects built-in and bad id', async () => {
+    const builtin = await domainPacks.request('/research', { method: 'DELETE' });
+    expect(builtin.status).toBe(400);
+
+    const badId = await domainPacks.request('/%20', { method: 'DELETE' });
+    expect(badId.status).toBe(404);
+  });
+});
