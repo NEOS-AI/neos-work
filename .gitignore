@@ -38,3 +38,4 @@ apps/server/_cov_sess_write_*.txt
 # tools/dev runtime state
 .tools-dev/
 deploy/.env
+*.tsbuildinfo
