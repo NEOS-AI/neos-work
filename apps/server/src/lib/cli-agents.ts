@@ -152,7 +152,11 @@ export function loadMcpTokenEnvVars(): Record<string, string> {
       // Skip non-json and hidden files (e.g. .backup.json)
       if (!file.endsWith('.json') || file.startsWith('.')) continue;
       try {
-        const raw = fs.readFileSync(path.join(tokenDir, file), 'utf-8');
+        const abs = path.join(tokenDir, file);
+        // Skip planted symlinks (do not follow into outside token dumps)
+        const st = fs.lstatSync(abs);
+        if (st.isSymbolicLink() || !st.isFile()) continue;
+        const raw = fs.readFileSync(abs, 'utf-8');
         const token = JSON.parse(raw) as { serverId: string; accessToken: string; expiresAt?: string };
         const serverIdRaw = typeof token.serverId === 'string' ? token.serverId : '';
         const accessTokenRaw = typeof token.accessToken === 'string' ? token.accessToken : '';

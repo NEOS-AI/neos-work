@@ -1,6 +1,6 @@
-import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createMemory,
@@ -211,6 +211,30 @@ describe('memory-store', () => {
       expect(listed.some((m) => m.id === `hidden-${process.pid}`)).toBe(false);
     } finally {
       if (existsSync(hidden)) unlinkSync(hidden);
+    }
+  });
+
+  it('skips symlink .md files in listMemories (no outside content)', () => {
+    const dir = join(homedir(), '.config', 'neos-work', 'memory');
+    const outside = join(tmpdir(), `neos-mem-out-${process.pid}.md`);
+    const link = join(dir, `symlink_escape_${process.pid}.md`);
+    try {
+      writeFileSync(
+        outside,
+        `---\nid: leak-${process.pid}\nname: Leak\ntype: user\nenabled: true\ncreatedAt: 2020-01-01T00:00:00.000Z\nupdatedAt: 2020-01-01T00:00:00.000Z\n---\n\noutside-secret\n`,
+        'utf-8',
+      );
+      try {
+        symlinkSync(outside, link);
+      } catch {
+        return; // symlink may be restricted
+      }
+      const listed = listMemories();
+      expect(listed.some((m) => m.id === `leak-${process.pid}`)).toBe(false);
+      expect(listed.some((m) => m.content?.includes('outside-secret'))).toBe(false);
+    } finally {
+      if (existsSync(link)) unlinkSync(link);
+      if (existsSync(outside)) unlinkSync(outside);
     }
   });
 

@@ -1,4 +1,12 @@
-import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+  lstatSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -83,8 +91,16 @@ function writeFile(item: MemoryItem): void {
 
 export function listMemories(): MemoryItem[] {
   ensureDir();
-  // Skip hidden .md files (e.g. .draft.md) — match skill discovery hygiene
-  const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md') && !f.startsWith('.'));
+  // Skip hidden .md files and symlinks (escape links must not surface outside content)
+  const files = readdirSync(MEMORY_DIR).filter((f) => {
+    if (!f.endsWith('.md') || f.startsWith('.')) return false;
+    try {
+      const st = lstatSync(join(MEMORY_DIR, f));
+      return st.isFile() && !st.isSymbolicLink();
+    } catch {
+      return false;
+    }
+  });
   return files
     .map((f) => parseFile(join(MEMORY_DIR, f)))
     .filter((item): item is MemoryItem => item !== null)

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -335,6 +336,24 @@ describe('bundled design-systems catalog', () => {
     expect(await scanDesignSystemsRoot('/tmp/definitely-missing-ds-root-xyz', 'user')).toEqual(
       [],
     );
+
+    // Directory symlink under a scan root must not load outside content
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-ds-scan-'));
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-ds-out-'));
+    try {
+      await fs.writeFile(path.join(outsideDir, 'DESIGN.md'), '# outside', 'utf8');
+      const linkName = `escape_link_${process.pid}`;
+      try {
+        await fs.symlink(outsideDir, path.join(tmpRoot, linkName));
+      } catch {
+        // skip when symlink restricted
+      }
+      const scanned = await scanDesignSystemsRoot(tmpRoot, 'user');
+      expect(scanned.some((d) => d.name === linkName)).toBe(false);
+    } finally {
+      await fs.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(outsideDir, { recursive: true, force: true }).catch(() => {});
+    }
     expect(await getDesignSystem('')).toBeNull();
     expect(await getDesignSystem('bad\nid')).toBeNull();
     expect(await getDesignSystem('x'.repeat(100))).toBeNull();

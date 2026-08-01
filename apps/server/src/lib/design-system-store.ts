@@ -228,6 +228,13 @@ export async function scanDesignSystemsRoot(
     if (count >= 200) break;
     if (!entry || entry.startsWith('.') || /[\0\r\n]/.test(entry) || entry.length > 200) continue;
     const dirPath = path.join(base, entry);
+    // Skip planted directory symlinks (do not load DESIGN.md from outside the root)
+    try {
+      const lst = await fs.lstat(dirPath);
+      if (lst.isSymbolicLink() || !lst.isDirectory()) continue;
+    } catch {
+      continue;
+    }
     const ds = await loadFromDir(dirPath, entry, source);
     if (ds) {
       results.push(ds);

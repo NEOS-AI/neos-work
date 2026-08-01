@@ -617,4 +617,26 @@ describe('loadMcpTokenEnvVars hygiene', () => {
     const env = loadMcpTokenEnvVars();
     expect(env.NEOS_MCP_TOKEN_LONG_SRV).toBeUndefined();
   });
+
+  it('skips symlink token files (no outside content injection)', () => {
+    fs.mkdirSync(tokenDir, { recursive: true });
+    const outside = path.join(os.tmpdir(), `_cov_mcp_out_${process.pid}.json`);
+    const link = path.join(tokenDir, `_cov_mcp_link_${process.pid}.json`);
+    files.push(outside, link);
+    fs.writeFileSync(
+      outside,
+      JSON.stringify({
+        serverId: 'symlink-srv',
+        accessToken: 'leaked-token-from-outside',
+      }),
+    );
+    try {
+      fs.symlinkSync(outside, link);
+    } catch {
+      return;
+    }
+    const env = loadMcpTokenEnvVars();
+    expect(env.NEOS_MCP_TOKEN_SYMLINK_SRV).toBeUndefined();
+    expect(Object.values(env).includes('leaked-token-from-outside')).toBe(false);
+  });
 });
