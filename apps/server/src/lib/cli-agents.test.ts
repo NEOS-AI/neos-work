@@ -549,8 +549,29 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     const dir = ensureCliWorkspace(runId);
     expect(dir).toContain(path.join('.config', 'neos-work', 'workspaces', runId));
     expect(fs.existsSync(dir)).toBe(true);
+    // realpath form
+    expect(dir).toBe(fs.realpathSync(dir));
     // cleanup
     try { fs.rmSync(dir, { recursive: true }); } catch { /* ignore */ }
+  });
+
+  it('refuses workspace path that is a symlink escape', () => {
+    const runId = `_cov_ws_link_${process.pid}`;
+    const workspacesRoot = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
+    const linkPath = path.join(workspacesRoot, runId);
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-ws-out-'));
+    try {
+      fs.mkdirSync(workspacesRoot, { recursive: true });
+      try {
+        fs.symlinkSync(outside, linkPath);
+      } catch {
+        return;
+      }
+      expect(() => ensureCliWorkspace(runId)).toThrow(/Invalid runId/i);
+    } finally {
+      try { fs.unlinkSync(linkPath); } catch { /* ignore */ }
+      try { fs.rmSync(outside, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
   });
 
   it('sanitizes runId and rejects blank / traversal-like ids', () => {
@@ -567,7 +588,8 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
     const dirty = `../evil_${process.pid}`;
     const dir = ensureCliWorkspace(dirty);
     const workspacesRoot = path.join(os.homedir(), '.config', 'neos-work', 'workspaces');
-    expect(path.resolve(dir).startsWith(path.resolve(workspacesRoot) + path.sep)).toBe(true);
+    const rootReal = fs.realpathSync(workspacesRoot);
+    expect(dir.startsWith(rootReal + path.sep) || dir === rootReal).toBe(true);
     expect(path.basename(dir)).toBe(`___evil_${process.pid}`);
     try { fs.rmSync(dir, { recursive: true }); } catch { /* ignore */ }
 

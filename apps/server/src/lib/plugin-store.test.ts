@@ -192,6 +192,29 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     }
   });
 
+  it('upgradeSkillToPlugin refuses skill directory that is a symlink', async () => {
+    const outsideDir = path.join(os.tmpdir(), `neos-up-skill-dir-${process.pid}`);
+    await fs.mkdir(outsideDir, { recursive: true });
+    await fs.writeFile(path.join(outsideDir, 'SKILL.md'), '# Outside Dir Skill\n', 'utf8');
+    // Ensure parent exists; plant DIR as symlink to outside
+    await fs.mkdir(SKILLS_DIR, { recursive: true });
+    await fs.rm(DIR, { recursive: true, force: true }).catch(() => {});
+    try {
+      try {
+        await fs.symlink(outsideDir, DIR);
+      } catch {
+        return;
+      }
+      await expect(upgradeSkillToPlugin({ skillDirName: DIR_NAME })).rejects.toThrow(/not found/i);
+      // Must not have written open-design into the outside directory
+      const outsideEntries = await fs.readdir(outsideDir);
+      expect(outsideEntries).not.toContain('open-design.json');
+    } finally {
+      await fs.rm(DIR, { force: true }).catch(() => {});
+      await fs.rm(outsideDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it('listPlugins skips open-design.json that is a symlink escape', async () => {
     await fs.mkdir(DIR, { recursive: true });
     const outside = path.join(os.tmpdir(), `neos-plugin-out-${process.pid}.json`);

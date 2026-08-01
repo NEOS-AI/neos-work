@@ -353,6 +353,11 @@ export async function upgradeSkillToPlugin(options: {
   const dir = path.join(SKILLS_DIR, safe);
   const skillPath = path.join(dir, 'SKILL.md');
   try {
+    // Refuse planted skill-dir symlink (write would follow intermediate link outside)
+    const dst = await fs.lstat(dir);
+    if (dst.isSymbolicLink() || !dst.isDirectory()) {
+      throw new Error(`Skill directory not found: ${safe}`);
+    }
     // Refuse planted SKILL.md symlinks (do not upgrade from outside content)
     const st = await fs.lstat(skillPath);
     if (st.isSymbolicLink() || !st.isFile()) {

@@ -249,8 +249,32 @@ export function ensureCliWorkspace(runId: string): string {
   if (!resolved.startsWith(path.resolve(base) + path.sep) && resolved !== path.resolve(base)) {
     throw new Error('Invalid runId');
   }
+  // Refuse planted workspace path that is a symlink (escape outside workspaces root)
+  try {
+    const st = fs.lstatSync(dir);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid runId');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid runId') throw err;
+    // ENOENT — create below
+  }
+  fs.mkdirSync(base, { recursive: true });
   fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  // Return realpath so spawn cwd cannot follow a mid-path link escape
+  let realBase: string;
+  let realDir: string;
+  try {
+    realBase = fs.realpathSync(base);
+    realDir = fs.realpathSync(dir);
+  } catch {
+    throw new Error('Invalid runId');
+  }
+  const prefix = realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
+  if (realDir !== realBase && !realDir.startsWith(prefix)) {
+    throw new Error('Invalid runId');
+  }
+  return realDir;
 }
 
 /** Cap CLI stream accumulation (plan Task 3 — runaway output defense). */

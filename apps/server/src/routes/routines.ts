@@ -317,9 +317,26 @@ ${outputsSummary}
 Review and edit this skill, then enable it under Skills. Use it as a prompt/reference for similar automated runs.
 `;
 
-  const skillsDir = path.join(os.homedir(), '.config', 'neos-work', 'skills', skillName);
+  const skillsRoot = path.join(os.homedir(), '.config', 'neos-work', 'skills');
+  const skillsDir = path.join(skillsRoot, skillName);
+  // Refuse planted skill-dir symlink (mkdir/write would follow outside)
+  try {
+    const dst = await fs.lstat(skillsDir);
+    if (dst.isSymbolicLink()) {
+      return c.json({ ok: false, error: 'Skill path conflict' }, 409);
+    }
+  } catch {
+    // ENOENT — create
+  }
   await fs.mkdir(skillsDir, { recursive: true });
   const skillPath = path.join(skillsDir, 'SKILL.md');
+  // Do not write SKILL.md through a planted symlink
+  try {
+    const st = await fs.lstat(skillPath);
+    if (st.isSymbolicLink()) await fs.unlink(skillPath);
+  } catch {
+    // ENOENT — ok
+  }
   await fs.writeFile(skillPath, skillMd, 'utf8');
 
   const skillId = crypto.randomUUID();
