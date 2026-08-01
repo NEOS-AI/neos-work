@@ -271,6 +271,40 @@ describe('coding blocks', () => {
       expect(readResult.output).toBe('coverage-payload');
     });
 
+    it('rejects file_write under parent symlink that escapes workspaces', async () => {
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-we-out-'));
+      try {
+        const linkAbs = path.join(workspaces, testRel, 'out-dir');
+        await fs.mkdir(path.dirname(linkAbs), { recursive: true });
+        await fs.symlink(outside, linkAbs);
+        const result = await write().execute(
+          ctx({ path: `${testRel}/out-dir/escaped.txt`, content: 'leak' }),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/workspaces|relative|unsafe|Invalid/i);
+      } finally {
+        await fs.rm(path.join(workspaces, testRel), { recursive: true, force: true }).catch(() => {});
+        await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+
+    it('rejects file_read through symlink that escapes workspaces', async () => {
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-we-out-'));
+      try {
+        const secret = path.join(outside, 'secret.txt');
+        await fs.writeFile(secret, 'leak-me', 'utf8');
+        const linkAbs = path.join(workspaces, testRel, 'link.txt');
+        await fs.mkdir(path.dirname(linkAbs), { recursive: true });
+        await fs.symlink(secret, linkAbs);
+        const result = await read().execute(ctx({ path: `${testRel}/link.txt` }));
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/unsafe|Invalid/i);
+      } finally {
+        await fs.rm(path.join(workspaces, testRel), { recursive: true, force: true }).catch(() => {});
+        await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+
     it('surfaces filesystem errors when parent path is a file (write catch path)', async () => {
       // Create a regular file, then try to write nested under it so mkdir fails
       const blockerRel = `${testRel}/blocker`;
@@ -389,6 +423,15 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/home directory/);
     });
 
+    it('rejects sibling-prefix of home as repoPath', async () => {
+      // bare startsWith(home) would accept /home/user-evil when home is /home/user
+      const home = os.homedir();
+      const sibling = `${home}-evil-neos-not-home`;
+      const result = await git().execute(ctx({ repoPath: sibling }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/home directory/);
+    });
+
     it('rejects control characters in repoPath', async () => {
       const result = await git().execute(ctx({ repoPath: `/tmp${'\n'}evil` }));
       expect(result.ok).toBe(false);
@@ -421,6 +464,14 @@ describe('coding blocks', () => {
 
     it('rejects absolute cwd outside home (not process.cwd)', async () => {
       const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: '/var/empty' }));
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/home directory/);
+    });
+
+    it('rejects sibling-prefix of home as cwd', async () => {
+      const home = os.homedir();
+      const sibling = `${home}-evil-neos-not-home`;
+      const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: sibling }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/home directory/);
     });

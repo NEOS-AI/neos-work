@@ -11,6 +11,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import os from 'node:os';
+import { realpathSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { registerNativeBlock } from '../registry.js';
@@ -37,6 +38,23 @@ function hasUnsafeControlChars(value: string): boolean {
   return /[\0\r\n]/.test(value);
 }
 
+/** True when abs is root or a proper child (path.sep boundary — not sibling-prefix). */
+function isContainedInRoot(root: string, abs: string): boolean {
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+  return abs === root || abs.startsWith(prefix);
+}
+
+/** Absolute path under the user home (sibling-prefix safe). */
+function isUnderHomeDir(absPath: string): boolean {
+  const home = path.resolve(os.homedir());
+  const resolved = path.resolve(absPath);
+  return isContainedInRoot(home, resolved);
+}
+
+/**
+ * Resolve a user-relative path under baseDir.
+ * Lexical containment + realpath (blocks symlink escape on read/write).
+ */
 function safePath(inputPath: string, baseDir?: string): string | null {
   if (typeof inputPath !== 'string') return null;
   // Control-char check before trim (trim strips leading/trailing \r\n)
@@ -45,12 +63,38 @@ function safePath(inputPath: string, baseDir?: string): string | null {
   if (!trimmed) return null;
   // Reject absolute paths or traversal attempts
   if (path.isAbsolute(trimmed)) return null;
-  const base = baseDir ?? WORKSPACES_DIR;
-  const resolved = path.resolve(base, trimmed);
-  if (!resolved.startsWith(path.resolve(base) + path.sep) && resolved !== path.resolve(base)) {
-    return null;
+  const baseResolved = path.resolve(baseDir ?? WORKSPACES_DIR);
+  let base = baseResolved;
+  try {
+    base = realpathSync(baseResolved);
+  } catch {
+    // base may not exist yet (first workspace write)
   }
-  return resolved;
+  const resolved = path.resolve(base, trimmed);
+  if (!isContainedInRoot(base, resolved)) return null;
+
+  // Existing path — realpath must stay under base
+  try {
+    const real = realpathSync(resolved);
+    if (!isContainedInRoot(base, real)) return null;
+    return real;
+  } catch {
+    // Non-existent: walk parents so a symlink parent cannot escape the sandbox
+    let current = path.dirname(resolved);
+    for (let i = 0; i < 64; i++) {
+      try {
+        const realParent = realpathSync(current);
+        if (!isContainedInRoot(base, realParent)) return null;
+        return resolved;
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) break;
+        if (!isContainedInRoot(base, current) && current !== base) break;
+        current = parent;
+      }
+    }
+    return isContainedInRoot(base, resolved) ? resolved : null;
+  }
 }
 
 /**
@@ -302,8 +346,8 @@ async function executeGitDiff(ctx: BlockExecutionContext): Promise<BlockResult> 
   }
   const repoPath = rawRepo || process.cwd();
 
-  // Validate repo path is not going outside reasonable bounds
-  if (path.isAbsolute(repoPath) && !repoPath.startsWith(os.homedir())) {
+  // Validate repo path is not going outside reasonable bounds (path.sep boundary)
+  if (path.isAbsolute(repoPath) && !isUnderHomeDir(repoPath)) {
     return { ok: false, output: null, error: 'Repo path must be within home directory', durationMs: Date.now() - start };
   }
 
@@ -365,10 +409,11 @@ async function executeTestRunner(ctx: BlockExecutionContext): Promise<BlockResul
   }
 
   // Absolute cwd must stay under home (or be process.cwd for CI checkouts)
+  // path.sep boundary — bare startsWith(home) allows /home/user-evil/...
   if (
     path.isAbsolute(cwd)
     && path.resolve(cwd) !== path.resolve(process.cwd())
-    && !cwd.startsWith(os.homedir())
+    && !isUnderHomeDir(cwd)
   ) {
     return {
       ok: false,
