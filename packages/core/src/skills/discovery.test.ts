@@ -105,6 +105,35 @@ describe('discoverSkills', () => {
     expect(skills.map((s) => s.manifest.name)).toEqual(['ok']);
   });
 
+  it('skips flat and package symlinks that escape the skills root', async () => {
+    const dir = join(workspace, '.neos-work', 'skills');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'ok.md'), skillMd('ok'));
+
+    const outside = await mkdtemp(join(tmpdir(), 'neos-skill-out-'));
+    try {
+      await writeFile(join(outside, 'escape.md'), skillMd('escaped-flat'));
+      await mkdir(join(outside, 'pkg'), { recursive: true });
+      await writeFile(join(outside, 'pkg', 'SKILL.md'), skillMd('escaped-pkg'));
+      try {
+        await symlink(join(outside, 'escape.md'), join(dir, 'flat-link.md'));
+        await symlink(join(outside, 'pkg'), join(dir, 'pkg-link'));
+      } catch {
+        return; // symlink may be restricted
+      }
+      const skills = await discoverSkills(workspace, {
+        includeGlobal: false,
+        includeBundled: false,
+      });
+      const names = skills.map((s) => s.manifest.name);
+      expect(names).toContain('ok');
+      expect(names).not.toContain('escaped-flat');
+      expect(names).not.toContain('escaped-pkg');
+    } finally {
+      await rm(outside, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it('skips hidden markdown files in skill directories', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });

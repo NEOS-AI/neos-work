@@ -6,7 +6,7 @@
  * Same manifest.name: higher-priority source wins (user shadows bundled).
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, lstat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { existsSync } from 'node:fs';
@@ -50,8 +50,10 @@ async function listSafeFiles(dir: string, exts?: string[]): Promise<string[]> {
       if (exts && !exts.some((e) => entry.toLowerCase().endsWith(e))) continue;
       const p = join(dir, entry);
       try {
-        const s = await stat(p);
-        if (s.isFile() && s.size <= FILE_MAX_BYTES) out.push(entry);
+        // lstat: do not follow planted symlinks into outside assets
+        const s = await lstat(p);
+        if (s.isSymbolicLink() || !s.isFile() || s.size > FILE_MAX_BYTES) continue;
+        out.push(entry);
       } catch {
         /* skip */
       }
@@ -89,8 +91,9 @@ async function loadPackageSkill(
 ): Promise<Skill | null> {
   const skillMd = join(packageDir, 'SKILL.md');
   try {
-    const s = await stat(skillMd);
-    if (!s.isFile() || s.size > FILE_MAX_BYTES) return null;
+    // Refuse SKILL.md that is a symlink (escape to outside content)
+    const s = await lstat(skillMd);
+    if (s.isSymbolicLink() || !s.isFile() || s.size > FILE_MAX_BYTES) return null;
     const content = await readFile(skillMd, 'utf-8');
     const skill = parseSkillFile(content, skillMd, source);
     if (!skill) return null;
@@ -136,7 +139,9 @@ export async function scanSkillRoot(
     }
     const full = join(base, entry);
     try {
-      const s = await stat(full);
+      // lstat: skip planted symlinks (do not load outside skill packages/files)
+      const s = await lstat(full);
+      if (s.isSymbolicLink()) continue;
       if (s.isDirectory()) {
         const pkg = await loadPackageSkill(full, source);
         if (pkg) {

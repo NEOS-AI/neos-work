@@ -246,6 +246,30 @@ describe('domain-pack-store additional branches', () => {
     // Must not register under traversal-like names either
     expect(listPacks().some((p) => p.id === 'Bad Name')).toBe(false);
   });
+
+  it('loadInstalledDomainPacks skips pack-dir symlinks that escape data root', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-pack-out-'));
+    const link = path.join(packsDir, 'symlink-pack');
+    try {
+      await fs.writeFile(path.join(outside, 'pack.json'), JSON.stringify({
+        ...SAMPLE,
+        id: 'symlink-pack',
+      }), 'utf8');
+      try {
+        await fs.symlink(outside, link);
+      } catch {
+        return;
+      }
+      const r = await loadInstalledDomainPacks();
+      expect(listPacks().some((p) => p.id === 'symlink-pack')).toBe(false);
+      // Must not count as a successful load of the escape target
+      expect(r.errors.some((e) => /symlink-pack/i.test(e))).toBe(false);
+    } finally {
+      await fs.rm(link, { force: true }).catch(() => {});
+      await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 });
 
 describe('domain-pack-store install variants', () => {

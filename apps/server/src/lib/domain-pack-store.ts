@@ -344,11 +344,12 @@ export async function loadInstalledDomainPacks(): Promise<{ loaded: number; erro
     if (!dir) continue;
     let st;
     try {
-      st = await fs.stat(dir);
+      // lstat: do not follow planted pack-dir symlinks outside data root
+      st = await fs.lstat(dir);
     } catch {
       continue;
     }
-    if (!st.isDirectory()) continue;
+    if (st.isSymbolicLink() || !st.isDirectory()) continue;
 
     const read = await readPackManifestFromDir(dir);
     if (!read.ok) {
