@@ -15,6 +15,7 @@ import {
   installPackFromDir,
   installPackFromZipBuffer,
   loadInstalledDomainPacks,
+  readPackManifestFromDir,
   setInstalledPackEnabled,
   uninstallInstalledPack,
   resolveDomainPacksDir,
@@ -245,6 +246,23 @@ describe('domain-pack-store additional branches', () => {
     expect(r.errors.some((e) => /invalid pack directory name/i.test(e))).toBe(true);
     // Must not register under traversal-like names either
     expect(listPacks().some((p) => p.id === 'Bad Name')).toBe(false);
+  });
+
+  it('readPackManifestFromDir / install rejects pack.json that is a symlink', async () => {
+    const src = path.join(tmpRoot, 'pack-json-link');
+    await fs.mkdir(src, { recursive: true });
+    const outside = path.join(tmpRoot, 'outside-pack.json');
+    await fs.writeFile(outside, JSON.stringify(SAMPLE), 'utf8');
+    try {
+      await fs.symlink(outside, path.join(src, 'pack.json'));
+    } catch {
+      return;
+    }
+    const read = await readPackManifestFromDir(src);
+    expect(read.ok).toBe(false);
+    if (!read.ok) expect(read.error).toMatch(/missing pack\.json/i);
+    const inst = await installPackFromDir(src);
+    expect(inst.ok).toBe(false);
   });
 
   it('loadInstalledDomainPacks skips pack-dir symlinks that escape data root', async () => {

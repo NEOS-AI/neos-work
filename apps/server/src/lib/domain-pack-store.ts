@@ -75,6 +75,9 @@ export interface PackState {
 async function readState(packDir: string): Promise<PackState> {
   const statePath = path.join(packDir, 'state.json');
   try {
+    // Refuse planted state.json symlinks (do not follow outside)
+    const st = await fs.lstat(statePath);
+    if (st.isSymbolicLink() || !st.isFile()) return { enabled: true };
     const raw = await fs.readFile(statePath, 'utf8');
     if (/\0/.test(raw)) return { enabled: true };
     const j = JSON.parse(raw) as { enabled?: unknown };
@@ -85,8 +88,16 @@ async function readState(packDir: string): Promise<PackState> {
 }
 
 async function writeState(packDir: string, state: PackState): Promise<void> {
+  const statePath = path.join(packDir, 'state.json');
+  // If a planted symlink occupies the path, remove it so write cannot follow outside
+  try {
+    const st = await fs.lstat(statePath);
+    if (st.isSymbolicLink()) await fs.unlink(statePath);
+  } catch {
+    // ENOENT — ok
+  }
   await fs.writeFile(
-    path.join(packDir, 'state.json'),
+    statePath,
     JSON.stringify({ enabled: state.enabled }, null, 2),
     'utf8',
   );
@@ -95,7 +106,13 @@ async function writeState(packDir: string, state: PackState): Promise<void> {
 async function findManifestPath(dir: string): Promise<string | null> {
   for (const name of PACK_MANIFEST_FILENAMES) {
     const p = path.join(dir, name);
-    if (existsSync(p)) return p;
+    try {
+      // existsSync follows symlinks — require a regular file under pack dir
+      const st = await fs.lstat(p);
+      if (!st.isSymbolicLink() && st.isFile()) return p;
+    } catch {
+      // missing
+    }
   }
   return null;
 }

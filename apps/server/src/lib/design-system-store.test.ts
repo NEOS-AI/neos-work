@@ -153,6 +153,37 @@ describe('design-system-store scan edge cases', () => {
     await fs.rm(path.join(DESIGN_SYSTEMS_DIR, EXTRA), { recursive: true, force: true }).catch(() => {});
   });
 
+  it('skips DESIGN.md that is a symlink escape', async () => {
+    const dir = path.join(DESIGN_SYSTEMS_DIR, EXTRA);
+    const outside = path.join(os.tmpdir(), `neos-ds-md-out-${process.pid}.md`);
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(outside, '# outside-leak\n', 'utf8');
+      try {
+        await fs.symlink(outside, path.join(dir, 'DESIGN.md'));
+      } catch {
+        return;
+      }
+      const scanned = await scanDesignSystemsRoot(DESIGN_SYSTEMS_DIR, 'user');
+      expect(scanned.some((d) => d.name === EXTRA)).toBe(false);
+      // create then replace DESIGN.md with symlink — content API must refuse
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+      const created = await createDesignSystem(EXTRA, 'desc');
+      expect(created).toBeTruthy();
+      await fs.rm(path.join(created!.path, 'DESIGN.md'), { force: true });
+      try {
+        await fs.symlink(outside, path.join(created!.path, 'DESIGN.md'));
+      } catch {
+        return;
+      }
+      // list may still have entry from before replace depending on scan; content must be null
+      expect(await getDesignSystemContent(created!.id)).toBeNull();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(outside, { force: true }).catch(() => {});
+    }
+  });
+
   it('skips directories without DESIGN.md', async () => {
     await fs.mkdir(path.join(DESIGN_SYSTEMS_DIR, EXTRA), { recursive: true });
     await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, EXTRA, 'readme.txt'), 'nope', 'utf8');

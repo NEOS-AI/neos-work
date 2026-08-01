@@ -72,6 +72,17 @@ async function statOrNull(filePath: string) {
   }
 }
 
+/** Regular non-symlink file only (blocks planted escape links). */
+async function regularFileStatOrNull(filePath: string) {
+  try {
+    const st = await fs.lstat(filePath);
+    if (st.isSymbolicLink() || !st.isFile()) return null;
+    return st;
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureDesignSystemsDir(): Promise<void> {
   await fs.mkdir(DESIGN_SYSTEMS_DIR, { recursive: true });
 }
@@ -172,12 +183,13 @@ async function loadFromDir(
   if (!dirStat?.isDirectory()) return null;
 
   const designMdPath = path.join(dirPath, 'DESIGN.md');
-  const designMdStat = await statOrNull(designMdPath);
+  // Refuse DESIGN.md that is a symlink (escape to outside content)
+  const designMdStat = await regularFileStatOrNull(designMdPath);
   if (!designMdStat) return null;
 
-  const hasManifest = !!(await statOrNull(path.join(dirPath, 'manifest.json')));
-  const hasTokens = !!(await statOrNull(path.join(dirPath, 'tokens.css')));
-  const hasComponents = !!(await statOrNull(path.join(dirPath, 'components.html')));
+  const hasManifest = !!(await regularFileStatOrNull(path.join(dirPath, 'manifest.json')));
+  const hasTokens = !!(await regularFileStatOrNull(path.join(dirPath, 'tokens.css')));
+  const hasComponents = !!(await regularFileStatOrNull(path.join(dirPath, 'components.html')));
 
   let description: string | undefined;
   let manifest: DesignSystemManifest | null = null;
@@ -299,7 +311,9 @@ export async function getDesignSystemContent(id: string): Promise<string | null>
   const ds = await getDesignSystem(id);
   if (!ds) return null;
   try {
-    const content = await fs.readFile(path.join(ds.path, 'DESIGN.md'), 'utf8');
+    const p = path.join(ds.path, 'DESIGN.md');
+    if (!(await regularFileStatOrNull(p))) return null;
+    const content = await fs.readFile(p, 'utf8');
     if (/\0/.test(content)) return null;
     return content.trim().length > 0 ? content : null;
   } catch {
@@ -312,7 +326,9 @@ export async function getDesignSystemTokens(id: string): Promise<string | null> 
   const ds = await getDesignSystem(id);
   if (!ds?.hasTokens) return null;
   try {
-    const content = await fs.readFile(path.join(ds.path, 'tokens.css'), 'utf8');
+    const p = path.join(ds.path, 'tokens.css');
+    if (!(await regularFileStatOrNull(p))) return null;
+    const content = await fs.readFile(p, 'utf8');
     if (/\0/.test(content)) return null;
     if (content.length > 256 * 1024) return content.slice(0, 256 * 1024);
     return content.trim().length > 0 ? content : null;
@@ -333,7 +349,15 @@ export async function updateDesignSystemContent(id: string, content: string): Pr
   if (body.length > DESIGN_MD_MAX_CHARS) return false;
   if (/\0/.test(body)) return false;
   try {
-    await fs.writeFile(path.join(ds.path, 'DESIGN.md'), body, 'utf8');
+    const p = path.join(ds.path, 'DESIGN.md');
+    // Do not write through a planted symlink
+    try {
+      const st = await fs.lstat(p);
+      if (st.isSymbolicLink()) await fs.unlink(p);
+    } catch {
+      // ENOENT — ok
+    }
+    await fs.writeFile(p, body, 'utf8');
     return true;
   } catch {
     return false;
