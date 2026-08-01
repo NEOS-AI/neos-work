@@ -154,6 +154,34 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
   });
 
+  it('listPlugins skips open-design.json that is a symlink escape', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    const outside = path.join(os.tmpdir(), `neos-plugin-out-${process.pid}.json`);
+    const manifestPath = path.join(DIR, 'open-design.json');
+    try {
+      await fs.writeFile(
+        outside,
+        JSON.stringify({
+          schemaVersion: 'od-plugin/v1',
+          id: DIR_NAME,
+          name: 'Escaped',
+          version: '0.0.1',
+        }),
+        'utf8',
+      );
+      try {
+        await fs.symlink(outside, manifestPath);
+      } catch {
+        return;
+      }
+      const list = await listPlugins();
+      expect(list.some((p) => p.id === DIR_NAME && p.name === 'Escaped')).toBe(false);
+    } finally {
+      await fs.rm(manifestPath, { force: true }).catch(() => {});
+      await fs.rm(outside, { force: true }).catch(() => {});
+    }
+  });
+
   it('listPlugins drops stages with control-char ids before trim', async () => {
     await fs.mkdir(DIR, { recursive: true });
     await fs.writeFile(

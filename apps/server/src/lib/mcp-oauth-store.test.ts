@@ -241,6 +241,44 @@ describe('mcp-oauth-store field hygiene', () => {
     expect(await loadToken(TEST_ID)).toBeNull();
   });
 
+  it('loadToken skips symlink token files; saveToken replaces symlink without following', async () => {
+    const dir = path.join(os.homedir(), '.config', 'neos-work', 'mcp-tokens');
+    const f = path.join(dir, `${TEST_ID}.json`);
+    const outside = path.join(os.tmpdir(), `neos-oauth-out-${process.pid}.json`);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      outside,
+      JSON.stringify({
+        serverId: TEST_ID,
+        accessToken: 'leaked-from-outside',
+      }),
+      'utf8',
+    );
+    try {
+      try {
+        await fs.rm(f, { force: true });
+        await fs.symlink(outside, f);
+      } catch {
+        return; // symlink may be restricted
+      }
+      expect(await loadToken(TEST_ID)).toBeNull();
+
+      await saveToken({
+        serverId: TEST_ID,
+        accessToken: 'new-safe-token',
+      });
+      // Must not have written through the symlink into outside
+      const outsideRaw = await fs.readFile(outside, 'utf8');
+      expect(outsideRaw).toContain('leaked-from-outside');
+      expect(outsideRaw).not.toContain('new-safe-token');
+      const loaded = await loadToken(TEST_ID);
+      expect(loaded?.accessToken).toBe('new-safe-token');
+    } finally {
+      await fs.rm(f, { force: true }).catch(() => {});
+      await fs.rm(outside, { force: true }).catch(() => {});
+    }
+  });
+
   it('deleteToken is idempotent for invalid ids', async () => {
     await expect(deleteToken('')).resolves.toBeUndefined();
     await expect(deleteToken('bad\nid')).resolves.toBeUndefined();

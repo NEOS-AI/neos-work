@@ -152,6 +152,13 @@ async function loadPluginFromDir(
 ): Promise<PluginManifest | null> {
   const manifestPath = path.join(dir, 'open-design.json');
   try {
+    // Refuse planted symlink manifests (escape to outside content)
+    try {
+      const mst = await fs.lstat(manifestPath);
+      if (mst.isSymbolicLink() || !mst.isFile()) return null;
+    } catch {
+      return null;
+    }
     const raw = await fs.readFile(manifestPath, 'utf-8');
     const manifest = JSON.parse(raw) as PluginManifest & { channel?: PluginChannel };
     if (manifest.schemaVersion !== 'od-plugin/v1') return null;
@@ -199,14 +206,17 @@ async function loadPluginFromDir(
     }
     const skillPath = path.join(dir, 'SKILL.md');
     try {
-      const skillBody = await fs.readFile(skillPath, 'utf-8');
-      if (!/\0/.test(skillBody)) {
-        const trimmedSkill = skillBody.trim();
-        if (trimmedSkill) {
-          manifest.skillContent =
-            skillBody.length > PLUGIN_SKILL_CONTENT_MAX
-              ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
-              : skillBody;
+      const sst = await fs.lstat(skillPath);
+      if (!sst.isSymbolicLink() && sst.isFile()) {
+        const skillBody = await fs.readFile(skillPath, 'utf-8');
+        if (!/\0/.test(skillBody)) {
+          const trimmedSkill = skillBody.trim();
+          if (trimmedSkill) {
+            manifest.skillContent =
+              skillBody.length > PLUGIN_SKILL_CONTENT_MAX
+                ? skillBody.slice(0, PLUGIN_SKILL_CONTENT_MAX) + '\n…[skill truncated]'
+                : skillBody;
+          }
         }
       }
     } catch {
@@ -238,7 +248,10 @@ async function scanPluginRoot(
     return out;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory() || !entry.name || entry.name.startsWith('.')) continue;
+    // Skip symlink dirs (Dirent.isDirectory is false for links; belt-and-suspenders)
+    if (entry.isSymbolicLink() || !entry.isDirectory() || !entry.name || entry.name.startsWith('.')) {
+      continue;
+    }
     const dir = path.join(root, entry.name);
     // Try as package
     const direct = await loadPluginFromDir(dir, entry.name, channel);
@@ -260,7 +273,9 @@ async function scanPluginRoot(
           ? 'community'
           : channel;
     for (const child of children) {
-      if (!child.isDirectory() || !child.name || child.name.startsWith('.')) continue;
+      if (child.isSymbolicLink() || !child.isDirectory() || !child.name || child.name.startsWith('.')) {
+        continue;
+      }
       const pkg = await loadPluginFromDir(
         path.join(dir, child.name),
         child.name,

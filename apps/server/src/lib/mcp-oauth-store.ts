@@ -59,6 +59,13 @@ export async function saveToken(token: McpOAuthToken): Promise<void> {
   const file = tokenPath(token.serverId);
   if (!file) throw new Error('Invalid serverId');
   await ensureDir();
+  // If a planted symlink occupies the path, remove it so writeFile cannot follow outside
+  try {
+    const st = await fs.lstat(file);
+    if (st.isSymbolicLink()) await fs.unlink(file);
+  } catch {
+    // ENOENT — ok
+  }
   if (typeof token.accessToken !== 'string' || /[\0\r\n]/.test(token.accessToken)) {
     throw new Error('accessToken is required');
   }
@@ -90,6 +97,9 @@ export async function loadToken(serverId: string): Promise<McpOAuthToken | null>
   const file = tokenPath(serverId);
   if (!file) return null;
   try {
+    // Refuse planted symlinks (do not follow into outside token dumps)
+    const st = await fs.lstat(file);
+    if (st.isSymbolicLink() || !st.isFile()) return null;
     const raw = await fs.readFile(file, 'utf-8');
     const token = JSON.parse(raw) as McpOAuthToken;
     // Normalize tokens loaded from disk (legacy files may have whitespace / control chars)
