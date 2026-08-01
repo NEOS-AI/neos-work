@@ -28,6 +28,8 @@ const setTheme = vi.fn();
 const changeLanguage = vi.fn();
 
 const clientApi = {
+  // EngineClient.url — used for MCP OAuth redirect_uri base
+  url: 'http://127.0.0.1:57286',
   getSettings,
   getSetting,
   saveSetting,
@@ -676,6 +678,8 @@ describe('Settings page', () => {
           tokenEndpoint: 'https://auth.example/token',
           clientId: 'my-client',
           scope: 'openid profile',
+          // Must hit mcp-servers mount (not /api/mcp) and use engine base URL
+          redirectUri: 'http://127.0.0.1:57286/api/mcp-servers/oauth/callback',
         }),
       );
     });

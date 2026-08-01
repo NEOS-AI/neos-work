@@ -42,6 +42,7 @@ import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@ne
 import { listCustomWorkers } from './db/workers.js';
 import { initScheduler } from './lib/routine-scheduler.js';
 import { setRuntimeContext } from './lib/runtime-context.js';
+import { isAuthExemptPath } from './lib/auth-paths.js';
 
 /**
  * Auth token: fixed via NEOS_AUTH_TOKEN (Docker / stable CLI) or random per process.
@@ -107,14 +108,7 @@ app.use('*', async (c, next) => {
 
 // Authentication middleware (VULN-002)
 app.use('*', async (c, next) => {
-  // Skip auth for health check (used for connection probing before token is known)
-  if (c.req.path === '/api/health') return next();
-
-  // Webhook endpoint uses HMAC-SHA256 signature auth — skip Bearer token check
-  if (c.req.path.startsWith('/api/webhook/')) return next();
-
-  // Tool-token routes validate agent tool tokens themselves (Task 9)
-  if (c.req.path.startsWith('/api/tools/')) return next();
+  if (isAuthExemptPath(c.req.path)) return next();
 
   const authHeader = c.req.header('Authorization');
   if (authHeader !== `Bearer ${AUTH_TOKEN}`) {

@@ -1,0 +1,30 @@
+/**
+ * Paths that skip Bearer auth (public probes / browser redirects).
+ * Kept separate from index.ts so unit tests do not boot the HTTP server.
+ */
+
+/**
+ * True when `pathname` must not require the daemon AUTH_TOKEN Bearer.
+ * Webhooks use HMAC; tool routes use short-lived tool tokens; OAuth callback
+ * is state/PKCE-bound (browser redirect cannot attach Bearer).
+ */
+export function isAuthExemptPath(pathname: string): boolean {
+  if (typeof pathname !== 'string' || /[\0\r\n]/.test(pathname)) return false;
+  const p = pathname.trim();
+  if (!p) return false;
+  // Health check (connection probing before token is known)
+  if (p === '/api/health') return true;
+  // Webhook uses HMAC-SHA256 signature auth
+  if (p.startsWith('/api/webhook/')) return true;
+  // Tool-token routes validate agent tool tokens themselves (Task 9)
+  if (p.startsWith('/api/tools/')) return true;
+  // MCP OAuth provider browser redirect — protected by PKCE `state`, not Bearer
+  // Mounted at /api/mcp-servers; allow documented /api/mcp alias path too
+  if (
+    p === '/api/mcp-servers/oauth/callback'
+    || p === '/api/mcp/oauth/callback'
+  ) {
+    return true;
+  }
+  return false;
+}

@@ -475,7 +475,7 @@ export { mcp };
 // ── OAuth 2.0 PKCE routes ───────────────────────────────────────────────────
 
 /**
- * POST /api/mcp/oauth/start
+ * POST /api/mcp-servers/oauth/start
  * Begin OAuth 2.0 PKCE flow for a given MCP server.
  * Body: { serverId, authorizationEndpoint, tokenEndpoint, clientId, redirectUri, scope? }
  * Returns: { authUrl }
@@ -555,8 +555,9 @@ mcp.post('/oauth/start', async (c) => {
 });
 
 /**
- * GET /api/mcp/oauth/callback?code=...&state=...
- * Receives the authorization code from the OAuth provider.
+ * GET /api/mcp-servers/oauth/callback?code=...&state=...
+ * Receives the authorization code from the OAuth provider (browser redirect;
+ * Bearer auth is exempt — protected by PKCE state).
  * Exchanges it for tokens and stores them.
  */
 mcp.get('/oauth/callback', async (c) => {

@@ -1197,7 +1197,13 @@ function McpServersSection() {
     if (!authEp || !tokenEp || !cid) return;
     setOauthConnecting(true);
     try {
-      const redirectUri = `http://localhost:3000/api/mcp/oauth/callback`;
+      // Must match server mount (`/api/mcp-servers`) and actual engine base URL/port.
+      // Browser redirect has no Bearer — server exempts this path (PKCE state auth).
+      const base =
+        typeof client.url === 'string' && client.url.trim()
+          ? client.url.trim().replace(/\/+$/, '')
+          : 'http://127.0.0.1:3000';
+      const redirectUri = `${base}/api/mcp-servers/oauth/callback`;
       const res = await client.startMcpOAuth({
         serverId: oauthServerId,
         authorizationEndpoint: authEp,
