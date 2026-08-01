@@ -86,6 +86,13 @@ function writeFile(item: MemoryItem): void {
     `createdAt: ${item.createdAt}`,
     `updatedAt: ${item.updatedAt}`,
   ].join('\n');
+  // Do not write through a planted symlink (escape to outside content)
+  try {
+    const st = lstatSync(item.filePath);
+    if (st.isSymbolicLink()) unlinkSync(item.filePath);
+  } catch {
+    // ENOENT — ok
+  }
   writeFileSync(item.filePath, `---\n${frontmatter}\n---\n\n${item.content}`, 'utf-8');
 }
 

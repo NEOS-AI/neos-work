@@ -1,4 +1,4 @@
-import { writeFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
+import { writeFileSync, readFileSync, unlinkSync, existsSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -232,6 +232,46 @@ describe('memory-store', () => {
       const listed = listMemories();
       expect(listed.some((m) => m.id === `leak-${process.pid}`)).toBe(false);
       expect(listed.some((m) => m.content?.includes('outside-secret'))).toBe(false);
+    } finally {
+      if (existsSync(link)) unlinkSync(link);
+      if (existsSync(outside)) unlinkSync(outside);
+    }
+  });
+
+  it('createMemory does not write through a planted path symlink', () => {
+    const dir = join(homedir(), '.config', 'neos-work', 'memory');
+    const name = `${NAME}_symwrite`;
+    // createMemory builds type_slug.md — plant symlink at that path
+    const slug = name
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    const targetName = `user_${slug}.md`;
+    const link = join(dir, targetName);
+    const outside = join(tmpdir(), `neos-mem-write-out-${process.pid}.md`);
+    try {
+      writeFileSync(outside, 'OUTSIDE_MARKER_DO_NOT_OVERWRITE\n', 'utf-8');
+      if (existsSync(link)) unlinkSync(link);
+      try {
+        symlinkSync(outside, link);
+      } catch {
+        return;
+      }
+      const m = createMemory({
+        name,
+        type: 'user',
+        content: 'safe-in-memory-dir',
+      });
+      expect(m.filePath).toBe(link);
+      const outsideRaw = readFileSync(outside, 'utf-8');
+      expect(outsideRaw).toContain('OUTSIDE_MARKER_DO_NOT_OVERWRITE');
+      expect(outsideRaw).not.toContain('safe-in-memory-dir');
+      // Real file now at the memory path
+      const onDisk = readFileSync(link, 'utf-8');
+      expect(onDisk).toContain('safe-in-memory-dir');
+      deleteMemory(m.id);
     } finally {
       if (existsSync(link)) unlinkSync(link);
       if (existsSync(outside)) unlinkSync(outside);
