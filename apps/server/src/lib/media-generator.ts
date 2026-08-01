@@ -97,8 +97,9 @@ export async function listMediaFiles(limit = 100): Promise<MediaFileInfo[]> {
     if (!isSafeMediaFilename(filename)) continue;
     const filePath = path.join(MEDIA_DIR, filename);
     try {
-      const st = await fs.stat(filePath);
-      if (!st.isFile()) continue;
+      // lstat: do not follow symlinks (escape links must not appear in catalog)
+      const st = await fs.lstat(filePath);
+      if (st.isSymbolicLink() || !st.isFile()) continue;
       const ext = path.extname(filename).toLowerCase();
       const kind: MediaFileInfo['kind'] =
         ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext) ? 'image'

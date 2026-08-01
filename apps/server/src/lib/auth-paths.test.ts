@@ -7,7 +7,7 @@ describe('isAuthExemptPath', () => {
     expect(isAuthExemptPath('/api/webhook/wf-1')).toBe(true);
     expect(isAuthExemptPath('/api/tools/live-artifacts/list')).toBe(true);
     expect(isAuthExemptPath('/api/mcp-servers/oauth/callback')).toBe(true);
-    // Documented alias path (desktop historically used /api/mcp/oauth/callback)
+    // Documented alias path is auth-exempt and mounted as a forwarder in index.ts
     expect(isAuthExemptPath('/api/mcp/oauth/callback')).toBe(true);
   });
 

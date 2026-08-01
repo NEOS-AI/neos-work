@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -106,12 +106,26 @@ app.use('*', async (c, next) => {
   return next();
 });
 
+/** Constant-time Bearer match (avoids leaking AUTH_TOKEN via string !== timing). */
+function bearerMatches(authHeader: string | undefined, token: string): boolean {
+  if (typeof authHeader !== 'string' || /[\0\r\n]/.test(authHeader)) return false;
+  const expected = `Bearer ${token}`;
+  const a = Buffer.from(authHeader);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 // Authentication middleware (VULN-002)
 app.use('*', async (c, next) => {
   if (isAuthExemptPath(c.req.path)) return next();
 
   const authHeader = c.req.header('Authorization');
-  if (authHeader !== `Bearer ${AUTH_TOKEN}`) {
+  if (!bearerMatches(authHeader, AUTH_TOKEN)) {
     return c.json({ ok: false, error: 'Unauthorized' }, 401);
   }
   return next();
@@ -126,6 +140,13 @@ app.route('/api/settings', settings);
 app.route('/api/skills', skills);
 app.route('/api/mcp-servers', mcp);
 app.route('/api/mcp', mcpExpose);
+// Documented / historical OAuth callback path — forward to mcp-servers handler
+// (auth-exempt via isAuthExemptPath; PKCE state protects the exchange).
+app.get('/api/mcp/oauth/callback', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/oauth/callback';
+  return mcp.fetch(new Request(url.toString(), c.req.raw));
+});
 app.route('/api/workflow', workflow);
 app.route('/api/workers', workers);
 app.route('/api/domain-packs', domainPacks);

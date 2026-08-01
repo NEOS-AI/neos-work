@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -140,6 +141,29 @@ describe('listMediaFiles', () => {
 
     await fs.rm(path.join(MEDIA_DIR, `${PREFIX}subdir`), { recursive: true, force: true }).catch(() => {});
     await fs.unlink(path.join(MEDIA_DIR, `${PREFIX}has space.png`)).catch(() => {});
+  });
+
+  it('skips planted symlinks so escape links are not catalogued', async () => {
+    const outside = path.join(os.tmpdir(), `${PREFIX}outside.txt`);
+    const linkName = `${PREFIX}escape.png`;
+    const linkPath = path.join(MEDIA_DIR, linkName);
+    try {
+      await fs.writeFile(outside, 'secret-outside', 'utf8');
+      try {
+        await fs.symlink(outside, linkPath);
+      } catch {
+        // symlink may be restricted — skip
+        return;
+      }
+      await write(`${PREFIX}real.png`, 'png');
+      const files = await listMediaFiles(500);
+      const ours = files.filter((f) => f.filename.startsWith(PREFIX));
+      expect(ours.some((f) => f.filename === linkName)).toBe(false);
+      expect(ours.some((f) => f.filename === `${PREFIX}real.png`)).toBe(true);
+    } finally {
+      await fs.unlink(linkPath).catch(() => {});
+      await fs.unlink(outside).catch(() => {});
+    }
   });
 
   it('maps jpeg/webp/gif/wav mime types and url-encodes filenames', async () => {
