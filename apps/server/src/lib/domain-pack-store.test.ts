@@ -288,6 +288,33 @@ describe('domain-pack-store additional branches', () => {
       await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
     }
   });
+
+  it('setInstalledPackEnabled refuses pack-dir symlink (no state write outside)', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-pack-en-out-'));
+    const link = path.join(packsDir, 'en-symlink-pack');
+    try {
+      await fs.writeFile(
+        path.join(outside, 'pack.json'),
+        JSON.stringify({ ...SAMPLE, id: 'en-symlink-pack' }),
+        'utf8',
+      );
+      try {
+        await fs.symlink(outside, link);
+      } catch {
+        return;
+      }
+      const r = await setInstalledPackEnabled('en-symlink-pack', false);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.status).toBe(404);
+      // Must not have written state.json into the escape target
+      const outsideNames = await fs.readdir(outside);
+      expect(outsideNames).not.toContain('state.json');
+    } finally {
+      await fs.rm(link, { force: true }).catch(() => {});
+      await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 });
 
 describe('domain-pack-store install variants', () => {

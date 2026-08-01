@@ -408,7 +408,13 @@ export async function setInstalledPackEnabled(
   if (!dir) {
     return { ok: false, error: 'invalid pack id', status: 400 };
   }
-  if (!existsSync(dir)) {
+  // Refuse planted pack-dir symlink (writeState would follow outside)
+  try {
+    const st = await fs.lstat(dir);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      return { ok: false, error: 'pack not installed', status: 404 };
+    }
+  } catch {
     return { ok: false, error: 'pack not installed', status: 404 };
   }
   await writeState(dir, { enabled });

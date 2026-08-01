@@ -155,8 +155,31 @@ function normalizeName(raw: unknown): string {
 function ensureDefaultWorkspace(projectId: string): string {
   const root = defaultProjectsRoot();
   const dir = path.join(root, projectId);
+  // Refuse planted workspace path that is a symlink (escape outside projects root)
+  try {
+    const st = fs.lstatSync(dir);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid project workspace path');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid project workspace path') throw err;
+    // ENOENT — create below
+  }
+  fs.mkdirSync(root, { recursive: true });
   fs.mkdirSync(dir, { recursive: true });
-  return fs.realpathSync(dir);
+  let realRoot: string;
+  let realDir: string;
+  try {
+    realRoot = fs.realpathSync(root);
+    realDir = fs.realpathSync(dir);
+  } catch {
+    throw new Error('Invalid project workspace path');
+  }
+  const prefix = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+  if (realDir !== realRoot && !realDir.startsWith(prefix)) {
+    throw new Error('Invalid project workspace path');
+  }
+  return realDir;
 }
 
 export function listProjects(): DesignProject[] {
