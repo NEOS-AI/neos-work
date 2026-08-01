@@ -14,8 +14,15 @@ export function isAuthExemptPath(pathname: string): boolean {
   if (!p) return false;
   // Health check (connection probing before token is known)
   if (p === '/api/health') return true;
-  // Webhook uses HMAC-SHA256 signature auth
-  if (p.startsWith('/api/webhook/')) return true;
+  // Webhook *trigger* only (/api/webhook/:id) uses HMAC-SHA256 — no Bearer.
+  // Admin ops (secret, regenerate, rate-limit) stay Bearer-protected so the
+  // HMAC secret is not world-readable under the same prefix.
+  if (p.startsWith('/api/webhook/')) {
+    const rest = p.slice('/api/webhook/'.length);
+    // Exactly one segment (workflow id); extra segments are admin routes
+    if (rest && !rest.includes('/')) return true;
+    return false;
+  }
   // Tool-token routes validate agent tool tokens themselves (Task 9)
   if (p.startsWith('/api/tools/')) return true;
   // MCP OAuth provider browser redirect — protected by PKCE `state`, not Bearer
