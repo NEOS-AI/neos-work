@@ -5,6 +5,7 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   AGENT_CLI_DEFS,
   buildLaunchArgs,
@@ -108,8 +109,11 @@ export async function spawnRegistryAgent(
   let cwd = typeof opts.cwd === 'string' ? opts.cwd.trim() || undefined : opts.cwd;
   if (cwd) {
     try {
-      const st = fs.statSync(cwd);
+      // realpath: resolve symlink cwd so spawn cannot run outside intended tree via link
+      const real = fs.realpathSync(path.resolve(cwd));
+      const st = fs.statSync(real);
       if (!st.isDirectory()) return Promise.reject(new Error('cwd is not a directory'));
+      cwd = real;
     } catch (err) {
       if (err instanceof Error && err.message.includes('not a directory')) throw err;
       return Promise.reject(new Error(`cwd does not exist: ${cwd}`));

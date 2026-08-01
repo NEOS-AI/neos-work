@@ -154,6 +154,44 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     expect(list.some((p) => p.id === DIR_NAME)).toBe(false);
   });
 
+  it('upgradeSkillToPlugin refuses SKILL.md symlink and does not write through open-design symlink', async () => {
+    await fs.mkdir(DIR, { recursive: true });
+    const outsideSkill = path.join(os.tmpdir(), `neos-up-skill-${process.pid}.md`);
+    const outsideManifest = path.join(os.tmpdir(), `neos-up-od-${process.pid}.json`);
+    const skillLink = path.join(DIR, 'SKILL.md');
+    const manifestLink = path.join(DIR, 'open-design.json');
+    try {
+      await fs.writeFile(outsideSkill, '# Outside Skill Leak\n', 'utf8');
+      await fs.writeFile(outsideManifest, '{"schemaVersion":"od-plugin/v1","id":"x"}', 'utf8');
+      try {
+        await fs.symlink(outsideSkill, skillLink);
+      } catch {
+        return;
+      }
+      await expect(upgradeSkillToPlugin({ skillDirName: DIR_NAME })).rejects.toThrow(/not found/i);
+
+      // Real skill, planted open-design symlink — upgrade must replace link, not write outside
+      await fs.rm(skillLink, { force: true });
+      await fs.writeFile(skillLink, '# Real Skill\n\nBody\n', 'utf8');
+      try {
+        await fs.symlink(outsideManifest, manifestLink);
+      } catch {
+        return;
+      }
+      const plugin = await upgradeSkillToPlugin({ skillDirName: DIR_NAME, name: 'Upgraded' });
+      expect(plugin.name).toBe('Upgraded');
+      const outsideRaw = await fs.readFile(outsideManifest, 'utf8');
+      expect(outsideRaw).not.toContain('Upgraded');
+      const onDisk = JSON.parse(await fs.readFile(manifestLink, 'utf8')) as { name: string };
+      expect(onDisk.name).toBe('Upgraded');
+    } finally {
+      await fs.rm(skillLink, { force: true }).catch(() => {});
+      await fs.rm(manifestLink, { force: true }).catch(() => {});
+      await fs.rm(outsideSkill, { force: true }).catch(() => {});
+      await fs.rm(outsideManifest, { force: true }).catch(() => {});
+    }
+  });
+
   it('listPlugins skips open-design.json that is a symlink escape', async () => {
     await fs.mkdir(DIR, { recursive: true });
     const outside = path.join(os.tmpdir(), `neos-plugin-out-${process.pid}.json`);

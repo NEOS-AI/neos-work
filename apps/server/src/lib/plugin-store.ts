@@ -353,17 +353,24 @@ export async function upgradeSkillToPlugin(options: {
   const dir = path.join(SKILLS_DIR, safe);
   const skillPath = path.join(dir, 'SKILL.md');
   try {
-    await fs.access(skillPath);
-  } catch {
+    // Refuse planted SKILL.md symlinks (do not upgrade from outside content)
+    const st = await fs.lstat(skillPath);
+    if (st.isSymbolicLink() || !st.isFile()) {
+      throw new Error(`Skill directory not found: ${safe}`);
+    }
+  } catch (err) {
+    if (err instanceof Error && /not found/i.test(err.message)) throw err;
     throw new Error(`Skill directory not found: ${safe}`);
   }
 
   const manifestPath = path.join(dir, 'open-design.json');
   try {
-    await fs.access(manifestPath);
-    // Already a plugin — return existing
-    const existing = await getPlugin(safe);
-    if (existing) return existing;
+    const mst = await fs.lstat(manifestPath);
+    if (!mst.isSymbolicLink() && mst.isFile()) {
+      // Already a plugin — return existing
+      const existing = await getPlugin(safe);
+      if (existing) return existing;
+    }
   } catch {
     // create
   }
@@ -437,6 +444,13 @@ export async function upgradeSkillToPlugin(options: {
     ],
   };
 
+  // Do not write open-design.json through a planted symlink
+  try {
+    const mst = await fs.lstat(manifestPath);
+    if (mst.isSymbolicLink()) await fs.unlink(manifestPath);
+  } catch {
+    // ENOENT — ok
+  }
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
   manifest.skillContent = skillBody;
   manifest.dir = dir;

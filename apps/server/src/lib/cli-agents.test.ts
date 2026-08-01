@@ -413,6 +413,30 @@ describe('spawnCliAgent', () => {
     await promise;
   });
 
+  it('resolves symlink cwd to realpath for spawn', async () => {
+    const target = fs.mkdtempSync(path.join(os.tmpdir(), 'neos-cli-cwd-real-'));
+    const link = path.join(os.tmpdir(), `neos-cli-cwd-link-${process.pid}`);
+    try {
+      try {
+        fs.symlinkSync(target, link);
+      } catch {
+        return;
+      }
+      const child = makeChild();
+      spawnMock.mockReturnValue(child);
+      const promise = spawnCliAgent({ cliId: 'cli-claude', prompt: 'sym-cwd', cwd: link });
+      await waitForSpawn();
+      const opts = spawnMock.mock.calls[0]?.[2] as { cwd?: string };
+      expect(opts.cwd).toBe(fs.realpathSync(target));
+      expect(opts.cwd).not.toBe(link);
+      child.emit('exit', 0);
+      await promise;
+    } finally {
+      try { fs.unlinkSync(link); } catch { /* ignore */ }
+      try { fs.rmSync(target, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
   it('rejects cwd that is a file and uses settings binary override when executable', async () => {
     const fileCwd = path.join(os.tmpdir(), `neos-cli-cwd-file-${process.pid}`);
     fs.writeFileSync(fileCwd, 'not-a-dir');
