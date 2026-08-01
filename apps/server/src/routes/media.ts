@@ -26,6 +26,28 @@ import { isSafeMediaFilename } from '../lib/media-filename.js';
 const media = new Hono();
 const MEDIA_DIR = MEDIA_DIR_EXPORT;
 
+/**
+ * Resolve a media filename under MEDIA_DIR and ensure realpath stays inside
+ * (blocks planted symlinks that escape the media root).
+ * Returns absolute path or null when invalid/missing/escape.
+ */
+function resolveMediaFilePath(filename: string): string | null {
+  if (!isSafeMediaFilename(filename)) return null;
+  const name = filename.trim();
+  const joined = path.join(MEDIA_DIR, name);
+  let rootReal: string;
+  let fileReal: string;
+  try {
+    rootReal = fs.realpathSync(MEDIA_DIR);
+    fileReal = fs.realpathSync(joined);
+  } catch {
+    return null;
+  }
+  const prefix = rootReal.endsWith(path.sep) ? rootReal : rootReal + path.sep;
+  if (fileReal !== rootReal && !fileReal.startsWith(prefix)) return null;
+  return fileReal;
+}
+
 /** Map validation / config errors to 400; provider/network failures stay 500. */
 function mediaClientErrorStatus(msg: string): 400 | 500 {
   if (
@@ -207,7 +229,7 @@ media.post('/audio', async (c) => {
   }
 });
 
-// Serve a saved media file by filename (path traversal safe)
+// Serve a saved media file by filename (path traversal + symlink-escape safe)
 media.get('/file/:filename', (c) => {
   // Pass raw param — isSafeMediaFilename checks control chars before trim
   const filenameRaw = c.req.param('filename');
@@ -215,8 +237,8 @@ media.get('/file/:filename', (c) => {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
   const filename = filenameRaw.trim();
-  const filePath = path.join(MEDIA_DIR, filename);
-  if (!fs.existsSync(filePath)) {
+  const filePath = resolveMediaFilePath(filename);
+  if (!filePath) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
   const ext = path.extname(filename).toLowerCase();
@@ -296,12 +318,14 @@ media.delete('/file/:filename', (c) => {
     return c.json({ ok: false, error: 'Invalid filename' }, 400);
   }
   const filename = filenameRaw.trim();
-  const filePath = path.join(MEDIA_DIR, filename);
-  if (!fs.existsSync(filePath)) {
+  // realpath containment — refuse to unlink through escape symlink
+  const filePath = resolveMediaFilePath(filename);
+  if (!filePath) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
   try {
-    fs.unlinkSync(filePath);
+    // Unlink the path under MEDIA_DIR (not the escape target if any)
+    fs.unlinkSync(path.join(MEDIA_DIR, filename));
     return c.json({ ok: true });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Delete failed');

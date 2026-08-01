@@ -432,6 +432,20 @@ describe('coding blocks', () => {
       expect(result.error).toMatch(/home directory/);
     });
 
+    it('rejects repoPath that is a symlink under home escaping outside', async () => {
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-we-repo-out-'));
+      const link = path.join(os.homedir(), `.neos-we-repo-escape-${process.pid}`);
+      try {
+        await fs.symlink(outside, link);
+        const result = await git().execute(ctx({ repoPath: link }));
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/home directory/);
+      } finally {
+        await fs.rm(link, { force: true }).catch(() => {});
+        await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+
     it('rejects control characters in repoPath', async () => {
       const result = await git().execute(ctx({ repoPath: `/tmp${'\n'}evil` }));
       expect(result.ok).toBe(false);
@@ -474,6 +488,20 @@ describe('coding blocks', () => {
       const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: sibling }));
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/home directory/);
+    });
+
+    it('rejects cwd that is a symlink under home escaping outside', async () => {
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-we-cwd-out-'));
+      const link = path.join(os.homedir(), `.neos-we-cwd-escape-${process.pid}`);
+      try {
+        await fs.symlink(outside, link);
+        const result = await runner().execute(ctx({ command: 'pnpm --version', cwd: link }));
+        expect(result.ok).toBe(false);
+        expect(result.error).toMatch(/home directory/);
+      } finally {
+        await fs.rm(link, { force: true }).catch(() => {});
+        await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+      }
     });
 
     it('rejects control characters in cwd', async () => {

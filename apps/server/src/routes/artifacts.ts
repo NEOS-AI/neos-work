@@ -258,9 +258,21 @@ artifacts.post('/:id/refresh', async (c) => {
       if (/[\0\r\n]/.test(artifact.filePath) || resolved.length > 4_096) {
         return c.json({ ok: false, error: 'Invalid file path' }, 400);
       }
-      const home = pathMod.resolve((await import('node:os')).homedir());
-      const homePrefix = home.endsWith(pathMod.sep) ? home : home + pathMod.sep;
-      const underHome = (abs: string) => abs === home || abs.startsWith(homePrefix);
+      const osMod = await import('node:os');
+      // Prefer realpath(home) so macOS /var vs /private/var forms match
+      let home: string;
+      try {
+        home = await fs.realpath(pathMod.resolve(osMod.homedir()));
+      } catch {
+        home = pathMod.resolve(osMod.homedir());
+      }
+      const homeLexical = pathMod.resolve(osMod.homedir());
+      const homePrefix = (h: string) => (h.endsWith(pathMod.sep) ? h : h + pathMod.sep);
+      const underHome = (abs: string) =>
+        abs === home
+        || abs.startsWith(homePrefix(home))
+        || abs === homeLexical
+        || abs.startsWith(homePrefix(homeLexical));
       // Require path.sep after home — bare startsWith(home) allows /home/user-evil/...
       if (!underHome(resolved)) {
         return c.json({ ok: false, error: 'Invalid file path' }, 400);

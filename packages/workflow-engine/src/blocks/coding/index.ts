@@ -44,11 +44,30 @@ function isContainedInRoot(root: string, abs: string): boolean {
   return abs === root || abs.startsWith(prefix);
 }
 
-/** Absolute path under the user home (sibling-prefix safe). */
+/**
+ * Absolute path under the user home (sibling-prefix safe).
+ * When the path exists, realpath must stay under home (blocks ~/link → /tmp).
+ */
 function isUnderHomeDir(absPath: string): boolean {
-  const home = path.resolve(os.homedir());
+  let home: string;
+  try {
+    home = realpathSync(path.resolve(os.homedir()));
+  } catch {
+    home = path.resolve(os.homedir());
+  }
+  const homeLexical = path.resolve(os.homedir());
   const resolved = path.resolve(absPath);
-  return isContainedInRoot(home, resolved);
+  // Lexical check first (also accept lexical home when realpath(home) differs)
+  if (!isContainedInRoot(home, resolved) && !isContainedInRoot(homeLexical, resolved)) {
+    return false;
+  }
+  try {
+    const real = realpathSync(resolved);
+    return isContainedInRoot(home, real) || isContainedInRoot(homeLexical, real);
+  } catch {
+    // ENOENT — spawn/cwd will fail; lexical under home is enough
+    return true;
+  }
 }
 
 /**

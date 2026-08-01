@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { deleteSetting, getSecretSetting, getSetting, setSetting } from '../db/settings.js';
@@ -432,6 +433,31 @@ describe('media routes', () => {
     const del = await media.request(`/file/${name}`, { method: 'DELETE' });
     expect(del.status).toBe(200);
     expect(fs.existsSync(TMP)).toBe(false);
+  });
+
+  it('GET/DELETE file refuses symlink that escapes MEDIA_DIR', async () => {
+    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    const name = `_cov_media_escape_${process.pid}.png`;
+    const linkPath = path.join(MEDIA_DIR, name);
+    const outside = path.join(os.tmpdir(), `neos-media-out-${process.pid}.txt`);
+    try {
+      fs.writeFileSync(outside, 'secret-outside');
+      try {
+        fs.symlinkSync(outside, linkPath);
+      } catch {
+        // symlink may be restricted — skip
+        return;
+      }
+      const get = await media.request(`/file/${name}`);
+      expect(get.status).toBe(404);
+      const del = await media.request(`/file/${name}`, { method: 'DELETE' });
+      expect(del.status).toBe(404);
+      // Escape target must remain; link may still exist (we refuse to manage it)
+      expect(fs.existsSync(outside)).toBe(true);
+    } finally {
+      try { fs.unlinkSync(linkPath); } catch { /* ignore */ }
+      try { fs.unlinkSync(outside); } catch { /* ignore */ }
+    }
   });
 
   it('GET /jobs validates id and limit query edges', async () => {
