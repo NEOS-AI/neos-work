@@ -324,6 +324,26 @@ describe('filesystem tools', () => {
     }
   });
 
+  it('rejects move destination under parent that is a symlink escaping the workspace', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'neos-fs-out-'));
+    try {
+      await writeFile(join(root, 'inside.txt'), 'stay');
+      await symlink(outside, join(root, 'out-dir'));
+      const move = createMoveFileTool(root);
+      const result = await move.execute({
+        source: 'inside.txt',
+        destination: 'out-dir/escaped.txt',
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/outside the workspace|symlink|does not exist/i);
+      // Source must remain (move must not succeed via symlink escape)
+      const read = createReadFileTool(root);
+      expect((await read.execute({ path: 'inside.txt' })).output).toBe('stay');
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
   it('blocks symlink escape when reading through a link outside the workspace', async () => {
     const outside = await mkdtemp(join(tmpdir(), 'neos-fs-out-'));
     try {

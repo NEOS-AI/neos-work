@@ -385,17 +385,30 @@ export function createMoveFileTool(workspaceRoot: string): Tool {
           return { success: false, output: null, error: `Cannot move protected path: ${sourceTrimmed}` };
         }
 
-        // Destination may not exist yet — validate via parent resolve
-        const destResolved = resolve(absoluteRoot, destTrimmed);
-        const destRel = relative(absoluteRoot, destResolved);
-        if (isOutsideWorkspace(absoluteRoot, destResolved, destRel)) {
-          return { success: false, output: null, error: `Destination is outside the workspace: ${destTrimmed}` };
+        // Destination may not exist yet — safePath checks parent realpath (blocks symlink escape)
+        let destPath: string;
+        try {
+          destPath = safePath(workspaceRoot, destTrimmed);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Normalize safePath "outside" wording for move callers/tests
+          if (/outside the workspace/i.test(msg)) {
+            return {
+              success: false,
+              output: null,
+              error: `Destination is outside the workspace: ${destTrimmed}`,
+            };
+          }
+          return { success: false, output: null, error: scrubErrorMessage(msg) || 'Invalid destination' };
         }
-        if (isProtectedPath(destRel)) {
+        const destRel = relative(absoluteRoot, destPath);
+        // Also reject protected lexical destination (e.g. .env) even if path is new
+        const destLexicalRel = relative(absoluteRoot, resolve(absoluteRoot, destTrimmed));
+        if (isProtectedPath(destRel) || isProtectedPath(destLexicalRel)) {
           return { success: false, output: null, error: `Cannot move to protected path: ${destTrimmed}` };
         }
 
-        await rename(srcPath, destResolved);
+        await rename(srcPath, destPath);
         return { success: true, output: { moved: `${source} → ${destination}` } };
       } catch (err) {
         return { success: false, output: null, error: scrubErrorMessage((err as Error).message) || 'Operation failed' };
