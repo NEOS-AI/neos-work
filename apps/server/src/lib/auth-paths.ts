@@ -5,13 +5,17 @@
 
 /**
  * True when `pathname` must not require the daemon AUTH_TOKEN Bearer.
- * Webhooks use HMAC; tool routes use short-lived tool tokens; OAuth callback
- * is state/PKCE-bound (browser redirect cannot attach Bearer).
+ * - Health: public probe
+ * - Webhook *trigger* only (`/api/webhook/:id`): HMAC-SHA256 (not secret/admin subpaths)
+ * - Tool routes: short-lived tool tokens
+ * - OAuth callback: state/PKCE-bound (browser redirect cannot attach Bearer)
  */
 export function isAuthExemptPath(pathname: string): boolean {
   if (typeof pathname !== 'string' || /[\0\r\n]/.test(pathname)) return false;
-  const p = pathname.trim();
+  let p = pathname.trim();
   if (!p) return false;
+  // Normalize trailing slash so /api/webhook/:id/ still matches trigger-only rule
+  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
   // Health check (connection probing before token is known)
   if (p === '/api/health') return true;
   // Webhook *trigger* only (/api/webhook/:id) uses HMAC-SHA256 — no Bearer.

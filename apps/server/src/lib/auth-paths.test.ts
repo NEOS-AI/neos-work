@@ -16,7 +16,10 @@ describe('isAuthExemptPath', () => {
     expect(isAuthExemptPath('/api/webhook/wf-1/secret')).toBe(false);
     expect(isAuthExemptPath('/api/webhook/wf-1/regenerate')).toBe(false);
     expect(isAuthExemptPath('/api/webhook/wf-1/rate-limit')).toBe(false);
+    expect(isAuthExemptPath('/api/webhook/wf-1/secret/')).toBe(false);
     expect(isAuthExemptPath('/api/webhook/')).toBe(false);
+    // Trailing slash on trigger still exempt (normalized)
+    expect(isAuthExemptPath('/api/webhook/wf-1/')).toBe(true);
   });
 
   it('does not exempt ordinary API routes', () => {
