@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_6_0 — Collaboration · Canvas · Marketplace
 
-**Status:** M0–M3 shipped through **0.6.3**; M4+ open  
-**Baseline:** monorepo **0.6.3**
+**Status:** M0–M4 shipped through **0.6.4**; M5 open  
+**Baseline:** monorepo **0.6.4**
 **Parent:** [`PLAN_FOR_V0_5_0.md`](./PLAN_FOR_V0_5_0.md) §13 backlog  
 **One-line:** Open the **v0.6 train** with multiplayer *foundations*, opt-in free-canvas *spikes*, and marketplace *hosting* — without regressing v0.5 Design Editor / dual-surface contracts.
 
@@ -111,8 +111,8 @@ v0.5 delivered OD-parity Design Projects + Editor (Layers, Edit-with-AI, file SS
 
 ### Task 6 — M4 Remote marketplace
 
-- [ ] Catalog schema + signature/trust tier  
-- [ ] Settings UI install from URL  
+- [x] Catalog schema + trust tier + optional sha256 (`neos-marketplace/v1`)  
+- [x] Desktop Plugins UI: catalog URL + fetch + install (0.6.4)  
 
 ### Task 7 — Docs · version · inventory
 

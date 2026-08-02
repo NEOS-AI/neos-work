@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "neos-marketplace/v1",
+  "name": "NEOS sample remote catalog",
+  "updatedAt": "2026-08-02",
+  "entries": [
+    {
+      "id": "sample-remote-hello",
+      "name": "Sample Remote Hello",
+      "description": "Fixture plugin for remote marketplace install tests",
+      "version": "1.0.0",
+      "trust": "community",
+      "packageUrl": "https://example.com/plugins/sample-remote-hello.json"
+    }
+  ]
+}

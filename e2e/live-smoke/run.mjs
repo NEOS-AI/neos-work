@@ -94,7 +94,7 @@ async function probeHttp(name, url, { headers = {}, allowPrivate = false } = {})
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'neos-work-live-smoke/0.6.3',
+        'User-Agent': 'neos-work-live-smoke/0.6.4',
         ...headers,
       },
     });
@@ -128,7 +128,7 @@ async function probeConnectionTest(base, token, target) {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
-        'User-Agent': 'neos-work-live-smoke/0.6.3',
+        'User-Agent': 'neos-work-live-smoke/0.6.4',
       },
       body: JSON.stringify({ target }),
     });

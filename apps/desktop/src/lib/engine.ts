@@ -2178,6 +2178,71 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  // --- Remote marketplace (v0.6 M4) ---
+
+  async getMarketplaceCatalogUrl(): Promise<ApiResponse<{ url: string | null }>> {
+    const res = await fetch(`${this.baseUrl}/api/marketplace/catalog-url`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async setMarketplaceCatalogUrl(url: string): Promise<ApiResponse<{ url: string | null }>> {
+    const res = await fetch(`${this.baseUrl}/api/marketplace/catalog-url`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ url }),
+    });
+    return readApiResponse(res);
+  }
+
+  async fetchMarketplaceCatalog(url?: string): Promise<
+    ApiResponse<{
+      schemaVersion: string;
+      name?: string;
+      entries: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        version: string;
+        trust: string;
+        packageUrl: string;
+        sha256?: string;
+      }>;
+      sourceUrl: string;
+    }>
+  > {
+    const qs =
+      url && typeof url === 'string' && !/[\0\r\n]/.test(url)
+        ? `?url=${encodeURIComponent(url.trim())}`
+        : '';
+    const res = await fetch(`${this.baseUrl}/api/marketplace/catalog${qs}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async installMarketplaceEntry(input: {
+    id?: string;
+    url?: string;
+    entry?: {
+      id: string;
+      name: string;
+      version: string;
+      trust: string;
+      packageUrl: string;
+      sha256?: string;
+      description?: string;
+    };
+  }): Promise<ApiResponse<{ id: string; version: string; trust: string; message: string }>> {
+    const res = await fetch(`${this.baseUrl}/api/marketplace/install`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(input),
+    });
+    return readApiResponse(res);
+  }
+
   // --- Plugins ---
 
   async listPlugins(): Promise<ApiResponse<Plugin[]> & { meta?: PluginListMeta }> {

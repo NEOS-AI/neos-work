@@ -3,8 +3,21 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const listPlugins = vi.fn();
+const getMarketplaceCatalogUrl = vi.fn(async () => ({ ok: true, data: { url: null } }));
+const setMarketplaceCatalogUrl = vi.fn(async () => ({ ok: true, data: { url: null } }));
+const fetchMarketplaceCatalog = vi.fn(async () => ({
+  ok: true,
+  data: { schemaVersion: 'neos-marketplace/v1', entries: [], sourceUrl: '' },
+}));
+const installMarketplaceEntry = vi.fn(async () => ({ ok: true, data: { id: 'x', version: '1', trust: 'community', message: 'ok' } }));
 
-const client = { listPlugins };
+const client = {
+  listPlugins,
+  getMarketplaceCatalogUrl,
+  setMarketplaceCatalogUrl,
+  fetchMarketplaceCatalog,
+  installMarketplaceEntry,
+};
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
@@ -50,6 +63,10 @@ const samplePlugins = [
 describe('Plugins page', () => {
   beforeEach(() => {
     listPlugins.mockReset();
+    getMarketplaceCatalogUrl.mockClear();
+    setMarketplaceCatalogUrl.mockClear();
+    fetchMarketplaceCatalog.mockClear();
+    installMarketplaceEntry.mockClear();
   });
 
   it('shows empty state when no plugins', async () => {

@@ -28,6 +28,7 @@ import workflowRevisions from './routes/workflow-revisions.js';
 import cliAgents from './routes/cli-agents.js';
 import routines from './routes/routines.js';
 import media from './routes/media.js';
+import marketplace from './routes/marketplace.js';
 import deploy from './routes/deploy.js';
 import pluginsRoute from './routes/plugins.js';
 import projects from './routes/projects.js';
@@ -164,6 +165,7 @@ app.route('/api/routines', routines);
 app.route('/api/media', media);
 app.route('/api/deploy', deploy);
 app.route('/api/plugins', pluginsRoute);
+app.route('/api/marketplace', marketplace);
 app.route('/api/projects', projects);
 app.route('/api/runs', runs);
 app.route('/api/live-artifacts', liveArtifacts);
@@ -174,7 +176,7 @@ app.route('/api/connection-test', connectionTest);
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.6.3',
+    version: '0.6.4',
   });
 });
 
@@ -204,7 +206,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.6.3',
+      version: '0.6.4',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });
@@ -276,7 +278,7 @@ setRuntimeContext({ authToken: AUTH_TOKEN, port: actualPort });
 // Output structured metadata for Tauri sidecar / CLI / Docker logs
 console.log(`NEOS_PORT=${actualPort}`);
 console.log(`NEOS_HOST=${listenHost}`);
-// Never print env-provided secrets in full (v0.6.3). Ephemeral process tokens
+// Never print env-provided secrets in full (v0.6.4). Ephemeral process tokens
 // still print once so local `pnpm dev` can paste into desktop/web.
 if (typeof process.env.NEOS_AUTH_TOKEN === 'string' && process.env.NEOS_AUTH_TOKEN.trim().length >= 16) {
   console.log('NEOS_AUTH_TOKEN=(from env, value not printed)');

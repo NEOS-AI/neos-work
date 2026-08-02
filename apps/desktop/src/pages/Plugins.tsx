@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useEngine } from '../hooks/useEngine.js';
 import type { Plugin, PluginChannel, PluginListMeta } from '../lib/engine.js';
 import { PipelineRunner } from '../components/workflow/PipelineRunner.js';
@@ -271,9 +271,235 @@ export function Plugins() {
         </div>
       )}
 
+      <RemoteMarketplaceSection
+        onInstalled={() => {
+          // reload local plugins after install
+          if (!client) return;
+          void client.listPlugins().then((res) => {
+            if (res.ok && res.data) setPlugins(res.data as Plugin[]);
+          });
+        }}
+      />
+
       {selected && (
         <PipelineRunner plugin={selected} onClose={() => setSelected(null)} />
       )}
     </div>
+  );
+}
+
+type RemoteEntry = {
+  id: string;
+  name: string;
+  description?: string;
+  version: string;
+  trust: string;
+  packageUrl: string;
+  sha256?: string;
+};
+
+function trustBadge(trust: string): { bg: string; fg: string; label: string } {
+  switch (trust) {
+    case 'official':
+      return { bg: '#1e3a8a40', fg: '#60a5fa', label: 'official' };
+    case 'community':
+      return { bg: '#14532d40', fg: '#4ade80', label: 'community' };
+    default:
+      return { bg: '#713f1240', fg: '#fbbf24', label: 'unverified' };
+  }
+}
+
+function RemoteMarketplaceSection({ onInstalled }: { onInstalled: () => void }) {
+  const { client } = useEngine();
+  const [url, setUrl] = useState('');
+  const [entries, setEntries] = useState<RemoteEntry[]>([]);
+  const [catalogName, setCatalogName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [installing, setInstalling] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!client) return;
+    void client.getMarketplaceCatalogUrl().then((res) => {
+      if (res.ok && res.data?.url) setUrl(res.data.url);
+    });
+  }, [client]);
+
+  const saveUrl = useCallback(async () => {
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await client.setMarketplaceCatalogUrl(url.trim());
+      if (!res.ok) {
+        setError(scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'Save failed');
+      } else {
+        setStatus(res.data?.url ? 'Catalog URL saved' : 'Catalog URL cleared');
+        if (res.data?.url) setUrl(res.data.url);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  }, [client, url]);
+
+  const loadCatalog = useCallback(async () => {
+    if (!client) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      if (url.trim()) {
+        await client.setMarketplaceCatalogUrl(url.trim());
+      }
+      const res = await client.fetchMarketplaceCatalog(url.trim() || undefined);
+      if (!res.ok || !res.data) {
+        setEntries([]);
+        setError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 }) || 'Fetch failed',
+        );
+        return;
+      }
+      setCatalogName(res.data.name ?? null);
+      setEntries(res.data.entries ?? []);
+      setStatus(`Loaded ${res.data.entries?.length ?? 0} entries`);
+    } catch (err) {
+      setEntries([]);
+      setError(err instanceof Error ? err.message : 'Fetch failed');
+    } finally {
+      setBusy(false);
+    }
+  }, [client, url]);
+
+  const install = async (entry: RemoteEntry) => {
+    if (!client) return;
+    if (entry.trust === 'unverified') {
+      const ok = window.confirm(
+        `Install unverified plugin “${entry.name}”?\n\nOnly install from catalogs you trust.`,
+      );
+      if (!ok) return;
+    }
+    setInstalling(entry.id);
+    setError(null);
+    try {
+      const res = await client.installMarketplaceEntry({ entry });
+      if (!res.ok) {
+        setError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 }) || 'Install failed',
+        );
+      } else {
+        setStatus(res.data?.message ?? `Installed ${entry.id}`);
+        onInstalled();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Install failed');
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  return (
+    <section
+      className="mt-8 rounded-xl border p-4"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+      data-testid="remote-marketplace"
+    >
+      <h2 className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+        Remote catalog
+      </h2>
+      <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+        Opt-in marketplace URL (HTTPS). Local / bundled plugins stay primary. Unverified entries
+        require confirmation.
+      </p>
+      <div className="flex flex-wrap gap-2 mb-3">
+        <input
+          className="flex-1 min-w-[200px] rounded-lg border px-2 py-1.5 text-xs font-mono"
+          style={{
+            borderColor: 'var(--border-secondary)',
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-primary)',
+          }}
+          placeholder="https://example.com/catalog.json"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          data-testid="marketplace-url"
+        />
+        <button
+          type="button"
+          className="rounded-lg px-3 py-1.5 text-xs"
+          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+          disabled={busy || !client}
+          onClick={() => void saveUrl()}
+          data-testid="marketplace-save-url"
+        >
+          Save URL
+        </button>
+        <button
+          type="button"
+          className="rounded-lg px-3 py-1.5 text-xs text-white"
+          style={{ backgroundColor: '#6366f1' }}
+          disabled={busy || !client}
+          onClick={() => void loadCatalog()}
+          data-testid="marketplace-fetch"
+        >
+          {busy ? '…' : 'Fetch catalog'}
+        </button>
+      </div>
+      {error && (
+        <p className="text-xs text-red-400 mb-2" role="alert" data-testid="marketplace-error">
+          {error}
+        </p>
+      )}
+      {status && (
+        <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }} data-testid="marketplace-status">
+          {catalogName ? `${catalogName}: ` : ''}
+          {status}
+        </p>
+      )}
+      {entries.length > 0 && (
+        <ul className="flex flex-col gap-2" data-testid="marketplace-entries">
+          {entries.map((e) => {
+            const tb = trustBadge(e.trust);
+            return (
+              <li
+                key={e.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
+                style={{ borderColor: 'var(--border-secondary)' }}
+              >
+                <div className="flex-1 min-w-[140px]">
+                  <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {scrubDisplayText(e.name, { maxChars: 120 }) || e.id}
+                  </div>
+                  <div className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    {e.id} · v{e.version}
+                    {e.description
+                      ? ` · ${scrubDisplayText(e.description, { maxChars: 80 })}`
+                      : ''}
+                  </div>
+                </div>
+                <span
+                  className="text-[10px] rounded px-1.5 py-0.5 capitalize"
+                  style={{ backgroundColor: tb.bg, color: tb.fg }}
+                >
+                  {tb.label}
+                </span>
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-xs text-white"
+                  style={{ backgroundColor: '#10b981' }}
+                  disabled={installing === e.id || !client}
+                  onClick={() => void install(e)}
+                  data-testid={`marketplace-install-${e.id}`}
+                >
+                  {installing === e.id ? '…' : 'Install'}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
