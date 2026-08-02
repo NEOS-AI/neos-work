@@ -249,6 +249,16 @@ export function ensureCliWorkspace(runId: string): string {
   if (!resolved.startsWith(path.resolve(base) + path.sep) && resolved !== path.resolve(base)) {
     throw new Error('Invalid runId');
   }
+  // Refuse planted workspaces root symlink (mkdir would follow outside)
+  try {
+    const st = fs.lstatSync(base);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid runId');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid runId') throw err;
+    // ENOENT — create below
+  }
   // Refuse planted workspace path that is a symlink (escape outside workspaces root)
   try {
     const st = fs.lstatSync(dir);

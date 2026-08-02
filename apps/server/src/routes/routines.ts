@@ -319,6 +319,15 @@ Review and edit this skill, then enable it under Skills. Use it as a prompt/refe
 
   const skillsRoot = path.join(os.homedir(), '.config', 'neos-work', 'skills');
   const skillsDir = path.join(skillsRoot, skillName);
+  // Refuse planted skills root symlink (mkdir would follow outside)
+  try {
+    const rootSt = await fs.lstat(skillsRoot);
+    if (rootSt.isSymbolicLink()) {
+      return c.json({ ok: false, error: 'Invalid skills directory' }, 500);
+    }
+  } catch {
+    // ENOENT — mkdir below will create
+  }
   // Refuse planted skill-dir symlink (mkdir/write would follow outside)
   try {
     const dst = await fs.lstat(skillsDir);

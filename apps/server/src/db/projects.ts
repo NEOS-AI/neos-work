@@ -155,6 +155,16 @@ function normalizeName(raw: unknown): string {
 function ensureDefaultWorkspace(projectId: string): string {
   const root = defaultProjectsRoot();
   const dir = path.join(root, projectId);
+  // Refuse planted projects root symlink (mkdir would follow outside)
+  try {
+    const st = fs.lstatSync(root);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid project workspace path');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid project workspace path') throw err;
+    // ENOENT — create below
+  }
   // Refuse planted workspace path that is a symlink (escape outside projects root)
   try {
     const st = fs.lstatSync(dir);
