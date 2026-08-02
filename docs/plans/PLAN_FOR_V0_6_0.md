@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_6_0 — Collaboration · Canvas · Marketplace
 
-**Status:** M0 shipped (0.6.0); **M1 shipped (0.6.1)**; M2+ open  
-**Baseline:** monorepo **0.6.1**
+**Status:** M0–M2 shipped through **0.6.2**; M3+ open  
+**Baseline:** monorepo **0.6.2**
 **Parent:** [`PLAN_FOR_V0_5_0.md`](./PLAN_FOR_V0_5_0.md) §13 backlog  
 **One-line:** Open the **v0.6 train** with multiplayer *foundations*, opt-in free-canvas *spikes*, and marketplace *hosting* — without regressing v0.5 Design Editor / dual-surface contracts.
 
@@ -100,9 +100,9 @@ v0.5 delivered OD-parity Design Projects + Editor (Layers, Edit-with-AI, file SS
 
 ### Task 4 — M2 Canvas overlay
 
-- [ ] Preview overlay hit-targets for selected layer  
-- [ ] Drag → update inline style / write via existing save path  
-- [ ] Feature flag `NEOS_CANVAS_OVERLAY=1`  
+- [x] Preview overlay hit-targets for selected layer (`CanvasOverlay`)  
+- [x] Drag → update inline style / write via existing save path  
+- [x] Feature flag `NEOS_CANVAS_OVERLAY=1` / `VITE_NEOS_CANVAS_OVERLAY` (0.6.2)  
 
 ### Task 5 — M3 Shared ops (spike)
 

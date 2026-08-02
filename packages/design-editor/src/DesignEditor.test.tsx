@@ -29,6 +29,12 @@ function openHtml(content: string, path = 'index.html') {
 }
 
 describe('DesignEditor chrome', () => {
+  it('shows canvas badge when canvasOverlay is forced on', () => {
+    const buffer = openHtml('<div id="hero">Hi</div>');
+    render(<DesignEditor buffer={buffer} mode="inspect" canvasOverlay />);
+    expect(screen.getByTestId('canvas-overlay-badge')).toBeTruthy();
+  });
+
   it('renders modes, marks dirty, invokes save', () => {
     const onSave = vi.fn();
     const onEdit = vi.fn();

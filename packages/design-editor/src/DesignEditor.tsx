@@ -19,6 +19,12 @@ import {
   toggleVisibilityByNeosId,
 } from './html-layers.js';
 import { isJsxPath, parseJsxToLayerTree } from './jsx-layers.js';
+import { CanvasOverlay } from './CanvasOverlay.js';
+import {
+  applyPositionDeltaToHtml,
+  elementIdFromSelector,
+  isCanvasOverlayEnabled,
+} from './canvas-style.js';
 import {
   editContextFromSelection,
   selectionFromBridge,
@@ -62,6 +68,11 @@ export interface DesignEditorProps {
   onEditWithAi?: (selection: SelectionState, detail?: BridgeSelectPayload | null) => void;
   /** Show Layers side panel (default true for html-like paths). */
   showLayers?: boolean;
+  /**
+   * Free-canvas overlay (v0.6 M2): drag selected frame → inline left/top.
+   * Defaults to `isCanvasOverlayEnabled()` (NEOS_CANVAS_OVERLAY=1).
+   */
+  canvasOverlay?: boolean;
   className?: string;
 }
 
@@ -108,6 +119,7 @@ export function DesignEditor({
   onSelectionChange,
   onEditWithAi,
   showLayers: showLayersProp,
+  canvasOverlay: canvasOverlayProp,
   className,
 }: DesignEditorProps) {
   const labels = { ...defaultLabels, ...labelsProp };
@@ -282,6 +294,38 @@ export function DesignEditor({
 
   const showPreview = mode === 'preview' || mode === 'split' || mode === 'inspect';
   const showCode = mode === 'code' || mode === 'split';
+  const canvasOn = isCanvasOverlayEnabled(canvasOverlayProp) && htmlLike;
+
+  const handleCanvasDragEnd = (dx: number, dy: number) => {
+    if (!buffer.path || (dx === 0 && dy === 0)) return;
+    const layerId = selection?.layerId ?? null;
+    const elId = elementIdFromSelector(selection?.selector);
+    // Prefer stamped HTML so data-neos-id rewrites stick in SSOT
+    let base = buffer.local;
+    if (layerId && !base.includes(`data-neos-id="${layerId}"`)) {
+      base = stampNeosIds(base);
+    }
+    const next = applyPositionDeltaToHtml(base, {
+      neosId: layerId,
+      elementId: elId,
+      dx,
+      dy,
+    });
+    if (next === base || next === buffer.local) return;
+    applyHtmlEdit(next);
+    setBridgeLayers(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  const canvasBbox =
+    canvasOn && selectDetail?.bbox
+      ? {
+          x: selectDetail.bbox.x,
+          y: selectDetail.bbox.y,
+          width: selectDetail.bbox.width,
+          height: selectDetail.bbox.height,
+        }
+      : null;
 
   return (
     <div
@@ -343,6 +387,15 @@ export function DesignEditor({
         {dirty && (
           <span data-testid="dirty-badge" style={{ fontSize: 11, color: '#fbbf24' }}>
             {labels.dirty}
+          </span>
+        )}
+        {canvasOn && (
+          <span
+            data-testid="canvas-overlay-badge"
+            title="Canvas overlay: select an element, then drag the frame"
+            style={{ fontSize: 10, color: '#a5b4fc' }}
+          >
+            Canvas
           </span>
         )}
         {selection?.selector && (
@@ -543,14 +596,30 @@ export function DesignEditor({
                 <span style={{ fontSize: 10, color: '#a5b4fc' }}>click to select</span>
               )}
             </div>
-            <PreviewFrame
-              html={previewHtml}
-              reloadKey={reloadKey}
-              devicePresetId={deviceId}
-              bridgeEnabled={htmlLike}
-              inspectEnabled={inspectEnabled}
-              onBridgeMessage={handleBridgeMessage}
-            />
+            <div
+              style={{
+                position: 'relative',
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              data-testid="preview-canvas-host"
+            >
+              <PreviewFrame
+                html={previewHtml}
+                reloadKey={reloadKey}
+                devicePresetId={deviceId}
+                bridgeEnabled={htmlLike}
+                inspectEnabled={inspectEnabled || canvasOn}
+                onBridgeMessage={handleBridgeMessage}
+              />
+              <CanvasOverlay
+                enabled={canvasOn && Boolean(selection?.selector)}
+                bbox={canvasBbox}
+                onDragEnd={handleCanvasDragEnd}
+              />
+            </div>
             {mode === 'inspect' && selection && (
               <div
                 data-testid="inspect-panel"

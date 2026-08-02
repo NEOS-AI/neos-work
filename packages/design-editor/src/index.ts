@@ -65,3 +65,11 @@ export {
   type DesignEditorMode,
   type DesignEditorProps,
 } from './DesignEditor.js';
+
+export {
+  applyPositionDeltaToHtml,
+  elementIdFromSelector,
+  isCanvasOverlayEnabled,
+  mergePositionDeltaIntoOpenTag,
+} from './canvas-style.js';
+export { CanvasOverlay, type CanvasBBox, type CanvasOverlayProps } from './CanvasOverlay.js';
