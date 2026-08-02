@@ -10,7 +10,7 @@ import { discoverSkills, resolveBundledSkillsDir } from '@neos-work/core';
 import { safeError } from '../lib/errors.js';
 import { getDb } from '../db/schema.js';
 import * as db from '../db/sessions.js';
-import { safeRouteId } from '../lib/path-safety.js';
+import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 
 /** Monorepo `skills/` catalog (apps/server/src/routes → repo root). */
 const REPO_SKILLS_CANDIDATE = resolve(
@@ -150,20 +150,6 @@ function packageDirLabel(raw: unknown): string | undefined {
   return last && last.length <= 200 ? last : undefined;
 }
 
-/**
- * Public skill path for API responses: last few segments only.
- * Avoids leaking home directory / absolute host paths (align with packageDirLabel).
- */
-function publicSkillPath(raw: unknown): string {
-  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
-  const t = raw.trim().replace(/\\/g, '/');
-  if (!t) return '';
-  const parts = t.split('/').filter(Boolean);
-  const tail = parts.slice(-3).join('/');
-  if (!tail) return '';
-  return tail.length <= 400 ? tail : tail.slice(0, 400);
-}
-
 function sanitizeExampleCards(raw: unknown): Array<{
   id?: string;
   key?: string;
@@ -221,7 +207,7 @@ skills.get('/', (c) => {
       description: r.description,
       source: r.source,
       // Redact absolute on-disk path (home / username leak)
-      path: publicSkillPath(r.path),
+      path: publicPathTail(r.path),
       version: r.version,
       enabled: r.enabled === 1,
       installedAt: r.installed_at,

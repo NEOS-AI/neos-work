@@ -13,7 +13,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import * as store from '../lib/design-system-store.js';
-import { safeRouteId } from '../lib/path-safety.js';
+import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 
 const REPO_DS_CANDIDATE = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -22,12 +22,17 @@ const REPO_DS_CANDIDATE = resolve(
 
 const designSystems = new Hono();
 
+/** Redact absolute on-disk path before API responses. */
+function publicDesignSystem(ds: store.DesignSystem): store.DesignSystem {
+  return { ...ds, path: publicPathTail(ds.path) };
+}
+
 designSystems.get('/', async (c) => {
   const bundledRoot =
     store.resolveBundledDesignSystemsDir(REPO_DS_CANDIDATE)
     ?? store.resolveBundledDesignSystemsDir(null);
   const list = await store.listDesignSystems({ bundledRoot, includeBundled: true });
-  return c.json({ ok: true, data: list });
+  return c.json({ ok: true, data: list.map(publicDesignSystem) });
 });
 
 designSystems.post('/', async (c) => {
@@ -52,7 +57,7 @@ designSystems.post('/', async (c) => {
   if (!ds) {
     return c.json({ ok: false, error: 'Name must be alphanumeric (- and _ allowed) and must not already exist' }, 409);
   }
-  return c.json({ ok: true, data: ds }, 201);
+  return c.json({ ok: true, data: publicDesignSystem(ds) }, 201);
 });
 
 function paramDesignId(c: { req: { param: (k: string) => string } }): string {
@@ -67,7 +72,7 @@ designSystems.get('/:id', async (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const ds = await store.getDesignSystem(id);
   if (!ds) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: ds });
+  return c.json({ ok: true, data: publicDesignSystem(ds) });
 });
 
 designSystems.delete('/:id', async (c) => {

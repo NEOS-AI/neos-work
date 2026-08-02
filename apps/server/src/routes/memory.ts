@@ -10,7 +10,12 @@
  */
 
 import { Hono } from 'hono';
-import type { CreateMemoryInput, MemoryType, UpdateMemoryInput } from '@neos-work/shared';
+import type {
+  CreateMemoryInput,
+  MemoryItem,
+  MemoryType,
+  UpdateMemoryInput,
+} from '@neos-work/shared';
 import {
   listMemories,
   getMemory,
@@ -20,12 +25,17 @@ import {
   toggleMemory,
   exportMemories,
 } from '../lib/memory-store.js';
-import { safeRouteId } from '../lib/path-safety.js';
+import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
 const memory = new Hono();
 
 const MEMORY_TYPES = new Set<MemoryType>(['user', 'session', 'skill', 'reference']);
+
+/** Redact absolute filePath before JSON responses. */
+function publicMemory(item: MemoryItem): MemoryItem {
+  return { ...item, filePath: publicPathTail(item.filePath, 1) };
+}
 
 function paramId(c: { req: { param: (k: string) => string } }): string {
   return safeRouteId(c.req.param('id'));
@@ -38,7 +48,7 @@ function parseMemoryType(raw: unknown): MemoryType | undefined {
 }
 
 memory.get('/', (c) => {
-  return c.json({ ok: true, data: listMemories() });
+  return c.json({ ok: true, data: listMemories().map(publicMemory) });
 });
 
 // Must be before /:id to avoid param collision
@@ -74,7 +84,7 @@ memory.post('/', async (c) => {
       content,
       enabled: body.enabled,
     });
-    return c.json({ ok: true, data: item }, 201);
+    return c.json({ ok: true, data: publicMemory(item) }, 201);
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to create memory');
     return c.json({ ok: false, error: msg }, 400);
@@ -86,7 +96,7 @@ memory.get('/:id', (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const item = getMemory(id);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: item });
+  return c.json({ ok: true, data: publicMemory(item) });
 });
 
 memory.put('/:id', async (c) => {
@@ -124,7 +134,7 @@ memory.put('/:id', async (c) => {
 
   const item = updateMemory(id, patch);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: item });
+  return c.json({ ok: true, data: publicMemory(item) });
 });
 
 memory.delete('/:id', (c) => {
@@ -140,7 +150,7 @@ memory.put('/:id/toggle', (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const item = toggleMemory(id);
   if (!item) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: item });
+  return c.json({ ok: true, data: publicMemory(item) });
 });
 
 export default memory;

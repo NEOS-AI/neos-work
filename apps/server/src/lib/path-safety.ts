@@ -26,6 +26,26 @@ export function safeRouteId(raw: unknown, max = ROUTE_ID_MAX_CHARS): string {
   return id;
 }
 
+/**
+ * Public path tail for API responses — last N segments only.
+ * Avoids leaking home directory / absolute host paths to clients.
+ */
+export function publicPathTail(
+  raw: unknown,
+  maxSegments = 3,
+  maxChars = 400,
+): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const t = raw.trim().replace(/\\/g, '/');
+  if (!t) return '';
+  const segs = Math.min(Math.max(1, Math.floor(maxSegments) || 3), 20);
+  const parts = t.split('/').filter(Boolean);
+  const tail = parts.slice(-segs).join('/');
+  if (!tail) return '';
+  const cap = Math.min(Math.max(1, Math.floor(maxChars) || 400), 2_048);
+  return tail.length <= cap ? tail : tail.slice(0, cap);
+}
+
 function underHomeDir(abs: string, homeAbs: string): boolean {
   const homePrefix = homeAbs.endsWith(sep) ? homeAbs : homeAbs + sep;
   return abs === homeAbs || abs.startsWith(homePrefix);

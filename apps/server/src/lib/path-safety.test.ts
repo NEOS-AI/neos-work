@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ROUTE_ID_MAX_CHARS, safeRouteId, validateWorkspacePath } from './path-safety.js';
+import {
+  publicPathTail,
+  ROUTE_ID_MAX_CHARS,
+  safeRouteId,
+  validateWorkspacePath,
+} from './path-safety.js';
 
 describe('safeRouteId', () => {
   it('trims and accepts normal ids', () => {
@@ -25,6 +30,19 @@ describe('safeRouteId', () => {
   it('respects custom max length', () => {
     expect(safeRouteId('abcdef', 5)).toBe('');
     expect(safeRouteId('abcde', 5)).toBe('abcde');
+  });
+});
+
+describe('publicPathTail', () => {
+  it('returns last segments and rejects control chars', () => {
+    expect(publicPathTail('/Users/me/.config/neos-work/skills/foo/SKILL.md')).toBe(
+      'skills/foo/SKILL.md',
+    );
+    expect(publicPathTail('/tmp/a/b/c.md', 1)).toBe('c.md');
+    expect(publicPathTail('a\\b\\c.md')).toBe('a/b/c.md');
+    expect(publicPathTail('bad\npath')).toBe('');
+    expect(publicPathTail('')).toBe('');
+    expect(publicPathTail(null)).toBe('');
   });
 });
 

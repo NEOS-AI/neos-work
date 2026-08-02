@@ -22,9 +22,18 @@ import {
 import { buildMediaConfigPublic, listProviderCatalog } from '../lib/media-providers.js';
 import { listMediaJobs } from '../lib/media-jobs.js';
 import { isSafeMediaFilename } from '../lib/media-filename.js';
+import { publicPathTail } from '../lib/path-safety.js';
 
 const media = new Hono();
 const MEDIA_DIR = MEDIA_DIR_EXPORT;
+
+/** Prefer safe filename; never echo absolute MEDIA_DIR paths to clients. */
+function publicMediaFilePath(filename: unknown, filePath: unknown): string {
+  if (typeof filename === 'string' && isSafeMediaFilename(filename)) {
+    return filename.trim();
+  }
+  return publicPathTail(filePath, 1);
+}
 
 /**
  * Resolve a media filename under MEDIA_DIR and ensure realpath stays inside
@@ -170,7 +179,7 @@ media.post('/image', async (c) => {
     return c.json({
       ok: true,
       data: {
-        filePath: result.filePath,
+        filePath: publicMediaFilePath(result.filename, result.filePath),
         filename: result.filename,
         revisedPrompt: result.revisedPrompt,
         provider: result.provider,
@@ -218,7 +227,7 @@ media.post('/audio', async (c) => {
     return c.json({
       ok: true,
       data: {
-        filePath: result.filePath,
+        filePath: publicMediaFilePath(result.filename, result.filePath),
         filename: result.filename,
         provider: result.provider,
       },
@@ -303,7 +312,18 @@ media.post('/generate', async (c) => {
       voice: body.voice,
       model: typeof body.model === 'string' ? body.model : undefined,
     });
-    return c.json({ ok: true, data: result });
+    // Redact absolute on-disk paths from unified result
+    const data =
+      result && typeof result === 'object' && 'filePath' in result
+        ? {
+            ...result,
+            filePath: publicMediaFilePath(
+              (result as { filename?: unknown }).filename,
+              (result as { filePath?: unknown }).filePath,
+            ),
+          }
+        : result;
+    return c.json({ ok: true, data });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to generate media');
     return c.json({ ok: false, error: msg }, mediaClientErrorStatus(msg));

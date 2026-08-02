@@ -21,7 +21,7 @@ import * as workflowDb from '../db/workflows.js';
 import { getDb } from '../db/schema.js';
 import { addOrUpdateSchedule, removeSchedule, runRoutine } from '../lib/routine-scheduler.js';
 import { estimateNextCronRun } from '../lib/cron-next.js';
-import { safeRouteId } from '../lib/path-safety.js';
+import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
 const routines = new Hono();
@@ -374,7 +374,8 @@ Review and edit this skill, then enable it under Skills. Use it as a prompt/refe
       skillId: row.id,
       name: row.name,
       description: row.description,
-      path: row.path,
+      // Redact absolute on-disk path (home / username leak)
+      path: publicPathTail(row.path),
       source: row.source,
       version: row.version,
     },
