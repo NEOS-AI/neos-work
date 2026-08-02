@@ -87,10 +87,22 @@ ok(
 
 section('4. Dual-surface docs present');
 ok('docs/migration/v0.5.0.md', exists('docs/migration/v0.5.0.md'));
+ok('docs/migration/v0.6.0.md', exists('docs/migration/v0.6.0.md'));
 ok('docs/security/v0.5.md', exists('docs/security/v0.5.md'));
+ok('docs/plans/PLAN_FOR_V0_6_0.md', exists('docs/plans/PLAN_FOR_V0_6_0.md'));
+ok('deploy/helm/neos-work/Chart.yaml', exists('deploy/helm/neos-work/Chart.yaml'));
 const readme = exists('README.md') ? read('README.md') : '';
 ok('README mentions Design Project or Design Editor', /Design (Project|Editor)/i.test(readme));
 ok('README mentions Workflow', /[Ww]orkflow/.test(readme));
+
+section('5. v0.6 inventory feature gates');
+const v06 = inv.catalogs?.v06Features;
+ok('inventory v06Features present', Boolean(v06));
+ok(
+  `v06Features complete (${v06?.count ?? 0}/${v06?.total ?? '?'})`,
+  Boolean(v06?.ok),
+  v06?.missing?.length ? v06.missing.join(',') : '',
+);
 
 section('Summary');
 if (failures.length === 0) {

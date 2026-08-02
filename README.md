@@ -30,6 +30,7 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **Security:** [docs/security/v0.5.md](docs/security/v0.5.md)  
 **Capability dump:** `pnpm inventory` / `pnpm inventory:check` · smoke: `pnpm e2e:smoke` · C5: `pnpm e2e:c5` · live (opt-in): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
 **v0.5 closeout:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md) · **v0.6 plan:** [docs/plans/PLAN_FOR_V0_6_0.md](docs/plans/PLAN_FOR_V0_6_0.md)  
+**v0.6 migration:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — drag selected frames in Preview (HTML)
 
 ---

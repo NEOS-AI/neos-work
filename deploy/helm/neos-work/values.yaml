@@ -1,0 +1,41 @@
+# Minimal values for NEOS Work single-replica engine.
+# Not a multi-tenant HA chart — local-first / single-node (see docs/security).
+
+replicaCount: 1
+
+image:
+  repository: neos-work
+  tag: "0.6.5"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+# Required: set via --set authToken=… or existing secret
+authToken: ""
+# Or reference an existing secret:
+# existingSecret: neos-work-auth
+# existingSecretKey: token
+
+env:
+  NEOS_HOST: "0.0.0.0"
+  NEOS_PORT: "3000"
+  NEOS_DATA_DIR: "/data"
+  NEOS_ALLOW_ANY_HOST: "1"
+  # Optional hard file-lock enforce (v0.6.3)
+  # NEOS_SHARED_EDIT: "0"
+
+persistence:
+  enabled: true
+  size: 5Gi
+  # storageClass: ""
+
+resources: {}
+# limits:
+#   cpu: 1000m
+#   memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

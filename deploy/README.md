@@ -59,8 +59,23 @@ pnpm --filter @neos-work/cli exec neos status
 docker build -f deploy/Dockerfile -t neos-work:latest .
 ```
 
+## Helm (optional, v0.6 M5)
+
+Single-replica chart under [`helm/neos-work/`](./helm/neos-work/):
+
+```bash
+docker build -f deploy/Dockerfile -t neos-work:0.6.5 .
+helm upgrade --install neos ./deploy/helm/neos-work \
+  --set authToken="$(openssl rand -hex 32)" \
+  --set image.tag=0.6.5
+```
+
+See [helm/neos-work/README.md](./helm/neos-work/README.md). Not multi-tenant HA;
+collab is in-process (one replica).
+
 ## Notes
 
-- Desktop Tauri app is not included; use CLI or a future `apps/web` client.
-- Keep `NEOS_AUTH_TOKEN` secret; rotate by recreating the container with a new token.
+- Desktop Tauri app is not included; use CLI or `apps/web` client.
+- Keep `NEOS_AUTH_TOKEN` secret; when set via env it is not printed in full (v0.6+).
 - Do not expose the engine to the public internet without TLS reverse proxy and network policy.
+- Migration: [docs/migration/v0.6.0.md](../docs/migration/v0.6.0.md)

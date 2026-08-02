@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_6_0 — Collaboration · Canvas · Marketplace
 
-**Status:** M0–M4 shipped through **0.6.4**; M5 open  
-**Baseline:** monorepo **0.6.4**
+**Status:** **M0–M5 complete** through **0.6.5**  
+**Baseline:** monorepo **0.6.5**
 **Parent:** [`PLAN_FOR_V0_5_0.md`](./PLAN_FOR_V0_5_0.md) §13 backlog  
 **One-line:** Open the **v0.6 train** with multiplayer *foundations*, opt-in free-canvas *spikes*, and marketplace *hosting* — without regressing v0.5 Design Editor / dual-surface contracts.
 
@@ -68,7 +68,7 @@ v0.5 delivered OD-parity Design Projects + Editor (Layers, Edit-with-AI, file SS
 | **M2** | Canvas overlay MVP | Preview-frame drag for selected element → CSS/patch write |
 | **M3** | Shared edit ops | Single-file awareness locks or Yjs/Loro spike behind flag |
 | **M4** | Marketplace remote | Opt-in catalog URL + install; trust UI |
-| **M5** | Polish / ops | Helm snippet optional; inventory gates; docs |
+| **M5** | Polish / ops | Helm snippet optional; inventory gates; docs — **done 0.6.5** |
 
 ---
 
@@ -116,9 +116,11 @@ v0.5 delivered OD-parity Design Projects + Editor (Layers, Edit-with-AI, file SS
 
 ### Task 7 — Docs · version · inventory
 
-- [x] `docs/implementation/v0.6/v0.6.0.md`  
-- [x] monorepo **0.6.0**  
-- [ ] migration note if any breaking (expect additive)
+- [x] Implementation notes 0.6.0–0.6.5  
+- [x] monorepo **0.6.5** (M5 closeout)  
+- [x] migration note [`docs/migration/v0.6.0.md`](../migration/v0.6.0.md) (additive)  
+- [x] Helm snippet `deploy/helm/neos-work`  
+- [x] Inventory `v06Features` gate
 
 ---
 

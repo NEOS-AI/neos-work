@@ -30,7 +30,41 @@ const GATES = {
   minMcpTools: 6,
   minDomainPacks: 4,
   minMediaSurfaces: 3, // image, audio, video
+  /** v0.6 train feature files that must remain present */
+  requireV06Features: true,
 };
+
+function existsRel(rel) {
+  return fs.existsSync(path.join(ROOT, rel));
+}
+
+/** v0.6 capability surface (M0–M5) — presence in-repo, not runtime. */
+function scanV06Features() {
+  const features = {
+    collabPresence: existsRel('apps/server/src/lib/project-collab.ts'),
+    collabRoutes: existsRel('apps/server/src/routes/projects.ts')
+      && (readText('apps/server/src/routes/projects.ts') ?? '').includes('collab/stream'),
+    presencePeersBar: existsRel('packages/ui-app/src/PresencePeersBar.tsx'),
+    jsxLayers: existsRel('packages/design-editor/src/jsx-layers.ts'),
+    canvasOverlay: existsRel('packages/design-editor/src/CanvasOverlay.tsx'),
+    sharedEditAdr: existsRel('docs/adr/0001-shared-edit-strategy.md'),
+    marketplace: existsRel('apps/server/src/routes/marketplace.ts'),
+    marketplaceCatalog: existsRel('apps/server/src/lib/marketplace-catalog.ts'),
+    helmSnippet: existsRel('deploy/helm/neos-work/Chart.yaml'),
+    migrationV06: existsRel('docs/migration/v0.6.0.md'),
+    planV06: existsRel('docs/plans/PLAN_FOR_V0_6_0.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
 
 function readText(rel) {
   const abs = path.join(ROOT, rel);
@@ -214,6 +248,7 @@ export function buildInventory() {
   const media = scanMediaProviders();
   const packs = scanDomainPacks();
   const mcp = scanMcpTools();
+  const v06 = scanV06Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -229,6 +264,7 @@ export function buildInventory() {
       mediaProviders: media,
       domainPacks: packs,
       mcpTools: mcp,
+      v06Features: v06,
     },
     gates: GATES,
     summary: {
@@ -241,6 +277,8 @@ export function buildInventory() {
       mediaSurfaces: media.surfaces.length,
       domainPacks: packs.count,
       mcpTools: mcp.count,
+      v06Features: v06.count,
+      v06FeaturesTotal: v06.total,
     },
   };
 
@@ -261,6 +299,17 @@ export function evaluateGates(inventory) {
     { id: 'mcpTools', ok: s.mcpTools >= g.minMcpTools, actual: s.mcpTools, min: g.minMcpTools },
     { id: 'domainPacks', ok: s.domainPacks >= g.minDomainPacks, actual: s.domainPacks, min: g.minDomainPacks },
   ];
+  if (g.requireV06Features) {
+    const v06 = inventory.catalogs?.v06Features;
+    const ok = Boolean(v06?.ok);
+    results.push({
+      id: 'v06Features',
+      ok,
+      actual: v06?.count ?? 0,
+      min: v06?.total ?? 0,
+      missing: v06?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -286,7 +335,11 @@ function main(argv = process.argv.slice(2)) {
   if (check && !inv.checks.ok) {
     process.stderr.write('inventory gates failed:\n');
     for (const r of inv.checks.results.filter((x) => !x.ok)) {
-      process.stderr.write(`  - ${r.id}: ${r.actual} < min ${r.min}\n`);
+      if (r.id === 'v06Features' && Array.isArray(r.missing) && r.missing.length) {
+        process.stderr.write(`  - ${r.id}: missing ${r.missing.join(', ')}\n`);
+      } else {
+        process.stderr.write(`  - ${r.id}: ${r.actual} < min ${r.min}\n`);
+      }
     }
     process.exitCode = 1;
   }

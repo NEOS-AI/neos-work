@@ -36,4 +36,14 @@ describe('buildInventory', () => {
     assert.equal(checks.ok, false);
     assert.ok(checks.results.some((r) => r.id === 'agentCliDefs' && !r.ok));
   });
+
+  it('includes v0.6 feature gates', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v06Features);
+    assert.equal(inv.catalogs.v06Features.ok, true);
+    assert.ok(inv.catalogs.v06Features.features.collabPresence);
+    assert.ok(inv.catalogs.v06Features.features.marketplace);
+    assert.ok(inv.catalogs.v06Features.features.helmSnippet);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v06Features' && r.ok));
+  });
 });
