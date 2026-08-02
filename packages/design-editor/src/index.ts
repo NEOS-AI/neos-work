@@ -36,6 +36,14 @@ export {
 } from './html-layers.js';
 
 export {
+  extractJsxReturnSnippet,
+  isJsxPath,
+  jsxSnippetToPseudoHtml,
+  parseJsxToLayerTree,
+  type JsxLayerParseResult,
+} from './jsx-layers.js';
+
+export {
   createEmptySelection,
   editContextFromSelection,
   selectionEquals,

@@ -1257,9 +1257,9 @@ export class EngineClient {
       type: string;
       projectId?: string;
       sessionId?: string;
-      peers?: Array<{ sessionId: string; displayName: string }>;
-      peer?: { sessionId: string; displayName: string };
-      self?: { sessionId: string; displayName: string };
+      peers?: Array<{ sessionId: string; displayName: string; colorHint?: number; joinedAt?: string }>;
+      peer?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
+      self?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
     }) => void,
     opts?: { displayName?: string },
   ): () => void {

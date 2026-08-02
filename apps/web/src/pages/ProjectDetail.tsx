@@ -16,6 +16,7 @@ import {
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
+import { PresencePeersBar, type PresencePeerInfo } from '@neos-work/ui-app';
 import { loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
 
@@ -38,8 +39,9 @@ export function ProjectDetail() {
   const [busy, setBusy] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
-  /** Other peers on collab channel (v0.6.0 presence). */
-  const [peerCount, setPeerCount] = useState(0);
+  /** Collab presence (v0.6 M1) — self + other peers. */
+  const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
+  const [collabPeers, setCollabPeers] = useState<PresencePeerInfo[]>([]);
 
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
@@ -101,19 +103,24 @@ export function ProjectDetail() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  // Collab presence (v0.6.0 M0) — count other peers
+  // Collab presence (v0.6 M1) — full peer list for awareness bar
   useEffect(() => {
     if (!conn.token || !id) return;
-    setPeerCount(0);
+    setCollabSelf(null);
+    setCollabPeers([]);
     const stop = client.streamProjectCollab(
       id,
       (ev) => {
         if (ev.type === 'presence.sync') {
-          setPeerCount(Array.isArray(ev.peers) ? ev.peers.length : 0);
-        } else if (ev.type === 'presence.join') {
-          setPeerCount((n) => n + 1);
-        } else if (ev.type === 'presence.leave') {
-          setPeerCount((n) => Math.max(0, n - 1));
+          if (ev.self) setCollabSelf(ev.self as PresencePeerInfo);
+          setCollabPeers(Array.isArray(ev.peers) ? (ev.peers as PresencePeerInfo[]) : []);
+        } else if (ev.type === 'presence.join' && ev.peer) {
+          const peer = ev.peer as PresencePeerInfo;
+          setCollabPeers((list) =>
+            list.some((p) => p.sessionId === peer.sessionId) ? list : [...list, peer],
+          );
+        } else if (ev.type === 'presence.leave' && ev.sessionId) {
+          setCollabPeers((list) => list.filter((p) => p.sessionId !== ev.sessionId));
         }
       },
       { displayName: 'Web' },
@@ -303,9 +310,7 @@ export function ProjectDetail() {
         </div>
         <div className="row muted" style={{ fontSize: 12 }}>
           {dirty && <span data-testid="web-dirty">Unsaved</span>}
-          <span className="muted" data-testid="collab-peers" title="Other sessions on this project">
-            {peerCount === 0 ? 'Solo' : `${peerCount} peer${peerCount === 1 ? '' : 's'}`}
-          </span>
+          <PresencePeersBar peers={collabPeers} self={collabSelf} />
           {status && <span>{status}</span>}
         </div>
       </header>

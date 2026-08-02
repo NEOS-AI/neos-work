@@ -18,6 +18,7 @@ import {
   toggleLockByNeosId,
   toggleVisibilityByNeosId,
 } from './html-layers.js';
+import { isJsxPath, parseJsxToLayerTree } from './jsx-layers.js';
 import {
   editContextFromSelection,
   selectionFromBridge,
@@ -90,6 +91,10 @@ function isHtmlPath(path: string | null): boolean {
   return p.endsWith('.html') || p.endsWith('.htm') || p.endsWith('.svg');
 }
 
+function isLayersPath(path: string | null): boolean {
+  return isHtmlPath(path) || isJsxPath(path);
+}
+
 export function DesignEditor({
   buffer,
   mode: controlledMode,
@@ -136,7 +141,8 @@ export function DesignEditor({
   const dirty = isDirty(buffer);
   const conflict = isConflict(buffer);
   const htmlLike = isHtmlPath(buffer.path);
-  const showLayers = showLayersProp ?? htmlLike;
+  const jsxLike = isJsxPath(buffer.path);
+  const showLayers = showLayersProp ?? isLayersPath(buffer.path);
 
   const previewHtml = useMemo(() => {
     const base = toPreviewDocument(buffer.local, buffer.path);
@@ -144,13 +150,25 @@ export function DesignEditor({
     return htmlLike ? stampNeosIds(base) : base;
   }, [buffer.local, buffer.path, htmlLike]);
 
-  const parseLayers = useMemo(
-    () => (htmlLike ? parseHtmlToLayerTree(previewHtml) : []),
-    [previewHtml, htmlLike],
+  const jsxParse = useMemo(
+    () => (jsxLike ? parseJsxToLayerTree(buffer.local) : null),
+    [buffer.local, jsxLike],
   );
 
+  const parseLayers = useMemo(() => {
+    if (htmlLike) return parseHtmlToLayerTree(previewHtml);
+    if (jsxLike && jsxParse) return jsxParse.layers;
+    return [];
+  }, [htmlLike, jsxLike, previewHtml, jsxParse]);
+
   const layers = bridgeLayers ?? parseLayers;
-  const layerSource = bridgeLayers ? 'bridge' : 'parse';
+  const layerSource = bridgeLayers
+    ? 'bridge'
+    : jsxLike
+      ? jsxParse?.incomplete
+        ? 'jsx-partial'
+        : 'jsx'
+      : 'parse';
 
   // Reset bridge tree when file/content identity changes substantially
   useEffect(() => {

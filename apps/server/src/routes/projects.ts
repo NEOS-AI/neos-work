@@ -49,6 +49,9 @@ import {
 } from '../lib/project-file-events.js';
 import {
   joinProjectPresence,
+  listProjectPeers,
+  sweepIdlePresence,
+  touchProjectPresence,
   type CollabEvent,
 } from '../lib/project-collab.js';
 
@@ -321,6 +324,7 @@ projects.delete('/:id', (c) => {
 /**
  * Presence channel: connection = join; disconnect = leave.
  * Query: name=displayName (optional, sanitized).
+ * M1: touch() each loop tick; idle sweep; sessionId in ready for heartbeats.
  */
 projects.get('/:id/collab/stream', (c) => {
   const id = paramId(c);
@@ -355,16 +359,23 @@ projects.get('/:id/collab/stream', (c) => {
     }
 
     try {
-      await s.write(`event: ready\ndata: ${JSON.stringify({ projectId: id, sessionId: joined.sessionId })}\n\n`);
+      await s.write(
+        `event: ready\ndata: ${JSON.stringify({ projectId: id, sessionId: joined.sessionId })}\n\n`,
+      );
       await s.write(`event: ${joined.sync.type}\ndata: ${JSON.stringify(joined.sync)}\n\n`);
       const started = Date.now();
       const maxMs = 30 * 60 * 1000;
+      let tick = 0;
       while (Date.now() - started < maxMs) {
         if (c.req.raw.signal.aborted) break;
+        joined.touch();
         while (queue.length > 0) {
           const ev = queue.shift()!;
           await s.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
         }
+        // Periodic idle sweep (every ~15s)
+        tick += 1;
+        if (tick % 15 === 0) sweepIdlePresence(id);
         await s.write(`: ping\n\n`);
         await new Promise((r) => setTimeout(r, 1_000));
       }
@@ -373,6 +384,33 @@ projects.get('/:id/collab/stream', (c) => {
       joined.unsub();
     }
   });
+});
+
+/** Snapshot of current peers (REST helper for UI refresh). */
+projects.get('/:id/collab/peers', (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  sweepIdlePresence(id);
+  return c.json({ ok: true, data: { peers: listProjectPeers(id) } });
+});
+
+/** Heartbeat — keeps idle sweep from dropping a session if SSE stalls. */
+projects.post('/:id/collab/heartbeat', async (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  const sessionId =
+    body && typeof body === 'object' && typeof (body as { sessionId?: unknown }).sessionId === 'string'
+      ? (body as { sessionId: string }).sessionId
+      : '';
+  if (!sessionId || /[\0\r\n]/.test(sessionId)) {
+    return c.json({ ok: false, error: 'sessionId required' }, 400);
+  }
+  const ok = touchProjectPresence(id, sessionId);
+  if (!ok) return c.json({ ok: false, error: 'Unknown session' }, 404);
+  return c.json({ ok: true, data: { touched: true } });
 });
 
 // ── Project file events (SSE) ──────────────────────────────

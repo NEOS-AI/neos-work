@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_6_0 — Collaboration · Canvas · Marketplace
 
-**Status:** M0 shipped (0.6.0); M1+ open  
-**Baseline:** monorepo **0.6.0** (v0.5 line closed; List B done)  
+**Status:** M0 shipped (0.6.0); **M1 shipped (0.6.1)**; M2+ open  
+**Baseline:** monorepo **0.6.1**
 **Parent:** [`PLAN_FOR_V0_5_0.md`](./PLAN_FOR_V0_5_0.md) §13 backlog  
 **One-line:** Open the **v0.6 train** with multiplayer *foundations*, opt-in free-canvas *spikes*, and marketplace *hosting* — without regressing v0.5 Design Editor / dual-surface contracts.
 
@@ -89,14 +89,14 @@ v0.5 delivered OD-parity Design Projects + Editor (Layers, Edit-with-AI, file SS
 
 ### Task 2 — M1 Awareness UX
 
-- [ ] Peer avatars / count in Design Editor chrome  
-- [ ] Optional displayName query (sanitized)  
-- [ ] Presence idle timeout  
+- [x] Peer avatars / count in Design Editor chrome (`PresencePeersBar`)  
+- [x] Optional displayName query (sanitized) + colorHint  
+- [x] Presence idle timeout (90s) + heartbeat + peers REST  
 
 ### Task 3 — M1 JSX Layers best-effort
 
-- [ ] Parse common JSX return trees → LayerNode  
-- [ ] Fallback badge when AST incomplete  
+- [x] Parse common JSX return trees → LayerNode (`jsx-layers.ts`)  
+- [x] Fallback badge when incomplete (`JSX~`)  
 
 ### Task 4 — M2 Canvas overlay
 

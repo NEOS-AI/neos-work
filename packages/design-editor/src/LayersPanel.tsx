@@ -10,8 +10,8 @@ export interface LayersPanelProps {
   layers: LayerNode[];
   selectedLayerId?: string | null;
   selectedSelector?: string | null;
-  /** Source badge: live bridge snapshot vs HTML parse fallback. */
-  source?: 'bridge' | 'parse';
+  /** Source badge: live bridge snapshot vs HTML/JSX parse fallback. */
+  source?: 'bridge' | 'parse' | 'jsx' | 'jsx-partial';
   onSelect?: (layer: LayerNode) => void;
   onHover?: (layer: LayerNode | null) => void;
   onToggleVisibility?: (layer: LayerNode, visible: boolean) => void;
@@ -24,6 +24,8 @@ export interface LayersPanelProps {
     empty?: string;
     sourceBridge?: string;
     sourceParse?: string;
+    sourceJsx?: string;
+    sourceJsxPartial?: string;
     editWithAi?: string;
     copySelector?: string;
   };
@@ -37,6 +39,8 @@ const defaultLabels = {
   empty: 'No layers',
   sourceBridge: 'Live',
   sourceParse: 'Parse',
+  sourceJsx: 'JSX',
+  sourceJsxPartial: 'JSX~',
   editWithAi: 'Edit with AI',
   copySelector: 'Copy selector',
 };
@@ -261,11 +265,27 @@ export function LayersPanel({
             fontSize: 9,
             padding: '1px 5px',
             borderRadius: 4,
-            background: source === 'bridge' ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
-            color: source === 'bridge' ? '#6ee7b7' : '#94a3b8',
+            background:
+              source === 'bridge'
+                ? 'rgba(16,185,129,0.15)'
+                : source === 'jsx' || source === 'jsx-partial'
+                  ? 'rgba(167,139,250,0.18)'
+                  : 'rgba(148,163,184,0.15)',
+            color:
+              source === 'bridge'
+                ? '#6ee7b7'
+                : source === 'jsx' || source === 'jsx-partial'
+                  ? '#c4b5fd'
+                  : '#94a3b8',
           }}
         >
-          {source === 'bridge' ? labels.sourceBridge : labels.sourceParse}
+          {source === 'bridge'
+            ? labels.sourceBridge
+            : source === 'jsx'
+              ? labels.sourceJsx
+              : source === 'jsx-partial'
+                ? labels.sourceJsxPartial
+                : labels.sourceParse}
         </span>
       </div>
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-primary, #333)' }}>

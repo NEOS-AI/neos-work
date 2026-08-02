@@ -18,6 +18,7 @@ import {
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
+import { PresencePeersBar, type PresencePeerInfo } from '@neos-work/ui-app';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type {
@@ -85,7 +86,8 @@ export function ProjectWorkspace() {
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
   bufferRef.current = buffer;
-  const [peerCount, setPeerCount] = useState(0);
+  const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
+  const [collabPeers, setCollabPeers] = useState<PresencePeerInfo[]>([]);
   const blocker = useBlocker(dirty);
 
   const loadProject = useCallback(async () => {
@@ -154,19 +156,24 @@ export function ProjectWorkspace() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  // Collab presence (v0.6.0 M0)
+  // Collab presence (v0.6 M1) — peer list + avatars
   useEffect(() => {
     if (!client || !projectId) return;
-    setPeerCount(0);
+    setCollabSelf(null);
+    setCollabPeers([]);
     const stop = client.streamProjectCollab(
       projectId,
       (ev) => {
         if (ev.type === 'presence.sync') {
-          setPeerCount(Array.isArray(ev.peers) ? ev.peers.length : 0);
-        } else if (ev.type === 'presence.join') {
-          setPeerCount((n) => n + 1);
-        } else if (ev.type === 'presence.leave') {
-          setPeerCount((n) => Math.max(0, n - 1));
+          if (ev.self) setCollabSelf(ev.self as PresencePeerInfo);
+          setCollabPeers(Array.isArray(ev.peers) ? (ev.peers as PresencePeerInfo[]) : []);
+        } else if (ev.type === 'presence.join' && ev.peer) {
+          const peer = ev.peer as PresencePeerInfo;
+          setCollabPeers((list) =>
+            list.some((p) => p.sessionId === peer.sessionId) ? list : [...list, peer],
+          );
+        } else if (ev.type === 'presence.leave' && ev.sessionId) {
+          setCollabPeers((list) => list.filter((p) => p.sessionId !== ev.sessionId));
         }
       },
       { displayName: 'Desktop' },
@@ -761,14 +768,7 @@ export function ProjectWorkspace() {
           {scrubDisplayText(project.name, { collapseLines: true, maxChars: 80 })}
           {dirty ? ' *' : ''}
         </h1>
-        <span
-          className="text-[11px]"
-          style={{ color: 'var(--text-muted)' }}
-          data-testid="collab-peers"
-          title="Other sessions on this project"
-        >
-          {peerCount === 0 ? 'Solo' : `${peerCount} peer${peerCount === 1 ? '' : 's'}`}
-        </span>
+        <PresencePeersBar peers={collabPeers} self={collabSelf} />
       </header>
 
       {pageError && (

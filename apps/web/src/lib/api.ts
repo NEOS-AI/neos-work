@@ -151,9 +151,9 @@ export class WebApiClient {
       type: string;
       projectId?: string;
       sessionId?: string;
-      peers?: Array<{ sessionId: string; displayName: string }>;
-      peer?: { sessionId: string; displayName: string };
-      self?: { sessionId: string; displayName: string };
+      peers?: Array<{ sessionId: string; displayName: string; colorHint?: number; joinedAt?: string }>;
+      peer?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
+      self?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
     }) => void,
     opts?: { displayName?: string },
   ): () => void {
@@ -198,15 +198,30 @@ export class WebApiClient {
                   projectId: typeof data.projectId === 'string' ? data.projectId : undefined,
                   sessionId: typeof data.sessionId === 'string' ? data.sessionId : undefined,
                   peers: Array.isArray(data.peers)
-                    ? (data.peers as Array<{ sessionId: string; displayName: string }>)
+                    ? (data.peers as Array<{
+                        sessionId: string;
+                        displayName: string;
+                        colorHint?: number;
+                        joinedAt?: string;
+                      }>)
                     : undefined,
                   peer:
                     data.peer && typeof data.peer === 'object'
-                      ? (data.peer as { sessionId: string; displayName: string })
+                      ? (data.peer as {
+                          sessionId: string;
+                          displayName: string;
+                          colorHint?: number;
+                          joinedAt?: string;
+                        })
                       : undefined,
                   self:
                     data.self && typeof data.self === 'object'
-                      ? (data.self as { sessionId: string; displayName: string })
+                      ? (data.self as {
+                          sessionId: string;
+                          displayName: string;
+                          colorHint?: number;
+                          joinedAt?: string;
+                        })
                       : undefined,
                 });
               } catch {
