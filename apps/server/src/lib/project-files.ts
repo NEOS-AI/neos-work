@@ -42,6 +42,81 @@ export function detectEntryFile(rootDir: string): string | null {
   return null;
 }
 
+/** Signature used for post-CLI change detection (size/mtime + optional content hash). */
+export interface ProjectFileSignature {
+  size: number;
+  mtimeMs: number;
+  /** sha256 of utf8 body when hashed under size cap; omitted when skipped/unreadable */
+  hash?: string;
+}
+
+export const PROJECT_SNAPSHOT_MAX_HASHED_FILES = 500;
+
+/**
+ * Snapshot file signatures under a project root for change detection.
+ * When `hashContent` is true (default), hashes utf8 files under size cap so
+ * mtime-only touches are not reported as modifications.
+ */
+export function snapshotProjectFileSignatures(
+  rootDir: string,
+  options: {
+    maxEntries?: number;
+    hashContent?: boolean;
+    maxHashedFiles?: number;
+  } = {},
+): Map<string, ProjectFileSignature> {
+  const hashContent = options.hashContent !== false;
+  const maxHashed = options.maxHashedFiles ?? PROJECT_SNAPSHOT_MAX_HASHED_FILES;
+  const files = listProjectFiles(rootDir, { maxEntries: options.maxEntries }).filter(
+    (f) => f.type === 'file',
+  );
+  const out = new Map<string, ProjectFileSignature>();
+  let hashed = 0;
+  for (const f of files) {
+    const size = f.size ?? 0;
+    const mtimeMs = f.mtimeMs ?? 0;
+    let hash: string | undefined;
+    if (hashContent && hashed < maxHashed && size > 0 && size <= PROJECT_FILE_MAX_CHARS) {
+      try {
+        const { absolute } = resolveUnderRoot(rootDir, f.path, { mustExist: true });
+        const st = fs.lstatSync(absolute);
+        if (st.isFile() && !st.isSymbolicLink()) {
+          const content = fs.readFileSync(absolute, 'utf8');
+          if (content.length <= PROJECT_FILE_MAX_CHARS) {
+            hash = contentHash(content);
+            hashed += 1;
+          }
+        }
+      } catch {
+        // unreadable / binary-ish — fall back to size:mtime only
+      }
+    } else if (hashContent && size === 0) {
+      hash = contentHash('');
+      hashed += 1;
+    }
+    out.set(f.path, { size, mtimeMs, ...(hash ? { hash } : {}) });
+  }
+  return out;
+}
+
+/**
+ * Whether content likely changed between two signatures.
+ * Prefer content hash when both sides have it; else size:mtime.
+ */
+export function projectFileSignatureChanged(
+  before: ProjectFileSignature | undefined,
+  after: ProjectFileSignature,
+): 'created' | 'modified' | false {
+  if (!before) return 'created';
+  if (before.hash && after.hash) {
+    return before.hash !== after.hash ? 'modified' : false;
+  }
+  if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+    return 'modified';
+  }
+  return false;
+}
+
 export function listProjectFiles(
   rootDir: string,
   options: { maxEntries?: number; entryFile?: string | null } = {},

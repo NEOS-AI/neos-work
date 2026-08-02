@@ -289,6 +289,33 @@ describe('domain-pack-store additional branches', () => {
     }
   });
 
+  it('loadInstalledDomainPacks refuses planted domain-packs root symlink', async () => {
+    const packsDir = resolveDomainPacksDir();
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-pack-root-out-'));
+    const planted = path.join(outside, 'legal');
+    try {
+      await fs.mkdir(planted, { recursive: true });
+      await fs.writeFile(
+        path.join(planted, 'pack.json'),
+        JSON.stringify(SAMPLE),
+        'utf8',
+      );
+      await fs.mkdir(path.dirname(packsDir), { recursive: true });
+      try {
+        await fs.symlink(outside, packsDir);
+      } catch {
+        return;
+      }
+      const r = await loadInstalledDomainPacks();
+      expect(r.loaded).toBe(0);
+      expect(r.errors.some((e) => /invalid domain packs directory/i.test(e))).toBe(true);
+      expect(listPacks().some((p) => p.id === 'legal')).toBe(false);
+    } finally {
+      await fs.rm(packsDir, { force: true }).catch(() => {});
+      await fs.rm(outside, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it('setInstalledPackEnabled refuses pack-dir symlink (no state write outside)', async () => {
     const packsDir = resolveDomainPacksDir();
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'neos-pack-en-out-'));

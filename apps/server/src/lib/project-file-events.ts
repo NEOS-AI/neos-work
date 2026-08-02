@@ -1,5 +1,5 @@
 /**
- * In-process pub/sub for Design Project file mutations (v0.5.27).
+ * In-process pub/sub for Design Project file mutations (v0.5.28).
  * Powers GET /api/projects/:id/events/stream (file.changed SSE).
  */
 

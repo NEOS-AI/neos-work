@@ -251,8 +251,60 @@ describe('runs live execute (mocked spawn)', () => {
     expect(status).toBe('succeeded');
     const ev = await app.request(`/api/runs/${id}/events`);
     const events = ((await ev.json()) as {
-      data: Array<{ type: string; data?: { kind?: string; chunk?: string } }>;
+      data: Array<{ type: string; data?: { kind?: string; chunk?: string; paths?: string[] } }>;
     }).data;
     expect(events.some((e) => e.type === 'run.stdout')).toBe(true);
+    const modified = events.find(
+      (e) => e.type === 'run.files_changed' && e.data?.kind === 'modified',
+    );
+    expect(modified).toBeTruthy();
+    expect(modified?.data?.paths?.some((x) => x.includes('index.html'))).toBe(true);
+  });
+
+  it('does not emit files_changed for mtime-only touches (hash-based)', async () => {
+    const p = projects.createProject({ name: `${NAME}_mtime` });
+    ids.push(p.id);
+    const target = `${p.baseDir}/index.html`;
+    const body = '<html>stable-content</html>';
+    fs.writeFileSync(target, body);
+    const old = fs.statSync(target).mtimeMs;
+
+    spawnMock.mockImplementation(async () => {
+      // rewrite identical content + bump mtime (would false-positive size:mtime)
+      fs.writeFileSync(target, body);
+      try {
+        fs.utimesSync(target, new Date(), new Date(old + 120_000));
+      } catch {
+        /* ignore */
+      }
+      return { output: 'noop', exitCode: 0 };
+    });
+
+    const create = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: p.id,
+        agentId: 'cli-claude',
+        prompt: 'touch only',
+        dryRun: false,
+      }),
+    });
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+    let status = 'running';
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+      const get = await app.request(`/api/runs/${id}`);
+      status = ((await get.json()) as { data: { status: string } }).data.status;
+      if (status !== 'running') break;
+    }
+    expect(status).toBe('succeeded');
+
+    const ev = await app.request(`/api/runs/${id}/events`);
+    const events = ((await ev.json()) as {
+      data: Array<{ type: string; data?: { kind?: string; paths?: string[] } }>;
+    }).data;
+    const filesChanged = events.filter((e) => e.type === 'run.files_changed');
+    expect(filesChanged).toHaveLength(0);
   });
 });

@@ -132,7 +132,7 @@ describe('Settings page', () => {
       ok: true,
       data: {
         serverName: 'neos-work',
-        version: '0.5.27',
+        version: '0.5.28',
         shellSnippet: 'export NEOS_SERVER_URL=http://127.0.0.1:3000\nneos mcp serve',
         codexAddCommand: 'codex mcp add neos-work -- neos mcp serve',
         claudeDesktop: { mcpServers: { 'neos-work': { command: 'neos', args: ['mcp', 'serve'] } } },

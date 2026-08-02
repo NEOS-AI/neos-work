@@ -367,6 +367,11 @@ export async function loadInstalledDomainPacks(): Promise<{ loaded: number; erro
   let loaded = 0;
   let entries: string[] = [];
   try {
+    // Refuse planted domain-packs root symlink (readdir would follow outside)
+    const rootSt = await fs.lstat(root);
+    if (rootSt.isSymbolicLink() || !rootSt.isDirectory()) {
+      return { loaded: 0, errors: ['invalid domain packs directory'] };
+    }
     entries = await fs.readdir(root);
   } catch {
     return { loaded: 0, errors: [] };

@@ -29,7 +29,11 @@ import {
 } from '../lib/design-system-store.js';
 import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
-import { listProjectFiles } from '../lib/project-files.js';
+import {
+  projectFileSignatureChanged,
+  snapshotProjectFileSignatures,
+  type ProjectFileSignature,
+} from '../lib/project-files.js';
 import { exportMemories } from '../lib/memory-store.js';
 import { publishProjectFileEvent } from '../lib/project-file-events.js';
 
@@ -86,18 +90,16 @@ async function executeCliRun(runId: string): Promise<void> {
   }
 
   let cwd: string | undefined;
-  /** path → size:mtime snapshot for change detection after CLI exit */
-  let filesBeforeMeta: Map<string, string> | undefined;
+  /** path → size/mtime/hash snapshot for change detection after CLI exit */
+  let filesBeforeMeta: Map<string, ProjectFileSignature> | undefined;
   if (run.projectId) {
     const project = getProject(run.projectId);
     if (project?.baseDir) {
       cwd = project.baseDir;
       try {
-        filesBeforeMeta = new Map(
-          listProjectFiles(project.baseDir)
-            .filter((f) => f.type === 'file')
-            .map((f) => [f.path, `${f.size ?? 0}:${f.mtimeMs ?? 0}`]),
-        );
+        filesBeforeMeta = snapshotProjectFileSignatures(project.baseDir, {
+          hashContent: true,
+        });
       } catch {
         filesBeforeMeta = undefined;
       }
@@ -128,43 +130,44 @@ async function executeCliRun(runId: string): Promise<void> {
     const current = reg.get(runId);
     if (!current || current.status === 'canceled') return;
 
-    // Detect new/modified files under project (size+mtime; best-effort)
+    // Detect new/modified files under project (content hash preferred; size+mtime fallback)
     if (cwd && filesBeforeMeta && run.projectId) {
       try {
-        const after = listProjectFiles(cwd).filter((f) => f.type === 'file');
-        const created: string[] = [];
-        const changed: string[] = [];
-        for (const f of after) {
-          const sig = `${f.size ?? 0}:${f.mtimeMs ?? 0}`;
-          const prev = filesBeforeMeta.get(f.path);
-          if (prev === undefined) created.push(f.path);
-          else if (prev !== sig) changed.push(f.path);
+        const afterMap = snapshotProjectFileSignatures(cwd, { hashContent: true });
+        const created: Array<{ path: string; hash?: string }> = [];
+        const changed: Array<{ path: string; hash?: string }> = [];
+        for (const [filePath, sig] of afterMap) {
+          const kind = projectFileSignatureChanged(filesBeforeMeta.get(filePath), sig);
+          if (kind === 'created') created.push({ path: filePath, hash: sig.hash });
+          else if (kind === 'modified') changed.push({ path: filePath, hash: sig.hash });
         }
         if (created.length > 0) {
           reg.appendEvent(runId, 'run.files_changed', {
-            paths: created.slice(0, 200),
+            paths: created.slice(0, 200).map((c) => c.path),
             kind: 'created',
           });
-          for (const p of created.slice(0, 200)) {
+          for (const c of created.slice(0, 200)) {
             publishProjectFileEvent({
               type: 'file.created',
               projectId: run.projectId,
-              path: p,
+              path: c.path,
               source: 'agent',
+              hash: c.hash,
             });
           }
         }
         if (changed.length > 0) {
           reg.appendEvent(runId, 'run.files_changed', {
-            paths: changed.slice(0, 200),
+            paths: changed.slice(0, 200).map((c) => c.path),
             kind: 'modified',
           });
-          for (const p of changed.slice(0, 200)) {
+          for (const c of changed.slice(0, 200)) {
             publishProjectFileEvent({
               type: 'file.changed',
               projectId: run.projectId,
-              path: p,
+              path: c.path,
               source: 'agent',
+              hash: c.hash,
             });
           }
         }

@@ -6,7 +6,9 @@ import {
   contentHash,
   detectEntryFile,
   listProjectFiles,
+  projectFileSignatureChanged,
   readProjectFile,
+  snapshotProjectFileSignatures,
   writeProjectFile,
   deleteProjectPath,
   mkdirProjectPath,
@@ -111,5 +113,29 @@ describe('project-files additional coverage', () => {
     expect(() =>
       writeProjectFile(root, 'x.txt', 42 as unknown as string),
     ).toThrow();
+  });
+
+  it('snapshot signatures hash content and ignore mtime-only touches', () => {
+    const root = makeRoot();
+    writeProjectFile(root, 'index.html', '<html>same</html>');
+    const before = snapshotProjectFileSignatures(root, { hashContent: true });
+    const sig = before.get('index.html');
+    expect(sig?.hash).toBe(contentHash('<html>same</html>'));
+
+    // mtime touch, same bytes
+    const abs = path.join(root, 'index.html');
+    const st = fs.statSync(abs);
+    fs.utimesSync(abs, st.atime, new Date(st.mtimeMs + 120_000));
+
+    const afterTouch = snapshotProjectFileSignatures(root, { hashContent: true });
+    expect(projectFileSignatureChanged(sig, afterTouch.get('index.html')!)).toBe(false);
+
+    writeProjectFile(root, 'index.html', '<html>changed</html>');
+    const afterEdit = snapshotProjectFileSignatures(root, { hashContent: true });
+    expect(projectFileSignatureChanged(sig, afterEdit.get('index.html')!)).toBe('modified');
+
+    writeProjectFile(root, 'new.html', '<html>new</html>');
+    const afterCreate = snapshotProjectFileSignatures(root, { hashContent: true });
+    expect(projectFileSignatureChanged(undefined, afterCreate.get('new.html')!)).toBe('created');
   });
 });
