@@ -85,6 +85,7 @@ export function ProjectWorkspace() {
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
   bufferRef.current = buffer;
+  const [peerCount, setPeerCount] = useState(0);
   const blocker = useBlocker(dirty);
 
   const loadProject = useCallback(async () => {
@@ -152,6 +153,26 @@ export function ProjectWorkspace() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
+
+  // Collab presence (v0.6.0 M0)
+  useEffect(() => {
+    if (!client || !projectId) return;
+    setPeerCount(0);
+    const stop = client.streamProjectCollab(
+      projectId,
+      (ev) => {
+        if (ev.type === 'presence.sync') {
+          setPeerCount(Array.isArray(ev.peers) ? ev.peers.length : 0);
+        } else if (ev.type === 'presence.join') {
+          setPeerCount((n) => n + 1);
+        } else if (ev.type === 'presence.leave') {
+          setPeerCount((n) => Math.max(0, n - 1));
+        }
+      },
+      { displayName: 'Desktop' },
+    );
+    return () => stop();
+  }, [client, projectId]);
 
   // Project file SSE — agent/remote writes → disk-changed (conflict if dirty)
   // Hash-aware skip: matching event/disk tip avoids re-read thrash (v0.5.30).
@@ -740,6 +761,14 @@ export function ProjectWorkspace() {
           {scrubDisplayText(project.name, { collapseLines: true, maxChars: 80 })}
           {dirty ? ' *' : ''}
         </h1>
+        <span
+          className="text-[11px]"
+          style={{ color: 'var(--text-muted)' }}
+          data-testid="collab-peers"
+          title="Other sessions on this project"
+        >
+          {peerCount === 0 ? 'Solo' : `${peerCount} peer${peerCount === 1 ? '' : 's'}`}
+        </span>
       </header>
 
       {pageError && (

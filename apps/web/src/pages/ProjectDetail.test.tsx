@@ -61,6 +61,7 @@ vi.mock('../lib/api.js', () => {
       createRun = createRun;
       getRun = getRun;
       streamProjectFileEvents = streamProjectFileEvents;
+      streamProjectCollab = () => () => {};
     },
   };
 });

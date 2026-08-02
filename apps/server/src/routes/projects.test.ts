@@ -974,6 +974,39 @@ describe('projects import-token and path validation', () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it('SSE collab/stream emits ready and presence.sync', async () => {
+    const project = await createViaApi();
+    const ac = new AbortController();
+    const res = await app.request(
+      `/api/projects/${project.id}/collab/stream?name=${encodeURIComponent('Tester')}`,
+      { signal: ac.signal },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type') ?? '').toMatch(/text\/event-stream/i);
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('no body');
+    const decoder = new TextDecoder();
+    let buf = '';
+    const deadline = Date.now() + 4_000;
+    while (Date.now() < deadline) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      if (buf.includes('presence.sync')) break;
+    }
+    ac.abort();
+    expect(buf).toMatch(/event:\s*ready/);
+    expect(buf).toMatch(/presence\.sync/);
+    expect(buf).toMatch(/Tester/);
+  });
+
+  it('SSE collab/stream 404 for missing project', async () => {
+    const res = await app.request(
+      '/api/projects/00000000-0000-0000-0000-000000000000/collab/stream',
+    );
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('projects import zip edge paths', () => {

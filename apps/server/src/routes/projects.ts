@@ -11,6 +11,7 @@
  * POST   /api/projects/import.zip
  * GET    /api/projects/:id/files
  * GET    /api/projects/:id/events/stream — file.changed SSE
+ * GET    /api/projects/:id/collab/stream — presence SSE (v0.6.0 M0)
  * …
  */
 
@@ -46,6 +47,10 @@ import {
   subscribeProjectFileEvents,
   type ProjectFileEvent,
 } from '../lib/project-file-events.js';
+import {
+  joinProjectPresence,
+  type CollabEvent,
+} from '../lib/project-collab.js';
 
 const projects = new Hono();
 
@@ -309,6 +314,65 @@ projects.delete('/:id', (c) => {
   const ok = db.deleteProject(id);
   if (!ok) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true });
+});
+
+// ── Project collab presence (SSE) — v0.6.0 M0 ──────────────
+
+/**
+ * Presence channel: connection = join; disconnect = leave.
+ * Query: name=displayName (optional, sanitized).
+ */
+projects.get('/:id/collab/stream', (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  const nameRaw = c.req.query('name') ?? '';
+  const displayName = typeof nameRaw === 'string' && !/[\0\r\n]/.test(nameRaw) ? nameRaw : '';
+
+  c.header('Content-Type', 'text/event-stream');
+  c.header('Cache-Control', 'no-cache');
+  c.header('Connection', 'keep-alive');
+  c.header('X-Accel-Buffering', 'no');
+
+  return stream(c, async (s) => {
+    const queue: CollabEvent[] = [];
+    const MAX_QUEUE = 64;
+    let closed = false;
+
+    const joined = joinProjectPresence({
+      projectId: id,
+      displayName,
+      listener: (ev) => {
+        if (closed) return;
+        if (queue.length >= MAX_QUEUE) queue.shift();
+        queue.push(ev);
+      },
+    });
+    if (!joined) {
+      await s.write(`event: error\ndata: ${JSON.stringify({ error: 'join failed' })}\n\n`);
+      return;
+    }
+
+    try {
+      await s.write(`event: ready\ndata: ${JSON.stringify({ projectId: id, sessionId: joined.sessionId })}\n\n`);
+      await s.write(`event: ${joined.sync.type}\ndata: ${JSON.stringify(joined.sync)}\n\n`);
+      const started = Date.now();
+      const maxMs = 30 * 60 * 1000;
+      while (Date.now() - started < maxMs) {
+        if (c.req.raw.signal.aborted) break;
+        while (queue.length > 0) {
+          const ev = queue.shift()!;
+          await s.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+        }
+        await s.write(`: ping\n\n`);
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
+    } finally {
+      closed = true;
+      joined.unsub();
+    }
+  });
 });
 
 // ── Project file events (SSE) ──────────────────────────────

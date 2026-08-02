@@ -141,6 +141,90 @@ export class WebApiClient {
    * Uses fetch + Bearer (EventSource cannot set Authorization).
    * Returns an abort function.
    */
+  /**
+   * Project collab presence SSE (v0.6.0).
+   * Events: ready | presence.sync | presence.join | presence.leave
+   */
+  streamProjectCollab(
+    projectId: string,
+    onEvent: (event: {
+      type: string;
+      projectId?: string;
+      sessionId?: string;
+      peers?: Array<{ sessionId: string; displayName: string }>;
+      peer?: { sessionId: string; displayName: string };
+      self?: { sessionId: string; displayName: string };
+    }) => void,
+    opts?: { displayName?: string },
+  ): () => void {
+    const controller = new AbortController();
+    const id = encodeURIComponent(projectId);
+    const qs =
+      opts?.displayName && !/[\0\r\n]/.test(opts.displayName)
+        ? `?name=${encodeURIComponent(opts.displayName.trim().slice(0, 48))}`
+        : '';
+    void (async () => {
+      try {
+        const res = await fetch(this.url(`/api/projects/${id}/collab/stream${qs}`), {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+            ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          },
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventName = 'message';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              const name = line.slice(6).trim();
+              eventName = name && !/[\0\r\n]/.test(name) ? name : 'message';
+            } else if (line.startsWith('data:')) {
+              const raw = line.slice(5).trim();
+              if (!raw || /[\0]/.test(raw)) continue;
+              try {
+                const data = JSON.parse(raw) as Record<string, unknown>;
+                onEvent({
+                  type: eventName,
+                  projectId: typeof data.projectId === 'string' ? data.projectId : undefined,
+                  sessionId: typeof data.sessionId === 'string' ? data.sessionId : undefined,
+                  peers: Array.isArray(data.peers)
+                    ? (data.peers as Array<{ sessionId: string; displayName: string }>)
+                    : undefined,
+                  peer:
+                    data.peer && typeof data.peer === 'object'
+                      ? (data.peer as { sessionId: string; displayName: string })
+                      : undefined,
+                  self:
+                    data.self && typeof data.self === 'object'
+                      ? (data.self as { sessionId: string; displayName: string })
+                      : undefined,
+                });
+              } catch {
+                // skip
+              }
+              eventName = 'message';
+            } else if (line === '') {
+              eventName = 'message';
+            }
+          }
+        }
+      } catch {
+        // abort
+      }
+    })();
+    return () => controller.abort();
+  }
+
   streamProjectFileEvents(
     projectId: string,
     onEvent: (event: {

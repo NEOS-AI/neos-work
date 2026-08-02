@@ -174,7 +174,7 @@ app.route('/api/connection-test', connectionTest);
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.5.30',
+    version: '0.6.0',
   });
 });
 
@@ -204,7 +204,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.5.30',
+      version: '0.6.0',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });
@@ -276,7 +276,13 @@ setRuntimeContext({ authToken: AUTH_TOKEN, port: actualPort });
 // Output structured metadata for Tauri sidecar / CLI / Docker logs
 console.log(`NEOS_PORT=${actualPort}`);
 console.log(`NEOS_HOST=${listenHost}`);
-console.log(`NEOS_AUTH_TOKEN=${AUTH_TOKEN}`);
+// Never print env-provided secrets in full (v0.6.0). Ephemeral process tokens
+// still print once so local `pnpm dev` can paste into desktop/web.
+if (typeof process.env.NEOS_AUTH_TOKEN === 'string' && process.env.NEOS_AUTH_TOKEN.trim().length >= 16) {
+  console.log('NEOS_AUTH_TOKEN=(from env, value not printed)');
+} else {
+  console.log(`NEOS_AUTH_TOKEN=${AUTH_TOKEN}`);
+}
 if (process.env.NEOS_DATA_DIR) {
   console.log(`NEOS_DATA_DIR=${process.env.NEOS_DATA_DIR}`);
 }

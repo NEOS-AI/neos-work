@@ -1248,6 +1248,90 @@ export class EngineClient {
   }
 
   /**
+   * Project collab presence SSE (v0.6.0 M0).
+   * Events: ready | presence.sync | presence.join | presence.leave
+   */
+  streamProjectCollab(
+    projectId: string,
+    onEvent: (event: {
+      type: string;
+      projectId?: string;
+      sessionId?: string;
+      peers?: Array<{ sessionId: string; displayName: string }>;
+      peer?: { sessionId: string; displayName: string };
+      self?: { sessionId: string; displayName: string };
+    }) => void,
+    opts?: { displayName?: string },
+  ): () => void {
+    const controller = new AbortController();
+    const seg = this.pathSegment(projectId);
+    if (!seg) return () => {};
+    const qs =
+      opts?.displayName && !/[\0\r\n]/.test(opts.displayName)
+        ? `?name=${encodeURIComponent(opts.displayName.trim().slice(0, 48))}`
+        : '';
+    void (async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/stream${qs}`, {
+          method: 'GET',
+          headers: {
+            ...this.getHeaders(),
+            Accept: 'text/event-stream',
+          },
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventName = 'message';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventName = parseSseEventName(line) || 'message';
+            } else if (line.startsWith('data:')) {
+              const data = parseSseDataPayload(line);
+              if (!data) continue;
+              try {
+                const parsed = JSON.parse(data) as Record<string, unknown>;
+                onEvent({
+                  type: eventName,
+                  projectId: typeof parsed.projectId === 'string' ? parsed.projectId : undefined,
+                  sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : undefined,
+                  peers: Array.isArray(parsed.peers)
+                    ? (parsed.peers as Array<{ sessionId: string; displayName: string }>)
+                    : undefined,
+                  peer:
+                    parsed.peer && typeof parsed.peer === 'object'
+                      ? (parsed.peer as { sessionId: string; displayName: string })
+                      : undefined,
+                  self:
+                    parsed.self && typeof parsed.self === 'object'
+                      ? (parsed.self as { sessionId: string; displayName: string })
+                      : undefined,
+                });
+              } catch {
+                // skip
+              }
+              eventName = 'message';
+            } else if (line === '') {
+              eventName = 'message';
+            }
+          }
+        }
+      } catch {
+        // aborted
+      }
+    })();
+    return () => controller.abort();
+  }
+
+  /**
    * Project file SSE (`file.changed` / `file.created` / `file.deleted`).
    * Returns abort callback. Uses fetch + Bearer (not EventSource).
    */

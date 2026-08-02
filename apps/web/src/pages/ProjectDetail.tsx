@@ -38,6 +38,8 @@ export function ProjectDetail() {
   const [busy, setBusy] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
+  /** Other peers on collab channel (v0.6.0 presence). */
+  const [peerCount, setPeerCount] = useState(0);
 
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
@@ -98,6 +100,26 @@ export function ProjectDetail() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
+
+  // Collab presence (v0.6.0 M0) — count other peers
+  useEffect(() => {
+    if (!conn.token || !id) return;
+    setPeerCount(0);
+    const stop = client.streamProjectCollab(
+      id,
+      (ev) => {
+        if (ev.type === 'presence.sync') {
+          setPeerCount(Array.isArray(ev.peers) ? ev.peers.length : 0);
+        } else if (ev.type === 'presence.join') {
+          setPeerCount((n) => n + 1);
+        } else if (ev.type === 'presence.leave') {
+          setPeerCount((n) => Math.max(0, n - 1));
+        }
+      },
+      { displayName: 'Web' },
+    );
+    return () => stop();
+  }, [client, conn.token, id]);
 
   // Project file SSE — reload open buffer on agent/remote writes (disk-changed / conflict)
   // Skip re-fetch when event hash matches known disk/pending tip (hash-aware, v0.5.30).
@@ -281,6 +303,9 @@ export function ProjectDetail() {
         </div>
         <div className="row muted" style={{ fontSize: 12 }}>
           {dirty && <span data-testid="web-dirty">Unsaved</span>}
+          <span className="muted" data-testid="collab-peers" title="Other sessions on this project">
+            {peerCount === 0 ? 'Solo' : `${peerCount} peer${peerCount === 1 ? '' : 's'}`}
+          </span>
           {status && <span>{status}</span>}
         </div>
       </header>
