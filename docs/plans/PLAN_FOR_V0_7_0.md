@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_7_0 — Canvas polish · Collab transport · Selection awareness
 
-**Status:** M0 shipped (**0.7.0**); M1+ open  
-**Baseline:** monorepo **0.7.0**
+**Status:** M0–M1 shipped through **0.7.1**; M2+ open  
+**Baseline:** monorepo **0.7.1**
 **Parent backlog:** free-canvas stretch, multi-replica collab, CRDT (deferred from v0.6)
 
 ## One-line
@@ -26,12 +26,12 @@ Deepen Design Editor canvas tooling and prepare collab for multi-node without ab
 | M | Theme | Exit |
 |---|---|---|
 | **M0** | Canvas resize | SE resize handle → width/height styles; tests; **0.7.0** |
-| **M1** | Collab bus interface | `CollabBus` + in-process impl; Redis adapter stub behind flag |
+| **M1** | Collab bus interface | `CollabBus` + memory + Redis/stub — **done 0.7.1** |
 | **M2** | Selection awareness | SSE `selection.changed` peer indicators |
 | **M3** | Canvas multi-select | Shift+click multi bbox (stretch) |
 | **M4** | Docs / inventory | v0.7 migration + inventory gates |
 
-## Task M0 (this release)
+## Task M0 (0.7.0)
 
 - [x] Plan file  
 - [x] `mergeSizeDeltaIntoOpenTag` / `applySizeDeltaToHtml`  
@@ -39,6 +39,15 @@ Deepen Design Editor canvas tooling and prepare collab for multi-node without ab
 - [x] DesignEditor `onTransformEnd` wiring  
 - [x] Tests + `docs/implementation/v0.7/v0.7.0.md`  
 - [x] Version **0.7.0**  
+
+## Task M1 (0.7.1)
+
+- [x] `CollabBus` interface + `initCollabBus`  
+- [x] Memory bus (default)  
+- [x] Redis adapter + stub (`NEOS_COLLAB_BUS=redis`)  
+- [x] Hub fan-out + `applyRemoteCollabEvent`  
+- [x] `GET /api/collab/status`  
+- [x] Tests + `docs/implementation/v0.7/v0.7.1.md`  
 
 ## Decisions
 

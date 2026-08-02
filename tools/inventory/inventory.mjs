@@ -59,6 +59,8 @@ function scanV06Features() {
       && (readText('packages/design-editor/src/canvas-style.ts') ?? '').includes(
         'applySizeDeltaToHtml',
       ),
+    collabBus: existsRel('apps/server/src/lib/collab-bus.ts')
+      && existsRel('apps/server/src/lib/collab-bus-redis.ts'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)

@@ -44,6 +44,8 @@ import { listCustomWorkers } from './db/workers.js';
 import { initScheduler } from './lib/routine-scheduler.js';
 import { setRuntimeContext } from './lib/runtime-context.js';
 import { isAuthExemptPath } from './lib/auth-paths.js';
+import { initCollabBus, getCollabBus } from './lib/collab-bus.js';
+import { applyRemoteCollabEvent } from './lib/project-collab.js';
 
 /**
  * Auth token: fixed via NEOS_AUTH_TOKEN (Docker / stable CLI) or random per process.
@@ -172,11 +174,25 @@ app.route('/api/live-artifacts', liveArtifacts);
 app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 app.route('/api/connection-test', connectionTest);
 
+/** Collab transport status (v0.7 M1) — no secrets. */
+app.get('/api/collab/status', (c) => {
+  const st = getCollabBus().status();
+  return c.json({
+    ok: true,
+    data: {
+      bus: st.kind,
+      nodeId: st.nodeId,
+      ready: st.ready,
+      detail: st.detail ?? null,
+    },
+  });
+});
+
 /** API banner (always JSON). SPA may own `/` when NEOS_WEB_DIST is set. */
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.7.0',
+    version: '0.7.1',
   });
 });
 
@@ -206,7 +222,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.7.0',
+      version: '0.7.1',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });
@@ -214,6 +230,14 @@ if (webDist) {
 
 // Migrate plaintext API keys to encrypted format
 migrateEncryption();
+
+// Collab bus (v0.7 M1): memory default; NEOS_COLLAB_BUS=redis for multi-node fan-out
+const collabBus = initCollabBus((projectId, event) => {
+  applyRemoteCollabEvent(projectId, event);
+});
+console.log(
+  `NEOS_COLLAB_BUS=${collabBus.status().kind}${collabBus.status().detail ? ` (${collabBus.status().detail})` : ''}`,
+);
 
 // Register built-in domain blocks
 registerFinanceBlocks();
@@ -278,7 +302,7 @@ setRuntimeContext({ authToken: AUTH_TOKEN, port: actualPort });
 // Output structured metadata for Tauri sidecar / CLI / Docker logs
 console.log(`NEOS_PORT=${actualPort}`);
 console.log(`NEOS_HOST=${listenHost}`);
-// Never print env-provided secrets in full (v0.7.0). Ephemeral process tokens
+// Never print env-provided secrets in full (v0.7.1). Ephemeral process tokens
 // still print once so local `pnpm dev` can paste into desktop/web.
 if (typeof process.env.NEOS_AUTH_TOKEN === 'string' && process.env.NEOS_AUTH_TOKEN.trim().length >= 16) {
   console.log('NEOS_AUTH_TOKEN=(from env, value not printed)');

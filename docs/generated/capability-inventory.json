@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-02T11:19:38.879Z",
-  "version": "0.7.0",
+  "generatedAt": "2026-08-02T11:35:04.850Z",
+  "version": "0.7.1",
   "root": "/Users/yeonwoosung/Desktop/neos-work",
   "catalogs": {
     "agentCliDefs": {
@@ -167,8 +167,8 @@
     },
     "v06Features": {
       "ok": true,
-      "count": 13,
-      "total": 13,
+      "count": 14,
+      "total": 14,
       "features": {
         "collabPresence": true,
         "collabRoutes": true,
@@ -182,7 +182,8 @@
         "migrationV06": true,
         "planV06": true,
         "planV07": true,
-        "canvasResize": true
+        "canvasResize": true,
+        "collabBus": true
       },
       "missing": []
     }
@@ -208,8 +209,8 @@
     "mediaSurfaces": 3,
     "domainPacks": 4,
     "mcpTools": 8,
-    "v06Features": 13,
-    "v06FeaturesTotal": 13
+    "v06Features": 14,
+    "v06FeaturesTotal": 14
   },
   "checks": {
     "ok": true,
@@ -265,8 +266,8 @@
       {
         "id": "v06Features",
         "ok": true,
-        "actual": 13,
-        "min": 13,
+        "actual": 14,
+        "min": 14,
         "missing": []
       }
     ]

@@ -16,10 +16,12 @@ import {
   sweepIdlePresence,
   touchProjectPresence,
 } from './project-collab.js';
+import { resetCollabBusForTests } from './collab-bus.js';
 
 describe('project-collab presence', () => {
   afterEach(() => {
     clearProjectPresence();
+    resetCollabBusForTests();
   });
 
   it('sanitizeDisplayName strips controls and bounds length', () => {

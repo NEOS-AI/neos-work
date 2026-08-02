@@ -5,46 +5,14 @@
  *
  * M1: lastSeen + idle sweep; peer list includes stable colorHint for avatars.
  * M3: advisory file locks (ADR 0001 — lock+LWW spike).
+ * v0.7 M1: fan-out via CollabBus (memory default; redis optional).
  */
 
 import { randomBytes } from 'node:crypto';
+import { getCollabBus, isCollabBusFanoutEvent } from './collab-bus.js';
+import type { CollabEvent, FileLock, PresencePeer } from './collab-types.js';
 
-export type PresencePeer = {
-  sessionId: string;
-  displayName: string;
-  joinedAt: string;
-  /** Stable hue 0–359 for avatar chrome (derived from sessionId). */
-  colorHint: number;
-  lastSeen?: string;
-};
-
-/** Advisory lock on a project-relative file path. */
-export type FileLock = {
-  path: string;
-  sessionId: string;
-  displayName: string;
-  acquiredAt: string;
-};
-
-export type CollabEvent =
-  | {
-      type: 'presence.sync';
-      projectId: string;
-      self: PresencePeer;
-      peers: PresencePeer[];
-      locks: FileLock[];
-      ts: string;
-    }
-  | { type: 'presence.join'; projectId: string; peer: PresencePeer; ts: string }
-  | {
-      type: 'presence.leave';
-      projectId: string;
-      sessionId: string;
-      reason?: 'leave' | 'idle' | 'evicted';
-      ts: string;
-    }
-  | { type: 'lock.acquired'; projectId: string; lock: FileLock; ts: string }
-  | { type: 'lock.released'; projectId: string; path: string; sessionId: string; ts: string };
+export type { CollabEvent, FileLock, PresencePeer } from './collab-types.js';
 
 type RoomListener = (event: CollabEvent) => void;
 
@@ -148,7 +116,12 @@ function listPeers(projectId: string, exceptSessionId?: string): PresencePeer[] 
   return out;
 }
 
-function broadcast(projectId: string, event: CollabEvent, exceptSessionId?: string): void {
+/** Deliver to local SSE listeners only (no bus republish). */
+export function deliverCollabEventLocal(
+  projectId: string,
+  event: CollabEvent,
+  exceptSessionId?: string,
+): void {
   const room = rooms.get(projectId);
   if (!room) return;
   for (const s of room.values()) {
@@ -159,6 +132,49 @@ function broadcast(projectId: string, event: CollabEvent, exceptSessionId?: stri
       // never break hub
     }
   }
+}
+
+function broadcast(
+  projectId: string,
+  event: CollabEvent,
+  exceptSessionId?: string,
+  opts?: { skipBus?: boolean },
+): void {
+  deliverCollabEventLocal(projectId, event, exceptSessionId);
+  if (opts?.skipBus) return;
+  if (!isCollabBusFanoutEvent(event)) return;
+  try {
+    void getCollabBus().publish(projectId, event);
+  } catch {
+    // bus optional
+  }
+}
+
+/**
+ * Apply a remote bus event on this node (locks state + local listeners).
+ * Does not re-publish to the bus.
+ */
+export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): void {
+  const id = normalizeProjectId(projectId);
+  if (!id) return;
+
+  if (event.type === 'lock.acquired' && event.lock) {
+    let m = lockRooms.get(id);
+    if (!m) {
+      m = new Map();
+      lockRooms.set(id, m);
+    }
+    m.set(event.lock.path, event.lock);
+  } else if (event.type === 'lock.released' && event.path) {
+    const m = lockRooms.get(id);
+    if (m) {
+      m.delete(event.path);
+      if (m.size === 0) lockRooms.delete(id);
+    }
+  }
+  // Presence join/leave from remote: we only mirror to local listeners for UX;
+  // remote peers are not in local `rooms` (no SSE session on this node).
+  deliverCollabEventLocal(id, event);
 }
 
 function forceLeave(

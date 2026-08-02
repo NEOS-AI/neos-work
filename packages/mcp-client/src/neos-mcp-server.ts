@@ -16,7 +16,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 export const NEOS_MCP_SERVER_NAME = 'neos-work';
-export const NEOS_MCP_DEFAULT_VERSION = '0.7.0';
+export const NEOS_MCP_DEFAULT_VERSION = '0.7.1';
 
 export interface NeosMcpProjectSummary {
   id: string;

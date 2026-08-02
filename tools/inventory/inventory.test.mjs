@@ -46,6 +46,7 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v06Features.features.helmSnippet);
     assert.ok(inv.catalogs.v06Features.features.planV07);
     assert.ok(inv.catalogs.v06Features.features.canvasResize);
+    assert.ok(inv.catalogs.v06Features.features.collabBus);
     assert.ok(inv.checks.results.some((r) => r.id === 'v06Features' && r.ok));
   });
 });
