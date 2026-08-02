@@ -84,6 +84,16 @@ async function regularFileStatOrNull(filePath: string) {
 }
 
 export async function ensureDesignSystemsDir(): Promise<void> {
+  // Refuse planted design-systems root symlink (writes/list would follow outside)
+  try {
+    const st = await fs.lstat(DESIGN_SYSTEMS_DIR);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid design systems directory');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid design systems directory') throw err;
+    // ENOENT — create below
+  }
   await fs.mkdir(DESIGN_SYSTEMS_DIR, { recursive: true });
 }
 

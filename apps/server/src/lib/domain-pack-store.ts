@@ -68,6 +68,20 @@ export function resolveDomainPacksDir(): string {
   }
 }
 
+/** Ensure domain-packs root exists and is not a planted symlink. */
+async function ensureDomainPacksRoot(destRoot: string): Promise<void> {
+  try {
+    const st = await fs.lstat(destRoot);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid domain packs directory');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid domain packs directory') throw err;
+    // ENOENT — create below
+  }
+  await fs.mkdir(destRoot, { recursive: true });
+}
+
 export interface PackState {
   enabled: boolean;
 }
@@ -174,7 +188,11 @@ export async function installPackFromDir(
   if (!destDir) {
     return { ok: false, error: 'invalid pack id' };
   }
-  await fs.mkdir(destRoot, { recursive: true });
+  try {
+    await ensureDomainPacksRoot(destRoot);
+  } catch {
+    return { ok: false, error: 'invalid domain packs directory' };
+  }
 
   // Replace existing install of same id
   if (existsSync(destDir)) {
@@ -284,7 +302,11 @@ export async function installPackFromZipBuffer(
   if (!destDir) {
     return { ok: false, error: 'invalid pack id' };
   }
-  await fs.mkdir(destRoot, { recursive: true });
+  try {
+    await ensureDomainPacksRoot(destRoot);
+  } catch {
+    return { ok: false, error: 'invalid domain packs directory' };
+  }
   if (existsSync(destDir)) {
     await fs.rm(destDir, { recursive: true, force: true });
   }

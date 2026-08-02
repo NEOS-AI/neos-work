@@ -19,6 +19,16 @@ export interface McpOAuthToken {
 }
 
 async function ensureDir(): Promise<void> {
+  // Refuse planted mcp-tokens root symlink (token writes would follow outside)
+  try {
+    const st = await fs.lstat(TOKEN_DIR);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid MCP token directory');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid MCP token directory') throw err;
+    // ENOENT — create below
+  }
   await fs.mkdir(TOKEN_DIR, { recursive: true });
 }
 
