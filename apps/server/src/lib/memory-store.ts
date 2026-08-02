@@ -6,6 +6,7 @@ import {
   mkdirSync,
   unlinkSync,
   lstatSync,
+  realpathSync,
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
@@ -15,23 +16,55 @@ import type { MemoryItem, MemoryType, CreateMemoryInput, UpdateMemoryInput } fro
 const MEMORY_DIR = join(homedir(), '.config', 'neos-work', 'memory');
 
 function ensureDir() {
+  // Refuse planted memory-dir symlink (writes would follow outside)
+  try {
+    const st = lstatSync(MEMORY_DIR);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid memory directory');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid memory directory') throw err;
+    // ENOENT — create below
+  }
   if (!existsSync(MEMORY_DIR)) {
     mkdirSync(MEMORY_DIR, { recursive: true });
   }
 }
 
-/** True when abs path is a file directly under MEMORY_DIR (basename only — no escapes). */
+/**
+ * True when path is a shallow `*.md` under MEMORY_DIR (basename only).
+ * Symlink entries at that basename are allowed so write/delete can unlink them
+ * without following; realpath containment is checked for regular files.
+ */
 function isUnderMemoryDir(filePath: string): boolean {
   if (typeof filePath !== 'string' || !filePath || /[\0\r\n]/.test(filePath)) return false;
+  let root: string;
+  try {
+    const rootLexical = resolve(MEMORY_DIR);
+    const st = lstatSync(rootLexical);
+    if (st.isSymbolicLink() || !st.isDirectory()) return false;
+    root = realpathSync(rootLexical);
+  } catch {
+    root = resolve(MEMORY_DIR);
+  }
   const abs = resolve(filePath);
-  const root = resolve(MEMORY_DIR);
   const prefix = root.endsWith(sep) ? root : root + sep;
   if (!abs.startsWith(prefix)) return false;
-  // Only allow shallow files (no nested paths under memory dir)
   const rel = abs.slice(prefix.length);
-  if (!rel || rel.includes(sep) || rel === '..' || rel.includes('..')) return false;
+  // Shallow basename only (no nested paths / traversal segments)
+  if (!rel || rel.includes(sep) || rel === '.' || rel === '..') return false;
   if (!rel.endsWith('.md') || rel.startsWith('.')) return false;
-  return true;
+
+  try {
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink()) return true; // unlink-only; do not follow
+    if (!st.isFile()) return false;
+    const real = realpathSync(abs);
+    return real === root || real.startsWith(prefix);
+  } catch {
+    // ENOENT — allowed for create
+    return true;
+  }
 }
 
 function slugify(name: string): string {
