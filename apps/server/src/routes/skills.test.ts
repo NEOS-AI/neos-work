@@ -34,7 +34,13 @@ describe('skills routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as {
       ok: boolean;
-      data: Array<{ name: string; enabled: boolean; category?: string; featured?: boolean }>;
+      data: Array<{
+        name: string;
+        enabled: boolean;
+        category?: string;
+        featured?: boolean;
+        path?: string;
+      }>;
     };
     expect(body.ok).toBe(true);
     const found = body.data.find((s) => s.name === SKILL_NAME);
@@ -42,6 +48,10 @@ describe('skills routes', () => {
     expect(found!.enabled).toBe(true);
     expect(found!.category).toBe('test');
     expect(found!.featured).toBe(true);
+    // Absolute host paths must not leak (publicSkillPath redacts to tail segments)
+    expect(found!.path).toBeTruthy();
+    expect(found!.path).not.toMatch(/^\/tmp\//);
+    expect(found!.path).toContain('SKILL.md');
   });
 
   it('rejects control-char path ids on toggle/delete', async () => {

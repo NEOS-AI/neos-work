@@ -150,6 +150,20 @@ function packageDirLabel(raw: unknown): string | undefined {
   return last && last.length <= 200 ? last : undefined;
 }
 
+/**
+ * Public skill path for API responses: last few segments only.
+ * Avoids leaking home directory / absolute host paths (align with packageDirLabel).
+ */
+function publicSkillPath(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const t = raw.trim().replace(/\\/g, '/');
+  if (!t) return '';
+  const parts = t.split('/').filter(Boolean);
+  const tail = parts.slice(-3).join('/');
+  if (!tail) return '';
+  return tail.length <= 400 ? tail : tail.slice(0, 400);
+}
+
 function sanitizeExampleCards(raw: unknown): Array<{
   id?: string;
   key?: string;
@@ -206,7 +220,8 @@ skills.get('/', (c) => {
       name: r.name,
       description: r.description,
       source: r.source,
-      path: r.path,
+      // Redact absolute on-disk path (home / username leak)
+      path: publicSkillPath(r.path),
       version: r.version,
       enabled: r.enabled === 1,
       installedAt: r.installed_at,
