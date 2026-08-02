@@ -238,44 +238,55 @@ describe('memory-store', () => {
     }
   });
 
-  it('createMemory does not write through a planted path symlink', () => {
-    const dir = join(homedir(), '.config', 'neos-work', 'memory');
-    const name = `${NAME}_symwrite`;
-    // createMemory builds type_slug.md — plant symlink at that path
-    const slug = name
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40);
-    const targetName = `user_${slug}.md`;
-    const link = join(dir, targetName);
+  it('does not follow a planted path symlink (list/update fail closed; outside intact)', () => {
     const outside = join(tmpdir(), `neos-mem-write-out-${process.pid}.md`);
+    const m = createMemory({
+      name: `${NAME}_symwrite`,
+      type: 'user',
+      content: 'initial',
+    });
+    const link = m.filePath;
     try {
       writeFileSync(outside, 'OUTSIDE_MARKER_DO_NOT_OVERWRITE\n', 'utf-8');
       if (existsSync(link)) unlinkSync(link);
       try {
         symlinkSync(outside, link);
       } catch {
+        // restore for cleanup
+        writeFileSync(link, '---\nid: x\nname: y\ntype: user\nenabled: true\ncreatedAt: t\nupdatedAt: t\n---\n\n', 'utf-8');
+        deleteMemory(m.id);
         return;
       }
-      const m = createMemory({
-        name,
-        type: 'user',
-        content: 'safe-in-memory-dir',
-      });
-      expect(m.filePath).toBe(link);
+      // Symlink entries are skipped by list — memory disappears; no write-through
+      expect(getMemory(m.id)).toBeNull();
+      expect(updateMemory(m.id, { content: 'safe-in-memory-dir' })).toBeNull();
       const outsideRaw = readFileSync(outside, 'utf-8');
       expect(outsideRaw).toContain('OUTSIDE_MARKER_DO_NOT_OVERWRITE');
       expect(outsideRaw).not.toContain('safe-in-memory-dir');
-      // Real file now at the memory path
-      const onDisk = readFileSync(link, 'utf-8');
-      expect(onDisk).toContain('safe-in-memory-dir');
-      deleteMemory(m.id);
     } finally {
       if (existsSync(link)) unlinkSync(link);
       if (existsSync(outside)) unlinkSync(outside);
     }
+  });
+
+  it('same name+type create distinct files (no clobber)', () => {
+    const a = createMemory({
+      name: `${NAME}_dup`,
+      type: 'user',
+      content: 'first-memory',
+    });
+    const b = createMemory({
+      name: `${NAME}_dup`,
+      type: 'user',
+      content: 'second-memory',
+    });
+    expect(a.id).not.toBe(b.id);
+    expect(a.filePath).not.toBe(b.filePath);
+    expect(getMemory(a.id)?.content).toBe('first-memory');
+    expect(getMemory(b.id)?.content).toBe('second-memory');
+    expect(listMemories().filter((m) => m.name === `${NAME}_dup`).length).toBe(2);
+    deleteMemory(a.id);
+    deleteMemory(b.id);
   });
 
   it('creates memories of each type and lists them', () => {

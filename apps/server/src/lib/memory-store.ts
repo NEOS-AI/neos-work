@@ -164,7 +164,8 @@ export function createMemory(input: CreateMemoryInput): MemoryItem {
   const id = randomUUID();
   const now = new Date().toISOString();
   const slug = slugify(name) || id.slice(0, 8);
-  const fileName = `${type}_${slug}.md`;
+  // Include full id so same name+type cannot clobber an existing memory file
+  const fileName = `${type}_${slug}_${id}.md`;
   const filePath = join(MEMORY_DIR, fileName);
 
   const item: MemoryItem = {
