@@ -27,4 +27,28 @@ describe('CanvasOverlay', () => {
     fireEvent.mouseUp(window, { clientX: 70, clientY: 65 });
     expect(onDragEnd).toHaveBeenCalledWith(20, 15);
   });
+
+  it('calls onTransformEnd resize from SE handle', () => {
+    const onTransformEnd = vi.fn();
+    render(
+      <CanvasOverlay
+        enabled
+        bbox={{ x: 10, y: 20, width: 100, height: 40 }}
+        onTransformEnd={onTransformEnd}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByTestId('canvas-overlay-resize-se'), {
+      clientX: 110,
+      clientY: 60,
+    });
+    fireEvent.mouseMove(window, { clientX: 130, clientY: 80 });
+    fireEvent.mouseUp(window);
+    expect(onTransformEnd).toHaveBeenCalledWith({
+      kind: 'resize',
+      dw: 20,
+      dh: 20,
+      baseWidth: 100,
+      baseHeight: 40,
+    });
+  });
 });

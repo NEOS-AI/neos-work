@@ -19,9 +19,10 @@ import {
   toggleVisibilityByNeosId,
 } from './html-layers.js';
 import { isJsxPath, parseJsxToLayerTree } from './jsx-layers.js';
-import { CanvasOverlay } from './CanvasOverlay.js';
+import { CanvasOverlay, type CanvasTransformEnd } from './CanvasOverlay.js';
 import {
   applyPositionDeltaToHtml,
+  applySizeDeltaToHtml,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
 } from './canvas-style.js';
@@ -296,25 +297,46 @@ export function DesignEditor({
   const showCode = mode === 'code' || mode === 'split';
   const canvasOn = isCanvasOverlayEnabled(canvasOverlayProp) && htmlLike;
 
-  const handleCanvasDragEnd = (dx: number, dy: number) => {
-    if (!buffer.path || (dx === 0 && dy === 0)) return;
+  const applyCanvasHtml = (mutate: (html: string) => string) => {
+    if (!buffer.path) return;
     const layerId = selection?.layerId ?? null;
-    const elId = elementIdFromSelector(selection?.selector);
-    // Prefer stamped HTML so data-neos-id rewrites stick in SSOT
     let base = buffer.local;
     if (layerId && !base.includes(`data-neos-id="${layerId}"`)) {
       base = stampNeosIds(base);
     }
-    const next = applyPositionDeltaToHtml(base, {
-      neosId: layerId,
-      elementId: elId,
-      dx,
-      dy,
-    });
+    const next = mutate(base);
     if (next === base || next === buffer.local) return;
     applyHtmlEdit(next);
     setBridgeLayers(null);
     setReloadKey((k) => k + 1);
+  };
+
+  const handleCanvasDragEnd = (dx: number, dy: number) => {
+    if (dx === 0 && dy === 0) return;
+    const layerId = selection?.layerId ?? null;
+    const elId = elementIdFromSelector(selection?.selector);
+    applyCanvasHtml((base) =>
+      applyPositionDeltaToHtml(base, { neosId: layerId, elementId: elId, dx, dy }),
+    );
+  };
+
+  const handleCanvasTransformEnd = (t: CanvasTransformEnd) => {
+    const layerId = selection?.layerId ?? null;
+    const elId = elementIdFromSelector(selection?.selector);
+    if (t.kind === 'move') {
+      handleCanvasDragEnd(t.dx, t.dy);
+      return;
+    }
+    applyCanvasHtml((base) =>
+      applySizeDeltaToHtml(base, {
+        neosId: layerId,
+        elementId: elId,
+        dw: t.dw,
+        dh: t.dh,
+        baseWidth: t.baseWidth,
+        baseHeight: t.baseHeight,
+      }),
+    );
   };
 
   const canvasBbox =
@@ -618,6 +640,7 @@ export function DesignEditor({
                 enabled={canvasOn && Boolean(selection?.selector)}
                 bbox={canvasBbox}
                 onDragEnd={handleCanvasDragEnd}
+                onTransformEnd={handleCanvasTransformEnd}
               />
             </div>
             {mode === 'inspect' && selection && (

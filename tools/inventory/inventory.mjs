@@ -53,6 +53,12 @@ function scanV06Features() {
     helmSnippet: existsRel('deploy/helm/neos-work/Chart.yaml'),
     migrationV06: existsRel('docs/migration/v0.6.0.md'),
     planV06: existsRel('docs/plans/PLAN_FOR_V0_6_0.md'),
+    // v0.7 M0+
+    planV07: existsRel('docs/plans/PLAN_FOR_V0_7_0.md'),
+    canvasResize: existsRel('packages/design-editor/src/CanvasOverlay.tsx')
+      && (readText('packages/design-editor/src/canvas-style.ts') ?? '').includes(
+        'applySizeDeltaToHtml',
+      ),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)

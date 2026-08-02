@@ -68,8 +68,15 @@ export {
 
 export {
   applyPositionDeltaToHtml,
+  applySizeDeltaToHtml,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
   mergePositionDeltaIntoOpenTag,
+  mergeSizeDeltaIntoOpenTag,
 } from './canvas-style.js';
-export { CanvasOverlay, type CanvasBBox, type CanvasOverlayProps } from './CanvasOverlay.js';
+export {
+  CanvasOverlay,
+  type CanvasBBox,
+  type CanvasOverlayProps,
+  type CanvasTransformEnd,
+} from './CanvasOverlay.js';

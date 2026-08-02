@@ -90,6 +90,28 @@ export function mergePositionDeltaIntoOpenTag(open: string, dx: number, dy: numb
   return `${open} style="${styleStr}"`;
 }
 
+function findOpenTagRe(opts: {
+  neosId?: string | null;
+  elementId?: string | null;
+}): RegExp | null {
+  const neosId = opts.neosId && !/[^\w-]/.test(opts.neosId) ? opts.neosId : '';
+  const elementId =
+    opts.elementId && /^[A-Za-z][\w\-:.]*$/.test(opts.elementId) ? opts.elementId : '';
+  if (neosId) {
+    return new RegExp(
+      `(<([A-Za-z][\\w-]*)\\b[^>]*\\bdata-neos-id=["']${escapeRegExp(neosId)}["'][^>]*)(/?)>`,
+      'i',
+    );
+  }
+  if (elementId) {
+    return new RegExp(
+      `(<([A-Za-z][\\w-]*)\\b[^>]*\\bid=["']${escapeRegExp(elementId)}["'][^>]*)(/?)>`,
+      'i',
+    );
+  }
+  return null;
+}
+
 /**
  * Apply drag delta to the first element matching data-neos-id or #id in HTML source.
  * Returns original html if no match or zero delta.
@@ -105,26 +127,70 @@ export function applyPositionDeltaToHtml(
   },
 ): string {
   if (!html || (opts.dx === 0 && opts.dy === 0)) return html;
-  const neosId = opts.neosId && !/[^\w-]/.test(opts.neosId) ? opts.neosId : '';
-  const elementId =
-    opts.elementId && /^[A-Za-z][\w\-:.]*$/.test(opts.elementId) ? opts.elementId : '';
-
-  let re: RegExp | null = null;
-  if (neosId) {
-    re = new RegExp(
-      `(<([A-Za-z][\\w-]*)\\b[^>]*\\bdata-neos-id=["']${escapeRegExp(neosId)}["'][^>]*)(/?)>`,
-      'i',
-    );
-  } else if (elementId) {
-    re = new RegExp(
-      `(<([A-Za-z][\\w-]*)\\b[^>]*\\bid=["']${escapeRegExp(elementId)}["'][^>]*)(/?)>`,
-      'i',
-    );
-  }
+  const re = findOpenTagRe(opts);
   if (!re || !re.test(html)) return html;
 
   return html.replace(re, (_full, open: string, _tag: string, selfClose: string) => {
     const nextOpen = mergePositionDeltaIntoOpenTag(open, opts.dx, opts.dy);
+    return `${nextOpen}${selfClose}>`;
+  });
+}
+
+/**
+ * Merge width/height delta into open-tag style (v0.7 M0 resize).
+ * Uses baseWidth/baseHeight when style has no explicit px size.
+ */
+export function mergeSizeDeltaIntoOpenTag(
+  open: string,
+  opts: { dw: number; dh: number; baseWidth?: number; baseHeight?: number },
+): string {
+  const { dw, dh, baseWidth = 0, baseHeight = 0 } = opts;
+  if (!Number.isFinite(dw) || !Number.isFinite(dh)) return open;
+  if (dw === 0 && dh === 0) return open;
+
+  const styleMatch = /\bstyle=(["'])([\s\S]*?)\1/i.exec(open);
+  const map = styleMatch ? parseStyleAttr(styleMatch[2] ?? '') : {};
+  const w0 = parsePx(map.width) || (baseWidth > 0 ? baseWidth : 0);
+  const h0 = parsePx(map.height) || (baseHeight > 0 ? baseHeight : 0);
+  const w = Math.max(8, Math.round(w0 + dw));
+  const h = Math.max(8, Math.round(h0 + dh));
+  if (w0 + dw !== 0 || map.width) map.width = `${w}px`;
+  if (h0 + dh !== 0 || map.height) map.height = `${h}px`;
+  // Always write both when we have bases from bbox
+  if (baseWidth > 0) map.width = `${w}px`;
+  if (baseHeight > 0) map.height = `${h}px`;
+  const styleStr = serializeStyle(map);
+  if (styleMatch) {
+    return open.replace(styleMatch[0], `style="${styleStr}"`);
+  }
+  return `${open} style="${styleStr}"`;
+}
+
+/**
+ * Apply size delta to element matching data-neos-id or #id.
+ */
+export function applySizeDeltaToHtml(
+  html: string,
+  opts: {
+    neosId?: string | null;
+    elementId?: string | null;
+    dw: number;
+    dh: number;
+    baseWidth?: number;
+    baseHeight?: number;
+  },
+): string {
+  if (!html || (opts.dw === 0 && opts.dh === 0)) return html;
+  const re = findOpenTagRe(opts);
+  if (!re || !re.test(html)) return html;
+
+  return html.replace(re, (_full, open: string, _tag: string, selfClose: string) => {
+    const nextOpen = mergeSizeDeltaIntoOpenTag(open, {
+      dw: opts.dw,
+      dh: opts.dh,
+      baseWidth: opts.baseWidth,
+      baseHeight: opts.baseHeight,
+    });
     return `${nextOpen}${selfClose}>`;
   });
 }

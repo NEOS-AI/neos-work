@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyPositionDeltaToHtml,
+  applySizeDeltaToHtml,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
   mergePositionDeltaIntoOpenTag,
+  mergeSizeDeltaIntoOpenTag,
 } from './canvas-style.js';
 
 describe('canvas-style', () => {
@@ -52,5 +54,29 @@ describe('canvas-style', () => {
   it('elementIdFromSelector', () => {
     expect(elementIdFromSelector('#hero')).toBe('hero');
     expect(elementIdFromSelector('div > p')).toBeNull();
+  });
+
+  it('mergeSizeDeltaIntoOpenTag uses base bbox sizes', () => {
+    const o = mergeSizeDeltaIntoOpenTag('<div id="x"', {
+      dw: 20,
+      dh: 10,
+      baseWidth: 100,
+      baseHeight: 50,
+    });
+    expect(o).toMatch(/width:\s*120px/);
+    expect(o).toMatch(/height:\s*60px/);
+  });
+
+  it('applySizeDeltaToHtml by data-neos-id', () => {
+    const html = '<section data-neos-id="e1">Hi</section>';
+    const next = applySizeDeltaToHtml(html, {
+      neosId: 'e1',
+      dw: 5,
+      dh: 5,
+      baseWidth: 80,
+      baseHeight: 40,
+    });
+    expect(next).toMatch(/width:\s*85px/);
+    expect(next).toMatch(/height:\s*45px/);
   });
 });

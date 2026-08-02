@@ -147,7 +147,7 @@ export async function fetchRemoteCatalog(
       fetchImpl: opts?.fetchImpl,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'neos-work-marketplace/0.6.5',
+        'User-Agent': 'neos-work-marketplace/0.7.0',
       },
     });
   } catch (err) {
@@ -183,7 +183,7 @@ export async function installCatalogEntry(
       fetchImpl: opts?.fetchImpl,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'neos-work-marketplace/0.6.5',
+        'User-Agent': 'neos-work-marketplace/0.7.0',
       },
     });
   } catch (err) {
