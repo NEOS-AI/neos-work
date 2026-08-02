@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_6_0 — Collaboration · Canvas · Marketplace
 
-**Status:** M0–M2 shipped through **0.6.2**; M3+ open  
-**Baseline:** monorepo **0.6.2**
+**Status:** M0–M3 shipped through **0.6.3**; M4+ open  
+**Baseline:** monorepo **0.6.3**
 **Parent:** [`PLAN_FOR_V0_5_0.md`](./PLAN_FOR_V0_5_0.md) §13 backlog  
 **One-line:** Open the **v0.6 train** with multiplayer *foundations*, opt-in free-canvas *spikes*, and marketplace *hosting* — without regressing v0.5 Design Editor / dual-surface contracts.
 
@@ -106,8 +106,8 @@ v0.5 delivered OD-parity Design Projects + Editor (Layers, Edit-with-AI, file SS
 
 ### Task 5 — M3 Shared ops (spike)
 
-- [ ] ADR: Yjs vs Loro vs lock+LWW  
-- [ ] Flagged experimental multi-caret or section lock  
+- [x] ADR: Yjs vs Loro vs lock+LWW → **lock+LWW** ([0001](../adr/0001-shared-edit-strategy.md))  
+- [x] Flagged experimental **file locks** + optional hard enforce (`NEOS_SHARED_EDIT=1`) (0.6.3)  
 
 ### Task 6 — M4 Remote marketplace
 

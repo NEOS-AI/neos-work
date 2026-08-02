@@ -1260,6 +1260,9 @@ export class EngineClient {
       peers?: Array<{ sessionId: string; displayName: string; colorHint?: number; joinedAt?: string }>;
       peer?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
       self?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
+      locks?: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
+      lock?: { path: string; sessionId: string; displayName: string; acquiredAt?: string };
+      path?: string;
     }) => void,
     opts?: { displayName?: string },
   ): () => void {
@@ -1314,6 +1317,22 @@ export class EngineClient {
                     parsed.self && typeof parsed.self === 'object'
                       ? (parsed.self as { sessionId: string; displayName: string })
                       : undefined,
+                  locks: Array.isArray(parsed.locks)
+                    ? (parsed.locks as Array<{
+                        path: string;
+                        sessionId: string;
+                        displayName: string;
+                      }>)
+                    : undefined,
+                  lock:
+                    parsed.lock && typeof parsed.lock === 'object'
+                      ? (parsed.lock as {
+                          path: string;
+                          sessionId: string;
+                          displayName: string;
+                        })
+                      : undefined,
+                  path: typeof parsed.path === 'string' ? parsed.path : undefined,
                 });
               } catch {
                 // skip
@@ -1329,6 +1348,20 @@ export class EngineClient {
       }
     })();
     return () => controller.abort();
+  }
+
+  async collabLock(
+    projectId: string,
+    body: { sessionId: string; path: string; action: 'acquire' | 'release' },
+  ): Promise<ApiResponse<{ lock?: unknown; released?: boolean; holder?: unknown }>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/locks`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
   }
 
   /**

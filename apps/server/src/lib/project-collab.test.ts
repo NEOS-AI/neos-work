@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  acquireFileLock,
   clearProjectPresence,
   colorHintFromSessionId,
+  getFileLock,
+  isSharedEditHardEnforce,
   joinProjectPresence,
+  listProjectLocks,
   listProjectPeers,
+  normalizeLockPath,
   PRESENCE_IDLE_MS,
   projectPresenceCount,
+  releaseFileLock,
   sanitizeDisplayName,
   sweepIdlePresence,
   touchProjectPresence,
@@ -116,5 +122,61 @@ describe('project-collab presence', () => {
     expect(a).not.toHaveBeenCalled();
     expect(projectPresenceCount('p-a')).toBe(1);
     expect(projectPresenceCount('p-b')).toBe(1);
+  });
+
+  it('normalizeLockPath rejects traversal', () => {
+    expect(normalizeLockPath('../x')).toBe('');
+    expect(normalizeLockPath('a/b.html')).toBe('a/b.html');
+    expect(normalizeLockPath('/abs')).toBe('abs');
+  });
+
+  it('file locks: acquire conflict release and clear on leave', () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    const ja = joinProjectPresence({ projectId: 'p1', displayName: 'A', listener: a })!;
+    const jb = joinProjectPresence({ projectId: 'p1', displayName: 'B', listener: b })!;
+
+    const ok = acquireFileLock({
+      projectId: 'p1',
+      sessionId: ja.sessionId,
+      path: 'index.html',
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) throw new Error('expected lock');
+    expect(listProjectLocks('p1')).toHaveLength(1);
+    expect(getFileLock('p1', 'index.html')?.sessionId).toBe(ja.sessionId);
+
+    const conflict = acquireFileLock({
+      projectId: 'p1',
+      sessionId: jb.sessionId,
+      path: 'index.html',
+    });
+    expect(conflict.ok).toBe(false);
+
+    // sync includes locks for new joiners
+    const jc = joinProjectPresence({ projectId: 'p1', displayName: 'C', listener: vi.fn() })!;
+    expect(jc.sync.type).toBe('presence.sync');
+    if (jc.sync.type === 'presence.sync') {
+      expect(jc.sync.locks.some((l) => l.path === 'index.html')).toBe(true);
+    }
+    jc.unsub();
+
+    releaseFileLock({ projectId: 'p1', sessionId: ja.sessionId, path: 'index.html' });
+    expect(getFileLock('p1', 'index.html')).toBeNull();
+
+    acquireFileLock({ projectId: 'p1', sessionId: ja.sessionId, path: 'a.html' });
+    ja.unsub(); // should release locks
+    expect(listProjectLocks('p1')).toHaveLength(0);
+    jb.unsub();
+  });
+
+  it('isSharedEditHardEnforce reads env', () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    process.env.NEOS_SHARED_EDIT = '1';
+    expect(isSharedEditHardEnforce()).toBe(true);
+    process.env.NEOS_SHARED_EDIT = '0';
+    expect(isSharedEditHardEnforce()).toBe(false);
+    if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+    else process.env.NEOS_SHARED_EDIT = prev;
   });
 });

@@ -48,8 +48,13 @@ import {
   type ProjectFileEvent,
 } from '../lib/project-file-events.js';
 import {
+  acquireFileLock,
+  getFileLock,
+  isSharedEditHardEnforce,
   joinProjectPresence,
+  listProjectLocks,
   listProjectPeers,
+  releaseFileLock,
   sweepIdlePresence,
   touchProjectPresence,
   type CollabEvent,
@@ -413,6 +418,70 @@ projects.post('/:id/collab/heartbeat', async (c) => {
   return c.json({ ok: true, data: { touched: true } });
 });
 
+/** List advisory file locks (M3). */
+projects.get('/:id/collab/locks', (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({
+    ok: true,
+    data: {
+      locks: listProjectLocks(id),
+      hardEnforce: isSharedEditHardEnforce(),
+    },
+  });
+});
+
+/**
+ * Acquire or release a file lock.
+ * body: { sessionId, path, action: 'acquire' | 'release' }
+ */
+projects.post('/:id/collab/locks', async (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  const sessionId =
+    typeof (body as { sessionId?: unknown }).sessionId === 'string'
+      ? (body as { sessionId: string }).sessionId
+      : '';
+  const path =
+    typeof (body as { path?: unknown }).path === 'string'
+      ? (body as { path: string }).path
+      : '';
+  const actionRaw =
+    typeof (body as { action?: unknown }).action === 'string'
+      ? (body as { action: string }).action.trim().toLowerCase()
+      : '';
+  if (!sessionId || /[\0\r\n]/.test(sessionId)) {
+    return c.json({ ok: false, error: 'sessionId required' }, 400);
+  }
+  if (!path) return c.json({ ok: false, error: 'path required' }, 400);
+  if (actionRaw !== 'acquire' && actionRaw !== 'release') {
+    return c.json({ ok: false, error: "action must be 'acquire' or 'release'" }, 400);
+  }
+  if (actionRaw === 'release') {
+    const r = releaseFileLock({ projectId: id, sessionId, path });
+    if (!r.ok) return c.json({ ok: false, error: r.error }, 409);
+    return c.json({ ok: true, data: { released: true, path } });
+  }
+  const r = acquireFileLock({ projectId: id, sessionId, path });
+  if (!r.ok) {
+    return c.json(
+      {
+        ok: false,
+        error: r.error,
+        data: r.holder ? { holder: r.holder } : undefined,
+      },
+      r.holder ? 409 : 400,
+    );
+  }
+  return c.json({ ok: true, data: { lock: r.lock } });
+});
+
 // ── Project file events (SSE) ──────────────────────────────
 
 /**
@@ -504,7 +573,9 @@ projects.put('/:id/files/*', async (c) => {
   const rel = splatPath(c, `/api/projects/${id}/files/`);
   if (!rel) return c.json({ ok: false, error: 'path required' }, 400);
 
-  const body = await c.req.json<{ content?: string; source?: string }>().catch(() => null);
+  const body = await c.req
+    .json<{ content?: string; source?: string; sessionId?: string }>()
+    .catch(() => null);
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
   }
@@ -514,6 +585,30 @@ projects.put('/:id/files/*', async (c) => {
   ).includes(sourceRaw as FileRevisionSource)
     ? (sourceRaw as FileRevisionSource)
     : 'user';
+
+  // M3 hard enforce: when NEOS_SHARED_EDIT=1, reject writes if another session holds the lock
+  if (isSharedEditHardEnforce() && source === 'user') {
+    const holder = getFileLock(id, rel);
+    if (holder) {
+      const hdr = c.req.header('x-neos-session-id') ?? '';
+      const sessionId =
+        typeof body.sessionId === 'string' && !/[\0\r\n]/.test(body.sessionId)
+          ? body.sessionId.trim()
+          : typeof hdr === 'string' && !/[\0\r\n]/.test(hdr)
+            ? hdr.trim()
+            : '';
+      if (!sessionId || sessionId !== holder.sessionId) {
+        return c.json(
+          {
+            ok: false,
+            error: `File locked by ${holder.displayName}`,
+            data: { holder },
+          },
+          423,
+        );
+      }
+    }
+  }
 
   try {
     const written = writeProjectFile(project.baseDir, rel, body.content);

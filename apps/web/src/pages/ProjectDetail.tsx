@@ -42,6 +42,13 @@ export function ProjectDetail() {
   /** Collab presence (v0.6 M1) — self + other peers. */
   const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
   const [collabPeers, setCollabPeers] = useState<PresencePeerInfo[]>([]);
+  const [collabSessionId, setCollabSessionId] = useState<string | null>(null);
+  const collabSessionRef = useRef<string | null>(null);
+  collabSessionRef.current = collabSessionId;
+  /** path → lock holder (others only) — M3 advisory locks. */
+  const [foreignLocks, setForeignLocks] = useState<
+    Record<string, { sessionId: string; displayName: string }>
+  >({});
 
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
@@ -103,30 +110,98 @@ export function ProjectDetail() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  // Collab presence (v0.6 M1) — full peer list for awareness bar
+  // Collab presence + locks (v0.6 M1/M3)
   useEffect(() => {
     if (!conn.token || !id) return;
     setCollabSelf(null);
     setCollabPeers([]);
+    setCollabSessionId(null);
+    setForeignLocks({});
     const stop = client.streamProjectCollab(
       id,
       (ev) => {
-        if (ev.type === 'presence.sync') {
-          if (ev.self) setCollabSelf(ev.self as PresencePeerInfo);
+        if (ev.type === 'ready' && ev.sessionId) {
+          setCollabSessionId(ev.sessionId);
+        } else if (ev.type === 'presence.sync') {
+          if (ev.self) {
+            setCollabSelf(ev.self as PresencePeerInfo);
+            if (ev.self.sessionId) setCollabSessionId(ev.self.sessionId);
+          }
           setCollabPeers(Array.isArray(ev.peers) ? (ev.peers as PresencePeerInfo[]) : []);
+          const selfId = ev.self?.sessionId ?? collabSessionRef.current;
+          const next: Record<string, { sessionId: string; displayName: string }> = {};
+          for (const l of ev.locks ?? []) {
+            if (selfId && l.sessionId === selfId) continue;
+            next[l.path] = { sessionId: l.sessionId, displayName: l.displayName };
+          }
+          setForeignLocks(next);
         } else if (ev.type === 'presence.join' && ev.peer) {
           const peer = ev.peer as PresencePeerInfo;
           setCollabPeers((list) =>
             list.some((p) => p.sessionId === peer.sessionId) ? list : [...list, peer],
           );
         } else if (ev.type === 'presence.leave' && ev.sessionId) {
-          setCollabPeers((list) => list.filter((p) => p.sessionId !== ev.sessionId));
+          const left = ev.sessionId;
+          setCollabPeers((list) => list.filter((p) => p.sessionId !== left));
+          setForeignLocks((m) => {
+            const n: typeof m = {};
+            for (const [path, h] of Object.entries(m)) {
+              if (h.sessionId !== left) n[path] = h;
+            }
+            return n;
+          });
+        } else if (ev.type === 'lock.acquired' && ev.lock) {
+          const lock = ev.lock;
+          setForeignLocks((m) => {
+            if (collabSessionRef.current && lock.sessionId === collabSessionRef.current) return m;
+            return {
+              ...m,
+              [lock.path]: { sessionId: lock.sessionId, displayName: lock.displayName },
+            };
+          });
+        } else if (ev.type === 'lock.released' && ev.path) {
+          setForeignLocks((m) => {
+            const n = { ...m };
+            delete n[ev.path!];
+            return n;
+          });
         }
       },
       { displayName: 'Web' },
     );
     return () => stop();
   }, [client, conn.token, id]);
+
+  // M3: try to acquire lock when opening a file; release previous
+  const lockedByOther =
+    buffer.path && foreignLocks[buffer.path] ? foreignLocks[buffer.path]!.displayName : null;
+
+  useEffect(() => {
+    if (!conn.token || !id || !collabSessionId || !buffer.path) return;
+    const path = buffer.path;
+    void client.collabLock(id, {
+      sessionId: collabSessionId,
+      path,
+      action: 'acquire',
+    }).then((res) => {
+      if (!res.ok && res.data && typeof res.data === 'object' && 'holder' in (res.data as object)) {
+        const holder = (res.data as { holder?: { sessionId?: string; displayName?: string } }).holder;
+        if (holder?.displayName && holder.sessionId) {
+          setForeignLocks((m) => ({
+            ...m,
+            [path]: { sessionId: holder.sessionId!, displayName: holder.displayName! },
+          }));
+        }
+      }
+    });
+    return () => {
+      void client.collabLock(id, {
+        sessionId: collabSessionId,
+        path,
+        action: 'release',
+      });
+    };
+  }, [client, conn.token, id, collabSessionId, buffer.path]);
 
   // Project file SSE — reload open buffer on agent/remote writes (disk-changed / conflict)
   // Skip re-fetch when event hash matches known disk/pending tip (hash-aware, v0.5.30).
@@ -311,6 +386,15 @@ export function ProjectDetail() {
         <div className="row muted" style={{ fontSize: 12 }}>
           {dirty && <span data-testid="web-dirty">Unsaved</span>}
           <PresencePeersBar peers={collabPeers} self={collabSelf} />
+          {lockedByOther && (
+            <span
+              data-testid="file-lock-banner"
+              className="err"
+              title="Advisory lock (hard-enforced when NEOS_SHARED_EDIT=1)"
+            >
+              Locked by {lockedByOther}
+            </span>
+          )}
           {status && <span>{status}</span>}
         </div>
       </header>

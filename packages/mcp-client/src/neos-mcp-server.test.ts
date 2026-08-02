@@ -9,7 +9,7 @@ import {
 
 function mockBackend(partial: Partial<NeosMcpBackend> = {}): NeosMcpBackend {
   return {
-    status: vi.fn(async () => ({ status: 'ok', version: '0.6.2', serverUrl: 'http://127.0.0.1:3000' })),
+    status: vi.fn(async () => ({ status: 'ok', version: '0.6.3', serverUrl: 'http://127.0.0.1:3000' })),
     listProjects: vi.fn(async () => [{ id: 'p1', name: 'Demo', baseDir: '/tmp/p1' }]),
     listFiles: vi.fn(async () => [{ path: 'index.html', type: 'file', size: 12 }]),
     readFile: vi.fn(async (_pid, path) => ({ path, content: '<html/>' })),

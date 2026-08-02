@@ -1,9 +1,10 @@
 /**
- * In-process project collaboration presence hub (v0.6 M0–M1).
- * Powers GET /api/projects/:id/collab/stream — presence.sync / join / leave.
+ * In-process project collaboration presence + file locks (v0.6 M0–M3).
+ * Powers GET /api/projects/:id/collab/stream — presence.* / lock.*.
  * Ephemeral only; no disk persistence. Disk files remain SSOT for content.
  *
  * M1: lastSeen + idle sweep; peer list includes stable colorHint for avatars.
+ * M3: advisory file locks (ADR 0001 — lock+LWW spike).
  */
 
 import { randomBytes } from 'node:crypto';
@@ -17,10 +18,33 @@ export type PresencePeer = {
   lastSeen?: string;
 };
 
+/** Advisory lock on a project-relative file path. */
+export type FileLock = {
+  path: string;
+  sessionId: string;
+  displayName: string;
+  acquiredAt: string;
+};
+
 export type CollabEvent =
-  | { type: 'presence.sync'; projectId: string; self: PresencePeer; peers: PresencePeer[]; ts: string }
+  | {
+      type: 'presence.sync';
+      projectId: string;
+      self: PresencePeer;
+      peers: PresencePeer[];
+      locks: FileLock[];
+      ts: string;
+    }
   | { type: 'presence.join'; projectId: string; peer: PresencePeer; ts: string }
-  | { type: 'presence.leave'; projectId: string; sessionId: string; reason?: 'leave' | 'idle' | 'evicted'; ts: string };
+  | {
+      type: 'presence.leave';
+      projectId: string;
+      sessionId: string;
+      reason?: 'leave' | 'idle' | 'evicted';
+      ts: string;
+    }
+  | { type: 'lock.acquired'; projectId: string; lock: FileLock; ts: string }
+  | { type: 'lock.released'; projectId: string; path: string; sessionId: string; ts: string };
 
 type RoomListener = (event: CollabEvent) => void;
 
@@ -34,7 +58,10 @@ type Session = {
 };
 
 const rooms = new Map<string, Map<string, Session>>();
+/** projectId → path → FileLock */
+const lockRooms = new Map<string, Map<string, FileLock>>();
 const MAX_PEERS_PER_PROJECT = 32;
+const MAX_LOCKS_PER_PROJECT = 64;
 /** Drop sessions with no heartbeat / SSE activity (ms). */
 export const PRESENCE_IDLE_MS = 90_000;
 
@@ -54,6 +81,39 @@ export function sanitizeDisplayName(raw: unknown): string {
 
 function newSessionId(): string {
   return randomBytes(12).toString('hex');
+}
+
+/** Normalize project-relative file path for locks (no .., no abs, bounded). */
+export function normalizeLockPath(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  let p = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!p || p.length > 500) return '';
+  if (p.includes('..')) return '';
+  if (p.startsWith('~/') || /^[A-Za-z]:\//.test(p)) return '';
+  return p;
+}
+
+function listLocks(projectId: string): FileLock[] {
+  const m = lockRooms.get(projectId);
+  if (!m) return [];
+  return [...m.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function releaseAllLocksForSession(projectId: string, sessionId: string): void {
+  const m = lockRooms.get(projectId);
+  if (!m) return;
+  for (const [path, lock] of [...m.entries()]) {
+    if (lock.sessionId !== sessionId) continue;
+    m.delete(path);
+    broadcast(projectId, {
+      type: 'lock.released',
+      projectId,
+      path,
+      sessionId,
+      ts: new Date().toISOString(),
+    });
+  }
+  if (m.size === 0) lockRooms.delete(projectId);
 }
 
 /** Stable 0–359 from session id for avatar colors. */
@@ -112,6 +172,7 @@ function forceLeave(
   if (!s) return;
   room.delete(sessionId);
   if (room.size === 0) rooms.delete(projectId);
+  releaseAllLocksForSession(projectId, sessionId);
   const ev: CollabEvent = {
     type: 'presence.leave',
     projectId,
@@ -171,6 +232,7 @@ export function joinProjectPresence(input: {
     projectId,
     self: peerPublic(session),
     peers: listPeers(projectId, session.sessionId),
+    locks: listLocks(projectId),
     ts,
   };
 
@@ -244,7 +306,106 @@ export function projectPresenceCount(projectId: string): number {
   return rooms.get(id)?.size ?? 0;
 }
 
-/** Test helper — clear all rooms. */
+/**
+ * Acquire advisory lock on a project file path.
+ * Same session may re-acquire (refresh). Other session → conflict.
+ */
+export function acquireFileLock(input: {
+  projectId: string;
+  sessionId: string;
+  path: string;
+}): { ok: true; lock: FileLock } | { ok: false; error: string; holder?: FileLock } {
+  const projectId = normalizeProjectId(input.projectId);
+  const path = normalizeLockPath(input.path);
+  if (!projectId || !path) return { ok: false, error: 'Invalid project or path' };
+  if (typeof input.sessionId !== 'string' || /[\0\r\n]/.test(input.sessionId)) {
+    return { ok: false, error: 'Invalid session' };
+  }
+  const sessionId = input.sessionId.trim();
+  const session = rooms.get(projectId)?.get(sessionId);
+  if (!session) return { ok: false, error: 'Session not in presence room' };
+
+  let m = lockRooms.get(projectId);
+  if (!m) {
+    m = new Map();
+    lockRooms.set(projectId, m);
+  }
+  const existing = m.get(path);
+  if (existing && existing.sessionId !== sessionId) {
+    return { ok: false, error: 'Locked by another session', holder: existing };
+  }
+  if (!existing && m.size >= MAX_LOCKS_PER_PROJECT) {
+    return { ok: false, error: 'Too many locks on project' };
+  }
+
+  const lock: FileLock = {
+    path,
+    sessionId,
+    displayName: session.displayName,
+    acquiredAt: existing?.acquiredAt ?? new Date().toISOString(),
+  };
+  m.set(path, lock);
+  broadcast(projectId, {
+    type: 'lock.acquired',
+    projectId,
+    lock,
+    ts: new Date().toISOString(),
+  });
+  return { ok: true, lock };
+}
+
+export function releaseFileLock(input: {
+  projectId: string;
+  sessionId: string;
+  path: string;
+}): { ok: true } | { ok: false; error: string } {
+  const projectId = normalizeProjectId(input.projectId);
+  const path = normalizeLockPath(input.path);
+  if (!projectId || !path) return { ok: false, error: 'Invalid project or path' };
+  if (typeof input.sessionId !== 'string' || /[\0\r\n]/.test(input.sessionId)) {
+    return { ok: false, error: 'Invalid session' };
+  }
+  const sessionId = input.sessionId.trim();
+  const m = lockRooms.get(projectId);
+  const existing = m?.get(path);
+  if (!existing) return { ok: true }; // idempotent
+  if (existing.sessionId !== sessionId) {
+    return { ok: false, error: 'Not lock holder' };
+  }
+  m!.delete(path);
+  if (m!.size === 0) lockRooms.delete(projectId);
+  broadcast(projectId, {
+    type: 'lock.released',
+    projectId,
+    path,
+    sessionId,
+    ts: new Date().toISOString(),
+  });
+  return { ok: true };
+}
+
+export function listProjectLocks(projectId: string): FileLock[] {
+  const id = normalizeProjectId(projectId);
+  if (!id) return [];
+  return listLocks(id);
+}
+
+/** Who holds a lock on path, if any. */
+export function getFileLock(projectId: string, path: string): FileLock | null {
+  const id = normalizeProjectId(projectId);
+  const p = normalizeLockPath(path);
+  if (!id || !p) return null;
+  return lockRooms.get(id)?.get(p) ?? null;
+}
+
+/** When true, file PUT rejects writers who do not hold the lock (if a lock exists). */
+export function isSharedEditHardEnforce(): boolean {
+  const v = process.env.NEOS_SHARED_EDIT;
+  return v === '1' || v === 'true';
+}
+
+/** Test helper — clear all rooms and locks. */
 export function clearProjectPresence(): void {
   rooms.clear();
+  lockRooms.clear();
 }

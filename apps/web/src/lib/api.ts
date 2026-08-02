@@ -154,6 +154,9 @@ export class WebApiClient {
       peers?: Array<{ sessionId: string; displayName: string; colorHint?: number; joinedAt?: string }>;
       peer?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
       self?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
+      locks?: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
+      lock?: { path: string; sessionId: string; displayName: string; acquiredAt?: string };
+      path?: string;
     }) => void,
     opts?: { displayName?: string },
   ): () => void {
@@ -223,6 +226,24 @@ export class WebApiClient {
                           joinedAt?: string;
                         })
                       : undefined,
+                  locks: Array.isArray(data.locks)
+                    ? (data.locks as Array<{
+                        path: string;
+                        sessionId: string;
+                        displayName: string;
+                        acquiredAt?: string;
+                      }>)
+                    : undefined,
+                  lock:
+                    data.lock && typeof data.lock === 'object'
+                      ? (data.lock as {
+                          path: string;
+                          sessionId: string;
+                          displayName: string;
+                          acquiredAt?: string;
+                        })
+                      : undefined,
+                  path: typeof data.path === 'string' ? data.path : undefined,
                 });
               } catch {
                 // skip
@@ -238,6 +259,13 @@ export class WebApiClient {
       }
     })();
     return () => controller.abort();
+  }
+
+  collabLock(
+    projectId: string,
+    body: { sessionId: string; path: string; action: 'acquire' | 'release' },
+  ): Promise<ApiEnvelope<{ lock?: unknown; released?: boolean; holder?: unknown }>> {
+    return this.request('POST', `/api/projects/${encodeURIComponent(projectId)}/collab/locks`, body);
   }
 
   streamProjectFileEvents(
