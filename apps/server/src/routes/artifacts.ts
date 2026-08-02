@@ -12,7 +12,7 @@
 
 import { Hono } from 'hono';
 import * as db from '../db/artifacts.js';
-import { safeRouteId } from '../lib/path-safety.js';
+import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 
 const artifacts = new Hono();
@@ -22,15 +22,21 @@ function safeId(raw: string, max = 100): string {
   return safeRouteId(raw, max);
 }
 
+/** Redact absolute filePath before JSON responses (refresh still uses DB path). */
+function publicArtifact(a: db.Artifact): db.Artifact {
+  if (!a.filePath) return a;
+  return { ...a, filePath: publicPathTail(a.filePath) };
+}
+
 artifacts.get('/', (c) => {
   const workflowId = safeId(c.req.query('workflowId') ?? '');
   const runId = safeId(c.req.query('runId') ?? '');
 
   if (runId) {
-    return c.json({ ok: true, data: db.listArtifactsByRun(runId) });
+    return c.json({ ok: true, data: db.listArtifactsByRun(runId).map(publicArtifact) });
   }
   if (workflowId) {
-    return c.json({ ok: true, data: db.listArtifacts(workflowId) });
+    return c.json({ ok: true, data: db.listArtifacts(workflowId).map(publicArtifact) });
   }
   return c.json({ ok: false, error: 'workflowId or runId query param required' }, 400);
 });
@@ -40,7 +46,7 @@ artifacts.get('/:id', (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const artifact = db.getArtifact(id);
   if (!artifact) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: artifact });
+  return c.json({ ok: true, data: publicArtifact(artifact) });
 });
 
 /**
@@ -130,7 +136,7 @@ artifacts.post('/', async (c) => {
       content: body.content,
       nodeId,
     });
-    return c.json({ ok: true, data: artifact }, 201);
+    return c.json({ ok: true, data: publicArtifact(artifact) }, 201);
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to create artifact');
     // Size / validation errors from db layer → 400
@@ -155,7 +161,7 @@ artifacts.put('/:id', async (c) => {
   try {
     const updated = db.updateArtifactContent(id, body.content);
     if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
-    return c.json({ ok: true, data: updated });
+    return c.json({ ok: true, data: publicArtifact(updated) });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to update artifact');
     if (/max size|control characters/i.test(msg)) {
@@ -197,7 +203,7 @@ artifacts.patch('/:id', async (c) => {
       content: body.content,
     });
     if (!updated) return c.json({ ok: false, error: 'Not found' }, 404);
-    return c.json({ ok: true, data: updated });
+    return c.json({ ok: true, data: publicArtifact(updated) });
   } catch (err) {
     const msg = publicErrorMessage(err, 'Failed to update artifact');
     if (/max size|control characters/i.test(msg)) {
@@ -239,7 +245,7 @@ artifacts.post('/:id/refresh', async (c) => {
     // Client should call POST /api/workflow/:workflowId/run and listen for new artifacts
     return c.json({
       ok: true,
-      data: artifact,
+      data: publicArtifact(artifact),
       meta: {
         mode: 'rerun',
         workflowId: artifact.workflowId,
@@ -254,6 +260,7 @@ artifacts.post('/:id/refresh', async (c) => {
       const fs = await import('node:fs/promises');
       const pathMod = await import('node:path');
       // Only allow reading under home (path traversal + sibling-prefix + symlink escape)
+      // Use full DB path (not redacted) for filesystem access
       const resolved = pathMod.resolve(artifact.filePath);
       if (/[\0\r\n]/.test(artifact.filePath) || resolved.length > 4_096) {
         return c.json({ ok: false, error: 'Invalid file path' }, 400);
@@ -289,7 +296,11 @@ artifacts.post('/:id/refresh', async (c) => {
       }
       const content = await fs.readFile(real, 'utf8');
       const updated = db.updateArtifactContent(id, content);
-      return c.json({ ok: true, data: updated, meta: { mode: 'reload' } });
+      return c.json({
+        ok: true,
+        data: updated ? publicArtifact(updated) : publicArtifact(artifact),
+        meta: { mode: 'reload' },
+      });
     } catch (err) {
       const msg = publicErrorMessage(err, 'Failed to refresh file');
       return c.json({ ok: false, error: msg }, 500);
@@ -297,7 +308,7 @@ artifacts.post('/:id/refresh', async (c) => {
   }
 
   // No file — return current in-DB content (client reloads preview)
-  return c.json({ ok: true, data: artifact, meta: { mode: 'reload' } });
+  return c.json({ ok: true, data: publicArtifact(artifact), meta: { mode: 'reload' } });
 });
 
 export default artifacts;

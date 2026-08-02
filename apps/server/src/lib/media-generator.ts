@@ -69,6 +69,16 @@ export function resolveMediaDir(): string {
 export const MEDIA_DIR = resolveMediaDir();
 
 async function ensureMediaDir() {
+  // Refuse planted media-dir symlink (writes/list would follow outside)
+  try {
+    const st = await fs.lstat(MEDIA_DIR);
+    if (st.isSymbolicLink()) {
+      throw new Error('Invalid media directory');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid media directory') throw err;
+    // ENOENT — create below
+  }
   await fs.mkdir(MEDIA_DIR, { recursive: true });
 }
 
