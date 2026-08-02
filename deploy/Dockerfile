@@ -26,8 +26,10 @@ RUN pnpm --filter @neos-work/shared build \
  && pnpm --filter @neos-work/plugin-runtime build \
  && pnpm --filter @neos-work/server build
 
-# Drop devDependencies for runtime image size
-RUN pnpm prune --prod
+# Reinstall production deps only. `pnpm prune --prod` in a monorepo can drop
+# hoisted runtime packages (e.g. @hono/node-server) and crash the server.
+RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules \
+ && CI=true pnpm install --frozen-lockfile --prod
 
 FROM node:22-bookworm-slim AS runtime
 

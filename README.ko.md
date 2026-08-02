@@ -27,7 +27,8 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 
 **마이그레이션 (v0.4 → v0.5):** [docs/migration/v0.5.0.md](docs/migration/v0.5.0.md)  
 **보안:** [docs/security/v0.5.md](docs/security/v0.5.md)  
-**능력 목록:** `pnpm inventory` / `pnpm inventory:check` · 스모크: `pnpm e2e:smoke`
+**능력 목록:** `pnpm inventory` / `pnpm inventory:check` · 스모크: `pnpm e2e:smoke` · 라이브(옵트인): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
+**v0.5 클로즈아웃 계획:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md)
 
 ---
 
@@ -168,6 +169,7 @@ PORT=3000 pnpm dev
 | `pnpm inventory:check` | 게이트 미달 시 실패 |
 | `pnpm inventory:write` | `docs/generated/capability-inventory.json` 기록 |
 | `pnpm e2e:smoke` | fixture + inventory 계약 스모크 |
+| `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke` | 옵트인 프로바이더 도달성 스모크 (기본 CI 스킵) |
 | `pnpm clean` | 빌드 산출물 및 node_modules 제거 |
 
 ## 셀프호스트 (Docker)
