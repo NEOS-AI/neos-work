@@ -7,7 +7,7 @@ import {
   unlinkSync,
   lstatSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import type { MemoryItem, MemoryType, CreateMemoryInput, UpdateMemoryInput } from '@neos-work/shared';
@@ -18,6 +18,20 @@ function ensureDir() {
   if (!existsSync(MEMORY_DIR)) {
     mkdirSync(MEMORY_DIR, { recursive: true });
   }
+}
+
+/** True when abs path is a file directly under MEMORY_DIR (basename only — no escapes). */
+function isUnderMemoryDir(filePath: string): boolean {
+  if (typeof filePath !== 'string' || !filePath || /[\0\r\n]/.test(filePath)) return false;
+  const abs = resolve(filePath);
+  const root = resolve(MEMORY_DIR);
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  if (!abs.startsWith(prefix)) return false;
+  // Only allow shallow files (no nested paths under memory dir)
+  const rel = abs.slice(prefix.length);
+  if (!rel || rel.includes(sep) || rel === '..' || rel.includes('..')) return false;
+  if (!rel.endsWith('.md') || rel.startsWith('.')) return false;
+  return true;
 }
 
 function slugify(name: string): string {
@@ -78,6 +92,9 @@ function parseFile(filePath: string): MemoryItem | null {
 }
 
 function writeFile(item: MemoryItem): void {
+  if (!isUnderMemoryDir(item.filePath)) {
+    throw new Error('Invalid memory file path');
+  }
   const frontmatter = [
     `id: ${item.id}`,
     `name: ${item.name}`,
@@ -222,7 +239,18 @@ export function updateMemory(id: string, input: UpdateMemoryInput): MemoryItem |
 export function deleteMemory(id: string): boolean {
   const item = getMemory(id);
   if (!item) return false;
+  if (!isUnderMemoryDir(item.filePath)) return false;
   try {
+    // Do not unlink through a planted symlink (escape target must stay intact)
+    try {
+      const st = lstatSync(item.filePath);
+      if (st.isSymbolicLink()) {
+        unlinkSync(item.filePath);
+        return true;
+      }
+    } catch {
+      // ENOENT — fall through to unlink attempt
+    }
     unlinkSync(item.filePath);
     return true;
   } catch {
