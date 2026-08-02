@@ -94,6 +94,17 @@ vi.mock('@neos-work/design-editor', () => {
       snippet: opts?.snippet,
     }),
     isDirty: (b: Buf) => b.local !== b.disk,
+    shouldSkipDiskReload: (
+      b: Buf,
+      event: { path?: string | null; hash?: string | null },
+    ) => {
+      if (b.path == null) return true;
+      const p = typeof event.path === 'string' ? event.path : '';
+      if (p && p !== b.path) return true;
+      const hash = typeof event.hash === 'string' && event.hash ? event.hash : null;
+      if (!hash) return false;
+      return b.diskHash != null && b.diskHash === hash;
+    },
     reduceEditorBuffer: (
       prev: Buf,
       event:

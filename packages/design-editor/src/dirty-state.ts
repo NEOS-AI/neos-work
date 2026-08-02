@@ -51,6 +51,26 @@ export function isConflict(state: EditorBufferState): boolean {
   return state.pendingDisk != null;
 }
 
+/**
+ * Whether an SSE/file event with optional content hash needs a disk re-fetch.
+ * When the event hash matches the known disk (or pending conflict) tip, skip
+ * network read — content is unchanged (v0.5.28+ server publishes hash).
+ */
+export function shouldSkipDiskReload(
+  state: EditorBufferState,
+  event: { path?: string | null; hash?: string | null },
+): boolean {
+  if (state.path == null) return true;
+  const p = typeof event.path === 'string' ? event.path : '';
+  if (p && p !== state.path) return true;
+  const hash = typeof event.hash === 'string' && event.hash ? event.hash : null;
+  if (!hash) return false;
+  if (state.pendingDisk != null) {
+    return state.pendingDiskHash != null && state.pendingDiskHash === hash;
+  }
+  return state.diskHash != null && state.diskHash === hash;
+}
+
 export function reduceEditorBuffer(
   state: EditorBufferState,
   event: EditorBufferEvent,
@@ -94,8 +114,19 @@ export function reduceEditorBuffer(
       if (state.path == null) return state;
       const incoming = typeof event.content === 'string' ? event.content : '';
       const hash = event.hash ?? null;
-      // Same as current disk — ignore
+      // Same content hash as known disk tip — ignore (even without content compare)
+      if (hash != null && state.diskHash != null && hash === state.diskHash) {
+        return state;
+      }
+      // Same as current disk content — ignore
       if (incoming === state.disk && (hash == null || hash === state.diskHash)) {
+        return state;
+      }
+      // Already conflicting on the same pending tip
+      if (
+        state.pendingDisk != null
+        && ((hash != null && state.pendingDiskHash === hash) || incoming === state.pendingDisk)
+      ) {
         return state;
       }
       // Clean buffer: accept disk tip

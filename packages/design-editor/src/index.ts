@@ -3,6 +3,7 @@ export {
   isConflict,
   isDirty,
   reduceEditorBuffer,
+  shouldSkipDiskReload,
   simpleDiffLines,
   type ConflictChoice,
   type EditorBufferEvent,

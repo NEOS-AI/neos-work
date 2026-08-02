@@ -4,6 +4,7 @@ import {
   isConflict,
   isDirty,
   reduceEditorBuffer,
+  shouldSkipDiskReload,
   simpleDiffLines,
 } from './dirty-state.js';
 
@@ -91,6 +92,13 @@ describe('dirty-state edge cases', () => {
     });
     const same = reduceEditorBuffer(s, { type: 'disk-changed', content: 'base', hash: 'h1' });
     expect(same).toEqual(s);
+    // Hash-only short circuit (content string could be anything if hash matches)
+    const sameHash = reduceEditorBuffer(s, {
+      type: 'disk-changed',
+      content: 'base-but-would-be-same-hash',
+      hash: 'h1',
+    });
+    expect(sameHash).toEqual(s);
 
     s = reduceEditorBuffer(s, { type: 'edit', content: 'mine' });
     s = reduceEditorBuffer(s, { type: 'disk-changed', content: 'agent', hash: 'ha' });
@@ -112,6 +120,24 @@ describe('dirty-state edge cases', () => {
     s = reduceEditorBuffer(s, { type: 'disk-changed', content: 'agent' });
     const still = reduceEditorBuffer(s, { type: 'resolve-conflict', choice: 'diff' });
     expect(isConflict(still)).toBe(true);
+  });
+
+  it('shouldSkipDiskReload uses event hash vs disk/pending tips', () => {
+    let s = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'a.html',
+      content: 'base',
+      hash: 'h1',
+    });
+    expect(shouldSkipDiskReload(s, { path: 'a.html', hash: 'h1' })).toBe(true);
+    expect(shouldSkipDiskReload(s, { path: 'a.html', hash: 'h2' })).toBe(false);
+    expect(shouldSkipDiskReload(s, { path: 'other.html', hash: 'h2' })).toBe(true);
+    expect(shouldSkipDiskReload(s, { path: 'a.html' })).toBe(false);
+
+    s = reduceEditorBuffer(s, { type: 'edit', content: 'mine' });
+    s = reduceEditorBuffer(s, { type: 'disk-changed', content: 'agent', hash: 'ha' });
+    expect(shouldSkipDiskReload(s, { path: 'a.html', hash: 'ha' })).toBe(true);
+    expect(shouldSkipDiskReload(s, { path: 'a.html', hash: 'hb' })).toBe(false);
   });
 
   it('unknown event types leave state unchanged', () => {

@@ -14,6 +14,19 @@ const readFile = vi.fn(async (_pid: string, path: string) => ({
   },
 }));
 
+type SseHandler = (ev: {
+  type: string;
+  path?: string;
+  hash?: string;
+}) => void;
+let sseHandler: SseHandler | null = null;
+const streamProjectFileEvents = vi.fn((_id: string, cb: SseHandler) => {
+  sseHandler = cb;
+  return () => {
+    sseHandler = null;
+  };
+});
+
 vi.mock('../lib/auth.js', () => ({
   loadConnection: () => ({
     serverUrl: 'http://127.0.0.1:3000',
@@ -47,7 +60,7 @@ vi.mock('../lib/api.js', () => {
       writeFile = writeFile;
       createRun = createRun;
       getRun = getRun;
-      streamProjectFileEvents = () => () => {};
+      streamProjectFileEvents = streamProjectFileEvents;
     },
   };
 });
@@ -59,13 +72,25 @@ vi.mock('@neos-work/design-editor', async () => {
   return {
     ...actual,
     DesignEditor: (props: {
-      buffer: { path: string | null; local: string };
+      buffer: { path: string | null; local: string; pendingDisk?: string | null };
       onEdit?: (c: string) => void;
       onSave?: () => void;
       saving?: boolean;
+      onResolveConflict?: (choice: 'keep-mine' | 'take-agent' | 'diff') => void;
     }) => (
       <div data-testid="design-editor">
         <div data-testid="editor-path">{props.buffer.path}</div>
+        {props.buffer.pendingDisk != null && (
+          <div data-testid="conflict-banner">
+            <button
+              type="button"
+              data-testid="conflict-take"
+              onClick={() => props.onResolveConflict?.('take-agent')}
+            >
+              Take agent
+            </button>
+          </div>
+        )}
         <textarea
           data-testid="file-editor"
           value={props.buffer.local}
@@ -97,6 +122,8 @@ describe('ProjectDetail Design Editor', () => {
     createRun.mockClear();
     getRun.mockClear();
     readFile.mockClear();
+    streamProjectFileEvents.mockClear();
+    sseHandler = null;
     readFile.mockImplementation(async (_pid: string, path: string) => ({
       ok: true,
       data: {
@@ -157,5 +184,43 @@ describe('ProjectDetail Design Editor', () => {
       expect(readFile.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
     vi.useRealTimers();
+  });
+
+  it('shows conflict banner when dirty and SSE disk tip changes', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('file-editor'));
+    fireEvent.change(screen.getByTestId('file-editor'), {
+      target: { value: '<html><body>mine</body></html>' },
+    });
+    await waitFor(() => expect(screen.getByTestId('web-dirty')).toBeInTheDocument());
+
+    const readsBefore = readFile.mock.calls.length;
+    readFile.mockImplementation(async () => ({
+      ok: true,
+      data: { path: 'index.html', content: '<html><body>agent</body></html>', hash: 'agent-h' },
+    }));
+    expect(sseHandler).toBeTruthy();
+    sseHandler?.({ type: 'file.changed', path: 'index.html', hash: 'agent-h' });
+    await waitFor(() => {
+      expect(screen.getByTestId('conflict-banner')).toBeInTheDocument();
+    });
+    expect(readFile.mock.calls.length).toBeGreaterThan(readsBefore);
+    fireEvent.click(screen.getByTestId('conflict-take'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('conflict-banner')).not.toBeInTheDocument();
+    });
+    expect((screen.getByTestId('file-editor') as HTMLTextAreaElement).value).toContain('agent');
+  });
+
+  it('skips re-read when SSE hash matches known disk tip', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('file-editor'));
+    const readsAfterLoad = readFile.mock.calls.length;
+    expect(sseHandler).toBeTruthy();
+    sseHandler?.({ type: 'file.changed', path: 'index.html', hash: 'abc' });
+    // allow microtasks
+    await new Promise((r) => setTimeout(r, 30));
+    expect(readFile.mock.calls.length).toBe(readsAfterLoad);
+    expect(screen.queryByTestId('conflict-banner')).not.toBeInTheDocument();
   });
 });

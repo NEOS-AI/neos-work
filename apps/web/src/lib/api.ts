@@ -110,6 +110,32 @@ export class WebApiClient {
     return this.request('GET', `/api/runs/${encodeURIComponent(runId)}`);
   }
 
+  /** GET /api/mcp/install-info — snippets for neos mcp serve clients. */
+  getMcpInstallInfo(query?: {
+    projectId?: string;
+    includeToken?: boolean;
+  }): Promise<
+    ApiEnvelope<{
+      serverName?: string;
+      shellSnippet?: string;
+      codexAddCommand?: string;
+      codexRemoveCommand?: string;
+      claudeDesktop?: unknown;
+      tools?: Array<{ name: string; description?: string }>;
+      version?: string;
+      notes?: string[];
+    }>
+  > {
+    const qs = new URLSearchParams();
+    if (query?.projectId && !/[\0\r\n]/.test(query.projectId)) {
+      const p = query.projectId.trim().slice(0, 100);
+      if (p) qs.set('projectId', p);
+    }
+    if (query?.includeToken === false) qs.set('includeToken', '0');
+    const q = qs.toString();
+    return this.request('GET', `/api/mcp/install-info${q ? `?${q}` : ''}`);
+  }
+
   /**
    * Subscribe to project file SSE (`file.changed` / `file.created` / `file.deleted`).
    * Uses fetch + Bearer (EventSource cannot set Authorization).

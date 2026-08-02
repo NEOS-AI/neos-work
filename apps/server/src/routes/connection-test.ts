@@ -108,7 +108,7 @@ connectionTest.post('/', async (c) => {
         method: 'GET',
         redirect: 'manual',
         signal: controller.signal,
-        headers: { Accept: 'application/json', 'User-Agent': 'neos-work-connection-test/0.5.29' },
+        headers: { Accept: 'application/json', 'User-Agent': 'neos-work-connection-test/0.5.30' },
       });
       // Redirect check
       if (res.status >= 300 && res.status < 400) {

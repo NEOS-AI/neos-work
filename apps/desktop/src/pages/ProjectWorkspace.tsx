@@ -3,7 +3,7 @@
  * Files | Layers | Preview/Code/Split/Inspect | Chat / Comments / Revisions / Context.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useBlocker } from 'react-router-dom';
 import {
@@ -12,6 +12,7 @@ import {
   editContextFromSelection,
   isDirty,
   reduceEditorBuffer,
+  shouldSkipDiskReload,
   type BridgeSelectPayload,
   type DesignEditorMode,
   type EditorBufferState,
@@ -82,6 +83,8 @@ export function ProjectWorkspace() {
   const [dsError, setDsError] = useState<string | null>(null);
 
   const dirty = isDirty(buffer);
+  const bufferRef = useRef(buffer);
+  bufferRef.current = buffer;
   const blocker = useBlocker(dirty);
 
   const loadProject = useCallback(async () => {
@@ -151,19 +154,32 @@ export function ProjectWorkspace() {
   }, [dirty]);
 
   // Project file SSE — agent/remote writes → disk-changed (conflict if dirty)
+  // Hash-aware skip: matching event/disk tip avoids re-read thrash (v0.5.30).
   useEffect(() => {
     if (!client || !projectId) return;
-    const openPath = buffer.path;
     const stop = client.streamProjectFileEvents(projectId, (ev) => {
       if (ev.type !== 'file.changed' && ev.type !== 'file.created') return;
       const p = typeof ev.path === 'string' ? ev.path : '';
-      if (!p || !openPath || p !== openPath) return;
+      if (!p) return;
       void (async () => {
         try {
+          const cur = bufferRef.current;
+          if (cur.path !== p) return;
+          if (shouldSkipDiskReload(cur, { path: p, hash: ev.hash ?? null })) {
+            if (ev.type === 'file.created') {
+              const filesRes = await client.listProjectFiles(projectId);
+              if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+            }
+            return;
+          }
+
           const res = await client.readProjectFile(projectId, p);
           if (!res.ok || !res.data) return;
           setBuffer((prev) => {
             if (prev.path !== p) return prev;
+            if (shouldSkipDiskReload(prev, { path: p, hash: res.data!.hash ?? ev.hash ?? null })) {
+              return prev;
+            }
             return reduceEditorBuffer(prev, {
               type: 'disk-changed',
               content: res.data!.content,
@@ -181,7 +197,7 @@ export function ProjectWorkspace() {
       })();
     });
     return () => stop();
-  }, [client, projectId, buffer.path]);
+  }, [client, projectId]);
 
   const openFile = useCallback(
     async (path: string) => {

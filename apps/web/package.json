@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/web",
-  "version": "0.5.29",
+  "version": "0.5.30",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -15,6 +15,7 @@
   "dependencies": {
     "@neos-work/design-editor": "workspace:*",
     "@neos-work/shared": "workspace:*",
+    "@neos-work/ui-app": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.5.0"

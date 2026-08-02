@@ -42,6 +42,9 @@ export function Projects() {
           <p className="muted">Design projects on the daemon</p>
         </div>
         <div className="row">
+          <Link to="/settings" className="btn btn-ghost">
+            Settings
+          </Link>
           <Link to="/" className="btn btn-ghost">
             Connection
           </Link>

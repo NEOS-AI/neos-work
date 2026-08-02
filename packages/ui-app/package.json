@@ -1,5 +1,5 @@
 {
-  "name": "@neos-work/design-editor",
+  "name": "@neos-work/ui-app",
   "version": "0.5.30",
   "private": true,
   "license": "MIT",
@@ -13,23 +13,12 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist *.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src/"
-  },
-  "dependencies": {
-    "@codemirror/commands": "^6.8.0",
-    "@codemirror/lang-css": "^6.3.1",
-    "@codemirror/lang-html": "^6.4.9",
-    "@codemirror/lang-javascript": "^6.2.3",
-    "@codemirror/language": "^6.11.0",
-    "@codemirror/state": "^6.5.2",
-    "@codemirror/view": "^6.36.4",
-    "@neos-work/shared": "workspace:*",
-    "codemirror": "^6.0.1"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -39,7 +28,6 @@
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitest/coverage-v8": "3.2.4",
     "jsdom": "^26.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

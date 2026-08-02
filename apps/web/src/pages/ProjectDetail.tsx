@@ -3,7 +3,7 @@
  * Shares @neos-work/design-editor with desktop (Preview / Code / Layers / Inspect).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   createEmptyBuffer,
@@ -11,6 +11,7 @@ import {
   editContextFromSelection,
   isDirty,
   reduceEditorBuffer,
+  shouldSkipDiskReload,
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
@@ -39,6 +40,8 @@ export function ProjectDetail() {
   const [aiBusy, setAiBusy] = useState(false);
 
   const dirty = isDirty(buffer);
+  const bufferRef = useRef(buffer);
+  bufferRef.current = buffer;
 
   const load = useCallback(async () => {
     if (!conn.token || !id) {
@@ -97,20 +100,27 @@ export function ProjectDetail() {
   }, [dirty]);
 
   // Project file SSE — reload open buffer on agent/remote writes (disk-changed / conflict)
+  // Skip re-fetch when event hash matches known disk/pending tip (hash-aware, v0.5.30).
   useEffect(() => {
     if (!conn.token || !id) return;
-    const openPath = buffer.path;
     const stop = client.streamProjectFileEvents(id, (ev) => {
       if (ev.type !== 'file.changed' && ev.type !== 'file.created') return;
       const p = typeof ev.path === 'string' ? ev.path : '';
-      if (!p || !openPath || p !== openPath) return;
+      if (!p) return;
       void (async () => {
         try {
+          const cur = bufferRef.current;
+          if (cur.path !== p) return;
+          if (shouldSkipDiskReload(cur, { path: p, hash: ev.hash ?? null })) return;
+
           const file = await client.readFile(id, p);
           const content = (file.data as { content?: string })?.content ?? '';
           const hash = (file.data as { hash?: string })?.hash ?? null;
           setBuffer((prev) => {
             if (prev.path !== p) return prev;
+            if (shouldSkipDiskReload(prev, { path: p, hash: hash ?? ev.hash ?? null })) {
+              return prev;
+            }
             return reduceEditorBuffer(prev, {
               type: 'disk-changed',
               content,
@@ -124,7 +134,7 @@ export function ProjectDetail() {
       })();
     });
     return () => stop();
-  }, [client, conn.token, id, buffer.path]);
+  }, [client, conn.token, id]);
 
   const openFile = async (path: string) => {
     if (!id) return;

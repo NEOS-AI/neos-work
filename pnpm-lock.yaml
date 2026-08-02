@@ -72,6 +72,9 @@ importers:
       '@neos-work/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@neos-work/ui-app':
+        specifier: workspace:*
+        version: link:../../packages/ui-app
       '@tauri-apps/api':
         specifier: ^2.11.0
         version: 2.11.0
@@ -257,6 +260,9 @@ importers:
       '@neos-work/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@neos-work/ui-app':
+        specifier: workspace:*
+        version: link:../../packages/ui-app
       react:
         specifier: ^19.0.0
         version: 19.2.4
@@ -481,6 +487,33 @@ importers:
       typescript:
         specifier: ^5.8.2
         version: 5.9.3
+
+  packages/ui-app:
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^16.3.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.13
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.13)
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      react:
+        specifier: ^19.0.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.4(react@19.2.4)
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.10)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(tsx@4.21.0)
 
   packages/workflow-engine:
     dependencies:

@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/desktop",
-  "version": "0.5.29",
+  "version": "0.5.30",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -19,6 +19,7 @@
     "@neos-work/design-editor": "workspace:*",
     "@neos-work/shared": "workspace:*",
     "@neos-work/ui": "workspace:*",
+    "@neos-work/ui-app": "workspace:*",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-shell": "^2.2.2",
