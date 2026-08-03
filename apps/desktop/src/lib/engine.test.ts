@@ -2218,6 +2218,74 @@ describe('EngineClient', () => {
     ).toBe(true);
   });
 
+  it('streamProjectRunEvents hits correct URL, parses one event, and aborts', async () => {
+    const client = new EngineClient('http://engine.test');
+    client.setAuthToken('run-token');
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'id: ev1\nevent: run.stdout\ndata: {"id":"ev1","type":"run.stdout","ts":"t1","data":{"chunk":"hello"}}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+
+    const events: Array<{ type: string; id?: string; ts?: string; data?: unknown }> = [];
+    let done = false;
+    const stop = client.streamProjectRunEvents(
+      'run-abc',
+      (e) => events.push(e),
+      { onDone: () => { done = true; } },
+    );
+
+    await vi.waitFor(() => {
+      expect(events.length).toBeGreaterThanOrEqual(1);
+      expect(done).toBe(true);
+    });
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'http://engine.test/api/runs/run-abc/events/stream',
+    );
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({
+      method: 'GET',
+      headers: expect.objectContaining({
+        Accept: 'text/event-stream',
+        Authorization: 'Bearer run-token',
+      }),
+      signal: expect.any(AbortSignal),
+    });
+    expect(events[0]).toMatchObject({
+      type: 'run.stdout',
+      id: 'ev1',
+      ts: 't1',
+      data: { chunk: 'hello' },
+    });
+
+    // abort returns cleanly
+    stop();
+
+    // invalid id: no fetch, onError, abort is no-op
+    const prevCalls = fetchMock.mock.calls.length;
+    let err: unknown;
+    const noop = client.streamProjectRunEvents(
+      `run${'\n'}1`,
+      () => {},
+      { onError: (e) => { err = e; } },
+    );
+    await vi.waitFor(() => {
+      expect(err).toBeInstanceOf(Error);
+    });
+    expect(fetchMock.mock.calls.length).toBe(prevCalls);
+    expect(typeof noop).toBe('function');
+    noop();
+  });
+
   it('listHarnesses falls back to /api/harness when workers fail', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock

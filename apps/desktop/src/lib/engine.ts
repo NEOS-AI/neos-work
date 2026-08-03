@@ -1936,6 +1936,93 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /**
+   * Project run SSE (`run.stdout` / `run.succeeded` / `run.failed` / …).
+   * GET /api/runs/:id/events/stream — ends when run is terminal or after 10 min.
+   * Returns abort callback. Uses fetch + Bearer (not EventSource).
+   */
+  streamProjectRunEvents(
+    runId: string,
+    onEvent: (event: {
+      type: string;
+      id?: string;
+      ts?: string;
+      data?: unknown;
+    }) => void,
+    opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+  ): () => void {
+    const controller = new AbortController();
+    const seg = this.pathSegment(runId);
+    if (!seg) {
+      queueMicrotask(() => opts?.onError?.(new Error('Invalid run id')));
+      return () => {};
+    }
+    void (async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/runs/${seg}/events/stream`, {
+          method: 'GET',
+          headers: {
+            ...this.getHeaders(),
+            Accept: 'text/event-stream',
+          },
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          if (!controller.signal.aborted) {
+            opts?.onError?.(
+              new Error(formatHttpErrorMessage(res.status, res.statusText)),
+            );
+          }
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventName = 'message';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventName = parseSseEventName(line) || 'message';
+            } else if (line.startsWith('data:')) {
+              const data = parseSseDataPayload(line);
+              if (!data) continue;
+              try {
+                const parsed = JSON.parse(data) as Record<string, unknown>;
+                const type =
+                  typeof parsed.type === 'string' && parsed.type
+                    ? parsed.type
+                    : eventName;
+                onEvent({
+                  type,
+                  id: typeof parsed.id === 'string' ? parsed.id : undefined,
+                  ts: typeof parsed.ts === 'string' ? parsed.ts : undefined,
+                  data: 'data' in parsed ? parsed.data : undefined,
+                });
+              } catch {
+                // skip malformed JSON
+              }
+              eventName = 'message';
+            } else if (line === '') {
+              eventName = 'message';
+            }
+          }
+        }
+        if (!controller.signal.aborted) {
+          opts?.onDone?.();
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        opts?.onError?.(err);
+      }
+    })();
+    return () => controller.abort();
+  }
+
   async cancelProjectRun(runId: string): Promise<ApiResponse<{ id: string; status: string }>> {
     const seg = this.pathSegment(runId);
     if (!seg) return this.invalidIdResponse('run id');

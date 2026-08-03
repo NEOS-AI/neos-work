@@ -930,23 +930,19 @@ export function ProjectWorkspace() {
       appendLog(`→ run ${res.data.id.slice(0, 8)}… (${res.data.status})`);
       setChatPrompt('');
 
-      // Poll events a few times for dry-run / fast CLI failure
-      let after: string | undefined;
-      for (let i = 0; i < 40; i++) {
-        const evRes = await client.listProjectRunEvents(res.data.id, after);
-        if (evRes.ok && evRes.data) {
-          for (const ev of evRes.data) {
-            after = ev.id;
-            const detail =
-              ev.type === 'run.stdout' && ev.data && typeof ev.data === 'object' && 'chunk' in ev.data
-                ? String((ev.data as { chunk: string }).chunk).slice(0, 120)
-                : ev.type === 'run.failed' && ev.data && typeof ev.data === 'object' && 'error' in ev.data
-                  ? String((ev.data as { error: string }).error)
-                  : '';
-            appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
-          }
-        }
-        const st = await client.getProjectRun(res.data.id);
+      const runId = res.data.id;
+      const logRunEvent = (ev: { type: string; data?: unknown }) => {
+        const detail =
+          ev.type === 'run.stdout' && ev.data && typeof ev.data === 'object' && 'chunk' in ev.data
+            ? String((ev.data as { chunk: string }).chunk).slice(0, 120)
+            : ev.type === 'run.failed' && ev.data && typeof ev.data === 'object' && 'error' in ev.data
+              ? String((ev.data as { error: string }).error)
+              : '';
+        appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
+      };
+
+      const applyTerminalStatus = async (): Promise<boolean> => {
+        const st = await client.getProjectRun(runId);
         if (
           st.ok
           && st.data
@@ -958,9 +954,49 @@ export function ProjectWorkspace() {
             const filesRes = await client.listProjectFiles(projectId);
             if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
           }
-          break;
+          return true;
         }
-        await new Promise((r) => setTimeout(r, 300));
+        return false;
+      };
+
+      // Prefer SSE for live run events; fall back to short poll if stream fails
+      let sawStreamEvent = false;
+      let streamErrored = false;
+      await new Promise<void>((resolve) => {
+        client.streamProjectRunEvents(
+          runId,
+          (ev) => {
+            sawStreamEvent = true;
+            logRunEvent(ev);
+          },
+          {
+            onDone: () => resolve(),
+            onError: () => {
+              streamErrored = true;
+              resolve();
+            },
+          },
+        );
+      });
+
+      // Always fetch final status once stream ends (or errors)
+      let terminal = await applyTerminalStatus();
+
+      // Short poll fallback when SSE fails immediately / yields nothing useful
+      if (!terminal && (streamErrored || !sawStreamEvent)) {
+        let after: string | undefined;
+        for (let i = 0; i < 10; i++) {
+          const evRes = await client.listProjectRunEvents(runId, after);
+          if (evRes.ok && evRes.data) {
+            for (const ev of evRes.data) {
+              after = ev.id;
+              logRunEvent(ev);
+            }
+          }
+          terminal = await applyTerminalStatus();
+          if (terminal) break;
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('project.chatFailed');

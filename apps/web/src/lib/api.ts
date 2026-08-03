@@ -3,6 +3,7 @@
  */
 
 import type {
+  FileRevision,
   ProjectFileContent,
   ProjectFileEntry,
   ProjectFileEventPayload,
@@ -166,6 +167,67 @@ export class WebApiClient {
     return this.requestEnvelope(
       'DELETE',
       `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`,
+    );
+  }
+
+  /**
+   * GET /api/projects/:id/revisions?path= — list file revisions (no content).
+   * Optional `filePath` is appended as `?path=` when free of control characters.
+   */
+  listRevisions(
+    projectId: string,
+    filePath?: string,
+  ): Promise<
+    ApiEnvelope<
+      Array<
+        Pick<FileRevision, 'id' | 'path' | 'contentHash' | 'source' | 'createdAt'> & {
+          projectId?: string;
+        }
+      >
+    >
+  > {
+    let qs = '';
+    if (filePath != null && filePath !== '') {
+      if (typeof filePath === 'string' && !/[\0\r\n]/.test(filePath)) {
+        const p = filePath.trim();
+        if (p) qs = `?path=${encodeURIComponent(p)}`;
+      }
+    }
+    return this.request(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/revisions${qs}`,
+    );
+  }
+
+  /** GET /api/projects/:id/revisions/:revisionId — full revision with content. */
+  getRevision(
+    projectId: string,
+    revisionId: string,
+  ): Promise<
+    ApiEnvelope<
+      Pick<FileRevision, 'id' | 'path' | 'contentHash' | 'source' | 'createdAt'> & {
+        projectId?: string;
+        content?: string;
+      }
+    >
+  > {
+    return this.request(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}`,
+    );
+  }
+
+  /**
+   * POST /api/projects/:id/revisions/:revisionId/restore
+   * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   */
+  restoreRevision(
+    projectId: string,
+    revisionId: string,
+  ): Promise<ApiEnvelope<{ path?: string; hash?: string }>> {
+    return this.requestEnvelope(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
     );
   }
 

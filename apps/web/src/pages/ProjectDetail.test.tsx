@@ -13,6 +13,35 @@ const readFile = vi.fn(async (_pid: string, path: string) => ({
     hash: 'abc',
   },
 }));
+const listRevisions = vi.fn(async () => ({
+  ok: true,
+  data: [
+    {
+      id: 'rev1',
+      projectId: 'p1',
+      path: 'index.html',
+      contentHash: 'deadbeef01',
+      source: 'user',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ],
+}));
+const getRevision = vi.fn(async () => ({
+  ok: true,
+  data: {
+    id: 'rev1',
+    projectId: 'p1',
+    path: 'index.html',
+    contentHash: 'deadbeef01',
+    source: 'user',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    content: '<html><body>old</body></html>',
+  },
+}));
+const restoreRevision = vi.fn(async () => ({
+  ok: true,
+  data: { path: 'index.html', hash: 'restored-h' },
+}));
 
 type SseHandler = (ev: {
   type: string;
@@ -69,6 +98,9 @@ vi.mock('../lib/api.js', () => {
       writeFile = writeFile;
       createRun = createRun;
       getRun = getRun;
+      listRevisions = listRevisions;
+      getRevision = getRevision;
+      restoreRevision = restoreRevision;
       streamProjectFileEvents = streamProjectFileEvents;
       streamProjectCollab = () => () => {};
       collabLock = vi.fn(async () => ({ ok: true, data: {} }));
@@ -136,6 +168,9 @@ describe('ProjectDetail Design Editor', () => {
     createRun.mockClear();
     getRun.mockClear();
     readFile.mockClear();
+    listRevisions.mockClear();
+    getRevision.mockClear();
+    restoreRevision.mockClear();
     streamProjectFileEvents.mockClear();
     sseHandler = null;
     readFile.mockImplementation(async (_pid: string, path: string) => ({
@@ -146,6 +181,35 @@ describe('ProjectDetail Design Editor', () => {
         hash: 'abc',
       },
     }));
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev1',
+          projectId: 'p1',
+          path: 'index.html',
+          contentHash: 'deadbeef01',
+          source: 'user',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    getRevision.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'rev1',
+        projectId: 'p1',
+        path: 'index.html',
+        contentHash: 'deadbeef01',
+        source: 'user',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        content: '<html><body>old</body></html>',
+      },
+    });
+    restoreRevision.mockResolvedValue({
+      ok: true,
+      data: { path: 'index.html', hash: 'restored-h' },
+    });
     getRun.mockResolvedValue({ ok: true, data: { id: 'run1', status: 'succeeded' } });
   });
 
@@ -236,5 +300,59 @@ describe('ProjectDetail Design Editor', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(readFile.mock.calls.length).toBe(readsAfterLoad);
     expect(screen.queryByTestId('conflict-banner')).not.toBeInTheDocument();
+  });
+
+  it('lists revisions for the open file', async () => {
+    renderProject();
+    await waitFor(() => {
+      expect(screen.getByTestId('web-revisions')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(listRevisions).toHaveBeenCalledWith('p1', 'index.html');
+    });
+    expect(screen.getByTestId('web-revision-rev1')).toBeInTheDocument();
+    expect(screen.getByText(/user · deadbeef/i)).toBeInTheDocument();
+  });
+
+  it('views a revision and shows content preview', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('web-revision-view-rev1'));
+    fireEvent.click(screen.getByTestId('web-revision-view-rev1'));
+    await waitFor(() => {
+      expect(getRevision).toHaveBeenCalledWith('p1', 'rev1');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('web-revision-preview')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('web-revision-preview').textContent).toContain(
+      '<html><body>old</body></html>',
+    );
+  });
+
+  it('restores a revision and reloads buffer from disk', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('web-revision-restore-rev1'));
+    const readsBefore = readFile.mock.calls.length;
+    readFile.mockImplementation(async () => ({
+      ok: true,
+      data: {
+        path: 'index.html',
+        content: '<html><body>restored-body</body></html>',
+        hash: 'restored-h',
+      },
+    }));
+    fireEvent.click(screen.getByTestId('web-revision-restore-rev1'));
+    await waitFor(() => {
+      expect(restoreRevision).toHaveBeenCalledWith('p1', 'rev1');
+    });
+    await waitFor(() => {
+      expect(readFile.mock.calls.length).toBeGreaterThan(readsBefore);
+    });
+    await waitFor(() => {
+      expect((screen.getByTestId('file-editor') as HTMLTextAreaElement).value).toContain(
+        'restored-body',
+      );
+    });
+    expect(listRevisions.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

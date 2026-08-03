@@ -44,6 +44,24 @@ export function ProjectDetail() {
   const [busy, setBusy] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
+  /** File revisions (list / view / restore). */
+  const [revisions, setRevisions] = useState<
+    Array<{
+      id: string;
+      projectId?: string;
+      path: string;
+      contentHash: string;
+      source: string;
+      createdAt: string;
+    }>
+  >([]);
+  const [revisionPreview, setRevisionPreview] = useState<{
+    id: string;
+    contentHash: string;
+    source: string;
+    content?: string;
+  } | null>(null);
+  const [revisionBusy, setRevisionBusy] = useState(false);
   /** Collab presence (v0.6 M1) — self + other peers. */
   const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
   const [collabPeers, setCollabPeers] = useState<PresencePeerInfo[]>([]);
@@ -431,6 +449,109 @@ export function ProjectDetail() {
     }
   };
 
+  const loadRevisions = useCallback(async () => {
+    if (!id || !buffer.path) {
+      setRevisions([]);
+      setRevisionPreview(null);
+      return;
+    }
+    try {
+      const res = await client.listRevisions(id, buffer.path);
+      if (res.ok && Array.isArray(res.data)) {
+        setRevisions(res.data);
+      } else {
+        setRevisions([]);
+      }
+      setRevisionPreview(null);
+    } catch (err) {
+      setRevisions([]);
+      setRevisionPreview(null);
+      setError(err instanceof ApiError ? err.message : 'Failed to load revisions');
+    }
+  }, [client, id, buffer.path]);
+
+  useEffect(() => {
+    void loadRevisions();
+  }, [loadRevisions]);
+
+  const viewRevision = async (revisionId: string) => {
+    if (!id || revisionBusy) return;
+    setRevisionBusy(true);
+    setError(null);
+    try {
+      const res = await client.getRevision(id, revisionId);
+      if (!res.ok || !res.data) {
+        setError(
+          (typeof res.error === 'string' && res.error ? res.error : 'Failed to load revision').replace(
+            /[\0\r\n]+/g,
+            ' ',
+          ).slice(0, 300),
+        );
+        setRevisionPreview(null);
+        return;
+      }
+      setRevisionPreview({
+        id: res.data.id,
+        contentHash: res.data.contentHash,
+        source: res.data.source,
+        content: res.data.content,
+      });
+    } catch (err) {
+      setRevisionPreview(null);
+      setError(err instanceof ApiError ? err.message : 'Failed to load revision');
+    } finally {
+      setRevisionBusy(false);
+    }
+  };
+
+  const restoreRevision = async (revisionId: string) => {
+    if (!id || revisionBusy) return;
+    if (dirty) {
+      const ok = window.confirm('Discard unsaved changes and restore this revision?');
+      if (!ok) return;
+    }
+    setRevisionBusy(true);
+    setError(null);
+    try {
+      const res = await client.restoreRevision(id, revisionId);
+      if (!res.ok) {
+        setError(
+          (typeof res.error === 'string' && res.error ? res.error : 'Restore failed')
+            .replace(/[\0\r\n]+/g, ' ')
+            .slice(0, 300),
+        );
+        return;
+      }
+      const path =
+        (typeof res.data?.path === 'string' && res.data.path) || buffer.path || null;
+      const restoreHash =
+        typeof res.data?.hash === 'string' && res.data.hash ? res.data.hash : null;
+      if (path) {
+        const file = await client.readFile(id, path);
+        const content = (file.data as { content?: string })?.content ?? '';
+        const hash =
+          (file.data as { hash?: string })?.hash
+          ?? restoreHash
+          ?? null;
+        setBuffer(
+          reduceEditorBuffer(createEmptyBuffer(), {
+            type: 'open',
+            path,
+            content,
+            hash,
+          }),
+        );
+        setSelection(null);
+      }
+      setStatus('Restored');
+      await loadRevisions();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Restore failed');
+    } finally {
+      setRevisionBusy(false);
+    }
+  };
+
   const save = async () => {
     if (!id || !buffer.path) return;
     if (/\0/.test(buffer.local)) {
@@ -457,6 +578,7 @@ export function ProjectDetail() {
           }),
         );
         setStatus('Saved');
+        void loadRevisions();
       } else {
         let msg =
           typeof res.error === 'string' && res.error ? res.error : 'Save failed';
@@ -701,6 +823,121 @@ export function ProjectDetail() {
           <p className="muted" style={{ fontSize: 11, margin: 0 }}>
             Uses replace-selection / patch by default. Full-file overwrite is not the default.
           </p>
+
+          <div
+            data-testid="web-revisions"
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '1px solid var(--border, #333)',
+            }}
+          >
+            <div className="muted" style={{ marginBottom: 8 }}>
+              Revisions
+              {buffer.path ? (
+                <span className="mono" style={{ marginLeft: 6, fontSize: 11 }}>
+                  {buffer.path}
+                </span>
+              ) : null}
+            </div>
+            {!buffer.path ? (
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+                Open a file to see revisions.
+              </p>
+            ) : revisions.length === 0 ? (
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+                No revisions yet.
+              </p>
+            ) : (
+              <ul className="list" style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {revisions.map((r) => (
+                  <li
+                    key={r.id}
+                    data-testid={`web-revision-${r.id}`}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '0.35rem 0',
+                      borderBottom: '1px solid var(--border, #2a2a2a)',
+                      fontSize: 11,
+                    }}
+                  >
+                    <div style={{ flex: '1 1 100%', minWidth: 0 }}>
+                      <div className="mono muted">
+                        {r.source} · {(r.contentHash || '').slice(0, 8)}
+                      </div>
+                      <div className="muted" style={{ fontSize: 10 }}>
+                        {r.createdAt}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ fontSize: 11, padding: '0.2rem 0.45rem' }}
+                      disabled={revisionBusy}
+                      data-testid={`web-revision-view-${r.id}`}
+                      onClick={() => void viewRevision(r.id)}
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ fontSize: 11, padding: '0.2rem 0.45rem' }}
+                      disabled={revisionBusy}
+                      data-testid={`web-revision-restore-${r.id}`}
+                      onClick={() => void restoreRevision(r.id)}
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {revisionPreview && (
+              <div
+                data-testid="web-revision-preview"
+                style={{
+                  marginTop: 8,
+                  maxHeight: 160,
+                  overflow: 'auto',
+                  border: '1px solid var(--border, #333)',
+                  borderRadius: 4,
+                  padding: 8,
+                }}
+              >
+                <div
+                  className="row"
+                  style={{ justifyContent: 'space-between', marginBottom: 4, fontSize: 10 }}
+                >
+                  <span className="mono muted">
+                    {revisionPreview.source} · {(revisionPreview.contentHash || '').slice(0, 8)}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{ fontSize: 10, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted, #888)' }}
+                    onClick={() => setRevisionPreview(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+                <pre
+                  className="mono"
+                  style={{
+                    margin: 0,
+                    fontSize: 10,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {revisionPreview.content ?? '(no content)'}
+                </pre>
+              </div>
+            )}
+          </div>
         </aside>
       </div>
     </div>

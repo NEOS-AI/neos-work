@@ -25,6 +25,13 @@ const createLiveArtifact = vi.fn();
 const refreshLiveArtifact = vi.fn();
 const deleteLiveArtifact = vi.fn();
 const streamProjectFileEvents = vi.fn(() => () => {});
+const streamProjectRunEvents = vi.fn(
+  (
+    _runId: string,
+    _onEvent: (event: { type: string; id?: string; ts?: string; data?: unknown }) => void,
+    _opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+  ) => () => {},
+);
 const streamProjectCollab = vi.fn(() => () => {});
 const collabLock = vi.fn(async () => ({ ok: true, data: {} }));
 const collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
@@ -54,6 +61,7 @@ const client = {
   refreshLiveArtifact,
   deleteLiveArtifact,
   streamProjectFileEvents,
+  streamProjectRunEvents,
   streamProjectCollab,
   collabLock,
   collabSelection,
@@ -289,6 +297,7 @@ describe('ProjectWorkspace', () => {
     refreshLiveArtifact.mockReset();
     deleteLiveArtifact.mockReset();
     streamProjectFileEvents.mockReset().mockImplementation(() => () => {});
+    streamProjectRunEvents.mockReset().mockImplementation(() => () => {});
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -700,23 +709,24 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('restore denied'));
   });
 
-  it('sends dry-run chat and polls run events until succeeded', async () => {
+  it('sends dry-run chat and streams run events until succeeded', async () => {
     const user = userEvent.setup();
     mockLoadedProject();
     createProjectRun.mockResolvedValue({
       ok: true,
       data: { id: 'run-abcdef01', status: 'running' },
     });
-    listProjectRunEvents.mockResolvedValue({
-      ok: true,
-      data: [
-        {
-          id: 'ev1',
+    streamProjectRunEvents.mockImplementation((_runId, onEvent, opts) => {
+      queueMicrotask(() => {
+        onEvent({
           type: 'run.stdout',
+          id: 'ev1',
           ts: 't',
           data: { chunk: 'hello from dry-run' },
-        },
-      ],
+        });
+        opts?.onDone?.();
+      });
+      return () => {};
     });
     getProjectRun.mockResolvedValue({
       ok: true,
@@ -743,12 +753,20 @@ describe('ProjectWorkspace', () => {
       );
     });
     await waitFor(() => {
-      expect(listProjectRunEvents).toHaveBeenCalled();
+      expect(streamProjectRunEvents).toHaveBeenCalledWith(
+        'run-abcdef01',
+        expect.any(Function),
+        expect.objectContaining({
+          onDone: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+      );
       expect(getProjectRun).toHaveBeenCalledWith('run-abcdef01');
       const log = screen.getByTestId('project-chat-log');
       expect(log.textContent).toMatch(/run\.stdout/);
       expect(log.textContent).toMatch(/succeeded/);
     });
+    expect(listProjectRunEvents).not.toHaveBeenCalled();
   });
 
   it('rejects chat prompts containing null bytes', async () => {
@@ -792,9 +810,13 @@ describe('ProjectWorkspace', () => {
       ok: true,
       data: { id: 'run-live001', status: 'running' },
     });
-    listProjectRunEvents.mockResolvedValue({
-      ok: true,
-      data: [{ id: 'ev1', type: 'run.started', ts: 't' }],
+    streamProjectRunEvents.mockImplementation((_runId, onEvent, opts) => {
+      queueMicrotask(() => {
+        onEvent({ type: 'run.started', id: 'ev1', ts: 't' });
+        onEvent({ type: 'run.succeeded', id: 'ev2', ts: 't2' });
+        opts?.onDone?.();
+      });
+      return () => {};
     });
     getProjectRun.mockResolvedValue({
       ok: true,
@@ -821,6 +843,11 @@ describe('ProjectWorkspace', () => {
       );
     });
     await waitFor(() => {
+      expect(streamProjectRunEvents).toHaveBeenCalledWith(
+        'run-live001',
+        expect.any(Function),
+        expect.any(Object),
+      );
       // initial load + success reload
       expect(listProjectFiles.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
