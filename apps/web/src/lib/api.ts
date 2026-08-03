@@ -348,6 +348,55 @@ export class WebApiClient {
     return this.request('GET', `/api/mcp/install-info${q ? `?${q}` : ''}`);
   }
 
+  /** GET /api/settings — all settings (sensitive values masked). */
+  getSettings(): Promise<ApiEnvelope<Record<string, string>>> {
+    return this.request('GET', '/api/settings');
+  }
+
+  /**
+   * PUT /api/settings/:key — create/update (or clear sensitive via empty string).
+   * Envelope: does not throw on HTTP errors.
+   */
+  saveSetting(key: string, value: string): Promise<ApiEnvelope<{ deleted?: boolean } | void>> {
+    if (typeof key !== 'string' || !key.trim() || /[\0\r\n]/.test(key) || key.length > 100) {
+      return Promise.resolve({ ok: false, error: 'Invalid setting key' });
+    }
+    if (typeof value !== 'string') {
+      return Promise.resolve({ ok: false, error: 'Invalid setting value' });
+    }
+    return this.requestEnvelope(
+      'PUT',
+      `/api/settings/${encodeURIComponent(key.trim())}`,
+      { value },
+    );
+  }
+
+  /**
+   * POST /api/settings/verify-key — validate provider API key (anthropic | google).
+   * Envelope: 4xx/5xx do not throw (caller checks ok + data.valid).
+   */
+  verifyApiKey(
+    provider: string,
+    key: string,
+  ): Promise<ApiEnvelope<{ valid?: boolean }>> {
+    return this.requestEnvelope('POST', '/api/settings/verify-key', { provider, key });
+  }
+
+  /**
+   * GET /api/collab/status — bus + presence registry (ops, no secrets).
+   */
+  getCollabStatus(): Promise<
+    ApiEnvelope<{
+      bus?: string;
+      nodeId?: string;
+      ready?: boolean;
+      detail?: string | null;
+      presence?: { kind?: string; ready?: boolean; detail?: string | null };
+    }>
+  > {
+    return this.request('GET', '/api/collab/status');
+  }
+
   /**
    * Subscribe to project file SSE (`file.changed` / `file.created` / `file.deleted`).
    * Uses fetch + Bearer (EventSource cannot set Authorization).
