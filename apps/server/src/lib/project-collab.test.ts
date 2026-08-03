@@ -8,11 +8,14 @@ import {
   joinProjectPresence,
   listProjectLocks,
   listProjectPeers,
+  listProjectSelections,
   normalizeLockPath,
   PRESENCE_IDLE_MS,
   projectPresenceCount,
   releaseFileLock,
   sanitizeDisplayName,
+  sanitizeSelector,
+  setSessionSelection,
   sweepIdlePresence,
   touchProjectPresence,
 } from './project-collab.js';
@@ -180,5 +183,94 @@ describe('project-collab presence', () => {
     expect(isSharedEditHardEnforce()).toBe(false);
     if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
     else process.env.NEOS_SHARED_EDIT = prev;
+  });
+
+  it('sanitizeSelector bounds and strips controls', () => {
+    expect(sanitizeSelector('  #hero > h1  ')).toBe('#hero > h1');
+    expect(sanitizeSelector('a\nb')).toBeNull();
+    expect(sanitizeSelector('x'.repeat(500))!.length).toBe(400);
+    expect(sanitizeSelector(null)).toBeNull();
+    expect(sanitizeSelector('')).toBeNull();
+  });
+
+  it('selection.changed broadcasts path+selector and clears on leave', () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    const ja = joinProjectPresence({ projectId: 'p1', displayName: 'A', listener: a })!;
+    const jb = joinProjectPresence({ projectId: 'p1', displayName: 'B', listener: b })!;
+
+    const set = setSessionSelection({
+      projectId: 'p1',
+      sessionId: ja.sessionId,
+      path: 'index.html',
+      selector: '#hero',
+      layerId: 'neos-1',
+    });
+    expect(set.ok).toBe(true);
+    if (!set.ok) throw new Error('expected selection');
+    expect(set.selection.path).toBe('index.html');
+    expect(set.selection.selector).toBe('#hero');
+    expect(listProjectSelections('p1')).toHaveLength(1);
+
+    expect(b).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'selection.changed',
+        selection: expect.objectContaining({
+          sessionId: ja.sessionId,
+          path: 'index.html',
+          selector: '#hero',
+          displayName: 'A',
+        }),
+      }),
+    );
+
+    // sync includes selections for new joiners
+    const jc = joinProjectPresence({ projectId: 'p1', displayName: 'C', listener: vi.fn() })!;
+    expect(jc.sync.type).toBe('presence.sync');
+    if (jc.sync.type === 'presence.sync') {
+      expect(jc.sync.selections.some((s) => s.path === 'index.html')).toBe(true);
+    }
+    jc.unsub();
+
+    // clear selection
+    const cleared = setSessionSelection({
+      projectId: 'p1',
+      sessionId: ja.sessionId,
+      path: null,
+      selector: null,
+    });
+    expect(cleared.ok).toBe(true);
+    expect(listProjectSelections('p1')).toHaveLength(0);
+
+    // re-set then leave should drop without leaving stale selection
+    setSessionSelection({
+      projectId: 'p1',
+      sessionId: ja.sessionId,
+      path: 'about.html',
+      selector: 'main',
+    });
+    expect(listProjectSelections('p1')).toHaveLength(1);
+    ja.unsub();
+    expect(listProjectSelections('p1')).toHaveLength(0);
+    jb.unsub();
+  });
+
+  it('setSessionSelection rejects bad path and missing session', () => {
+    const j = joinProjectPresence({ projectId: 'p1', displayName: 'A', listener: () => {} })!;
+    expect(
+      setSessionSelection({
+        projectId: 'p1',
+        sessionId: j.sessionId,
+        path: '../secret',
+      }).ok,
+    ).toBe(false);
+    expect(
+      setSessionSelection({
+        projectId: 'p1',
+        sessionId: 'missing',
+        path: 'index.html',
+      }).ok,
+    ).toBe(false);
+    j.unsub();
   });
 });

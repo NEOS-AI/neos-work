@@ -27,9 +27,14 @@ import {
   isCanvasOverlayEnabled,
 } from './canvas-style.js';
 import {
+  bboxesFromMultiEntries,
   editContextFromSelection,
+  multiEntriesFromBridge,
   selectionFromBridge,
   selectionFromLayer,
+  splitPrimaryExtras,
+  toggleMultiSelectLayer,
+  type MultiSelectEntry,
 } from './selection-state.js';
 import type { BridgeInboundMessage, BridgeSelectPayload } from './bridge-types.js';
 
@@ -137,6 +142,8 @@ export function DesignEditor({
   const [bridgeLayers, setBridgeLayers] = useState<LayerNode[] | null>(null);
   const [internalSelection, setInternalSelection] = useState<SelectionState | null>(null);
   const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
+  /** Secondary multi-select entries (primary is `selection` / selectDetail). v0.7 M3 */
+  const [multiExtras, setMultiExtras] = useState<MultiSelectEntry[]>([]);
   const iframeHostRef = useRef<HTMLDivElement>(null);
 
   const selection =
@@ -150,6 +157,47 @@ export function DesignEditor({
     },
     [controlledSelection, onSelectionChange],
   );
+
+  const clearMulti = useCallback(() => setMultiExtras([]), []);
+
+  const postHighlightMulti = useCallback((selectors: string[]) => {
+    const iframe = iframeHostRef.current?.querySelector('iframe');
+    if (!iframe) return;
+    if (selectors.length > 1) {
+      postToPreview(iframe as HTMLIFrameElement, {
+        type: 'neos.highlight-multi',
+        selectors,
+      });
+    } else {
+      postToPreview(iframe as HTMLIFrameElement, {
+        type: 'neos.highlight',
+        selector: selectors[0] ?? null,
+      });
+    }
+  }, []);
+
+  const applyMultiEntries = useCallback(
+    (entries: MultiSelectEntry[]) => {
+      const { primary, extras } = splitPrimaryExtras(entries);
+      setMultiExtras(extras);
+      if (!primary) {
+        setSelection(null, null);
+        postHighlightMulti([]);
+        return;
+      }
+      setSelection(primary.selection, primary.detail);
+      const selectors = entries
+        .map((e) => e.selection.selector)
+        .filter((s): s is string => Boolean(s));
+      postHighlightMulti(selectors);
+    },
+    [postHighlightMulti, setSelection],
+  );
+
+  // Drop multi when file path changes
+  useEffect(() => {
+    clearMulti();
+  }, [buffer.path, clearMulti]);
 
   const dirty = isDirty(buffer);
   const conflict = isConflict(buffer);
@@ -208,24 +256,39 @@ export function DesignEditor({
       }
       if (msg.type === 'neos.select' && buffer.path) {
         const payload = msg.selection;
-        const layer = findLayerBySelector(bridgeLayers ?? parseLayers, payload.selector);
-        const sel = selectionFromBridge(buffer.path, payload, layer?.id);
-        setSelection(sel, payload);
-        // Outline already set inside iframe; also ask highlight for consistency
-        const iframe = iframeHostRef.current?.querySelector('iframe');
-        if (iframe) {
-          postToPreview(iframe as HTMLIFrameElement, {
-            type: 'neos.highlight',
-            selector: payload.selector,
-          });
+        const layersNow = bridgeLayers ?? parseLayers;
+        const resolveLayerId = (selector: string) =>
+          findLayerBySelector(layersNow, selector)?.id;
+        const entries = multiEntriesFromBridge(buffer.path, payload, resolveLayerId);
+        // Bridge already painted multi outlines; sync React state
+        const { primary, extras } = splitPrimaryExtras(entries);
+        setMultiExtras(extras);
+        if (primary) {
+          setSelection(primary.selection, primary.detail);
+        } else {
+          setSelection(null, null);
         }
       }
     },
     [buffer.path, bridgeLayers, parseLayers, setSelection],
   );
 
-  const handleLayerSelect = (layer: LayerNode) => {
+  const handleLayerSelect = (layer: LayerNode, opts?: { additive?: boolean }) => {
     if (!buffer.path) return;
+    if (opts?.additive) {
+      const current: MultiSelectEntry[] = [];
+      for (const e of multiExtras) current.push(e);
+      if (selection) {
+        current.push({
+          selection,
+          detail: selectDetail,
+        });
+      }
+      const next = toggleMultiSelectLayer(current, buffer.path, layer);
+      applyMultiEntries(next);
+      return;
+    }
+    clearMulti();
     const sel = selectionFromLayer(buffer.path, layer);
     setSelection(sel, {
       selector: layer.selector,
@@ -288,6 +351,7 @@ export function DesignEditor({
 
   const handleEditWithAi = (layer: LayerNode) => {
     if (!buffer.path) return;
+    clearMulti();
     const sel = selectionFromLayer(buffer.path, layer);
     setSelection(sel, { selector: layer.selector, tag: layer.tag });
     onEditWithAi?.(sel, { selector: layer.selector, tag: layer.tag });
@@ -311,12 +375,55 @@ export function DesignEditor({
     setReloadKey((k) => k + 1);
   };
 
+  const multiEntriesForMove: MultiSelectEntry[] = (() => {
+    const list: MultiSelectEntry[] = [...multiExtras];
+    if (selection) {
+      list.push({ selection, detail: selectDetail });
+    }
+    return list;
+  })();
+
   const handleCanvasDragEnd = (dx: number, dy: number) => {
     if (dx === 0 && dy === 0) return;
-    const layerId = selection?.layerId ?? null;
-    const elId = elementIdFromSelector(selection?.selector);
-    applyCanvasHtml((base) =>
-      applyPositionDeltaToHtml(base, { neosId: layerId, elementId: elId, dx, dy }),
+    // Multi-move: apply same delta to every selected element (v0.7 M3)
+    applyCanvasHtml((base) => {
+      let html = base;
+      for (const entry of multiEntriesForMove) {
+        const layerId = entry.selection.layerId ?? null;
+        const elId = elementIdFromSelector(entry.selection.selector);
+        html = applyPositionDeltaToHtml(html, { neosId: layerId, elementId: elId, dx, dy });
+      }
+      return html;
+    });
+    // Nudge local bboxes so overlay tracks until iframe reload
+    setSelectDetail((d) =>
+      d?.bbox
+        ? {
+            ...d,
+            bbox: {
+              ...d.bbox,
+              x: d.bbox.x + dx,
+              y: d.bbox.y + dy,
+            },
+          }
+        : d,
+    );
+    setMultiExtras((extras) =>
+      extras.map((e) =>
+        e.detail?.bbox
+          ? {
+              ...e,
+              detail: {
+                ...e.detail,
+                bbox: {
+                  ...e.detail.bbox,
+                  x: e.detail.bbox.x + dx,
+                  y: e.detail.bbox.y + dy,
+                },
+              },
+            }
+          : e,
+      ),
     );
   };
 
@@ -327,6 +434,7 @@ export function DesignEditor({
       handleCanvasDragEnd(t.dx, t.dy);
       return;
     }
+    // Resize primary only
     applyCanvasHtml((base) =>
       applySizeDeltaToHtml(base, {
         neosId: layerId,
@@ -337,17 +445,31 @@ export function DesignEditor({
         baseHeight: t.baseHeight,
       }),
     );
+    setSelectDetail((d) =>
+      d?.bbox
+        ? {
+            ...d,
+            bbox: {
+              ...d.bbox,
+              width: Math.max(8, d.bbox.width + t.dw),
+              height: Math.max(8, d.bbox.height + t.dh),
+            },
+          }
+        : d,
+    );
   };
 
-  const canvasBbox =
-    canvasOn && selectDetail?.bbox
-      ? {
-          x: selectDetail.bbox.x,
-          y: selectDetail.bbox.y,
-          width: selectDetail.bbox.width,
-          height: selectDetail.bbox.height,
-        }
-      : null;
+  const canvasBoxes = (() => {
+    if (!canvasOn) return bboxesFromMultiEntries([]);
+    const entries: MultiSelectEntry[] = [...multiExtras];
+    if (selection && selectDetail?.bbox) {
+      entries.push({ selection, detail: selectDetail });
+    }
+    return bboxesFromMultiEntries(entries);
+  })();
+  const canvasBbox = canvasBoxes.primary;
+  const canvasExtraBboxes = canvasBoxes.extras;
+  const multiSelectCount = multiExtras.length + (selection?.selector ? 1 : 0);
 
   return (
     <div
@@ -423,10 +545,14 @@ export function DesignEditor({
         {selection?.selector && (
           <span
             data-testid="selection-badge"
-            title={selection.selector}
+            title={
+              multiSelectCount > 1
+                ? `${multiSelectCount} selected · ${selection.selector}`
+                : selection.selector
+            }
             style={{
               fontSize: 10,
-              maxWidth: 180,
+              maxWidth: 220,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -434,7 +560,9 @@ export function DesignEditor({
               fontFamily: 'ui-monospace, monospace',
             }}
           >
-            {labels.selection}: {selection.selector}
+            {multiSelectCount > 1
+              ? `${multiSelectCount} selected`
+              : `${labels.selection}: ${selection.selector}`}
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -537,6 +665,12 @@ export function DesignEditor({
               layers={layers}
               selectedLayerId={selection?.layerId}
               selectedSelector={selection?.selector}
+              selectedLayerIds={multiExtras
+                .map((e) => e.selection.layerId)
+                .filter((id): id is string => Boolean(id))}
+              selectedSelectors={multiExtras
+                .map((e) => e.selection.selector)
+                .filter((s): s is string => Boolean(s))}
               source={layerSource}
               onSelect={handleLayerSelect}
               onHover={handleLayerHover}
@@ -615,7 +749,17 @@ export function DesignEditor({
                 {dirty ? ` (${labels.dirty})` : ''}
               </span>
               {mode === 'inspect' && (
-                <span style={{ fontSize: 10, color: '#a5b4fc' }}>click to select</span>
+                <span style={{ fontSize: 10, color: '#a5b4fc' }}>
+                  click to select · shift+click multi
+                </span>
+              )}
+              {canvasOn && multiSelectCount > 1 && (
+                <span
+                  data-testid="multi-select-badge"
+                  style={{ fontSize: 10, color: '#c4b5fd' }}
+                >
+                  {multiSelectCount} multi
+                </span>
               )}
             </div>
             <div
@@ -637,8 +781,9 @@ export function DesignEditor({
                 onBridgeMessage={handleBridgeMessage}
               />
               <CanvasOverlay
-                enabled={canvasOn && Boolean(selection?.selector)}
+                enabled={canvasOn && Boolean(canvasBbox)}
                 bbox={canvasBbox}
+                extraBboxes={canvasExtraBboxes}
                 onDragEnd={handleCanvasDragEnd}
                 onTransformEnd={handleCanvasTransformEnd}
               />

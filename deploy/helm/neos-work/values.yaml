@@ -5,7 +5,7 @@ replicaCount: 1
 
 image:
   repository: neos-work
-  tag: "0.7.1"
+  tag: "0.7.4"
   pullPolicy: IfNotPresent
 
 service:

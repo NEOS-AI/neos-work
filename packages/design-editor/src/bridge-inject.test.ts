@@ -11,6 +11,15 @@ describe('bridge-inject', () => {
     expect(script).toContain('postMessage');
     expect(script).toContain('__neosBridge');
   });
+
+  it('includes multi-select shift handling and highlight-multi (v0.7 M3)', () => {
+    const script = buildBridgeInjectScript();
+    expect(script).toContain('neos-inspect-sel-multi');
+    expect(script).toContain('shiftKey');
+    expect(script).toContain('neos.highlight-multi');
+    expect(script).toContain('additive');
+    expect(script).toContain('multiPayloads');
+  });
 });
 
 describe('injectBridgeIntoHtml placements', () => {

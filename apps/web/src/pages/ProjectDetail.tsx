@@ -16,7 +16,11 @@ import {
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
-import { PresencePeersBar, type PresencePeerInfo } from '@neos-work/ui-app';
+import {
+  PresencePeersBar,
+  type PeerSelectionInfo,
+  type PresencePeerInfo,
+} from '@neos-work/ui-app';
 import { loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
 
@@ -49,6 +53,8 @@ export function ProjectDetail() {
   const [foreignLocks, setForeignLocks] = useState<
     Record<string, { sessionId: string; displayName: string }>
   >({});
+  /** sessionId → peer selection (v0.7 M2). */
+  const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
 
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
@@ -110,13 +116,14 @@ export function ProjectDetail() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  // Collab presence + locks (v0.6 M1/M3)
+  // Collab presence + locks + selection (v0.6 M1/M3 + v0.7 M2)
   useEffect(() => {
     if (!conn.token || !id) return;
     setCollabSelf(null);
     setCollabPeers([]);
     setCollabSessionId(null);
     setForeignLocks({});
+    setPeerSelections({});
     const stop = client.streamProjectCollab(
       id,
       (ev) => {
@@ -135,6 +142,13 @@ export function ProjectDetail() {
             next[l.path] = { sessionId: l.sessionId, displayName: l.displayName };
           }
           setForeignLocks(next);
+          const selMap: Record<string, PeerSelectionInfo> = {};
+          for (const s of ev.selections ?? []) {
+            if (selfId && s.sessionId === selfId) continue;
+            if (s.path == null && s.selector == null) continue;
+            selMap[s.sessionId] = s as PeerSelectionInfo;
+          }
+          setPeerSelections(selMap);
         } else if (ev.type === 'presence.join' && ev.peer) {
           const peer = ev.peer as PresencePeerInfo;
           setCollabPeers((list) =>
@@ -148,6 +162,12 @@ export function ProjectDetail() {
             for (const [path, h] of Object.entries(m)) {
               if (h.sessionId !== left) n[path] = h;
             }
+            return n;
+          });
+          setPeerSelections((m) => {
+            if (!(left in m)) return m;
+            const n = { ...m };
+            delete n[left];
             return n;
           });
         } else if (ev.type === 'lock.acquired' && ev.lock) {
@@ -164,6 +184,18 @@ export function ProjectDetail() {
             const n = { ...m };
             delete n[ev.path!];
             return n;
+          });
+        } else if (ev.type === 'selection.changed' && ev.selection) {
+          const sel = ev.selection as PeerSelectionInfo;
+          if (collabSessionRef.current && sel.sessionId === collabSessionRef.current) return;
+          setPeerSelections((m) => {
+            if (sel.path == null && sel.selector == null) {
+              if (!(sel.sessionId in m)) return m;
+              const n = { ...m };
+              delete n[sel.sessionId];
+              return n;
+            }
+            return { ...m, [sel.sessionId]: sel };
           });
         }
       },
@@ -202,6 +234,32 @@ export function ProjectDetail() {
       });
     };
   }, [client, conn.token, id, collabSessionId, buffer.path]);
+
+  // M2: publish local selection (path + selector) for peer indicators
+  useEffect(() => {
+    if (!conn.token || !id || !collabSessionId) return;
+    const path = selection?.filePath ?? buffer.path ?? null;
+    const selector = selection?.selector ?? null;
+    const layerId = selection?.layerId ?? null;
+    const t = window.setTimeout(() => {
+      void client.collabSelection(id, {
+        sessionId: collabSessionId,
+        path,
+        selector,
+        layerId,
+      });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [
+    client,
+    conn.token,
+    id,
+    collabSessionId,
+    selection?.filePath,
+    selection?.selector,
+    selection?.layerId,
+    buffer.path,
+  ]);
 
   // Project file SSE — reload open buffer on agent/remote writes (disk-changed / conflict)
   // Skip re-fetch when event hash matches known disk/pending tip (hash-aware, v0.5.30).
@@ -385,7 +443,7 @@ export function ProjectDetail() {
         </div>
         <div className="row muted" style={{ fontSize: 12 }}>
           {dirty && <span data-testid="web-dirty">Unsaved</span>}
-          <PresencePeersBar peers={collabPeers} self={collabSelf} />
+          <PresencePeersBar peers={collabPeers} self={collabSelf} selections={peerSelections} />
           {lockedByOther && (
             <span
               data-testid="file-lock-banner"

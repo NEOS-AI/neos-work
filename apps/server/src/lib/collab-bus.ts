@@ -50,6 +50,7 @@ export function isCollabBusFanoutEvent(event: CollabEvent): boolean {
     || event.type === 'presence.leave'
     || event.type === 'lock.acquired'
     || event.type === 'lock.released'
+    || event.type === 'selection.changed'
   );
 }
 

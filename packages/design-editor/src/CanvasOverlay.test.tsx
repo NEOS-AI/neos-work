@@ -51,4 +51,21 @@ describe('CanvasOverlay', () => {
       baseHeight: 40,
     });
   });
+
+  it('renders extra multi-select frames (v0.7 M3)', () => {
+    const { container } = render(
+      <CanvasOverlay
+        enabled
+        bbox={{ x: 10, y: 20, width: 100, height: 40 }}
+        extraBboxes={[
+          { x: 50, y: 80, width: 30, height: 20 },
+          { x: 0, y: 0, width: 0, height: 0 }, // invalid ignored
+        ]}
+      />,
+    );
+    const root = container.querySelector('[data-testid="canvas-overlay"]') as HTMLElement;
+    expect(root.getAttribute('data-multi-count')).toBe('2');
+    expect(screen.getAllByTestId('canvas-overlay-extra-frame')).toHaveLength(1);
+    expect(screen.getByTestId('canvas-overlay-handle').textContent).toMatch(/2 selected/);
+  });
 });

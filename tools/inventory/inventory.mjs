@@ -32,6 +32,8 @@ const GATES = {
   minMediaSurfaces: 3, // image, audio, video
   /** v0.6 train feature files that must remain present */
   requireV06Features: true,
+  /** v0.7 train (M0–M4 closeout) */
+  requireV07Features: true,
 };
 
 function existsRel(rel) {
@@ -53,14 +55,49 @@ function scanV06Features() {
     helmSnippet: existsRel('deploy/helm/neos-work/Chart.yaml'),
     migrationV06: existsRel('docs/migration/v0.6.0.md'),
     planV06: existsRel('docs/plans/PLAN_FOR_V0_6_0.md'),
-    // v0.7 M0+
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/** v0.7 capability surface (M0–M4) — canvas polish + collab transport. */
+function scanV07Features() {
+  const features = {
     planV07: existsRel('docs/plans/PLAN_FOR_V0_7_0.md'),
+    migrationV07: existsRel('docs/migration/v0.7.0.md'),
     canvasResize: existsRel('packages/design-editor/src/CanvasOverlay.tsx')
       && (readText('packages/design-editor/src/canvas-style.ts') ?? '').includes(
         'applySizeDeltaToHtml',
       ),
     collabBus: existsRel('apps/server/src/lib/collab-bus.ts')
       && existsRel('apps/server/src/lib/collab-bus-redis.ts'),
+    selectionAwareness:
+      existsRel('apps/server/src/lib/project-collab.ts')
+      && (readText('apps/server/src/lib/project-collab.ts') ?? '').includes('setSessionSelection')
+      && (readText('apps/server/src/lib/collab-types.ts') ?? '').includes('selection.changed')
+      && (readText('packages/ui-app/src/PresencePeersBar.tsx') ?? '').includes('selections'),
+    canvasMultiSelect:
+      existsRel('packages/design-editor/src/CanvasOverlay.tsx')
+      && (readText('packages/design-editor/src/CanvasOverlay.tsx') ?? '').includes('extraBboxes')
+      && (readText('packages/design-editor/src/bridge-inject.ts') ?? '').includes(
+        'neos.highlight-multi',
+      )
+      && (readText('packages/design-editor/src/selection-state.ts') ?? '').includes(
+        'toggleMultiSelectLayer',
+      ),
+    implM0: existsRel('docs/implementation/v0.7/v0.7.0.md'),
+    implM1: existsRel('docs/implementation/v0.7/v0.7.1.md'),
+    implM2: existsRel('docs/implementation/v0.7/v0.7.2.md'),
+    implM3: existsRel('docs/implementation/v0.7/v0.7.3.md'),
+    implM4: existsRel('docs/implementation/v0.7/v0.7.4.md'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -257,6 +294,7 @@ export function buildInventory() {
   const packs = scanDomainPacks();
   const mcp = scanMcpTools();
   const v06 = scanV06Features();
+  const v07 = scanV07Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -273,6 +311,7 @@ export function buildInventory() {
       domainPacks: packs,
       mcpTools: mcp,
       v06Features: v06,
+      v07Features: v07,
     },
     gates: GATES,
     summary: {
@@ -287,6 +326,8 @@ export function buildInventory() {
       mcpTools: mcp.count,
       v06Features: v06.count,
       v06FeaturesTotal: v06.total,
+      v07Features: v07.count,
+      v07FeaturesTotal: v07.total,
     },
   };
 
@@ -318,6 +359,17 @@ export function evaluateGates(inventory) {
       missing: v06?.missing ?? [],
     });
   }
+  if (g.requireV07Features) {
+    const v07 = inventory.catalogs?.v07Features;
+    const ok = Boolean(v07?.ok);
+    results.push({
+      id: 'v07Features',
+      ok,
+      actual: v07?.count ?? 0,
+      min: v07?.total ?? 0,
+      missing: v07?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -343,7 +395,11 @@ function main(argv = process.argv.slice(2)) {
   if (check && !inv.checks.ok) {
     process.stderr.write('inventory gates failed:\n');
     for (const r of inv.checks.results.filter((x) => !x.ok)) {
-      if (r.id === 'v06Features' && Array.isArray(r.missing) && r.missing.length) {
+      if (
+        (r.id === 'v06Features' || r.id === 'v07Features')
+        && Array.isArray(r.missing)
+        && r.missing.length
+      ) {
         process.stderr.write(`  - ${r.id}: missing ${r.missing.join(', ')}\n`);
       } else {
         process.stderr.write(`  - ${r.id}: ${r.actual} < min ${r.min}\n`);

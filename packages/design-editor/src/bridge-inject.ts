@@ -16,13 +16,16 @@ export function buildBridgeInjectScript(): string {
   var SRC = ${JSON.stringify(NEOS_BRIDGE_SOURCE)};
   var inspectOn = false;
   var hoverEl = null;
-  var selectEl = null;
+  /** Multi-select list; last element is primary (v0.7 M3). */
+  var selectEls = [];
   var HL = 'neos-inspect-hl';
   var SEL = 'neos-inspect-sel';
+  var SEL_MULTI = 'neos-inspect-sel-multi';
   var style = document.createElement('style');
   style.textContent =
     '.' + HL + '{outline:2px dashed #818cf8!important;outline-offset:1px}' +
-    '.' + SEL + '{outline:2px solid #6366f1!important;outline-offset:1px}';
+    '.' + SEL + '{outline:2px solid #6366f1!important;outline-offset:1px}' +
+    '.' + SEL_MULTI + '{outline:2px solid #a5b4fc!important;outline-offset:1px;outline-style:dashed!important}';
   (document.head || document.documentElement).appendChild(style);
 
   function post(msg) {
@@ -153,10 +156,31 @@ export function buildBridgeInjectScript(): string {
   }
 
   function clearSelect() {
-    if (selectEl) {
-      selectEl.classList.remove(SEL);
-      selectEl = null;
+    for (var i = 0; i < selectEls.length; i++) {
+      try {
+        selectEls[i].classList.remove(SEL);
+        selectEls[i].classList.remove(SEL_MULTI);
+      } catch (e) {}
     }
+    selectEls = [];
+  }
+
+  function restyleSelects() {
+    for (var i = 0; i < selectEls.length; i++) {
+      try {
+        selectEls[i].classList.remove(SEL);
+        selectEls[i].classList.remove(SEL_MULTI);
+        if (i === selectEls.length - 1) selectEls[i].classList.add(SEL);
+        else selectEls[i].classList.add(SEL_MULTI);
+      } catch (e) {}
+    }
+  }
+
+  function indexOfSelectEl(el) {
+    for (var i = 0; i < selectEls.length; i++) {
+      if (selectEls[i] === el) return i;
+    }
+    return -1;
   }
 
   function highlight(selector) {
@@ -166,9 +190,22 @@ export function buildBridgeInjectScript(): string {
       var el = document.querySelector(selector);
       if (el) {
         el.classList.add(SEL);
-        selectEl = el;
+        selectEls = [el];
       }
     } catch (e) {}
+  }
+
+  /** Multi-outline; last selector is primary. */
+  function highlightMulti(selectors) {
+    clearSelect();
+    if (!selectors || !selectors.length) return;
+    for (var i = 0; i < selectors.length; i++) {
+      try {
+        var el = document.querySelector(selectors[i]);
+        if (el && indexOfSelectEl(el) < 0) selectEls.push(el);
+      } catch (e) {}
+    }
+    restyleSelects();
   }
 
   function scrollToSel(selector) {
@@ -189,6 +226,14 @@ export function buildBridgeInjectScript(): string {
       outerHTML: outer,
       bbox: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
     };
+  }
+
+  function multiPayloads() {
+    var out = [];
+    for (var i = 0; i < selectEls.length; i++) {
+      out.push(selectPayload(selectEls[i]));
+    }
+    return out;
   }
 
   function onMove(ev) {
@@ -214,8 +259,35 @@ export function buildBridgeInjectScript(): string {
     ev.preventDefault();
     ev.stopPropagation();
     clearHover();
-    highlight(cssPath(t));
-    post({ type: 'neos.select', selection: selectPayload(t) });
+    var additive = !!(ev.shiftKey || ev.metaKey);
+    if (additive) {
+      var idx = indexOfSelectEl(t);
+      if (idx >= 0) {
+        try {
+          selectEls[idx].classList.remove(SEL);
+          selectEls[idx].classList.remove(SEL_MULTI);
+        } catch (e) {}
+        selectEls.splice(idx, 1);
+      } else {
+        selectEls.push(t);
+      }
+      restyleSelects();
+    } else {
+      clearSelect();
+      try { t.classList.add(SEL); } catch (e) {}
+      selectEls = [t];
+    }
+    var multi = multiPayloads();
+    var primary = multi.length ? multi[multi.length - 1] : selectPayload(t);
+    var payload = {
+      selector: primary.selector,
+      tag: primary.tag,
+      outerHTML: primary.outerHTML,
+      bbox: primary.bbox,
+      additive: additive
+    };
+    if (multi.length > 1) payload.multi = multi;
+    post({ type: 'neos.select', selection: payload });
   }
 
   window.addEventListener('message', function (ev) {
@@ -231,6 +303,11 @@ export function buildBridgeInjectScript(): string {
     }
     if (data.type === 'neos.highlight') {
       highlight(data.selector || null);
+      return;
+    }
+    if (data.type === 'neos.highlight-multi') {
+      var sels = Array.isArray(data.selectors) ? data.selectors : [];
+      highlightMulti(sels);
       return;
     }
     if (data.type === 'neos.scroll-to') {

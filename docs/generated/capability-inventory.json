@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-02T11:35:04.850Z",
-  "version": "0.7.1",
+  "generatedAt": "2026-08-03T11:25:20.966Z",
+  "version": "0.7.4",
   "root": "/Users/yeonwoosung/Desktop/neos-work",
   "catalogs": {
     "agentCliDefs": {
@@ -167,8 +167,8 @@
     },
     "v06Features": {
       "ok": true,
-      "count": 14,
-      "total": 14,
+      "count": 11,
+      "total": 11,
       "features": {
         "collabPresence": true,
         "collabRoutes": true,
@@ -180,10 +180,26 @@
         "marketplaceCatalog": true,
         "helmSnippet": true,
         "migrationV06": true,
-        "planV06": true,
+        "planV06": true
+      },
+      "missing": []
+    },
+    "v07Features": {
+      "ok": true,
+      "count": 11,
+      "total": 11,
+      "features": {
         "planV07": true,
+        "migrationV07": true,
         "canvasResize": true,
-        "collabBus": true
+        "collabBus": true,
+        "selectionAwareness": true,
+        "canvasMultiSelect": true,
+        "implM0": true,
+        "implM1": true,
+        "implM2": true,
+        "implM3": true,
+        "implM4": true
       },
       "missing": []
     }
@@ -197,7 +213,8 @@
     "minMcpTools": 6,
     "minDomainPacks": 4,
     "minMediaSurfaces": 3,
-    "requireV06Features": true
+    "requireV06Features": true,
+    "requireV07Features": true
   },
   "summary": {
     "agentCliDefs": 13,
@@ -209,8 +226,10 @@
     "mediaSurfaces": 3,
     "domainPacks": 4,
     "mcpTools": 8,
-    "v06Features": 14,
-    "v06FeaturesTotal": 14
+    "v06Features": 11,
+    "v06FeaturesTotal": 11,
+    "v07Features": 11,
+    "v07FeaturesTotal": 11
   },
   "checks": {
     "ok": true,
@@ -266,8 +285,15 @@
       {
         "id": "v06Features",
         "ok": true,
-        "actual": 14,
-        "min": 14,
+        "actual": 11,
+        "min": 11,
+        "missing": []
+      },
+      {
+        "id": "v07Features",
+        "ok": true,
+        "actual": 11,
+        "min": 11,
         "missing": []
       }
     ]

@@ -10,9 +10,16 @@ export interface LayersPanelProps {
   layers: LayerNode[];
   selectedLayerId?: string | null;
   selectedSelector?: string | null;
+  /** Additional selected layer ids (v0.7 M3 multi-select). */
+  selectedLayerIds?: string[];
+  /** Additional selected selectors (v0.7 M3). */
+  selectedSelectors?: string[];
   /** Source badge: live bridge snapshot vs HTML/JSX parse fallback. */
   source?: 'bridge' | 'parse' | 'jsx' | 'jsx-partial';
-  onSelect?: (layer: LayerNode) => void;
+  /**
+   * Layer select. Second arg reports Shift/meta for multi-select (v0.7 M3).
+   */
+  onSelect?: (layer: LayerNode, opts?: { additive?: boolean }) => void;
   onHover?: (layer: LayerNode | null) => void;
   onToggleVisibility?: (layer: LayerNode, visible: boolean) => void;
   onToggleLock?: (layer: LayerNode, locked: boolean) => void;
@@ -49,6 +56,8 @@ function LayerRow({
   layer,
   selectedLayerId,
   selectedSelector,
+  selectedLayerIds,
+  selectedSelectors,
   collapsed,
   onToggleCollapse,
   onSelect,
@@ -61,9 +70,11 @@ function LayerRow({
   layer: LayerNode;
   selectedLayerId?: string | null;
   selectedSelector?: string | null;
+  selectedLayerIds?: string[];
+  selectedSelectors?: string[];
   collapsed: Set<string>;
   onToggleCollapse: (id: string) => void;
-  onSelect?: (layer: LayerNode) => void;
+  onSelect?: (layer: LayerNode, opts?: { additive?: boolean }) => void;
   onHover?: (layer: LayerNode | null) => void;
   onToggleVisibility?: (layer: LayerNode, visible: boolean) => void;
   onToggleLock?: (layer: LayerNode, locked: boolean) => void;
@@ -72,11 +83,15 @@ function LayerRow({
 }) {
   const hasKids = layer.children.length > 0;
   const isCollapsed = collapsed.has(layer.id);
-  const selected =
+  const primarySelected =
     (selectedLayerId != null && selectedLayerId === layer.id)
     || (selectedSelector != null
       && selectedSelector !== ''
       && selectedSelector === layer.selector);
+  const multiSelected =
+    (selectedLayerIds?.includes(layer.id) ?? false)
+    || (selectedSelectors?.includes(layer.selector) ?? false);
+  const selected = primarySelected || multiSelected;
 
   return (
     <>
@@ -86,7 +101,10 @@ function LayerRow({
         data-testid={`layer-row-${layer.id}`}
         data-layer-id={layer.id}
         data-selected={selected ? '1' : undefined}
-        onClick={() => onSelect?.(layer)}
+        data-multi-selected={multiSelected && !primarySelected ? '1' : undefined}
+        onClick={(e) =>
+          onSelect?.(layer, { additive: Boolean(e.shiftKey || e.metaKey) })
+        }
         onMouseEnter={() => onHover?.(layer)}
         onMouseLeave={() => onHover?.(null)}
         onContextMenu={(e) => {
@@ -103,9 +121,11 @@ function LayerRow({
           paddingLeft: 6 + layer.depth * 12,
           fontSize: 11,
           cursor: 'pointer',
-          background: selected
+          background: primarySelected
             ? 'color-mix(in srgb, var(--accent, #6366f1) 28%, transparent)'
-            : 'transparent',
+            : multiSelected
+              ? 'color-mix(in srgb, var(--accent, #6366f1) 14%, transparent)'
+              : 'transparent',
           color: layer.visible ? 'var(--text-primary, inherit)' : 'var(--text-muted, #888)',
           opacity: layer.visible ? 1 : 0.55,
           borderRadius: 4,
@@ -183,6 +203,8 @@ function LayerRow({
             layer={c}
             selectedLayerId={selectedLayerId}
             selectedSelector={selectedSelector}
+            selectedLayerIds={selectedLayerIds}
+            selectedSelectors={selectedSelectors}
             collapsed={collapsed}
             onToggleCollapse={onToggleCollapse}
             onSelect={onSelect}
@@ -201,6 +223,8 @@ export function LayersPanel({
   layers,
   selectedLayerId,
   selectedSelector,
+  selectedLayerIds,
+  selectedSelectors,
   source = 'parse',
   onSelect,
   onHover,
@@ -326,6 +350,8 @@ export function LayersPanel({
               layer={layer}
               selectedLayerId={selectedLayerId}
               selectedSelector={selectedSelector}
+              selectedLayerIds={selectedLayerIds}
+              selectedSelectors={selectedSelectors}
               collapsed={collapsed}
               onToggleCollapse={toggleCollapse}
               onSelect={onSelect}

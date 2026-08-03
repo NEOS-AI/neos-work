@@ -62,6 +62,8 @@ vi.mock('../lib/api.js', () => {
       getRun = getRun;
       streamProjectFileEvents = streamProjectFileEvents;
       streamProjectCollab = () => () => {};
+      collabLock = vi.fn(async () => ({ ok: true, data: {} }));
+      collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
     },
   };
 });

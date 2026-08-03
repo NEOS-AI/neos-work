@@ -1,18 +1,19 @@
 /**
- * In-process project collaboration presence + file locks (v0.6 M0–M3).
- * Powers GET /api/projects/:id/collab/stream — presence.* / lock.*.
+ * In-process project collaboration presence + file locks + selection (v0.6–v0.7).
+ * Powers GET /api/projects/:id/collab/stream — presence.* / lock.* / selection.*.
  * Ephemeral only; no disk persistence. Disk files remain SSOT for content.
  *
  * M1: lastSeen + idle sweep; peer list includes stable colorHint for avatars.
  * M3: advisory file locks (ADR 0001 — lock+LWW spike).
  * v0.7 M1: fan-out via CollabBus (memory default; redis optional).
+ * v0.7 M2: selection awareness (path + selector) for peer indicators.
  */
 
 import { randomBytes } from 'node:crypto';
 import { getCollabBus, isCollabBusFanoutEvent } from './collab-bus.js';
-import type { CollabEvent, FileLock, PresencePeer } from './collab-types.js';
+import type { CollabEvent, FileLock, PeerSelection, PresencePeer } from './collab-types.js';
 
-export type { CollabEvent, FileLock, PresencePeer } from './collab-types.js';
+export type { CollabEvent, FileLock, PeerSelection, PresencePeer } from './collab-types.js';
 
 type RoomListener = (event: CollabEvent) => void;
 
@@ -28,8 +29,12 @@ type Session = {
 const rooms = new Map<string, Map<string, Session>>();
 /** projectId → path → FileLock */
 const lockRooms = new Map<string, Map<string, FileLock>>();
+/** projectId → sessionId → PeerSelection (local + remote-mirrored) */
+const selectionRooms = new Map<string, Map<string, PeerSelection>>();
 const MAX_PEERS_PER_PROJECT = 32;
 const MAX_LOCKS_PER_PROJECT = 64;
+const MAX_SELECTIONS_PER_PROJECT = 64;
+const MAX_SELECTOR_LEN = 400;
 /** Drop sessions with no heartbeat / SSE activity (ms). */
 export const PRESENCE_IDLE_MS = 90_000;
 
@@ -67,6 +72,41 @@ function listLocks(projectId: string): FileLock[] {
   return [...m.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
+function listSelections(projectId: string): PeerSelection[] {
+  const m = selectionRooms.get(projectId);
+  if (!m) return [];
+  return [...m.values()].sort((a, b) => a.sessionId.localeCompare(b.sessionId));
+}
+
+function clearSelectionForSession(
+  projectId: string,
+  sessionId: string,
+  opts?: { broadcast?: boolean },
+): void {
+  const m = selectionRooms.get(projectId);
+  if (!m) return;
+  const prev = m.get(sessionId);
+  if (!prev) return;
+  m.delete(sessionId);
+  if (m.size === 0) selectionRooms.delete(projectId);
+  if (opts?.broadcast === false) return;
+  const cleared: PeerSelection = {
+    sessionId: prev.sessionId,
+    displayName: prev.displayName,
+    colorHint: prev.colorHint,
+    path: null,
+    selector: null,
+    layerId: null,
+    updatedAt: new Date().toISOString(),
+  };
+  broadcast(projectId, {
+    type: 'selection.changed',
+    projectId,
+    selection: cleared,
+    ts: cleared.updatedAt,
+  });
+}
+
 function releaseAllLocksForSession(projectId: string, sessionId: string): void {
   const m = lockRooms.get(projectId);
   if (!m) return;
@@ -82,6 +122,22 @@ function releaseAllLocksForSession(projectId: string, sessionId: string): void {
     });
   }
   if (m.size === 0) lockRooms.delete(projectId);
+}
+
+/** Sanitize CSS/layer selector for awareness (no control chars, bounded). */
+export function sanitizeSelector(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const t = raw.trim().slice(0, MAX_SELECTOR_LEN);
+  return t || null;
+}
+
+/** Sanitize optional layer id. */
+export function sanitizeLayerId(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const t = raw.trim().slice(0, 128);
+  return t || null;
 }
 
 /** Stable 0–359 from session id for avatar colors. */
@@ -151,7 +207,7 @@ function broadcast(
 }
 
 /**
- * Apply a remote bus event on this node (locks state + local listeners).
+ * Apply a remote bus event on this node (locks/selections + local listeners).
  * Does not re-publish to the bus.
  */
 export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): void {
@@ -171,6 +227,37 @@ export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): v
       m.delete(event.path);
       if (m.size === 0) lockRooms.delete(id);
     }
+  } else if (event.type === 'selection.changed' && event.selection) {
+    const sel = event.selection;
+    let m = selectionRooms.get(id);
+    if (!m) {
+      m = new Map();
+      selectionRooms.set(id, m);
+    }
+    if (sel.path == null && sel.selector == null) {
+      m.delete(sel.sessionId);
+      if (m.size === 0) selectionRooms.delete(id);
+    } else {
+      if (!m.has(sel.sessionId) && m.size >= MAX_SELECTIONS_PER_PROJECT) {
+        // drop oldest by updatedAt
+        let oldestId: string | null = null;
+        let oldestTs = '';
+        for (const [sid, s] of m) {
+          if (!oldestId || s.updatedAt < oldestTs) {
+            oldestId = sid;
+            oldestTs = s.updatedAt;
+          }
+        }
+        if (oldestId) m.delete(oldestId);
+      }
+      m.set(sel.sessionId, sel);
+    }
+  } else if (event.type === 'presence.leave' && event.sessionId) {
+    const m = selectionRooms.get(id);
+    if (m) {
+      m.delete(event.sessionId);
+      if (m.size === 0) selectionRooms.delete(id);
+    }
   }
   // Presence join/leave from remote: we only mirror to local listeners for UX;
   // remote peers are not in local `rooms` (no SSE session on this node).
@@ -189,6 +276,7 @@ function forceLeave(
   room.delete(sessionId);
   if (room.size === 0) rooms.delete(projectId);
   releaseAllLocksForSession(projectId, sessionId);
+  clearSelectionForSession(projectId, sessionId, { broadcast: false });
   const ev: CollabEvent = {
     type: 'presence.leave',
     projectId,
@@ -249,6 +337,7 @@ export function joinProjectPresence(input: {
     self: peerPublic(session),
     peers: listPeers(projectId, session.sessionId),
     locks: listLocks(projectId),
+    selections: listSelections(projectId).filter((s) => s.sessionId !== session.sessionId),
     ts,
   };
 
@@ -414,14 +503,92 @@ export function getFileLock(projectId: string, path: string): FileLock | null {
   return lockRooms.get(id)?.get(p) ?? null;
 }
 
+/**
+ * Publish (or clear) the session's editing selection for peer awareness (v0.7 M2).
+ * `path` / `selector` null or empty → clear that field; both null → clear selection.
+ * Same session may update freely; no exclusive claim (unlike file locks).
+ */
+export function setSessionSelection(input: {
+  projectId: string;
+  sessionId: string;
+  path?: string | null;
+  selector?: string | null;
+  layerId?: string | null;
+}): { ok: true; selection: PeerSelection } | { ok: false; error: string } {
+  const projectId = normalizeProjectId(input.projectId);
+  if (!projectId) return { ok: false, error: 'Invalid project' };
+  if (typeof input.sessionId !== 'string' || /[\0\r\n]/.test(input.sessionId)) {
+    return { ok: false, error: 'Invalid session' };
+  }
+  const sessionId = input.sessionId.trim();
+  if (!sessionId || sessionId.length > 64) return { ok: false, error: 'Invalid session' };
+
+  const session = rooms.get(projectId)?.get(sessionId);
+  if (!session) return { ok: false, error: 'Session not in presence room' };
+
+  // path: null/undefined/'' → null; otherwise normalizeLockPath
+  let path: string | null = null;
+  if (input.path != null && input.path !== '') {
+    path = normalizeLockPath(input.path);
+    if (!path) return { ok: false, error: 'Invalid path' };
+  }
+  const selector = sanitizeSelector(input.selector ?? null);
+  const layerId = sanitizeLayerId(input.layerId ?? null);
+
+  const updatedAt = new Date().toISOString();
+  const selection: PeerSelection = {
+    sessionId,
+    displayName: session.displayName,
+    colorHint: session.colorHint,
+    path,
+    selector,
+    layerId,
+    updatedAt,
+  };
+
+  let m = selectionRooms.get(projectId);
+  if (!m) {
+    m = new Map();
+    selectionRooms.set(projectId, m);
+  }
+
+  if (path == null && selector == null) {
+    m.delete(sessionId);
+    if (m.size === 0) selectionRooms.delete(projectId);
+  } else {
+    if (!m.has(sessionId) && m.size >= MAX_SELECTIONS_PER_PROJECT) {
+      return { ok: false, error: 'Too many selections on project' };
+    }
+    m.set(sessionId, selection);
+  }
+
+  // Touch presence so selection activity keeps session alive
+  session.lastSeen = Date.now();
+
+  broadcast(projectId, {
+    type: 'selection.changed',
+    projectId,
+    selection,
+    ts: updatedAt,
+  });
+  return { ok: true, selection };
+}
+
+export function listProjectSelections(projectId: string): PeerSelection[] {
+  const id = normalizeProjectId(projectId);
+  if (!id) return [];
+  return listSelections(id);
+}
+
 /** When true, file PUT rejects writers who do not hold the lock (if a lock exists). */
 export function isSharedEditHardEnforce(): boolean {
   const v = process.env.NEOS_SHARED_EDIT;
   return v === '1' || v === 'true';
 }
 
-/** Test helper — clear all rooms and locks. */
+/** Test helper — clear all rooms, locks, and selections. */
 export function clearProjectPresence(): void {
   rooms.clear();
   lockRooms.clear();
+  selectionRooms.clear();
 }

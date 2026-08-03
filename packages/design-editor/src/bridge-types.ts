@@ -35,6 +35,18 @@ export interface BridgeSelectPayload {
   tag: string;
   outerHTML?: string;
   bbox?: { x: number; y: number; width: number; height: number };
+  /** True when Shift was held (v0.7 M3 multi-select). */
+  additive?: boolean;
+  /**
+   * Full multi-selection after this click (ordered; last = primary).
+   * Omitted when length ≤ 1. Nested items do not include `multi` / `additive`.
+   */
+  multi?: Array<{
+    selector: string;
+    tag: string;
+    outerHTML?: string;
+    bbox?: { x: number; y: number; width: number; height: number };
+  }>;
 }
 
 export type BridgeInboundMessage =
@@ -49,6 +61,8 @@ export type BridgeOutboundCommand =
   | { type: 'neos.ping' }
   | { type: 'neos.request-snapshot' }
   | { type: 'neos.highlight'; selector: string | null }
+  /** Multi-outline; last selector is primary (v0.7 M3). */
+  | { type: 'neos.highlight-multi'; selectors: string[] }
   | { type: 'neos.scroll-to'; selector: string }
   | { type: 'neos.set-inspect'; enabled: boolean };
 

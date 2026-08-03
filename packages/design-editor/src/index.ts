@@ -44,11 +44,16 @@ export {
 } from './jsx-layers.js';
 
 export {
+  bboxesFromMultiEntries,
   createEmptySelection,
   editContextFromSelection,
+  multiEntriesFromBridge,
   selectionEquals,
   selectionFromBridge,
   selectionFromLayer,
+  splitPrimaryExtras,
+  toggleMultiSelectLayer,
+  type MultiSelectEntry,
 } from './selection-state.js';
 
 export { DEVICE_PRESETS, resolvePresetWidth, type DevicePreset } from './device-presets.js';

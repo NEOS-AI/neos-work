@@ -1007,6 +1007,33 @@ describe('projects import-token and path validation', () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it('collab/selection requires live presence session', async () => {
+    const project = await createViaApi();
+    const missing = await app.request(`/api/projects/${project.id}/collab/selection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'deadbeefdeadbeef',
+        path: 'index.html',
+        selector: '#hero',
+      }),
+    });
+    expect(missing.status).toBe(404);
+
+    const badBody = await app.request(`/api/projects/${project.id}/collab/selection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json',
+    });
+    expect(badBody.status).toBe(400);
+
+    const snap = await app.request(`/api/projects/${project.id}/collab/selections`);
+    expect(snap.status).toBe(200);
+    const body = (await snap.json()) as { ok: boolean; data: { selections: unknown[] } };
+    expect(body.ok).toBe(true);
+    expect(body.data.selections).toEqual([]);
+  });
 });
 
 describe('projects import zip edge paths', () => {

@@ -29,4 +29,27 @@ describe('PresencePeersBar', () => {
     expect(within(root).getByText('Bob')).toBeTruthy();
     expect(within(root).getByText(/\(you\)/)).toBeTruthy();
   });
+
+  it('shows selection hints for peers (v0.7 M2)', () => {
+    const { container } = render(
+      <PresencePeersBar
+        self={{ sessionId: 's1', displayName: 'Me', colorHint: 10 }}
+        peers={[{ sessionId: 'abc123xyz', displayName: 'Alice', colorHint: 40 }]}
+        selections={{
+          abc123xyz: {
+            sessionId: 'abc123xyz',
+            path: 'pages/index.html',
+            selector: '#hero > h1',
+          },
+        }}
+      />,
+    );
+    const root = container.querySelector('[data-testid="collab-peers"]') as HTMLElement;
+    expect(within(root).getByTestId('collab-peers-label').textContent).toMatch(/selecting/);
+    fireEvent.click(within(root).getByTestId('collab-peers-toggle'));
+    expect(within(root).getByTestId('collab-peer-selection-abc123').textContent).toMatch(
+      /index\.html/,
+    );
+    expect(within(root).getByTestId('collab-peer-selection-abc123').textContent).toMatch(/#hero/);
+  });
 });

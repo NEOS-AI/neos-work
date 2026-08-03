@@ -1,5 +1,5 @@
 /**
- * Preview canvas overlay (v0.6 M2 move + v0.7 M0 resize).
+ * Preview canvas overlay (v0.6 M2 move + v0.7 M0 resize + v0.7 M3 multi-select).
  * Coordinates are relative to the overlay host (iframe outer box).
  */
 
@@ -20,8 +20,13 @@ export type CanvasTransformEnd =
 
 export interface CanvasOverlayProps {
   enabled: boolean;
-  /** Selection box in overlay/host coordinates. */
+  /** Primary selection box (move + SE resize). */
   bbox: CanvasBBox | null;
+  /**
+   * Secondary multi-select outlines (v0.7 M3). Move applies to all via parent;
+   * resize stays primary-only.
+   */
+  extraBboxes?: CanvasBBox[];
   /** @deprecated prefer onTransformEnd */
   onDragEnd?: (dx: number, dy: number) => void;
   onTransformEnd?: (t: CanvasTransformEnd) => void;
@@ -43,9 +48,14 @@ type Gesture =
       baseH: number;
     };
 
+function validBbox(b: CanvasBBox | null | undefined): b is CanvasBBox {
+  return Boolean(b && b.width > 0 && b.height > 0);
+}
+
 export function CanvasOverlay({
   enabled,
   bbox,
+  extraBboxes = [],
   onDragEnd,
   onTransformEnd,
   onDrag,
@@ -112,18 +122,20 @@ export function CanvasOverlay({
     };
   }, [onMouseMove, onMouseUp]);
 
-  if (!enabled || !bbox || bbox.width <= 0 || bbox.height <= 0) {
+  if (!enabled || !validBbox(bbox)) {
     return null;
   }
 
-  let left = bbox.x;
-  let top = bbox.y;
+  const extras = extraBboxes.filter(validBbox);
+  const multiCount = 1 + extras.length;
+  const moveDx = gesture?.mode === 'move' ? gesture.dx : 0;
+  const moveDy = gesture?.mode === 'move' ? gesture.dy : 0;
+
+  let left = bbox.x + moveDx;
+  let top = bbox.y + moveDy;
   let width = bbox.width;
   let height = bbox.height;
-  if (gesture?.mode === 'move') {
-    left += gesture.dx;
-    top += gesture.dy;
-  } else if (gesture?.mode === 'resize') {
+  if (gesture?.mode === 'resize') {
     width = Math.max(8, bbox.width + gesture.dw);
     height = Math.max(8, bbox.height + gesture.dh);
   }
@@ -156,6 +168,7 @@ export function CanvasOverlay({
     <div
       className={className}
       data-testid="canvas-overlay"
+      data-multi-count={multiCount}
       style={{
         position: 'absolute',
         inset: 0,
@@ -164,6 +177,26 @@ export function CanvasOverlay({
         ...style,
       }}
     >
+      {extras.map((b, i) => (
+        <div
+          key={`extra-${i}-${Math.round(b.x)}-${Math.round(b.y)}`}
+          data-testid="canvas-overlay-extra-frame"
+          role="presentation"
+          style={{
+            position: 'absolute',
+            left: b.x + moveDx,
+            top: b.y + moveDy,
+            width: b.width,
+            height: b.height,
+            boxSizing: 'border-box',
+            border: '2px dashed #a5b4fc',
+            background: 'rgba(165, 180, 252, 0.06)',
+            pointerEvents: 'none',
+            borderRadius: 2,
+          }}
+          title="Multi-selected"
+        />
+      ))}
       <div
         data-testid="canvas-overlay-frame"
         role="presentation"
@@ -182,7 +215,11 @@ export function CanvasOverlay({
           borderRadius: 2,
           boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
         }}
-        title="Drag to reposition; SE corner to resize"
+        title={
+          multiCount > 1
+            ? `Drag to move ${multiCount} selected; SE corner resizes primary`
+            : 'Drag to reposition; SE corner to resize'
+        }
       >
         <span
           data-testid="canvas-overlay-handle"
@@ -199,7 +236,7 @@ export function CanvasOverlay({
             pointerEvents: 'none',
           }}
         >
-          Move / Resize
+          {multiCount > 1 ? `${multiCount} selected · Move` : 'Move / Resize'}
         </span>
         <div
           data-testid="canvas-overlay-resize-se"
@@ -218,7 +255,7 @@ export function CanvasOverlay({
             pointerEvents: 'auto',
             boxSizing: 'border-box',
           }}
-          title="Resize"
+          title="Resize primary"
         />
       </div>
     </div>

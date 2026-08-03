@@ -1,18 +1,39 @@
 /**
- * Collab awareness chrome (v0.6 M1) — avatars + peer list popover.
+ * Collab awareness chrome (v0.6 M1 + v0.7 M2 selection) — avatars + peer list popover.
  */
 
 import { useMemo, useState, type CSSProperties } from 'react';
-import type { PresencePeerInfo } from './types.js';
+import type { PeerSelectionInfo, PresencePeerInfo } from './types.js';
 
 export interface PresencePeersBarProps {
   /** Other peers (not self). */
   peers: PresencePeerInfo[];
   self?: PresencePeerInfo | null;
+  /**
+   * sessionId → current editing selection (path + selector).
+   * Used for peer indicators under names (v0.7 M2).
+   */
+  selections?: Record<string, PeerSelectionInfo | undefined>;
   className?: string;
   /** Compact label when alone. */
   soloLabel?: string;
   listTitle?: string;
+}
+
+function formatSelectionHint(sel?: PeerSelectionInfo | null): string | null {
+  if (!sel) return null;
+  const path = sel.path?.trim() || '';
+  const selector = sel.selector?.trim() || '';
+  if (!path && !selector) return null;
+  if (path && selector) {
+    const shortSel = selector.length > 36 ? `${selector.slice(0, 34)}…` : selector;
+    const base = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path;
+    return `${base} · ${shortSel}`;
+  }
+  if (path) {
+    return path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path;
+  }
+  return selector.length > 40 ? `${selector.slice(0, 38)}…` : selector;
 }
 
 function initials(name: string): string {
@@ -43,6 +64,7 @@ function avatarStyle(hint?: number): CSSProperties {
 export function PresencePeersBar({
   peers,
   self = null,
+  selections = {},
   className,
   soloLabel = 'Solo',
   listTitle = 'On this project',
@@ -55,6 +77,14 @@ export function PresencePeersBar({
   const count = others.length;
   const shown = others.slice(0, 4);
   const extra = Math.max(0, count - shown.length);
+  const selectingCount = useMemo(
+    () =>
+      others.filter((p) => {
+        const h = formatSelectionHint(selections[p.sessionId]);
+        return Boolean(h);
+      }).length,
+    [others, selections],
+  );
 
   return (
     <div
@@ -92,20 +122,26 @@ export function PresencePeersBar({
               {initials(self.displayName)}
             </span>
           )}
-          {shown.map((p, i) => (
-            <span
-              key={p.sessionId}
-              style={{
-                ...avatarStyle(p.colorHint),
-                marginLeft: i === 0 && !self ? 0 : -6,
-                zIndex: 4 - i,
-              }}
-              title={p.displayName}
-              data-testid={`collab-peer-avatar-${p.sessionId.slice(0, 6)}`}
-            >
-              {initials(p.displayName)}
-            </span>
-          ))}
+          {shown.map((p, i) => {
+            const hint = formatSelectionHint(selections[p.sessionId]);
+            return (
+              <span
+                key={p.sessionId}
+                style={{
+                  ...avatarStyle(p.colorHint),
+                  marginLeft: i === 0 && !self ? 0 : -6,
+                  zIndex: 4 - i,
+                  boxShadow: hint
+                    ? `0 0 0 2px hsl(${(p.colorHint ?? 220) % 360} 70% 55%)`
+                    : undefined,
+                }}
+                title={hint ? `${p.displayName}: ${hint}` : p.displayName}
+                data-testid={`collab-peer-avatar-${p.sessionId.slice(0, 6)}`}
+              >
+                {initials(p.displayName)}
+              </span>
+            );
+          })}
           {extra > 0 && (
             <span
               style={{
@@ -120,7 +156,11 @@ export function PresencePeersBar({
           )}
         </span>
         <span data-testid="collab-peers-label">
-          {count === 0 ? soloLabel : `${count} peer${count === 1 ? '' : 's'}`}
+          {count === 0
+            ? soloLabel
+            : selectingCount > 0
+              ? `${count} peer${count === 1 ? '' : 's'} · ${selectingCount} selecting`
+              : `${count} peer${count === 1 ? '' : 's'}`}
         </span>
       </button>
 
@@ -164,16 +204,44 @@ export function PresencePeersBar({
               </span>
             </div>
           )}
-          {others.map((p) => (
-            <div
-              key={p.sessionId}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px', fontSize: 12 }}
-              data-testid={`collab-peer-row-${p.sessionId.slice(0, 6)}`}
-            >
-              <span style={avatarStyle(p.colorHint)}>{initials(p.displayName)}</span>
-              <span style={{ color: 'var(--text-primary, #eee)' }}>{p.displayName}</span>
-            </div>
-          ))}
+          {others.map((p) => {
+            const hint = formatSelectionHint(selections[p.sessionId]);
+            return (
+              <div
+                key={p.sessionId}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  padding: '4px 2px',
+                  fontSize: 12,
+                }}
+                data-testid={`collab-peer-row-${p.sessionId.slice(0, 6)}`}
+              >
+                <span style={avatarStyle(p.colorHint)}>{initials(p.displayName)}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ color: 'var(--text-primary, #eee)' }}>{p.displayName}</div>
+                  {hint && (
+                    <div
+                      data-testid={`collab-peer-selection-${p.sessionId.slice(0, 6)}`}
+                      title={hint}
+                      style={{
+                        fontSize: 10,
+                        color: 'var(--text-muted, #888)',
+                        fontFamily: 'ui-monospace, monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: 200,
+                      }}
+                    >
+                      {hint}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
           {others.length === 0 && (
             <div style={{ fontSize: 12, color: 'var(--text-muted, #888)', padding: '4px 2px' }}>
               No other sessions

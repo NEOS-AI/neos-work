@@ -1248,8 +1248,8 @@ export class EngineClient {
   }
 
   /**
-   * Project collab presence SSE (v0.6.0 M0).
-   * Events: ready | presence.sync | presence.join | presence.leave
+   * Project collab presence SSE (v0.6.0 M0 + v0.7 M2 selection).
+   * Events: ready | presence.sync | presence.join | presence.leave | lock.* | selection.changed
    */
   streamProjectCollab(
     projectId: string,
@@ -1263,6 +1263,24 @@ export class EngineClient {
       locks?: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
       lock?: { path: string; sessionId: string; displayName: string; acquiredAt?: string };
       path?: string;
+      selections?: Array<{
+        sessionId: string;
+        displayName?: string;
+        colorHint?: number;
+        path: string | null;
+        selector: string | null;
+        layerId?: string | null;
+        updatedAt?: string;
+      }>;
+      selection?: {
+        sessionId: string;
+        displayName?: string;
+        colorHint?: number;
+        path: string | null;
+        selector: string | null;
+        layerId?: string | null;
+        updatedAt?: string;
+      };
     }) => void,
     opts?: { displayName?: string },
   ): () => void {
@@ -1333,6 +1351,29 @@ export class EngineClient {
                         })
                       : undefined,
                   path: typeof parsed.path === 'string' ? parsed.path : undefined,
+                  selections: Array.isArray(parsed.selections)
+                    ? (parsed.selections as Array<{
+                        sessionId: string;
+                        displayName?: string;
+                        colorHint?: number;
+                        path: string | null;
+                        selector: string | null;
+                        layerId?: string | null;
+                        updatedAt?: string;
+                      }>)
+                    : undefined,
+                  selection:
+                    parsed.selection && typeof parsed.selection === 'object'
+                      ? (parsed.selection as {
+                          sessionId: string;
+                          displayName?: string;
+                          colorHint?: number;
+                          path: string | null;
+                          selector: string | null;
+                          layerId?: string | null;
+                          updatedAt?: string;
+                        })
+                      : undefined,
                 });
               } catch {
                 // skip
@@ -1357,6 +1398,26 @@ export class EngineClient {
     const seg = this.pathSegment(projectId);
     if (!seg) return this.invalidIdResponse('project id');
     const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/locks`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
+  }
+
+  /** Publish editing selection for peer awareness (v0.7 M2). */
+  async collabSelection(
+    projectId: string,
+    body: {
+      sessionId: string;
+      path?: string | null;
+      selector?: string | null;
+      layerId?: string | null;
+    },
+  ): Promise<ApiResponse<{ selection?: unknown }>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/selection`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(body),

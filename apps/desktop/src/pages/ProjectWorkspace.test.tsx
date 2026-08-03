@@ -26,6 +26,7 @@ const deleteLiveArtifact = vi.fn();
 const streamProjectFileEvents = vi.fn(() => () => {});
 const streamProjectCollab = vi.fn(() => () => {});
 const collabLock = vi.fn(async () => ({ ok: true, data: {} }));
+const collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
 
 const client = {
   getProject,
@@ -51,6 +52,7 @@ const client = {
   streamProjectFileEvents,
   streamProjectCollab,
   collabLock,
+  collabSelection,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({

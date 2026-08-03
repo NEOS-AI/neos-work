@@ -12,6 +12,7 @@ import {
   clearProjectPresence,
   joinProjectPresence,
   listProjectLocks,
+  listProjectSelections,
 } from './project-collab.js';
 import type { CollabEvent } from './collab-types.js';
 
@@ -27,7 +28,7 @@ describe('collab-bus', () => {
     expect(resolveCollabBusKind({ NEOS_COLLAB_BUS: 'MEMORY' })).toBe('memory');
   });
 
-  it('isCollabBusFanoutEvent excludes presence.sync', () => {
+  it('isCollabBusFanoutEvent excludes presence.sync includes selection.changed', () => {
     expect(
       isCollabBusFanoutEvent({
         type: 'presence.sync',
@@ -40,6 +41,7 @@ describe('collab-bus', () => {
         },
         peers: [],
         locks: [],
+        selections: [],
         ts: '',
       }),
     ).toBe(false);
@@ -48,6 +50,21 @@ describe('collab-bus', () => {
         type: 'presence.join',
         projectId: 'p',
         peer: { sessionId: 's', displayName: 'A', joinedAt: '', colorHint: 1 },
+        ts: '',
+      }),
+    ).toBe(true);
+    expect(
+      isCollabBusFanoutEvent({
+        type: 'selection.changed',
+        projectId: 'p',
+        selection: {
+          sessionId: 's',
+          displayName: 'A',
+          colorHint: 1,
+          path: 'index.html',
+          selector: '#x',
+          updatedAt: '',
+        },
         ts: '',
       }),
     ).toBe(true);
@@ -138,5 +155,36 @@ describe('collab-bus', () => {
       ts: 't',
     });
     expect(listProjectLocks('p1')).toHaveLength(0);
+  });
+
+  it('applyRemoteCollabEvent merges selection state', () => {
+    applyRemoteCollabEvent('p1', {
+      type: 'selection.changed',
+      projectId: 'p1',
+      selection: {
+        sessionId: 'r1',
+        displayName: 'R',
+        colorHint: 12,
+        path: 'index.html',
+        selector: '#hero',
+        updatedAt: 't',
+      },
+      ts: 't',
+    });
+    expect(listProjectSelections('p1')[0]?.selector).toBe('#hero');
+    applyRemoteCollabEvent('p1', {
+      type: 'selection.changed',
+      projectId: 'p1',
+      selection: {
+        sessionId: 'r1',
+        displayName: 'R',
+        colorHint: 12,
+        path: null,
+        selector: null,
+        updatedAt: 't2',
+      },
+      ts: 't2',
+    });
+    expect(listProjectSelections('p1')).toHaveLength(0);
   });
 });

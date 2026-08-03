@@ -6,6 +6,17 @@ export interface PresencePeerInfo {
   colorHint?: number;
 }
 
+/** Peer editing awareness (v0.7 M2 selection.changed / presence.sync.selections). */
+export interface PeerSelectionInfo {
+  sessionId: string;
+  displayName?: string;
+  colorHint?: number;
+  path: string | null;
+  selector: string | null;
+  layerId?: string | null;
+  updatedAt?: string;
+}
+
 /** Shared MCP install-info payload (daemon GET /api/mcp/install-info). */
 export interface McpInstallInfo {
   serverName?: string;

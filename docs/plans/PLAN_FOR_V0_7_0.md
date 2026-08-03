@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_7_0 — Canvas polish · Collab transport · Selection awareness
 
-**Status:** M0–M1 shipped through **0.7.1**; M2+ open  
-**Baseline:** monorepo **0.7.1**
+**Status:** **M0–M4 complete** through **0.7.4**  
+**Baseline:** monorepo **0.7.4**
 **Parent backlog:** free-canvas stretch, multi-replica collab, CRDT (deferred from v0.6)
 
 ## One-line
@@ -27,9 +27,9 @@ Deepen Design Editor canvas tooling and prepare collab for multi-node without ab
 |---|---|---|
 | **M0** | Canvas resize | SE resize handle → width/height styles; tests; **0.7.0** |
 | **M1** | Collab bus interface | `CollabBus` + memory + Redis/stub — **done 0.7.1** |
-| **M2** | Selection awareness | SSE `selection.changed` peer indicators |
-| **M3** | Canvas multi-select | Shift+click multi bbox (stretch) |
-| **M4** | Docs / inventory | v0.7 migration + inventory gates |
+| **M2** | Selection awareness | SSE `selection.changed` peer indicators — **done 0.7.2** |
+| **M3** | Canvas multi-select | Shift+click multi bbox — **done 0.7.3** |
+| **M4** | Docs / inventory | v0.7 migration + inventory gates — **done 0.7.4** |
 
 ## Task M0 (0.7.0)
 
@@ -48,6 +48,32 @@ Deepen Design Editor canvas tooling and prepare collab for multi-node without ab
 - [x] Hub fan-out + `applyRemoteCollabEvent`  
 - [x] `GET /api/collab/status`  
 - [x] Tests + `docs/implementation/v0.7/v0.7.1.md`  
+
+## Task M2 (0.7.2)
+
+- [x] `PeerSelection` + `selection.changed` event type  
+- [x] `setSessionSelection` + clear on leave  
+- [x] `presence.sync.selections` snapshot  
+- [x] `POST /api/projects/:id/collab/selection` + `GET …/selections`  
+- [x] Bus fan-out for `selection.changed`  
+- [x] Web + desktop publish + `PresencePeersBar` indicators  
+- [x] Tests + `docs/implementation/v0.7/v0.7.2.md`  
+
+## Task M3 (0.7.3)
+
+- [x] Bridge Shift+click multi + `selection.multi` / `neos.highlight-multi`  
+- [x] Layers Shift+click multi highlight  
+- [x] CanvasOverlay primary + extra bboxes  
+- [x] Multi-move HTML SSOT (resize primary-only)  
+- [x] Tests + `docs/implementation/v0.7/v0.7.3.md`  
+
+## Task M4 (0.7.4)
+
+- [x] `docs/migration/v0.7.0.md`  
+- [x] Inventory `v07Features` gate (plan, migration, M0–M3 code, impl M0–M4)  
+- [x] README / Helm pointers  
+- [x] Tests + `docs/implementation/v0.7/v0.7.4.md`  
+- [x] Version **0.7.4**  
 
 ## Decisions
 

@@ -54,7 +54,9 @@ import {
   joinProjectPresence,
   listProjectLocks,
   listProjectPeers,
+  listProjectSelections,
   releaseFileLock,
+  setSessionSelection,
   sweepIdlePresence,
   touchProjectPresence,
   type CollabEvent,
@@ -430,6 +432,79 @@ projects.get('/:id/collab/locks', (c) => {
       hardEnforce: isSharedEditHardEnforce(),
     },
   });
+});
+
+/**
+ * Snapshot of peer selections (v0.7 M2).
+ */
+projects.get('/:id/collab/selections', (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({
+    ok: true,
+    data: { selections: listProjectSelections(id) },
+  });
+});
+
+/**
+ * Publish or clear this session's editing selection (path + selector).
+ * body: { sessionId, path?: string | null, selector?: string | null, layerId?: string | null }
+ */
+projects.post('/:id/collab/selection', async (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+  const sessionId =
+    typeof (body as { sessionId?: unknown }).sessionId === 'string'
+      ? (body as { sessionId: string }).sessionId
+      : '';
+  if (!sessionId || /[\0\r\n]/.test(sessionId)) {
+    return c.json({ ok: false, error: 'sessionId required' }, 400);
+  }
+  const pathRaw = (body as { path?: unknown }).path;
+  const selectorRaw = (body as { selector?: unknown }).selector;
+  const layerIdRaw = (body as { layerId?: unknown }).layerId;
+  const path =
+    pathRaw === null || pathRaw === undefined
+      ? null
+      : typeof pathRaw === 'string'
+        ? pathRaw
+        : null;
+  const selector =
+    selectorRaw === null || selectorRaw === undefined
+      ? null
+      : typeof selectorRaw === 'string'
+        ? selectorRaw
+        : null;
+  const layerId =
+    layerIdRaw === null || layerIdRaw === undefined
+      ? null
+      : typeof layerIdRaw === 'string'
+        ? layerIdRaw
+        : null;
+  if (pathRaw !== null && pathRaw !== undefined && typeof pathRaw !== 'string') {
+    return c.json({ ok: false, error: 'path must be string or null' }, 400);
+  }
+  if (selectorRaw !== null && selectorRaw !== undefined && typeof selectorRaw !== 'string') {
+    return c.json({ ok: false, error: 'selector must be string or null' }, 400);
+  }
+  const r = setSessionSelection({
+    projectId: id,
+    sessionId,
+    path,
+    selector,
+    layerId,
+  });
+  if (!r.ok) {
+    const status = r.error.includes('Session') ? 404 : 400;
+    return c.json({ ok: false, error: r.error }, status);
+  }
+  return c.json({ ok: true, data: { selection: r.selection } });
 });
 
 /**

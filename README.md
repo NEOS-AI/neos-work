@@ -31,8 +31,20 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **Capability dump:** `pnpm inventory` / `pnpm inventory:check` · smoke: `pnpm e2e:smoke` · C5: `pnpm e2e:c5` · live (opt-in): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
 **v0.5 closeout:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md) · **v0.6 plan:** [docs/plans/PLAN_FOR_V0_6_0.md](docs/plans/PLAN_FOR_V0_6_0.md)  
 **v0.6 migration:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
-**v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md)  
-**Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — move + resize selected frames in Preview (HTML)
+**v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md) · **v0.7 migration:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)  
+**Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — move + resize + Shift multi-select in Preview (HTML)
+
+---
+
+## What's new in v0.7
+
+- Canvas **resize** (SE handle → HTML `width`/`height` SSOT)
+- **CollabBus** (memory default; optional Redis) for multi-node presence/lock fan-out
+- **Selection awareness** — peers see path · selector
+- Canvas **multi-select** (Shift+click) + multi-move
+- Migration + inventory gates: [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)
+
+v0.6 Design Projects / collab presence / locks remain the base.
 
 ---
 

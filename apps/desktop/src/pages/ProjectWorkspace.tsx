@@ -18,7 +18,11 @@ import {
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
-import { PresencePeersBar, type PresencePeerInfo } from '@neos-work/ui-app';
+import {
+  PresencePeersBar,
+  type PeerSelectionInfo,
+  type PresencePeerInfo,
+} from '@neos-work/ui-app';
 
 import { useEngine } from '../hooks/useEngine.js';
 import type {
@@ -94,6 +98,8 @@ export function ProjectWorkspace() {
   const [foreignLocks, setForeignLocks] = useState<
     Record<string, { sessionId: string; displayName: string }>
   >({});
+  /** sessionId → peer selection (v0.7 M2). */
+  const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
   const blocker = useBlocker(dirty);
 
   const loadProject = useCallback(async () => {
@@ -162,13 +168,14 @@ export function ProjectWorkspace() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  // Collab presence + file locks (v0.6 M1/M3)
+  // Collab presence + file locks + selection (v0.6 M1/M3 + v0.7 M2)
   useEffect(() => {
     if (!client || !projectId) return;
     setCollabSelf(null);
     setCollabPeers([]);
     setCollabSessionId(null);
     setForeignLocks({});
+    setPeerSelections({});
     const stop = client.streamProjectCollab(
       projectId,
       (ev) => {
@@ -187,6 +194,13 @@ export function ProjectWorkspace() {
             next[l.path] = { sessionId: l.sessionId, displayName: l.displayName };
           }
           setForeignLocks(next);
+          const selMap: Record<string, PeerSelectionInfo> = {};
+          for (const s of ev.selections ?? []) {
+            if (selfId && s.sessionId === selfId) continue;
+            if (s.path == null && s.selector == null) continue;
+            selMap[s.sessionId] = s as PeerSelectionInfo;
+          }
+          setPeerSelections(selMap);
         } else if (ev.type === 'presence.join' && ev.peer) {
           const peer = ev.peer as PresencePeerInfo;
           setCollabPeers((list) =>
@@ -200,6 +214,12 @@ export function ProjectWorkspace() {
             for (const [path, h] of Object.entries(m)) {
               if (h.sessionId !== left) n[path] = h;
             }
+            return n;
+          });
+          setPeerSelections((m) => {
+            if (!(left in m)) return m;
+            const n = { ...m };
+            delete n[left];
             return n;
           });
         } else if (ev.type === 'lock.acquired' && ev.lock) {
@@ -216,6 +236,18 @@ export function ProjectWorkspace() {
             const n = { ...m };
             delete n[ev.path!];
             return n;
+          });
+        } else if (ev.type === 'selection.changed' && ev.selection) {
+          const sel = ev.selection as PeerSelectionInfo;
+          if (collabSessionRef.current && sel.sessionId === collabSessionRef.current) return;
+          setPeerSelections((m) => {
+            if (sel.path == null && sel.selector == null) {
+              if (!(sel.sessionId in m)) return m;
+              const n = { ...m };
+              delete n[sel.sessionId];
+              return n;
+            }
+            return { ...m, [sel.sessionId]: sel };
           });
         }
       },
@@ -252,6 +284,31 @@ export function ProjectWorkspace() {
       });
     };
   }, [client, projectId, collabSessionId, buffer.path]);
+
+  // M2: publish local selection (path + selector) for peer indicators
+  useEffect(() => {
+    if (!client || !projectId || !collabSessionId) return;
+    const path = selection?.filePath ?? buffer.path ?? null;
+    const selector = selection?.selector ?? null;
+    const layerId = selection?.layerId ?? null;
+    const t = window.setTimeout(() => {
+      void client.collabSelection(projectId, {
+        sessionId: collabSessionId,
+        path,
+        selector,
+        layerId,
+      });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [
+    client,
+    projectId,
+    collabSessionId,
+    selection?.filePath,
+    selection?.selector,
+    selection?.layerId,
+    buffer.path,
+  ]);
 
   // Project file SSE — agent/remote writes → disk-changed (conflict if dirty)
   // Hash-aware skip: matching event/disk tip avoids re-read thrash (v0.5.30).
@@ -840,7 +897,7 @@ export function ProjectWorkspace() {
           {scrubDisplayText(project.name, { collapseLines: true, maxChars: 80 })}
           {dirty ? ' *' : ''}
         </h1>
-        <PresencePeersBar peers={collabPeers} self={collabSelf} />
+        <PresencePeersBar peers={collabPeers} self={collabSelf} selections={peerSelections} />
         {lockedByOther && (
           <span
             className="text-[11px] text-red-300"

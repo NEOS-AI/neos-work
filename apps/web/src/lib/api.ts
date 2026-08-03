@@ -142,8 +142,8 @@ export class WebApiClient {
    * Returns an abort function.
    */
   /**
-   * Project collab presence SSE (v0.6.0).
-   * Events: ready | presence.sync | presence.join | presence.leave
+   * Project collab presence SSE (v0.6.0 + v0.7 M2 selection).
+   * Events: ready | presence.sync | presence.join | presence.leave | lock.* | selection.changed
    */
   streamProjectCollab(
     projectId: string,
@@ -157,6 +157,24 @@ export class WebApiClient {
       locks?: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
       lock?: { path: string; sessionId: string; displayName: string; acquiredAt?: string };
       path?: string;
+      selections?: Array<{
+        sessionId: string;
+        displayName?: string;
+        colorHint?: number;
+        path: string | null;
+        selector: string | null;
+        layerId?: string | null;
+        updatedAt?: string;
+      }>;
+      selection?: {
+        sessionId: string;
+        displayName?: string;
+        colorHint?: number;
+        path: string | null;
+        selector: string | null;
+        layerId?: string | null;
+        updatedAt?: string;
+      };
     }) => void,
     opts?: { displayName?: string },
   ): () => void {
@@ -244,6 +262,29 @@ export class WebApiClient {
                         })
                       : undefined,
                   path: typeof data.path === 'string' ? data.path : undefined,
+                  selections: Array.isArray(data.selections)
+                    ? (data.selections as Array<{
+                        sessionId: string;
+                        displayName?: string;
+                        colorHint?: number;
+                        path: string | null;
+                        selector: string | null;
+                        layerId?: string | null;
+                        updatedAt?: string;
+                      }>)
+                    : undefined,
+                  selection:
+                    data.selection && typeof data.selection === 'object'
+                      ? (data.selection as {
+                          sessionId: string;
+                          displayName?: string;
+                          colorHint?: number;
+                          path: string | null;
+                          selector: string | null;
+                          layerId?: string | null;
+                          updatedAt?: string;
+                        })
+                      : undefined,
                 });
               } catch {
                 // skip
@@ -266,6 +307,23 @@ export class WebApiClient {
     body: { sessionId: string; path: string; action: 'acquire' | 'release' },
   ): Promise<ApiEnvelope<{ lock?: unknown; released?: boolean; holder?: unknown }>> {
     return this.request('POST', `/api/projects/${encodeURIComponent(projectId)}/collab/locks`, body);
+  }
+
+  /** Publish editing selection for peer awareness (v0.7 M2). */
+  collabSelection(
+    projectId: string,
+    body: {
+      sessionId: string;
+      path?: string | null;
+      selector?: string | null;
+      layerId?: string | null;
+    },
+  ): Promise<ApiEnvelope<{ selection?: unknown }>> {
+    return this.request(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/collab/selection`,
+      body,
+    );
   }
 
   streamProjectFileEvents(
