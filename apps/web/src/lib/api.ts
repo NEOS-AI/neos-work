@@ -2,6 +2,13 @@
  * Minimal browser API client for NEOS daemon.
  */
 
+import type {
+  ProjectFileContent,
+  ProjectFileEntry,
+  ProjectFileEventPayload,
+  ProjectFileWriteResult,
+} from '@neos-work/shared';
+
 export interface ApiEnvelope<T = unknown> {
   ok: boolean;
   data?: T;
@@ -12,11 +19,14 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public data?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
   }
 }
+
+export { normalizeProjectRelPath } from '@neos-work/shared';
 
 export class WebApiClient {
   constructor(
@@ -33,6 +43,42 @@ export class WebApiClient {
   private url(path: string): string {
     const base = this.serverUrl.replace(/\/+$/, '');
     return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
+  /**
+   * Parse JSON envelope. Never throws on HTTP 4xx/5xx — returns `{ ok: false, error, data }`.
+   * Network/abort failures still reject. Used by collab APIs that need 409 `data.holder`.
+   */
+  private async requestEnvelope<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<ApiEnvelope<T>> {
+    const res = await fetch(this.url(path), {
+      method,
+      headers: {
+        ...this.headers(),
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    try {
+      const json: unknown = await res.json();
+      if (json && typeof json === 'object' && !Array.isArray(json)) {
+        const envelope = json as ApiEnvelope<T>;
+        // Ensure ok reflects HTTP when server omitted it
+        if (envelope.ok === undefined) {
+          return { ...envelope, ok: res.ok };
+        }
+        return envelope;
+      }
+      return { ok: res.ok, data: json as T };
+    } catch {
+      return {
+        ok: res.ok,
+        error: res.ok ? undefined : `HTTP ${res.status}`,
+      };
+    }
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<ApiEnvelope<T>> {
@@ -61,7 +107,7 @@ export class WebApiClient {
         typeof envelope.error === 'string' && envelope.error
           ? envelope.error
           : `HTTP ${res.status}`;
-      throw new ApiError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300), res.status);
+      throw new ApiError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300), res.status, envelope.data);
     }
     return envelope;
   }
@@ -80,21 +126,47 @@ export class WebApiClient {
     return this.request('GET', `/api/projects/${encodeURIComponent(id)}`);
   }
 
-  listFiles(projectId: string): Promise<ApiEnvelope<Array<{ path: string; type?: string }>>> {
+  listFiles(projectId: string): Promise<ApiEnvelope<ProjectFileEntry[]>> {
     return this.request('GET', `/api/projects/${encodeURIComponent(projectId)}/files`);
   }
 
-  readFile(projectId: string, filePath: string): Promise<ApiEnvelope<{ content?: string; path?: string }>> {
+  readFile(
+    projectId: string,
+    filePath: string,
+  ): Promise<ApiEnvelope<ProjectFileContent>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
     return this.request('GET', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`);
   }
 
-  writeFile(projectId: string, filePath: string, content: string): Promise<ApiEnvelope<unknown>> {
+  /**
+   * Write project file. Returns full envelope on HTTP errors (e.g. 423 hard lock
+   * with `data.holder`) instead of throwing — callers check `res.ok`.
+   */
+  writeFile(
+    projectId: string,
+    filePath: string,
+    content: string,
+  ): Promise<ApiEnvelope<ProjectFileWriteResult & { contentHash?: string; holder?: unknown }>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-    return this.request('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, {
+    return this.requestEnvelope('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, {
       content,
       source: 'user',
     });
+  }
+
+  /**
+   * DELETE /api/projects/:id/files/*
+   * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   */
+  deleteFile(
+    projectId: string,
+    filePath: string,
+  ): Promise<ApiEnvelope<{ path?: string; deleted?: boolean; holder?: unknown }>> {
+    const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    return this.requestEnvelope(
+      'DELETE',
+      `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`,
+    );
   }
 
   createRun(input: {
@@ -143,7 +215,7 @@ export class WebApiClient {
    */
   /**
    * Project collab presence SSE (v0.6.0 + v0.7 M2 selection).
-   * Events: ready | presence.sync | presence.join | presence.leave | lock.* | selection.changed
+   * Events: ready | presence.sync | presence.join | presence.leave | presence.heartbeat | lock.* | selection.changed
    */
   streamProjectCollab(
     projectId: string,
@@ -151,9 +223,30 @@ export class WebApiClient {
       type: string;
       projectId?: string;
       sessionId?: string;
-      peers?: Array<{ sessionId: string; displayName: string; colorHint?: number; joinedAt?: string }>;
-      peer?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
-      self?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
+      /** Top-level (e.g. presence.heartbeat). */
+      displayName?: string;
+      colorHint?: number;
+      peers?: Array<{
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      }>;
+      peer?: {
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      };
+      self?: {
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      };
       locks?: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
       lock?: { path: string; sessionId: string; displayName: string; acquiredAt?: string };
       path?: string;
@@ -164,6 +257,8 @@ export class WebApiClient {
         path: string | null;
         selector: string | null;
         layerId?: string | null;
+        selectors?: string[];
+        layerIds?: string[];
         updatedAt?: string;
       }>;
       selection?: {
@@ -173,6 +268,8 @@ export class WebApiClient {
         path: string | null;
         selector: string | null;
         layerId?: string | null;
+        selectors?: string[];
+        layerIds?: string[];
         updatedAt?: string;
       };
     }) => void,
@@ -218,12 +315,19 @@ export class WebApiClient {
                   type: eventName,
                   projectId: typeof data.projectId === 'string' ? data.projectId : undefined,
                   sessionId: typeof data.sessionId === 'string' ? data.sessionId : undefined,
+                  displayName:
+                    typeof data.displayName === 'string' ? data.displayName : undefined,
+                  colorHint:
+                    typeof data.colorHint === 'number' && Number.isFinite(data.colorHint)
+                      ? data.colorHint
+                      : undefined,
                   peers: Array.isArray(data.peers)
                     ? (data.peers as Array<{
                         sessionId: string;
                         displayName: string;
                         colorHint?: number;
                         joinedAt?: string;
+                        lastSeen?: string;
                       }>)
                     : undefined,
                   peer:
@@ -233,6 +337,7 @@ export class WebApiClient {
                           displayName: string;
                           colorHint?: number;
                           joinedAt?: string;
+                          lastSeen?: string;
                         })
                       : undefined,
                   self:
@@ -242,6 +347,7 @@ export class WebApiClient {
                           displayName: string;
                           colorHint?: number;
                           joinedAt?: string;
+                          lastSeen?: string;
                         })
                       : undefined,
                   locks: Array.isArray(data.locks)
@@ -306,11 +412,19 @@ export class WebApiClient {
     return () => controller.abort();
   }
 
+  /**
+   * Advisory file lock. Returns full envelope on 409 (includes `data.holder`)
+   * instead of throwing — matches desktop `readApiResponse` behavior.
+   */
   collabLock(
     projectId: string,
     body: { sessionId: string; path: string; action: 'acquire' | 'release' },
   ): Promise<ApiEnvelope<{ lock?: unknown; released?: boolean; holder?: unknown }>> {
-    return this.request('POST', `/api/projects/${encodeURIComponent(projectId)}/collab/locks`, body);
+    return this.requestEnvelope(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/collab/locks`,
+      body,
+    );
   }
 
   /** Publish editing selection for peer awareness (v0.7 M2 + v0.8 M3 multi). */
@@ -326,22 +440,45 @@ export class WebApiClient {
       layerIds?: string[] | null;
     },
   ): Promise<ApiEnvelope<{ selection?: unknown }>> {
-    return this.request(
+    return this.requestEnvelope(
       'POST',
       `/api/projects/${encodeURIComponent(projectId)}/collab/selection`,
       body,
     );
   }
 
+  /** Snapshot of current collab peers (REST helper). */
+  getCollabPeers(
+    projectId: string,
+  ): Promise<
+    ApiEnvelope<{
+      peers?: Array<{
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      }>;
+    }>
+  > {
+    return this.request('GET', `/api/projects/${encodeURIComponent(projectId)}/collab/peers`);
+  }
+
+  /** Heartbeat to keep presence alive if SSE stalls. */
+  postCollabHeartbeat(
+    projectId: string,
+    body: { sessionId: string },
+  ): Promise<ApiEnvelope<{ touched?: boolean }>> {
+    return this.request(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/collab/heartbeat`,
+      body,
+    );
+  }
+
   streamProjectFileEvents(
     projectId: string,
-    onEvent: (event: {
-      type: string;
-      projectId?: string;
-      path?: string;
-      source?: string;
-      hash?: string;
-    }) => void,
+    onEvent: (event: ProjectFileEventPayload & { type: string }) => void,
   ): () => void {
     const controller = new AbortController();
     const id = encodeURIComponent(projectId);

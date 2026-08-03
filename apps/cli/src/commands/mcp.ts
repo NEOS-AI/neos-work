@@ -63,7 +63,12 @@ function createHttpBackend(client: NeosApiClient, cfg: CliConfig): NeosMcpBacken
       return {
         path,
         bytes: typeof data.bytes === 'number' ? data.bytes : content.length,
-        contentHash: typeof data.contentHash === 'string' ? data.contentHash : undefined,
+        contentHash:
+          typeof data.hash === 'string'
+            ? data.hash
+            : typeof data.contentHash === 'string'
+              ? data.contentHash
+              : undefined,
       };
     },
     async listLiveArtifacts(projectId) {

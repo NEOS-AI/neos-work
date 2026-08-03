@@ -33,6 +33,7 @@ import type {
   ProjectFileRevision,
   ProjectPreviewComment,
 } from '../lib/engine.js';
+import { normalizeProjectRelPath } from '../lib/engine.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
@@ -191,14 +192,21 @@ export function ProjectWorkspace() {
           const next: Record<string, { sessionId: string; displayName: string }> = {};
           for (const l of ev.locks ?? []) {
             if (selfId && l.sessionId === selfId) continue;
-            next[l.path] = { sessionId: l.sessionId, displayName: l.displayName };
+            const p = normalizeProjectRelPath(l.path);
+            if (!p) continue;
+            next[p] = { sessionId: l.sessionId, displayName: l.displayName };
           }
           setForeignLocks(next);
           const selMap: Record<string, PeerSelectionInfo> = {};
           for (const s of ev.selections ?? []) {
             if (selfId && s.sessionId === selfId) continue;
             if (s.path == null && s.selector == null) continue;
-            selMap[s.sessionId] = s as PeerSelectionInfo;
+            const pathNorm =
+              s.path == null ? null : normalizeProjectRelPath(s.path) || null;
+            selMap[s.sessionId] = {
+              ...(s as PeerSelectionInfo),
+              path: pathNorm,
+            };
           }
           setPeerSelections(selMap);
         } else if (ev.type === 'presence.join' && ev.peer) {
@@ -206,6 +214,24 @@ export function ProjectWorkspace() {
           setCollabPeers((list) =>
             list.some((p) => p.sessionId === peer.sessionId) ? list : [...list, peer],
           );
+        } else if (ev.type === 'presence.heartbeat' && ev.sessionId) {
+          // Upsert unknown peers from heartbeat (multi-replica / late discovery)
+          const sid = ev.sessionId;
+          if (collabSessionRef.current && sid === collabSessionRef.current) return;
+          setCollabPeers((list) => {
+            if (list.some((p) => p.sessionId === sid)) return list;
+            return [
+              ...list,
+              {
+                sessionId: sid,
+                displayName:
+                  typeof ev.displayName === 'string' && ev.displayName.trim()
+                    ? ev.displayName.trim()
+                    : 'Anonymous',
+                colorHint: typeof ev.colorHint === 'number' ? ev.colorHint : undefined,
+              },
+            ];
+          });
         } else if (ev.type === 'presence.leave' && ev.sessionId) {
           const left = ev.sessionId;
           setCollabPeers((list) => list.filter((p) => p.sessionId !== left));
@@ -224,30 +250,37 @@ export function ProjectWorkspace() {
           });
         } else if (ev.type === 'lock.acquired' && ev.lock) {
           const lock = ev.lock;
+          const p = normalizeProjectRelPath(lock.path);
+          if (!p) return;
           setForeignLocks((m) => {
             if (collabSessionRef.current && lock.sessionId === collabSessionRef.current) return m;
             return {
               ...m,
-              [lock.path]: { sessionId: lock.sessionId, displayName: lock.displayName },
+              [p]: { sessionId: lock.sessionId, displayName: lock.displayName },
             };
           });
         } else if (ev.type === 'lock.released' && ev.path) {
+          const p = normalizeProjectRelPath(ev.path);
+          if (!p) return;
           setForeignLocks((m) => {
+            if (!(p in m)) return m;
             const n = { ...m };
-            delete n[ev.path!];
+            delete n[p];
             return n;
           });
         } else if (ev.type === 'selection.changed' && ev.selection) {
           const sel = ev.selection as PeerSelectionInfo;
           if (collabSessionRef.current && sel.sessionId === collabSessionRef.current) return;
+          const pathNorm =
+            sel.path == null ? null : normalizeProjectRelPath(sel.path) || null;
           setPeerSelections((m) => {
-            if (sel.path == null && sel.selector == null) {
+            if (pathNorm == null && sel.selector == null) {
               if (!(sel.sessionId in m)) return m;
               const n = { ...m };
               delete n[sel.sessionId];
               return n;
             }
-            return { ...m, [sel.sessionId]: sel };
+            return { ...m, [sel.sessionId]: { ...sel, path: pathNorm } };
           });
         }
       },
@@ -256,12 +289,16 @@ export function ProjectWorkspace() {
     return () => stop();
   }, [client, projectId]);
 
+  const openBufferPath = normalizeProjectRelPath(buffer.path);
   const lockedByOther =
-    buffer.path && foreignLocks[buffer.path] ? foreignLocks[buffer.path]!.displayName : null;
+    openBufferPath && foreignLocks[openBufferPath]
+      ? foreignLocks[openBufferPath]!.displayName
+      : null;
 
   useEffect(() => {
     if (!client || !projectId || !collabSessionId || !buffer.path) return;
-    const path = buffer.path;
+    const path = normalizeProjectRelPath(buffer.path);
+    if (!path) return;
     void client
       .collabLock(projectId, { sessionId: collabSessionId, path, action: 'acquire' })
       .then((res) => {
@@ -290,7 +327,11 @@ export function ProjectWorkspace() {
   const multiLayerIdsKey = (selection?.multiLayerIds ?? []).join('\0');
   useEffect(() => {
     if (!client || !projectId || !collabSessionId) return;
-    const path = selection?.filePath ?? buffer.path ?? null;
+    const rawPath = selection?.filePath ?? buffer.path ?? null;
+    const path =
+      rawPath == null || rawPath === ''
+        ? null
+        : normalizeProjectRelPath(rawPath) || null;
     const selector = selection?.selector ?? null;
     const layerId = selection?.layerId ?? null;
     const selectors = selection?.multiSelectors;
@@ -324,13 +365,14 @@ export function ProjectWorkspace() {
     if (!client || !projectId) return;
     const stop = client.streamProjectFileEvents(projectId, (ev) => {
       if (ev.type !== 'file.changed' && ev.type !== 'file.created') return;
-      const p = typeof ev.path === 'string' ? ev.path : '';
+      const p = normalizeProjectRelPath(ev.path);
       if (!p) return;
       void (async () => {
         try {
           const cur = bufferRef.current;
-          if (cur.path !== p) return;
-          if (shouldSkipDiskReload(cur, { path: p, hash: ev.hash ?? null })) {
+          if (normalizeProjectRelPath(cur.path) !== p) return;
+          // Path already matched via normalize — pass buffer path so skip check is hash-only
+          if (shouldSkipDiskReload(cur, { path: cur.path, hash: ev.hash ?? null })) {
             if (ev.type === 'file.created') {
               const filesRes = await client.listProjectFiles(projectId);
               if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
@@ -341,8 +383,13 @@ export function ProjectWorkspace() {
           const res = await client.readProjectFile(projectId, p);
           if (!res.ok || !res.data) return;
           setBuffer((prev) => {
-            if (prev.path !== p) return prev;
-            if (shouldSkipDiskReload(prev, { path: p, hash: res.data!.hash ?? ev.hash ?? null })) {
+            if (normalizeProjectRelPath(prev.path) !== p) return prev;
+            if (
+              shouldSkipDiskReload(prev, {
+                path: prev.path,
+                hash: res.data!.hash ?? ev.hash ?? null,
+              })
+            ) {
               return prev;
             }
             return reduceEditorBuffer(prev, {
@@ -1009,14 +1056,21 @@ export function ProjectWorkspace() {
               setSelection(sel);
               setSelectDetail(detail ?? null);
             }}
-            peerAwareness={Object.entries(peerSelections).map(([sessionId, sel]) => ({
-              sessionId,
-              colorHint: sel?.colorHint,
-              displayName: sel?.displayName,
-              path: sel?.path ?? null,
-              selector: sel?.selector ?? null,
-              selectors: sel?.selectors,
-            }))}
+            peerAwareness={Object.entries(peerSelections)
+              .filter(([, sel]) => {
+                if (!openBufferPath) return false;
+                const sp =
+                  sel?.path != null ? normalizeProjectRelPath(sel.path) : '';
+                return sp === openBufferPath;
+              })
+              .map(([sessionId, sel]) => ({
+                sessionId,
+                colorHint: sel?.colorHint,
+                displayName: sel?.displayName,
+                path: sel?.path ?? null,
+                selector: sel?.selector ?? null,
+                selectors: sel?.selectors,
+              }))}
             onEditWithAi={(sel, detail) => {
               setSelection(sel);
               setSelectDetail(detail ?? null);

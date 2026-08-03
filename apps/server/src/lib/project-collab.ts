@@ -293,25 +293,33 @@ export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): v
       upsertMembership(id, event.peer, { remote: true });
     }
   } else if (event.type === 'presence.heartbeat' && event.sessionId) {
+    // Multi-replica: first-seen remote heartbeat should surface as presence.join
+    // so local SSE clients learn about the peer (routine heartbeats stay silent).
+    let newlyAdded = false;
     if (!rooms.get(id)?.has(event.sessionId)) {
       const ok = touchMembership(id, event.sessionId);
       if (!ok) {
         // Heartbeat before join on this node — upsert minimal remote
-        upsertMembership(
-          id,
-          {
-            sessionId: event.sessionId,
-            displayName: event.displayName || 'Anonymous',
-            joinedAt: event.ts || new Date().toISOString(),
-            colorHint: typeof event.colorHint === 'number' ? event.colorHint : 0,
-          },
-          { remote: true },
-        );
+        const peer: PresencePeer = {
+          sessionId: event.sessionId,
+          displayName: event.displayName || 'Anonymous',
+          joinedAt: event.ts || new Date().toISOString(),
+          colorHint: typeof event.colorHint === 'number' ? event.colorHint : 0,
+        };
+        newlyAdded = upsertMembership(id, peer, { remote: true });
+        if (newlyAdded) {
+          deliverCollabEventLocal(id, {
+            type: 'presence.join',
+            projectId: id,
+            peer,
+            ts: event.ts || new Date().toISOString(),
+          });
+        }
       }
     } else {
       touchMembership(id, event.sessionId);
     }
-    // Heartbeats do not need client fan-out (membership only)
+    // Heartbeats do not need client fan-out (membership only); first-seen join above
     return;
   } else if (event.type === 'presence.leave' && event.sessionId) {
     const m = selectionRooms.get(id);

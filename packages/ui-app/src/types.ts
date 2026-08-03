@@ -4,6 +4,7 @@ export interface PresencePeerInfo {
   displayName: string;
   joinedAt?: string;
   colorHint?: number;
+  lastSeen?: string;
 }
 
 /** Peer editing awareness (v0.7 M2 + v0.8 M3 multi-select). */

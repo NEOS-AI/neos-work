@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-const writeFile = vi.fn(async () => ({ ok: true, data: { contentHash: 'h1' } }));
+const writeFile = vi.fn(async () => ({ ok: true, data: { hash: 'h1' } }));
 const createRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'queued' } }));
 const getRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'succeeded' } }));
 const readFile = vi.fn(async (_pid: string, path: string) => ({
@@ -42,8 +42,17 @@ vi.mock('../lib/api.js', () => {
       this.status = status;
     }
   }
+  function normalizeProjectRelPath(raw: unknown): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const p = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!p || p.length > 500) return '';
+    if (p.includes('..')) return '';
+    if (p.startsWith('~/') || /^[A-Za-z]:\//.test(p)) return '';
+    return p;
+  }
   return {
     ApiError,
+    normalizeProjectRelPath,
     WebApiClient: class {
       getProject = vi.fn(async () => ({
         ok: true,

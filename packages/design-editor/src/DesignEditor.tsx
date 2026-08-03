@@ -114,6 +114,26 @@ export type PeerAwarenessHint = {
   selectors?: string[];
 };
 
+/**
+ * Merge explicit host frames with bridge-measured awareness frames.
+ * Explicit wins per `sessionId`; frames without sessionId are never deduped.
+ */
+export function mergePeerCanvasFrames(
+  explicit: PeerCanvasFrame[],
+  measured: PeerCanvasFrame[],
+): PeerCanvasFrame[] {
+  if (explicit.length === 0) return measured;
+  if (measured.length === 0) return explicit;
+  const explicitSessionIds = new Set(
+    explicit.map((f) => f.sessionId).filter((id): id is string => Boolean(id)),
+  );
+  const measuredExtra = measured.filter((f) => {
+    if (!f.sessionId) return true;
+    return !explicitSessionIds.has(f.sessionId);
+  });
+  return measuredExtra.length === 0 ? explicit : [...explicit, ...measuredExtra];
+}
+
 const defaultLabels = {
   preview: 'Preview',
   code: 'Code',
@@ -344,6 +364,7 @@ export function DesignEditor({
           }
           if (bboxes.length > 0) {
             frames.push({
+              sessionId: sid,
               colorHint: meta.colorHint,
               label: meta.label,
               bboxes,
@@ -423,13 +444,10 @@ export function DesignEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- key encodes awareness payload
   }, [peerAwarenessKey, buffer.path, htmlLike, canvasOn, reloadKey, previewHtml]);
 
-  const peerCanvasFrames = useMemo(() => {
-    // Explicit prop frames first; then measured (no sessionId on PeerCanvasFrame — just merge lists)
-    const explicit = peerCanvasFramesProp ?? [];
-    if (explicit.length === 0) return measuredPeerFrames;
-    if (measuredPeerFrames.length === 0) return explicit;
-    return [...explicit, ...measuredPeerFrames];
-  }, [peerCanvasFramesProp, measuredPeerFrames]);
+  const peerCanvasFrames = useMemo(
+    () => mergePeerCanvasFrames(peerCanvasFramesProp ?? [], measuredPeerFrames),
+    [peerCanvasFramesProp, measuredPeerFrames],
+  );
 
   const handleLayerSelect = (layer: LayerNode, opts?: { additive?: boolean }) => {
     if (!buffer.path) return;

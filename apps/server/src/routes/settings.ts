@@ -143,7 +143,7 @@ settings.post('/verify-key', async (c) => {
     return c.json({
       ok: false,
       error: safeError(error, 'verify-key'),
-    });
+    }, 500);
   }
 });
 

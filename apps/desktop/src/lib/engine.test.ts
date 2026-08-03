@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EngineClient,
   formatHttpErrorMessage,
+  normalizeProjectRelPath,
   parseSseDataPayload,
   parseSseEventName,
   readApiResponse,
@@ -791,8 +792,34 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/a/b.html');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
 
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'a/b.html' } }));
+    await client.deleteProjectFile('p1', 'a/b.html');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/a/b.html');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
     const bad = await client.readProjectFile('p1', '../etc/passwd');
     expect(bad.ok).toBe(false);
+    await expect(client.deleteProjectFile('p1', '../etc/passwd')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid file path',
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { peers: [] } }));
+    await client.listCollabPeers('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/collab\/peers$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { locks: [] } }));
+    await client.listCollabLocks('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/collab\/locks$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { selections: [] } }));
+    await client.listCollabSelections('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/collab\/selections$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { touched: true } }));
+    await client.collabHeartbeat('p1', { sessionId: 's1', displayName: 'Desktop' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/collab\/heartbeat$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
   });
 
   it('cli agents and design systems list', async () => {
@@ -819,6 +846,10 @@ describe('EngineClient', () => {
     await client.saveSetting('OPENAI_API_KEY', 'sk-test');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ value: 'sk-test' });
+
+    await client.deleteSetting('OPENAI_API_KEY');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain(encodeURIComponent('OPENAI_API_KEY'));
 
     await client.verifyApiKey('openai', 'sk-x');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
@@ -1052,6 +1083,18 @@ describe('EngineClient', () => {
     const result = await client.testWebhookFire('wf-1');
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/secret/i);
+  });
+
+  it('normalizeProjectRelPath mirrors server lock path rules', () => {
+    expect(normalizeProjectRelPath('a/b.html')).toBe('a/b.html');
+    expect(normalizeProjectRelPath('/abs')).toBe('abs');
+    expect(normalizeProjectRelPath('  a\\b.html  ')).toBe('a/b.html');
+    expect(normalizeProjectRelPath('../x')).toBe('');
+    expect(normalizeProjectRelPath('~/x')).toBe('');
+    expect(normalizeProjectRelPath('C:/Windows')).toBe('');
+    expect(normalizeProjectRelPath(`a${'\0'}b`)).toBe('');
+    expect(normalizeProjectRelPath('x'.repeat(501))).toBe('');
+    expect(normalizeProjectRelPath(null)).toBe('');
   });
 
   it('parseSseDataPayload / parseSseEventName reject control-char payloads', () => {

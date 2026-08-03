@@ -1,9 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { DesignEditor } from './DesignEditor.js';
+import { DesignEditor, mergePeerCanvasFrames } from './DesignEditor.js';
 import { createEmptyBuffer, reduceEditorBuffer } from './dirty-state.js';
 import { NEOS_BRIDGE_SOURCE } from './bridge-types.js';
 import * as PreviewFrameMod from './PreviewFrame.js';
+import type { PeerCanvasFrame } from './CanvasOverlay.js';
 
 // CodeMirror needs a layout box; mock CodeEditor for chrome tests
 vi.mock('./CodeEditor.js', () => ({
@@ -408,6 +409,33 @@ describe('DesignEditor bridge + layers actions', () => {
     if (last?.multiSelectors) {
       expect(last.multiSelectors.length).toBeGreaterThan(1);
     }
+  });
+});
+
+describe('mergePeerCanvasFrames', () => {
+  const box = (n: number) => [{ x: n, y: n, width: 10, height: 10 }];
+
+  it('returns measured when explicit empty and vice versa', () => {
+    const measured: PeerCanvasFrame[] = [{ sessionId: 'a', colorHint: 1, bboxes: box(1) }];
+    const explicit: PeerCanvasFrame[] = [{ sessionId: 'b', colorHint: 2, bboxes: box(2) }];
+    expect(mergePeerCanvasFrames([], measured)).toBe(measured);
+    expect(mergePeerCanvasFrames(explicit, [])).toBe(explicit);
+  });
+
+  it('explicit wins per sessionId; measured without sessionId always kept', () => {
+    const explicit: PeerCanvasFrame[] = [
+      { sessionId: 's1', colorHint: 10, label: 'explicit', bboxes: box(1) },
+    ];
+    const measured: PeerCanvasFrame[] = [
+      { sessionId: 's1', colorHint: 99, label: 'measured-dup', bboxes: box(9) },
+      { sessionId: 's2', colorHint: 20, label: 'measured-only', bboxes: box(2) },
+      { colorHint: 30, label: 'no-sid', bboxes: box(3) },
+    ];
+    const merged = mergePeerCanvasFrames(explicit, measured);
+    expect(merged).toHaveLength(3);
+    expect(merged[0]!.label).toBe('explicit');
+    expect(merged[0]!.colorHint).toBe(10);
+    expect(merged.map((f) => f.label)).toEqual(['explicit', 'measured-only', 'no-sid']);
   });
 });
 

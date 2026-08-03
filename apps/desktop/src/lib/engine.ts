@@ -2,7 +2,16 @@
  * Engine client — communicates with the NEOS Work engine server.
  */
 
-import type { ApiResponse, ChatChunk, HealthResponse } from '@neos-work/shared';
+import type {
+  ApiResponse,
+  ChatChunk,
+  HealthResponse,
+  ProjectFileContent,
+  ProjectFileEventPayload,
+  ProjectFileWriteResult,
+} from '@neos-work/shared';
+
+export { normalizeProjectRelPath } from '@neos-work/shared';
 
 /**
  * Extract SSE `data:` payload. Rejects null-byte lines (control injection);
@@ -783,6 +792,16 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  async deleteSetting(key: string): Promise<ApiResponse<void>> {
+    const seg = this.settingKeySegment(key);
+    if (!seg) return this.invalidIdResponse('setting key');
+    const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   async verifyApiKey(provider: string, key: string): Promise<ApiResponse<{ valid: boolean }>> {
     const res = await fetch(`${this.baseUrl}/api/settings/verify-key`, {
       method: 'POST',
@@ -1249,7 +1268,7 @@ export class EngineClient {
 
   /**
    * Project collab presence SSE (v0.6.0 M0 + v0.7 M2 selection).
-   * Events: ready | presence.sync | presence.join | presence.leave | lock.* | selection.changed
+   * Events: ready | presence.sync | presence.join | presence.leave | presence.heartbeat | lock.* | selection.changed
    */
   streamProjectCollab(
     projectId: string,
@@ -1257,9 +1276,30 @@ export class EngineClient {
       type: string;
       projectId?: string;
       sessionId?: string;
-      peers?: Array<{ sessionId: string; displayName: string; colorHint?: number; joinedAt?: string }>;
-      peer?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
-      self?: { sessionId: string; displayName: string; colorHint?: number; joinedAt?: string };
+      /** Top-level (e.g. presence.heartbeat). */
+      displayName?: string;
+      colorHint?: number;
+      peers?: Array<{
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      }>;
+      peer?: {
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      };
+      self?: {
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      };
       locks?: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
       lock?: { path: string; sessionId: string; displayName: string; acquiredAt?: string };
       path?: string;
@@ -1270,6 +1310,8 @@ export class EngineClient {
         path: string | null;
         selector: string | null;
         layerId?: string | null;
+        selectors?: string[];
+        layerIds?: string[];
         updatedAt?: string;
       }>;
       selection?: {
@@ -1279,6 +1321,8 @@ export class EngineClient {
         path: string | null;
         selector: string | null;
         layerId?: string | null;
+        selectors?: string[];
+        layerIds?: string[];
         updatedAt?: string;
       };
     }) => void,
@@ -1324,16 +1368,34 @@ export class EngineClient {
                   type: eventName,
                   projectId: typeof parsed.projectId === 'string' ? parsed.projectId : undefined,
                   sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : undefined,
+                  displayName:
+                    typeof parsed.displayName === 'string' ? parsed.displayName : undefined,
+                  colorHint:
+                    typeof parsed.colorHint === 'number' && Number.isFinite(parsed.colorHint)
+                      ? parsed.colorHint
+                      : undefined,
                   peers: Array.isArray(parsed.peers)
-                    ? (parsed.peers as Array<{ sessionId: string; displayName: string }>)
+                    ? (parsed.peers as Array<{
+                        sessionId: string;
+                        displayName: string;
+                        lastSeen?: string;
+                      }>)
                     : undefined,
                   peer:
                     parsed.peer && typeof parsed.peer === 'object'
-                      ? (parsed.peer as { sessionId: string; displayName: string })
+                      ? (parsed.peer as {
+                          sessionId: string;
+                          displayName: string;
+                          lastSeen?: string;
+                        })
                       : undefined,
                   self:
                     parsed.self && typeof parsed.self === 'object'
-                      ? (parsed.self as { sessionId: string; displayName: string })
+                      ? (parsed.self as {
+                          sessionId: string;
+                          displayName: string;
+                          lastSeen?: string;
+                        })
                       : undefined,
                   locks: Array.isArray(parsed.locks)
                     ? (parsed.locks as Array<{
@@ -1409,6 +1471,86 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /** Snapshot of collab peers (REST helper). */
+  async listCollabPeers(
+    projectId: string,
+  ): Promise<
+    ApiResponse<{
+      peers: Array<{
+        sessionId: string;
+        displayName: string;
+        colorHint?: number;
+        joinedAt?: string;
+        lastSeen?: string;
+      }>;
+    }>
+  > {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/peers`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** Snapshot of advisory file locks. */
+  async listCollabLocks(
+    projectId: string,
+  ): Promise<
+    ApiResponse<{
+      locks: Array<{ path: string; sessionId: string; displayName: string; acquiredAt?: string }>;
+      hardEnforce?: boolean;
+    }>
+  > {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/locks`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** Snapshot of peer selections. */
+  async listCollabSelections(
+    projectId: string,
+  ): Promise<
+    ApiResponse<{
+      selections: Array<{
+        sessionId: string;
+        displayName?: string;
+        colorHint?: number;
+        path: string | null;
+        selector: string | null;
+        layerId?: string | null;
+        selectors?: string[];
+        layerIds?: string[];
+        updatedAt?: string;
+      }>;
+    }>
+  > {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/selections`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** Keep idle sweep from dropping a session if SSE stalls. */
+  async collabHeartbeat(
+    projectId: string,
+    body: { sessionId: string; displayName?: string },
+  ): Promise<ApiResponse<{ touched?: boolean }>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/heartbeat`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
+  }
+
   /** Publish editing selection for peer awareness (v0.7 M2). */
   async collabSelection(
     projectId: string,
@@ -1437,14 +1579,7 @@ export class EngineClient {
    */
   streamProjectFileEvents(
     projectId: string,
-    onEvent: (event: {
-      type: string;
-      projectId?: string;
-      path?: string;
-      source?: string;
-      hash?: string;
-      ts?: string;
-    }) => void,
+    onEvent: (event: ProjectFileEventPayload & { type: string }) => void,
   ): () => void {
     const controller = new AbortController();
     const seg = this.pathSegment(projectId);
@@ -1505,7 +1640,7 @@ export class EngineClient {
   async readProjectFile(
     projectId: string,
     filePath: string,
-  ): Promise<ApiResponse<{ path: string; content: string; hash: string }>> {
+  ): Promise<ApiResponse<ProjectFileContent>> {
     const seg = this.pathSegment(projectId);
     const pathSeg = this.projectRelPathSegments(filePath);
     if (!seg) return this.invalidIdResponse('project id');
@@ -1521,7 +1656,7 @@ export class EngineClient {
     filePath: string,
     content: string,
     source: 'user' | 'agent' | 'import' | 'restore' = 'user',
-  ): Promise<ApiResponse<{ path: string; hash: string; bytes: number; created: boolean }>> {
+  ): Promise<ApiResponse<ProjectFileWriteResult>> {
     const seg = this.pathSegment(projectId);
     const pathSeg = this.projectRelPathSegments(filePath);
     if (!seg) return this.invalidIdResponse('project id');
@@ -1533,6 +1668,21 @@ export class EngineClient {
       method: 'PUT',
       headers: this.getHeaders(),
       body: JSON.stringify({ content, source }),
+    });
+    return readApiResponse(res);
+  }
+
+  async deleteProjectFile(
+    projectId: string,
+    filePath: string,
+  ): Promise<ApiResponse<{ path?: string }>> {
+    const seg = this.pathSegment(projectId);
+    const pathSeg = this.projectRelPathSegments(filePath);
+    if (!seg) return this.invalidIdResponse('project id');
+    if (!pathSeg) return this.invalidIdResponse('file path');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/files/${pathSeg}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }

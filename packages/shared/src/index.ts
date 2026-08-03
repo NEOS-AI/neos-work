@@ -9,3 +9,4 @@ export * from './models.js';
 export * from './messaging.js';
 export * from './deploy.js';
 export * from './migrate-workflow.js';
+export * from './project-path.js';

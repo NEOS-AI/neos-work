@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AnthropicAdapter } from '@neos-work/core';
 import { deleteSetting } from '../db/settings.js';
 import { settings } from './settings.js';
 
@@ -214,6 +215,26 @@ describe('settings routes', () => {
       }
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+
+  it('verify-key returns HTTP 500 with ok:false when validation throws', async () => {
+    const spy = vi
+      .spyOn(AnthropicAdapter.prototype, 'validateApiKey')
+      .mockRejectedValue(new Error('upstream boom'));
+    try {
+      const res = await settings.request('/verify-key', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'anthropic', key: 'sk-test' }),
+      });
+      expect(res.status).toBe(500);
+      const body = await res.json() as { ok: boolean; error: string };
+      expect(body.ok).toBe(false);
+      expect(typeof body.error).toBe('string');
+      expect(body.error.length).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
     }
   });
 

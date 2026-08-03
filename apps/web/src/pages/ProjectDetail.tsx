@@ -22,7 +22,7 @@ import {
   type PresencePeerInfo,
 } from '@neos-work/ui-app';
 import { loadConnection } from '../lib/auth.js';
-import { ApiError, WebApiClient } from '../lib/api.js';
+import { ApiError, normalizeProjectRelPath, WebApiClient } from '../lib/api.js';
 
 export function ProjectDetail() {
   const { id = '' } = useParams();
@@ -139,14 +139,17 @@ export function ProjectDetail() {
           const next: Record<string, { sessionId: string; displayName: string }> = {};
           for (const l of ev.locks ?? []) {
             if (selfId && l.sessionId === selfId) continue;
-            next[l.path] = { sessionId: l.sessionId, displayName: l.displayName };
+            const lp = normalizeProjectRelPath(l.path);
+            if (!lp) continue;
+            next[lp] = { sessionId: l.sessionId, displayName: l.displayName };
           }
           setForeignLocks(next);
           const selMap: Record<string, PeerSelectionInfo> = {};
           for (const s of ev.selections ?? []) {
             if (selfId && s.sessionId === selfId) continue;
             if (s.path == null && s.selector == null) continue;
-            selMap[s.sessionId] = s as PeerSelectionInfo;
+            const sp = s.path == null ? null : normalizeProjectRelPath(s.path) || null;
+            selMap[s.sessionId] = { ...(s as PeerSelectionInfo), path: sp };
           }
           setPeerSelections(selMap);
         } else if (ev.type === 'presence.join' && ev.peer) {
@@ -154,6 +157,24 @@ export function ProjectDetail() {
           setCollabPeers((list) =>
             list.some((p) => p.sessionId === peer.sessionId) ? list : [...list, peer],
           );
+        } else if (ev.type === 'presence.heartbeat' && ev.sessionId) {
+          // Upsert unknown peers from heartbeat (multi-replica / late discovery)
+          const sid = ev.sessionId;
+          if (collabSessionRef.current && sid === collabSessionRef.current) return;
+          setCollabPeers((list) => {
+            if (list.some((p) => p.sessionId === sid)) return list;
+            return [
+              ...list,
+              {
+                sessionId: sid,
+                displayName:
+                  typeof ev.displayName === 'string' && ev.displayName.trim()
+                    ? ev.displayName.trim()
+                    : 'Anonymous',
+                colorHint: typeof ev.colorHint === 'number' ? ev.colorHint : undefined,
+              },
+            ];
+          });
         } else if (ev.type === 'presence.leave' && ev.sessionId) {
           const left = ev.sessionId;
           setCollabPeers((list) => list.filter((p) => p.sessionId !== left));
@@ -172,30 +193,35 @@ export function ProjectDetail() {
           });
         } else if (ev.type === 'lock.acquired' && ev.lock) {
           const lock = ev.lock;
+          const lp = normalizeProjectRelPath(lock.path);
+          if (!lp) return;
           setForeignLocks((m) => {
             if (collabSessionRef.current && lock.sessionId === collabSessionRef.current) return m;
             return {
               ...m,
-              [lock.path]: { sessionId: lock.sessionId, displayName: lock.displayName },
+              [lp]: { sessionId: lock.sessionId, displayName: lock.displayName },
             };
           });
         } else if (ev.type === 'lock.released' && ev.path) {
+          const lp = normalizeProjectRelPath(ev.path);
+          if (!lp) return;
           setForeignLocks((m) => {
             const n = { ...m };
-            delete n[ev.path!];
+            delete n[lp];
             return n;
           });
         } else if (ev.type === 'selection.changed' && ev.selection) {
           const sel = ev.selection as PeerSelectionInfo;
           if (collabSessionRef.current && sel.sessionId === collabSessionRef.current) return;
+          const sp = sel.path == null ? null : normalizeProjectRelPath(sel.path) || null;
           setPeerSelections((m) => {
-            if (sel.path == null && sel.selector == null) {
+            if (sp == null && sel.selector == null) {
               if (!(sel.sessionId in m)) return m;
               const n = { ...m };
               delete n[sel.sessionId];
               return n;
             }
-            return { ...m, [sel.sessionId]: sel };
+            return { ...m, [sel.sessionId]: { ...sel, path: sp } };
           });
         }
       },
@@ -205,33 +231,45 @@ export function ProjectDetail() {
   }, [client, conn.token, id]);
 
   // M3: try to acquire lock when opening a file; release previous
+  const bufferPathNorm = buffer.path ? normalizeProjectRelPath(buffer.path) : '';
   const lockedByOther =
-    buffer.path && foreignLocks[buffer.path] ? foreignLocks[buffer.path]!.displayName : null;
+    bufferPathNorm && foreignLocks[bufferPathNorm]
+      ? foreignLocks[bufferPathNorm]!.displayName
+      : null;
 
   useEffect(() => {
     if (!conn.token || !id || !collabSessionId || !buffer.path) return;
-    const path = buffer.path;
-    void client.collabLock(id, {
-      sessionId: collabSessionId,
-      path,
-      action: 'acquire',
-    }).then((res) => {
-      if (!res.ok && res.data && typeof res.data === 'object' && 'holder' in (res.data as object)) {
-        const holder = (res.data as { holder?: { sessionId?: string; displayName?: string } }).holder;
-        if (holder?.displayName && holder.sessionId) {
-          setForeignLocks((m) => ({
-            ...m,
-            [path]: { sessionId: holder.sessionId!, displayName: holder.displayName! },
-          }));
-        }
-      }
-    });
-    return () => {
-      void client.collabLock(id, {
+    const path = normalizeProjectRelPath(buffer.path);
+    if (!path) return;
+    void client
+      .collabLock(id, {
         sessionId: collabSessionId,
         path,
-        action: 'release',
+        action: 'acquire',
+      })
+      .then((res) => {
+        if (!res.ok && res.data && typeof res.data === 'object' && 'holder' in (res.data as object)) {
+          const holder = (res.data as { holder?: { sessionId?: string; displayName?: string } })
+            .holder;
+          if (holder?.displayName && holder.sessionId) {
+            setForeignLocks((m) => ({
+              ...m,
+              [path]: { sessionId: holder.sessionId!, displayName: holder.displayName! },
+            }));
+          }
+        }
+      })
+      .catch(() => {
+        // network — leave lock state to SSE
       });
+    return () => {
+      void client
+        .collabLock(id, {
+          sessionId: collabSessionId,
+          path,
+          action: 'release',
+        })
+        .catch(() => {});
     };
   }, [client, conn.token, id, collabSessionId, buffer.path]);
 
@@ -240,20 +278,24 @@ export function ProjectDetail() {
   const multiLayerIdsKey = (selection?.multiLayerIds ?? []).join('\0');
   useEffect(() => {
     if (!conn.token || !id || !collabSessionId) return;
-    const path = selection?.filePath ?? buffer.path ?? null;
+    const rawPath = selection?.filePath ?? buffer.path ?? null;
+    const path =
+      rawPath == null ? null : normalizeProjectRelPath(rawPath) || null;
     const selector = selection?.selector ?? null;
     const layerId = selection?.layerId ?? null;
     const selectors = selection?.multiSelectors;
     const layerIds = selection?.multiLayerIds;
     const t = window.setTimeout(() => {
-      void client.collabSelection(id, {
-        sessionId: collabSessionId,
-        path,
-        selector,
-        layerId,
-        selectors: selectors && selectors.length > 1 ? selectors : null,
-        layerIds: layerIds && layerIds.length > 1 ? layerIds : null,
-      });
+      void client
+        .collabSelection(id, {
+          sessionId: collabSessionId,
+          path,
+          selector,
+          layerId,
+          selectors: selectors && selectors.length > 1 ? selectors : null,
+          layerIds: layerIds && layerIds.length > 1 ? layerIds : null,
+        })
+        .catch(() => {});
     }, 120);
     return () => window.clearTimeout(t);
   }, [
@@ -275,19 +317,21 @@ export function ProjectDetail() {
     if (!conn.token || !id) return;
     const stop = client.streamProjectFileEvents(id, (ev) => {
       if (ev.type !== 'file.changed' && ev.type !== 'file.created') return;
-      const p = typeof ev.path === 'string' ? ev.path : '';
+      const p = normalizeProjectRelPath(ev.path);
       if (!p) return;
       void (async () => {
         try {
           const cur = bufferRef.current;
-          if (cur.path !== p) return;
+          const curPath = cur.path ? normalizeProjectRelPath(cur.path) : '';
+          if (!curPath || curPath !== p) return;
           if (shouldSkipDiskReload(cur, { path: p, hash: ev.hash ?? null })) return;
 
           const file = await client.readFile(id, p);
           const content = (file.data as { content?: string })?.content ?? '';
           const hash = (file.data as { hash?: string })?.hash ?? null;
           setBuffer((prev) => {
-            if (prev.path !== p) return prev;
+            const prevPath = prev.path ? normalizeProjectRelPath(prev.path) : '';
+            if (!prevPath || prevPath !== p) return prev;
             if (shouldSkipDiskReload(prev, { path: p, hash: hash ?? ev.hash ?? null })) {
               return prev;
             }
@@ -345,18 +389,34 @@ export function ProjectDetail() {
     setError(null);
     try {
       const res = await client.writeFile(id, buffer.path, buffer.local);
-      const hash =
-        res.data && typeof res.data === 'object' && 'contentHash' in (res.data as object)
-          ? String((res.data as { contentHash?: string }).contentHash ?? '')
-          : null;
-      setBuffer((prev) =>
-        reduceEditorBuffer(prev, {
-          type: 'saved',
-          content: prev.local,
-          hash: hash || undefined,
-        }),
-      );
-      setStatus('Saved');
+      if (res.ok) {
+        const data = res.data as { hash?: string; contentHash?: string } | undefined;
+        const hash =
+          typeof data?.hash === 'string' && data.hash
+            ? data.hash
+            : typeof data?.contentHash === 'string'
+              ? data.contentHash
+              : null;
+        setBuffer((prev) =>
+          reduceEditorBuffer(prev, {
+            type: 'saved',
+            content: prev.local,
+            hash: hash || undefined,
+          }),
+        );
+        setStatus('Saved');
+      } else {
+        let msg =
+          typeof res.error === 'string' && res.error ? res.error : 'Save failed';
+        const holder =
+          res.data && typeof res.data === 'object' && res.data !== null && 'holder' in res.data
+            ? (res.data as { holder?: { displayName?: string } }).holder
+            : undefined;
+        if (holder && typeof holder.displayName === 'string' && holder.displayName.trim()) {
+          msg = `Locked by ${holder.displayName.trim()}`;
+        }
+        setError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Save failed');
     } finally {
@@ -515,14 +575,30 @@ export function ProjectDetail() {
               saving={busy}
               selection={selection}
               onSelectionChange={(sel) => setSelection(sel)}
-              peerAwareness={Object.entries(peerSelections).map(([sessionId, sel]) => ({
-                sessionId,
-                colorHint: sel?.colorHint,
-                displayName: sel?.displayName,
-                path: sel?.path ?? null,
-                selector: sel?.selector ?? null,
-                selectors: sel?.selectors,
-              }))}
+              peerAwareness={Object.entries(peerSelections).map(([sessionId, sel]) => {
+                const selPath =
+                  sel?.path == null ? null : normalizeProjectRelPath(sel.path) || null;
+                const openPath = buffer.path ? normalizeProjectRelPath(buffer.path) : '';
+                // Only surface peer selection when on the same normalized file path
+                if (selPath && openPath && selPath !== openPath) {
+                  return {
+                    sessionId,
+                    colorHint: sel?.colorHint,
+                    displayName: sel?.displayName,
+                    path: selPath,
+                    selector: null as string | null,
+                    selectors: undefined as string[] | undefined,
+                  };
+                }
+                return {
+                  sessionId,
+                  colorHint: sel?.colorHint,
+                  displayName: sel?.displayName,
+                  path: selPath,
+                  selector: sel?.selector ?? null,
+                  selectors: sel?.selectors,
+                };
+              })}
               onEditWithAi={(sel) => {
                 setSelection(sel);
                 setAiPrompt((prev) =>

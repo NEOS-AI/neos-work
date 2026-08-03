@@ -70,6 +70,7 @@ export { LayersPanel, type LayersPanelProps } from './LayersPanel.js';
 export {
   DesignEditor,
   CANVAS_UNDO_CAP,
+  mergePeerCanvasFrames,
   type DesignEditorMode,
   type DesignEditorProps,
   type PeerAwarenessHint,

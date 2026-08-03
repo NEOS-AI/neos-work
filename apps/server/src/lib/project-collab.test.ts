@@ -359,4 +359,46 @@ describe('project-collab presence', () => {
       ts: new Date().toISOString(),
     });
   });
+
+  it('first-seen remote presence.heartbeat fans out synthetic presence.join to local listeners', () => {
+    const local = vi.fn();
+    const ja = joinProjectPresence({ projectId: 'p1', displayName: 'Local', listener: local })!;
+    local.mockClear();
+
+    applyRemoteCollabEvent('p1', {
+      type: 'presence.heartbeat',
+      projectId: 'p1',
+      sessionId: 'hb-first-seen',
+      displayName: 'RemoteHB',
+      colorHint: 12,
+      ts: new Date().toISOString(),
+    });
+
+    expect(listProjectPeers('p1').some((p) => p.sessionId === 'hb-first-seen')).toBe(true);
+    expect(local).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'presence.join',
+        projectId: 'p1',
+        peer: expect.objectContaining({
+          sessionId: 'hb-first-seen',
+          displayName: 'RemoteHB',
+          colorHint: 12,
+        }),
+      }),
+    );
+
+    // Routine heartbeats after first-seen must not re-fan-out join
+    local.mockClear();
+    applyRemoteCollabEvent('p1', {
+      type: 'presence.heartbeat',
+      projectId: 'p1',
+      sessionId: 'hb-first-seen',
+      displayName: 'RemoteHB',
+      colorHint: 12,
+      ts: new Date().toISOString(),
+    });
+    expect(local).not.toHaveBeenCalled();
+
+    ja.unsub();
+  });
 });

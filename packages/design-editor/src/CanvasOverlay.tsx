@@ -22,6 +22,8 @@ export type PeerCanvasFrame = {
   colorHint: number;
   bboxes: CanvasBBox[];
   label?: string;
+  /** Collab session id — used to dedupe explicit vs measured frames. */
+  sessionId?: string;
 };
 
 export type CanvasTransformEnd =

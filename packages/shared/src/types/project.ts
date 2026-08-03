@@ -70,6 +70,34 @@ export interface ProjectFileEntry {
   isEntry?: boolean;
 }
 
+/**
+ * Live file read payload (GET …/files/*). Uses `hash` not revision contentHash.
+ * Revisions use `contentHash`; live file IO uses `hash`.
+ */
+export interface ProjectFileContent {
+  path: string;
+  content: string;
+  hash: string;
+}
+
+/** Live file write payload (PUT …/files/*). */
+export interface ProjectFileWriteResult {
+  path: string;
+  hash: string;
+  bytes: number;
+  created: boolean;
+}
+
+/** Project file SSE event payload fields (event type is SSE event name). */
+export interface ProjectFileEventPayload {
+  projectId?: string;
+  path?: string;
+  source?: string;
+  /** Content hash of written tip (live domain uses `hash`). */
+  hash?: string;
+  ts?: string;
+}
+
 export type FileRevisionSource = 'user' | 'agent' | 'import' | 'restore';
 
 export interface FileRevision {
