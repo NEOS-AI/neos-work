@@ -45,6 +45,7 @@ import { initScheduler } from './lib/routine-scheduler.js';
 import { setRuntimeContext } from './lib/runtime-context.js';
 import { isAuthExemptPath } from './lib/auth-paths.js';
 import { initCollabBus, getCollabBus } from './lib/collab-bus.js';
+import { initPresenceRegistry, getPresenceRegistry } from './lib/collab-presence-redis.js';
 import { applyRemoteCollabEvent } from './lib/project-collab.js';
 
 /**
@@ -174,9 +175,10 @@ app.route('/api/live-artifacts', liveArtifacts);
 app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 app.route('/api/connection-test', connectionTest);
 
-/** Collab transport status (v0.7 M1) — no secrets. */
+/** Collab transport + presence registry status (v0.7 M1 / v0.8 M1) — no secrets. */
 app.get('/api/collab/status', (c) => {
   const st = getCollabBus().status();
+  const pr = getPresenceRegistry().status();
   return c.json({
     ok: true,
     data: {
@@ -184,6 +186,11 @@ app.get('/api/collab/status', (c) => {
       nodeId: st.nodeId,
       ready: st.ready,
       detail: st.detail ?? null,
+      presence: {
+        kind: pr.kind,
+        ready: pr.ready,
+        detail: pr.detail ?? null,
+      },
     },
   });
 });
@@ -192,7 +199,7 @@ app.get('/api/collab/status', (c) => {
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.7.1',
+    version: '0.8.1',
   });
 });
 
@@ -222,7 +229,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.7.1',
+      version: '0.8.1',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });
@@ -237,6 +244,12 @@ const collabBus = initCollabBus((projectId, event) => {
 });
 console.log(
   `NEOS_COLLAB_BUS=${collabBus.status().kind}${collabBus.status().detail ? ` (${collabBus.status().detail})` : ''}`,
+);
+
+// Presence registry (v0.8 M1): auto Redis when bus=redis; dual-write + hydrate
+const presenceReg = initPresenceRegistry();
+console.log(
+  `NEOS_COLLAB_PRESENCE=${presenceReg.status().kind}${presenceReg.status().detail ? ` (${presenceReg.status().detail})` : ''}`,
 );
 
 // Register built-in domain blocks

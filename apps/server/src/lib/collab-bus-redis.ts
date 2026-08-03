@@ -14,21 +14,9 @@ import { randomBytes } from 'node:crypto';
 import type { CollabEvent } from './collab-types.js';
 import type { CollabBus, CollabBusEnvelope, CollabBusHandler, CollabBusStatus } from './collab-bus.js';
 import { createMemoryCollabBus } from './collab-bus-memory.js';
+import { resolveCollabRedisUrl } from './collab-redis-url.js';
 
 const CHANNEL = 'neos:collab:events';
-
-function redisUrl(env: NodeJS.ProcessEnv): string | null {
-  for (const k of ['NEOS_COLLAB_REDIS_URL', 'REDIS_URL']) {
-    const v = env[k];
-    if (typeof v === 'string' && !/[\0\r\n]/.test(v) && v.trim()) {
-      const t = v.trim();
-      if (t.length <= 2_048 && (t.startsWith('redis://') || t.startsWith('rediss://'))) {
-        return t;
-      }
-    }
-  }
-  return null;
-}
 
 /** Stub that mirrors memory bus but reports kind redis-stub. */
 function createRedisStub(detail: string): CollabBus {
@@ -61,7 +49,7 @@ type RedisClientLike = {
  * Try real Redis via optional `redis` package; fall back to stub.
  */
 export function createRedisCollabBus(env: NodeJS.ProcessEnv = process.env): CollabBus {
-  const url = redisUrl(env);
+  const url = resolveCollabRedisUrl(env);
   if (!url) {
     return createRedisStub(
       'NEOS_COLLAB_BUS=redis but NEOS_COLLAB_REDIS_URL/REDIS_URL unset — using local stub',

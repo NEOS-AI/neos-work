@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { getCollabBus, isCollabBusFanoutEvent } from './collab-bus.js';
 import {
   clearMembershipStore,
+  hydrateMembershipFromRegistry,
   listMembershipPeers,
   membershipCount,
   PRESENCE_HEARTBEAT_INTERVAL_MS,
@@ -30,6 +31,7 @@ export {
   PRESENCE_HEARTBEAT_INTERVAL_MS,
   PRESENCE_LOCAL_IDLE_MS,
   PRESENCE_REMOTE_IDLE_MS,
+  hydrateMembershipFromRegistry,
 } from './collab-presence-store.js';
 
 type RoomListener = (event: CollabEvent) => void;

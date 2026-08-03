@@ -51,6 +51,7 @@ import {
   acquireFileLock,
   getFileLock,
   isSharedEditHardEnforce,
+  hydrateMembershipFromRegistry,
   joinProjectPresence,
   listProjectLocks,
   listProjectPeers,
@@ -351,6 +352,13 @@ projects.get('/:id/collab/stream', (c) => {
     const MAX_QUEUE = 64;
     let closed = false;
 
+    // v0.8 M1: pull Redis registry peers before join so presence.sync is complete
+    try {
+      await hydrateMembershipFromRegistry(id);
+    } catch {
+      /* registry optional */
+    }
+
     const joined = joinProjectPresence({
       projectId: id,
       displayName,
@@ -394,10 +402,15 @@ projects.get('/:id/collab/stream', (c) => {
 });
 
 /** Snapshot of current peers (REST helper for UI refresh). */
-projects.get('/:id/collab/peers', (c) => {
+projects.get('/:id/collab/peers', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  try {
+    await hydrateMembershipFromRegistry(id);
+  } catch {
+    /* optional */
+  }
   sweepIdlePresence(id);
   return c.json({ ok: true, data: { peers: listProjectPeers(id) } });
 });

@@ -1,7 +1,7 @@
 # PLAN_FOR_V0_8_0 — Shared presence · Multi-replica collab hardening
 
-**Status:** M0 shipped **0.8.0**; M1+ open  
-**Baseline:** monorepo **0.8.0**  
+**Status:** M0–M1 shipped through **0.8.1**; M2+ open  
+**Baseline:** monorepo **0.8.1**  
 **Parent backlog:** multi-replica presence membership (deferred from v0.7 M1); group resize / multi broadcast stretch; CRDT (Q19 still out of scope)
 
 ## One-line
@@ -26,7 +26,7 @@ Make peer lists accurate across engine replicas by sharing **presence membership
 | M | Theme | Exit |
 |---|---|---|
 | **M0** | Shared presence membership | join/leave/heartbeat → membership; sync lists remote peers — **done 0.8.0** |
-| **M1** | Redis presence registry | Optional Redis HASH/TTL when bus=redis |
+| **M1** | Redis presence registry | Optional Redis SET+TTL + hydrate — **done 0.8.1** |
 | **M2** | Group canvas resize | Multi-select scale (stretch) |
 | **M3** | Collab multi-selection | Broadcast multi set (stretch) |
 | **M4** | Docs / inventory | v0.8 migration + `v08Features` gates |
@@ -40,6 +40,16 @@ Make peer lists accurate across engine replicas by sharing **presence membership
 - [x] Idle sweep for remote members  
 - [x] Tests + `docs/implementation/v0.8/v0.8.0.md`  
 - [x] Version **0.8.0**  
+
+## Task M1 (0.8.1)
+
+- [x] Redis presence keys (peer SET EX + members set)  
+- [x] Dual-write put / touch / del from membership store  
+- [x] `hydrateMembershipFromRegistry` before SSE join + REST peers  
+- [x] `NEOS_COLLAB_PRESENCE=auto|memory|redis|off`  
+- [x] `GET /api/collab/status` → `presence`  
+- [x] Tests + `docs/implementation/v0.8/v0.8.1.md`  
+- [x] Version **0.8.1**  
 
 ## Decisions
 
