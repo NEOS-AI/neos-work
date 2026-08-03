@@ -19,6 +19,7 @@ import {
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
 import {
+  formatPresenceLeaveMessage,
   PresencePeersBar,
   type PeerSelectionInfo,
   type PresencePeerInfo,
@@ -96,11 +97,16 @@ export function ProjectWorkspace() {
   const [collabSessionId, setCollabSessionId] = useState<string | null>(null);
   const collabSessionRef = useRef<string | null>(null);
   collabSessionRef.current = collabSessionId;
+  /** Brief presence leave notice (idle / leave / evicted). */
+  const [collabNotice, setCollabNotice] = useState<string | null>(null);
+  const collabNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [foreignLocks, setForeignLocks] = useState<
     Record<string, { sessionId: string; displayName: string }>
   >({});
   /** sessionId → peer selection (v0.7 M2). */
   const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
+  /** Revision content preview from GET …/revisions/:id */
+  const [revisionPreview, setRevisionPreview] = useState<ProjectFileRevision | null>(null);
   const blocker = useBlocker(dirty);
 
   const loadProject = useCallback(async () => {
@@ -234,7 +240,19 @@ export function ProjectWorkspace() {
           });
         } else if (ev.type === 'presence.leave' && ev.sessionId) {
           const left = ev.sessionId;
-          setCollabPeers((list) => list.filter((p) => p.sessionId !== left));
+          setCollabPeers((list) => {
+            const gone = list.find((p) => p.sessionId === left);
+            if (gone) {
+              const msg = formatPresenceLeaveMessage(
+                gone.displayName,
+                typeof ev.reason === 'string' ? ev.reason : undefined,
+              );
+              setCollabNotice(msg);
+              if (collabNoticeTimer.current) clearTimeout(collabNoticeTimer.current);
+              collabNoticeTimer.current = setTimeout(() => setCollabNotice(null), 4000);
+            }
+            return list.filter((p) => p.sessionId !== left);
+          });
           setForeignLocks((m) => {
             const n: typeof m = {};
             for (const [path, h] of Object.entries(m)) {
@@ -529,14 +547,17 @@ export function ProjectWorkspace() {
   const loadRevisions = useCallback(async () => {
     if (!client || !projectId || !buffer.path) {
       setRevisions([]);
+      setRevisionPreview(null);
       return;
     }
     try {
       const res = await client.listProjectRevisions(projectId, buffer.path);
       if (res.ok && res.data) setRevisions(res.data);
       else setRevisions([]);
+      setRevisionPreview(null);
     } catch {
       setRevisions([]);
+      setRevisionPreview(null);
     }
   }, [client, projectId, buffer.path]);
 
@@ -786,6 +807,33 @@ export function ProjectWorkspace() {
     [client, projectId, loadComments],
   );
 
+  const handleViewRevision = useCallback(
+    async (revisionId: string) => {
+      if (!client || !projectId) return;
+      setRevisionBusy(true);
+      setRevisionError(null);
+      try {
+        const res = await client.getProjectRevision(projectId, revisionId);
+        if (!res.ok || !res.data) {
+          setRevisionError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.revisionLoadFailed'),
+          );
+          setRevisionPreview(null);
+          return;
+        }
+        setRevisionPreview(res.data);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.revisionLoadFailed');
+        setRevisionError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+        setRevisionPreview(null);
+      } finally {
+        setRevisionBusy(false);
+      }
+    },
+    [client, projectId, t],
+  );
+
   const handleRestoreRevision = useCallback(
     async (revisionId: string) => {
       if (!client || !projectId) return;
@@ -1013,6 +1061,20 @@ export function ProjectWorkspace() {
           role="alert"
         >
           {saveError}
+        </div>
+      )}
+      {collabNotice && (
+        <div
+          className="border-b px-4 py-1.5 text-xs"
+          style={{
+            borderColor: 'var(--border-primary)',
+            backgroundColor: 'var(--bg-tertiary, #2a2a2a)',
+            color: 'var(--text-secondary)',
+          }}
+          data-testid="collab-leave-notice"
+          role="status"
+        >
+          {collabNotice}
         </div>
       )}
 
@@ -1380,6 +1442,19 @@ export function ProjectWorkspace() {
                       <button
                         type="button"
                         disabled={revisionBusy}
+                        className="shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium disabled:opacity-40"
+                        style={{
+                          borderColor: 'var(--border-primary)',
+                          color: 'var(--text-secondary)',
+                        }}
+                        data-testid={`revision-view-${r.id}`}
+                        onClick={() => void handleViewRevision(r.id)}
+                      >
+                        {t('project.viewRevision')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={revisionBusy}
                         className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium text-white disabled:opacity-40"
                         style={{ backgroundColor: 'var(--accent, #6366f1)' }}
                         onClick={() => void handleRestoreRevision(r.id)}
@@ -1390,6 +1465,36 @@ export function ProjectWorkspace() {
                   ))
                 )}
               </ul>
+              {revisionPreview && (
+                <div
+                  className="mt-1 flex max-h-48 min-h-0 flex-col gap-1 rounded border p-2"
+                  style={{
+                    borderColor: 'var(--border-primary)',
+                    backgroundColor: 'var(--bg-primary)',
+                  }}
+                  data-testid="revision-preview"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      {revisionPreview.source} · {revisionPreview.contentHash.slice(0, 8)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-[10px]"
+                      style={{ color: 'var(--text-muted)' }}
+                      onClick={() => setRevisionPreview(null)}
+                    >
+                      {t('project.closePreview')}
+                    </button>
+                  </div>
+                  <pre
+                    className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px]"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    {revisionPreview.content ?? t('project.revisionNoContent')}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
 

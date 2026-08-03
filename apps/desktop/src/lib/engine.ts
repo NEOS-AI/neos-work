@@ -1279,6 +1279,8 @@ export class EngineClient {
       /** Top-level (e.g. presence.heartbeat). */
       displayName?: string;
       colorHint?: number;
+      /** presence.leave reason */
+      reason?: 'leave' | 'idle' | 'evicted' | string;
       peers?: Array<{
         sessionId: string;
         displayName: string;
@@ -1373,6 +1375,10 @@ export class EngineClient {
                   colorHint:
                     typeof parsed.colorHint === 'number' && Number.isFinite(parsed.colorHint)
                       ? parsed.colorHint
+                      : undefined,
+                  reason:
+                    typeof parsed.reason === 'string' && !/[\0\r\n]/.test(parsed.reason)
+                      ? parsed.reason
                       : undefined,
                   peers: Array.isArray(parsed.peers)
                     ? (parsed.peers as Array<{
@@ -1718,6 +1724,21 @@ export class EngineClient {
       qs = `?path=${encodeURIComponent(filePath.trim())}`;
     }
     const res = await fetch(`${this.baseUrl}/api/projects/${seg}/revisions${qs}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** GET /api/projects/:id/revisions/:revisionId — includes content snapshot. */
+  async getProjectRevision(
+    projectId: string,
+    revisionId: string,
+  ): Promise<ApiResponse<ProjectFileRevision>> {
+    const pSeg = this.pathSegment(projectId);
+    const rSeg = this.pathSegment(revisionId);
+    if (!pSeg) return this.invalidIdResponse('project id');
+    if (!rSeg) return this.invalidIdResponse('revision id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${pSeg}/revisions/${rSeg}`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);

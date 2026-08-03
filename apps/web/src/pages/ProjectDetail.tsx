@@ -17,6 +17,7 @@ import {
 } from '@neos-work/design-editor';
 import type { SelectionState } from '@neos-work/shared';
 import {
+  formatPresenceLeaveMessage,
   PresencePeersBar,
   type PeerSelectionInfo,
   type PresencePeerInfo,
@@ -177,7 +178,18 @@ export function ProjectDetail() {
           });
         } else if (ev.type === 'presence.leave' && ev.sessionId) {
           const left = ev.sessionId;
-          setCollabPeers((list) => list.filter((p) => p.sessionId !== left));
+          setCollabPeers((list) => {
+            const gone = list.find((p) => p.sessionId === left);
+            if (gone) {
+              setStatus(
+                formatPresenceLeaveMessage(
+                  gone.displayName,
+                  typeof ev.reason === 'string' ? ev.reason : undefined,
+                ),
+              );
+            }
+            return list.filter((p) => p.sessionId !== left);
+          });
           setForeignLocks((m) => {
             const n: typeof m = {};
             for (const [path, h] of Object.entries(m)) {

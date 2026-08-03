@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { PresencePeersBar } from './PresencePeersBar.js';
+import { fireEvent, render, within } from '@testing-library/react';
+import {
+  formatPresenceLeaveMessage,
+  peerIdleHint,
+  PresencePeersBar,
+} from './PresencePeersBar.js';
 
 describe('PresencePeersBar', () => {
   it('shows Solo when no peers', () => {
@@ -73,5 +77,34 @@ describe('PresencePeersBar', () => {
     expect(within(root).getByTestId('collab-peer-selection-abc123').textContent).toMatch(
       /3 sel/,
     );
+  });
+
+  it('shows idle badge from lastSeen', () => {
+    const stale = new Date(Date.now() - 60_000).toISOString();
+    const { container } = render(
+      <PresencePeersBar
+        self={{ sessionId: 's1', displayName: 'Me', colorHint: 10 }}
+        peers={[
+          {
+            sessionId: 'abc123xyz',
+            displayName: 'Alice',
+            colorHint: 40,
+            lastSeen: stale,
+          },
+        ]}
+      />,
+    );
+    const root = container.querySelector('[data-testid="collab-peers"]') as HTMLElement;
+    fireEvent.click(within(root).getByTestId('collab-peers-toggle'));
+    expect(within(root).getByTestId('collab-peer-idle-abc123').textContent).toBe('idle');
+  });
+
+  it('formatPresenceLeaveMessage / peerIdleHint helpers', () => {
+    expect(formatPresenceLeaveMessage('Alice', 'idle')).toMatch(/timed out/);
+    expect(formatPresenceLeaveMessage('Bob', 'evicted')).toMatch(/disconnected/);
+    expect(formatPresenceLeaveMessage('Cara', 'leave')).toBe('Cara left');
+    expect(peerIdleHint(new Date().toISOString())).toBeNull();
+    expect(peerIdleHint(new Date(Date.now() - 50_000).toISOString())).toBe('idle');
+    expect(peerIdleHint(new Date(Date.now() - 200_000).toISOString())).toBe('away');
   });
 });

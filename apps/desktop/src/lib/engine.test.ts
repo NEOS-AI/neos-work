@@ -1804,6 +1804,28 @@ describe('EngineClient', () => {
       error: 'Invalid file path',
     });
 
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: {
+          id: 'rev1',
+          projectId: 'p1',
+          path: 'index.html',
+          contentHash: 'deadbeef',
+          content: '<html>old</html>',
+          source: 'user',
+          createdAt: '2020-01-01T00:00:00.000Z',
+        },
+      }),
+    );
+    const got = await client.getProjectRevision('p1', 'rev1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/revisions\/rev1$/);
+    expect(got.ok && got.data?.content).toBe('<html>old</html>');
+    await expect(client.getProjectRevision('p1', `r${'\0'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid revision id',
+    });
+
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'index.html', hash: 'h' } }));
     await client.restoreProjectRevision('p1', 'rev1');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/restore/);

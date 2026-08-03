@@ -11,6 +11,7 @@ const listProjectPreviewComments = vi.fn();
 const createProjectPreviewComment = vi.fn();
 const deleteProjectPreviewComment = vi.fn();
 const listProjectRevisions = vi.fn();
+const getProjectRevision = vi.fn();
 const restoreProjectRevision = vi.fn();
 const listDesignSystems = vi.fn();
 const getDesignSystemContent = vi.fn();
@@ -39,6 +40,7 @@ const client = {
   createProjectPreviewComment,
   deleteProjectPreviewComment,
   listProjectRevisions,
+  getProjectRevision,
   restoreProjectRevision,
   listDesignSystems,
   getDesignSystemContent,
@@ -273,6 +275,7 @@ describe('ProjectWorkspace', () => {
     createProjectPreviewComment.mockReset();
     deleteProjectPreviewComment.mockReset();
     listProjectRevisions.mockReset().mockResolvedValue({ ok: true, data: [] });
+    getProjectRevision.mockReset();
     restoreProjectRevision.mockReset();
     listDesignSystems.mockReset().mockResolvedValue({ ok: true, data: [] });
     getDesignSystemContent.mockReset().mockResolvedValue({ ok: true, data: { content: '# DS' } });
@@ -610,7 +613,7 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('comment blocked'));
   });
 
-  it('restores a revision and reloads file content', async () => {
+  it('views a revision snapshot then restores content', async () => {
     const user = userEvent.setup();
     mockLoadedProject();
     listProjectRevisions.mockResolvedValue({
@@ -625,6 +628,18 @@ describe('ProjectWorkspace', () => {
           createdAt: '2026-01-01',
         },
       ],
+    });
+    getProjectRevision.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'rev-1',
+        projectId: 'proj-1',
+        path: 'index.html',
+        source: 'user',
+        contentHash: 'deadbeef',
+        content: '<html>old-snap</html>',
+        createdAt: '2026-01-01',
+      },
     });
     restoreProjectRevision.mockResolvedValue({
       ok: true,
@@ -644,6 +659,11 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
     await user.click(screen.getByTestId('side-tab-revisions'));
     await waitFor(() => expect(screen.getByTestId('revision-rev-1')).toBeInTheDocument());
+    await user.click(screen.getByTestId('revision-view-rev-1'));
+    await waitFor(() => {
+      expect(getProjectRevision).toHaveBeenCalledWith('proj-1', 'rev-1');
+      expect(screen.getByTestId('revision-preview')).toHaveTextContent('old-snap');
+    });
     await user.click(screen.getByRole('button', { name: 'project.restore' }));
     await waitFor(() => {
       expect(restoreProjectRevision).toHaveBeenCalledWith('proj-1', 'rev-1');

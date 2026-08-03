@@ -226,6 +226,8 @@ export class WebApiClient {
       /** Top-level (e.g. presence.heartbeat). */
       displayName?: string;
       colorHint?: number;
+      /** presence.leave reason */
+      reason?: 'leave' | 'idle' | 'evicted' | string;
       peers?: Array<{
         sessionId: string;
         displayName: string;
@@ -320,6 +322,10 @@ export class WebApiClient {
                   colorHint:
                     typeof data.colorHint === 'number' && Number.isFinite(data.colorHint)
                       ? data.colorHint
+                      : undefined,
+                  reason:
+                    typeof data.reason === 'string' && !/[\0\r\n]/.test(data.reason)
+                      ? data.reason
                       : undefined,
                   peers: Array.isArray(data.peers)
                     ? (data.peers as Array<{

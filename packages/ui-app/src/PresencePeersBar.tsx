@@ -53,11 +53,11 @@ function initials(name: string): string {
   return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
 }
 
-function avatarStyle(hint?: number): CSSProperties {
+function avatarStyle(hint?: number, muted = false): CSSProperties {
   const h = typeof hint === 'number' && Number.isFinite(hint) ? hint % 360 : 220;
   return {
-    backgroundColor: `hsl(${h} 55% 38%)`,
-    color: '#fff',
+    backgroundColor: muted ? `hsl(${h} 25% 28%)` : `hsl(${h} 55% 38%)`,
+    color: muted ? 'rgba(255,255,255,0.65)' : '#fff',
     width: 22,
     height: 22,
     borderRadius: '999px',
@@ -67,8 +67,32 @@ function avatarStyle(hint?: number): CSSProperties {
     fontSize: 10,
     fontWeight: 600,
     flexShrink: 0,
-    border: '1px solid rgba(255,255,255,0.15)',
+    border: muted
+      ? '1px dashed rgba(255,255,255,0.25)'
+      : '1px solid rgba(255,255,255,0.15)',
+    opacity: muted ? 0.85 : 1,
   };
+}
+
+/** Soft presence from lastSeen (ms since epoch age). */
+export function peerIdleHint(lastSeen?: string, nowMs = Date.now()): 'idle' | 'away' | null {
+  if (!lastSeen || typeof lastSeen !== 'string') return null;
+  const t = Date.parse(lastSeen);
+  if (!Number.isFinite(t)) return null;
+  const age = nowMs - t;
+  if (age < 45_000) return null;
+  if (age < 150_000) return 'idle';
+  return 'away';
+}
+
+export function formatPresenceLeaveMessage(
+  displayName: string,
+  reason?: 'leave' | 'idle' | 'evicted' | string | null,
+): string {
+  const name = displayName.trim() || 'Peer';
+  if (reason === 'idle') return `${name} timed out (idle)`;
+  if (reason === 'evicted') return `${name} was disconnected`;
+  return `${name} left`;
 }
 
 export function PresencePeersBar({
@@ -134,18 +158,22 @@ export function PresencePeersBar({
           )}
           {shown.map((p, i) => {
             const hint = formatSelectionHint(selections[p.sessionId]);
+            const idle = peerIdleHint(p.lastSeen);
+            const titleBase = idle
+              ? `${p.displayName} (${idle})`
+              : p.displayName;
             return (
               <span
                 key={p.sessionId}
                 style={{
-                  ...avatarStyle(p.colorHint),
+                  ...avatarStyle(p.colorHint, Boolean(idle)),
                   marginLeft: i === 0 && !self ? 0 : -6,
                   zIndex: 4 - i,
                   boxShadow: hint
                     ? `0 0 0 2px hsl(${(p.colorHint ?? 220) % 360} 70% 55%)`
                     : undefined,
                 }}
-                title={hint ? `${p.displayName}: ${hint}` : p.displayName}
+                title={hint ? `${titleBase}: ${hint}` : titleBase}
                 data-testid={`collab-peer-avatar-${p.sessionId.slice(0, 6)}`}
               >
                 {initials(p.displayName)}
@@ -216,6 +244,7 @@ export function PresencePeersBar({
           )}
           {others.map((p) => {
             const hint = formatSelectionHint(selections[p.sessionId]);
+            const idle = peerIdleHint(p.lastSeen);
             return (
               <div
                 key={p.sessionId}
@@ -228,9 +257,27 @@ export function PresencePeersBar({
                 }}
                 data-testid={`collab-peer-row-${p.sessionId.slice(0, 6)}`}
               >
-                <span style={avatarStyle(p.colorHint)}>{initials(p.displayName)}</span>
+                <span style={avatarStyle(p.colorHint, Boolean(idle))}>
+                  {initials(p.displayName)}
+                </span>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ color: 'var(--text-primary, #eee)' }}>{p.displayName}</div>
+                  <div style={{ color: 'var(--text-primary, #eee)' }}>
+                    {p.displayName}
+                    {idle && (
+                      <span
+                        data-testid={`collab-peer-idle-${p.sessionId.slice(0, 6)}`}
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 10,
+                          color: 'var(--text-muted, #888)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.03em',
+                        }}
+                      >
+                        {idle}
+                      </span>
+                    )}
+                  </div>
                   {hint && (
                     <div
                       data-testid={`collab-peer-selection-${p.sessionId.slice(0, 6)}`}
