@@ -93,10 +93,26 @@ export interface DesignEditorProps {
   /**
    * Peer selection outlines on canvas (v0.8.5).
    * Host supplies measured bboxes; empty/undefined skips drawing.
+   * When `peerAwareness` is set, DesignEditor measures bboxes via the preview bridge
+   * and merges with this prop (explicit frames win per sessionId if both provided).
    */
   peerCanvasFrames?: PeerCanvasFrame[];
+  /**
+   * Peer collab awareness (v0.8.6). Measured into canvas frames for the open HTML file.
+   */
+  peerAwareness?: PeerAwarenessHint[];
   className?: string;
 }
+
+/** Peer editing hint for canvas outlines (path + selectors from collab). */
+export type PeerAwarenessHint = {
+  sessionId: string;
+  colorHint?: number;
+  displayName?: string;
+  path?: string | null;
+  selector?: string | null;
+  selectors?: string[];
+};
 
 const defaultLabels = {
   preview: 'Preview',
@@ -142,7 +158,8 @@ export function DesignEditor({
   onEditWithAi,
   showLayers: showLayersProp,
   canvasOverlay: canvasOverlayProp,
-  peerCanvasFrames = [],
+  peerCanvasFrames: peerCanvasFramesProp = [],
+  peerAwareness = [],
   className,
 }: DesignEditorProps) {
   const labels = { ...defaultLabels, ...labelsProp };
@@ -161,6 +178,12 @@ export function DesignEditor({
   const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
   /** Secondary multi-select entries (primary is `selection` / selectDetail). v0.7 M3 */
   const [multiExtras, setMultiExtras] = useState<MultiSelectEntry[]>([]);
+  /** Measured peer frames from bridge (v0.8.6). */
+  const [measuredPeerFrames, setMeasuredPeerFrames] = useState<PeerCanvasFrame[]>([]);
+  const measureReqRef = useRef(0);
+  const peerMeasureMapRef = useRef<
+    Map<string, { colorHint: number; label?: string; selectors: string[] }>
+  >(new Map());
   const iframeHostRef = useRef<HTMLDivElement>(null);
   /** Lightweight canvas transform undo/redo (HTML snapshots only). v0.8.5 */
   const canvasUndoRef = useRef<string[]>([]);
@@ -290,10 +313,123 @@ export function DesignEditor({
         const entries = multiEntriesFromBridge(buffer.path, payload, resolveLayerId);
         // Bridge already painted multi outlines; sync React state (+ multiSelectors)
         applyMultiEntries(entries);
+        return;
+      }
+      if (msg.type === 'neos.measure-result') {
+        const req = String(msg.requestId ?? '');
+        // requestId format: `${n}|${sessionId}|${sessionId}|...` or map by last measure
+        const parts = req.split('|');
+        const reqN = Number(parts[0]);
+        if (!Number.isFinite(reqN) || reqN !== measureReqRef.current) return;
+        const sessionIds = parts.slice(1).filter(Boolean);
+        const results = Array.isArray(msg.results) ? msg.results : [];
+        // Rebuild frames: we measured flat selectors ordered by peer groups stored in peerMeasureMapRef
+        const frames: PeerCanvasFrame[] = [];
+        // Prefer map order from last request meta encoded as sessionIds list matching peer groups
+        // results are flat; peerMeasureMapRef holds selectors per session
+        for (const sid of sessionIds) {
+          const meta = peerMeasureMapRef.current.get(sid);
+          if (!meta) continue;
+          const bboxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+          for (const sel of meta.selectors) {
+            const hit = results.find((r) => r.selector === sel);
+            if (hit?.bbox && hit.bbox.width > 0 && hit.bbox.height > 0) {
+              bboxes.push({
+                x: hit.bbox.x,
+                y: hit.bbox.y,
+                width: hit.bbox.width,
+                height: hit.bbox.height,
+              });
+            }
+          }
+          if (bboxes.length > 0) {
+            frames.push({
+              colorHint: meta.colorHint,
+              label: meta.label,
+              bboxes,
+            });
+          }
+        }
+        setMeasuredPeerFrames(frames);
       }
     },
     [buffer.path, bridgeLayers, parseLayers, applyMultiEntries],
   );
+
+  // Stable key so host inline arrays don't re-measure every render
+  const peerAwarenessKey = useMemo(
+    () =>
+      (peerAwareness ?? [])
+        .map(
+          (p) =>
+            `${p.sessionId}\t${p.path ?? ''}\t${p.selector ?? ''}\t${(p.selectors ?? []).join(',')}\t${p.colorHint ?? ''}`,
+        )
+        .join('|'),
+    [peerAwareness],
+  );
+
+  // Measure peer awareness selectors in the preview iframe (HTML only).
+  useEffect(() => {
+    if (!htmlLike || !canvasOn) {
+      setMeasuredPeerFrames((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    const openPath = buffer.path ?? '';
+    const peers = (peerAwareness ?? []).filter((p) => {
+      if (!p.sessionId) return false;
+      const pPath = (p.path ?? '').trim();
+      // Match open file, or path-less peers (treat as current file)
+      return !pPath || pPath === openPath;
+    });
+    if (peers.length === 0) {
+      setMeasuredPeerFrames((prev) => (prev.length === 0 ? prev : []));
+      peerMeasureMapRef.current = new Map();
+      return;
+    }
+    const map = new Map<string, { colorHint: number; label?: string; selectors: string[] }>();
+    const flat: string[] = [];
+    const order: string[] = [];
+    for (const p of peers) {
+      const sels =
+        p.selectors && p.selectors.length > 0
+          ? p.selectors.filter((s): s is string => typeof s === 'string' && s.length > 0)
+          : p.selector
+            ? [p.selector]
+            : [];
+      if (sels.length === 0) continue;
+      map.set(p.sessionId, {
+        colorHint: typeof p.colorHint === 'number' ? p.colorHint : 220,
+        label: p.displayName,
+        selectors: sels,
+      });
+      order.push(p.sessionId);
+      for (const s of sels) flat.push(s);
+    }
+    peerMeasureMapRef.current = map;
+    if (flat.length === 0) {
+      setMeasuredPeerFrames((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    const iframe = iframeHostRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe) return;
+    measureReqRef.current += 1;
+    const requestId = `${measureReqRef.current}|${order.join('|')}`;
+    // Defer until iframe can receive messages
+    const t = window.setTimeout(() => {
+      postToPreview(iframe, { type: 'neos.measure', selectors: flat, requestId });
+    }, 80);
+    return () => window.clearTimeout(t);
+    // peerAwarenessKey stabilizes host-allocated arrays; peerAwareness still read for data
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- key encodes awareness payload
+  }, [peerAwarenessKey, buffer.path, htmlLike, canvasOn, reloadKey, previewHtml]);
+
+  const peerCanvasFrames = useMemo(() => {
+    // Explicit prop frames first; then measured (no sessionId on PeerCanvasFrame — just merge lists)
+    const explicit = peerCanvasFramesProp ?? [];
+    if (explicit.length === 0) return measuredPeerFrames;
+    if (measuredPeerFrames.length === 0) return explicit;
+    return [...explicit, ...measuredPeerFrames];
+  }, [peerCanvasFramesProp, measuredPeerFrames]);
 
   const handleLayerSelect = (layer: LayerNode, opts?: { additive?: boolean }) => {
     if (!buffer.path) return;

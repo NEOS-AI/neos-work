@@ -25,6 +25,13 @@ describe('bridge-inject', () => {
     const script = buildBridgeInjectScript();
     expect(script).toMatch(/shiftKey\s*\|\|\s*ev\.metaKey\s*\|\|\s*ev\.ctrlKey/);
   });
+
+  it('includes neos.measure / measure-result (v0.8.6 peer outlines)', () => {
+    const script = buildBridgeInjectScript();
+    expect(script).toContain('neos.measure');
+    expect(script).toContain('neos.measure-result');
+    expect(script).toContain('getBoundingClientRect');
+  });
 });
 
 describe('injectBridgeIntoHtml placements', () => {

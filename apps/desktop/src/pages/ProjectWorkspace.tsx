@@ -1009,6 +1009,14 @@ export function ProjectWorkspace() {
               setSelection(sel);
               setSelectDetail(detail ?? null);
             }}
+            peerAwareness={Object.entries(peerSelections).map(([sessionId, sel]) => ({
+              sessionId,
+              colorHint: sel?.colorHint,
+              displayName: sel?.displayName,
+              path: sel?.path ?? null,
+              selector: sel?.selector ?? null,
+              selectors: sel?.selectors,
+            }))}
             onEditWithAi={(sel, detail) => {
               setSelection(sel);
               setSelectDetail(detail ?? null);

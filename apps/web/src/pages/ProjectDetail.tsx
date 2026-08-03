@@ -515,6 +515,14 @@ export function ProjectDetail() {
               saving={busy}
               selection={selection}
               onSelectionChange={(sel) => setSelection(sel)}
+              peerAwareness={Object.entries(peerSelections).map(([sessionId, sel]) => ({
+                sessionId,
+                colorHint: sel?.colorHint,
+                displayName: sel?.displayName,
+                path: sel?.path ?? null,
+                selector: sel?.selector ?? null,
+                selectors: sel?.selectors,
+              }))}
               onEditWithAi={(sel) => {
                 setSelection(sel);
                 setAiPrompt((prev) =>

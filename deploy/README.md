@@ -64,7 +64,7 @@ docker build -f deploy/Dockerfile -t neos-work:latest .
 Single-replica chart under [`helm/neos-work/`](./helm/neos-work/):
 
 ```bash
-docker build -f deploy/Dockerfile -t neos-work:0.8.5 .
+docker build -f deploy/Dockerfile -t neos-work:0.8.6 .
 helm upgrade --install neos ./deploy/helm/neos-work \
   --set authToken="$(openssl rand -hex 32)" \
   --set image.tag=0.8.5
@@ -73,17 +73,23 @@ helm upgrade --install neos ./deploy/helm/neos-work \
 See [helm/neos-work/README.md](./helm/neos-work/README.md). Not multi-tenant HA;
 default collab is in-process (**one replica**).
 
-## Multi-replica collab (optional)
+## Multi-replica (optional)
 
-For Redis-backed event fan-out and shared presence membership (`NEOS_COLLAB_BUS`,
-`NEOS_COLLAB_REDIS_URL`, `NEOS_COLLAB_PRESENCE`), see:
+Default [docker-compose.yml](./docker-compose.yml) stays **single-engine**. For
+Redis-backed collab bus + presence across two engines (ports **3000** / **3001**):
 
-- **Ops:** [docs/ops/multi-replica-collab.md](../docs/ops/multi-replica-collab.md)
-- **Release:** [docs/releases/v0.8.5.md](../docs/releases/v0.8.5.md)
-- **Migrations:** [v0.7](../docs/migration/v0.7.0.md) · [v0.8](../docs/migration/v0.8.0.md)
+```bash
+# from monorepo root (same deploy/.env with NEOS_AUTH_TOKEN)
+docker compose -f deploy/docker-compose.multi.yml up -d --build
+docker compose -f deploy/docker-compose.multi.yml logs -f
+```
 
-Compose above remains single-process; the ops doc includes an optional
-docker-compose snippet with Redis.
+| File | Role |
+|---|---|
+| [docker-compose.multi.yml](./docker-compose.multi.yml) | `redis` + `neos-a` + `neos-b`; `NEOS_COLLAB_BUS=redis`, `NEOS_COLLAB_REDIS_URL=redis://redis:6379`, `NEOS_COLLAB_PRESENCE=auto` |
+| [docs/ops/multi-replica-collab.md](../docs/ops/multi-replica-collab.md) | Env, QA checklist, limits (SSE local, redis-stub, shared volume risks) |
+
+Optional release / migration notes: [v0.8.4](../docs/releases/v0.8.4.md) · [v0.7](../docs/migration/v0.7.0.md) · [v0.8](../docs/migration/v0.8.0.md).
 
 ## Notes
 

@@ -322,6 +322,36 @@ export function buildBridgeInjectScript(): string {
       } else {
         document.documentElement.style.cursor = 'crosshair';
       }
+      return;
+    }
+    if (data.type === 'neos.measure') {
+      var reqId = typeof data.requestId === 'string' ? data.requestId : '';
+      var list = Array.isArray(data.selectors) ? data.selectors : [];
+      var results = [];
+      for (var mi = 0; mi < list.length; mi++) {
+        var sel = list[mi];
+        if (typeof sel !== 'string' || !sel) {
+          results.push({ selector: '', bbox: null });
+          continue;
+        }
+        try {
+          var mel = document.querySelector(sel);
+          if (!mel) {
+            results.push({ selector: sel, bbox: null });
+          } else {
+            var mrect = mel.getBoundingClientRect
+              ? mel.getBoundingClientRect()
+              : { x: 0, y: 0, width: 0, height: 0 };
+            results.push({
+              selector: sel,
+              bbox: { x: mrect.x, y: mrect.y, width: mrect.width, height: mrect.height }
+            });
+          }
+        } catch (e) {
+          results.push({ selector: sel, bbox: null });
+        }
+      }
+      post({ type: 'neos.measure-result', requestId: reqId, results: results });
     }
   });
 

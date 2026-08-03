@@ -15,6 +15,7 @@ export {
   isBridgeInbound,
   type BridgeDomNode,
   type BridgeInboundMessage,
+  type BridgeMeasureItem,
   type BridgeMessageType,
   type BridgeOutboundCommand,
   type BridgeSelectPayload,
@@ -71,6 +72,7 @@ export {
   CANVAS_UNDO_CAP,
   type DesignEditorMode,
   type DesignEditorProps,
+  type PeerAwarenessHint,
 } from './DesignEditor.js';
 
 export {

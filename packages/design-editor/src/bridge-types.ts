@@ -11,7 +11,8 @@ export type BridgeMessageType =
   | 'neos.select'
   | 'neos.hover'
   | 'neos.scroll'
-  | 'neos.pong';
+  | 'neos.pong'
+  | 'neos.measure-result';
 
 export interface BridgeMessageBase {
   source: typeof NEOS_BRIDGE_SOURCE;
@@ -49,13 +50,23 @@ export interface BridgeSelectPayload {
   }>;
 }
 
+export type BridgeMeasureItem = {
+  selector: string;
+  bbox: { x: number; y: number; width: number; height: number } | null;
+};
+
 export type BridgeInboundMessage =
   | (BridgeMessageBase & { type: 'neos.ready' })
   | (BridgeMessageBase & { type: 'neos.dom-snapshot'; tree: BridgeDomNode[] })
   | (BridgeMessageBase & { type: 'neos.select'; selection: BridgeSelectPayload })
   | (BridgeMessageBase & { type: 'neos.hover'; selector: string | null })
   | (BridgeMessageBase & { type: 'neos.scroll'; x: number; y: number })
-  | (BridgeMessageBase & { type: 'neos.pong' });
+  | (BridgeMessageBase & { type: 'neos.pong' })
+  | (BridgeMessageBase & {
+      type: 'neos.measure-result';
+      requestId: string;
+      results: BridgeMeasureItem[];
+    });
 
 export type BridgeOutboundCommand =
   | { type: 'neos.ping' }
@@ -64,7 +75,9 @@ export type BridgeOutboundCommand =
   /** Multi-outline; last selector is primary (v0.7 M3). */
   | { type: 'neos.highlight-multi'; selectors: string[] }
   | { type: 'neos.scroll-to'; selector: string }
-  | { type: 'neos.set-inspect'; enabled: boolean };
+  | { type: 'neos.set-inspect'; enabled: boolean }
+  /** Measure layout boxes for selectors (v0.8.6 peer outlines). */
+  | { type: 'neos.measure'; selectors: string[]; requestId: string };
 
 export function isBridgeInbound(data: unknown): data is BridgeInboundMessage {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;

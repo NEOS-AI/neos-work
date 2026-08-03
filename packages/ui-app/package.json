@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/ui-app",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "rm -rf dist *.tsbuildinfo",
     "typecheck": "tsc --noEmit",
