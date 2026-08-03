@@ -130,10 +130,14 @@ describe('project-collab presence', () => {
     expect(projectPresenceCount('p-b')).toBe(1);
   });
 
-  it('normalizeLockPath rejects traversal', () => {
+  it('normalizeLockPath aliases shared normalizeProjectRelPath', () => {
     expect(normalizeLockPath('../x')).toBe('');
     expect(normalizeLockPath('a/b.html')).toBe('a/b.html');
     expect(normalizeLockPath('/abs')).toBe('abs');
+    expect(normalizeLockPath('  a\\b.html  ')).toBe('a/b.html');
+    expect(normalizeLockPath('~/x')).toBe('');
+    expect(normalizeLockPath('C:/Windows')).toBe('');
+    expect(normalizeLockPath(null)).toBe('');
   });
 
   it('file locks: acquire conflict release and clear on leave', () => {

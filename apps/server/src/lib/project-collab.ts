@@ -11,6 +11,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { normalizeProjectRelPath } from '@neos-work/shared';
 import { getCollabBus, isCollabBusFanoutEvent } from './collab-bus.js';
 import {
   clearMembershipStore,
@@ -78,15 +79,11 @@ function newSessionId(): string {
   return randomBytes(12).toString('hex');
 }
 
-/** Normalize project-relative file path for locks (no .., no abs, bounded). */
-export function normalizeLockPath(raw: unknown): string {
-  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
-  const p = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '');
-  if (!p || p.length > 500) return '';
-  if (p.includes('..')) return '';
-  if (p.startsWith('~/') || /^[A-Za-z]:\//.test(p)) return '';
-  return p;
-}
+/**
+ * Normalize project-relative file path for locks (no .., no abs, bounded).
+ * Alias of shared `normalizeProjectRelPath` — keep export name for collab call sites/tests.
+ */
+export const normalizeLockPath = normalizeProjectRelPath;
 
 function listLocks(projectId: string): FileLock[] {
   const m = lockRooms.get(projectId);

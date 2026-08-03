@@ -1,6 +1,7 @@
 /**
  * Normalize a project-relative path for lock/selection/file keys.
- * Mirrors server normalizeLockPath: posix slashes, strip leading /, reject traversal/absolute.
+ * Canonical rules for FE clients and server collab locks: posix slashes,
+ * strip leading /, reject traversal / absolute / home / drive paths.
  */
 export function normalizeProjectRelPath(raw: unknown): string {
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
