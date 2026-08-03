@@ -3,6 +3,8 @@
  */
 
 import {
+  parseCollabLockConflict,
+  parseCollabLockSuccess,
   parseProjectFileWriteResponse,
   type ApiResponse,
   type ChatChunk,
@@ -1475,7 +1477,19 @@ export class EngineClient {
   async collabLock(
     projectId: string,
     body: { sessionId: string; path: string; action: 'acquire' | 'release' },
-  ): Promise<ApiResponse<{ lock?: unknown; released?: boolean; holder?: unknown }>> {
+  ): Promise<
+    ApiResponse<{
+      lock?: {
+        path: string;
+        sessionId: string;
+        displayName: string;
+        acquiredAt?: string;
+      };
+      released?: boolean;
+      path?: string;
+      holder?: { sessionId: string; displayName: string; path?: string; acquiredAt?: string };
+    }>
+  > {
     const seg = this.pathSegment(projectId);
     if (!seg) return this.invalidIdResponse('project id');
     const res = await fetch(`${this.baseUrl}/api/projects/${seg}/collab/locks`, {
@@ -1483,7 +1497,34 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify(body),
     });
-    return readApiResponse(res);
+    const envelope = await readApiResponse<{
+      lock?: {
+        path: string;
+        sessionId: string;
+        displayName: string;
+        acquiredAt?: string;
+      };
+      released?: boolean;
+      path?: string;
+      holder?: { sessionId: string; displayName: string; path?: string; acquiredAt?: string };
+    }>(res);
+    if (envelope.ok) {
+      const checked = parseCollabLockSuccess(envelope);
+      if (!checked.ok) {
+        return { ok: false, error: checked.error };
+      }
+      return { ok: true, data: checked.data.data };
+    }
+    // 409 conflict: preserve holder via shared schema when possible
+    const conflict = parseCollabLockConflict(envelope);
+    if (conflict.ok) {
+      return {
+        ok: false,
+        error: conflict.data.error ?? envelope.error,
+        data: conflict.data.data,
+      };
+    }
+    return envelope;
   }
 
   /** Snapshot of collab peers (REST helper). */

@@ -99,3 +99,57 @@ describe('assertCollabLock*Response', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+describe('assert peers / selections / run summary', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('accepts peers and selections snapshots', async () => {
+    const { assertCollabPeersSnapshotResponse, assertCollabSelectionsSnapshotResponse } =
+      await import('./wire-assert.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    assertCollabPeersSnapshotResponse(
+      {
+        ok: true,
+        data: {
+          peers: [
+            {
+              sessionId: 's1',
+              displayName: 'A',
+              joinedAt: new Date().toISOString(),
+              colorHint: 10,
+            },
+          ],
+        },
+      },
+      { NODE_ENV: 'test' },
+    );
+    assertCollabSelectionsSnapshotResponse(
+      {
+        ok: true,
+        data: {
+          selections: [
+            {
+              sessionId: 's1',
+              path: 'index.html',
+              selector: '#hero',
+              displayName: 'A',
+              colorHint: 10,
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      },
+      { NODE_ENV: 'test' },
+    );
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns on bad run summary', async () => {
+    const { assertProjectRunSummary } = await import('./wire-assert.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    assertProjectRunSummary({ status: 'running' }, { NODE_ENV: 'test' });
+    expect(warn).toHaveBeenCalled();
+  });
+});

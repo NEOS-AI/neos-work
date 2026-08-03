@@ -150,6 +150,73 @@ export const collabLockBodySchema = z.object({
   action: z.enum(['acquire', 'release']),
 });
 
+// ── Runs ───────────────────────────────────────────────────
+
+export const projectRunStatusSchema = z.enum([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'canceled',
+]);
+
+/** Accepts canonical statuses plus common aliases (cancelled / error). */
+export const projectRunStatusLooseSchema = z.string().min(1);
+
+export const projectRunSummarySchema = z.object({
+  id: z.string().min(1),
+  status: projectRunStatusLooseSchema,
+  agentId: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  conversationId: z.string().nullable().optional(),
+  prompt: z.string().optional(),
+  editContext: z.unknown().nullable().optional(),
+  provider: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
+  startedAt: z.string().nullable().optional(),
+  completedAt: z.string().nullable().optional(),
+  eventCount: z.number().nonnegative().optional(),
+});
+
+export const projectRunSummaryResponseSchema = apiEnvelopeSchema(projectRunSummarySchema);
+export const projectRunListResponseSchema = apiEnvelopeSchema(z.array(projectRunSummarySchema));
+
+export const projectRunEventSchema = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  ts: z.string().min(1),
+  data: z.unknown().optional(),
+});
+
+export const projectRunEventsResponseSchema = apiEnvelopeSchema(z.array(projectRunEventSchema));
+
+// ── File revisions (contentHash domain) ────────────────────
+
+export const fileRevisionSourceSchema = z.enum(['user', 'agent', 'import', 'restore']);
+
+/** List row (content usually omitted). */
+export const fileRevisionListItemSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1).optional(),
+  path: z.string().min(1),
+  contentHash: z.string().min(1),
+  content: z.string().optional(),
+  source: fileRevisionSourceSchema.or(z.string()),
+  createdAt: z.string().min(1),
+});
+
+export const fileRevisionListResponseSchema = apiEnvelopeSchema(
+  z.array(fileRevisionListItemSchema),
+);
+
+/** GET by id may include full content. */
+export const fileRevisionDetailSchema = fileRevisionListItemSchema.extend({
+  content: z.string().optional(),
+});
+
+export const fileRevisionDetailResponseSchema = apiEnvelopeSchema(fileRevisionDetailSchema);
+
 // ── Parse helpers ──────────────────────────────────────────
 
 export type ParseOk<T> = { ok: true; data: T };
@@ -194,6 +261,46 @@ export function parseProjectFileWriteResponse(input: unknown) {
 
 export function parseCollabLockConflict(input: unknown) {
   return parseWithSchema(collabLockConflictSchema, input);
+}
+
+export function parseCollabLockSuccess(input: unknown) {
+  return parseWithSchema(collabLockSuccessSchema, input);
+}
+
+export function parseCollabPeersSnapshot(input: unknown) {
+  return parseWithSchema(collabPeersSnapshotSchema, input);
+}
+
+export function parseCollabLocksSnapshot(input: unknown) {
+  return parseWithSchema(collabLocksSnapshotSchema, input);
+}
+
+export function parseCollabSelectionsSnapshot(input: unknown) {
+  return parseWithSchema(collabSelectionsSnapshotSchema, input);
+}
+
+export function parseProjectRunSummaryResponse(input: unknown) {
+  return parseWithSchema(projectRunSummaryResponseSchema, input);
+}
+
+export function parseProjectRunListResponse(input: unknown) {
+  return parseWithSchema(projectRunListResponseSchema, input);
+}
+
+export function parseProjectRunEventsResponse(input: unknown) {
+  return parseWithSchema(projectRunEventsResponseSchema, input);
+}
+
+export function parseFileRevisionListResponse(input: unknown) {
+  return parseWithSchema(fileRevisionListResponseSchema, input);
+}
+
+export function parseFileRevisionDetailResponse(input: unknown) {
+  return parseWithSchema(fileRevisionDetailResponseSchema, input);
+}
+
+export function parseProjectFileEventPayload(input: unknown) {
+  return parseWithSchema(projectFileEventPayloadSchema, input);
 }
 
 // ── Lightweight OpenAPI fragment (JSON Schema 2020-ish) ────
@@ -260,6 +367,49 @@ export const openApiWireFragments = {
       selectors: { type: 'array', items: { type: 'string' } },
       layerIds: { type: 'array', items: { type: 'string' } },
       updatedAt: { type: 'string' },
+    },
+  },
+  ProjectRunSummary: {
+    type: 'object',
+    required: ['id', 'status'],
+    properties: {
+      id: { type: 'string' },
+      status: {
+        type: 'string',
+        description: 'queued|running|succeeded|failed|canceled (+ aliases)',
+      },
+      agentId: { type: ['string', 'null'] },
+      projectId: { type: ['string', 'null'] },
+      prompt: { type: 'string' },
+      error: { type: ['string', 'null'] },
+      createdAt: { type: 'string' },
+      eventCount: { type: 'number' },
+    },
+  },
+  FileRevisionListItem: {
+    type: 'object',
+    required: ['id', 'path', 'contentHash', 'source', 'createdAt'],
+    properties: {
+      id: { type: 'string' },
+      projectId: { type: 'string' },
+      path: { type: 'string' },
+      contentHash: {
+        type: 'string',
+        description: 'Revision domain hash (not live file hash)',
+      },
+      content: { type: 'string' },
+      source: { type: 'string' },
+      createdAt: { type: 'string' },
+    },
+  },
+  ProjectFileEventPayload: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string' },
+      path: { type: 'string' },
+      source: { type: 'string' },
+      hash: { type: 'string', description: 'Live tip hash' },
+      ts: { type: 'string' },
     },
   },
 } as const;

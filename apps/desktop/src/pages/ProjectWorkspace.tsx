@@ -409,15 +409,12 @@ export function ProjectWorkspace() {
     void client
       .collabLock(projectId, { sessionId: collabSessionId, path, action: 'acquire' })
       .then((res) => {
-        if (!res.ok && res.data && typeof res.data === 'object' && res.data !== null) {
-          const holder = (res.data as { holder?: { sessionId?: string; displayName?: string } })
-            .holder;
-          if (holder?.sessionId && holder.displayName) {
-            setForeignLocks((m) => ({
-              ...m,
-              [path]: { sessionId: holder.sessionId!, displayName: holder.displayName! },
-            }));
-          }
+        if (!res.ok && res.data?.holder?.sessionId && res.data.holder.displayName) {
+          const holder = res.data.holder;
+          setForeignLocks((m) => ({
+            ...m,
+            [path]: { sessionId: holder.sessionId, displayName: holder.displayName },
+          }));
         }
       });
     return () => {

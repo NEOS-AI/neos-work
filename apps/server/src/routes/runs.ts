@@ -19,6 +19,7 @@ import {
   getGlobalRunRegistry,
 } from '@neos-work/agent-runtime';
 import { normalizeEditContext, type ProjectRunSummary } from '@neos-work/shared';
+import { assertProjectRunSummary } from '../lib/wire-assert.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 import { getProject, listPreviewComments } from '../db/projects.js';
@@ -56,7 +57,7 @@ function publicRun(record: {
   completedAt?: string | null;
   events: unknown[];
 }): ProjectRunSummary {
-  return {
+  const summary: ProjectRunSummary = {
     id: record.id,
     status: record.status,
     agentId: record.agentId ?? null,
@@ -69,6 +70,8 @@ function publicRun(record: {
     completedAt: record.completedAt ?? null,
     eventCount: record.events.length,
   };
+  assertProjectRunSummary(summary);
+  return summary;
 }
 
 /**

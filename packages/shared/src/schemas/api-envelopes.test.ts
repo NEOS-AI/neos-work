@@ -91,4 +91,49 @@ describe('openApiWireFragments', () => {
       openApiWireFragments.ProjectFileWriteResult.required,
     ).not.toContain('contentHash');
   });
+
+  it('documents run summary and revision contentHash', () => {
+    expect(openApiWireFragments.ProjectRunSummary.required).toContain('status');
+    expect(openApiWireFragments.FileRevisionListItem.required).toContain('contentHash');
+    expect(openApiWireFragments.ProjectFileEventPayload.properties.hash).toBeDefined();
+  });
+});
+
+describe('run + revision schemas', () => {
+  it('parses run summary envelope', async () => {
+    const { parseProjectRunSummaryResponse } = await import('./api-envelopes.js');
+    const r = parseProjectRunSummaryResponse({
+      ok: true,
+      data: { id: 'r1', status: 'succeeded', eventCount: 3 },
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('parses revision list (contentHash domain)', async () => {
+    const { parseFileRevisionListResponse } = await import('./api-envelopes.js');
+    const r = parseFileRevisionListResponse({
+      ok: true,
+      data: [
+        {
+          id: 'rev1',
+          path: 'index.html',
+          contentHash: 'deadbeef',
+          source: 'user',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('parses file SSE payload', async () => {
+    const { parseProjectFileEventPayload } = await import('./api-envelopes.js');
+    const r = parseProjectFileEventPayload({
+      projectId: 'p1',
+      path: 'index.html',
+      hash: 'abc',
+      source: 'user',
+    });
+    expect(r.ok).toBe(true);
+  });
 });

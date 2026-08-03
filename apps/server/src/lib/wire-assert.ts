@@ -6,9 +6,14 @@
 
 import {
   parseCollabLockConflict,
+  parseCollabLockSuccess,
+  parseCollabLocksSnapshot,
+  parseCollabPeersSnapshot,
+  parseCollabSelectionsSnapshot,
   parseProjectFileWriteResponse,
+  parseProjectRunSummaryResponse,
   parseWithSchema,
-  collabLockSuccessSchema,
+  projectRunSummarySchema,
 } from '@neos-work/shared';
 
 export function wireAssertEnabled(
@@ -49,7 +54,7 @@ export function assertCollabLockSuccessResponse(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   if (!wireAssertEnabled(env)) return;
-  const r = parseWithSchema(collabLockSuccessSchema, body);
+  const r = parseCollabLockSuccess(body);
   if (!r.ok) report('collab lock success response', r.error, env);
 }
 
@@ -61,4 +66,51 @@ export function assertCollabLockConflictResponse(
   if (!wireAssertEnabled(env)) return;
   const r = parseCollabLockConflict(body);
   if (!r.ok) report('collab lock conflict response', r.error, env);
+}
+
+export function assertCollabPeersSnapshotResponse(
+  body: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!wireAssertEnabled(env)) return;
+  const r = parseCollabPeersSnapshot(body);
+  if (!r.ok) report('collab peers snapshot', r.error, env);
+}
+
+export function assertCollabLocksSnapshotResponse(
+  body: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!wireAssertEnabled(env)) return;
+  const r = parseCollabLocksSnapshot(body);
+  if (!r.ok) report('collab locks snapshot', r.error, env);
+}
+
+export function assertCollabSelectionsSnapshotResponse(
+  body: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!wireAssertEnabled(env)) return;
+  const r = parseCollabSelectionsSnapshot(body);
+  if (!r.ok) report('collab selections snapshot', r.error, env);
+}
+
+/** Assert public run summary (create/get/cancel/list item). */
+export function assertProjectRunSummary(
+  data: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!wireAssertEnabled(env)) return;
+  const r = parseWithSchema(projectRunSummarySchema, data);
+  if (!r.ok) report('project run summary', r.error, env);
+}
+
+/** Assert envelope wrapping a single run summary. */
+export function assertProjectRunSummaryResponse(
+  body: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!wireAssertEnabled(env)) return;
+  const r = parseProjectRunSummaryResponse(body);
+  if (!r.ok) report('project run summary response', r.error, env);
 }

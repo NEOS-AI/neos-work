@@ -45,6 +45,9 @@ import { publicErrorMessage } from '../lib/errors.js';
 import {
   assertCollabLockConflictResponse,
   assertCollabLockSuccessResponse,
+  assertCollabLocksSnapshotResponse,
+  assertCollabPeersSnapshotResponse,
+  assertCollabSelectionsSnapshotResponse,
   assertProjectFileWriteResponse,
 } from '../lib/wire-assert.js';
 import {
@@ -417,7 +420,9 @@ projects.get('/:id/collab/peers', async (c) => {
     /* optional */
   }
   sweepIdlePresence(id);
-  return c.json({ ok: true, data: { peers: listProjectPeers(id) } });
+  const peersBody = { ok: true as const, data: { peers: listProjectPeers(id) } };
+  assertCollabPeersSnapshotResponse(peersBody);
+  return c.json(peersBody);
 });
 
 /** Heartbeat — keeps idle sweep from dropping a session if SSE stalls. */
@@ -443,13 +448,15 @@ projects.get('/:id/collab/locks', (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({
-    ok: true,
+  const locksBody = {
+    ok: true as const,
     data: {
       locks: listProjectLocks(id),
       hardEnforce: isSharedEditHardEnforce(),
     },
-  });
+  };
+  assertCollabLocksSnapshotResponse(locksBody);
+  return c.json(locksBody);
 });
 
 /**
@@ -459,10 +466,9 @@ projects.get('/:id/collab/selections', (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({
-    ok: true,
-    data: { selections: listProjectSelections(id) },
-  });
+  const selBody = { ok: true as const, data: { selections: listProjectSelections(id) } };
+  assertCollabSelectionsSnapshotResponse(selBody);
+  return c.json(selBody);
 });
 
 /**
