@@ -244,6 +244,65 @@ export class WebApiClient {
     return this.request('GET', `/api/runs/${encodeURIComponent(runId)}`);
   }
 
+  /** GET /api/runs?projectId= — list runs for a project. */
+  listRuns(projectId: string): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        status: string;
+        agentId?: string | null;
+        projectId?: string | null;
+        prompt?: string;
+        error?: string | null;
+        createdAt?: string;
+        eventCount?: number;
+      }>
+    >
+  > {
+    return this.request(
+      'GET',
+      `/api/runs?projectId=${encodeURIComponent(projectId)}`,
+    );
+  }
+
+  /** GET /api/runs/:id/events — event history (?after=eventId). */
+  listRunEvents(
+    runId: string,
+    after?: string,
+  ): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        type: string;
+        ts: string;
+        data?: unknown;
+      }>
+    >
+  > {
+    let qs = '';
+    if (after != null && after !== '') {
+      if (typeof after === 'string' && !/[\0\r\n]/.test(after)) {
+        const a = after.trim();
+        if (a) qs = `?after=${encodeURIComponent(a)}`;
+      }
+    }
+    return this.request(
+      'GET',
+      `/api/runs/${encodeURIComponent(runId)}/events${qs}`,
+    );
+  }
+
+  /**
+   * POST /api/runs/:id/cancel
+   * Uses requestEnvelope so 409 (already terminal) does not throw.
+   */
+  cancelRun(runId: string): Promise<ApiEnvelope<{ id?: string; status?: string }>> {
+    return this.requestEnvelope(
+      'POST',
+      `/api/runs/${encodeURIComponent(runId)}/cancel`,
+    );
+  }
+
   /** GET /api/mcp/install-info — snippets for neos mcp serve clients. */
   getMcpInstallInfo(query?: {
     projectId?: string;
@@ -532,6 +591,50 @@ export class WebApiClient {
     return this.requestEnvelope(
       'GET',
       `/api/projects/${encodeURIComponent(projectId)}/collab/peers`,
+    );
+  }
+
+  /** Snapshot of advisory file locks (REST helper; multi-replica resync). */
+  getCollabLocks(
+    projectId: string,
+  ): Promise<
+    ApiEnvelope<{
+      locks?: Array<{
+        path: string;
+        sessionId: string;
+        displayName: string;
+        acquiredAt?: string;
+      }>;
+      hardEnforce?: boolean;
+    }>
+  > {
+    return this.requestEnvelope(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/collab/locks`,
+    );
+  }
+
+  /** Snapshot of peer selections (REST helper; multi-replica resync). */
+  getCollabSelections(
+    projectId: string,
+  ): Promise<
+    ApiEnvelope<{
+      selections?: Array<{
+        sessionId: string;
+        displayName?: string;
+        colorHint?: number;
+        path: string | null;
+        selector: string | null;
+        layerId?: string | null;
+        selectors?: string[];
+        layerIds?: string[];
+        updatedAt?: string;
+      }>;
+    }>
+  > {
+    return this.requestEnvelope(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/collab/selections`,
     );
   }
 

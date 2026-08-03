@@ -62,6 +62,27 @@ export function ProjectDetail() {
     content?: string;
   } | null>(null);
   const [revisionBusy, setRevisionBusy] = useState(false);
+  /** Project agent runs (list / events / cancel). */
+  type RunListItem = {
+    id: string;
+    status: string;
+    agentId?: string | null;
+    projectId?: string | null;
+    prompt?: string;
+    error?: string | null;
+    createdAt?: string;
+    eventCount?: number;
+  };
+  type RunEventItem = {
+    id: string;
+    type: string;
+    ts: string;
+    data?: unknown;
+  };
+  const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runEvents, setRunEvents] = useState<RunEventItem[]>([]);
+  const [runsBusy, setRunsBusy] = useState(false);
   /** Collab presence (v0.6 M1) — self + other peers. */
   const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
   const [collabPeers, setCollabPeers] = useState<PresencePeerInfo[]>([]);
@@ -260,7 +281,7 @@ export function ProjectDetail() {
     return () => stop();
   }, [client, conn.token, id]);
 
-  // Multi-replica resilience: REST peers snapshot + heartbeat if SSE join/heartbeat was missed
+  // Multi-replica resilience: REST peers/locks/selections + heartbeat if SSE was missed
   useEffect(() => {
     if (!conn.token || !id || !collabSessionId) return;
     const sessionId = collabSessionId;
@@ -288,6 +309,44 @@ export function ProjectDetail() {
               lastSeen: typeof p.lastSeen === 'string' ? p.lastSeen : undefined,
             }));
           setCollabPeers(next);
+        })
+        .catch(() => {});
+      void client
+        .getCollabLocks(id)
+        .then((res) => {
+          if (!res.ok || !res.data?.locks || !Array.isArray(res.data.locks)) return;
+          const selfId = collabSessionRef.current;
+          const next: Record<string, { sessionId: string; displayName: string }> = {};
+          for (const l of res.data.locks) {
+            if (!l || typeof l.sessionId !== 'string' || typeof l.path !== 'string') continue;
+            if (selfId && l.sessionId === selfId) continue;
+            const lp = normalizeProjectRelPath(l.path);
+            if (!lp) continue;
+            next[lp] = {
+              sessionId: l.sessionId,
+              displayName:
+                typeof l.displayName === 'string' && l.displayName.trim()
+                  ? l.displayName.trim()
+                  : 'Anonymous',
+            };
+          }
+          setForeignLocks(next);
+        })
+        .catch(() => {});
+      void client
+        .getCollabSelections(id)
+        .then((res) => {
+          if (!res.ok || !res.data?.selections || !Array.isArray(res.data.selections)) return;
+          const selfId = collabSessionRef.current;
+          const selMap: Record<string, PeerSelectionInfo> = {};
+          for (const s of res.data.selections) {
+            if (!s || typeof s.sessionId !== 'string' || !s.sessionId) continue;
+            if (selfId && s.sessionId === selfId) continue;
+            if (s.path == null && s.selector == null) continue;
+            const sp = s.path == null ? null : normalizeProjectRelPath(s.path) || null;
+            selMap[s.sessionId] = { ...(s as PeerSelectionInfo), path: sp };
+          }
+          setPeerSelections(selMap);
         })
         .catch(() => {});
     };
@@ -552,6 +611,95 @@ export function ProjectDetail() {
     }
   };
 
+  const TERMINAL_RUN_STATUSES = useMemo(
+    () => new Set(['succeeded', 'failed', 'canceled', 'cancelled', 'error']),
+    [],
+  );
+
+  const isRunTerminal = useCallback(
+    (status: string) => TERMINAL_RUN_STATUSES.has(status.toLowerCase()),
+    [TERMINAL_RUN_STATUSES],
+  );
+
+  const loadRuns = useCallback(async () => {
+    if (!id) {
+      setRuns([]);
+      return;
+    }
+    try {
+      const res = await client.listRuns(id);
+      if (res.ok && Array.isArray(res.data)) {
+        setRuns(res.data);
+      } else {
+        setRuns([]);
+      }
+    } catch {
+      setRuns([]);
+    }
+  }, [client, id]);
+
+  useEffect(() => {
+    void loadRuns();
+  }, [loadRuns]);
+
+  const selectRun = async (runId: string) => {
+    if (!id || runsBusy) return;
+    if (selectedRunId === runId) {
+      setSelectedRunId(null);
+      setRunEvents([]);
+      return;
+    }
+    setRunsBusy(true);
+    setError(null);
+    setSelectedRunId(runId);
+    try {
+      const res = await client.listRunEvents(runId);
+      if (res.ok && Array.isArray(res.data)) {
+        setRunEvents(res.data.slice(-20));
+      } else {
+        setRunEvents([]);
+      }
+    } catch (err) {
+      setRunEvents([]);
+      setError(err instanceof ApiError ? err.message : 'Failed to load run events');
+    } finally {
+      setRunsBusy(false);
+    }
+  };
+
+  const cancelRun = async (runId: string) => {
+    if (!id || runsBusy) return;
+    setRunsBusy(true);
+    setError(null);
+    try {
+      const res = await client.cancelRun(runId);
+      if (!res.ok) {
+        setError(
+          (typeof res.error === 'string' && res.error ? res.error : 'Cancel failed')
+            .replace(/[\0\r\n]+/g, ' ')
+            .slice(0, 300),
+        );
+      } else {
+        setStatus('Run canceled');
+      }
+      await loadRuns();
+      if (selectedRunId === runId) {
+        try {
+          const ev = await client.listRunEvents(runId);
+          if (ev.ok && Array.isArray(ev.data)) {
+            setRunEvents(ev.data.slice(-20));
+          }
+        } catch {
+          // best-effort
+        }
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Cancel failed');
+    } finally {
+      setRunsBusy(false);
+    }
+  };
+
   const save = async () => {
     if (!id || !buffer.path) return;
     if (/\0/.test(buffer.local)) {
@@ -641,12 +789,13 @@ export function ProjectDetail() {
       setAiPrompt('');
       if (!runId) {
         setStatus('Run started');
+        void loadRuns();
         return;
       }
       setStatus(`Run ${runId.slice(0, 8)}…`);
+      void loadRuns();
       // Prefer project file SSE for disk-changed; still poll run status for UX.
       // Fallback reload when run ends (covers agents that write without SSE gap).
-      const terminal = new Set(['succeeded', 'failed', 'canceled', 'cancelled', 'error']);
       for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 500));
         try {
@@ -655,11 +804,12 @@ export function ProjectDetail() {
             st.data && typeof st.data === 'object'
               ? String((st.data as { status?: string }).status ?? '')
               : '';
-          if (terminal.has(status.toLowerCase())) {
+          if (isRunTerminal(status)) {
             setStatus(status === 'succeeded' ? 'Run finished' : `Run ${status}`);
             if (status.toLowerCase() === 'succeeded') {
               await reloadOpenFileFromDisk();
             }
+            void loadRuns();
             return;
           }
         } catch {
@@ -667,6 +817,7 @@ export function ProjectDetail() {
         }
       }
       setStatus('Run still running — file SSE will refresh when disk changes');
+      void loadRuns();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Run failed');
     } finally {
@@ -935,6 +1086,174 @@ export function ProjectDetail() {
                 >
                   {revisionPreview.content ?? '(no content)'}
                 </pre>
+              </div>
+            )}
+          </div>
+
+          <div
+            data-testid="web-runs"
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '1px solid var(--border, #333)',
+            }}
+          >
+            <div className="muted" style={{ marginBottom: 8 }}>
+              Runs
+            </div>
+            {runs.length === 0 ? (
+              <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+                No runs yet.
+              </p>
+            ) : (
+              <ul className="list" style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {runs.map((r) => {
+                  const terminal = isRunTerminal(r.status);
+                  const promptSlice = (r.prompt ?? '').replace(/[\0\r\n]+/g, ' ').slice(0, 48);
+                  return (
+                    <li
+                      key={r.id}
+                      data-testid={`web-run-${r.id}`}
+                      style={{
+                        padding: '0.35rem 0',
+                        borderBottom: '1px solid var(--border, #2a2a2a)',
+                        fontSize: 11,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          style={{
+                            flex: '1 1 auto',
+                            minWidth: 0,
+                            border: 'none',
+                            background: 'transparent',
+                            color: selectedRunId === r.id ? 'var(--accent)' : 'var(--text)',
+                            cursor: 'pointer',
+                            padding: 0,
+                            textAlign: 'left',
+                            fontSize: 11,
+                          }}
+                          disabled={runsBusy}
+                          onClick={() => void selectRun(r.id)}
+                        >
+                          <div>
+                            <span className="mono">{r.status}</span>
+                            {' · '}
+                            <span className="mono muted">{r.id.slice(0, 8)}</span>
+                          </div>
+                          {promptSlice ? (
+                            <div className="muted" style={{ fontSize: 10, wordBreak: 'break-all' }}>
+                              {promptSlice}
+                              {(r.prompt ?? '').length > 48 ? '…' : ''}
+                            </div>
+                          ) : null}
+                          {r.createdAt ? (
+                            <div className="muted" style={{ fontSize: 10 }}>
+                              {r.createdAt}
+                            </div>
+                          ) : null}
+                        </button>
+                        {!terminal && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ fontSize: 11, padding: '0.2rem 0.45rem' }}
+                            disabled={runsBusy}
+                            data-testid={`web-run-cancel-${r.id}`}
+                            onClick={() => void cancelRun(r.id)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {selectedRunId && (
+              <div
+                data-testid="web-run-events"
+                style={{
+                  marginTop: 8,
+                  maxHeight: 160,
+                  overflow: 'auto',
+                  border: '1px solid var(--border, #333)',
+                  borderRadius: 4,
+                  padding: 8,
+                }}
+              >
+                <div
+                  className="row"
+                  style={{ justifyContent: 'space-between', marginBottom: 4, fontSize: 10 }}
+                >
+                  <span className="mono muted">
+                    Events · {selectedRunId.slice(0, 8)}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{
+                      fontSize: 10,
+                      padding: 0,
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      color: 'var(--text-muted, #888)',
+                    }}
+                    onClick={() => {
+                      setSelectedRunId(null);
+                      setRunEvents([]);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+                {runEvents.length === 0 ? (
+                  <p className="muted" style={{ fontSize: 10, margin: 0 }}>
+                    No events.
+                  </p>
+                ) : (
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                    {runEvents.map((ev) => {
+                      let snippet = '';
+                      if (ev.data && typeof ev.data === 'object' && ev.data !== null) {
+                        const d = ev.data as { chunk?: unknown; error?: unknown };
+                        if (typeof d.chunk === 'string' && d.chunk) {
+                          snippet = d.chunk.replace(/[\0\r\n]+/g, ' ').slice(0, 80);
+                        } else if (typeof d.error === 'string' && d.error) {
+                          snippet = d.error.replace(/[\0\r\n]+/g, ' ').slice(0, 80);
+                        }
+                      }
+                      return (
+                        <li
+                          key={ev.id}
+                          className="mono"
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 0',
+                            borderBottom: '1px solid var(--border, #2a2a2a)',
+                            wordBreak: 'break-all',
+                          }}
+                        >
+                          <span>{ev.type}</span>
+                          {snippet ? (
+                            <span className="muted"> · {snippet}</span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             )}
           </div>

@@ -5,6 +5,39 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 const writeFile = vi.fn(async () => ({ ok: true, data: { hash: 'h1' } }));
 const createRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'queued' } }));
 const getRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'succeeded' } }));
+const listRuns = vi.fn(async () => ({
+  ok: true,
+  data: [
+    {
+      id: 'run-abc',
+      status: 'running',
+      projectId: 'p1',
+      prompt: 'Make the hero blue',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      eventCount: 2,
+    },
+  ],
+}));
+const listRunEvents = vi.fn(async () => ({
+  ok: true,
+  data: [
+    {
+      id: 'ev1',
+      type: 'run.started',
+      ts: '2026-01-02T00:00:01.000Z',
+    },
+    {
+      id: 'ev2',
+      type: 'run.stdout',
+      ts: '2026-01-02T00:00:02.000Z',
+      data: { chunk: 'hello from agent' },
+    },
+  ],
+}));
+const cancelRun = vi.fn(async () => ({
+  ok: true,
+  data: { id: 'run-abc', status: 'canceled' },
+}));
 const readFile = vi.fn(async (_pid: string, path: string) => ({
   ok: true,
   data: {
@@ -98,6 +131,9 @@ vi.mock('../lib/api.js', () => {
       writeFile = writeFile;
       createRun = createRun;
       getRun = getRun;
+      listRuns = listRuns;
+      listRunEvents = listRunEvents;
+      cancelRun = cancelRun;
       listRevisions = listRevisions;
       getRevision = getRevision;
       restoreRevision = restoreRevision;
@@ -106,6 +142,8 @@ vi.mock('../lib/api.js', () => {
       collabLock = vi.fn(async () => ({ ok: true, data: {} }));
       collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
       getCollabPeers = vi.fn(async () => ({ ok: true, data: { peers: [] } }));
+      getCollabLocks = vi.fn(async () => ({ ok: true, data: { locks: [] } }));
+      getCollabSelections = vi.fn(async () => ({ ok: true, data: { selections: [] } }));
       postCollabHeartbeat = vi.fn(async () => ({ ok: true, data: { touched: true } }));
     },
   };
@@ -167,6 +205,9 @@ describe('ProjectDetail Design Editor', () => {
     writeFile.mockClear();
     createRun.mockClear();
     getRun.mockClear();
+    listRuns.mockClear();
+    listRunEvents.mockClear();
+    cancelRun.mockClear();
     readFile.mockClear();
     listRevisions.mockClear();
     getRevision.mockClear();
@@ -211,6 +252,39 @@ describe('ProjectDetail Design Editor', () => {
       data: { path: 'index.html', hash: 'restored-h' },
     });
     getRun.mockResolvedValue({ ok: true, data: { id: 'run1', status: 'succeeded' } });
+    listRuns.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'run-abc',
+          status: 'running',
+          projectId: 'p1',
+          prompt: 'Make the hero blue',
+          createdAt: '2026-01-02T00:00:00.000Z',
+          eventCount: 2,
+        },
+      ],
+    });
+    listRunEvents.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ev1',
+          type: 'run.started',
+          ts: '2026-01-02T00:00:01.000Z',
+        },
+        {
+          id: 'ev2',
+          type: 'run.stdout',
+          ts: '2026-01-02T00:00:02.000Z',
+          data: { chunk: 'hello from agent' },
+        },
+      ],
+    });
+    cancelRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-abc', status: 'canceled' },
+    });
   });
 
   it('loads project and shows Design Editor for entry file', async () => {
@@ -354,5 +428,72 @@ describe('ProjectDetail Design Editor', () => {
       );
     });
     expect(listRevisions.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows runs when mocked', async () => {
+    renderProject();
+    await waitFor(() => {
+      expect(screen.getByTestId('web-runs')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(listRuns).toHaveBeenCalledWith('p1');
+    });
+    expect(screen.getByTestId('web-run-run-abc')).toBeInTheDocument();
+    expect(screen.getByText(/running/i)).toBeInTheDocument();
+    expect(screen.getByText(/Make the hero blue/i)).toBeInTheDocument();
+  });
+
+  it('cancel calls cancelRun and refreshes list', async () => {
+    listRuns
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          {
+            id: 'run-abc',
+            status: 'running',
+            projectId: 'p1',
+            prompt: 'Make the hero blue',
+            createdAt: '2026-01-02T00:00:00.000Z',
+            eventCount: 2,
+          },
+        ],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [
+          {
+            id: 'run-abc',
+            status: 'canceled',
+            projectId: 'p1',
+            prompt: 'Make the hero blue',
+            createdAt: '2026-01-02T00:00:00.000Z',
+            eventCount: 3,
+          },
+        ],
+      });
+    renderProject();
+    await waitFor(() => screen.getByTestId('web-run-cancel-run-abc'));
+    fireEvent.click(screen.getByTestId('web-run-cancel-run-abc'));
+    await waitFor(() => {
+      expect(cancelRun).toHaveBeenCalledWith('run-abc');
+    });
+    await waitFor(() => {
+      expect(listRuns.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('expand/select shows run events', async () => {
+    renderProject();
+    await waitFor(() => screen.getByTestId('web-run-run-abc'));
+    fireEvent.click(screen.getByTestId('web-run-run-abc').querySelector('button')!);
+    await waitFor(() => {
+      expect(listRunEvents).toHaveBeenCalledWith('run-abc');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('web-run-events')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('web-run-events').textContent).toMatch(/run\.started/);
+    expect(screen.getByTestId('web-run-events').textContent).toMatch(/run\.stdout/);
+    expect(screen.getByTestId('web-run-events').textContent).toMatch(/hello from agent/);
   });
 });

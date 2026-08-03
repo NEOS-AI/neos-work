@@ -307,7 +307,7 @@ export function ProjectWorkspace() {
     return () => stop();
   }, [client, projectId]);
 
-  // Multi-replica resilience: REST peers snapshot + heartbeat if SSE join/heartbeat was missed
+  // Multi-replica resilience: REST peers/locks/selections + heartbeat if SSE was missed
   useEffect(() => {
     if (!client || !projectId || !collabSessionId) return;
     const sessionId = collabSessionId;
@@ -334,6 +334,48 @@ export function ProjectWorkspace() {
               lastSeen: typeof p.lastSeen === 'string' ? p.lastSeen : undefined,
             }));
           setCollabPeers(next);
+        })
+        .catch(() => {});
+      void client
+        .listCollabLocks(projectId)
+        .then((res) => {
+          if (!res.ok || !res.data?.locks || !Array.isArray(res.data.locks)) return;
+          const selfId = collabSessionRef.current;
+          const next: Record<string, { sessionId: string; displayName: string }> = {};
+          for (const l of res.data.locks) {
+            if (!l || typeof l.sessionId !== 'string' || typeof l.path !== 'string') continue;
+            if (selfId && l.sessionId === selfId) continue;
+            const p = normalizeProjectRelPath(l.path);
+            if (!p) continue;
+            next[p] = {
+              sessionId: l.sessionId,
+              displayName:
+                typeof l.displayName === 'string' && l.displayName.trim()
+                  ? l.displayName.trim()
+                  : 'Anonymous',
+            };
+          }
+          setForeignLocks(next);
+        })
+        .catch(() => {});
+      void client
+        .listCollabSelections(projectId)
+        .then((res) => {
+          if (!res.ok || !res.data?.selections || !Array.isArray(res.data.selections)) return;
+          const selfId = collabSessionRef.current;
+          const selMap: Record<string, PeerSelectionInfo> = {};
+          for (const s of res.data.selections) {
+            if (!s || typeof s.sessionId !== 'string' || !s.sessionId) continue;
+            if (selfId && s.sessionId === selfId) continue;
+            if (s.path == null && s.selector == null) continue;
+            const pathNorm =
+              s.path == null ? null : normalizeProjectRelPath(s.path) || null;
+            selMap[s.sessionId] = {
+              ...(s as PeerSelectionInfo),
+              path: pathNorm,
+            };
+          }
+          setPeerSelections(selMap);
         })
         .catch(() => {});
     };

@@ -29,7 +29,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: neos-work:0.8.6
+    image: neos-work:0.8.7
     container_name: neos-work-a
     restart: unless-stopped
     ports:
@@ -67,7 +67,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: neos-work:0.8.6
+    image: neos-work:0.8.7
     container_name: neos-work-b
     restart: unless-stopped
     ports:

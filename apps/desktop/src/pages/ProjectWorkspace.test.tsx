@@ -36,6 +36,8 @@ const streamProjectCollab = vi.fn(() => () => {});
 const collabLock = vi.fn(async () => ({ ok: true, data: {} }));
 const collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
 const listCollabPeers = vi.fn(async () => ({ ok: true, data: { peers: [] } }));
+const listCollabLocks = vi.fn(async () => ({ ok: true, data: { locks: [] } }));
+const listCollabSelections = vi.fn(async () => ({ ok: true, data: { selections: [] } }));
 const collabHeartbeat = vi.fn(async () => ({ ok: true, data: { touched: true } }));
 
 const client = {
@@ -66,6 +68,8 @@ const client = {
   collabLock,
   collabSelection,
   listCollabPeers,
+  listCollabLocks,
+  listCollabSelections,
   collabHeartbeat,
 };
 

@@ -64,7 +64,7 @@ docker build -f deploy/Dockerfile -t neos-work:latest .
 Single-replica chart under [`helm/neos-work/`](./helm/neos-work/):
 
 ```bash
-docker build -f deploy/Dockerfile -t neos-work:0.8.6 .
+docker build -f deploy/Dockerfile -t neos-work:0.8.7 .
 helm upgrade --install neos ./deploy/helm/neos-work \
   --set authToken="$(openssl rand -hex 32)" \
   --set image.tag=0.8.5
