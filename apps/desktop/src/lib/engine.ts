@@ -1566,6 +1566,24 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /**
+   * GET /api/collab/status — bus + presence registry (ops, no secrets).
+   */
+  async getCollabStatus(): Promise<
+    ApiResponse<{
+      bus?: string;
+      nodeId?: string;
+      ready?: boolean;
+      detail?: string | null;
+      presence?: { kind?: string; ready?: boolean; detail?: string | null };
+    }>
+  > {
+    const res = await fetch(`${this.baseUrl}/api/collab/status`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   /** Publish editing selection for peer awareness (v0.7 M2). */
   async collabSelection(
     projectId: string,

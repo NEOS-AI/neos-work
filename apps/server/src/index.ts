@@ -7,6 +7,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { NEOS_VERSION } from '@neos-work/shared';
 
 import { health } from './routes/health.js';
 import { session, workspace, models } from './routes/session.js';
@@ -199,7 +200,7 @@ app.get('/api/collab/status', (c) => {
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.8.4',
+    version: NEOS_VERSION,
   });
 });
 
@@ -229,7 +230,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.8.4',
+      version: NEOS_VERSION,
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });

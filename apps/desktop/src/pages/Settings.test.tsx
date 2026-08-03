@@ -7,6 +7,7 @@ const getSetting = vi.fn();
 const saveSetting = vi.fn();
 const verifyApiKey = vi.fn();
 const health = vi.fn();
+const getCollabStatus = vi.fn();
 const getMediaConfig = vi.fn();
 const listMcpServers = vi.fn();
 const getMcpOAuthStatus = vi.fn();
@@ -35,6 +36,7 @@ const clientApi = {
   saveSetting,
   verifyApiKey,
   health,
+  getCollabStatus,
   getMediaConfig,
   listMcpServers,
   getMcpOAuthStatus,
@@ -109,7 +111,17 @@ describe('Settings page', () => {
     getSetting.mockReset().mockResolvedValue({ ok: true, data: null });
     saveSetting.mockReset().mockResolvedValue({ ok: true });
     verifyApiKey.mockReset();
-    health.mockReset().mockResolvedValue({ status: 'ok', version: '0.3.59', uptime: 3661 });
+    health.mockReset().mockResolvedValue({ status: 'ok', version: '0.8.7', uptime: 3661 });
+    getCollabStatus.mockReset().mockResolvedValue({
+      ok: true,
+      data: {
+        bus: 'memory',
+        nodeId: 'node-desktop-test',
+        ready: true,
+        detail: null,
+        presence: { kind: 'memory', ready: true, detail: null },
+      },
+    });
     getMediaConfig.mockReset().mockResolvedValue({
       ok: true,
       data: {
@@ -189,7 +201,13 @@ describe('Settings page', () => {
     await waitFor(() => {
       expect(screen.getByText('Connected')).toBeInTheDocument();
       expect(screen.getByText('Local')).toBeInTheDocument();
-      expect(screen.getByText('v0.3.59')).toBeInTheDocument();
+      expect(screen.getByText('v0.8.7')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('collab-status-section')).toBeInTheDocument();
+      expect(getCollabStatus).toHaveBeenCalled();
+      expect(screen.getByTestId('collab-status-bus').textContent).toMatch(/memory/);
+      expect(screen.getByTestId('collab-status-node').textContent).toBe('node-desktop-test');
     });
     await waitFor(() => {
       expect(screen.getByText('Configured')).toBeInTheDocument();

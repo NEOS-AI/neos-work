@@ -4,6 +4,7 @@
 
 import { EXIT, exitCodeFromHttp, type ExitCode } from './exit-codes.js';
 import type { CliConfig } from './config.js';
+import { CLI_VERSION } from './commands/version.js';
 
 export class CliHttpError extends Error {
   constructor(
@@ -39,7 +40,7 @@ export class NeosApiClient {
   private headers(json = true): Record<string, string> {
     const h: Record<string, string> = {
       Accept: 'application/json',
-      'User-Agent': 'neos-cli/0.7.1',
+      'User-Agent': `neos-cli/${CLI_VERSION}`,
     };
     if (json) h['Content-Type'] = 'application/json';
     if (this.config.authToken) {
@@ -127,7 +128,7 @@ export class NeosApiClient {
     try {
       const res = await this.fetchImpl(url, {
         method: 'GET',
-        headers: { Accept: 'application/json', 'User-Agent': 'neos-cli/0.7.1' },
+        headers: { Accept: 'application/json', 'User-Agent': `neos-cli/${CLI_VERSION}` },
         signal: controller.signal,
       });
       if (!res.ok) {

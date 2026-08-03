@@ -1,0 +1,55 @@
+# Opt-in live multi-replica collab e2e (Redis + two engines).
+# Structural multi-replica checks already run in ci.yml on every PR.
+name: Nightly multi-replica live
+
+on:
+  schedule:
+    # 06:00 UTC daily
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-multi-replica
+  cancel-in-progress: true
+
+jobs:
+  multi-replica-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared + server (live e2e needs dist)
+        run: |
+          pnpm --filter @neos-work/shared build
+          pnpm --filter @neos-work/core build
+          pnpm --filter @neos-work/workflow-engine build
+          pnpm --filter @neos-work/mcp-client build
+          pnpm --filter @neos-work/browser-tool build
+          pnpm --filter @neos-work/agent-runtime build
+          pnpm --filter @neos-work/plugin-runtime build
+          pnpm --filter @neos-work/server build
+
+      - name: Multi-replica structural e2e
+        run: pnpm e2e:multi-replica
+
+      - name: Multi-replica live e2e (Redis + dual engines)
+        run: pnpm e2e:multi-replica:live
+        env:
+          NEOS_MULTI_REPLICA_VERBOSE: '0'

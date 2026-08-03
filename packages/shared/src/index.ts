@@ -11,3 +11,4 @@ export * from './deploy.js';
 export * from './migrate-workflow.js';
 export * from './project-path.js';
 export * from './schemas/api-envelopes.js';
+export * from './version.js';

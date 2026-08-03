@@ -66,6 +66,7 @@ export function Settings() {
       <h1 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{t('settings:title')}</h1>
 
       <EngineStatusSection />
+      <CollabStatusSection />
 
       {/* API Keys */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -442,6 +443,156 @@ function MediaStatusSection() {
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+// --- Collab bus / presence registry (GET /api/collab/status) ---
+
+function CollabStatusSection() {
+  const { client, status } = useEngine();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<{
+    bus?: string;
+    nodeId?: string;
+    ready?: boolean;
+    detail?: string | null;
+    presence?: { kind?: string; ready?: boolean; detail?: string | null };
+  } | null>(null);
+
+  const load = useCallback(async () => {
+    if (!client || status !== 'connected') {
+      setData(null);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await client.getCollabStatus();
+      if (!res.ok) {
+        setData(null);
+        setError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || 'Failed to load collab status',
+        );
+        return;
+      }
+      setData(res.data ?? null);
+    } catch (err) {
+      setData(null);
+      const msg = err instanceof Error ? err.message : 'Failed to load collab status';
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, status]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (status !== 'connected') {
+    return (
+      <section
+        className="rounded-xl border p-5"
+        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+        data-testid="collab-status-section"
+      >
+        <h2 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          Collab status
+        </h2>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Connect to the engine to inspect bus and presence registry.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="rounded-xl border p-5"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+      data-testid="collab-status-section"
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+            Collab status
+          </h2>
+          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Multi-replica bus and presence registry (no secrets).
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void load()}
+          className="rounded-lg border px-2.5 py-1 text-xs disabled:opacity-50"
+          style={{
+            borderColor: 'var(--border-secondary)',
+            color: 'var(--text-secondary)',
+            backgroundColor: 'var(--bg-tertiary)',
+          }}
+          data-testid="collab-status-refresh"
+        >
+          {loading ? '…' : 'Refresh'}
+        </button>
+      </div>
+      {error ? (
+        <p className="mb-2 text-xs text-red-400" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {data ? (
+        <dl
+          className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-xs"
+          data-testid="collab-status-body"
+        >
+          <dt style={{ color: 'var(--text-muted)' }}>bus</dt>
+          <dd style={{ color: 'var(--text-primary)' }} data-testid="collab-status-bus">
+            {data.bus ?? '—'}
+            {typeof data.ready === 'boolean' ? (data.ready ? ' · ready' : ' · not ready') : ''}
+          </dd>
+          <dt style={{ color: 'var(--text-muted)' }}>nodeId</dt>
+          <dd
+            className="truncate"
+            style={{ color: 'var(--text-primary)' }}
+            data-testid="collab-status-node"
+            title={data.nodeId}
+          >
+            {data.nodeId ?? '—'}
+          </dd>
+          {data.detail ? (
+            <>
+              <dt style={{ color: 'var(--text-muted)' }}>detail</dt>
+              <dd style={{ color: 'var(--text-secondary)' }}>{data.detail}</dd>
+            </>
+          ) : null}
+          <dt style={{ color: 'var(--text-muted)' }}>presence</dt>
+          <dd style={{ color: 'var(--text-primary)' }} data-testid="collab-status-presence">
+            {data.presence?.kind ?? '—'}
+            {typeof data.presence?.ready === 'boolean'
+              ? data.presence.ready
+                ? ' · ready'
+                : ' · not ready'
+              : ''}
+          </dd>
+          {data.presence?.detail ? (
+            <>
+              <dt style={{ color: 'var(--text-muted)' }}>p.detail</dt>
+              <dd style={{ color: 'var(--text-secondary)' }}>{data.presence.detail}</dd>
+            </>
+          ) : null}
+        </dl>
+      ) : (
+        !error && (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {loading ? 'Loading…' : 'No status loaded.'}
+          </p>
+        )
       )}
     </section>
   );

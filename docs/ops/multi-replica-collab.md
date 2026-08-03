@@ -189,7 +189,7 @@ Notes:
 
 ## Automated e2e (C4)
 
-Structural checks (CI-safe, no Docker required):
+Structural checks (CI-safe, no Docker required) — also run on every PR:
 
 ```bash
 pnpm e2e:multi-replica
@@ -203,6 +203,9 @@ asserts collab status, cross-node peers, selection fan-out):
 pnpm e2e:multi-replica:live
 # or: NEOS_MULTI_REPLICA_E2E=1 pnpm e2e:multi-replica
 ```
+
+GitHub Actions: **Nightly multi-replica live** workflow
+(`.github/workflows/nightly-multi-replica.yml`) — daily schedule + `workflow_dispatch`.
 
 Optional: point at an existing Redis with `NEOS_COLLAB_REDIS_URL` and
 `--skip-redis-docker`. Verbose engine logs: `NEOS_MULTI_REPLICA_VERBOSE=1`.
