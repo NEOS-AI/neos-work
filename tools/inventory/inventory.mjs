@@ -34,6 +34,8 @@ const GATES = {
   requireV06Features: true,
   /** v0.7 train (M0–M4 closeout) */
   requireV07Features: true,
+  /** v0.8 train (M0–M4 closeout) */
+  requireV08Features: true,
 };
 
 function existsRel(rel) {
@@ -98,6 +100,57 @@ function scanV07Features() {
     implM2: existsRel('docs/implementation/v0.7/v0.7.2.md'),
     implM3: existsRel('docs/implementation/v0.7/v0.7.3.md'),
     implM4: existsRel('docs/implementation/v0.7/v0.7.4.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/** v0.8 capability surface (M0–M4) — shared presence + canvas/collab polish. */
+function scanV08Features() {
+  const features = {
+    planV08: existsRel('docs/plans/PLAN_FOR_V0_8_0.md'),
+    migrationV08: existsRel('docs/migration/v0.8.0.md'),
+    sharedPresence:
+      existsRel('apps/server/src/lib/collab-presence-store.ts')
+      && (readText('apps/server/src/lib/collab-types.ts') ?? '').includes('presence.heartbeat')
+      && (readText('apps/server/src/lib/project-collab.ts') ?? '').includes(
+        'hydrateMembershipFromRegistry',
+      ),
+    redisPresence:
+      existsRel('apps/server/src/lib/collab-presence-redis.ts')
+      && (readText('apps/server/src/lib/collab-presence-redis.ts') ?? '').includes(
+        'createPresenceRegistry',
+      )
+      && (readText('apps/server/src/lib/collab-presence-store.ts') ?? '').includes(
+        'hydrateMembershipFromRegistry',
+      ),
+    groupResize:
+      existsRel('packages/design-editor/src/canvas-style.ts')
+      && (readText('packages/design-editor/src/canvas-style.ts') ?? '').includes(
+        'applyGroupResizeToHtml',
+      )
+      && (readText('packages/design-editor/src/canvas-style.ts') ?? '').includes(
+        'computeGroupResizeScales',
+      ),
+    multiSelectCollab:
+      (readText('apps/server/src/lib/collab-types.ts') ?? '').includes('selectors?:')
+      && (readText('packages/design-editor/src/selection-state.ts') ?? '').includes(
+        'selectionWithMulti',
+      )
+      && (readText('packages/ui-app/src/types.ts') ?? '').includes('selectors?:'),
+    implM0: existsRel('docs/implementation/v0.8/v0.8.0.md'),
+    implM1: existsRel('docs/implementation/v0.8/v0.8.1.md'),
+    implM2: existsRel('docs/implementation/v0.8/v0.8.2.md'),
+    implM3: existsRel('docs/implementation/v0.8/v0.8.3.md'),
+    implM4: existsRel('docs/implementation/v0.8/v0.8.4.md'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -295,6 +348,7 @@ export function buildInventory() {
   const mcp = scanMcpTools();
   const v06 = scanV06Features();
   const v07 = scanV07Features();
+  const v08 = scanV08Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -312,6 +366,7 @@ export function buildInventory() {
       mcpTools: mcp,
       v06Features: v06,
       v07Features: v07,
+      v08Features: v08,
     },
     gates: GATES,
     summary: {
@@ -328,6 +383,8 @@ export function buildInventory() {
       v06FeaturesTotal: v06.total,
       v07Features: v07.count,
       v07FeaturesTotal: v07.total,
+      v08Features: v08.count,
+      v08FeaturesTotal: v08.total,
     },
   };
 
@@ -370,6 +427,17 @@ export function evaluateGates(inventory) {
       missing: v07?.missing ?? [],
     });
   }
+  if (g.requireV08Features) {
+    const v08 = inventory.catalogs?.v08Features;
+    const ok = Boolean(v08?.ok);
+    results.push({
+      id: 'v08Features',
+      ok,
+      actual: v08?.count ?? 0,
+      min: v08?.total ?? 0,
+      missing: v08?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -396,7 +464,7 @@ function main(argv = process.argv.slice(2)) {
     process.stderr.write('inventory gates failed:\n');
     for (const r of inv.checks.results.filter((x) => !x.ok)) {
       if (
-        (r.id === 'v06Features' || r.id === 'v07Features')
+        (r.id === 'v06Features' || r.id === 'v07Features' || r.id === 'v08Features')
         && Array.isArray(r.missing)
         && r.missing.length
       ) {

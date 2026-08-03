@@ -1,8 +1,8 @@
 # PLAN_FOR_V0_8_0 — Shared presence · Multi-replica collab hardening
 
-**Status:** M0–M3 shipped through **0.8.3**; M4 open  
-**Baseline:** monorepo **0.8.3**  
-**Parent backlog:** multi-replica presence membership (deferred from v0.7 M1); group resize / multi broadcast stretch; CRDT (Q19 still out of scope)
+**Status:** **M0–M4 complete** through **0.8.4**  
+**Baseline:** monorepo **0.8.4**  
+**Parent backlog:** CRDT multi-caret (Q22) deferred until product pull
 
 ## One-line
 
@@ -29,7 +29,7 @@ Make peer lists accurate across engine replicas by sharing **presence membership
 | **M1** | Redis presence registry | Optional Redis SET+TTL + hydrate — **done 0.8.1** |
 | **M2** | Group canvas resize | Multi-select scale — **done 0.8.2** |
 | **M3** | Collab multi-selection | Broadcast multi set — **done 0.8.3** |
-| **M4** | Docs / inventory | v0.8 migration + `v08Features` gates |
+| **M4** | Docs / inventory | v0.8 migration + `v08Features` gates — **done 0.8.4** |
 
 ## Task M0 (0.8.0)
 
@@ -67,6 +67,14 @@ Make peer lists accurate across engine replicas by sharing **presence membership
 - [x] Web/desktop publish + peers bar hint  
 - [x] Tests + `docs/implementation/v0.8/v0.8.3.md`  
 - [x] Version **0.8.3**  
+
+## Task M4 (0.8.4)
+
+- [x] `docs/migration/v0.8.0.md`  
+- [x] Inventory `v08Features` gate (plan, migration, M0–M3 code, impl M0–M4)  
+- [x] README / Helm pointers  
+- [x] Tests + `docs/implementation/v0.8/v0.8.4.md`  
+- [x] Version **0.8.4**  
 
 ## Decisions
 

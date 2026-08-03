@@ -6,12 +6,12 @@ Optional **single-replica** chart for the engine container. Not multi-tenant HA.
 
 ```bash
 # Build / load image into the cluster first (tag matches values.yaml)
-docker build -f deploy/Dockerfile -t neos-work:0.8.3 .
+docker build -f deploy/Dockerfile -t neos-work:0.8.4 .
 
 helm upgrade --install neos ./deploy/helm/neos-work \
   --set authToken="$(openssl rand -hex 32)" \
   --set image.repository=neos-work \
-  --set image.tag=0.8.3
+  --set image.tag=0.8.4
 ```
 
 ## Existing secret

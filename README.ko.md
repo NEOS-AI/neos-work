@@ -30,7 +30,8 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **능력 목록:** `pnpm inventory` / `pnpm inventory:check` · 스모크: `pnpm e2e:smoke` · 라이브(옵트인): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
 **v0.5 클로즈아웃 계획:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md)  
 **v0.6 마이그레이션:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **v0.7 계획:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md)  
-**v0.7 마이그레이션:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)
+**v0.7 마이그레이션:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) · **v0.8 계획:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md)  
+**v0.8 마이그레이션:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)
 
 ---
 

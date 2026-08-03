@@ -62,4 +62,19 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v07Features.features.implM4);
     assert.ok(inv.checks.results.some((r) => r.id === 'v07Features' && r.ok));
   });
+
+  it('includes v0.8 feature gates (M0–M4 closeout)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v08Features);
+    assert.equal(inv.catalogs.v08Features.ok, true);
+    assert.ok(inv.catalogs.v08Features.features.planV08);
+    assert.ok(inv.catalogs.v08Features.features.migrationV08);
+    assert.ok(inv.catalogs.v08Features.features.sharedPresence);
+    assert.ok(inv.catalogs.v08Features.features.redisPresence);
+    assert.ok(inv.catalogs.v08Features.features.groupResize);
+    assert.ok(inv.catalogs.v08Features.features.multiSelectCollab);
+    assert.ok(inv.catalogs.v08Features.features.implM0);
+    assert.ok(inv.catalogs.v08Features.features.implM4);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v08Features' && r.ok));
+  });
 });
