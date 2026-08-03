@@ -19,6 +19,10 @@ vi.mock('../lib/registry-spawn.js', () => ({
 
 import { Hono } from 'hono';
 import { resetGlobalRunRegistry } from '@neos-work/agent-runtime';
+import {
+  parseCollabLockConflict,
+  parseProjectFileWriteResponse,
+} from '@neos-work/shared';
 import projects from './projects.js';
 import runs from './runs.js';
 import { getDb } from '../db/schema.js';
@@ -115,14 +119,15 @@ describe('FE↔BE contract smoke', () => {
       body: JSON.stringify({ content: '<html><body>contract</body></html>', source: 'user' }),
     });
     expect(put.status).toBe(200);
-    const body = (await put.json()) as {
-      ok: boolean;
-      data: { path?: string; hash?: string; contentHash?: string; bytes?: number };
-    };
-    expect(body.ok).toBe(true);
-    expect(typeof body.data.hash).toBe('string');
-    expect(body.data.hash!.length).toBeGreaterThan(7);
-    expect(body.data).not.toHaveProperty('contentHash');
+    const body = await put.json();
+    const parsed = parseProjectFileWriteResponse(body);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.data.data?.hash.length).toBeGreaterThan(7);
+      expect(parsed.data.data?.path).toBe('index.html');
+    }
+    expect(body).toEqual(expect.objectContaining({ ok: true }));
+    expect((body as { data: object }).data).not.toHaveProperty('contentHash');
   });
 
   it('lock conflict returns 409 with data.holder', async () => {
@@ -144,14 +149,13 @@ describe('FE↔BE contract smoke', () => {
       body: JSON.stringify({ sessionId: b, path: 'index.html', action: 'acquire' }),
     });
     expect(conflict.status).toBe(409);
-    const body = (await conflict.json()) as {
-      ok: boolean;
-      error?: string;
-      data?: { holder?: { sessionId?: string; displayName?: string } };
-    };
-    expect(body.ok).toBe(false);
-    expect(body.data?.holder?.sessionId).toBe(a);
-    expect(typeof body.data?.holder?.displayName).toBe('string');
+    const body = await conflict.json();
+    const parsed = parseCollabLockConflict(body);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.data.data?.holder?.sessionId).toBe(a);
+      expect(typeof parsed.data.data?.holder?.displayName).toBe('string');
+    }
   });
 
   it('GET collab peers and locks snapshots shape', async () => {

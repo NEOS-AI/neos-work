@@ -8,14 +8,16 @@
  * - Network/abort failures still reject the promise (both helpers).
  */
 
-import type {
-  FileRevision,
-  ProjectFileContent,
-  ProjectFileEntry,
-  ProjectFileEventPayload,
-  ProjectFileWriteResult,
-  ProjectRunEvent,
-  ProjectRunSummary,
+import {
+  parseCollabLockConflict,
+  parseProjectFileWriteResponse,
+  type FileRevision,
+  type ProjectFileContent,
+  type ProjectFileEntry,
+  type ProjectFileEventPayload,
+  type ProjectFileWriteResult,
+  type ProjectRunEvent,
+  type ProjectRunSummary,
 } from '@neos-work/shared';
 
 export interface ApiEnvelope<T = unknown> {
@@ -159,17 +161,39 @@ export class WebApiClient {
   /**
    * Write project file. Returns full envelope on HTTP errors (e.g. 423 hard lock
    * with `data.holder`) instead of throwing — callers check `res.ok`.
+   * Success `data` is validated against the shared write schema (`hash` required).
    */
-  writeFile(
+  async writeFile(
     projectId: string,
     filePath: string,
     content: string,
   ): Promise<ApiEnvelope<ProjectFileWriteResult & { contentHash?: string; holder?: unknown }>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-    return this.requestEnvelope('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, {
+    const envelope = await this.requestEnvelope<
+      ProjectFileWriteResult & { contentHash?: string; holder?: unknown }
+    >('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, {
       content,
       source: 'user',
     });
+    if (envelope.ok) {
+      const checked = parseProjectFileWriteResponse(envelope);
+      if (!checked.ok) {
+        return { ok: false, error: checked.error };
+      }
+      return {
+        ok: true,
+        data: checked.data.data as ProjectFileWriteResult,
+      };
+    }
+    return envelope;
+  }
+
+  /**
+   * Best-effort parse of a collab lock conflict body (409).
+   * Useful when callers have a raw envelope and need `data.holder`.
+   */
+  static parseLockConflict(body: unknown) {
+    return parseCollabLockConflict(body);
   }
 
   /**
