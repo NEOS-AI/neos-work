@@ -447,7 +447,7 @@ export class WebApiClient {
     );
   }
 
-  /** Snapshot of current collab peers (REST helper). */
+  /** Snapshot of current collab peers (REST helper; multi-replica resync). */
   getCollabPeers(
     projectId: string,
   ): Promise<
@@ -461,7 +461,10 @@ export class WebApiClient {
       }>;
     }>
   > {
-    return this.request('GET', `/api/projects/${encodeURIComponent(projectId)}/collab/peers`);
+    return this.requestEnvelope(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/collab/peers`,
+    );
   }
 
   /** Heartbeat to keep presence alive if SSE stalls. */
@@ -469,7 +472,7 @@ export class WebApiClient {
     projectId: string,
     body: { sessionId: string },
   ): Promise<ApiEnvelope<{ touched?: boolean }>> {
-    return this.request(
+    return this.requestEnvelope(
       'POST',
       `/api/projects/${encodeURIComponent(projectId)}/collab/heartbeat`,
       body,

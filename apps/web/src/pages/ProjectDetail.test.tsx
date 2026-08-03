@@ -73,6 +73,8 @@ vi.mock('../lib/api.js', () => {
       streamProjectCollab = () => () => {};
       collabLock = vi.fn(async () => ({ ok: true, data: {} }));
       collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
+      getCollabPeers = vi.fn(async () => ({ ok: true, data: { peers: [] } }));
+      postCollabHeartbeat = vi.fn(async () => ({ ok: true, data: { touched: true } }));
     },
   };
 });

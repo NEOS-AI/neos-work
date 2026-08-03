@@ -27,6 +27,8 @@ const streamProjectFileEvents = vi.fn(() => () => {});
 const streamProjectCollab = vi.fn(() => () => {});
 const collabLock = vi.fn(async () => ({ ok: true, data: {} }));
 const collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
+const listCollabPeers = vi.fn(async () => ({ ok: true, data: { peers: [] } }));
+const collabHeartbeat = vi.fn(async () => ({ ok: true, data: { touched: true } }));
 
 const client = {
   getProject,
@@ -53,6 +55,8 @@ const client = {
   streamProjectCollab,
   collabLock,
   collabSelection,
+  listCollabPeers,
+  collabHeartbeat,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({

@@ -230,6 +230,46 @@ export function ProjectDetail() {
     return () => stop();
   }, [client, conn.token, id]);
 
+  // Multi-replica resilience: REST peers snapshot + heartbeat if SSE join/heartbeat was missed
+  useEffect(() => {
+    if (!conn.token || !id || !collabSessionId) return;
+    const sessionId = collabSessionId;
+    const tick = () => {
+      void client.postCollabHeartbeat(id, { sessionId }).catch(() => {});
+      void client
+        .getCollabPeers(id)
+        .then((res) => {
+          if (!res.ok || !res.data?.peers || !Array.isArray(res.data.peers)) return;
+          const selfId = collabSessionRef.current;
+          const next = res.data.peers
+            .filter(
+              (p): p is PresencePeerInfo =>
+                !!p
+                && typeof p.sessionId === 'string'
+                && p.sessionId.length > 0
+                && p.sessionId !== selfId
+                && typeof p.displayName === 'string',
+            )
+            .map((p) => ({
+              sessionId: p.sessionId,
+              displayName: p.displayName,
+              colorHint: typeof p.colorHint === 'number' ? p.colorHint : undefined,
+              joinedAt: typeof p.joinedAt === 'string' ? p.joinedAt : undefined,
+              lastSeen: typeof p.lastSeen === 'string' ? p.lastSeen : undefined,
+            }));
+          setCollabPeers(next);
+        })
+        .catch(() => {});
+    };
+    // Delay first poll so presence.sync wins the initial list; then refresh periodically
+    const first = window.setTimeout(tick, 12_000);
+    const iv = window.setInterval(tick, 45_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(iv);
+    };
+  }, [client, conn.token, id, collabSessionId]);
+
   // M3: try to acquire lock when opening a file; release previous
   const bufferPathNorm = buffer.path ? normalizeProjectRelPath(buffer.path) : '';
   const lockedByOther =
