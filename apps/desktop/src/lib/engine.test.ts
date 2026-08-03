@@ -787,8 +787,16 @@ describe('EngineClient', () => {
     await client.readProjectFile('p1', 'index.html');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/index.html');
 
-    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'a/b.html', hash: 'x', bytes: 1, created: true } }));
-    await client.writeProjectFile('p1', 'a/b.html', '<b/>');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { path: 'a/b.html', hash: 'x', bytes: 1, created: true },
+      }),
+    );
+    await expect(client.writeProjectFile('p1', 'a/b.html', '<b/>')).resolves.toMatchObject({
+      ok: true,
+      data: { path: 'a/b.html', hash: 'x', bytes: 1, created: true },
+    });
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/a/b.html');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
 

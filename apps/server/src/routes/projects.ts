@@ -43,6 +43,11 @@ import {
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 import {
+  assertCollabLockConflictResponse,
+  assertCollabLockSuccessResponse,
+  assertProjectFileWriteResponse,
+} from '../lib/wire-assert.js';
+import {
   publishProjectFileEvent,
   subscribeProjectFileEvents,
   type ProjectFileEvent,
@@ -571,21 +576,28 @@ projects.post('/:id/collab/locks', async (c) => {
   }
   if (actionRaw === 'release') {
     const r = releaseFileLock({ projectId: id, sessionId, path });
-    if (!r.ok) return c.json({ ok: false, error: r.error }, 409);
-    return c.json({ ok: true, data: { released: true, path } });
+    if (!r.ok) {
+      const conflictBody = { ok: false as const, error: r.error };
+      assertCollabLockConflictResponse(conflictBody);
+      return c.json(conflictBody, 409);
+    }
+    const releaseBody = { ok: true as const, data: { released: true, path } };
+    assertCollabLockSuccessResponse(releaseBody);
+    return c.json(releaseBody);
   }
   const r = acquireFileLock({ projectId: id, sessionId, path });
   if (!r.ok) {
-    return c.json(
-      {
-        ok: false,
-        error: r.error,
-        data: r.holder ? { holder: r.holder } : undefined,
-      },
-      r.holder ? 409 : 400,
-    );
+    const conflictBody = {
+      ok: false as const,
+      error: r.error,
+      data: r.holder ? { holder: r.holder } : undefined,
+    };
+    if (r.holder) assertCollabLockConflictResponse(conflictBody);
+    return c.json(conflictBody, r.holder ? 409 : 400);
   }
-  return c.json({ ok: true, data: { lock: r.lock } });
+  const lockBody = { ok: true as const, data: { lock: r.lock } };
+  assertCollabLockSuccessResponse(lockBody);
+  return c.json(lockBody);
 });
 
 // ── Project file events (SSE) ──────────────────────────────
@@ -734,15 +746,17 @@ projects.put('/:id/files/*', async (c) => {
       source,
       hash: written.hash,
     });
-    return c.json({
-      ok: true,
+    const writeBody = {
+      ok: true as const,
       data: {
         path: written.path,
         hash: written.hash,
         bytes: written.bytes,
         created: written.created,
       },
-    });
+    };
+    assertProjectFileWriteResponse(writeBody);
+    return c.json(writeBody);
   } catch (err) {
     if (err instanceof PathSandboxError) {
       return c.json({ ok: false, error: publicErrorMessage(err, 'Write failed') }, sandboxStatus(err));

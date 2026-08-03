@@ -2,15 +2,16 @@
  * Engine client — communicates with the NEOS Work engine server.
  */
 
-import type {
-  ApiResponse,
-  ChatChunk,
-  HealthResponse,
-  ProjectFileContent,
-  ProjectFileEventPayload,
-  ProjectFileWriteResult,
-  ProjectRunEvent,
-  ProjectRunSummary,
+import {
+  parseProjectFileWriteResponse,
+  type ApiResponse,
+  type ChatChunk,
+  type HealthResponse,
+  type ProjectFileContent,
+  type ProjectFileEventPayload,
+  type ProjectFileWriteResult,
+  type ProjectRunEvent,
+  type ProjectRunSummary,
 } from '@neos-work/shared';
 
 export {
@@ -1683,7 +1684,18 @@ export class EngineClient {
       headers: this.getHeaders(),
       body: JSON.stringify({ content, source }),
     });
-    return readApiResponse(res);
+    const envelope = await readApiResponse<ProjectFileWriteResult>(res);
+    if (envelope.ok) {
+      const checked = parseProjectFileWriteResponse(envelope);
+      if (!checked.ok) {
+        return { ok: false, error: checked.error };
+      }
+      return {
+        ok: true,
+        data: checked.data.data as ProjectFileWriteResult,
+      };
+    }
+    return envelope;
   }
 
   async deleteProjectFile(
