@@ -275,6 +275,36 @@ describe('project-collab presence', () => {
     j.unsub();
   });
 
+  it('setSessionSelection broadcasts multi selectors (v0.8 M3)', () => {
+    const a = vi.fn();
+    const b = vi.fn();
+    const ja = joinProjectPresence({ projectId: 'p1', displayName: 'A', listener: a })!;
+    const jb = joinProjectPresence({ projectId: 'p1', displayName: 'B', listener: b })!;
+    const set = setSessionSelection({
+      projectId: 'p1',
+      sessionId: ja.sessionId,
+      path: 'index.html',
+      selector: '#b',
+      selectors: ['#a', '#b', '#a', 'bad\n'],
+      layerIds: ['n1', 'n2'],
+    });
+    expect(set.ok).toBe(true);
+    if (!set.ok) throw new Error('expected ok');
+    expect(set.selection.selector).toBe('#b');
+    expect(set.selection.selectors).toEqual(['#a', '#b']);
+    expect(b).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'selection.changed',
+        selection: expect.objectContaining({
+          selectors: ['#a', '#b'],
+          selector: '#b',
+        }),
+      }),
+    );
+    ja.unsub();
+    jb.unsub();
+  });
+
   it('remote presence.join appears in listPeers / sync (v0.8 membership)', () => {
     const a = vi.fn();
     const ja = joinProjectPresence({ projectId: 'p1', displayName: 'Local', listener: a })!;

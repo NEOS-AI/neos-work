@@ -35,6 +35,7 @@ import {
   multiEntriesFromBridge,
   selectionFromBridge,
   selectionFromLayer,
+  selectionWithMulti,
   splitPrimaryExtras,
   toggleMultiSelectLayer,
   type MultiSelectEntry,
@@ -188,7 +189,8 @@ export function DesignEditor({
         postHighlightMulti([]);
         return;
       }
-      setSelection(primary.selection, primary.detail);
+      // v0.8 M3: embed multiSelectors on primary for collab broadcast
+      setSelection(selectionWithMulti(primary.selection, entries), primary.detail);
       const selectors = entries
         .map((e) => e.selection.selector)
         .filter((s): s is string => Boolean(s));
@@ -263,17 +265,11 @@ export function DesignEditor({
         const resolveLayerId = (selector: string) =>
           findLayerBySelector(layersNow, selector)?.id;
         const entries = multiEntriesFromBridge(buffer.path, payload, resolveLayerId);
-        // Bridge already painted multi outlines; sync React state
-        const { primary, extras } = splitPrimaryExtras(entries);
-        setMultiExtras(extras);
-        if (primary) {
-          setSelection(primary.selection, primary.detail);
-        } else {
-          setSelection(null, null);
-        }
+        // Bridge already painted multi outlines; sync React state (+ multiSelectors)
+        applyMultiEntries(entries);
       }
     },
-    [buffer.path, bridgeLayers, parseLayers, setSelection],
+    [buffer.path, bridgeLayers, parseLayers, applyMultiEntries],
   );
 
   const handleLayerSelect = (layer: LayerNode, opts?: { additive?: boolean }) => {
@@ -293,10 +289,18 @@ export function DesignEditor({
     }
     clearMulti();
     const sel = selectionFromLayer(buffer.path, layer);
-    setSelection(sel, {
-      selector: layer.selector,
-      tag: layer.tag,
-    });
+    // Explicit single — strip multi fields for collab
+    setSelection(
+      {
+        filePath: sel.filePath,
+        selector: sel.selector,
+        layerId: sel.layerId,
+      },
+      {
+        selector: layer.selector,
+        tag: layer.tag,
+      },
+    );
     const iframe = iframeHostRef.current?.querySelector('iframe');
     if (iframe) {
       postToPreview(iframe as HTMLIFrameElement, {

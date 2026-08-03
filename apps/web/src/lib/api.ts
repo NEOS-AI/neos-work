@@ -270,6 +270,8 @@ export class WebApiClient {
                         path: string | null;
                         selector: string | null;
                         layerId?: string | null;
+                        selectors?: string[];
+                        layerIds?: string[];
                         updatedAt?: string;
                       }>)
                     : undefined,
@@ -282,6 +284,8 @@ export class WebApiClient {
                           path: string | null;
                           selector: string | null;
                           layerId?: string | null;
+                          selectors?: string[];
+                          layerIds?: string[];
                           updatedAt?: string;
                         })
                       : undefined,
@@ -309,7 +313,7 @@ export class WebApiClient {
     return this.request('POST', `/api/projects/${encodeURIComponent(projectId)}/collab/locks`, body);
   }
 
-  /** Publish editing selection for peer awareness (v0.7 M2). */
+  /** Publish editing selection for peer awareness (v0.7 M2 + v0.8 M3 multi). */
   collabSelection(
     projectId: string,
     body: {
@@ -317,6 +321,9 @@ export class WebApiClient {
       path?: string | null;
       selector?: string | null;
       layerId?: string | null;
+      /** Multi-select ordered (last = primary). */
+      selectors?: string[] | null;
+      layerIds?: string[] | null;
     },
   ): Promise<ApiEnvelope<{ selection?: unknown }>> {
     return this.request(

@@ -40,11 +40,39 @@ export function selectionEquals(
 ): boolean {
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;
+  const multiA = (a.multiSelectors ?? []).join('\0');
+  const multiB = (b.multiSelectors ?? []).join('\0');
   return (
     a.filePath === b.filePath
     && (a.selector ?? '') === (b.selector ?? '')
     && (a.layerId ?? '') === (b.layerId ?? '')
+    && multiA === multiB
   );
+}
+
+/**
+ * Attach multi-select selector list to primary selection (v0.8 M3 collab).
+ * Ordered list; last entry is primary. Single selection omits multi fields.
+ */
+export function selectionWithMulti(
+  primary: SelectionState,
+  entries: Array<{ selection: SelectionState }>,
+): SelectionState {
+  const selectors = entries
+    .map((e) => e.selection.selector)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  const layerIds = entries
+    .map((e) => e.selection.layerId)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  if (selectors.length <= 1) {
+    const { multiSelectors: _ms, multiLayerIds: _ml, ...rest } = primary;
+    return rest;
+  }
+  return {
+    ...primary,
+    multiSelectors: selectors,
+    multiLayerIds: layerIds.length > 0 ? layerIds : undefined,
+  };
 }
 
 /** One entry in a multi-selection set (primary is last). */

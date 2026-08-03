@@ -280,4 +280,11 @@ export interface SelectionState {
   selector?: string;
   layerId?: string;
   sourceRange?: { start: number; end: number };
+  /**
+   * Full multi-select ordered selectors (last = primary). v0.8 M3 collab broadcast.
+   * Omitted or length ≤ 1 when single selection.
+   */
+  multiSelectors?: string[];
+  /** Parallel layer ids for multi-select (same order as multiSelectors when present). */
+  multiLayerIds?: string[];
 }

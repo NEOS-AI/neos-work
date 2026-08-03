@@ -7,6 +7,7 @@ import {
   selectionEquals,
   selectionFromBridge,
   selectionFromLayer,
+  selectionWithMulti,
   splitPrimaryExtras,
   toggleMultiSelectLayer,
 } from './selection-state.js';
@@ -111,5 +112,19 @@ describe('selection-state', () => {
     });
     expect(added).toHaveLength(2);
     expect(added[1]!.selection.selector).toBe('#c');
+  });
+
+  it('selectionWithMulti attaches multiSelectors for collab (v0.8 M3)', () => {
+    const entries = [
+      { selection: { filePath: 'a.html', selector: '#a', layerId: '1' } },
+      { selection: { filePath: 'a.html', selector: '#b', layerId: '2' } },
+    ];
+    const withMulti = selectionWithMulti(entries[1]!.selection, entries);
+    expect(withMulti.multiSelectors).toEqual(['#a', '#b']);
+    expect(withMulti.multiLayerIds).toEqual(['1', '2']);
+    expect(withMulti.selector).toBe('#b');
+
+    const single = selectionWithMulti(entries[0]!.selection, [entries[0]!]);
+    expect(single.multiSelectors).toBeUndefined();
   });
 });

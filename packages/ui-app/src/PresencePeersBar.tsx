@@ -23,16 +23,26 @@ export interface PresencePeersBarProps {
 function formatSelectionHint(sel?: PeerSelectionInfo | null): string | null {
   if (!sel) return null;
   const path = sel.path?.trim() || '';
-  const selector = sel.selector?.trim() || '';
-  if (!path && !selector) return null;
+  const multi = Array.isArray(sel.selectors) ? sel.selectors.filter(Boolean) : [];
+  const multiN = multi.length > 1 ? multi.length : 0;
+  const selector = sel.selector?.trim() || multi[multi.length - 1] || '';
+  if (!path && !selector && multiN === 0) return null;
+  const base = path
+    ? path.includes('/')
+      ? path.slice(path.lastIndexOf('/') + 1)
+      : path
+    : '';
+  if (multiN > 1) {
+    const shortSel = selector.length > 24 ? `${selector.slice(0, 22)}…` : selector;
+    if (base && shortSel) return `${base} · ${multiN} sel · ${shortSel}`;
+    if (base) return `${base} · ${multiN} selected`;
+    return `${multiN} selected · ${shortSel || '…'}`;
+  }
   if (path && selector) {
     const shortSel = selector.length > 36 ? `${selector.slice(0, 34)}…` : selector;
-    const base = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path;
     return `${base} · ${shortSel}`;
   }
-  if (path) {
-    return path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path;
-  }
+  if (path) return base;
   return selector.length > 40 ? `${selector.slice(0, 38)}…` : selector;
 }
 

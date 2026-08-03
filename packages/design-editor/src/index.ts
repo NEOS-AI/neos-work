@@ -51,6 +51,7 @@ export {
   selectionEquals,
   selectionFromBridge,
   selectionFromLayer,
+  selectionWithMulti,
   splitPrimaryExtras,
   toggleMultiSelectLayer,
   type MultiSelectEntry,

@@ -17,16 +17,23 @@ export type FileLock = {
   acquiredAt: string;
 };
 
-/** Peer editing awareness (v0.7 M2) — path + optional CSS/layer selector. */
+/** Peer editing awareness (v0.7 M2 + v0.8 M3 multi-select). */
 export type PeerSelection = {
   sessionId: string;
   displayName: string;
   colorHint: number;
   /** Project-relative file path, or null when cleared. */
   path: string | null;
-  /** CSS / layer selector, or null when none. */
+  /** Primary CSS / layer selector, or null when none. */
   selector: string | null;
   layerId?: string | null;
+  /**
+   * Full multi-select ordered (last = primary). Omitted when single/empty.
+   * v0.8 M3 collab multi-selection broadcast.
+   */
+  selectors?: string[];
+  /** Parallel layer ids when available (same order as selectors). */
+  layerIds?: string[];
   updatedAt: string;
 };
 

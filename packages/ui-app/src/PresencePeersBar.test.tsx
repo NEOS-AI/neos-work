@@ -52,4 +52,26 @@ describe('PresencePeersBar', () => {
     );
     expect(within(root).getByTestId('collab-peer-selection-abc123').textContent).toMatch(/#hero/);
   });
+
+  it('shows multi-select count in peer hint (v0.8 M3)', () => {
+    const { container } = render(
+      <PresencePeersBar
+        self={{ sessionId: 's1', displayName: 'Me', colorHint: 10 }}
+        peers={[{ sessionId: 'abc123xyz', displayName: 'Alice', colorHint: 40 }]}
+        selections={{
+          abc123xyz: {
+            sessionId: 'abc123xyz',
+            path: 'index.html',
+            selector: '#b',
+            selectors: ['#a', '#b', '#c'],
+          },
+        }}
+      />,
+    );
+    const root = container.querySelector('[data-testid="collab-peers"]') as HTMLElement;
+    fireEvent.click(within(root).getByTestId('collab-peers-toggle'));
+    expect(within(root).getByTestId('collab-peer-selection-abc123').textContent).toMatch(
+      /3 sel/,
+    );
+  });
 });

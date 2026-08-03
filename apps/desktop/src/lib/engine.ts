@@ -1359,6 +1359,8 @@ export class EngineClient {
                         path: string | null;
                         selector: string | null;
                         layerId?: string | null;
+                        selectors?: string[];
+                        layerIds?: string[];
                         updatedAt?: string;
                       }>)
                     : undefined,
@@ -1371,6 +1373,8 @@ export class EngineClient {
                           path: string | null;
                           selector: string | null;
                           layerId?: string | null;
+                          selectors?: string[];
+                          layerIds?: string[];
                           updatedAt?: string;
                         })
                       : undefined,
@@ -1413,6 +1417,8 @@ export class EngineClient {
       path?: string | null;
       selector?: string | null;
       layerId?: string | null;
+      selectors?: string[] | null;
+      layerIds?: string[] | null;
     },
   ): Promise<ApiResponse<{ selection?: unknown }>> {
     const seg = this.pathSegment(projectId);

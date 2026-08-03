@@ -55,6 +55,8 @@ const MAX_PEERS_PER_PROJECT = 32;
 const MAX_LOCKS_PER_PROJECT = 64;
 const MAX_SELECTIONS_PER_PROJECT = 64;
 const MAX_SELECTOR_LEN = 400;
+/** Max multi-select selectors per session (v0.8 M3). */
+const MAX_MULTI_SELECTORS = 32;
 /** Drop local SSE sessions with no activity (ms). Alias of PRESENCE_LOCAL_IDLE_MS. */
 export const PRESENCE_IDLE_MS = PRESENCE_LOCAL_IDLE_MS;
 
@@ -117,6 +119,8 @@ function clearSelectionForSession(
     path: null,
     selector: null,
     layerId: null,
+    selectors: undefined,
+    layerIds: undefined,
     updatedAt: new Date().toISOString(),
   };
   broadcast(projectId, {
@@ -616,8 +620,27 @@ export function getFileLock(projectId: string, path: string): FileLock | null {
 }
 
 /**
- * Publish (or clear) the session's editing selection for peer awareness (v0.7 M2).
- * `path` / `selector` null or empty → clear that field; both null → clear selection.
+ * Sanitize multi-select selector list (v0.8 M3).
+ * Dedupes, bounds count, drops invalid; preserves order (last = primary preferred).
+ */
+export function sanitizeSelectorsList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (out.length >= MAX_MULTI_SELECTORS) break;
+    const s = sanitizeSelector(item);
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+/**
+ * Publish (or clear) the session's editing selection for peer awareness (v0.7 M2 / v0.8 M3).
+ * `path` / `selector` null or empty → clear that field; both null and no multi → clear.
+ * `selectors` (optional) broadcasts full multi-select ordered list (last = primary).
  * Same session may update freely; no exclusive claim (unlike file locks).
  */
 export function setSessionSelection(input: {
@@ -626,6 +649,9 @@ export function setSessionSelection(input: {
   path?: string | null;
   selector?: string | null;
   layerId?: string | null;
+  /** Full multi-select selectors (ordered; last = primary). v0.8 M3 */
+  selectors?: string[] | null;
+  layerIds?: string[] | null;
 }): { ok: true; selection: PeerSelection } | { ok: false; error: string } {
   const projectId = normalizeProjectId(input.projectId);
   if (!projectId) return { ok: false, error: 'Invalid project' };
@@ -644,10 +670,30 @@ export function setSessionSelection(input: {
     path = normalizeLockPath(input.path);
     if (!path) return { ok: false, error: 'Invalid path' };
   }
-  const selector = sanitizeSelector(input.selector ?? null);
+
+  let selectors = sanitizeSelectorsList(input.selectors ?? null);
+  let selector = sanitizeSelector(input.selector ?? null);
+  // If multi list provided, primary is last entry
+  if (selectors.length > 0) {
+    selector = selectors[selectors.length - 1] ?? selector;
+  } else if (selector) {
+    selectors = [selector];
+  }
+
   const layerId = sanitizeLayerId(input.layerId ?? null);
+  let layerIds: string[] | undefined;
+  if (Array.isArray(input.layerIds) && input.layerIds.length > 0) {
+    const lids: string[] = [];
+    for (const raw of input.layerIds) {
+      if (lids.length >= MAX_MULTI_SELECTORS) break;
+      const id = sanitizeLayerId(raw);
+      if (id) lids.push(id);
+    }
+    if (lids.length > 0) layerIds = lids;
+  }
 
   const updatedAt = new Date().toISOString();
+  const multi = selectors.length > 1;
   const selection: PeerSelection = {
     sessionId,
     displayName: session.displayName,
@@ -655,6 +701,8 @@ export function setSessionSelection(input: {
     path,
     selector,
     layerId,
+    selectors: multi ? selectors : undefined,
+    layerIds: multi && layerIds && layerIds.length > 1 ? layerIds : undefined,
     updatedAt,
   };
 
@@ -664,7 +712,7 @@ export function setSessionSelection(input: {
     selectionRooms.set(projectId, m);
   }
 
-  if (path == null && selector == null) {
+  if (path == null && selector == null && !multi) {
     m.delete(sessionId);
     if (m.size === 0) selectionRooms.delete(projectId);
   } else {

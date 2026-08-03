@@ -6,7 +6,7 @@ export interface PresencePeerInfo {
   colorHint?: number;
 }
 
-/** Peer editing awareness (v0.7 M2 selection.changed / presence.sync.selections). */
+/** Peer editing awareness (v0.7 M2 + v0.8 M3 multi-select). */
 export interface PeerSelectionInfo {
   sessionId: string;
   displayName?: string;
@@ -14,6 +14,9 @@ export interface PeerSelectionInfo {
   path: string | null;
   selector: string | null;
   layerId?: string | null;
+  /** Full multi-select ordered (last = primary). v0.8 M3 */
+  selectors?: string[];
+  layerIds?: string[];
   updatedAt?: string;
 }
 

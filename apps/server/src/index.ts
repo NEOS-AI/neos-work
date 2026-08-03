@@ -199,7 +199,7 @@ app.get('/api/collab/status', (c) => {
 app.get('/api', (c) => {
   return c.json({
     name: 'NEOS Work Engine',
-    version: '0.8.2',
+    version: '0.8.3',
   });
 });
 
@@ -229,7 +229,7 @@ if (webDist) {
   app.get('/', (c) => {
     return c.json({
       name: 'NEOS Work Engine',
-      version: '0.8.2',
+      version: '0.8.3',
       hint: 'Build apps/web and set NEOS_WEB_DIST to serve the browser UI',
     });
   });

@@ -285,18 +285,24 @@ export function ProjectWorkspace() {
     };
   }, [client, projectId, collabSessionId, buffer.path]);
 
-  // M2: publish local selection (path + selector) for peer indicators
+  // M2/M3: publish local selection (+ multi selectors) for peer indicators
+  const multiSelectorsKey = (selection?.multiSelectors ?? []).join('\0');
+  const multiLayerIdsKey = (selection?.multiLayerIds ?? []).join('\0');
   useEffect(() => {
     if (!client || !projectId || !collabSessionId) return;
     const path = selection?.filePath ?? buffer.path ?? null;
     const selector = selection?.selector ?? null;
     const layerId = selection?.layerId ?? null;
+    const selectors = selection?.multiSelectors;
+    const layerIds = selection?.multiLayerIds;
     const t = window.setTimeout(() => {
       void client.collabSelection(projectId, {
         sessionId: collabSessionId,
         path,
         selector,
         layerId,
+        selectors: selectors && selectors.length > 1 ? selectors : null,
+        layerIds: layerIds && layerIds.length > 1 ? layerIds : null,
       });
     }, 120);
     return () => window.clearTimeout(t);
@@ -307,6 +313,8 @@ export function ProjectWorkspace() {
     selection?.filePath,
     selection?.selector,
     selection?.layerId,
+    multiSelectorsKey,
+    multiLayerIdsKey,
     buffer.path,
   ]);
 

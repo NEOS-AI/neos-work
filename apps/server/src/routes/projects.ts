@@ -461,8 +461,15 @@ projects.get('/:id/collab/selections', (c) => {
 });
 
 /**
- * Publish or clear this session's editing selection (path + selector).
- * body: { sessionId, path?: string | null, selector?: string | null, layerId?: string | null }
+ * Publish or clear this session's editing selection (path + selector [+ multi]).
+ * body: {
+ *   sessionId,
+ *   path?: string | null,
+ *   selector?: string | null,
+ *   layerId?: string | null,
+ *   selectors?: string[],  // v0.8 M3 multi-select (last = primary)
+ *   layerIds?: string[]
+ * }
  */
 projects.post('/:id/collab/selection', async (c) => {
   const id = paramId(c);
@@ -482,6 +489,8 @@ projects.post('/:id/collab/selection', async (c) => {
   const pathRaw = (body as { path?: unknown }).path;
   const selectorRaw = (body as { selector?: unknown }).selector;
   const layerIdRaw = (body as { layerId?: unknown }).layerId;
+  const selectorsRaw = (body as { selectors?: unknown }).selectors;
+  const layerIdsRaw = (body as { layerIds?: unknown }).layerIds;
   const path =
     pathRaw === null || pathRaw === undefined
       ? null
@@ -506,12 +515,21 @@ projects.post('/:id/collab/selection', async (c) => {
   if (selectorRaw !== null && selectorRaw !== undefined && typeof selectorRaw !== 'string') {
     return c.json({ ok: false, error: 'selector must be string or null' }, 400);
   }
+  if (
+    selectorsRaw !== null
+    && selectorsRaw !== undefined
+    && !Array.isArray(selectorsRaw)
+  ) {
+    return c.json({ ok: false, error: 'selectors must be an array' }, 400);
+  }
   const r = setSessionSelection({
     projectId: id,
     sessionId,
     path,
     selector,
     layerId,
+    selectors: Array.isArray(selectorsRaw) ? (selectorsRaw as string[]) : null,
+    layerIds: Array.isArray(layerIdsRaw) ? (layerIdsRaw as string[]) : null,
   });
   if (!r.ok) {
     const status = r.error.includes('Session') ? 404 : 400;
