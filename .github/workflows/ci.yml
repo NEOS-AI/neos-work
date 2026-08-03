@@ -46,5 +46,8 @@ jobs:
       - name: FE/BE contract smoke
         run: pnpm e2e:contract
 
+      - name: Multi-replica collab structural e2e
+        run: pnpm e2e:multi-replica
+
       - name: E2E smoke
         run: pnpm e2e:smoke

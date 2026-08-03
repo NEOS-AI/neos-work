@@ -27,6 +27,7 @@
     "nanoid": "^5.1.6",
     "node-cron": "^4.2.1",
     "openai": "^6.48.0",
+    "redis": "^4.7.0",
     "unzipper": "^0.12.3",
     "@neos-work/agent-runtime": "workspace:*",
     "@neos-work/plugin-runtime": "workspace:*"

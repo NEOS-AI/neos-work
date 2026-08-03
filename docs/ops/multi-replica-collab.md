@@ -187,6 +187,35 @@ Notes:
 
 ---
 
+## Automated e2e (C4)
+
+Structural checks (CI-safe, no Docker required):
+
+```bash
+pnpm e2e:multi-replica
+```
+
+Live two-engine probe (starts Redis via Docker when needed, shared `NEOS_DATA_DIR`,
+asserts collab status, cross-node peers, selection fan-out):
+
+```bash
+# requires: built server (pnpm --filter @neos-work/server build), Docker, redis npm dep
+pnpm e2e:multi-replica:live
+# or: NEOS_MULTI_REPLICA_E2E=1 pnpm e2e:multi-replica
+```
+
+Optional: point at an existing Redis with `NEOS_COLLAB_REDIS_URL` and
+`--skip-redis-docker`. Verbose engine logs: `NEOS_MULTI_REPLICA_VERBOSE=1`.
+
+Compose stack for manual multi-container runs:
+
+```bash
+cp deploy/.env.example deploy/.env   # set NEOS_AUTH_TOKEN
+docker compose -f deploy/docker-compose.multi.yml up -d --build
+```
+
+---
+
 ## Two-client manual QA checklist
 
 Use two browsers (or two browser profiles). Prefer two replicas behind Redis

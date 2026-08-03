@@ -21,6 +21,8 @@
     "inventory:write": "node tools/inventory/inventory.mjs --write",
     "e2e:smoke": "node e2e/smoke/run.mjs",
     "e2e:contract": "pnpm --filter @neos-work/server exec vitest run src/routes/contract-fe-be.test.ts",
+    "e2e:multi-replica": "node e2e/multi-replica/run.mjs",
+    "e2e:multi-replica:live": "node e2e/multi-replica/run.mjs --live",
     "e2e:live-smoke": "node e2e/live-smoke/run.mjs",
     "e2e:c5": "node e2e/c5-acceptance/run.mjs",
     "e2e:c5:docker": "node e2e/c5-acceptance/run.mjs --docker",
@@ -39,7 +41,7 @@
     "typescript-eslint": "^8.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "prettier": "^3.5.3",
-    "prettier-plugin-tailwindcss": "^0.7.11",
+    "prettier-plugin-tailwindcss": "^0.8.1",
     "turbo": "^2.5.0",
     "typescript": "^5.8.2"
   },
