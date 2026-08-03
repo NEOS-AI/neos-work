@@ -48,6 +48,7 @@ export function isCollabBusFanoutEvent(event: CollabEvent): boolean {
   return (
     event.type === 'presence.join'
     || event.type === 'presence.leave'
+    || event.type === 'presence.heartbeat'
     || event.type === 'lock.acquired'
     || event.type === 'lock.released'
     || event.type === 'selection.changed'

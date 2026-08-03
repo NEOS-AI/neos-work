@@ -68,6 +68,14 @@ describe('collab-bus', () => {
         ts: '',
       }),
     ).toBe(true);
+    expect(
+      isCollabBusFanoutEvent({
+        type: 'presence.heartbeat',
+        projectId: 'p',
+        sessionId: 's',
+        ts: '',
+      }),
+    ).toBe(true);
   });
 
   it('memory bus delivers to subscribers with originNodeId', () => {

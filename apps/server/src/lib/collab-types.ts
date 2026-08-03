@@ -49,6 +49,15 @@ export type CollabEvent =
       reason?: 'leave' | 'idle' | 'evicted';
       ts: string;
     }
+  /** Lightweight liveness for multi-replica membership (v0.8 M0). */
+  | {
+      type: 'presence.heartbeat';
+      projectId: string;
+      sessionId: string;
+      displayName?: string;
+      colorHint?: number;
+      ts: string;
+    }
   | { type: 'lock.acquired'; projectId: string; lock: FileLock; ts: string }
   | { type: 'lock.released'; projectId: string; path: string; sessionId: string; ts: string }
   | {

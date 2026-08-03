@@ -32,6 +32,7 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.5 closeout:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md) · **v0.6 plan:** [docs/plans/PLAN_FOR_V0_6_0.md](docs/plans/PLAN_FOR_V0_6_0.md)  
 **v0.6 migration:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md) · **v0.7 migration:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)  
+**v0.8 plan:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md) (shared presence membership)  
 **Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — move + resize + Shift multi-select in Preview (HTML)
 
 ---

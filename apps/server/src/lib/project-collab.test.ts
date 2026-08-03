@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   acquireFileLock,
+  applyRemoteCollabEvent,
   clearProjectPresence,
   colorHintFromSessionId,
   getFileLock,
@@ -272,5 +273,60 @@ describe('project-collab presence', () => {
       }).ok,
     ).toBe(false);
     j.unsub();
+  });
+
+  it('remote presence.join appears in listPeers / sync (v0.8 membership)', () => {
+    const a = vi.fn();
+    const ja = joinProjectPresence({ projectId: 'p1', displayName: 'Local', listener: a })!;
+    applyRemoteCollabEvent('p1', {
+      type: 'presence.join',
+      projectId: 'p1',
+      peer: {
+        sessionId: 'remote-sess-1',
+        displayName: 'Remote',
+        joinedAt: new Date().toISOString(),
+        colorHint: 42,
+      },
+      ts: new Date().toISOString(),
+    });
+    expect(listProjectPeers('p1').some((p) => p.sessionId === 'remote-sess-1')).toBe(true);
+    expect(projectPresenceCount('p1')).toBe(2);
+
+    // New joiner sync includes remote peer
+    const jb = joinProjectPresence({ projectId: 'p1', displayName: 'B', listener: vi.fn() })!;
+    expect(jb.sync.type).toBe('presence.sync');
+    if (jb.sync.type === 'presence.sync') {
+      expect(jb.sync.peers.some((p) => p.sessionId === 'remote-sess-1')).toBe(true);
+    }
+
+    applyRemoteCollabEvent('p1', {
+      type: 'presence.leave',
+      projectId: 'p1',
+      sessionId: 'remote-sess-1',
+      reason: 'leave',
+      ts: new Date().toISOString(),
+    });
+    expect(listProjectPeers('p1').some((p) => p.sessionId === 'remote-sess-1')).toBe(false);
+
+    jb.unsub();
+    ja.unsub();
+  });
+
+  it('remote presence.heartbeat refreshes membership', () => {
+    applyRemoteCollabEvent('p1', {
+      type: 'presence.heartbeat',
+      projectId: 'p1',
+      sessionId: 'hb-remote',
+      displayName: 'HB',
+      colorHint: 9,
+      ts: new Date().toISOString(),
+    });
+    expect(listProjectPeers('p1').some((p) => p.sessionId === 'hb-remote')).toBe(true);
+    applyRemoteCollabEvent('p1', {
+      type: 'presence.leave',
+      projectId: 'p1',
+      sessionId: 'hb-remote',
+      ts: new Date().toISOString(),
+    });
   });
 });

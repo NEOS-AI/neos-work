@@ -1,5 +1,5 @@
 /**
- * In-process project collaboration presence + file locks + selection (v0.6–v0.7).
+ * In-process project collaboration presence + file locks + selection (v0.6–v0.8).
  * Powers GET /api/projects/:id/collab/stream — presence.* / lock.* / selection.*.
  * Ephemeral only; no disk persistence. Disk files remain SSOT for content.
  *
@@ -7,13 +7,30 @@
  * M3: advisory file locks (ADR 0001 — lock+LWW spike).
  * v0.7 M1: fan-out via CollabBus (memory default; redis optional).
  * v0.7 M2: selection awareness (path + selector) for peer indicators.
+ * v0.8 M0: shared presence membership (remote peers in sync/list via bus).
  */
 
 import { randomBytes } from 'node:crypto';
 import { getCollabBus, isCollabBusFanoutEvent } from './collab-bus.js';
+import {
+  clearMembershipStore,
+  listMembershipPeers,
+  membershipCount,
+  PRESENCE_HEARTBEAT_INTERVAL_MS,
+  PRESENCE_LOCAL_IDLE_MS,
+  removeMembership,
+  sweepMembershipIdle,
+  touchMembership,
+  upsertMembership,
+} from './collab-presence-store.js';
 import type { CollabEvent, FileLock, PeerSelection, PresencePeer } from './collab-types.js';
 
 export type { CollabEvent, FileLock, PeerSelection, PresencePeer } from './collab-types.js';
+export {
+  PRESENCE_HEARTBEAT_INTERVAL_MS,
+  PRESENCE_LOCAL_IDLE_MS,
+  PRESENCE_REMOTE_IDLE_MS,
+} from './collab-presence-store.js';
 
 type RoomListener = (event: CollabEvent) => void;
 
@@ -24,6 +41,7 @@ type Session = {
   lastSeen: number;
   colorHint: number;
   listener: RoomListener;
+  lastHeartbeatAt: number;
 };
 
 const rooms = new Map<string, Map<string, Session>>();
@@ -35,8 +53,8 @@ const MAX_PEERS_PER_PROJECT = 32;
 const MAX_LOCKS_PER_PROJECT = 64;
 const MAX_SELECTIONS_PER_PROJECT = 64;
 const MAX_SELECTOR_LEN = 400;
-/** Drop sessions with no heartbeat / SSE activity (ms). */
-export const PRESENCE_IDLE_MS = 90_000;
+/** Drop local SSE sessions with no activity (ms). Alias of PRESENCE_LOCAL_IDLE_MS. */
+export const PRESENCE_IDLE_MS = PRESENCE_LOCAL_IDLE_MS;
 
 function normalizeProjectId(projectId: string): string {
   if (typeof projectId !== 'string' || /[\0\r\n]/.test(projectId)) return '';
@@ -159,7 +177,15 @@ function peerPublic(s: Session): PresencePeer {
   };
 }
 
+/**
+ * Peers visible to clients: membership store (local + remote-mirrored).
+ * Falls back to local room if membership empty (should not happen after join).
+ */
 function listPeers(projectId: string, exceptSessionId?: string): PresencePeer[] {
+  const fromStore = listMembershipPeers(projectId, exceptSessionId);
+  if (fromStore.length > 0 || membershipCount(projectId) > 0) {
+    return fromStore;
+  }
   const room = rooms.get(projectId);
   if (!room) return [];
   const out: PresencePeer[] = [];
@@ -167,7 +193,6 @@ function listPeers(projectId: string, exceptSessionId?: string): PresencePeer[] 
     if (exceptSessionId && s.sessionId === exceptSessionId) continue;
     out.push(peerPublic(s));
   }
-  // Stable order for UI
   out.sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
   return out;
 }
@@ -207,7 +232,7 @@ function broadcast(
 }
 
 /**
- * Apply a remote bus event on this node (locks/selections + local listeners).
+ * Apply a remote bus event on this node (locks/selections/membership + local listeners).
  * Does not re-publish to the bus.
  */
 export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): void {
@@ -221,12 +246,15 @@ export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): v
       lockRooms.set(id, m);
     }
     m.set(event.lock.path, event.lock);
+    // Activity from remote session refreshes membership TTL
+    touchMembership(id, event.lock.sessionId);
   } else if (event.type === 'lock.released' && event.path) {
     const m = lockRooms.get(id);
     if (m) {
       m.delete(event.path);
       if (m.size === 0) lockRooms.delete(id);
     }
+    if (event.sessionId) touchMembership(id, event.sessionId);
   } else if (event.type === 'selection.changed' && event.selection) {
     const sel = event.selection;
     let m = selectionRooms.get(id);
@@ -252,15 +280,44 @@ export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): v
       }
       m.set(sel.sessionId, sel);
     }
+    touchMembership(id, sel.sessionId);
+  } else if (event.type === 'presence.join' && event.peer) {
+    // Mirror remote peer into membership so late joiners / REST peers see them
+    if (!rooms.get(id)?.has(event.peer.sessionId)) {
+      upsertMembership(id, event.peer, { remote: true });
+    }
+  } else if (event.type === 'presence.heartbeat' && event.sessionId) {
+    if (!rooms.get(id)?.has(event.sessionId)) {
+      const ok = touchMembership(id, event.sessionId);
+      if (!ok) {
+        // Heartbeat before join on this node — upsert minimal remote
+        upsertMembership(
+          id,
+          {
+            sessionId: event.sessionId,
+            displayName: event.displayName || 'Anonymous',
+            joinedAt: event.ts || new Date().toISOString(),
+            colorHint: typeof event.colorHint === 'number' ? event.colorHint : 0,
+          },
+          { remote: true },
+        );
+      }
+    } else {
+      touchMembership(id, event.sessionId);
+    }
+    // Heartbeats do not need client fan-out (membership only)
+    return;
   } else if (event.type === 'presence.leave' && event.sessionId) {
     const m = selectionRooms.get(id);
     if (m) {
       m.delete(event.sessionId);
       if (m.size === 0) selectionRooms.delete(id);
     }
+    // Only drop membership if not a local SSE session
+    if (!rooms.get(id)?.has(event.sessionId)) {
+      removeMembership(id, event.sessionId);
+    }
   }
-  // Presence join/leave from remote: we only mirror to local listeners for UX;
-  // remote peers are not in local `rooms` (no SSE session on this node).
   deliverCollabEventLocal(id, event);
 }
 
@@ -275,6 +332,7 @@ function forceLeave(
   if (!s) return;
   room.delete(sessionId);
   if (room.size === 0) rooms.delete(projectId);
+  removeMembership(projectId, sessionId);
   releaseAllLocksForSession(projectId, sessionId);
   clearSelectionForSession(projectId, sessionId, { broadcast: false });
   const ev: CollabEvent = {
@@ -327,8 +385,11 @@ export function joinProjectPresence(input: {
     lastSeen: now,
     colorHint: colorHintFromSessionId(sessionId),
     listener: input.listener,
+    // Defer first bus heartbeat until interval (join already fans out)
+    lastHeartbeatAt: now,
   };
   room.set(session.sessionId, session);
+  upsertMembership(projectId, peerPublic(session), { remote: false, lastSeenMs: now });
 
   const ts = new Date().toISOString();
   const sync: CollabEvent = {
@@ -355,7 +416,26 @@ export function joinProjectPresence(input: {
   const touch = () => {
     const r = rooms.get(projectId);
     const s = r?.get(sessionId);
-    if (s) s.lastSeen = Date.now();
+    if (!s) return;
+    const t = Date.now();
+    s.lastSeen = t;
+    touchMembership(projectId, sessionId);
+    // Periodic multi-replica liveness (v0.8 M0)
+    if (t - s.lastHeartbeatAt >= PRESENCE_HEARTBEAT_INTERVAL_MS) {
+      s.lastHeartbeatAt = t;
+      broadcast(
+        projectId,
+        {
+          type: 'presence.heartbeat',
+          projectId,
+          sessionId,
+          displayName: s.displayName,
+          colorHint: s.colorHint,
+          ts: new Date(t).toISOString(),
+        },
+        sessionId,
+      );
+    }
   };
 
   const unsub = () => {
@@ -375,27 +455,55 @@ export function touchProjectPresence(projectId: string, sessionId: string): bool
   if (!sid || sid.length > 64) return false;
   const s = rooms.get(id)?.get(sid);
   if (!s) return false;
-  s.lastSeen = Date.now();
+  const t = Date.now();
+  s.lastSeen = t;
+  touchMembership(id, sid);
+  if (t - s.lastHeartbeatAt >= PRESENCE_HEARTBEAT_INTERVAL_MS) {
+    s.lastHeartbeatAt = t;
+    broadcast(
+      id,
+      {
+        type: 'presence.heartbeat',
+        projectId: id,
+        sessionId: sid,
+        displayName: s.displayName,
+        colorHint: s.colorHint,
+        ts: new Date(t).toISOString(),
+      },
+      sid,
+    );
+  }
   return true;
 }
 
-/** Remove sessions idle longer than PRESENCE_IDLE_MS. */
+/** Remove idle local sessions and stale remote membership. */
 export function sweepIdlePresence(projectId?: string): number {
-  const now = Date.now();
   let removed = 0;
-  const ids = projectId
-    ? [normalizeProjectId(projectId)].filter(Boolean)
-    : [...rooms.keys()];
-  for (const pid of ids) {
-    const room = rooms.get(pid);
-    if (!room) continue;
-    for (const s of [...room.values()]) {
-      if (now - s.lastSeen > PRESENCE_IDLE_MS) {
-        forceLeave(pid, s.sessionId, 'idle');
-        removed++;
-      }
+  const { localIdle, remoteRemoved } = sweepMembershipIdle(projectId);
+
+  for (const { projectId: pid, sessionId } of localIdle) {
+    if (rooms.get(pid)?.has(sessionId)) {
+      forceLeave(pid, sessionId, 'idle');
+      removed++;
+    } else {
+      // Orphan membership (no SSE room) — drop quietly
+      removeMembership(pid, sessionId);
+      removed++;
     }
   }
+
+  for (const { projectId: pid, sessionId } of remoteRemoved) {
+    // Local UX only — do not re-broadcast leave (other nodes own the session)
+    deliverCollabEventLocal(pid, {
+      type: 'presence.leave',
+      projectId: pid,
+      sessionId,
+      reason: 'idle',
+      ts: new Date().toISOString(),
+    });
+    removed++;
+  }
+
   return removed;
 }
 
@@ -408,6 +516,8 @@ export function listProjectPeers(projectId: string): PresencePeer[] {
 export function projectPresenceCount(projectId: string): number {
   const id = normalizeProjectId(projectId);
   if (!id) return 0;
+  const n = membershipCount(id);
+  if (n > 0) return n;
   return rooms.get(id)?.size ?? 0;
 }
 
@@ -586,9 +696,10 @@ export function isSharedEditHardEnforce(): boolean {
   return v === '1' || v === 'true';
 }
 
-/** Test helper — clear all rooms, locks, and selections. */
+/** Test helper — clear all rooms, locks, selections, and membership. */
 export function clearProjectPresence(): void {
   rooms.clear();
   lockRooms.clear();
   selectionRooms.clear();
+  clearMembershipStore();
 }
