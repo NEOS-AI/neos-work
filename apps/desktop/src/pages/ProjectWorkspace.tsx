@@ -61,6 +61,12 @@ export function ProjectWorkspace() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<string[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  /** Latest project run status (queued / running / succeeded / failed / canceled). */
+  const [runStatus, setRunStatus] = useState<string | null>(null);
+  /** Abort handle for active `streamProjectRunEvents` SSE. */
+  const runStreamStopRef = useRef<(() => void) | null>(null);
+  /** True while user cancel owns terminal UI (skip double-log from stream finally). */
+  const runCancelRequestedRef = useRef(false);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   /** Inspect/bridge detail (outerHTML) for selection-scoped AI context. */
   const [selectDetail, setSelectDetail] = useState<BridgeSelectPayload | null>(null);
@@ -924,6 +930,54 @@ export function ProjectWorkspace() {
     setChatLog((prev) => [...prev.slice(-200), safe]);
   }, []);
 
+  const isRunTerminalStatus = useCallback((status: string | null | undefined) => {
+    if (!status) return false;
+    const s = status.toLowerCase();
+    return s === 'succeeded' || s === 'failed' || s === 'canceled' || s === 'cancelled' || s === 'error';
+  }, []);
+
+  const handleCancelRun = useCallback(async () => {
+    if (!client || !activeRunId) return;
+    runCancelRequestedRef.current = true;
+    // Abort SSE first so the chat send await unblocks
+    runStreamStopRef.current?.();
+    runStreamStopRef.current = null;
+    try {
+      const res = await client.cancelProjectRun(activeRunId);
+      if (res.ok) {
+        const status = res.data?.status ?? 'canceled';
+        setRunStatus(status);
+        appendLog(`✓ ${status}`);
+      } else {
+        // 409 already-terminal (or other error) — refresh via GET
+        const st = await client.getProjectRun(activeRunId);
+        if (st.ok && st.data) {
+          setRunStatus(st.data.status);
+          if (isRunTerminalStatus(st.data.status)) {
+            appendLog(
+              `✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`,
+            );
+          } else {
+            setChatError(
+              scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+                || t('project.cancelFailed'),
+            );
+          }
+        } else {
+          setChatError(
+            scrubDisplayText(res.error || st.error, { collapseLines: true, maxChars: 300 })
+              || t('project.cancelFailed'),
+          );
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.cancelFailed');
+      setChatError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setChatBusy(false);
+    }
+  }, [client, activeRunId, appendLog, isRunTerminalStatus, t]);
+
   const handleChatSend = useCallback(async () => {
     if (!client || !projectId) return;
     // Null bytes rejected; newlines allowed in multi-line prompts
@@ -934,6 +988,7 @@ export function ProjectWorkspace() {
     if (!chatPrompt.trim()) return;
     setChatBusy(true);
     setChatError(null);
+    runCancelRequestedRef.current = false;
     try {
       const selectionSnippet =
         selectDetail?.outerHTML?.slice(0, 8_000)
@@ -969,6 +1024,7 @@ export function ProjectWorkspace() {
         return;
       }
       setActiveRunId(res.data.id);
+      setRunStatus(res.data.status);
       appendLog(`→ run ${res.data.id.slice(0, 8)}… (${res.data.status})`);
       setChatPrompt('');
 
@@ -985,11 +1041,8 @@ export function ProjectWorkspace() {
 
       const applyTerminalStatus = async (): Promise<boolean> => {
         const st = await client.getProjectRun(runId);
-        if (
-          st.ok
-          && st.data
-          && (st.data.status === 'succeeded' || st.data.status === 'failed' || st.data.status === 'canceled')
-        ) {
+        if (st.ok && st.data && isRunTerminalStatus(st.data.status)) {
+          setRunStatus(st.data.status);
           appendLog(`✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`);
           // Reload files if CLI may have written
           if (st.data.status === 'succeeded' && chatAgentId) {
@@ -998,6 +1051,9 @@ export function ProjectWorkspace() {
           }
           return true;
         }
+        if (st.ok && st.data?.status) {
+          setRunStatus(st.data.status);
+        }
         return false;
       };
 
@@ -1005,21 +1061,36 @@ export function ProjectWorkspace() {
       let sawStreamEvent = false;
       let streamErrored = false;
       await new Promise<void>((resolve) => {
-        client.streamProjectRunEvents(
+        let settled = false;
+        const finish = (errored = false) => {
+          if (settled) return;
+          settled = true;
+          runStreamStopRef.current = null;
+          if (errored) streamErrored = true;
+          resolve();
+        };
+        const stop = client.streamProjectRunEvents(
           runId,
           (ev) => {
             sawStreamEvent = true;
             logRunEvent(ev);
           },
           {
-            onDone: () => resolve(),
-            onError: () => {
-              streamErrored = true;
-              resolve();
-            },
+            onDone: () => finish(false),
+            onError: () => finish(true),
           },
         );
+        // Abort resolves the wait (engine abort does not call onDone/onError)
+        runStreamStopRef.current = () => {
+          stop();
+          finish(false);
+        };
       });
+
+      // User cancel owns terminal log/status — avoid double append
+      if (runCancelRequestedRef.current) {
+        return;
+      }
 
       // Always fetch final status once stream ends (or errors)
       let terminal = await applyTerminalStatus();
@@ -1028,6 +1099,7 @@ export function ProjectWorkspace() {
       if (!terminal && (streamErrored || !sawStreamEvent)) {
         let after: string | undefined;
         for (let i = 0; i < 10; i++) {
+          if (runCancelRequestedRef.current) return;
           const evRes = await client.listProjectRunEvents(runId, after);
           if (evRes.ok && evRes.data) {
             for (const ev of evRes.data) {
@@ -1044,6 +1116,7 @@ export function ProjectWorkspace() {
       const msg = err instanceof Error ? err.message : t('project.chatFailed');
       setChatError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
     } finally {
+      runStreamStopRef.current = null;
       setChatBusy(false);
     }
   }, [
@@ -1057,6 +1130,7 @@ export function ProjectWorkspace() {
     selectDetail,
     t,
     appendLog,
+    isRunTerminalStatus,
   ]);
 
   const fileTree = useMemo(() => {
@@ -1361,24 +1435,67 @@ export function ProjectWorkspace() {
                 }}
                 aria-label={t('project.chat')}
               />
-              <button
-                type="button"
-                disabled={chatBusy || !chatPrompt.trim()}
-                onClick={() => void handleChatSend()}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
-                style={{ backgroundColor: 'var(--accent, #6366f1)' }}
-              >
-                {chatBusy ? t('common.loading') : t('project.chatSend')}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={chatBusy || !chatPrompt.trim()}
+                  onClick={() => void handleChatSend()}
+                  className="flex-1 rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                  style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+                >
+                  {chatBusy ? t('common.loading') : t('project.chatSend')}
+                </button>
+                {activeRunId
+                  && (chatBusy || (runStatus != null && !isRunTerminalStatus(runStatus))) && (
+                  <button
+                    type="button"
+                    data-testid="project-run-cancel"
+                    onClick={() => void handleCancelRun()}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+                    style={{
+                      borderColor: 'var(--border-primary)',
+                      color: 'var(--text-primary)',
+                      backgroundColor: 'var(--bg-secondary, transparent)',
+                    }}
+                  >
+                    {t('project.chatCancel')}
+                  </button>
+                )}
+              </div>
               {chatError && (
                 <p className="text-[11px] text-red-400" role="alert">
                   {chatError}
                 </p>
               )}
               {activeRunId && (
-                <p className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                  run {activeRunId.slice(0, 8)}…
-                </p>
+                <div
+                  className="flex flex-wrap items-center gap-2 font-mono text-[10px]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <span>
+                    run {activeRunId.slice(0, 8)}…
+                  </span>
+                  {runStatus && (
+                    <span
+                      data-testid="project-run-status"
+                      className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                      style={{
+                        backgroundColor:
+                          runStatus === 'succeeded'
+                            ? 'color-mix(in srgb, #22c55e 25%, transparent)'
+                            : runStatus === 'failed' || runStatus === 'error'
+                              ? 'color-mix(in srgb, #ef4444 25%, transparent)'
+                              : runStatus === 'canceled' || runStatus === 'cancelled'
+                                ? 'color-mix(in srgb, #a3a3a3 30%, transparent)'
+                                : 'color-mix(in srgb, var(--accent, #6366f1) 25%, transparent)',
+                        color: 'var(--text-primary)',
+                      }}
+                      title={t('project.runStatus')}
+                    >
+                      {runStatus}
+                    </span>
+                  )}
+                </div>
               )}
               <div
                 className="min-h-0 flex-1 overflow-auto rounded border p-2 font-mono text-[10px] leading-relaxed"

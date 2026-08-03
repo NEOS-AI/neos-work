@@ -43,5 +43,8 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: FE/BE contract smoke
+        run: pnpm e2e:contract
+
       - name: E2E smoke
         run: pnpm e2e:smoke

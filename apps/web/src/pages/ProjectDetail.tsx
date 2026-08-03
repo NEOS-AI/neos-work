@@ -782,6 +782,12 @@ export function ProjectDetail() {
         prompt: aiPrompt.trim(),
         editContext,
       });
+      if (!res.ok) {
+        const msg =
+          typeof res.error === 'string' && res.error ? res.error : 'Run failed';
+        setError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
+        return;
+      }
       const runId =
         res.data && typeof res.data === 'object' && typeof (res.data as { id?: string }).id === 'string'
           ? (res.data as { id: string }).id
@@ -819,6 +825,7 @@ export function ProjectDetail() {
       setStatus('Run still running — file SSE will refresh when disk changes');
       void loadRuns();
     } catch (err) {
+      // Network / abort only — createRun uses requestEnvelope (no throw on HTTP).
       setError(err instanceof ApiError ? err.message : 'Run failed');
     } finally {
       setAiBusy(false);

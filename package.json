@@ -20,6 +20,7 @@
     "inventory:check": "node tools/inventory/inventory.mjs --check",
     "inventory:write": "node tools/inventory/inventory.mjs --write",
     "e2e:smoke": "node e2e/smoke/run.mjs",
+    "e2e:contract": "pnpm --filter @neos-work/server exec vitest run src/routes/contract-fe-be.test.ts",
     "e2e:live-smoke": "node e2e/live-smoke/run.mjs",
     "e2e:c5": "node e2e/c5-acceptance/run.mjs",
     "e2e:c5:docker": "node e2e/c5-acceptance/run.mjs --docker",

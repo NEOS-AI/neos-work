@@ -20,6 +20,7 @@ const updateProject = vi.fn();
 const createProjectRun = vi.fn();
 const listProjectRunEvents = vi.fn();
 const getProjectRun = vi.fn();
+const cancelProjectRun = vi.fn();
 const listLiveArtifacts = vi.fn();
 const createLiveArtifact = vi.fn();
 const refreshLiveArtifact = vi.fn();
@@ -58,6 +59,7 @@ const client = {
   createProjectRun,
   listProjectRunEvents,
   getProjectRun,
+  cancelProjectRun,
   listLiveArtifacts,
   createLiveArtifact,
   refreshLiveArtifact,
@@ -296,6 +298,7 @@ describe('ProjectWorkspace', () => {
     createProjectRun.mockReset();
     listProjectRunEvents.mockReset();
     getProjectRun.mockReset();
+    cancelProjectRun.mockReset();
     listLiveArtifacts.mockReset().mockResolvedValue({ ok: true, data: [] });
     createLiveArtifact.mockReset();
     refreshLiveArtifact.mockReset();
@@ -771,6 +774,92 @@ describe('ProjectWorkspace', () => {
       expect(log.textContent).toMatch(/succeeded/);
     });
     expect(listProjectRunEvents).not.toHaveBeenCalled();
+  });
+
+  it('cancels an active chat run, aborts SSE, and shows canceled status', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    createProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-cancel01', status: 'running' },
+    });
+    let streamStop: (() => void) | null = null;
+    streamProjectRunEvents.mockImplementation((_runId, _onEvent, opts) => {
+      // Stay open until cancel aborts (stop resolves the send await)
+      streamStop = () => {
+        // engine abort path: neither onDone nor onError — component stop wrapper resolves
+      };
+      return () => {
+        streamStop?.();
+        streamStop = null;
+      };
+    });
+    cancelProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-cancel01', status: 'canceled' },
+    });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('project.chat'), 'long running task');
+    await user.click(screen.getByRole('button', { name: 'project.chatSend' }));
+
+    await waitFor(() => {
+      expect(createProjectRun).toHaveBeenCalled();
+      expect(streamProjectRunEvents).toHaveBeenCalledWith(
+        'run-cancel01',
+        expect.any(Function),
+        expect.any(Object),
+      );
+      expect(screen.getByTestId('project-run-status')).toHaveTextContent('running');
+      expect(screen.getByTestId('project-run-cancel')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('project-run-cancel'));
+
+    await waitFor(() => {
+      expect(cancelProjectRun).toHaveBeenCalledWith('run-cancel01');
+      expect(screen.getByTestId('project-run-status')).toHaveTextContent('canceled');
+      const log = screen.getByTestId('project-chat-log');
+      expect(log.textContent).toMatch(/canceled/);
+    });
+    // Cancel button hidden once terminal
+    await waitFor(() => {
+      expect(screen.queryByTestId('project-run-cancel')).not.toBeInTheDocument();
+    });
+  });
+
+  it('handles cancel 409 already-terminal by refreshing run status', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    createProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-term409', status: 'running' },
+    });
+    streamProjectRunEvents.mockImplementation(() => () => {});
+    cancelProjectRun.mockResolvedValue({
+      ok: false,
+      error: 'Run already terminal',
+    });
+    getProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-term409', status: 'succeeded', error: null },
+    });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('project.chat'), 'already done');
+    await user.click(screen.getByRole('button', { name: 'project.chatSend' }));
+
+    await waitFor(() => expect(screen.getByTestId('project-run-cancel')).toBeInTheDocument());
+    await user.click(screen.getByTestId('project-run-cancel'));
+
+    await waitFor(() => {
+      expect(cancelProjectRun).toHaveBeenCalledWith('run-term409');
+      expect(getProjectRun).toHaveBeenCalledWith('run-term409');
+      expect(screen.getByTestId('project-run-status')).toHaveTextContent('succeeded');
+      expect(screen.getByTestId('project-chat-log').textContent).toMatch(/succeeded/);
+    });
   });
 
   it('rejects chat prompts containing null bytes', async () => {

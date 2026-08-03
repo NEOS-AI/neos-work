@@ -1,5 +1,11 @@
 /**
  * Minimal browser API client for NEOS daemon.
+ *
+ * Envelope policy:
+ * - **Mutating** methods (POST/PUT/PATCH/DELETE) use `requestEnvelope` — never throw
+ *   on HTTP status; return `{ ok, data?, error? }`. Callers check `res.ok`.
+ * - **GET/read** methods may keep throwing `ApiError` via `request()` for simpler load paths.
+ * - Network/abort failures still reject the promise (both helpers).
  */
 
 import type {
@@ -47,8 +53,10 @@ export class WebApiClient {
   }
 
   /**
-   * Parse JSON envelope. Never throws on HTTP 4xx/5xx — returns `{ ok: false, error, data }`.
-   * Network/abort failures still reject. Used by collab APIs that need 409 `data.holder`.
+   * Mutating-request helper: never throws on HTTP 4xx/5xx.
+   * Returns `{ ok: false, error?, data? }` so callers can surface conflicts (e.g. 409 holder).
+   * Network/abort failures still reject.
+   * @see request for GET/read paths that throw ApiError on non-OK HTTP
    */
   private async requestEnvelope<T>(
     method: string,
@@ -82,6 +90,13 @@ export class WebApiClient {
     }
   }
 
+  /**
+   * Read-request helper: throws `ApiError` on non-OK HTTP status.
+   * Prefer for GET/load paths where try/catch is enough. Mutates should use
+   * `requestEnvelope` instead so callers can check `res.ok` without try/catch.
+   * Network/abort failures still reject.
+   * @see requestEnvelope for POST/PUT/PATCH/DELETE
+   */
   async request<T>(method: string, path: string, body?: unknown): Promise<ApiEnvelope<T>> {
     const res = await fetch(this.url(path), {
       method,
@@ -231,13 +246,17 @@ export class WebApiClient {
     );
   }
 
+  /**
+   * POST /api/runs — start an agent run.
+   * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   */
   createRun(input: {
     projectId: string;
     prompt: string;
     agentId?: string;
     editContext?: unknown;
   }): Promise<ApiEnvelope<{ id?: string; status?: string }>> {
-    return this.request('POST', '/api/runs', input);
+    return this.requestEnvelope('POST', '/api/runs', input);
   }
 
   getRun(runId: string): Promise<ApiEnvelope<{ id?: string; status?: string; projectId?: string }>> {
