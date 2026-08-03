@@ -15,7 +15,12 @@ import {
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
-import type { SelectionState } from '@neos-work/shared';
+import {
+  isTerminalRunStatus,
+  type ProjectRunEvent,
+  type ProjectRunSummary,
+  type SelectionState,
+} from '@neos-work/shared';
 import {
   formatPresenceLeaveMessage,
   PresencePeersBar,
@@ -63,25 +68,9 @@ export function ProjectDetail() {
   } | null>(null);
   const [revisionBusy, setRevisionBusy] = useState(false);
   /** Project agent runs (list / events / cancel). */
-  type RunListItem = {
-    id: string;
-    status: string;
-    agentId?: string | null;
-    projectId?: string | null;
-    prompt?: string;
-    error?: string | null;
-    createdAt?: string;
-    eventCount?: number;
-  };
-  type RunEventItem = {
-    id: string;
-    type: string;
-    ts: string;
-    data?: unknown;
-  };
-  const [runs, setRuns] = useState<RunListItem[]>([]);
+  const [runs, setRuns] = useState<ProjectRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [runEvents, setRunEvents] = useState<RunEventItem[]>([]);
+  const [runEvents, setRunEvents] = useState<ProjectRunEvent[]>([]);
   const [runsBusy, setRunsBusy] = useState(false);
   /** Collab presence (v0.6 M1) — self + other peers. */
   const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
@@ -611,16 +600,6 @@ export function ProjectDetail() {
     }
   };
 
-  const TERMINAL_RUN_STATUSES = useMemo(
-    () => new Set(['succeeded', 'failed', 'canceled', 'cancelled', 'error']),
-    [],
-  );
-
-  const isRunTerminal = useCallback(
-    (status: string) => TERMINAL_RUN_STATUSES.has(status.toLowerCase()),
-    [TERMINAL_RUN_STATUSES],
-  );
-
   const loadRuns = useCallback(async () => {
     if (!id) {
       setRuns([]);
@@ -810,7 +789,7 @@ export function ProjectDetail() {
             st.data && typeof st.data === 'object'
               ? String((st.data as { status?: string }).status ?? '')
               : '';
-          if (isRunTerminal(status)) {
+          if (isTerminalRunStatus(status)) {
             setStatus(status === 'succeeded' ? 'Run finished' : `Run ${status}`);
             if (status.toLowerCase() === 'succeeded') {
               await reloadOpenFileFromDisk();
@@ -1115,7 +1094,7 @@ export function ProjectDetail() {
             ) : (
               <ul className="list" style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {runs.map((r) => {
-                  const terminal = isRunTerminal(r.status);
+                  const terminal = isTerminalRunStatus(r.status);
                   const promptSlice = (r.prompt ?? '').replace(/[\0\r\n]+/g, ' ').slice(0, 48);
                   return (
                     <li

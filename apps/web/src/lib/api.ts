@@ -14,6 +14,8 @@ import type {
   ProjectFileEntry,
   ProjectFileEventPayload,
   ProjectFileWriteResult,
+  ProjectRunEvent,
+  ProjectRunSummary,
 } from '@neos-work/shared';
 
 export interface ApiEnvelope<T = unknown> {
@@ -255,29 +257,16 @@ export class WebApiClient {
     prompt: string;
     agentId?: string;
     editContext?: unknown;
-  }): Promise<ApiEnvelope<{ id?: string; status?: string }>> {
+  }): Promise<ApiEnvelope<ProjectRunSummary>> {
     return this.requestEnvelope('POST', '/api/runs', input);
   }
 
-  getRun(runId: string): Promise<ApiEnvelope<{ id?: string; status?: string; projectId?: string }>> {
+  getRun(runId: string): Promise<ApiEnvelope<ProjectRunSummary>> {
     return this.request('GET', `/api/runs/${encodeURIComponent(runId)}`);
   }
 
   /** GET /api/runs?projectId= — list runs for a project. */
-  listRuns(projectId: string): Promise<
-    ApiEnvelope<
-      Array<{
-        id: string;
-        status: string;
-        agentId?: string | null;
-        projectId?: string | null;
-        prompt?: string;
-        error?: string | null;
-        createdAt?: string;
-        eventCount?: number;
-      }>
-    >
-  > {
+  listRuns(projectId: string): Promise<ApiEnvelope<ProjectRunSummary[]>> {
     return this.request(
       'GET',
       `/api/runs?projectId=${encodeURIComponent(projectId)}`,
@@ -288,16 +277,7 @@ export class WebApiClient {
   listRunEvents(
     runId: string,
     after?: string,
-  ): Promise<
-    ApiEnvelope<
-      Array<{
-        id: string;
-        type: string;
-        ts: string;
-        data?: unknown;
-      }>
-    >
-  > {
+  ): Promise<ApiEnvelope<ProjectRunEvent[]>> {
     let qs = '';
     if (after != null && after !== '') {
       if (typeof after === 'string' && !/[\0\r\n]/.test(after)) {
@@ -315,7 +295,7 @@ export class WebApiClient {
    * POST /api/runs/:id/cancel
    * Uses requestEnvelope so 409 (already terminal) does not throw.
    */
-  cancelRun(runId: string): Promise<ApiEnvelope<{ id?: string; status?: string }>> {
+  cancelRun(runId: string): Promise<ApiEnvelope<ProjectRunSummary>> {
     return this.requestEnvelope(
       'POST',
       `/api/runs/${encodeURIComponent(runId)}/cancel`,

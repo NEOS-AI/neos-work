@@ -14,6 +14,17 @@ export type {
   StreamFormat,
 } from './types.js';
 
+/** Re-export shared run helpers for server/UI consumers of agent-runtime. */
+export {
+  isActiveRunStatus,
+  isTerminalRunStatus,
+  normalizeRunStatus,
+  type ProjectRunEvent,
+  type ProjectRunEventType,
+  type ProjectRunStatus,
+  type ProjectRunSummary,
+} from '@neos-work/shared';
+
 export {
   AGENT_CLI_DEFS,
   getDefById,

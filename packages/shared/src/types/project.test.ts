@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isActiveRunStatus,
   isEditContextSelectionLines,
   isEditContextSelectionSelector,
+  isTerminalRunStatus,
   normalizeEditContext,
+  normalizeRunStatus,
   type DesignProject,
   type EditContext,
   type FileRevision,
@@ -114,5 +117,25 @@ describe('Design Project contracts (type smoke)', () => {
     expect(comment.selector).toContain('main');
     expect(layer.children).toEqual([]);
     expect(edit.mode).toBe('patch');
+  });
+});
+
+describe('run status helpers', () => {
+  it('isTerminalRunStatus covers canonical + aliases', () => {
+    expect(isTerminalRunStatus('succeeded')).toBe(true);
+    expect(isTerminalRunStatus('FAILED')).toBe(true);
+    expect(isTerminalRunStatus('canceled')).toBe(true);
+    expect(isTerminalRunStatus('cancelled')).toBe(true);
+    expect(isTerminalRunStatus('error')).toBe(true);
+    expect(isTerminalRunStatus('running')).toBe(false);
+    expect(isTerminalRunStatus(null)).toBe(false);
+  });
+
+  it('isActiveRunStatus and normalizeRunStatus', () => {
+    expect(isActiveRunStatus('running')).toBe(true);
+    expect(isActiveRunStatus('succeeded')).toBe(false);
+    expect(normalizeRunStatus('cancelled')).toBe('canceled');
+    expect(normalizeRunStatus('ERROR')).toBe('failed');
+    expect(normalizeRunStatus('running')).toBe('running');
   });
 });

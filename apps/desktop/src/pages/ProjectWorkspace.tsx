@@ -17,7 +17,10 @@ import {
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
-import type { SelectionState } from '@neos-work/shared';
+import {
+  isTerminalRunStatus,
+  type SelectionState,
+} from '@neos-work/shared';
 import {
   formatPresenceLeaveMessage,
   PresencePeersBar,
@@ -930,12 +933,6 @@ export function ProjectWorkspace() {
     setChatLog((prev) => [...prev.slice(-200), safe]);
   }, []);
 
-  const isRunTerminalStatus = useCallback((status: string | null | undefined) => {
-    if (!status) return false;
-    const s = status.toLowerCase();
-    return s === 'succeeded' || s === 'failed' || s === 'canceled' || s === 'cancelled' || s === 'error';
-  }, []);
-
   const handleCancelRun = useCallback(async () => {
     if (!client || !activeRunId) return;
     runCancelRequestedRef.current = true;
@@ -953,7 +950,7 @@ export function ProjectWorkspace() {
         const st = await client.getProjectRun(activeRunId);
         if (st.ok && st.data) {
           setRunStatus(st.data.status);
-          if (isRunTerminalStatus(st.data.status)) {
+          if (isTerminalRunStatus(st.data.status)) {
             appendLog(
               `✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`,
             );
@@ -976,7 +973,7 @@ export function ProjectWorkspace() {
     } finally {
       setChatBusy(false);
     }
-  }, [client, activeRunId, appendLog, isRunTerminalStatus, t]);
+  }, [client, activeRunId, appendLog, t]);
 
   const handleChatSend = useCallback(async () => {
     if (!client || !projectId) return;
@@ -1041,7 +1038,7 @@ export function ProjectWorkspace() {
 
       const applyTerminalStatus = async (): Promise<boolean> => {
         const st = await client.getProjectRun(runId);
-        if (st.ok && st.data && isRunTerminalStatus(st.data.status)) {
+        if (st.ok && st.data && isTerminalRunStatus(st.data.status)) {
           setRunStatus(st.data.status);
           appendLog(`✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`);
           // Reload files if CLI may have written
@@ -1130,7 +1127,6 @@ export function ProjectWorkspace() {
     selectDetail,
     t,
     appendLog,
-    isRunTerminalStatus,
   ]);
 
   const fileTree = useMemo(() => {
@@ -1446,7 +1442,7 @@ export function ProjectWorkspace() {
                   {chatBusy ? t('common.loading') : t('project.chatSend')}
                 </button>
                 {activeRunId
-                  && (chatBusy || (runStatus != null && !isRunTerminalStatus(runStatus))) && (
+                  && (chatBusy || (runStatus != null && !isTerminalRunStatus(runStatus))) && (
                   <button
                     type="button"
                     data-testid="project-run-cancel"

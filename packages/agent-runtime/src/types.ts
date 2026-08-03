@@ -2,6 +2,12 @@
  * Coding-agent CLI registry types (v0.5 Task 2 / PLAN_FOR_V0_5_0).
  */
 
+import type {
+  ProjectRunEvent,
+  ProjectRunEventType,
+  ProjectRunStatus,
+} from '@neos-work/shared';
+
 export type StreamFormat = 'text' | 'jsonl' | 'acp';
 
 export type LaunchMode = 'argv' | 'stdin';
@@ -67,31 +73,16 @@ export interface BuildLaunchResult {
   stdinPayload?: string;
 }
 
-/** In-memory run status (Task 3 shared with project runs). */
-export type RuntimeRunStatus =
-  | 'queued'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'canceled';
+/**
+ * In-memory run status (Task 3 shared with project runs).
+ * Alias of shared ProjectRunStatus — single wire vocabulary with FE clients.
+ */
+export type RuntimeRunStatus = ProjectRunStatus;
 
-export type RuntimeRunEventType =
-  | 'run.started'
-  | 'run.stdout'
-  | 'run.stderr'
-  | 'run.progress'
-  | 'run.tool'
-  | 'run.files_changed'
-  | 'run.succeeded'
-  | 'run.failed'
-  | 'run.canceled';
+/** Alias of shared ProjectRunEventType. */
+export type RuntimeRunEventType = ProjectRunEventType;
 
-export interface RuntimeRunEvent {
-  id: string;
-  type: RuntimeRunEventType;
-  ts: string;
-  data?: unknown;
-}
+export type RuntimeRunEvent = ProjectRunEvent;
 
 export interface RuntimeRunRecord {
   id: string;

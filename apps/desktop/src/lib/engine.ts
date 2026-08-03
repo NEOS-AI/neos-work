@@ -9,9 +9,17 @@ import type {
   ProjectFileContent,
   ProjectFileEventPayload,
   ProjectFileWriteResult,
+  ProjectRunEvent,
+  ProjectRunSummary,
 } from '@neos-work/shared';
 
-export { normalizeProjectRelPath } from '@neos-work/shared';
+export {
+  isActiveRunStatus,
+  isTerminalRunStatus,
+  normalizeProjectRelPath,
+  normalizeRunStatus,
+} from '@neos-work/shared';
+export type { ProjectRunEvent, ProjectRunStatus, ProjectRunSummary } from '@neos-work/shared';
 
 /**
  * Extract SSE `data:` payload. Rejects null-byte lines (control injection);
@@ -1854,17 +1862,7 @@ export class EngineClient {
     editContext?: unknown;
     dryRun?: boolean;
     execute?: boolean;
-  }): Promise<
-    ApiResponse<{
-      id: string;
-      status: string;
-      agentId?: string | null;
-      projectId?: string | null;
-      prompt?: string;
-      error?: string | null;
-      createdAt: string;
-    }>
-  > {
+  }): Promise<ApiResponse<ProjectRunSummary>> {
     if (typeof input.prompt !== 'string' || /\0/.test(input.prompt)) {
       return { ok: false, error: 'Invalid prompt' };
     }
@@ -1902,17 +1900,7 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  async getProjectRun(runId: string): Promise<
-    ApiResponse<{
-      id: string;
-      status: string;
-      agentId?: string | null;
-      projectId?: string | null;
-      prompt?: string;
-      error?: string | null;
-      eventCount?: number;
-    }>
-  > {
+  async getProjectRun(runId: string): Promise<ApiResponse<ProjectRunSummary>> {
     const seg = this.pathSegment(runId);
     if (!seg) return this.invalidIdResponse('run id');
     const res = await fetch(`${this.baseUrl}/api/runs/${seg}`, { headers: this.getHeaders() });
@@ -1922,7 +1910,7 @@ export class EngineClient {
   async listProjectRunEvents(
     runId: string,
     after?: string,
-  ): Promise<ApiResponse<Array<{ id: string; type: string; ts: string; data?: unknown }>>> {
+  ): Promise<ApiResponse<ProjectRunEvent[]>> {
     const seg = this.pathSegment(runId);
     if (!seg) return this.invalidIdResponse('run id');
     let qs = '';
@@ -2023,7 +2011,7 @@ export class EngineClient {
     return () => controller.abort();
   }
 
-  async cancelProjectRun(runId: string): Promise<ApiResponse<{ id: string; status: string }>> {
+  async cancelProjectRun(runId: string): Promise<ApiResponse<ProjectRunSummary>> {
     const seg = this.pathSegment(runId);
     if (!seg) return this.invalidIdResponse('run id');
     const res = await fetch(`${this.baseUrl}/api/runs/${seg}/cancel`, {

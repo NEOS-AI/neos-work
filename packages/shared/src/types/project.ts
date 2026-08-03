@@ -227,7 +227,7 @@ export function normalizeEditContext(raw: unknown): EditContext | null {
   return { filePath, selection, snippet, mode };
 }
 
-// ── Runs (project chat + shared run registry shape) ────────
+// ── Runs (project chat + shared run registry / /api/runs wire) ────────
 
 export type ProjectRunStatus =
   | 'queued'
@@ -235,6 +235,45 @@ export type ProjectRunStatus =
   | 'succeeded'
   | 'failed'
   | 'canceled';
+
+/** SSE / event-log type strings for project agent runs. */
+export type ProjectRunEventType =
+  | 'run.started'
+  | 'run.stdout'
+  | 'run.stderr'
+  | 'run.progress'
+  | 'run.tool'
+  | 'run.files_changed'
+  | 'run.succeeded'
+  | 'run.failed'
+  | 'run.canceled';
+
+export interface ProjectRunEvent {
+  id: string;
+  type: ProjectRunEventType | string;
+  ts: string;
+  data?: unknown;
+}
+
+/**
+ * Public run summary for list/get/create/cancel responses.
+ * Prefer this over full ProjectRun when events are not inlined (eventCount only).
+ */
+export interface ProjectRunSummary {
+  id: string;
+  status: ProjectRunStatus | string;
+  agentId?: string | null;
+  projectId?: string | null;
+  conversationId?: string | null;
+  prompt?: string;
+  editContext?: EditContext | unknown | null;
+  provider?: string | null;
+  error?: string | null;
+  createdAt?: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  eventCount?: number;
+}
 
 export interface ProjectRun {
   id: string;
@@ -249,6 +288,48 @@ export interface ProjectRun {
   createdAt: string;
   startedAt?: string | null;
   completedAt?: string | null;
+}
+
+const RUN_TERMINAL = new Set([
+  'succeeded',
+  'failed',
+  'canceled',
+  'cancelled',
+  'error',
+]);
+
+const RUN_ACTIVE = new Set(['queued', 'running', 'starting', 'pending']);
+
+/** True when status is terminal (including common wire/UI aliases). */
+export function isTerminalRunStatus(status: string | null | undefined): boolean {
+  if (!status || typeof status !== 'string') return false;
+  return RUN_TERMINAL.has(status.trim().toLowerCase());
+}
+
+/** True when cancel / busy UI still applies. */
+export function isActiveRunStatus(status: string | null | undefined): boolean {
+  if (!status || typeof status !== 'string') return false;
+  const s = status.trim().toLowerCase();
+  if (RUN_TERMINAL.has(s)) return false;
+  return RUN_ACTIVE.has(s) || s.length > 0;
+}
+
+/** Map loose status strings to a canonical ProjectRunStatus when possible. */
+export function normalizeRunStatus(status: string | null | undefined): ProjectRunStatus | string {
+  if (!status || typeof status !== 'string') return 'queued';
+  const s = status.trim().toLowerCase();
+  if (s === 'cancelled') return 'canceled';
+  if (s === 'error') return 'failed';
+  if (
+    s === 'queued'
+    || s === 'running'
+    || s === 'succeeded'
+    || s === 'failed'
+    || s === 'canceled'
+  ) {
+    return s;
+  }
+  return status.trim();
 }
 
 // ── Live artifact (project-scoped; full CRUD in M4 / Task 9) ────────

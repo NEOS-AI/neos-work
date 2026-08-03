@@ -18,7 +18,7 @@ import {
   getDefById,
   getGlobalRunRegistry,
 } from '@neos-work/agent-runtime';
-import { normalizeEditContext } from '@neos-work/shared';
+import { normalizeEditContext, type ProjectRunSummary } from '@neos-work/shared';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 import { getProject, listPreviewComments } from '../db/projects.js';
@@ -55,7 +55,7 @@ function publicRun(record: {
   startedAt?: string | null;
   completedAt?: string | null;
   events: unknown[];
-}) {
+}): ProjectRunSummary {
   return {
     id: record.id,
     status: record.status,
