@@ -355,7 +355,7 @@ export function scrubSecretsFromText(raw: unknown, knownSecrets: string[] = []):
     }
   }
   // Common API token shapes
-  text = text.replace(/\b(Bearer\s+)[A-Za-z0-9._\-]{8,}/gi, '$1***');
+  text = text.replace(/\b(Bearer\s+)[A-Za-z0-9._-]{8,}/gi, '$1***');
   text = text.replace(/\b(sk-[A-Za-z0-9]{8,})/g, (m) => maskSecret(m));
   text = text.replace(/\b(xai-[A-Za-z0-9]{8,})/g, (m) => maskSecret(m));
   return text.slice(0, 2_000);

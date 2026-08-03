@@ -1,5 +1,6 @@
 /**
- * Preview canvas overlay (v0.6 M2 move + v0.7 M0 resize + v0.7 M3 multi + v0.8 M2 group resize).
+ * Preview canvas overlay (v0.6 M2 move + v0.7 M0 resize + v0.7 M3 multi +
+ * v0.8 M2 group resize + v0.8.5 uniform Shift + peer frames).
  * Coordinates are relative to the overlay host (iframe outer box).
  */
 
@@ -10,14 +11,30 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from 'react';
 import { computeGroupResizeScales, scaleBBoxFromAnchor } from './canvas-style.js';
 
 export type CanvasBBox = { x: number; y: number; width: number; height: number };
 
+/** Peer awareness frames on canvas (v0.8.5). Non-interactive dashed outlines. */
+export type PeerCanvasFrame = {
+  colorHint: number;
+  bboxes: CanvasBBox[];
+  label?: string;
+};
+
 export type CanvasTransformEnd =
   | { kind: 'move'; dx: number; dy: number }
-  | { kind: 'resize'; dw: number; dh: number; baseWidth: number; baseHeight: number };
+  | {
+      kind: 'resize';
+      dw: number;
+      dh: number;
+      baseWidth: number;
+      baseHeight: number;
+      /** Shift held → uniform sx=sy for multi group scale (v0.8.5). */
+      uniform?: boolean;
+    };
 
 export interface CanvasOverlayProps {
   enabled: boolean;
@@ -28,6 +45,11 @@ export interface CanvasOverlayProps {
    * Move applies to all; resize scales the group (v0.8 M2).
    */
   extraBboxes?: CanvasBBox[];
+  /**
+   * Peer multi-select / selection outlines (v0.8.5).
+   * Host supplies measured bboxes; skipped when empty.
+   */
+  peerFrames?: PeerCanvasFrame[];
   /** @deprecated prefer onTransformEnd */
   onDragEnd?: (dx: number, dy: number) => void;
   onTransformEnd?: (t: CanvasTransformEnd) => void;
@@ -47,16 +69,89 @@ type Gesture =
       dh: number;
       baseW: number;
       baseH: number;
+      /** Shift held during multi-select resize → uniform sx=sy. */
+      uniform: boolean;
     };
 
 function validBbox(b: CanvasBBox | null | undefined): b is CanvasBBox {
   return Boolean(b && b.width > 0 && b.height > 0);
 }
 
+function peerStroke(colorHint: number): string {
+  const h = ((Number.isFinite(colorHint) ? colorHint : 220) % 360 + 360) % 360;
+  return `hsl(${h} 70% 55%)`;
+}
+
+function peerFill(colorHint: number): string {
+  const h = ((Number.isFinite(colorHint) ? colorHint : 220) % 360 + 360) % 360;
+  return `hsl(${h} 70% 55% / 0.08)`;
+}
+
+function renderPeerFrames(frames: PeerCanvasFrame[]): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  frames.forEach((peer, pi) => {
+    const boxes = peer.bboxes.filter(validBbox);
+    if (!boxes.length) return;
+    const stroke = peerStroke(peer.colorHint);
+    const fill = peerFill(peer.colorHint);
+    boxes.forEach((b, bi) => {
+      nodes.push(
+        <div
+          key={`peer-${pi}-${bi}-${Math.round(b.x)}-${Math.round(b.y)}`}
+          data-testid="canvas-overlay-peer-frame"
+          data-color-hint={String(peer.colorHint)}
+          role="presentation"
+          style={{
+            position: 'absolute',
+            left: b.x,
+            top: b.y,
+            width: b.width,
+            height: b.height,
+            boxSizing: 'border-box',
+            border: `2px dashed ${stroke}`,
+            background: fill,
+            pointerEvents: 'none',
+            borderRadius: 2,
+          }}
+          title={peer.label ? `Peer: ${peer.label}` : 'Peer selection'}
+        />,
+      );
+    });
+    if (peer.label && boxes[0]) {
+      const b0 = boxes[0];
+      nodes.push(
+        <span
+          key={`peer-label-${pi}`}
+          data-testid="canvas-overlay-peer-label"
+          style={{
+            position: 'absolute',
+            left: b0.x,
+            top: Math.max(0, b0.y - 16),
+            fontSize: 9,
+            padding: '0 4px',
+            borderRadius: 3,
+            background: stroke,
+            color: '#fff',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            maxWidth: 120,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {peer.label}
+        </span>,
+      );
+    }
+  });
+  return nodes;
+}
+
 export function CanvasOverlay({
   enabled,
   bbox,
   extraBboxes = [],
+  peerFrames = [],
   onDragEnd,
   onTransformEnd,
   onDrag,
@@ -72,6 +167,7 @@ export function CanvasOverlay({
   onDragEndRef.current = onDragEnd;
   const onTransformEndRef = useRef(onTransformEnd);
   onTransformEndRef.current = onTransformEnd;
+  const multiCountRef = useRef(1);
 
   const onMouseMove = useCallback((e: MouseEvent) => {
     const g = gestureRef.current;
@@ -84,37 +180,44 @@ export function CanvasOverlay({
     } else {
       const dw = e.clientX - g.startX;
       const dh = e.clientY - g.startY;
-      setGesture({ ...g, dw, dh });
+      // Multi-select only: Shift locks uniform sx=sy (v0.8.5)
+      const uniform = multiCountRef.current > 1 && Boolean(e.shiftKey);
+      setGesture({ ...g, dw, dh, uniform });
     }
   }, []);
 
-  const onMouseUp = useCallback(() => {
-    const g = gestureRef.current;
-    setGesture(null);
-    window.removeEventListener('mousemove', onMouseMove);
-    window.removeEventListener('mouseup', onMouseUp);
-    if (!g) return;
-    if (g.mode === 'move') {
-      const dx = Math.round(g.dx);
-      const dy = Math.round(g.dy);
-      if (dx !== 0 || dy !== 0) {
-        onTransformEndRef.current?.({ kind: 'move', dx, dy });
-        onDragEndRef.current?.(dx, dy);
+  const onMouseUp = useCallback(
+    (e: MouseEvent) => {
+      const g = gestureRef.current;
+      setGesture(null);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      if (!g) return;
+      if (g.mode === 'move') {
+        const dx = Math.round(g.dx);
+        const dy = Math.round(g.dy);
+        if (dx !== 0 || dy !== 0) {
+          onTransformEndRef.current?.({ kind: 'move', dx, dy });
+          onDragEndRef.current?.(dx, dy);
+        }
+      } else {
+        const dw = Math.round(g.dw);
+        const dh = Math.round(g.dh);
+        if (dw !== 0 || dh !== 0) {
+          const uniform = multiCountRef.current > 1 && Boolean(e.shiftKey || g.uniform);
+          onTransformEndRef.current?.({
+            kind: 'resize',
+            dw,
+            dh,
+            baseWidth: g.baseW,
+            baseHeight: g.baseH,
+            uniform: uniform || undefined,
+          });
+        }
       }
-    } else {
-      const dw = Math.round(g.dw);
-      const dh = Math.round(g.dh);
-      if (dw !== 0 || dh !== 0) {
-        onTransformEndRef.current?.({
-          kind: 'resize',
-          dw,
-          dh,
-          baseWidth: g.baseW,
-          baseHeight: g.baseH,
-        });
-      }
-    }
-  }, [onMouseMove]);
+    },
+    [onMouseMove],
+  );
 
   useEffect(() => {
     return () => {
@@ -123,23 +226,47 @@ export function CanvasOverlay({
     };
   }, [onMouseMove, onMouseUp]);
 
+  const extras = (extraBboxes ?? []).filter(validBbox);
+  const multiCount = bbox && validBbox(bbox) ? 1 + extras.length : 0;
+  multiCountRef.current = multiCount || 1;
+
   if (!enabled || !validBbox(bbox)) {
-    return null;
+    // Still allow peer-only frames when no local selection
+    const peersOnly = (peerFrames ?? []).filter((p) => p.bboxes.some(validBbox));
+    if (!enabled || peersOnly.length === 0) return null;
+    return (
+      <div
+        className={className}
+        data-testid="canvas-overlay"
+        data-peer-only="1"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 5,
+          ...style,
+        }}
+      >
+        {renderPeerFrames(peersOnly)}
+      </div>
+    );
   }
 
-  const extras = extraBboxes.filter(validBbox);
-  const multiCount = 1 + extras.length;
   const moveDx = gesture?.mode === 'move' ? gesture.dx : 0;
   const moveDy = gesture?.mode === 'move' ? gesture.dy : 0;
 
-  let left = bbox.x + moveDx;
-  let top = bbox.y + moveDy;
+  const left = bbox.x + moveDx;
+  const top = bbox.y + moveDy;
   let width = bbox.width;
   let height = bbox.height;
   let resizeSx = 1;
   let resizeSy = 1;
+  let uniformLive = false;
   if (gesture?.mode === 'resize') {
-    const scaled = computeGroupResizeScales(bbox, gesture.dw, gesture.dh);
+    uniformLive = multiCount > 1 && gesture.uniform;
+    const scaled = computeGroupResizeScales(bbox, gesture.dw, gesture.dh, {
+      uniform: uniformLive,
+    });
     width = scaled.primaryNext.width;
     height = scaled.primaryNext.height;
     resizeSx = scaled.sx;
@@ -165,6 +292,7 @@ export function CanvasOverlay({
       dh: 0,
       baseW: bbox.width,
       baseH: bbox.height,
+      uniform: multiCount > 1 && Boolean(e.shiftKey),
     });
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -176,6 +304,7 @@ export function CanvasOverlay({
       data-testid="canvas-overlay"
       data-multi-count={multiCount}
       data-group-resize={multiCount > 1 ? '1' : undefined}
+      data-uniform-scale={uniformLive ? '1' : undefined}
       style={{
         position: 'absolute',
         inset: 0,
@@ -184,6 +313,7 @@ export function CanvasOverlay({
         ...style,
       }}
     >
+      {renderPeerFrames(peerFrames ?? [])}
       {extras.map((b, i) => {
         const shown =
           gesture?.mode === 'resize'
@@ -235,7 +365,7 @@ export function CanvasOverlay({
         }}
         title={
           multiCount > 1
-            ? `Drag to move ${multiCount} selected; SE corner scales group`
+            ? `Drag to move ${multiCount} selected; SE scales group (Shift = uniform)`
             : 'Drag to reposition; SE corner to resize'
         }
       >
@@ -254,7 +384,9 @@ export function CanvasOverlay({
             pointerEvents: 'none',
           }}
         >
-          {multiCount > 1 ? `${multiCount} selected · Move / Scale` : 'Move / Resize'}
+          {multiCount > 1
+            ? `${multiCount} selected · Move / Scale${uniformLive ? ' · 1:1' : ''}`
+            : 'Move / Resize'}
         </span>
         <div
           data-testid="canvas-overlay-resize-se"
@@ -273,7 +405,11 @@ export function CanvasOverlay({
             pointerEvents: 'auto',
             boxSizing: 'border-box',
           }}
-          title={multiCount > 1 ? 'Scale group' : 'Resize'}
+          title={
+            multiCount > 1
+              ? 'Scale group (hold Shift for uniform sx=sy)'
+              : 'Resize'
+          }
         />
       </div>
     </div>

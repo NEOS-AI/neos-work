@@ -85,9 +85,10 @@ describe('canvas-style', () => {
 
   it('computeGroupResizeScales and scaleBBoxFromAnchor (v0.8 M2)', () => {
     const primary = { x: 10, y: 20, width: 100, height: 50 };
-    const { sx, sy, primaryNext } = computeGroupResizeScales(primary, 100, 50);
+    const { sx, sy, primaryNext, uniform } = computeGroupResizeScales(primary, 100, 50);
     expect(sx).toBe(2);
     expect(sy).toBe(2);
+    expect(uniform).toBe(false);
     expect(primaryNext).toEqual({ x: 10, y: 20, width: 200, height: 100 });
 
     const child = scaleBBoxFromAnchor({ x: 60, y: 40, width: 20, height: 10 }, { x: 10, y: 20 }, sx, sy);
@@ -96,6 +97,29 @@ describe('canvas-style', () => {
     expect(child.y).toBe(60);
     expect(child.width).toBe(40);
     expect(child.height).toBe(20);
+  });
+
+  it('computeGroupResizeScales uniform Shift locks sx=sy (v0.8.5)', () => {
+    const primary = { x: 0, y: 0, width: 100, height: 50 };
+    // Free: dw=100 → sx=2, dh=0 → sy=1
+    const free = computeGroupResizeScales(primary, 100, 0);
+    expect(free.sx).toBe(2);
+    expect(free.sy).toBe(1);
+    expect(free.uniform).toBe(false);
+
+    // Uniform: dominant axis is width → s=2 for both
+    const uni = computeGroupResizeScales(primary, 100, 0, { uniform: true });
+    expect(uni.uniform).toBe(true);
+    expect(uni.sx).toBe(2);
+    expect(uni.sy).toBe(2);
+    expect(uni.primaryNext).toEqual({ x: 0, y: 0, width: 200, height: 100 });
+
+    // Dominant height: dw=10, dh=50 → sy = 100/50 = 2
+    const uniH = computeGroupResizeScales(primary, 10, 50, { uniform: true });
+    expect(uniH.sx).toBe(2);
+    expect(uniH.sy).toBe(2);
+    expect(uniH.primaryNext.width).toBe(200);
+    expect(uniH.primaryNext.height).toBe(100);
   });
 
   it('applyGroupResizeToHtml scales size and position', () => {

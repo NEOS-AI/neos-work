@@ -894,7 +894,7 @@ describe('WorkflowEditor page', () => {
   });
 
   it('shows stop control while running and stops on click', async () => {
-    let stopFn = vi.fn();
+    const stopFn = vi.fn();
     runWorkflow.mockImplementation(() => stopFn);
     renderEditor();
     await waitFor(() => expect(screen.getByText('Editor Flow')).toBeInTheDocument());

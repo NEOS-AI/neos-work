@@ -59,23 +59,35 @@ pnpm --filter @neos-work/cli exec neos status
 docker build -f deploy/Dockerfile -t neos-work:latest .
 ```
 
-## Helm (optional, v0.6 M5)
+## Helm (optional, v0.6 M5+)
 
 Single-replica chart under [`helm/neos-work/`](./helm/neos-work/):
 
 ```bash
-docker build -f deploy/Dockerfile -t neos-work:0.7.0 .
+docker build -f deploy/Dockerfile -t neos-work:0.8.5 .
 helm upgrade --install neos ./deploy/helm/neos-work \
   --set authToken="$(openssl rand -hex 32)" \
-  --set image.tag=0.7.0
+  --set image.tag=0.8.5
 ```
 
 See [helm/neos-work/README.md](./helm/neos-work/README.md). Not multi-tenant HA;
-collab is in-process (one replica).
+default collab is in-process (**one replica**).
+
+## Multi-replica collab (optional)
+
+For Redis-backed event fan-out and shared presence membership (`NEOS_COLLAB_BUS`,
+`NEOS_COLLAB_REDIS_URL`, `NEOS_COLLAB_PRESENCE`), see:
+
+- **Ops:** [docs/ops/multi-replica-collab.md](../docs/ops/multi-replica-collab.md)
+- **Release:** [docs/releases/v0.8.5.md](../docs/releases/v0.8.5.md)
+- **Migrations:** [v0.7](../docs/migration/v0.7.0.md) · [v0.8](../docs/migration/v0.8.0.md)
+
+Compose above remains single-process; the ops doc includes an optional
+docker-compose snippet with Redis.
 
 ## Notes
 
 - Desktop Tauri app is not included; use CLI or `apps/web` client.
 - Keep `NEOS_AUTH_TOKEN` secret; when set via env it is not printed in full (v0.6+).
 - Do not expose the engine to the public internet without TLS reverse proxy and network policy.
-- Migration: [docs/migration/v0.6.0.md](../docs/migration/v0.6.0.md)
+- Migration: [docs/migration/v0.8.0.md](../docs/migration/v0.8.0.md) (parent trains: [v0.7](../docs/migration/v0.7.0.md), [v0.6](../docs/migration/v0.6.0.md))

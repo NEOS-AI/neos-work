@@ -17,7 +17,7 @@ export interface LayersPanelProps {
   /** Source badge: live bridge snapshot vs HTML/JSX parse fallback. */
   source?: 'bridge' | 'parse' | 'jsx' | 'jsx-partial';
   /**
-   * Layer select. Second arg reports Shift/meta for multi-select (v0.7 M3).
+   * Layer select. Second arg reports Shift/meta/ctrl for multi-select (v0.7 M3 + v0.8.5).
    */
   onSelect?: (layer: LayerNode, opts?: { additive?: boolean }) => void;
   onHover?: (layer: LayerNode | null) => void;
@@ -103,7 +103,9 @@ function LayerRow({
         data-selected={selected ? '1' : undefined}
         data-multi-selected={multiSelected && !primarySelected ? '1' : undefined}
         onClick={(e) =>
-          onSelect?.(layer, { additive: Boolean(e.shiftKey || e.metaKey) })
+          onSelect?.(layer, {
+            additive: Boolean(e.shiftKey || e.metaKey || e.ctrlKey),
+          })
         }
         onMouseEnter={() => onHover?.(layer)}
         onMouseLeave={() => onHover?.(null)}

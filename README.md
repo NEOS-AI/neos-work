@@ -33,15 +33,16 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.6 migration:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md) · **v0.7 migration:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)  
 **v0.8 plan:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md) · **v0.8 migration:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md)  
-**Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — move + resize + Shift multi-select + group scale in Preview (HTML)
+**Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — move + resize + multi-select (Shift/Ctrl/Cmd) + group scale (Shift = uniform) + canvas undo in Preview (HTML)
 
 ---
 
 ## What's new in v0.8
 
 - **Shared presence membership** across engine replicas (bus + optional Redis registry)
-- Canvas **group resize** when multi-selecting
+- Canvas **group resize** when multi-selecting (Shift = uniform scale in 0.8.5)
 - Collab **multi-selection broadcast** (`selectors[]` awareness)
+- Canvas transform **undo** + peer outline frames API (0.8.5)
 - Migration + inventory: [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md)
 
 ---

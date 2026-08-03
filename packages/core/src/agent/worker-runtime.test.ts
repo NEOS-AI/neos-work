@@ -505,6 +505,8 @@ describe('runWorker / WorkerRuntime', () => {
       getModels: () => [],
       async *chat() {
         throw new Error('upstream LLM down');
+        // Unreachable: satisfies require-yield for async generator mock
+        yield { type: 'done' as const };
       },
       async validateApiKey() {
         return true;

@@ -44,7 +44,7 @@ export function safeError(error: unknown, context: string): string {
   if (ctx.length > LOG_CONTEXT_MAX) ctx = ctx.slice(0, LOG_CONTEXT_MAX);
   // Scrub control chars from log lines (log injection defense)
   let message = error instanceof Error ? error.message : String(error);
-  message = message.replace(/[\x00\r\n]/g, ' ');
+  message = message.split('\0').join(' ').replace(/[\r\n]/g, ' ');
   if (message.length > LOG_MESSAGE_MAX) message = message.slice(0, LOG_MESSAGE_MAX);
   console.error(`[${ctx}]`, message);
   return 'An internal error occurred';

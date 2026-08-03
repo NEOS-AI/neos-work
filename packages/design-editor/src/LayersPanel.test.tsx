@@ -75,6 +75,16 @@ describe('LayersPanel', () => {
       expect.objectContaining({ id: 'h1' }),
       expect.objectContaining({ additive: true }),
     );
+    fireEvent.click(screen.getByTestId('layer-row-h1'), { metaKey: true });
+    expect(onSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'h1' }),
+      expect.objectContaining({ additive: true }),
+    );
+    fireEvent.click(screen.getByTestId('layer-row-h1'), { ctrlKey: true });
+    expect(onSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'h1' }),
+      expect.objectContaining({ additive: true }),
+    );
     fireEvent.click(screen.getByTestId('layer-vis-h1'));
     expect(onVis).toHaveBeenCalledWith(expect.objectContaining({ id: 'h1' }), false);
   });

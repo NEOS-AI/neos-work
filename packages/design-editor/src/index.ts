@@ -68,6 +68,7 @@ export { CodeEditor, type CodeEditorProps } from './CodeEditor.js';
 export { LayersPanel, type LayersPanelProps } from './LayersPanel.js';
 export {
   DesignEditor,
+  CANVAS_UNDO_CAP,
   type DesignEditorMode,
   type DesignEditorProps,
 } from './DesignEditor.js';
@@ -89,4 +90,5 @@ export {
   type CanvasBBox,
   type CanvasOverlayProps,
   type CanvasTransformEnd,
+  type PeerCanvasFrame,
 } from './CanvasOverlay.js';

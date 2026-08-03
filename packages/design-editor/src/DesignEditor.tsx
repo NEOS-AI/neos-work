@@ -19,7 +19,11 @@ import {
   toggleVisibilityByNeosId,
 } from './html-layers.js';
 import { isJsxPath, parseJsxToLayerTree } from './jsx-layers.js';
-import { CanvasOverlay, type CanvasTransformEnd } from './CanvasOverlay.js';
+import {
+  CanvasOverlay,
+  type CanvasTransformEnd,
+  type PeerCanvasFrame,
+} from './CanvasOverlay.js';
 import {
   applyGroupResizeToHtml,
   applyPositionDeltaToHtml,
@@ -43,6 +47,9 @@ import {
 import type { BridgeInboundMessage, BridgeSelectPayload } from './bridge-types.js';
 
 export type DesignEditorMode = 'preview' | 'code' | 'split' | 'inspect';
+
+/** Cap for lightweight canvas-transform undo stack (v0.8.5). */
+export const CANVAS_UNDO_CAP = 20;
 
 export interface DesignEditorProps {
   buffer: EditorBufferState;
@@ -83,6 +90,11 @@ export interface DesignEditorProps {
    * Defaults to `isCanvasOverlayEnabled()` (NEOS_CANVAS_OVERLAY=1).
    */
   canvasOverlay?: boolean;
+  /**
+   * Peer selection outlines on canvas (v0.8.5).
+   * Host supplies measured bboxes; empty/undefined skips drawing.
+   */
+  peerCanvasFrames?: PeerCanvasFrame[];
   className?: string;
 }
 
@@ -130,6 +142,7 @@ export function DesignEditor({
   onEditWithAi,
   showLayers: showLayersProp,
   canvasOverlay: canvasOverlayProp,
+  peerCanvasFrames = [],
   className,
 }: DesignEditorProps) {
   const labels = { ...defaultLabels, ...labelsProp };
@@ -149,6 +162,13 @@ export function DesignEditor({
   /** Secondary multi-select entries (primary is `selection` / selectDetail). v0.7 M3 */
   const [multiExtras, setMultiExtras] = useState<MultiSelectEntry[]>([]);
   const iframeHostRef = useRef<HTMLDivElement>(null);
+  /** Lightweight canvas transform undo/redo (HTML snapshots only). v0.8.5 */
+  const canvasUndoRef = useRef<string[]>([]);
+  const canvasRedoRef = useRef<string[]>([]);
+  const bufferLocalRef = useRef(buffer.local);
+  bufferLocalRef.current = buffer.local;
+  const onEditRef = useRef(onEdit);
+  onEditRef.current = onEdit;
 
   const selection =
     controlledSelection !== undefined ? controlledSelection : internalSelection;
@@ -199,9 +219,11 @@ export function DesignEditor({
     [postHighlightMulti, setSelection],
   );
 
-  // Drop multi when file path changes
+  // Drop multi + canvas undo when file path changes
   useEffect(() => {
     clearMulti();
+    canvasUndoRef.current = [];
+    canvasRedoRef.current = [];
   }, [buffer.path, clearMulti]);
 
   const dirty = isDirty(buffer);
@@ -209,6 +231,7 @@ export function DesignEditor({
   const htmlLike = isHtmlPath(buffer.path);
   const jsxLike = isJsxPath(buffer.path);
   const showLayers = showLayersProp ?? isLayersPath(buffer.path);
+  const canvasOn = isCanvasOverlayEnabled(canvasOverlayProp) && htmlLike;
 
   const previewHtml = useMemo(() => {
     const base = toPreviewDocument(buffer.local, buffer.path);
@@ -323,6 +346,73 @@ export function DesignEditor({
     if (next !== buffer.local) onEdit?.(next);
   };
 
+  const pushCanvasUndo = (snapshot: string) => {
+    const stack = canvasUndoRef.current;
+    stack.push(snapshot);
+    if (stack.length > CANVAS_UNDO_CAP) {
+      stack.splice(0, stack.length - CANVAS_UNDO_CAP);
+    }
+    canvasRedoRef.current = [];
+  };
+
+  const undoCanvasTransform = useCallback(() => {
+    const stack = canvasUndoRef.current;
+    if (!stack.length) return;
+    const prev = stack.pop()!;
+    const current = bufferLocalRef.current;
+    canvasRedoRef.current.push(current);
+    if (canvasRedoRef.current.length > CANVAS_UNDO_CAP) {
+      canvasRedoRef.current.splice(0, canvasRedoRef.current.length - CANVAS_UNDO_CAP);
+    }
+    if (prev !== current) {
+      onEditRef.current?.(prev);
+      setBridgeLayers(null);
+      setReloadKey((k) => k + 1);
+    }
+  }, []);
+
+  const redoCanvasTransform = useCallback(() => {
+    const stack = canvasRedoRef.current;
+    if (!stack.length) return;
+    const next = stack.pop()!;
+    const current = bufferLocalRef.current;
+    canvasUndoRef.current.push(current);
+    if (canvasUndoRef.current.length > CANVAS_UNDO_CAP) {
+      canvasUndoRef.current.splice(0, canvasUndoRef.current.length - CANVAS_UNDO_CAP);
+    }
+    if (next !== current) {
+      onEditRef.current?.(next);
+      setBridgeLayers(null);
+      setReloadKey((k) => k + 1);
+    }
+  }, []);
+
+  // Cmd/Ctrl+Z undo, Shift+Cmd/Ctrl+Z redo for canvas transforms only (v0.8.5)
+  useEffect(() => {
+    if (!canvasOn) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z') return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t
+        && (t.tagName === 'TEXTAREA'
+          || t.tagName === 'INPUT'
+          || t.isContentEditable
+          || t.closest?.('.cm-editor')
+          || t.closest?.('[data-testid="code-editor"]'))
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) redoCanvasTransform();
+      else undoCanvasTransform();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [canvasOn, undoCanvasTransform, redoCanvasTransform]);
+
   const handleToggleVisibility = (layer: LayerNode, visible: boolean) => {
     let next = toggleVisibilityByNeosId(buffer.local, layer.id, visible);
     if (next === buffer.local) {
@@ -366,20 +456,23 @@ export function DesignEditor({
 
   const showPreview = mode === 'preview' || mode === 'split' || mode === 'inspect';
   const showCode = mode === 'code' || mode === 'split';
-  const canvasOn = isCanvasOverlayEnabled(canvasOverlayProp) && htmlLike;
 
-  const applyCanvasHtml = (mutate: (html: string) => string) => {
-    if (!buffer.path) return;
+  /** Apply canvas HTML mutation; snapshot pre-transform for Cmd+Z undo. Returns whether applied. */
+  const applyCanvasHtml = (mutate: (html: string) => string): boolean => {
+    if (!buffer.path) return false;
+    const snapshot = buffer.local;
     const layerId = selection?.layerId ?? null;
     let base = buffer.local;
     if (layerId && !base.includes(`data-neos-id="${layerId}"`)) {
       base = stampNeosIds(base);
     }
     const next = mutate(base);
-    if (next === base || next === buffer.local) return;
+    if (next === base || next === buffer.local) return false;
+    pushCanvasUndo(snapshot);
     applyHtmlEdit(next);
     setBridgeLayers(null);
     setReloadKey((k) => k + 1);
+    return true;
   };
 
   const multiEntriesForMove: MultiSelectEntry[] = (() => {
@@ -443,6 +536,7 @@ export function DesignEditor({
     }
 
     // v0.8 M2: multi-select → group scale from primary SE handle
+    // v0.8.5: Shift (t.uniform) → sx=sy
     const primaryBbox = selectDetail?.bbox;
     const groupMode = multiEntriesForMove.length > 1 && primaryBbox;
 
@@ -456,6 +550,7 @@ export function DesignEditor({
         },
         t.dw,
         t.dh,
+        { uniform: Boolean(t.uniform) },
       );
       const anchor = { x: primaryBbox.x, y: primaryBbox.y };
 
@@ -856,7 +951,7 @@ export function DesignEditor({
               </span>
               {mode === 'inspect' && (
                 <span style={{ fontSize: 10, color: '#a5b4fc' }}>
-                  click to select · shift+click multi
+                  click to select · shift/ctrl/cmd+click multi
                 </span>
               )}
               {canvasOn && multiSelectCount > 1 && (
@@ -887,9 +982,14 @@ export function DesignEditor({
                 onBridgeMessage={handleBridgeMessage}
               />
               <CanvasOverlay
-                enabled={canvasOn && Boolean(canvasBbox)}
+                enabled={
+                  canvasOn
+                  && (Boolean(canvasBbox)
+                    || (peerCanvasFrames?.some((p) => p.bboxes?.length) ?? false))
+                }
                 bbox={canvasBbox}
                 extraBboxes={canvasExtraBboxes}
+                peerFrames={peerCanvasFrames}
                 onDragEnd={handleCanvasDragEnd}
                 onTransformEnd={handleCanvasTransformEnd}
               />

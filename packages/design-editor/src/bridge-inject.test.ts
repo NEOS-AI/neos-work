@@ -20,6 +20,11 @@ describe('bridge-inject', () => {
     expect(script).toContain('additive');
     expect(script).toContain('multiPayloads');
   });
+
+  it('treats metaKey and ctrlKey as additive multi-select (v0.8.5)', () => {
+    const script = buildBridgeInjectScript();
+    expect(script).toMatch(/shiftKey\s*\|\|\s*ev\.metaKey\s*\|\|\s*ev\.ctrlKey/);
+  });
 });
 
 describe('injectBridgeIntoHtml placements', () => {

@@ -205,24 +205,46 @@ export function elementIdFromSelector(selector: string | null | undefined): stri
 export type GroupResizeBBox = { x: number; y: number; width: number; height: number };
 
 /**
- * Uniform-ish group scale from primary SE resize (v0.8 M2).
+ * Group scale from primary SE resize (v0.8 M2 + v0.8.5 uniform Shift).
  * Anchor = primary top-left (fixed). Scale sx/sy from primary base + delta.
+ * When `uniform` is true (Shift held during multi-select resize), forces sx=sy
+ * using the scale from the dominant pointer axis.
  * Each box gets scaled size and position relative to the anchor.
  */
 export function computeGroupResizeScales(
   primary: GroupResizeBBox,
   dw: number,
   dh: number,
-): { sx: number; sy: number; primaryNext: GroupResizeBBox } {
+  opts?: { uniform?: boolean },
+): { sx: number; sy: number; primaryNext: GroupResizeBBox; uniform: boolean } {
   const baseW = Math.max(1, primary.width);
   const baseH = Math.max(1, primary.height);
   const nextW = Math.max(8, Math.round(baseW + dw));
   const nextH = Math.max(8, Math.round(baseH + dh));
-  const sx = nextW / baseW;
-  const sy = nextH / baseH;
+  let sx = nextW / baseW;
+  let sy = nextH / baseH;
+  const uniform = Boolean(opts?.uniform);
+  if (uniform) {
+    // Dominant axis chooses the locked scale (SE drag feel).
+    const s = Math.abs(dw) >= Math.abs(dh) ? sx : sy;
+    sx = s;
+    sy = s;
+    return {
+      sx,
+      sy,
+      uniform: true,
+      primaryNext: {
+        x: primary.x,
+        y: primary.y,
+        width: Math.max(8, Math.round(baseW * s)),
+        height: Math.max(8, Math.round(baseH * s)),
+      },
+    };
+  }
   return {
     sx,
     sy,
+    uniform: false,
     primaryNext: {
       x: primary.x,
       y: primary.y,

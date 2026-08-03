@@ -28,7 +28,7 @@ function normalizeProjectId(projectId: string): string {
 
 function normalizePath(raw: string): string {
   if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
-  let p = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  const p = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '');
   if (!p || p.length > 1_000) return '';
   if (p.includes('..')) return '';
   return p;

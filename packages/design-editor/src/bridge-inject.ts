@@ -259,7 +259,7 @@ export function buildBridgeInjectScript(): string {
     ev.preventDefault();
     ev.stopPropagation();
     clearHover();
-    var additive = !!(ev.shiftKey || ev.metaKey);
+    var additive = !!(ev.shiftKey || ev.metaKey || ev.ctrlKey);
     if (additive) {
       var idx = indexOfSelectEl(t);
       if (idx >= 0) {
@@ -339,7 +339,7 @@ export function buildBridgeInjectScript(): string {
 
 /** Inject bridge script before </body> (or append if missing). */
 export function injectBridgeIntoHtml(html: string): string {
-  const script = `<script data-neos-bridge="1">${buildBridgeInjectScript()}<\/script>`;
+  const script = `<script data-neos-bridge="1">${buildBridgeInjectScript()}</script>`;
   // Avoid double-inject
   if (/data-neos-bridge\s*=\s*["']1["']/.test(html)) return html;
   if (/<\/body>/i.test(html)) {

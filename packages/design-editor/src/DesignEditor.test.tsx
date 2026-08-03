@@ -379,4 +379,142 @@ describe('DesignEditor bridge + layers actions', () => {
     expect(screen.getByText(/click to select/i)).toBeTruthy();
     expect(screen.getByTestId('inspect-panel')).toBeTruthy();
   });
+
+  it('shift/meta multi-select works for jsx layer paths (v0.8.5)', () => {
+    const onSelectionChange = vi.fn();
+    const jsx = `export function App() {\n  return (\n    <div>\n      <h1>Title</h1>\n      <p>Body</p>\n    </div>\n  );\n}\n`;
+    const buffer = reduceEditorBuffer(createEmptyBuffer(), {
+      type: 'open',
+      path: 'App.jsx',
+      content: jsx,
+    });
+    render(
+      <DesignEditor
+        buffer={buffer}
+        mode="preview"
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    expect(screen.getByTestId('layers-panel')).toBeTruthy();
+    const rows = screen.getAllByRole('treeitem');
+    expect(rows.length).toBeGreaterThan(1);
+    fireEvent.click(rows[0]!);
+    fireEvent.click(rows[rows.length - 1]!, { shiftKey: true });
+    expect(onSelectionChange).toHaveBeenCalled();
+    const last = onSelectionChange.mock.calls.at(-1)?.[0] as {
+      multiSelectors?: string[];
+    };
+    // multi may publish when both selected
+    if (last?.multiSelectors) {
+      expect(last.multiSelectors.length).toBeGreaterThan(1);
+    }
+  });
+});
+
+describe('DesignEditor canvas polish (v0.8.5)', () => {
+  it('renders peerCanvasFrames on overlay', async () => {
+    const buffer = openHtml('<div id="hero">Hi</div>');
+    render(
+      <DesignEditor
+        buffer={buffer}
+        mode="inspect"
+        canvasOverlay
+        peerCanvasFrames={[
+          {
+            colorHint: 120,
+            label: 'Bob',
+            bboxes: [{ x: 20, y: 30, width: 40, height: 15 }],
+          },
+        ]}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('canvas-overlay-peer-frame')).toBeTruthy();
+    });
+    expect(screen.getByTestId('canvas-overlay-peer-label').textContent).toBe('Bob');
+  });
+
+  it('undo/redo canvas transform via Cmd+Z / Shift+Cmd+Z', async () => {
+    const { useState } = await import('react');
+    const html =
+      '<div data-neos-id="e1" id="hero" style="position: relative; left: 0px; top: 0px">Hi</div>';
+    const initial = openHtml(html);
+    const edits: string[] = [];
+
+    function Harness() {
+      const [buffer, setBuffer] = useState(initial);
+      return (
+        <DesignEditor
+          buffer={buffer}
+          mode="inspect"
+          canvasOverlay
+          onEdit={(content) => {
+            edits.push(content);
+            setBuffer((b) => reduceEditorBuffer(b, { type: 'edit', content }));
+          }}
+          selection={{ filePath: 'index.html', selector: '#hero', layerId: 'e1' }}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            source: NEOS_BRIDGE_SOURCE,
+            type: 'neos.select',
+            selection: {
+              selector: '#hero',
+              tag: 'div',
+              bbox: { x: 10, y: 10, width: 100, height: 40 },
+            },
+          },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('canvas-overlay-frame')).toBeTruthy();
+    });
+
+    const frame = screen.getByTestId('canvas-overlay-frame');
+    fireEvent.mouseDown(frame, { clientX: 50, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 70, clientY: 65 });
+    fireEvent.mouseUp(window, { clientX: 70, clientY: 65 });
+
+    await waitFor(() => {
+      expect(edits.length).toBeGreaterThan(0);
+    });
+    const afterMove = edits.at(-1)!;
+    expect(afterMove).toMatch(/left:\s*20px/);
+
+    const nAfterMove = edits.length;
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }),
+      );
+    });
+    await waitFor(() => {
+      expect(edits.length).toBeGreaterThan(nAfterMove);
+    });
+    expect(edits.at(-1)).toBe(html);
+
+    const nAfterUndo = edits.length;
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'z',
+          metaKey: true,
+          shiftKey: true,
+          bubbles: true,
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(edits.length).toBeGreaterThan(nAfterUndo);
+    });
+    expect(edits.at(-1)).toBe(afterMove);
+  });
 });

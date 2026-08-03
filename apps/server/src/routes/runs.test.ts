@@ -1,4 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/** Prevent real CLI spawn / open handles from hanging the suite. */
+const spawnMock = vi.hoisted(() =>
+  vi.fn(async () => ({ output: 'done', exitCode: 0 })),
+);
+
+vi.mock('../lib/registry-spawn.js', () => ({
+  spawnRegistryAgent: (...args: unknown[]) => spawnMock(...args),
+  isLegacyCliId: (id: string) =>
+    id === 'cli-claude' || id === 'cli-gemini' || id === 'cli-codex',
+  loadAllPathOverrides: () => ({}),
+}));
+
 import { Hono } from 'hono';
 import { resetGlobalRunRegistry } from '@neos-work/agent-runtime';
 import runs from './runs.js';
@@ -31,6 +44,10 @@ function cleanup() {
 }
 
 afterEach(cleanup);
+beforeEach(() => {
+  spawnMock.mockReset();
+  spawnMock.mockResolvedValue({ output: 'done', exitCode: 0 });
+});
 
 describe('runs routes', () => {
   it('creates dry-run, lists events, cancels terminal 409', async () => {
