@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyGroupResizeToHtml,
   applyPositionDeltaToHtml,
   applySizeDeltaToHtml,
+  computeGroupResizeScales,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
   mergePositionDeltaIntoOpenTag,
   mergeSizeDeltaIntoOpenTag,
+  scaleBBoxFromAnchor,
 } from './canvas-style.js';
 
 describe('canvas-style', () => {
@@ -78,5 +81,33 @@ describe('canvas-style', () => {
     });
     expect(next).toMatch(/width:\s*85px/);
     expect(next).toMatch(/height:\s*45px/);
+  });
+
+  it('computeGroupResizeScales and scaleBBoxFromAnchor (v0.8 M2)', () => {
+    const primary = { x: 10, y: 20, width: 100, height: 50 };
+    const { sx, sy, primaryNext } = computeGroupResizeScales(primary, 100, 50);
+    expect(sx).toBe(2);
+    expect(sy).toBe(2);
+    expect(primaryNext).toEqual({ x: 10, y: 20, width: 200, height: 100 });
+
+    const child = scaleBBoxFromAnchor({ x: 60, y: 40, width: 20, height: 10 }, { x: 10, y: 20 }, sx, sy);
+    // offset (50, 20) * 2 → (100, 40) + anchor → (110, 60); size * 2
+    expect(child.x).toBe(110);
+    expect(child.y).toBe(60);
+    expect(child.width).toBe(40);
+    expect(child.height).toBe(20);
+  });
+
+  it('applyGroupResizeToHtml scales size and position', () => {
+    const html = '<div data-neos-id="c1" style="position: relative; left: 50px; top: 20px">X</div>';
+    const next = applyGroupResizeToHtml(html, {
+      neosId: 'c1',
+      from: { x: 50, y: 20, width: 40, height: 20 },
+      to: { x: 90, y: 40, width: 80, height: 40 },
+    });
+    expect(next).toMatch(/width:\s*80px/);
+    expect(next).toMatch(/height:\s*40px/);
+    expect(next).toMatch(/left:\s*90px/);
+    expect(next).toMatch(/top:\s*40px/);
   });
 });

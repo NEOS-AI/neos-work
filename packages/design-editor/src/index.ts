@@ -72,12 +72,16 @@ export {
 } from './DesignEditor.js';
 
 export {
+  applyGroupResizeToHtml,
   applyPositionDeltaToHtml,
   applySizeDeltaToHtml,
+  computeGroupResizeScales,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
   mergePositionDeltaIntoOpenTag,
   mergeSizeDeltaIntoOpenTag,
+  scaleBBoxFromAnchor,
+  type GroupResizeBBox,
 } from './canvas-style.js';
 export {
   CanvasOverlay,

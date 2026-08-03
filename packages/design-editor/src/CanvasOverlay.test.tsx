@@ -65,7 +65,31 @@ describe('CanvasOverlay', () => {
     );
     const root = container.querySelector('[data-testid="canvas-overlay"]') as HTMLElement;
     expect(root.getAttribute('data-multi-count')).toBe('2');
+    expect(root.getAttribute('data-group-resize')).toBe('1');
     expect(screen.getAllByTestId('canvas-overlay-extra-frame')).toHaveLength(1);
-    expect(screen.getByTestId('canvas-overlay-handle').textContent).toMatch(/2 selected/);
+    expect(screen.getByTestId('canvas-overlay-handle').textContent).toMatch(/Move \/ Scale/);
+  });
+
+  it('group-resize live preview scales extras with primary (v0.8 M2)', () => {
+    render(
+      <CanvasOverlay
+        enabled
+        bbox={{ x: 0, y: 0, width: 100, height: 50 }}
+        extraBboxes={[{ x: 50, y: 25, width: 20, height: 10 }]}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByTestId('canvas-overlay-resize-se'), {
+      clientX: 100,
+      clientY: 50,
+    });
+    // Double primary size
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 100 });
+    const extra = screen.getByTestId('canvas-overlay-extra-frame');
+    // offset (50,25)*2 → (100,50); size 40×20
+    expect(extra.style.left).toBe('100px');
+    expect(extra.style.top).toBe('50px');
+    expect(extra.style.width).toBe('40px');
+    expect(extra.style.height).toBe('20px');
+    fireEvent.mouseUp(window);
   });
 });

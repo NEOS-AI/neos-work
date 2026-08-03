@@ -201,3 +201,90 @@ export function elementIdFromSelector(selector: string | null | undefined): stri
   const m = /^#([A-Za-z][\w\-:.]*)$/.exec(selector.trim());
   return m?.[1] ?? null;
 }
+
+export type GroupResizeBBox = { x: number; y: number; width: number; height: number };
+
+/**
+ * Uniform-ish group scale from primary SE resize (v0.8 M2).
+ * Anchor = primary top-left (fixed). Scale sx/sy from primary base + delta.
+ * Each box gets scaled size and position relative to the anchor.
+ */
+export function computeGroupResizeScales(
+  primary: GroupResizeBBox,
+  dw: number,
+  dh: number,
+): { sx: number; sy: number; primaryNext: GroupResizeBBox } {
+  const baseW = Math.max(1, primary.width);
+  const baseH = Math.max(1, primary.height);
+  const nextW = Math.max(8, Math.round(baseW + dw));
+  const nextH = Math.max(8, Math.round(baseH + dh));
+  const sx = nextW / baseW;
+  const sy = nextH / baseH;
+  return {
+    sx,
+    sy,
+    primaryNext: {
+      x: primary.x,
+      y: primary.y,
+      width: nextW,
+      height: nextH,
+    },
+  };
+}
+
+/** Scale a bbox relative to primary top-left anchor. */
+export function scaleBBoxFromAnchor(
+  box: GroupResizeBBox,
+  anchor: { x: number; y: number },
+  sx: number,
+  sy: number,
+): GroupResizeBBox {
+  const nx = anchor.x + (box.x - anchor.x) * sx;
+  const ny = anchor.y + (box.y - anchor.y) * sy;
+  return {
+    x: nx,
+    y: ny,
+    width: Math.max(8, Math.round(box.width * sx)),
+    height: Math.max(8, Math.round(box.height * sy)),
+  };
+}
+
+/**
+ * Apply group resize to HTML for one element: size to target bbox + position delta.
+ */
+export function applyGroupResizeToHtml(
+  html: string,
+  opts: {
+    neosId?: string | null;
+    elementId?: string | null;
+    /** Previous layout box (for dw/dh and position delta). */
+    from: GroupResizeBBox;
+    /** Target layout box after scale. */
+    to: GroupResizeBBox;
+  },
+): string {
+  const dw = opts.to.width - opts.from.width;
+  const dh = opts.to.height - opts.from.height;
+  const dx = Math.round(opts.to.x - opts.from.x);
+  const dy = Math.round(opts.to.y - opts.from.y);
+  let next = html;
+  if (dw !== 0 || dh !== 0) {
+    next = applySizeDeltaToHtml(next, {
+      neosId: opts.neosId,
+      elementId: opts.elementId,
+      dw,
+      dh,
+      baseWidth: opts.from.width,
+      baseHeight: opts.from.height,
+    });
+  }
+  if (dx !== 0 || dy !== 0) {
+    next = applyPositionDeltaToHtml(next, {
+      neosId: opts.neosId,
+      elementId: opts.elementId,
+      dx,
+      dy,
+    });
+  }
+  return next;
+}

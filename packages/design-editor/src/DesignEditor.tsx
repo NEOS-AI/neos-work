@@ -21,10 +21,13 @@ import {
 import { isJsxPath, parseJsxToLayerTree } from './jsx-layers.js';
 import { CanvasOverlay, type CanvasTransformEnd } from './CanvasOverlay.js';
 import {
+  applyGroupResizeToHtml,
   applyPositionDeltaToHtml,
   applySizeDeltaToHtml,
+  computeGroupResizeScales,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
+  scaleBBoxFromAnchor,
 } from './canvas-style.js';
 import {
   bboxesFromMultiEntries,
@@ -434,7 +437,106 @@ export function DesignEditor({
       handleCanvasDragEnd(t.dx, t.dy);
       return;
     }
-    // Resize primary only
+
+    // v0.8 M2: multi-select → group scale from primary SE handle
+    const primaryBbox = selectDetail?.bbox;
+    const groupMode = multiEntriesForMove.length > 1 && primaryBbox;
+
+    if (groupMode && primaryBbox) {
+      const { sx, sy, primaryNext } = computeGroupResizeScales(
+        {
+          x: primaryBbox.x,
+          y: primaryBbox.y,
+          width: primaryBbox.width,
+          height: primaryBbox.height,
+        },
+        t.dw,
+        t.dh,
+      );
+      const anchor = { x: primaryBbox.x, y: primaryBbox.y };
+
+      applyCanvasHtml((base) => {
+        let html = base;
+        // Stamp all target ids first when needed
+        for (const entry of multiEntriesForMove) {
+          const lid = entry.selection.layerId;
+          if (lid && !html.includes(`data-neos-id="${lid}"`)) {
+            html = stampNeosIds(html);
+            break;
+          }
+        }
+        for (const entry of multiEntriesForMove) {
+          const from = entry.detail?.bbox;
+          if (!from || from.width <= 0 || from.height <= 0) {
+            // Fallback: size-only on primary if no bbox
+            if (entry.selection.selector === selection?.selector) {
+              html = applySizeDeltaToHtml(html, {
+                neosId: entry.selection.layerId ?? null,
+                elementId: elementIdFromSelector(entry.selection.selector),
+                dw: t.dw,
+                dh: t.dh,
+                baseWidth: t.baseWidth,
+                baseHeight: t.baseHeight,
+              });
+            }
+            continue;
+          }
+          const to =
+            entry.selection.selector === selection?.selector
+              && entry.selection.layerId === selection?.layerId
+              ? primaryNext
+              : scaleBBoxFromAnchor(
+                  { x: from.x, y: from.y, width: from.width, height: from.height },
+                  anchor,
+                  sx,
+                  sy,
+                );
+          html = applyGroupResizeToHtml(html, {
+            neosId: entry.selection.layerId ?? null,
+            elementId: elementIdFromSelector(entry.selection.selector),
+            from: { x: from.x, y: from.y, width: from.width, height: from.height },
+            to,
+          });
+        }
+        return html;
+      });
+
+      setSelectDetail((d) =>
+        d?.bbox
+          ? {
+              ...d,
+              bbox: {
+                x: primaryNext.x,
+                y: primaryNext.y,
+                width: primaryNext.width,
+                height: primaryNext.height,
+              },
+            }
+          : d,
+      );
+      setMultiExtras((extras) =>
+        extras.map((e) => {
+          if (!e.detail?.bbox) return e;
+          const from = e.detail.bbox;
+          const to = scaleBBoxFromAnchor(
+            { x: from.x, y: from.y, width: from.width, height: from.height },
+            anchor,
+            sx,
+            sy,
+          );
+          return {
+            ...e,
+            detail: {
+              ...e.detail,
+              bbox: { x: to.x, y: to.y, width: to.width, height: to.height },
+            },
+          };
+        }),
+      );
+      return;
+    }
+
+    // Single selection resize (primary only)
     applyCanvasHtml((base) =>
       applySizeDeltaToHtml(base, {
         neosId: layerId,
