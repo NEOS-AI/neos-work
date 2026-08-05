@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const listProjects = vi.fn();
 const createProject = vi.fn();
+const updateProject = vi.fn();
+const deleteProject = vi.fn();
 
 vi.mock('../lib/auth.js', () => ({
   loadConnection: () => ({
@@ -20,6 +22,8 @@ vi.mock('../lib/api.js', async () => {
     WebApiClient: class {
       listProjects = listProjects;
       createProject = createProject;
+      updateProject = updateProject;
+      deleteProject = deleteProject;
     },
   };
 });
@@ -48,6 +52,15 @@ describe('Projects page', () => {
       ok: true,
       data: { id: 'p-new', name: 'Landing' },
     });
+    updateProject.mockReset().mockResolvedValue({
+      ok: true,
+      data: { id: 'p1', name: 'Renamed' },
+    });
+    deleteProject.mockReset().mockResolvedValue({ ok: true });
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
   });
 
   it('lists projects', async () => {
@@ -56,6 +69,8 @@ describe('Projects page', () => {
       expect(screen.getByText('Existing')).toBeInTheDocument();
     });
     expect(screen.getByTestId('project-create-form')).toBeInTheDocument();
+    expect(screen.getByTestId('project-rename-p1')).toBeInTheDocument();
+    expect(screen.getByTestId('project-delete-p1')).toBeInTheDocument();
   });
 
   it('creates a project and navigates to detail', async () => {
@@ -86,5 +101,81 @@ describe('Projects page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
     expect(screen.queryByTestId('project-detail')).not.toBeInTheDocument();
+  });
+
+  it('renames a project inline', async () => {
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-rename-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-rename-p1'));
+    const input = screen.getByTestId('project-rename-input-p1');
+    expect(input).toHaveValue('Existing');
+    fireEvent.change(input, { target: { value: 'Renamed' } });
+    fireEvent.click(screen.getByTestId('project-rename-save-p1'));
+    await waitFor(() => {
+      expect(updateProject).toHaveBeenCalledWith('p1', { name: 'Renamed' });
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Renamed')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('project-rename-input-p1')).not.toBeInTheDocument();
+  });
+
+  it('cancels rename without calling API', async () => {
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-rename-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-rename-p1'));
+    fireEvent.click(screen.getByTestId('project-rename-cancel-p1'));
+    expect(updateProject).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('project-rename-input-p1')).not.toBeInTheDocument();
+  });
+
+  it('surfaces scrubbed rename errors', async () => {
+    updateProject.mockResolvedValue({ ok: false, error: `rename${'\n'}no${'\0'}` });
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-rename-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-rename-p1'));
+    fireEvent.change(screen.getByTestId('project-rename-input-p1'), {
+      target: { value: 'Nope' },
+    });
+    fireEvent.click(screen.getByTestId('project-rename-save-p1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-action-error')).toHaveTextContent(/rename no/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('deletes a project after confirm', async () => {
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-delete-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-delete-p1'));
+    await waitFor(() => {
+      expect(deleteProject).toHaveBeenCalledWith('p1');
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('Existing')).not.toBeInTheDocument();
+    });
+  });
+
+  it('skips delete when confirm is cancelled', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => false),
+    );
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-delete-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-delete-p1'));
+    expect(deleteProject).not.toHaveBeenCalled();
+  });
+
+  it('surfaces scrubbed delete errors', async () => {
+    deleteProject.mockResolvedValue({ ok: false, error: `del${'\n'}no${'\0'}` });
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-delete-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-delete-p1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-action-error')).toHaveTextContent(/del no/);
+    });
+    expect(screen.getByText('Existing')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
   });
 });

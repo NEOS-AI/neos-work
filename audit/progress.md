@@ -40,6 +40,7 @@
 | Restore dirty flag | WorkflowEditor resets savedDraft after server restore |
 | Thin web dual-surface | Intentional core; web can **create projects** + conversations/mkdir |
 | Memory export | CLI `neos memory export` |
+| Web project delete/rename | `WebApiClient.updateProject`/`deleteProject` + Projects list UI (confirm delete, inline rename) |
 
 ## Corrections vs earlier draft audit
 

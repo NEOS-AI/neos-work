@@ -107,6 +107,44 @@ describe('WebApiClient hard-enforce session transport', () => {
     expect(JSON.parse(String(init.body))).toEqual({ name: 'Landing' });
   });
 
+  it('updateProject puts name and rejects invalid id/name', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'p1', name: 'Renamed' } }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.updateProject('', { name: 'x' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+    await expect(
+      client.updateProject('p1', { name: `bad${'\n'}name` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid name' });
+    await expect(client.updateProject('p1', {})).resolves.toMatchObject({
+      ok: false,
+      error: 'No fields to update',
+    });
+    const res = await client.updateProject('p1', { name: '  Renamed  ' });
+    expect(res.ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/projects\/p1$/);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(String(init.body))).toEqual({ name: 'Renamed' });
+  });
+
+  it('deleteProject sends DELETE and rejects invalid id', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.deleteProject(`bad${'\0'}id`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid project id',
+    });
+    const res = await client.deleteProject('p1');
+    expect(res.ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/projects\/p1$/);
+    expect(init.method).toBe('DELETE');
+  });
+
   it('mkdir sends path body + optional session header', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'assets' } }));
     const client = new WebApiClient('http://engine.test', 'tok');

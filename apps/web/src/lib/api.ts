@@ -187,6 +187,62 @@ export class WebApiClient {
     return this.requestEnvelope('POST', '/api/projects', body);
   }
 
+  /**
+   * PUT /api/projects/:id — rename or patch project fields.
+   * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   */
+  updateProject(
+    id: string,
+    input: {
+      name?: string;
+      entryFile?: string | null;
+    },
+  ): Promise<
+    ApiEnvelope<{ id: string; name: string; baseDir?: string; entryFile?: string | null }>
+  > {
+    if (typeof id !== 'string' || !id.trim() || /[\0\r\n]/.test(id) || id.length > 200) {
+      return Promise.resolve({ ok: false, error: 'Invalid project id' });
+    }
+    const body: { name?: string; entryFile?: string | null } = {};
+    if (input.name !== undefined) {
+      if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+        return Promise.resolve({ ok: false, error: 'Invalid name' });
+      }
+      body.name = input.name.trim().slice(0, 200);
+    }
+    if (input.entryFile === null) {
+      body.entryFile = null;
+    } else if (
+      typeof input.entryFile === 'string'
+      && !/[\0\r\n]/.test(input.entryFile)
+      && input.entryFile.trim()
+    ) {
+      body.entryFile = input.entryFile.trim();
+    }
+    if (Object.keys(body).length === 0) {
+      return Promise.resolve({ ok: false, error: 'No fields to update' });
+    }
+    return this.requestEnvelope(
+      'PUT',
+      `/api/projects/${encodeURIComponent(id.trim())}`,
+      body,
+    );
+  }
+
+  /**
+   * DELETE /api/projects/:id — remove project metadata (files on disk may remain).
+   * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   */
+  deleteProject(id: string): Promise<ApiEnvelope<null>> {
+    if (typeof id !== 'string' || !id.trim() || /[\0\r\n]/.test(id) || id.length > 200) {
+      return Promise.resolve({ ok: false, error: 'Invalid project id' });
+    }
+    return this.requestEnvelope(
+      'DELETE',
+      `/api/projects/${encodeURIComponent(id.trim())}`,
+    );
+  }
+
   getProject(id: string): Promise<ApiEnvelope<{ id: string; name: string; baseDir?: string; entryFile?: string | null }>> {
     return this.request('GET', `/api/projects/${encodeURIComponent(id)}`);
   }
