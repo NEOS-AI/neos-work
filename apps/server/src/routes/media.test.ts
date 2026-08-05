@@ -154,50 +154,38 @@ describe('media routes', () => {
     expect(hugeBody.data.length).toBeLessThanOrEqual(500);
   });
 
-  it('POST /image rejects missing prompt and missing API key', async () => {
-    const noPrompt = await media.request('/image', {
+  it('POST /generate image rejects missing prompt and missing API key', async () => {
+    const noPrompt = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ surface: 'image' }),
     });
     expect(noPrompt.status).toBe(400);
 
-    const noKey = await media.request('/image', {
+    const noKey = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a cat' }),
+      body: JSON.stringify({ surface: 'image', prompt: 'a cat' }),
     });
     expect(noKey.status).toBe(400);
     const body = await noKey.json() as { error: string };
     expect(body.error).toMatch(/OpenAI|key|configured/i);
   });
 
-  it('POST /image rejects prompt with control characters', async () => {
-    setSetting('OPENAI_API_KEY', SECRET);
-    const res = await media.request('/image', {
+  it('POST /image and /audio are removed (404/405)', async () => {
+    const img = await media.request('/image', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a cat\nwith newline' }),
+      body: JSON.stringify({ prompt: 'a cat' }),
     });
-    expect(res.status).toBe(400);
-    const body = await res.json() as { error: string };
-    expect(body.error).toMatch(/control characters/i);
+    expect([404, 405]).toContain(img.status);
 
-    // Leading control chars must be rejected before trim (would otherwise become blank/valid)
-    const leading = await media.request('/image', {
+    const audio = await media.request('/audio', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: '\nok-looking' }),
+      body: JSON.stringify({ text: 'hello' }),
     });
-    expect(leading.status).toBe(400);
-    expect(((await leading.json()) as { error: string }).error).toMatch(/control characters/i);
-
-    const nul = await media.request('/image', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: `cat${'\0'}dog` }),
-    });
-    expect(nul.status).toBe(400);
+    expect([404, 405]).toContain(audio.status);
   });
 
   it('POST /generate rejects control-char surface and prompt before trim', async () => {
@@ -226,22 +214,22 @@ describe('media routes', () => {
     expect(delRes.status).toBe(400);
   });
 
-  it('POST /audio rejects text with null bytes before trim', async () => {
+  it('POST /generate audio rejects text with null bytes; newlines allowed', async () => {
     setSetting('OPENAI_API_KEY', SECRET);
-    const res = await media.request('/audio', {
+    const res = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: `hello${'\0'}world` }),
+      body: JSON.stringify({ surface: 'audio', text: `hello${'\0'}world` }),
     });
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toMatch(/control characters/i);
 
     // Newlines are allowed for TTS; only NUL is rejected
-    const withNl = await media.request('/audio', {
+    const withNl = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'line1\nline2' }),
+      body: JSON.stringify({ surface: 'audio', text: 'line1\nline2' }),
     });
     // May fail on missing key already set, or generation — must not be control-char error
     if (withNl.status === 400) {
@@ -250,52 +238,25 @@ describe('media routes', () => {
     }
   });
 
-  it('POST /image and /audio reject invalid JSON body', async () => {
-    const img = await media.request('/image', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: 'not-json',
-    });
-    expect(img.status).toBe(400);
-
-    const audio = await media.request('/audio', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: 'not-json',
-    });
-    expect(audio.status).toBe(400);
-  });
-
-  it('POST /image rejects whitespace-only prompt and whitespace API key', async () => {
+  it('POST /generate rejects whitespace-only image prompt and whitespace API key', async () => {
     setSetting('OPENAI_API_KEY', '   ');
-    const blankPrompt = await media.request('/image', {
+    const blankPrompt = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: '   ' }),
+      body: JSON.stringify({ surface: 'image', prompt: '   ' }),
     });
     expect(blankPrompt.status).toBe(400);
     const blankBody = await blankPrompt.json() as { error: string };
     expect(blankBody.error).toMatch(/prompt/i);
 
-    const blankKey = await media.request('/image', {
+    const blankKey = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a cat' }),
+      body: JSON.stringify({ surface: 'image', prompt: 'a cat' }),
     });
     expect(blankKey.status).toBe(400);
     const keyBody = await blankKey.json() as { error: string };
     expect(keyBody.error).toMatch(/OpenAI|key|configured/i);
-  });
-
-  it('POST /audio rejects whitespace-only text', async () => {
-    const res = await media.request('/audio', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: '  \t  ' }),
-    });
-    expect(res.status).toBe(400);
-    const body = await res.json() as { error: string };
-    expect(body.error).toMatch(/text/i);
   });
 
   it('GET /config treats whitespace-only OpenAI key as not configured', async () => {
@@ -349,12 +310,12 @@ describe('media routes', () => {
     expect(blankDel.status).toBe(400);
   });
 
-  it('POST /image rejects prompt over 4000 chars', async () => {
+  it('POST /generate rejects image prompt over 4000 chars', async () => {
     setSetting('OPENAI_API_KEY', 'sk-long');
-    const res = await media.request('/image', {
+    const res = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'p'.repeat(4001) }),
+      body: JSON.stringify({ surface: 'image', prompt: 'p'.repeat(4001) }),
     });
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
@@ -391,17 +352,9 @@ describe('media routes', () => {
     expect(((await noText.json()) as { error: string }).error).toMatch(/text/i);
   });
 
-  it('POST /audio and /generate reject text over 4096 chars', async () => {
+  it('POST /generate rejects audio text over 4096 chars', async () => {
     setSetting('OPENAI_API_KEY', 'sk-long-audio');
     const long = 't'.repeat(4097);
-
-    const audio = await media.request('/audio', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: long }),
-    });
-    expect(audio.status).toBe(400);
-    expect(((await audio.json()) as { error: string }).error).toMatch(/too long/i);
 
     const gen = await media.request('/generate', {
       method: 'POST',
@@ -484,12 +437,12 @@ describe('media routes', () => {
     expect(listHigh.status).toBe(200);
   });
 
-  it('POST /image and /generate reject control-char prompt/provider', async () => {
+  it('POST /generate rejects control-char prompt/surface/provider', async () => {
     setSetting('OPENAI_API_KEY', 'sk-ctrl');
-    const img = await media.request('/image', {
+    const img = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'hi\nthere' }),
+      body: JSON.stringify({ surface: 'image', prompt: 'hi\nthere' }),
     });
     expect(img.status).toBe(400);
     expect(((await img.json()) as { error: string }).error).toMatch(/control/i);

@@ -1,5 +1,5 @@
 /**
- * MediaNode — generates images or audio via server API
+ * MediaNode — generates images, audio, or video via POST /api/media/generate
  */
 
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
@@ -100,13 +100,14 @@ export const MediaNode: ExecutableNode = {
       const quality = IMAGE_QUALITIES.has(rawQuality) ? rawQuality : 'standard';
 
       try {
-        const res = await fetch(`${serverUrl}/api/media/image`, {
+        const res = await fetch(`${serverUrl}/api/media/generate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${serverToken}`,
           },
           body: JSON.stringify({
+            surface: 'image',
             prompt,
             size,
             quality,
@@ -213,13 +214,14 @@ export const MediaNode: ExecutableNode = {
       const model = TTS_MODELS.has(rawModel) ? rawModel : 'tts-1';
 
       try {
-        const res = await fetch(`${serverUrl}/api/media/audio`, {
+        const res = await fetch(`${serverUrl}/api/media/generate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${serverToken}`,
           },
           body: JSON.stringify({
+            surface: 'audio',
             text,
             voice,
             model,

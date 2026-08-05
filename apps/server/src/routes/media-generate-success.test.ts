@@ -116,36 +116,6 @@ beforeEach(() => {
 });
 
 describe('media generate success paths', () => {
-  it('POST /image returns mocked generator result', async () => {
-    const res = await media.request('/image', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a cat', size: '1024x1024', quality: 'hd' }),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      ok: boolean;
-      data: { filename: string; revisedPrompt?: string };
-    };
-    expect(body.ok).toBe(true);
-    expect(body.data.filename).toBe('mock-image.png');
-    expect(body.data.revisedPrompt).toBe('a refined cat');
-    expect(generateMediaUnified).toHaveBeenCalledOnce();
-  });
-
-  it('POST /audio returns mocked generator result', async () => {
-    const res = await media.request('/audio', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'hello world', voice: 'alloy', model: 'tts-1' }),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; data: { filename: string } };
-    expect(body.ok).toBe(true);
-    expect(body.data.filename).toBe('mock-audio.mp3');
-    expect(generateMediaUnified).toHaveBeenCalledOnce();
-  });
-
   it('POST /generate image and audio surfaces', async () => {
     const img = await media.request('/generate', {
       method: 'POST',
@@ -181,12 +151,12 @@ describe('media generate success paths', () => {
     });
   });
 
-  it('POST /image returns 500 when generator throws', async () => {
+  it('POST /generate returns 500 when generator throws', async () => {
     vi.mocked(generateMediaUnified).mockRejectedValueOnce(new Error('upstream down'));
-    const res = await media.request('/image', {
+    const res = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'fail me' }),
+      body: JSON.stringify({ surface: 'image', prompt: 'fail me' }),
     });
     expect(res.status).toBe(500);
     expect(((await res.json()) as { error: string }).error).toMatch(/upstream|Failed|error/i);
@@ -208,15 +178,15 @@ describe('media generate success paths', () => {
     expect(nul.status).toBe(400);
   });
 
-  it('POST /image returns 400 when API key missing', async () => {
+  it('POST /generate returns 400 when API key missing', async () => {
     getSecretSettingMock.mockReturnValue(undefined);
     vi.mocked(generateMediaUnified).mockRejectedValueOnce(
       new Error('OPENAI_API_KEY is not configured'),
     );
-    const res = await media.request('/image', {
+    const res = await media.request('/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a cat' }),
+      body: JSON.stringify({ surface: 'image', prompt: 'a cat' }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/OpenAI|key|configured/i);

@@ -1,12 +1,13 @@
 /**
  * Media Generation routes (Task 8 multi-provider).
- * POST /api/media/generate — Unified image|audio|video (+ provider)  **preferred**
- * POST /api/media/image  — Generate image (deprecated; use /generate)
- * POST /api/media/audio  — Generate audio (deprecated; use /generate)
+ * POST /api/media/generate — Unified image|audio|video (+ provider)
  * GET  /api/media/jobs/:id — Video job poll
  * GET  /api/media/providers — Provider catalog
  * GET  /api/media/config — Readiness (no secrets)
  * GET  /api/media/file   — Serve a saved media file
+ *
+ * Legacy POST /image and /audio were removed after Sunset 2026-04-01.
+ * Clients and MediaNode must use /generate with `surface`.
  */
 
 import { Hono } from 'hono';
@@ -140,111 +141,6 @@ media.get('/jobs', (c) => {
   }));
   return c.json({ ok: true, data: jobs });
 });
-
-/**
- * Legacy surface-specific routes. Still generate, but mark deprecated and
- * rewrite body to the unified generator shape so clients migrate to POST /generate.
- */
-async function legacyGenerate(
-  c: import('hono').Context,
-  surface: 'image' | 'audio',
-): Promise<Response> {
-  c.header('Deprecation', 'true');
-  c.header('Sunset', 'Wed, 01 Apr 2026 00:00:00 GMT');
-  c.header('Link', '</api/media/generate>; rel="successor-version"');
-  c.header('Warning', '299 - "Use POST /api/media/generate with surface=' + surface + '"');
-
-  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
-  if (!body || typeof body !== 'object') {
-    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
-  }
-
-  if (surface === 'image') {
-    const promptRaw = typeof body.prompt === 'string' ? body.prompt : '';
-    if (/[\0\r\n]/.test(promptRaw)) {
-      return c.json({ ok: false, error: 'prompt contains invalid control characters' }, 400);
-    }
-    const prompt = promptRaw.trim();
-    if (!prompt) return c.json({ ok: false, error: 'prompt is required' }, 400);
-    if (prompt.length > 4000) return c.json({ ok: false, error: 'prompt too long' }, 400);
-    try {
-      const result = await generateMediaUnified({
-        surface: 'image',
-        provider: typeof body.provider === 'string' ? body.provider : undefined,
-        prompt,
-        size: body.size as '1024x1024' | '1792x1024' | '1024x1792' | undefined,
-        quality: body.quality as 'standard' | 'hd' | undefined,
-        model: typeof body.model === 'string' ? body.model : undefined,
-      });
-      if (result.surface !== 'image') {
-        return c.json({ ok: false, error: 'Unexpected surface' }, 500);
-      }
-      return c.json({
-        ok: true,
-        data: {
-          filePath: publicMediaFilePath(result.filename, result.filePath),
-          filename: result.filename,
-          revisedPrompt: result.revisedPrompt,
-          provider: result.provider,
-          deprecated: true,
-          prefer: 'POST /api/media/generate',
-        },
-      });
-    } catch (err) {
-      const msg = publicErrorMessage(err, 'Failed to generate image');
-      return c.json({ ok: false, error: msg }, mediaClientErrorStatus(msg));
-    }
-  }
-
-  // audio
-  const textRaw = typeof body.text === 'string' ? body.text : '';
-  if (/\0/.test(textRaw)) {
-    return c.json({ ok: false, error: 'text contains invalid control characters' }, 400);
-  }
-  const text = textRaw.trim();
-  if (!text) return c.json({ ok: false, error: 'text is required' }, 400);
-  if (text.length > 4096) {
-    return c.json({ ok: false, error: 'text too long (max 4096 chars)' }, 400);
-  }
-  try {
-    const result = await generateMediaUnified({
-      surface: 'audio',
-      provider: typeof body.provider === 'string' ? body.provider : undefined,
-      text,
-      voice: body.voice as
-        | 'alloy'
-        | 'echo'
-        | 'fable'
-        | 'onyx'
-        | 'nova'
-        | 'shimmer'
-        | undefined,
-      model: body.model as 'tts-1' | 'tts-1-hd' | string | undefined,
-    });
-    if (result.surface !== 'audio') {
-      return c.json({ ok: false, error: 'Unexpected surface' }, 500);
-    }
-    return c.json({
-      ok: true,
-      data: {
-        filePath: publicMediaFilePath(result.filename, result.filePath),
-        filename: result.filename,
-        provider: result.provider,
-        deprecated: true,
-        prefer: 'POST /api/media/generate',
-      },
-    });
-  } catch (err) {
-    const msg = publicErrorMessage(err, 'Failed to generate audio');
-    return c.json({ ok: false, error: msg }, mediaClientErrorStatus(msg));
-  }
-}
-
-/** @deprecated Prefer POST /api/media/generate with surface=image */
-media.post('/image', (c) => legacyGenerate(c, 'image'));
-
-/** @deprecated Prefer POST /api/media/generate with surface=audio */
-media.post('/audio', (c) => legacyGenerate(c, 'audio'));
 
 // Serve a saved media file by filename (path traversal + symlink-escape safe)
 media.get('/file/:filename', (c) => {

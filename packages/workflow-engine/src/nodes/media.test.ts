@@ -68,7 +68,7 @@ describe('MediaNode', () => {
     );
     expect(multi.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/media/audio'),
+      expect.stringContaining('/api/media/generate'),
       expect.objectContaining({
         body: expect.stringContaining('Hello\\nWorld'),
       }),
@@ -133,7 +133,7 @@ describe('MediaNode', () => {
       }),
     );
     expect(result.ok).toBe(true);
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/generate');
   });
 
   it('trims SERVER_URL and SERVER_TOKEN before calling the API', async () => {
@@ -147,7 +147,7 @@ describe('MediaNode', () => {
         settings: { SERVER_URL: '  http://localhost:3001  ', SERVER_TOKEN: '  tok  ' },
       }),
     );
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/generate');
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
   });
 
@@ -180,7 +180,7 @@ describe('MediaNode', () => {
         settings: { SERVER_URL: '   ', SERVER_TOKEN: '' },
       }),
     );
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/generate');
   });
 
   it('falls back to default SERVER_URL when non-http', async () => {
@@ -194,7 +194,7 @@ describe('MediaNode', () => {
         settings: { SERVER_URL: 'file:///tmp', SERVER_TOKEN: 'tok' },
       }),
     );
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/generate');
   });
 
   it('posts image request and returns filename', async () => {
@@ -210,7 +210,7 @@ describe('MediaNode', () => {
     expect(String(result.output)).toContain('img.png');
     expect(String(result.output)).toContain('better');
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/image');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3001/api/media/generate');
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.prompt).toBe('a cat');
   });
@@ -566,7 +566,7 @@ describe('MediaNode', () => {
         settings: { SERVER_URL: 'javascript:alert(1)', SERVER_TOKEN: 't' },
       }),
     );
-    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/^http:\/\/localhost:3001\/api\/media\/image/);
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/^http:\/\/localhost:3001\/api\/media\/generate/);
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue('boom'));
     const result = await MediaNode.execute(

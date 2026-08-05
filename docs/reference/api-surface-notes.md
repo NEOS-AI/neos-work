@@ -30,7 +30,7 @@ These exist on the server but are **not** product UI entry points (or are supers
 | `GET /api` | Version banner |
 | `POST /api/artifacts`, `PUT …`, `GET …/preview` | Created by workflow runs; UI uses list/get/patch/delete/refresh |
 | `POST/PUT/DELETE /api/harness` and `/api/harnesses` | Prefer **`/api/workers`**; harness mount is a v0.4 alias |
-| `POST /api/media/image`, `POST /api/media/audio` | Prefer **`POST /api/media/generate`** (desktop Media + CLI) |
+| ~~`POST /api/media/image`~~, ~~`/audio`~~ | **Removed** after Sunset 2026-04-01 — use **`POST /api/media/generate`** |
 | `GET /api/media/jobs` (list) | Clients poll **`GET /api/media/jobs/:id`** when generate returns `jobId` |
 | `GET /api/memory/export` | CLI: `neos memory export` |
 | `POST /api/workflow/migrate` | Ops / dry-run migration |
@@ -44,15 +44,11 @@ These exist on the server but are **not** product UI entry points (or are supers
 - Removed unused EngineClient methods (tests-only): `deleteSetting`, `listModels`, `listMcpPresets`, `refreshMcpOAuth`, `listNeosMcpTools`, `listProjectRuns`, `getRoutine`, `createProjectToolToken`, `connectionTest`, `getPlugin`, `getWebhookRateLimit`, `getDeployment`, `getDomainPack`, `validateDomainPackManifest`, `mediaFileUrl`.
 - Workspace client: **`listWorkspaces`**, **`createWorkspace`**, **`deleteWorkspace`** (blocks deleting `default`).
 
-## Media path deprecations (server still accepts until Sunset)
+## Media paths (unified only)
 
-- `POST /api/media/image` and `POST /api/media/audio` still generate media but respond with:
-  - `Deprecation: true`
-  - `Sunset: Wed, 01 Apr 2026 00:00:00 GMT`
-  - `Link: </api/media/generate>; rel="successor-version"`
-  - `data.deprecated: true` + `data.prefer: "POST /api/media/generate"`
-- Prefer **`POST /api/media/generate`** (desktop Media UI + CLI).
-- Plan: remove legacy routes after the Sunset date if no external callers remain.
+- **`POST /api/media/generate`** is the only generate endpoint (image / audio / video via `surface`).
+- Legacy `POST /api/media/image` and `POST /api/media/audio` were **removed** after Sunset **2026-04-01**.
+- Workflow `MediaNode` and desktop/CLI clients call `/generate` only.
 
 ## Workspace API
 

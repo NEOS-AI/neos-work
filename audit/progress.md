@@ -36,7 +36,7 @@
 | Workspace default | Sessions resolves via listWorkspaces (prefer default) |
 | Workflow restore | RevisionPanel calls `restoreRevision` then updates editor |
 | Workspace picker | New session modal: select + create + edit name/path + delete |
-| Media Sunset | image/audio: Deprecation + Sunset 2026-04-01 + body.prefer |
+| Media Sunset | **Removed** POST /image and /audio after Sunset; MediaNode → /generate |
 | Restore dirty flag | WorkflowEditor resets savedDraft after server restore |
 | Thin web dual-surface | Intentional core; web can **create projects** + conversations/mkdir |
 | Memory export | CLI `neos memory export` |
