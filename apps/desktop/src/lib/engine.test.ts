@@ -799,11 +799,59 @@ describe('EngineClient', () => {
     });
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/a/b.html');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      content: '<b/>',
+      source: 'user',
+    });
+
+    // sessionId for NEOS_SHARED_EDIT hard-enforce lock holder
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { path: 'a/b.html', hash: 'y', bytes: 1, created: false },
+      }),
+    );
+    await expect(
+      client.writeProjectFile('p1', 'a/b.html', '<b2/>', 'user', { sessionId: 'sess-abc' }),
+    ).resolves.toMatchObject({ ok: true, data: { hash: 'y' } });
+    const lockedWrite = fetchMock.mock.calls.at(-1)![1] as {
+      method: string;
+      headers: Record<string, string>;
+      body: string;
+    };
+    expect(lockedWrite.method).toBe('PUT');
+    expect(lockedWrite.headers['x-neos-session-id']).toBe('sess-abc');
+    expect(JSON.parse(lockedWrite.body)).toEqual({
+      content: '<b2/>',
+      source: 'user',
+      sessionId: 'sess-abc',
+    });
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'a/b.html' } }));
     await client.deleteProjectFile('p1', 'a/b.html');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/files/a/b.html');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+    // no session → no body / session header
+    {
+      const delPlain = fetchMock.mock.calls.at(-1)![1] as {
+        headers: Record<string, string>;
+        body?: string;
+      };
+      expect(delPlain.headers['x-neos-session-id']).toBeUndefined();
+      expect(delPlain.body).toBeUndefined();
+    }
+
+    // sessionId for NEOS_SHARED_EDIT hard-enforce on delete
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'a/b.html' } }));
+    await client.deleteProjectFile('p1', 'a/b.html', { sessionId: 'sess-del' });
+    const delLocked = fetchMock.mock.calls.at(-1)![1] as {
+      method: string;
+      headers: Record<string, string>;
+      body: string;
+    };
+    expect(delLocked.method).toBe('DELETE');
+    expect(delLocked.headers['x-neos-session-id']).toBe('sess-del');
+    expect(JSON.parse(delLocked.body)).toEqual({ sessionId: 'sess-del' });
 
     const bad = await client.readProjectFile('p1', '../etc/passwd');
     expect(bad.ok).toBe(false);
@@ -1804,6 +1852,23 @@ describe('EngineClient', () => {
     });
     await client.mkdirProjectPath('p1', 'src/components');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      path: 'src/components',
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'locked-dir' } }));
+    await client.mkdirProjectPath('p1', 'locked-dir', { sessionId: 'sess-mkdir' });
+    const mkdirLocked = fetchMock.mock.calls.at(-1)![1] as {
+      method: string;
+      headers: Record<string, string>;
+      body: string;
+    };
+    expect(mkdirLocked.method).toBe('POST');
+    expect(mkdirLocked.headers['x-neos-session-id']).toBe('sess-mkdir');
+    expect(JSON.parse(mkdirLocked.body)).toEqual({
+      path: 'locked-dir',
+      sessionId: 'sess-mkdir',
+    });
 
     await client.listProjectRevisions('p1', 'index.html');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('path=index.html');
@@ -1837,6 +1902,18 @@ describe('EngineClient', () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'index.html', hash: 'h' } }));
     await client.restoreProjectRevision('p1', 'rev1');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/restore/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'index.html', hash: 'h2' } }));
+    await client.restoreProjectRevision('p1', 'rev1', { sessionId: 'sess-restore' });
+    const restoreCall = fetchMock.mock.calls.at(-1)![1] as {
+      method: string;
+      headers: Record<string, string>;
+      body?: string;
+    };
+    expect(restoreCall.method).toBe('POST');
+    expect(restoreCall.headers['x-neos-session-id']).toBe('sess-restore');
+    expect(JSON.parse(String(restoreCall.body))).toEqual({ sessionId: 'sess-restore' });
+
     await expect(client.restoreProjectRevision('p1', `r${'\0'}`)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid revision id',

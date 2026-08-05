@@ -42,8 +42,30 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | `NEOS_COLLAB_REDIS_URL` | unset | Preferred Redis URL when bus/registry need Redis |
 | `REDIS_URL` | unset | Fallback URL if `NEOS_COLLAB_REDIS_URL` unset |
 | `NEOS_COLLAB_PRESENCE` | `auto` | `auto` \| `memory` \| `redis` \| `off` — membership registry |
-| `NEOS_SHARED_EDIT` | off | Hard file-lock enforce (unchanged; useful for multi-client edit) |
+| `NEOS_SHARED_EDIT` | off | Hard file-lock enforce for multi-client edit (see below) |
 | `NEOS_AUTH_TOKEN` | (process random) | Use a **stable** shared secret across replicas |
+
+### Hard enforce (`NEOS_SHARED_EDIT=1`)
+
+When a peer holds a file lock, other sessions get **HTTP 423** + `data.holder` on:
+
+- `PUT /api/projects/:id/files/*` with `source: "user"`
+- `DELETE /api/projects/:id/files/*`
+- `POST /api/projects/:id/revisions/:revisionId/restore`
+- `POST /api/projects/:id/mkdir` (lock on the mkdir target path)
+
+Lock holders must send collab **session id** (from SSE `ready`):
+
+| Transport | How |
+|---|---|
+| Body | `{ "sessionId": "<presence-session>" }` (writes also include content/source) |
+| Header | `x-neos-session-id: <presence-session>` |
+
+Clients (web + desktop) send **both** on file mutates. Prefer the header when DELETE
+bodies may be stripped by a proxy.
+
+**Agent bypass:** run-pipeline / `source: "agent"` writes are **not** hard-enforced
+(intentional — see [ADR 0001](../adr/0001-shared-edit-strategy.md)).
 
 ### Presence modes
 

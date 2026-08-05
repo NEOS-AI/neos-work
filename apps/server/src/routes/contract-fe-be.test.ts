@@ -20,8 +20,10 @@ vi.mock('../lib/registry-spawn.js', () => ({
 import { Hono } from 'hono';
 import { resetGlobalRunRegistry } from '@neos-work/agent-runtime';
 import {
+  collabSelectionsSnapshotSchema,
   parseCollabLockConflict,
   parseProjectFileWriteResponse,
+  peerSelectionSchema,
 } from '@neos-work/shared';
 import projects from './projects.js';
 import runs from './runs.js';
@@ -187,6 +189,51 @@ describe('FE↔BE contract smoke', () => {
     expect(locksBody.data.locks.some((l) => l.path === 'index.html' && l.sessionId === sid)).toBe(
       true,
     );
+  });
+
+  it('collab multi-selection publish + GET selections snapshot shape', async () => {
+    const id = await createProject();
+    const sid = await joinCollabSession(id, 'MultiSel');
+
+    const publish = await app.request(`/api/projects/${id}/collab/selection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: sid,
+        path: 'index.html',
+        selector: '#primary',
+        layerId: 'layer-primary',
+        selectors: ['#a', '#b', '#primary'],
+        layerIds: ['layer-a', 'layer-b', 'layer-primary'],
+      }),
+    });
+    expect(publish.status).toBe(200);
+    const published = (await publish.json()) as {
+      ok: boolean;
+      data: { selection: unknown };
+    };
+    expect(published.ok).toBe(true);
+    const one = peerSelectionSchema.safeParse(published.data.selection);
+    expect(one.success).toBe(true);
+    if (one.success) {
+      expect(one.data.sessionId).toBe(sid);
+      expect(one.data.path).toBe('index.html');
+      expect(one.data.selector).toBe('#primary');
+      expect(one.data.selectors).toEqual(['#a', '#b', '#primary']);
+      expect(one.data.layerIds).toEqual(['layer-a', 'layer-b', 'layer-primary']);
+    }
+
+    const snap = await app.request(`/api/projects/${id}/collab/selections`);
+    expect(snap.status).toBe(200);
+    const snapBody = await snap.json();
+    const parsed = collabSelectionsSnapshotSchema.safeParse(snapBody);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      const mine = parsed.data.data.selections.find((s) => s.sessionId === sid);
+      expect(mine).toBeTruthy();
+      expect(mine?.selectors).toEqual(expect.arrayContaining(['#a', '#primary']));
+      expect(mine?.layerIds?.length).toBe(3);
+    }
   });
 
   it('dry-run create + cancel terminal returns 409', async () => {

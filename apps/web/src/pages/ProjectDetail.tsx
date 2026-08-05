@@ -30,6 +30,17 @@ import {
 import { loadConnection } from '../lib/auth.js';
 import { ApiError, normalizeProjectRelPath, WebApiClient } from '../lib/api.js';
 
+/** Color for run status badge (desktop-parity chrome). */
+function runStatusColor(status: string): string {
+  const s = (status || '').trim().toLowerCase();
+  if (s === 'succeeded') return '#6ee7b7';
+  if (s === 'failed' || s === 'error') return '#fca5a5';
+  if (s === 'canceled' || s === 'cancelled') return '#d1d5db';
+  if (s === 'running' || s === 'starting') return '#93c5fd';
+  if (s === 'queued' || s === 'pending') return '#fcd34d';
+  return 'var(--text-muted, #888)';
+}
+
 export function ProjectDetail() {
   const { id = '' } = useParams();
   const nav = useNavigate();
@@ -72,6 +83,10 @@ export function ProjectDetail() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runEvents, setRunEvents] = useState<ProjectRunEvent[]>([]);
   const [runsBusy, setRunsBusy] = useState(false);
+  /** Active Edit-with-AI run status (for badge while aiBusy). */
+  const [activeAiRunStatus, setActiveAiRunStatus] = useState<string | null>(null);
+  /** Abort handle for active run event SSE. */
+  const runStreamStopRef = useRef<(() => void) | null>(null);
   /** Collab presence (v0.6 M1) — self + other peers. */
   const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
   const [collabPeers, setCollabPeers] = useState<PresencePeerInfo[]>([]);
@@ -561,7 +576,12 @@ export function ProjectDetail() {
     setRevisionBusy(true);
     setError(null);
     try {
-      const res = await client.restoreRevision(id, revisionId);
+      // Pass collab session so NEOS_SHARED_EDIT hard enforce accepts our own lock
+      const res = await client.restoreRevision(
+        id,
+        revisionId,
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
       if (!res.ok) {
         setError(
           (typeof res.error === 'string' && res.error ? res.error : 'Restore failed')
@@ -688,7 +708,13 @@ export function ProjectDetail() {
     setBusy(true);
     setError(null);
     try {
-      const res = await client.writeFile(id, buffer.path, buffer.local);
+      // Pass collab session so NEOS_SHARED_EDIT hard enforce accepts our own lock
+      const res = await client.writeFile(
+        id,
+        buffer.path,
+        buffer.local,
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
       if (res.ok) {
         const data = res.data as { hash?: string; contentHash?: string } | undefined;
         const hash =
@@ -745,9 +771,13 @@ export function ProjectDetail() {
 
   const runEditWithAi = async () => {
     if (!id || !aiPrompt.trim()) return;
+    // Abort any previous stream
+    runStreamStopRef.current?.();
+    runStreamStopRef.current = null;
     setAiBusy(true);
     setError(null);
     setStatus(null);
+    setActiveAiRunStatus(null);
     try {
       const editContext =
         selection && buffer.path
@@ -771,45 +801,131 @@ export function ProjectDetail() {
         res.data && typeof res.data === 'object' && typeof (res.data as { id?: string }).id === 'string'
           ? (res.data as { id: string }).id
           : '';
+      const initialStatus =
+        res.data && typeof res.data === 'object' && typeof (res.data as { status?: string }).status === 'string'
+          ? (res.data as { status: string }).status
+          : 'queued';
       setAiPrompt('');
       if (!runId) {
         setStatus('Run started');
         void loadRuns();
         return;
       }
-      setStatus(`Run ${runId.slice(0, 8)}…`);
+      setActiveAiRunStatus(initialStatus);
+      setStatus(`Run ${runId.slice(0, 8)}… (${initialStatus})`);
       void loadRuns();
-      // Prefer project file SSE for disk-changed; still poll run status for UX.
-      // Fallback reload when run ends (covers agents that write without SSE gap).
-      for (let i = 0; i < 60; i++) {
-        await new Promise((r) => setTimeout(r, 500));
+
+      const applyTerminalStatus = async (): Promise<string | null> => {
         try {
           const st = await client.getRun(runId);
           const status =
             st.data && typeof st.data === 'object'
               ? String((st.data as { status?: string }).status ?? '')
               : '';
+          if (status) setActiveAiRunStatus(status);
           if (isTerminalRunStatus(status)) {
             setStatus(status === 'succeeded' ? 'Run finished' : `Run ${status}`);
             if (status.toLowerCase() === 'succeeded') {
               await reloadOpenFileFromDisk();
             }
             void loadRuns();
-            return;
+            return status;
           }
+          if (status) setStatus(`Run ${runId.slice(0, 8)}… (${status})`);
         } catch {
-          break;
+          // ignore
+        }
+        return null;
+      };
+
+      // Prefer SSE for live run events; fall back to short poll if stream fails
+      let sawStreamEvent = false;
+      let streamErrored = false;
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = (errored = false) => {
+          if (settled) return;
+          settled = true;
+          runStreamStopRef.current = null;
+          if (errored) streamErrored = true;
+          resolve();
+        };
+        const stop = client.streamRunEvents(
+          runId,
+          (ev) => {
+            sawStreamEvent = true;
+            // Terminal event types from the stream are a hint; still GET for authoritative status
+            if (
+              ev.type === 'run.succeeded'
+              || ev.type === 'run.failed'
+              || ev.type === 'run.canceled'
+            ) {
+              const hint = ev.type.replace(/^run\./, '');
+              setActiveAiRunStatus(hint);
+              setStatus(
+                hint === 'succeeded' ? 'Run finished' : `Run ${hint}`,
+              );
+            } else if (ev.type === 'run.started') {
+              setActiveAiRunStatus('running');
+              setStatus(`Run ${runId.slice(0, 8)}… (running)`);
+            } else if (ev.type === 'run.stdout' || ev.type === 'run.stderr') {
+              // Keep status line compact; list panel has full event history
+              setActiveAiRunStatus((prev) => prev || 'running');
+            }
+          },
+          {
+            onDone: () => finish(false),
+            onError: () => finish(true),
+          },
+        );
+        runStreamStopRef.current = () => {
+          stop();
+          finish(false);
+        };
+      });
+
+      let terminal = await applyTerminalStatus();
+
+      // Short poll fallback when SSE fails immediately / yields nothing
+      if (!terminal && (streamErrored || !sawStreamEvent)) {
+        let after: string | undefined;
+        for (let i = 0; i < 20; i++) {
+          try {
+            const evRes = await client.listRunEvents(runId, after);
+            if (evRes.ok && Array.isArray(evRes.data)) {
+              for (const ev of evRes.data) {
+                if (typeof ev.id === 'string') after = ev.id;
+              }
+            }
+          } catch {
+            // ignore
+          }
+          terminal = await applyTerminalStatus();
+          if (terminal) break;
+          await new Promise((r) => setTimeout(r, 400));
         }
       }
-      setStatus('Run still running — file SSE will refresh when disk changes');
-      void loadRuns();
+
+      if (!terminal) {
+        setStatus('Run still running — file SSE will refresh when disk changes');
+        void loadRuns();
+      }
     } catch (err) {
       // Network / abort only — createRun uses requestEnvelope (no throw on HTTP).
       setError(err instanceof ApiError ? err.message : 'Run failed');
     } finally {
+      runStreamStopRef.current = null;
       setAiBusy(false);
     }
   };
+
+  // Cleanup run stream on unmount
+  useEffect(() => {
+    return () => {
+      runStreamStopRef.current?.();
+      runStreamStopRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="editor-layout" data-testid="project-workspace">
@@ -948,17 +1064,35 @@ export function ProjectDetail() {
             onChange={(e) => setAiPrompt(e.target.value)}
             data-testid="ai-prompt"
           />
-          <button
-            type="button"
-            className="btn"
-            disabled={!aiPrompt.trim() || aiBusy}
-            onClick={() => void runEditWithAi()}
-            data-testid="ai-run"
-          >
-            {aiBusy ? '…' : 'Run'}
-          </button>
+          <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              className="btn"
+              disabled={!aiPrompt.trim() || aiBusy}
+              onClick={() => void runEditWithAi()}
+              data-testid="ai-run"
+            >
+              {aiBusy ? '…' : 'Run'}
+            </button>
+            {activeAiRunStatus && (
+              <span
+                data-testid="web-ai-run-status"
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  border: '1px solid var(--border, #333)',
+                  color: runStatusColor(activeAiRunStatus),
+                }}
+              >
+                {activeAiRunStatus}
+              </span>
+            )}
+          </div>
           <p className="muted" style={{ fontSize: 11, margin: 0 }}>
             Uses replace-selection / patch by default. Full-file overwrite is not the default.
+            Live progress via run event stream (poll fallback).
           </p>
 
           <div
@@ -1131,9 +1265,20 @@ export function ProjectDetail() {
                           disabled={runsBusy}
                           onClick={() => void selectRun(r.id)}
                         >
-                          <div>
-                            <span className="mono">{r.status}</span>
-                            {' · '}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span
+                              data-testid={`web-run-status-${r.id}`}
+                              className="mono"
+                              style={{
+                                fontSize: 10,
+                                padding: '1px 6px',
+                                borderRadius: 999,
+                                border: '1px solid var(--border, #333)',
+                                color: runStatusColor(r.status),
+                              }}
+                            >
+                              {r.status}
+                            </span>
                             <span className="mono muted">{r.id.slice(0, 8)}</span>
                           </div>
                           {promptSlice ? (

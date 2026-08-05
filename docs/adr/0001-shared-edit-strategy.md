@@ -23,8 +23,50 @@ Defer full CRDT (Yjs / Loro) until product validates multi-user demand and WebSo
 
 - Ephemeral **file locks** keyed by project + relative path  
 - Lock holders broadcast on collab channel; released on leave/idle/unsub  
-- Optional **hard enforce** on `PUT` file write when `NEOS_SHARED_EDIT=1`  
+- Optional **hard enforce** when `NEOS_SHARED_EDIT=1` (see surface below)  
 - UI shows “locked by …” when another session holds the open file  
+
+### Hard enforce surface (0.6.3 → extended 0.8.x)
+
+When `NEOS_SHARED_EDIT=1` (or `true`) **and** a lock exists on the target path,
+only the lock holder may complete these **peer / human** mutations:
+
+| Method | Path | Notes |
+|---|---|---|
+| `PUT` | `/api/projects/:id/files/*` | Only when body `source` is `user` (default) |
+| `DELETE` | `/api/projects/:id/files/*` | Optional JSON body |
+| `POST` | `/api/projects/:id/revisions/:revisionId/restore` | Enforces lock on the revision’s path |
+| `POST` | `/api/projects/:id/mkdir` | Enforces lock on the mkdir target path |
+
+**Session identity** (either is enough; prefer both on clients):
+
+| Channel | Field |
+|---|---|
+| JSON body | `sessionId` (collab presence id from SSE `ready`) |
+| Header | `x-neos-session-id` (same value; survives proxies that strip DELETE bodies) |
+
+Mismatch or missing session while another peer holds the lock → **HTTP 423** with
+`{ ok: false, error, data: { holder } }` (same shape as lock conflict holder).
+
+### Agent bypass (accepted decision)
+
+| Writer | Hard-enforce |
+|---|---|
+| Human / UI (`source: "user"`) | **Yes** |
+| Agent / run pipeline (`source: "agent"` or daemon tool writes) | **No** |
+| `NEOS_SHARED_EDIT` off (default) | Advisory locks only (no 423) |
+
+**Rationale:** Peer locks constrain multi-human clients on a shared project.
+Agent runs are daemon-mediated and must still apply file tool writes while a
+human holds a lock (edit-with-AI while “my lock” is normal). Requiring agents to
+impersonate a collab session would couple the run registry to presence without a
+clear multi-user ownership model.
+
+**Future (if product requires):** optional `NEOS_SHARED_EDIT_AGENTS=1` to enforce
+locks on agent writes, or bind run → sessionId at create time.
+
+Wire/doc conventions for hash fields and envelopes:
+[`skills/api-docs/references/conventions.md`](../../skills/api-docs/references/conventions.md).
 
 ### Later (if multi-caret is required)
 
@@ -37,8 +79,12 @@ Defer full CRDT (Yjs / Loro) until product validates multi-user demand and WebSo
 - Paths sanitized (no `..`, no control chars, length caps)  
 - Locks never include absolute host paths  
 - Same Bearer auth as project routes  
+- Session ids reject control characters (`\0`, CR, LF)
 
 ## References
 
 - [`PLAN_FOR_V0_6_0.md`](../plans/PLAN_FOR_V0_6_0.md) Task 5  
-- `apps/server/src/lib/project-collab.ts`  
+- `apps/server/src/lib/project-collab.ts` (`isSharedEditHardEnforce`)  
+- `apps/server/src/routes/projects.ts` (`hardEnforceLockBlock`, `resolveCollabSessionId`)  
+- Ops: [`docs/ops/multi-replica-collab.md`](../ops/multi-replica-collab.md)  
+

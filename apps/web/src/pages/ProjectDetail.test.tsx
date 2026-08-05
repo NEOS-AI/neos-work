@@ -89,6 +89,36 @@ const streamProjectFileEvents = vi.fn((_id: string, cb: SseHandler) => {
   };
 });
 
+type RunSseHandler = (ev: {
+  type: string;
+  id?: string;
+  ts?: string;
+  data?: unknown;
+}) => void;
+const streamRunEvents = vi.fn(
+  (
+    _runId: string,
+    onEvent: RunSseHandler,
+    opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+  ) => {
+    // Default: emit a quick terminal-friendly stream then complete
+    queueMicrotask(() => {
+      onEvent({
+        type: 'run.started',
+        id: 'ev-start',
+        ts: '2026-01-01T00:00:00.000Z',
+      });
+      onEvent({
+        type: 'run.succeeded',
+        id: 'ev-end',
+        ts: '2026-01-01T00:00:01.000Z',
+      });
+      opts?.onDone?.();
+    });
+    return () => {};
+  },
+);
+
 vi.mock('../lib/auth.js', () => ({
   loadConnection: () => ({
     serverUrl: 'http://127.0.0.1:3000',
@@ -138,6 +168,7 @@ vi.mock('../lib/api.js', () => {
       getRevision = getRevision;
       restoreRevision = restoreRevision;
       streamProjectFileEvents = streamProjectFileEvents;
+      streamRunEvents = streamRunEvents;
       streamProjectCollab = () => () => {};
       collabLock = vi.fn(async () => ({ ok: true, data: {} }));
       collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
@@ -208,6 +239,20 @@ describe('ProjectDetail Design Editor', () => {
     listRuns.mockClear();
     listRunEvents.mockClear();
     cancelRun.mockClear();
+    streamRunEvents.mockClear().mockImplementation(
+      (
+        _runId: string,
+        onEvent: RunSseHandler,
+        opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+      ) => {
+        queueMicrotask(() => {
+          onEvent({ type: 'run.started', id: 'ev-start' });
+          onEvent({ type: 'run.succeeded', id: 'ev-end' });
+          opts?.onDone?.();
+        });
+        return () => {};
+      },
+    );
     readFile.mockClear();
     listRevisions.mockClear();
     getRevision.mockClear();
@@ -305,16 +350,26 @@ describe('ProjectDetail Design Editor', () => {
     await waitFor(() => expect(screen.getByTestId('web-dirty')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('file-save'));
     await waitFor(() => {
-      expect(writeFile).toHaveBeenCalledWith(
-        'p1',
-        'index.html',
-        '<html><body>v2</body></html>',
-      );
+      expect(writeFile).toHaveBeenCalled();
+      const args = writeFile.mock.calls.at(-1) as unknown as [
+        string,
+        string,
+        string,
+        { sessionId?: string } | undefined,
+      ];
+      expect(args[0]).toBe('p1');
+      expect(args[1]).toBe('index.html');
+      expect(args[2]).toBe('<html><body>v2</body></html>');
+      // collabSessionId when presence ready → { sessionId }; else undefined
+      if (args[3] !== undefined) {
+        expect(args[3]).toEqual(
+          expect.objectContaining({ sessionId: expect.any(String) }),
+        );
+      }
     });
   });
 
   it('runs Edit with AI with prompt and reloads after terminal status', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderProject();
     await waitFor(() => screen.getByTestId('ai-prompt'));
     fireEvent.change(screen.getByTestId('ai-prompt'), {
@@ -328,6 +383,14 @@ describe('ProjectDetail Design Editor', () => {
     const arg = calls[0]?.[0];
     expect(arg?.projectId).toBe('p1');
     expect(arg?.prompt).toMatch(/hero blue/i);
+    // Prefers run event SSE (desktop parity)
+    await waitFor(() => {
+      expect(streamRunEvents).toHaveBeenCalledWith(
+        'run1',
+        expect.any(Function),
+        expect.objectContaining({ onDone: expect.any(Function) }),
+      );
+    });
     await waitFor(() => {
       expect(getRun).toHaveBeenCalledWith('run1');
     });
@@ -335,7 +398,49 @@ describe('ProjectDetail Design Editor', () => {
       // initial load + post-run reload
       expect(readFile.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
-    vi.useRealTimers();
+    await waitFor(() => {
+      expect(screen.getByTestId('web-ai-run-status')).toHaveTextContent(/succeeded/i);
+    });
+  });
+
+  it('falls back to listRunEvents poll when run stream errors', async () => {
+    streamRunEvents.mockImplementation(
+      (
+        _runId: string,
+        _onEvent: RunSseHandler,
+        opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+      ) => {
+        queueMicrotask(() => opts?.onError?.(new Error('stream down')));
+        return () => {};
+      },
+    );
+    getRun
+      .mockResolvedValueOnce({ ok: true, data: { id: 'run1', status: 'running' } })
+      .mockResolvedValue({ ok: true, data: { id: 'run1', status: 'succeeded' } });
+    renderProject();
+    await waitFor(() => screen.getByTestId('ai-prompt'));
+    fireEvent.change(screen.getByTestId('ai-prompt'), {
+      target: { value: 'retry path' },
+    });
+    fireEvent.click(screen.getByTestId('ai-run'));
+    await waitFor(() => expect(streamRunEvents).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(listRunEvents).toHaveBeenCalledWith('run1', undefined);
+    });
+    await waitFor(() => {
+      expect(getRun).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('web-ai-run-status')).toHaveTextContent(/succeeded/i);
+    });
+  });
+
+  it('renders colored status badges in runs list', async () => {
+    renderProject();
+    await waitFor(() => {
+      expect(screen.getByTestId('web-run-status-run-abc')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('web-run-status-run-abc')).toHaveTextContent('running');
   });
 
   it('shows conflict banner when dirty and SSE disk tip changes', async () => {
@@ -417,7 +522,19 @@ describe('ProjectDetail Design Editor', () => {
     }));
     fireEvent.click(screen.getByTestId('web-revision-restore-rev1'));
     await waitFor(() => {
-      expect(restoreRevision).toHaveBeenCalledWith('p1', 'rev1');
+      expect(restoreRevision).toHaveBeenCalled();
+      const args = restoreRevision.mock.calls.at(-1) as unknown as [
+        string,
+        string,
+        { sessionId?: string } | undefined,
+      ];
+      expect(args[0]).toBe('p1');
+      expect(args[1]).toBe('rev1');
+      if (args[2] !== undefined) {
+        expect(args[2]).toEqual(
+          expect.objectContaining({ sessionId: expect.any(String) }),
+        );
+      }
     });
     await waitFor(() => {
       expect(readFile.mock.calls.length).toBeGreaterThan(readsBefore);

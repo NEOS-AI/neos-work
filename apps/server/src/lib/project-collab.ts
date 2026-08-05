@@ -745,7 +745,14 @@ export function listProjectSelections(projectId: string): PeerSelection[] {
   return listSelections(id);
 }
 
-/** When true, file PUT rejects writers who do not hold the lock (if a lock exists). */
+/**
+ * When true, hard-enforce file locks for peer (human) mutations when a lock exists:
+ * PUT write (`source=user`), DELETE file, POST revision restore, POST mkdir.
+ * Callers identify as the holder via body `sessionId` and/or `x-neos-session-id`.
+ *
+ * **Agent bypass (intentional):** `source=agent` / run-pipeline disk writes are
+ * not hard-enforced — daemon agents remain project-level writers (ADR 0001).
+ */
 export function isSharedEditHardEnforce(): boolean {
   const v = process.env.NEOS_SHARED_EDIT;
   return v === '1' || v === 'true';

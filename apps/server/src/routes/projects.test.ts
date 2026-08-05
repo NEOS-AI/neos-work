@@ -7,6 +7,11 @@ import projects from './projects.js';
 import * as db from '../db/projects.js';
 import { getDb } from '../db/schema.js';
 import { clearImportTokens } from '../lib/import-token.js';
+import {
+  acquireFileLock,
+  clearProjectPresence,
+  joinProjectPresence,
+} from '../lib/project-collab.js';
 
 const app = new Hono();
 app.route('/api/projects', projects);
@@ -36,6 +41,7 @@ function cleanup() {
 
 afterEach(() => {
   clearImportTokens();
+  clearProjectPresence();
   cleanup();
 });
 
@@ -163,6 +169,252 @@ describe('projects routes', () => {
       await app.request(`/api/projects/${project.id}/files/index.html`)
     ).json()) as { data: { content: string } };
     expect(after.data.content).toBe('version-one');
+  });
+
+  it('restore and delete respect NEOS_SHARED_EDIT hard-enforce locks', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    process.env.NEOS_SHARED_EDIT = '1';
+    try {
+      const project = await createViaApi();
+      await app.request(`/api/projects/${project.id}/files/index.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'locked-v1' }),
+      });
+      await app.request(`/api/projects/${project.id}/files/index.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'locked-v2' }),
+      });
+      const revs = db.listFileRevisions(project.id, 'index.html');
+      const older = revs.find((r) => db.getFileRevision(r.id)?.content === 'locked-v1');
+      expect(older).toBeTruthy();
+
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'Holder',
+        listener: () => {},
+      })!;
+      const other = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'Other',
+        listener: () => {},
+      })!;
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: holder.sessionId,
+          path: 'index.html',
+        }).ok,
+      ).toBe(true);
+
+      const blocked = await app.request(
+        `/api/projects/${project.id}/revisions/${older!.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: other.sessionId }),
+        },
+      );
+      expect(blocked.status).toBe(423);
+      const blockedBody = (await blocked.json()) as {
+        ok: boolean;
+        error?: string;
+        data?: { holder?: { sessionId?: string } };
+      };
+      expect(blockedBody.ok).toBe(false);
+      expect(blockedBody.data?.holder?.sessionId).toBe(holder.sessionId);
+
+      const delBlocked = await app.request(
+        `/api/projects/${project.id}/files/index.html`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: other.sessionId }),
+        },
+      );
+      expect(delBlocked.status).toBe(423);
+
+      const allowed = await app.request(
+        `/api/projects/${project.id}/revisions/${older!.id}/restore`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-neos-session-id': holder.sessionId,
+          },
+          body: JSON.stringify({ sessionId: holder.sessionId }),
+        },
+      );
+      expect(allowed.status).toBe(200);
+      const after = (await (
+        await app.request(`/api/projects/${project.id}/files/index.html`)
+      ).json()) as { data: { content: string } };
+      expect(after.data.content).toBe('locked-v1');
+
+      const delAllowed = await app.request(
+        `/api/projects/${project.id}/files/index.html`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-neos-session-id': holder.sessionId,
+          },
+          body: JSON.stringify({ sessionId: holder.sessionId }),
+        },
+      );
+      expect(delAllowed.status).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+    }
+  });
+
+  it('mkdir respects NEOS_SHARED_EDIT hard-enforce; agent PUT still bypasses', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    process.env.NEOS_SHARED_EDIT = '1';
+    try {
+      const project = await createViaApi();
+      // Locks are path keys — no on-disk file required for mkdir hard-enforce
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'MkdirHolder',
+        listener: () => {},
+      })!;
+      const other = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'MkdirOther',
+        listener: () => {},
+      })!;
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: holder.sessionId,
+          path: 'locked-dir',
+        }).ok,
+      ).toBe(true);
+
+      const blocked = await app.request(`/api/projects/${project.id}/mkdir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'locked-dir', sessionId: other.sessionId }),
+      });
+      expect(blocked.status).toBe(423);
+      const blockedBody = (await blocked.json()) as {
+        ok: boolean;
+        data?: { holder?: { sessionId?: string } };
+      };
+      expect(blockedBody.ok).toBe(false);
+      expect(blockedBody.data?.holder?.sessionId).toBe(holder.sessionId);
+
+      const allowed = await app.request(`/api/projects/${project.id}/mkdir`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-neos-session-id': holder.sessionId,
+        },
+        body: JSON.stringify({ path: 'locked-dir', sessionId: holder.sessionId }),
+      });
+      expect(allowed.status).toBe(201);
+
+      // Agent PUT bypasses hard-enforce even without session (intentional policy)
+      await app.request(`/api/projects/${project.id}/files/agent-only.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'v1' }),
+      });
+      const agentHolder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'AgentLock',
+        listener: () => {},
+      })!;
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: agentHolder.sessionId,
+          path: 'agent-only.html',
+        }).ok,
+      ).toBe(true);
+      const agentWrite = await app.request(
+        `/api/projects/${project.id}/files/agent-only.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'from-agent', source: 'agent' }),
+        },
+      );
+      expect(agentWrite.status).toBe(200);
+      // User write without session still blocked
+      const userBlocked = await app.request(
+        `/api/projects/${project.id}/files/agent-only.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'from-user', source: 'user' }),
+        },
+      );
+      expect(userBlocked.status).toBe(423);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+    }
+  });
+
+  it('hard-enforce accepts header-only x-neos-session-id on DELETE', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    process.env.NEOS_SHARED_EDIT = '1';
+    try {
+      const project = await createViaApi();
+      await app.request(`/api/projects/${project.id}/files/only-hdr.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'x' }),
+      });
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'HdrHolder',
+        listener: () => {},
+      })!;
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: holder.sessionId,
+          path: 'only-hdr.html',
+        }).ok,
+      ).toBe(true);
+
+      // No body — header alone identifies the lock holder (proxy-safe DELETE)
+      const allowed = await app.request(
+        `/api/projects/${project.id}/files/only-hdr.html`,
+        {
+          method: 'DELETE',
+          headers: { 'x-neos-session-id': holder.sessionId },
+        },
+      );
+      expect(allowed.status).toBe(200);
+
+      // Other session without body/header still blocked if file recreated + locked
+      await app.request(`/api/projects/${project.id}/files/only-hdr.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'y' }),
+      });
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: holder.sessionId,
+          path: 'only-hdr.html',
+        }).ok,
+      ).toBe(true);
+      const blocked = await app.request(
+        `/api/projects/${project.id}/files/only-hdr.html`,
+        { method: 'DELETE' },
+      );
+      expect(blocked.status).toBe(423);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+    }
   });
 
   it('404 for missing project', async () => {

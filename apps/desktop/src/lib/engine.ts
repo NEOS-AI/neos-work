@@ -1730,6 +1730,11 @@ export class EngineClient {
     filePath: string,
     content: string,
     source: 'user' | 'agent' | 'import' | 'restore' = 'user',
+    /**
+     * Collab presence session id. Required for `NEOS_SHARED_EDIT` hard enforce
+     * so the lock holder can write their own locked file (body + x-neos-session-id).
+     */
+    opts?: { sessionId?: string },
   ): Promise<ApiResponse<ProjectFileWriteResult>> {
     const seg = this.pathSegment(projectId);
     const pathSeg = this.projectRelPathSegments(filePath);
@@ -1738,10 +1743,25 @@ export class EngineClient {
     if (typeof content !== 'string' || /\0/.test(content)) {
       return { ok: false, error: 'Invalid content' };
     }
+    const sessionId =
+      opts?.sessionId != null
+      && typeof opts.sessionId === 'string'
+      && !/[\0\r\n]/.test(opts.sessionId)
+        ? opts.sessionId.trim()
+        : '';
+    const headers = this.getHeaders();
+    if (sessionId) {
+      headers['x-neos-session-id'] = sessionId;
+    }
+    const body: { content: string; source: string; sessionId?: string } = {
+      content,
+      source,
+    };
+    if (sessionId) body.sessionId = sessionId;
     const res = await fetch(`${this.baseUrl}/api/projects/${seg}/files/${pathSeg}`, {
       method: 'PUT',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ content, source }),
+      headers,
+      body: JSON.stringify(body),
     });
     const envelope = await readApiResponse<ProjectFileWriteResult>(res);
     if (envelope.ok) {
@@ -1760,14 +1780,27 @@ export class EngineClient {
   async deleteProjectFile(
     projectId: string,
     filePath: string,
-  ): Promise<ApiResponse<{ path?: string }>> {
+    /** Collab session for `NEOS_SHARED_EDIT` hard enforce when path is locked. */
+    opts?: { sessionId?: string },
+  ): Promise<ApiResponse<{ path?: string; holder?: unknown }>> {
     const seg = this.pathSegment(projectId);
     const pathSeg = this.projectRelPathSegments(filePath);
     if (!seg) return this.invalidIdResponse('project id');
     if (!pathSeg) return this.invalidIdResponse('file path');
+    const sessionId =
+      opts?.sessionId != null
+      && typeof opts.sessionId === 'string'
+      && !/[\0\r\n]/.test(opts.sessionId)
+        ? opts.sessionId.trim()
+        : '';
+    const headers = this.getHeaders();
+    if (sessionId) {
+      headers['x-neos-session-id'] = sessionId;
+    }
     const res = await fetch(`${this.baseUrl}/api/projects/${seg}/files/${pathSeg}`, {
       method: 'DELETE',
-      headers: this.getHeaders(),
+      headers,
+      body: sessionId ? JSON.stringify({ sessionId }) : undefined,
     });
     return readApiResponse(res);
   }
@@ -1775,16 +1808,30 @@ export class EngineClient {
   async mkdirProjectPath(
     projectId: string,
     dirPath: string,
-  ): Promise<ApiResponse<{ path: string }>> {
+    /** Collab session for `NEOS_SHARED_EDIT` hard enforce when path is locked. */
+    opts?: { sessionId?: string },
+  ): Promise<ApiResponse<{ path: string; holder?: unknown }>> {
     const seg = this.pathSegment(projectId);
     if (!seg) return this.invalidIdResponse('project id');
     if (typeof dirPath !== 'string' || /[\0\r\n]/.test(dirPath) || !dirPath.trim()) {
       return this.invalidIdResponse('path');
     }
+    const sessionId =
+      opts?.sessionId != null
+      && typeof opts.sessionId === 'string'
+      && !/[\0\r\n]/.test(opts.sessionId)
+        ? opts.sessionId.trim()
+        : '';
+    const headers = this.getHeaders();
+    if (sessionId) {
+      headers['x-neos-session-id'] = sessionId;
+    }
+    const body: { path: string; sessionId?: string } = { path: dirPath.trim() };
+    if (sessionId) body.sessionId = sessionId;
     const res = await fetch(`${this.baseUrl}/api/projects/${seg}/mkdir`, {
       method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ path: dirPath.trim() }),
+      headers,
+      body: JSON.stringify(body),
     });
     return readApiResponse(res);
   }
@@ -1826,14 +1873,33 @@ export class EngineClient {
   async restoreProjectRevision(
     projectId: string,
     revisionId: string,
+    /**
+     * Collab presence session id. Required under `NEOS_SHARED_EDIT` hard enforce
+     * when the target path is locked (body + x-neos-session-id).
+     */
+    opts?: { sessionId?: string },
   ): Promise<ApiResponse<{ path: string; hash: string }>> {
     const pSeg = this.pathSegment(projectId);
     const rSeg = this.pathSegment(revisionId);
     if (!pSeg) return this.invalidIdResponse('project id');
     if (!rSeg) return this.invalidIdResponse('revision id');
+    const sessionId =
+      opts?.sessionId != null
+      && typeof opts.sessionId === 'string'
+      && !/[\0\r\n]/.test(opts.sessionId)
+        ? opts.sessionId.trim()
+        : '';
+    const headers = this.getHeaders();
+    if (sessionId) {
+      headers['x-neos-session-id'] = sessionId;
+    }
     const res = await fetch(
       `${this.baseUrl}/api/projects/${pSeg}/revisions/${rSeg}/restore`,
-      { method: 'POST', headers: this.getHeaders() },
+      {
+        method: 'POST',
+        headers,
+        body: sessionId ? JSON.stringify({ sessionId }) : undefined,
+      },
     );
     return readApiResponse(res);
   }

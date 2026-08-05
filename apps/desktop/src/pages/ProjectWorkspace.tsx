@@ -553,7 +553,14 @@ export function ProjectWorkspace() {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await client.writeProjectFile(projectId, buffer.path, buffer.local, 'user');
+      // Pass collab session so NEOS_SHARED_EDIT hard enforce accepts our own lock
+      const res = await client.writeProjectFile(
+        projectId,
+        buffer.path,
+        buffer.local,
+        'user',
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
       if (res.ok) {
         setBuffer((prev) =>
           reduceEditorBuffer(prev, {
@@ -580,7 +587,94 @@ export function ProjectWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [client, projectId, buffer, t]);
+  }, [client, projectId, buffer, collabSessionId, t]);
+
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+
+  /**
+   * Delete a project file. Passes collab session for NEOS_SHARED_EDIT hard enforce.
+   * On 423, surfaces holder via error message / foreignLocks when present.
+   */
+  const handleDeleteFile = useCallback(
+    async (path: string) => {
+      if (!client || !projectId || !path) return;
+      const rel = normalizeProjectRelPath(path);
+      if (!rel) return;
+      const name = rel.split('/').pop() || rel;
+      const ok = window.confirm(
+        t('project.confirmDeleteFile', { name }),
+      );
+      if (!ok) return;
+      // Warn if deleting the dirty open buffer (confirm already covers destructive delete)
+      if (buffer.path && normalizeProjectRelPath(buffer.path) === rel && isDirty(buffer)) {
+        const leave = window.confirm(t('project.unsavedLeave'));
+        if (!leave) return;
+      }
+      setDeletingPath(rel);
+      setSaveError(null);
+      try {
+        const res = await client.deleteProjectFile(
+          projectId,
+          rel,
+          collabSessionId ? { sessionId: collabSessionId } : undefined,
+        );
+        if (!res.ok) {
+          const holder =
+            res.data
+            && typeof res.data === 'object'
+            && res.data !== null
+            && 'holder' in res.data
+              ? (res.data as {
+                  holder?: { sessionId?: string; displayName?: string; path?: string };
+                }).holder
+              : undefined;
+          if (holder?.displayName && holder.sessionId) {
+            const lockPath =
+              (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
+              || rel;
+            setForeignLocks((m) => ({
+              ...m,
+              [lockPath]: {
+                sessionId: holder.sessionId!,
+                displayName: holder.displayName!,
+              },
+            }));
+            setSaveError(
+              t('project.fileLockedBy', { name: holder.displayName }),
+            );
+          } else {
+            setSaveError(
+              scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+                || t('project.deleteFileFailed'),
+            );
+          }
+          return;
+        }
+        // Clear editor if we deleted the open file
+        if (buffer.path && normalizeProjectRelPath(buffer.path) === rel) {
+          setBuffer(createEmptyBuffer());
+          setSelection(null);
+          setSelectDetail(null);
+          setRevisions([]);
+          setRevisionPreview(null);
+        }
+        setForeignLocks((m) => {
+          if (!(rel in m)) return m;
+          const n = { ...m };
+          delete n[rel];
+          return n;
+        });
+        const filesRes = await client.listProjectFiles(projectId);
+        if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : t('project.deleteFileFailed');
+        setSaveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+      } finally {
+        setDeletingPath(null);
+      }
+    },
+    [client, projectId, buffer, collabSessionId, t],
+  );
 
   const loadComments = useCallback(async () => {
     if (!client || !projectId) return;
@@ -892,7 +986,12 @@ export function ProjectWorkspace() {
       setRevisionBusy(true);
       setRevisionError(null);
       try {
-        const res = await client.restoreProjectRevision(projectId, revisionId);
+        // Pass collab session so NEOS_SHARED_EDIT hard enforce accepts our own lock
+        const res = await client.restoreProjectRevision(
+          projectId,
+          revisionId,
+          collabSessionId ? { sessionId: collabSessionId } : undefined,
+        );
         if (!res.ok) {
           setRevisionError(
             scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
@@ -922,7 +1021,7 @@ export function ProjectWorkspace() {
         setRevisionBusy(false);
       }
     },
-    [client, projectId, buffer, t, loadRevisions],
+    [client, projectId, buffer, collabSessionId, t, loadRevisions],
   );
 
   const appendLog = useCallback((line: string) => {
@@ -1237,38 +1336,73 @@ export function ProjectWorkspace() {
           <ul className="flex-1 overflow-auto py-1 text-xs">
             {fileTree.map((f) => {
               const depth = f.path.split('/').length - 1;
-              const active = f.path === buffer.path;
+              const pathNorm = normalizeProjectRelPath(f.path) || f.path;
+              const active =
+                !!buffer.path && normalizeProjectRelPath(buffer.path) === pathNorm;
+              const isDir = f.type === 'directory';
+              const locked =
+                !isDir && foreignLocks[pathNorm]
+                  ? foreignLocks[pathNorm]!.displayName
+                  : null;
               return (
-                <li key={f.path}>
+                <li key={f.path} className="group flex items-stretch">
                   <button
                     type="button"
-                    disabled={f.type === 'directory'}
+                    disabled={isDir}
                     onClick={() => {
                       if (f.type === 'file') void openFile(f.path);
                     }}
-                    className="flex w-full items-center gap-1 truncate px-2 py-1 text-left disabled:cursor-default"
+                    className="flex min-w-0 flex-1 items-center gap-1 truncate px-2 py-1 text-left disabled:cursor-default"
                     style={{
                       paddingLeft: 8 + depth * 10,
                       backgroundColor: active
                         ? 'color-mix(in srgb, var(--bg-tertiary) 90%, transparent)'
                         : undefined,
                       color:
-                        f.type === 'directory'
+                        isDir
                           ? 'var(--text-muted)'
                           : active
                             ? 'var(--text-primary)'
                             : 'var(--text-secondary)',
                     }}
-                    title={f.path}
+                    title={locked ? `${f.path} — Locked by ${locked}` : f.path}
                   >
-                    <span className="opacity-60">{f.type === 'directory' ? '▸' : '·'}</span>
+                    <span className="opacity-60">{isDir ? '▸' : '·'}</span>
                     <span className="truncate">
                       {scrubDisplayText(f.name, { collapseLines: true, maxChars: 60 })}
                     </span>
                     {f.isEntry && (
-                      <span className="ml-auto text-[9px] text-emerald-400">entry</span>
+                      <span className="ml-auto shrink-0 text-[9px] text-emerald-400">entry</span>
+                    )}
+                    {locked && (
+                      <span
+                        className="ml-1 shrink-0 text-[9px] text-red-300"
+                        data-testid={`file-lock-chip-${pathNorm}`}
+                        title={t('project.fileLockedBy', { name: locked })}
+                      >
+                        🔒
+                      </span>
                     )}
                   </button>
+                  {!isDir && (
+                    <button
+                      type="button"
+                      data-testid={`file-delete-${pathNorm}`}
+                      aria-label={t('project.deleteFileAria', {
+                        name: scrubDisplayText(f.name, { collapseLines: true, maxChars: 40 }),
+                      })}
+                      disabled={deletingPath === pathNorm}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDeleteFile(f.path);
+                      }}
+                      className="shrink-0 px-1.5 text-[10px] opacity-60 hover:opacity-100 disabled:opacity-40"
+                      style={{ color: 'var(--text-muted)' }}
+                      title={t('project.deleteFile')}
+                    >
+                      {deletingPath === pathNorm ? '…' : '×'}
+                    </button>
+                  )}
                 </li>
               );
             })}

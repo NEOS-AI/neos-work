@@ -77,6 +77,48 @@ function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): stri
   return safeRouteId(c.req.param(key));
 }
 
+/**
+ * Resolve collab session id for hard-enforce lock checks (body preferred, then header).
+ */
+function resolveCollabSessionId(
+  c: { req: { header: (name: string) => string | undefined } },
+  body: { sessionId?: unknown } | null | undefined,
+): string {
+  if (
+    body
+    && typeof body.sessionId === 'string'
+    && !/[\0\r\n]/.test(body.sessionId)
+  ) {
+    const s = body.sessionId.trim();
+    if (s) return s;
+  }
+  const hdr = c.req.header('x-neos-session-id') ?? '';
+  if (typeof hdr === 'string' && !/[\0\r\n]/.test(hdr)) {
+    return hdr.trim();
+  }
+  return '';
+}
+
+/**
+ * When NEOS_SHARED_EDIT hard-enforce is on and a lock exists, only the holder may mutate.
+ * Returns a 423 JSON body when blocked; null when allowed.
+ */
+function hardEnforceLockBlock(
+  projectId: string,
+  relPath: string,
+  sessionId: string,
+): { ok: false; error: string; data: { holder: NonNullable<ReturnType<typeof getFileLock>> } } | null {
+  if (!isSharedEditHardEnforce()) return null;
+  const holder = getFileLock(projectId, relPath);
+  if (!holder) return null;
+  if (sessionId && sessionId === holder.sessionId) return null;
+  return {
+    ok: false,
+    error: `File locked by ${holder.displayName}`,
+    data: { holder },
+  };
+}
+
 /** Extract splat path from Hono /* route (may be "path" or include slashes). */
 function splatPath(c: { req: { path: string; param: (k: string) => string } }, prefix: string): string {
   // Prefer named splat if present
@@ -710,28 +752,10 @@ projects.put('/:id/files/*', async (c) => {
     ? (sourceRaw as FileRevisionSource)
     : 'user';
 
-  // M3 hard enforce: when NEOS_SHARED_EDIT=1, reject writes if another session holds the lock
-  if (isSharedEditHardEnforce() && source === 'user') {
-    const holder = getFileLock(id, rel);
-    if (holder) {
-      const hdr = c.req.header('x-neos-session-id') ?? '';
-      const sessionId =
-        typeof body.sessionId === 'string' && !/[\0\r\n]/.test(body.sessionId)
-          ? body.sessionId.trim()
-          : typeof hdr === 'string' && !/[\0\r\n]/.test(hdr)
-            ? hdr.trim()
-            : '';
-      if (!sessionId || sessionId !== holder.sessionId) {
-        return c.json(
-          {
-            ok: false,
-            error: `File locked by ${holder.displayName}`,
-            data: { holder },
-          },
-          423,
-        );
-      }
-    }
+  // M3 hard enforce: when NEOS_SHARED_EDIT=1, reject user writes if another session holds the lock
+  if (source === 'user') {
+    const blocked = hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, body));
+    if (blocked) return c.json(blocked, 423);
   }
 
   try {
@@ -771,13 +795,21 @@ projects.put('/:id/files/*', async (c) => {
   }
 });
 
-projects.delete('/:id/files/*', (c) => {
+projects.delete('/:id/files/*', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const project = db.getProject(id);
   if (!project) return c.json({ ok: false, error: 'Not found' }, 404);
   const rel = splatPath(c, `/api/projects/${id}/files/`);
   if (!rel) return c.json({ ok: false, error: 'path required' }, 400);
+  // Optional JSON body { sessionId } for hard-enforce; header also accepted
+  const body = await c.req.json().catch(() => null);
+  const sessionBody =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as { sessionId?: unknown })
+      : null;
+  const blocked = hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, sessionBody));
+  if (blocked) return c.json(blocked, 423);
   try {
     const result = deleteProjectPath(project.baseDir, rel);
     publishProjectFileEvent({
@@ -800,10 +832,19 @@ projects.post('/:id/mkdir', async (c) => {
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const project = db.getProject(id);
   if (!project) return c.json({ ok: false, error: 'Not found' }, 404);
-  const body = await c.req.json<{ path?: string }>().catch(() => null);
+  const body = await c.req
+    .json<{ path?: string; sessionId?: string }>()
+    .catch(() => null);
   if (!body || typeof body.path !== 'string') {
     return c.json({ ok: false, error: 'path string required' }, 400);
   }
+  // Hard-enforce when a lock exists on the mkdir target path (same session rules as files)
+  const blocked = hardEnforceLockBlock(
+    id,
+    body.path,
+    resolveCollabSessionId(c, body),
+  );
+  if (blocked) return c.json(blocked, 423);
   try {
     const rel = mkdirProjectPath(project.baseDir, body.path);
     return c.json({ ok: true, data: { path: rel } }, 201);
@@ -835,7 +876,7 @@ projects.get('/:id/revisions/:revisionId', (c) => {
   return c.json({ ok: true, data: rev });
 });
 
-projects.post('/:id/revisions/:revisionId/restore', (c) => {
+projects.post('/:id/revisions/:revisionId/restore', async (c) => {
   const id = paramId(c);
   const revisionId = safeRouteId(c.req.param('revisionId'));
   if (!id || !revisionId) return c.json({ ok: false, error: 'Not found' }, 404);
@@ -845,6 +886,19 @@ projects.post('/:id/revisions/:revisionId/restore', (c) => {
   if (!rev || rev.projectId !== id || rev.content == null) {
     return c.json({ ok: false, error: 'Not found' }, 404);
   }
+  // Optional body { sessionId } / x-neos-session-id — required under hard enforce when locked
+  const body = await c.req.json().catch(() => null);
+  const sessionBody =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as { sessionId?: unknown })
+      : null;
+  const blocked = hardEnforceLockBlock(
+    id,
+    rev.path,
+    resolveCollabSessionId(c, sessionBody),
+  );
+  if (blocked) return c.json(blocked, 423);
+
   try {
     const written = writeProjectFile(project.baseDir, rev.path, rev.content);
     db.recordFileRevision({

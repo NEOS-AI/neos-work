@@ -66,12 +66,14 @@ export class WebApiClient {
     method: string,
     path: string,
     body?: unknown,
+    opts?: { headers?: Record<string, string> },
   ): Promise<ApiEnvelope<T>> {
     const res = await fetch(this.url(path), {
       method,
       headers: {
         ...this.headers(),
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...opts?.headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
@@ -92,6 +94,21 @@ export class WebApiClient {
         error: res.ok ? undefined : `HTTP ${res.status}`,
       };
     }
+  }
+
+  /**
+   * Sanitize collab presence session id for hard-enforce (body + x-neos-session-id).
+   * Rejects control chars; returns '' when missing/invalid.
+   */
+  private collabSessionId(raw: unknown): string {
+    if (raw == null || typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    return raw.trim();
+  }
+
+  /** Headers for NEOS_SHARED_EDIT hard enforce (mirrors desktop EngineClient). */
+  private collabSessionHeaders(sessionId: string): Record<string, string> | undefined {
+    if (!sessionId) return undefined;
+    return { 'x-neos-session-id': sessionId };
   }
 
   /**
@@ -162,18 +179,27 @@ export class WebApiClient {
    * Write project file. Returns full envelope on HTTP errors (e.g. 423 hard lock
    * with `data.holder`) instead of throwing — callers check `res.ok`.
    * Success `data` is validated against the shared write schema (`hash` required).
+   *
+   * Pass `opts.sessionId` (collab presence id) so `NEOS_SHARED_EDIT` hard enforce
+   * accepts writes from the current lock holder.
    */
   async writeFile(
     projectId: string,
     filePath: string,
     content: string,
+    opts?: { sessionId?: string },
   ): Promise<ApiEnvelope<ProjectFileWriteResult & { contentHash?: string; holder?: unknown }>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
-    const envelope = await this.requestEnvelope<
-      ProjectFileWriteResult & { contentHash?: string; holder?: unknown }
-    >('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, {
+    const sessionId = this.collabSessionId(opts?.sessionId);
+    const body: { content: string; source: string; sessionId?: string } = {
       content,
       source: 'user',
+    };
+    if (sessionId) body.sessionId = sessionId;
+    const envelope = await this.requestEnvelope<
+      ProjectFileWriteResult & { contentHash?: string; holder?: unknown }
+    >('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, body, {
+      headers: this.collabSessionHeaders(sessionId),
     });
     if (envelope.ok) {
       const checked = parseProjectFileWriteResponse(envelope);
@@ -199,15 +225,20 @@ export class WebApiClient {
   /**
    * DELETE /api/projects/:id/files/*
    * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   * Pass `opts.sessionId` for `NEOS_SHARED_EDIT` hard enforce when locked.
    */
   deleteFile(
     projectId: string,
     filePath: string,
+    opts?: { sessionId?: string },
   ): Promise<ApiEnvelope<{ path?: string; deleted?: boolean; holder?: unknown }>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    const sessionId = this.collabSessionId(opts?.sessionId);
     return this.requestEnvelope(
       'DELETE',
       `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`,
+      sessionId ? { sessionId } : undefined,
+      { headers: this.collabSessionHeaders(sessionId) },
     );
   }
 
@@ -261,14 +292,19 @@ export class WebApiClient {
   /**
    * POST /api/projects/:id/revisions/:revisionId/restore
    * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   * Pass `opts.sessionId` so `NEOS_SHARED_EDIT` hard enforce accepts lock holders.
    */
   restoreRevision(
     projectId: string,
     revisionId: string,
-  ): Promise<ApiEnvelope<{ path?: string; hash?: string }>> {
+    opts?: { sessionId?: string },
+  ): Promise<ApiEnvelope<{ path?: string; hash?: string; holder?: unknown }>> {
+    const sessionId = this.collabSessionId(opts?.sessionId);
     return this.requestEnvelope(
       'POST',
       `/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
+      sessionId ? { sessionId } : undefined,
+      { headers: this.collabSessionHeaders(sessionId) },
     );
   }
 
@@ -324,6 +360,103 @@ export class WebApiClient {
       'POST',
       `/api/runs/${encodeURIComponent(runId)}/cancel`,
     );
+  }
+
+  /**
+   * GET /api/runs/:id/events/stream — live run events (stdout / terminal).
+   * Mirrors desktop `streamProjectRunEvents`. Returns abort callback.
+   * Prefer over polling for Edit-with-AI; callers should fall back to
+   * `listRunEvents` + `getRun` if the stream errors or yields nothing.
+   */
+  streamRunEvents(
+    runId: string,
+    onEvent: (event: {
+      type: string;
+      id?: string;
+      ts?: string;
+      data?: unknown;
+    }) => void,
+    opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+  ): () => void {
+    const controller = new AbortController();
+    if (
+      typeof runId !== 'string'
+      || !runId.trim()
+      || /[\0\r\n]/.test(runId)
+      || runId.length > 100
+    ) {
+      queueMicrotask(() => opts?.onError?.(new Error('Invalid run id')));
+      return () => {};
+    }
+    const seg = encodeURIComponent(runId.trim());
+    void (async () => {
+      try {
+        const res = await fetch(this.url(`/api/runs/${seg}/events/stream`), {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+            ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          },
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          if (!controller.signal.aborted) {
+            opts?.onError?.(
+              new Error(res.statusText || `HTTP ${res.status}` || 'Stream failed'),
+            );
+          }
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventName = 'message';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              const name = line.slice(6).trim();
+              eventName = name && !/[\0\r\n]/.test(name) ? name : 'message';
+            } else if (line.startsWith('data:')) {
+              let payload = line.slice(5);
+              if (payload.startsWith(' ')) payload = payload.slice(1);
+              if (payload.endsWith('\r')) payload = payload.slice(0, -1);
+              payload = payload.trim();
+              if (!payload || /\0/.test(payload)) continue;
+              try {
+                const parsed = JSON.parse(payload) as Record<string, unknown>;
+                const type =
+                  typeof parsed.type === 'string' && parsed.type
+                    ? parsed.type
+                    : eventName;
+                onEvent({
+                  type,
+                  id: typeof parsed.id === 'string' ? parsed.id : undefined,
+                  ts: typeof parsed.ts === 'string' ? parsed.ts : undefined,
+                  data: 'data' in parsed ? parsed.data : undefined,
+                });
+              } catch {
+                // skip malformed JSON
+              }
+              eventName = 'message';
+            } else if (line === '' || line === '\r') {
+              eventName = 'message';
+            }
+          }
+        }
+        if (!controller.signal.aborted) {
+          opts?.onDone?.();
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        opts?.onError?.(err);
+      }
+    })();
+    return () => controller.abort();
   }
 
   /** GET /api/mcp/install-info — snippets for neos mcp serve clients. */

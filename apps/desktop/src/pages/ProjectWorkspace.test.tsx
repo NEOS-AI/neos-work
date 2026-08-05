@@ -7,6 +7,7 @@ const getProject = vi.fn();
 const listProjectFiles = vi.fn();
 const readProjectFile = vi.fn();
 const writeProjectFile = vi.fn();
+const deleteProjectFile = vi.fn();
 const listProjectPreviewComments = vi.fn();
 const createProjectPreviewComment = vi.fn();
 const deleteProjectPreviewComment = vi.fn();
@@ -46,6 +47,7 @@ const client = {
   listProjectFiles,
   readProjectFile,
   writeProjectFile,
+  deleteProjectFile,
   listProjectPreviewComments,
   createProjectPreviewComment,
   deleteProjectPreviewComment,
@@ -285,6 +287,7 @@ describe('ProjectWorkspace', () => {
     listProjectFiles.mockReset();
     readProjectFile.mockReset();
     writeProjectFile.mockReset();
+    deleteProjectFile.mockReset();
     listProjectPreviewComments.mockReset().mockResolvedValue({ ok: true, data: [] });
     createProjectPreviewComment.mockReset();
     deleteProjectPreviewComment.mockReset();
@@ -305,6 +308,13 @@ describe('ProjectWorkspace', () => {
     deleteLiveArtifact.mockReset();
     streamProjectFileEvents.mockReset().mockImplementation(() => () => {});
     streamProjectRunEvents.mockReset().mockImplementation(() => () => {});
+    streamProjectCollab.mockReset().mockImplementation(() => () => {});
+    listCollabPeers.mockReset().mockResolvedValue({ ok: true, data: { peers: [] } });
+    listCollabLocks.mockReset().mockResolvedValue({ ok: true, data: { locks: [] } });
+    listCollabSelections.mockReset().mockResolvedValue({ ok: true, data: { selections: [] } });
+    collabHeartbeat.mockReset().mockResolvedValue({ ok: true, data: { touched: true } });
+    collabLock.mockReset().mockResolvedValue({ ok: true, data: {} });
+    collabSelection.mockReset().mockResolvedValue({ ok: true, data: {} });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -329,12 +339,18 @@ describe('ProjectWorkspace', () => {
 
     await user.click(screen.getByRole('button', { name: 'common.save' }));
     await waitFor(() => {
-      expect(writeProjectFile).toHaveBeenCalledWith(
-        'proj-1',
-        'index.html',
-        '<html>edited</html>',
-        'user',
-      );
+      expect(writeProjectFile).toHaveBeenCalled();
+      const args = writeProjectFile.mock.calls.at(-1)!;
+      expect(args[0]).toBe('proj-1');
+      expect(args[1]).toBe('index.html');
+      expect(args[2]).toBe('<html>edited</html>');
+      expect(args[3]).toBe('user');
+      // When presence session is ready, pass sessionId for hard-enforce lock holder writes
+      if (args[4] !== undefined) {
+        expect(args[4]).toEqual(
+          expect.objectContaining({ sessionId: expect.any(String) }),
+        );
+      }
     });
   });
 
@@ -391,6 +407,111 @@ describe('ProjectWorkspace', () => {
         'about',
       );
     });
+  });
+
+  it('deletes a file from the tree with sessionId when collab ready', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    streamProjectCollab.mockImplementation(
+      (_id: string, onEvent: (ev: { type: string; sessionId?: string }) => void) => {
+        onEvent({ type: 'ready', sessionId: 'sess-delete-1' });
+        return () => {};
+      },
+    );
+    deleteProjectFile.mockResolvedValue({ ok: true, data: { path: 'about.html' } });
+    listProjectFiles
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+          { path: 'about.html', name: 'about.html', type: 'file', isEntry: false },
+        ],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [{ path: 'index.html', name: 'index.html', type: 'file', isEntry: true }],
+      });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('file-delete-about.html')).toBeInTheDocument());
+    await user.click(screen.getByTestId('file-delete-about.html'));
+
+    await waitFor(() => {
+      expect(deleteProjectFile).toHaveBeenCalledWith('proj-1', 'about.html', {
+        sessionId: 'sess-delete-1',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('file-delete-about.html')).not.toBeInTheDocument();
+    });
+    expect(window.confirm).toHaveBeenCalled();
+  });
+
+  it('shows Locked by holder when delete returns 423 holder', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    deleteProjectFile.mockResolvedValue({
+      ok: false,
+      error: 'File locked by Alice',
+      data: {
+        holder: { sessionId: 'peer-a', displayName: 'Alice', path: 'about.html' },
+      },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('file-delete-about.html')).toBeInTheDocument());
+    await user.click(screen.getByTestId('file-delete-about.html'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/fileLockedBy|Alice/i);
+    });
+    // lock chip appears on the locked path
+    await waitFor(() => {
+      expect(screen.getByTestId('file-lock-chip-about.html')).toBeInTheDocument();
+    });
+  });
+
+  it('clears editor when deleting the open file', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    deleteProjectFile.mockResolvedValue({ ok: true, data: { path: 'index.html' } });
+    listProjectFiles
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+          { path: 'about.html', name: 'about.html', type: 'file', isEntry: false },
+        ],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [{ path: 'about.html', name: 'about.html', type: 'file', isEntry: false }],
+      });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('file-delete-index.html')).toBeInTheDocument());
+    await waitFor(() => {
+      expect((screen.getByLabelText('project.mode.code') as HTMLTextAreaElement).value).toContain(
+        'hi',
+      );
+    });
+    await user.click(screen.getByTestId('file-delete-index.html'));
+    await waitFor(() => {
+      expect(deleteProjectFile).toHaveBeenCalledWith('proj-1', 'index.html', undefined);
+    });
+    // buffer cleared — DesignEditor still mounted but empty / no path chrome
+    await waitFor(() => {
+      const ta = screen.queryByLabelText('project.mode.code') as HTMLTextAreaElement | null;
+      if (ta) expect(ta.value).toBe('');
+    });
+  });
+
+  it('does not delete when confirm is cancelled', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('file-delete-about.html')).toBeInTheDocument());
+    await user.click(screen.getByTestId('file-delete-about.html'));
+    expect(deleteProjectFile).not.toHaveBeenCalled();
   });
 
   it('shows save error when write fails', async () => {
@@ -682,7 +803,16 @@ describe('ProjectWorkspace', () => {
     });
     await user.click(screen.getByRole('button', { name: 'project.restore' }));
     await waitFor(() => {
-      expect(restoreProjectRevision).toHaveBeenCalledWith('proj-1', 'rev-1');
+      expect(restoreProjectRevision).toHaveBeenCalled();
+      const args = restoreProjectRevision.mock.calls.at(-1)!;
+      expect(args[0]).toBe('proj-1');
+      expect(args[1]).toBe('rev-1');
+      // collabSessionId when presence ready → { sessionId }; else undefined
+      if (args[2] !== undefined) {
+        expect(args[2]).toEqual(
+          expect.objectContaining({ sessionId: expect.any(String) }),
+        );
+      }
     });
     await waitFor(() => {
       expect((screen.getByLabelText('project.mode.code') as HTMLTextAreaElement).value).toContain(
