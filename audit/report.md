@@ -1,9 +1,9 @@
 # FE↔BE integration audit report
 
 **Repository:** NEOS Work monorepo  
-**Scope:** Backend `apps/server`; frontends `apps/web`, `apps/desktop`; client also scanned `apps/cli`  
-**Mode:** Investigation only (no code changes outside `audit/`)  
-**Date:** 2026-08-05  
+**Scope:** Backend `apps/server`; frontends `apps/web`, `apps/desktop`; also `apps/cli` as HTTP client  
+**Mode:** Investigation only (no product code changes; only `audit/*` written)  
+**Date:** 2026-08-05 (regenerated from source)
 
 Inventories: [`backend-endpoints.md`](./backend-endpoints.md) · [`frontend-calls.md`](./frontend-calls.md) · [`components.md`](./components.md) · [`routes.md`](./routes.md)
 
@@ -13,21 +13,20 @@ Inventories: [`backend-endpoints.md`](./backend-endpoints.md) · [`frontend-call
 
 | # | Severity | Category | Symptom (what the user experiences) | Evidence (file:line) | Root cause | Proposed fix | Confidence |
 |---|----------|----------|-------------------------------------|----------------------|------------|--------------|------------|
-| 1 | **P1** | Integration / CORS | Browser client on a **cross-origin** daemon URL that sends `x-neos-session-id` can fail CORS preflight; hard-enforce lock holder identity then only works via body `sessionId` (DELETE body may be stripped by some proxies). Default Vite proxy (same-origin) is OK. | CORS allow-list: `apps/server/src/index.ts:90-94` (`allowHeaders: ['Content-Type', 'Authorization']` only). Clients set header: `apps/web/src/lib/api.ts` collab session headers; `apps/desktop/src/lib/engine.ts` write/delete/restore/mkdir; server reads header: `apps/server/src/routes/projects.ts:95-98`. | Custom header not listed in CORS `allowHeaders`. | Add `x-neos-session-id` to `allowHeaders` (and document). Keep dual body+header. | **confirmed** |
-| 2 | **P1** | Integration / product gap | Web user **cannot delete project files** from UI even though API + client method exist. | Client method: `apps/web/src/lib/api.ts:230` `deleteFile`. Usage outside tests: **none** in `apps/web/src/pages/*` (only definition + `api.test.ts`). Server: `apps/server/src/routes/projects.ts:798` DELETE. Desktop UI has delete: `apps/desktop/src/pages/ProjectWorkspace.tsx:1391-1401`. | Thin web client; method never wired to file tree. | Add web file-tree delete (mirror desktop) with sessionId + 423 holder UX. | **confirmed** |
-| 3 | **P1** | Integration / product gap | **Project conversation history** API is never used by any frontend or CLI; chat is run-centric only. Users cannot resume multi-turn project conversations via stored messages. | Server: `apps/server/src/routes/projects.ts:969-997` (`GET/POST …/conversations`, messages). Grep of `apps/web`, `apps/desktop`, `apps/cli` for `conversations` path: **0 hits**. | Feature shipped on server without FE/CLI surface. | Wire desktop/web or document as deferred; or remove if abandoned. | **confirmed** |
-| 4 | **P2** | Integration / orphan | **mkdir** client exists on desktop but **no UI** calls it; web has no mkdir client. Users cannot create folders from UI (only via agent/disk). | Desktop client: `apps/desktop/src/lib/engine.ts:1808-1831`. Grep pages for `mkdirProjectPath`: **no page usage**. Web `api.ts`: no mkdir. Server: `apps/server/src/routes/projects.ts:830`. | Client-only surface; no product UI. | Add folder create in file tree or document intentional omission. | **confirmed** |
-| 5 | **P2** | Integration / orphan | Several **media** routes unused by FE/CLI (`POST /image`, `POST /audio`, `GET /jobs`); clients use `POST /media/generate` + list files. | Server: `apps/server/src/routes/media.ts:144`, `:194`, `:126`. Grep `media/image`, `media/audio` in apps: **0**. CLI: `apps/cli/src/client.ts:309` uses `/api/media/generate`. | Legacy or alternate generate paths. | Document preferred path; deprecate unused routes or wire admin UI. | **confirmed** |
-| 6 | **P2** | Integration / orphan | **Tool-token live-artifact** routes (`/api/tools/live-artifacts/*`) unused by browser/desktop/cli (agent tool tokens only). | Server: `apps/server/src/routes/tools-live-artifacts.ts:54,85,100,132`. Grep `tools/live-artifacts` in apps: **0**. Auth exempt: `apps/server/src/lib/auth-paths.ts` (`/api/tools/`). | By design for agent tools, not human UI. | Document as agent-only in API docs; not a FE bug. | **confirmed** |
-| 7 | **P2** | Integration / orphan | Other server-only (or agent/OAuth/ops) surfaces with **no FE call site**: e.g. `GET /api/memory/export`, `POST /api/workflow/migrate`, `GET /api/cli-agents/catalog`, `POST /api/domain-packs/install-zip`, OAuth callback paths, `GET /api` banner, live-artifact preview/refreshes list, artifact create/PUT/preview, etc. | Inventory orphans (manual verify subset): memory export `apps/server/src/routes/memory.ts:55`; workflow migrate `workflow.ts:319`; cli-agents catalog `cli-agents.ts:33`; oauth `mcp.ts:563`, `index.ts:150`. Full candidate list in cross-ref notes below. | Dual-surface product + ops/agent endpoints. | Prioritize product orphans; leave OAuth/tool/ops as intentional. | **confirmed** (individual rows vary) |
-| 8 | **P2** | Integration / dual-surface | **Web is a thin client** vs desktop: no workflows, harnesses, marketplace UI, media page, etc. Users opening web cannot reach most daemon APIs. | Web routes: `apps/web/src/App.tsx:11-15` (Connect, Projects, ProjectDetail, Settings only). Desktop routes: `apps/desktop/src/App.tsx:41-64` (full app). Web call sites ≈29 vs desktop ≈166 (`audit/frontend-calls.md`). | Product split (documented “desktop-first” for marketplace in release notes). | Keep intentional; expand web only with product decision. | **confirmed** |
-| 9 | **P2** | Contract / hygiene | Web write types still allow optional **`contentHash`** on live write result; UI falls back to `contentHash` if `hash` missing — can hide regressions of wrong field. | `apps/web/src/lib/api.ts:191,200`; save path `apps/web/src/pages/ProjectDetail.tsx:719-724`. Server write returns `hash`: `apps/server/src/routes/projects.ts:779-787`. Schema requires `hash`: `packages/shared/src/schemas/api-envelopes.ts:29-36`. | Compatibility fallback after historical mismatch. | Prefer fail-closed on missing `hash` in production clients; keep parse via shared Zod only. | **confirmed** |
-| 10 | **P2** | Error handling | Web **Connect** treats all failures generically; **401** not specially handled (Projects/Settings do). User may not know token is wrong vs network. | Connect: `apps/web/src/pages/Connect.tsx:30-35` (ApiError message only). Projects 401: `apps/web/src/pages/Projects.tsx:29`. Settings 401: `apps/web/src/pages/Settings.tsx:78,101`. | Incomplete error UX on first-connect path. | Map 401 → “invalid token” on Connect. | **confirmed** |
-| 11 | **P2** | Error handling | Web cancel run / collab: 409 terminal cancel handled loosely; many GETs still **throw** while mutates use envelopes — easy to mishandle when copying patterns. | Envelope policy: `apps/web/src/lib/api.ts:1-8,59-95`. cancelRun: `api.ts:358-363` + `ProjectDetail.tsx:654-685`. | Intentional dual policy; risk is developer footgun. | Document in skill (done Session D); keep contract tests. | **confirmed** |
-| 12 | **P2** | Dead code | Desktop **`createHarness` / `updateHarness` / `deleteHarness`** are deprecated aliases with **no page call sites** (pages use workers). | `apps/desktop/src/lib/engine.ts:3406-3418`. Grep pages for createHarness: empty. | Deprecation leftovers. | Remove after migration window or keep with @deprecated only. | **confirmed** |
-| 13 | **P2** | Dead code | Web **`deleteFile`** client method only used from unit tests, not product UI (see #2). | `apps/web/src/lib/api.ts:230`; tests `apps/web/src/lib/api.test.ts:65-82`. | Premature client API. | Wire UI or mark internal until used. | **confirmed** |
-| 14 | **P2** | Routes | Desktop **ModeSelection** blocks all routes until engine connects — expected, but deep links to `/projects/:id` while disconnected never mount. | `apps/desktop/src/App.tsx:68-76`. | Auth/connection gate. | Optional: show connect shell preserving intended path. | **confirmed** |
-| 15 | **P2** | Components | Some component-like exports show **0 external imports** in static scan (may be false positive for colocated/default-export patterns). Examples from inventory: local helpers named like components. | `audit/components.md` “no external imports” rows; e.g. colocated `WorkflowNodeComponent` in `WorkflowEditor.tsx`. | Static import graph limits. | Manual review before deleting. | **suspected** (for true dead components) |
+| 1 | **P1** | Integration / product gap | Desktop **Media** page can only list/delete/preview existing files; **no UI to generate** image/audio/video despite server + CLI support. Users must use CLI `media` commands. | Media UI calls: `listMediaFiles` / `deleteMediaFile` / `fetchMediaBlob` only — `apps/desktop/src/pages/Media.tsx:48`, `:100`, `:139`. No `generateMedia` / `/api/media/generate` in desktop tree (grep: 0). CLI generate: `apps/cli/src/client.ts:309`, `apps/cli/src/commands/media.ts:50`. Server: `POST /api/media/generate` `apps/server/src/routes/media.ts:273`; also orphan `POST /image` `:144`, `POST /audio` `:194`. | Desktop client never implemented generate; Media page is browse-only. | Wire desktop generate form to `POST /api/media/generate` (and job poll if video) or document CLI-only. | **confirmed** |
+| 2 | **P1** | Integration / product gap | Users **cannot create folders** in project file trees (web or desktop). Server + desktop client exist; no page calls them. | Server: `POST /api/projects/:id/mkdir` `apps/server/src/routes/projects.ts:830`. Desktop client: `mkdirProjectPath` `apps/desktop/src/lib/engine.ts:1827-1855`. Grep pages/hooks/components for `mkdirProjectPath`: **definition + tests only**. Web: no mkdir method in `apps/web/src/lib/api.ts`. | Client method never wired to file-tree UI. | Add “New folder” in desktop/web file tree with sessionId for hard-enforce. | **confirmed** |
+| 3 | **P1** | Integration / dual-surface | **Web** has **no project conversation** surface; multi-turn history API works on desktop only. Web chat/run path cannot resume stored project conversations. | Server: `apps/server/src/routes/projects.ts:969-1017`. Desktop UI: `listProjectConversations` / `createProjectConversation` `apps/desktop/src/pages/ProjectWorkspace.tsx:191-199`, `:1126-1132`. Web: grep `conversation` under `apps/web/src` product code: **0**. | Web is intentionally thin; conversation feature not ported. | Port conversation load/persist to web `ProjectDetail` or document web as single-run only. | **confirmed** |
+| 4 | **P2** | Integration / orphan endpoints | Multiple backend routes have **no FE/CLI call site** (ops/agent/legacy). No user path reaches them from clients. | Verified orphans (static match + manual qs false-positive removal): `GET /api` `index.ts:201`; `POST /api/artifacts` `artifacts.ts:75`; `PUT /api/artifacts/:id` `:150`; `GET …/preview` `:56`; `GET /api/cli-agents/catalog` `cli-agents.ts:33`; `POST /api/domain-packs/install-zip` `domain-packs.ts:93`; harness CRUD under `/api/harness` and `/api/harnesses` POST/PUT/DELETE (UI uses `/api/workers` — `Harnesses.tsx:83,461`); `PATCH /api/live-artifacts/:id` `live-artifacts.ts:147`; `GET …/preview` `:122`; `GET …/refreshes` `:135`; `POST /api/media/image` `media.ts:144`; `POST /api/media/audio` `:194`; `GET /api/memory/export` `memory.ts:55`; `POST /api/workflow/migrate` `workflow.ts:319`; tool-token routes `tools-live-artifacts.ts:54,85,100,132` (agent-only by design). | Dual-surface / deprecation / agent-only. | Document intentional orphans; deprecate or wire product UI for the rest. | **confirmed** |
+| 5 | **P2** | Meaningless code / dead client | Desktop `EngineClient` methods exist **only for unit tests**, never called from pages/hooks/components. | Unused-by-UI methods (grep pages+components+hooks = 0; only `engine.ts` + `engine.test.ts`): e.g. `listWorkspaces`/`createWorkspace`/`updateWorkspace`/`deleteWorkspace` (`engine.ts:752+`), `cancelSession` (`:718`), `listModels` (`:846`), `listMcpPresets` (`:927`), `refreshMcpOAuth` (`:1016`), `listNeosMcpTools` (`:1060`), `listProjectRuns` (`:2071`), `getRoutine` (`:2396`), `createProjectToolToken` (`:2507`), `listMediaProviders` (`:2557`), `getMediaJob` (`:2574`), `connectionTest` (`:2704`), `getPlugin` (`:2803`), `getWebhookRateLimit` (`:3199`), `getDeployment` (`:3351`), `getDomainPack` (`:3405`), `validateDomainPackManifest` (`:3424`), deprecated `createHarness`/`updateHarness`/`deleteHarness` (`:3507-3518`). Sessions hardcodes `workspaceId: 'default'` (`Sessions.tsx:125`) instead of workspace APIs. | API surface grew ahead of UI; aliases kept for tests. | Delete or gate behind admin UI; keep harness aliases only if external scripts need them. | **confirmed** |
+| 6 | **P2** | Contract / hygiene | Web save path still **falls back to `contentHash`** if `hash` missing after write — can mask wrong field if `writeFile` parser is bypassed. | Soft fallback: `apps/web/src/pages/ProjectDetail.tsx:798-803`. Server returns `hash`: `projects.ts:779-787`. Shared schema requires `hash`: `packages/shared/src/schemas/api-envelopes.ts:29-36`. Client already validates via `parseProjectFileWriteResponse` (`api.ts:205-208`) which **rejects** contentHash-only (`api-envelopes.ts:242-256`). | Historical dual-domain compatibility left in UI layer. | Remove contentHash branch in UI; rely on shared parse only. | **confirmed** |
+| 7 | **P2** | Error handling | Web **Connect** does not special-case **401**; user sees generic error vs Projects/Settings which clear session and redirect. | Connect: `apps/web/src/pages/Connect.tsx:28-35` (message only). Projects 401: `Projects.tsx:29-31`. Settings 401: `Settings.tsx:78,101`. Health is auth-exempt so wrong token fails on `listProjects()` (`Connect.tsx:25`) with ApiError text only. | Incomplete first-connect UX. | Map 401 → “Invalid token” + do not save connection. | **confirmed** |
+| 8 | **P2** | Integration / dual-surface | Web is a **thin client** (4 routes) vs desktop full app; most daemon APIs unreachable from browser UI by design. | Web routes: `App.tsx:11-15` (Connect, Projects, ProjectDetail, Settings). Desktop routes: `App.tsx:41-64` (19 routes). Call sites: web 24 vs desktop 170 (`audit/frontend-calls.md`). | Product split. | Keep intentional; expand only with product decision. | **confirmed** |
+| 9 | **P2** | Broken-behavior / routing | Desktop deep links while **disconnected** never mount target route; user always sees ModeSelection until connect (intended gate, but loses intended path). | `apps/desktop/src/App.tsx:68-76` returns `<ModeSelection />` without `RouterProvider`. | Connection gate before router. | Preserve intended path across ModeSelection → connect. | **confirmed** |
+| 10 | **P2** | Dead code / deprecation | `createHarness` / `updateHarness` / `deleteHarness` are `@deprecated` aliases to workers; **no page** calls them (Harnesses page uses `listWorkers`/`createWorker`). | Aliases: `engine.ts:3507-3518`. Live UI: `Harnesses.tsx:83`, `:461`. | Deprecation leftovers. | Remove after migration window. | **confirmed** |
+| 11 | **P2** | Integration / media alternate paths | `POST /api/media/image` and `POST /api/media/audio` unused; preferred path is `/generate` (CLI only from clients). `GET /api/media/jobs` list unused (`getMediaJob` client uses `/jobs/:id` but UI never calls it). | Server `media.ts:144,194,126`. Desktop `getMediaJob` `engine.ts:2574-2588` — tests only. | Legacy/alternate APIs. | Deprecate image/audio routes or document. | **confirmed** |
+| 12 | **P2** | Integration / agent-only | `/api/tools/live-artifacts/*` has no human client; auth-exempt for tool tokens. | Routes: `tools-live-artifacts.ts:54,85,100,132`. Auth: `auth-paths.ts:30-31`. Grep apps web/desktop/cli: 0. Server tests use them. | By design for agents. | Document as agent-only (not FE bug). | **confirmed** |
+| 13 | **P2** | CLI surface | `listCliAgents` client method unused by CLI commands (only defined). Catalog endpoint also unused. | Client: `apps/cli/src/client.ts:316-317`. Catalog: `cli-agents.ts:33`. | Incomplete CLI wiring. | Wire `neos cli-agents` command or drop method. | **confirmed** |
+| 14 | **P2** | Contract / workspace | Multi-workspace API exists but UI always uses hard-coded `'default'` workspace on session create — workspace CRUD unreachable from UI. | Create session: `Sessions.tsx:124-125` `workspaceId: 'default'`. Workspace routes: `session.ts:804-885`. Client methods unused by UI (finding #5). | Single-workspace product assumption. | Either expose workspace picker or remove unused workspace APIs from client. | **confirmed** |
 
 ---
 
@@ -35,44 +34,49 @@ Inventories: [`backend-endpoints.md`](./backend-endpoints.md) · [`frontend-call
 
 ### Phantom calls
 
-Automated matching reported FE URLs with **query string templates** (`/api/session${qs}`, `/api/runs${qs}`, etc.) as phantoms. Manual inspection shows they are **valid GET**s against existing routes (`apps/desktop/src/lib/engine.ts:548`, `:1991`, etc.). **No confirmed phantom path/method** after verification.
+Automated matching flagged FE URLs with **query-string templates** (`/api/session${qs}`, `/api/runs${qs}`, `/api/projects/.../revisions${qs}`, etc.) as phantoms.
 
-### Orphan endpoints (server exists; no FE/CLI usage verified)
+Manual verification: all are **valid GET/DELETE** against existing routes. Method mis-detection: `GET /api/skills` was once reported as POST (desktop `listSkills` uses GET without method option — `engine.ts:856-858`).
 
-| Method | Path | Notes | Confidence |
-|--------|------|-------|------------|
-| GET | `/api` | Version banner | intentional ops |
-| GET/POST | `/api/projects/:id/conversations…` | No client | product gap **P1** |
-| GET/POST | `/api/tools/live-artifacts/*` | Agent tool-token | intentional |
-| POST | `/api/media/image`, `/audio` | Prefer `/generate` | orphan **P2** |
-| GET | `/api/media/jobs` | Unused by clients | orphan **P2** |
-| GET | `/api/memory/export` | Unused | orphan **P2** |
-| POST | `/api/workflow/migrate` | Unused | orphan **P2** |
-| GET | `/api/cli-agents/catalog` | Unused | orphan **P2** |
-| POST | `/api/domain-packs/install-zip` | Unused by FE | orphan **P2** |
-| GET | OAuth callbacks | Browser redirect | intentional auth-exempt |
-| … | harnesses alias POST/PUT/DELETE | CRUD via `/api/workers` | intentional deprecation |
+**No confirmed phantom path/method** after verification.
 
-False orphan positives from matcher (actually used): collab stream, revisions, preview-comments, session list, marketplace catalog with query — **do not treat as unused**.
+### Orphan endpoints (server exists; no FE/CLI product usage)
+
+| Method | Path | Classification | Confidence |
+|--------|------|----------------|------------|
+| GET | `/api` | ops banner | intentional |
+| POST/PUT/GET preview | `/api/artifacts…` (create/put/preview) | artifacts created by engine runs; FE uses list/get/patch/delete/refresh | intentional + partial orphan |
+| GET | `/api/cli-agents/catalog` | unused | orphan P2 |
+| POST | `/api/domain-packs/install-zip` | unused by FE | orphan P2 |
+| POST/PUT/DELETE | `/api/harness`, `/api/harnesses` | superseded by `/api/workers` | intentional deprecation |
+| PATCH/GET preview/refreshes | `/api/live-artifacts/:id…` | partial surface | orphan P2 |
+| POST | `/api/media/image`, `/audio` | prefer `/generate` | orphan P2 |
+| GET | `/api/memory/export` | unused | orphan P2 |
+| POST | `/api/workflow/migrate` | unused | orphan P2 |
+| * | `/api/tools/live-artifacts/*` | agent tool-token | intentional |
+
+False orphan positives removed: revisions, preview-comments, runs events, workflow runs DELETE (query templates); collab stream (fetch stream).
 
 ### Contract mismatches
 
 | Topic | Result |
 |-------|--------|
-| Live write `hash` vs revision `contentHash` | Documented dual domain; web still soft-fallback (`ProjectDetail.tsx:719-724`) |
-| Hard-enforce session | Body + header; CORS header gap (**#1**) |
-| Lock acquire 409 vs hard-enforce 423 | Distinct; web/desktop handle holder on write/lock paths |
-| Method mismatches | None confirmed after re-scan |
+| Live write `hash` vs revision `contentHash` | Enforced by shared Zod + server assert; web UI soft-fallback is residual hygiene (#6) |
+| Hard-enforce session | Body + `x-neos-session-id` header; **CORS already allows header** (`index.ts:94`) — prior audit claim of missing CORS header is **stale/false** |
+| Lock 409 vs hard-enforce 423 | Web/desktop handle holder on write/delete/restore |
+| Method mismatches | None confirmed |
 
 ### Broken-behavior patterns checked
 
 | Pattern | Result |
 |---------|--------|
-| Buttons without handlers (web pages) | No bare product buttons found that lack onClick without form submit |
-| Web Edit-with-AI | Uses SSE + poll fallback (`ProjectDetail.tsx` run path) |
-| Desktop delete | Wired with confirm + session (`ProjectWorkspace.tsx`) |
-| Missing cache library | N/A (no React Query); manual reload after mutates is pattern |
-| Hardcoded base URL | Clients take user-provided server URL / engine config |
+| Buttons without handlers (web+desktop pages) | Scanner: 0 bare `<button>` without onClick/submit (`audit/_crossref.json` bareButtonsCount=0) |
+| Forms without onSubmit | 0 bare forms |
+| Async without await | Product paths use `void fn()` or await in handlers; not exhaustively proven for every fire-and-forget heartbeat (collab heartbeat intentionally `.catch(() => {})` — `ProjectDetail.tsx:295`) |
+| Loading/error/empty | Web Projects: loading+error+empty (`Projects.tsx:63-70`). ProjectDetail: error states + empty files/revisions/runs. Media: loading+error+empty pattern present |
+| Cache invalidation | No React Query; manual reload after mutations is the pattern |
+| Hardcoded env base URL | Web/desktop take user-provided server URL; no `import.meta.env` API base in app src |
+| useEffect cleanup | Collab/beforeunload effects clean up; SSE uses abort patterns in api.ts |
 
 ---
 
@@ -80,38 +84,36 @@ False orphan positives from matcher (actually used): collab stream, revisions, p
 
 | Metric | Count |
 |--------|------:|
-| Backend endpoints inventoried | **210** |
-| Frontend/CLI call sites inventoried | **227** (web ~29, desktop ~166, cli remainder) |
-| React component exports (tsx) | **76** |
-| App routes (web + desktop) | **25** |
-| Files primarily examined | Server routes (~29 modules) + index; web api + pages; desktop engine + App + key pages; auth-paths; shared envelopes |
+| Backend endpoints inventoried | **211** |
+| Frontend/CLI call sites inventoried | **220** (web 24, desktop 170, cli 26) |
+| Component-like symbols (tsx) | **132** |
+| App routes (web + desktop) | **24** (5 + 19) |
+| Verified orphan endpoint candidates | **23** (after false-positive removal) |
+| Files primarily examined | Server routes (~29 modules) + `index.ts` + `auth-paths.ts`; web `api.ts` + all pages; desktop `engine.ts` + `App.tsx` + Sidebar + key pages; shared envelopes; CLI client |
 
 ---
 
 ## Areas not fully settled by static analysis
 
-1. **Runtime route order / Hono splat** behavior for `files/*` vs static segments under edge IDs — needs live server.  
-2. **SSE reconnect / multi-replica** correctness under packet loss — needs multi-process e2e.  
-3. **Whether CORS #1 manifests** depends on deployment (proxy vs cross-origin).  
-4. **Component “zero imports”** may be false when re-exported or used only as `default` under different names.  
-5. **CLI command surface** vs `client.ts` methods: not every CLI subcommand was mapped to a UX flow.  
-6. **Workflow editor** large surface: node config ↔ API field casing not line-audited exhaustively for every block type.
+1. **Hono splat routing** order for `files/*` vs static segments under odd IDs — needs live server edge cases.  
+2. **SSE reconnect / multi-replica** correctness under packet loss — needs multi-process e2e (`e2e/multi-replica`).  
+3. **Workflow editor** node config ↔ API field casing for every block type — not line-audited exhaustively.  
+4. **Runtime-only dynamic URLs** built without `/api/` string literals would be missed (none found in primary clients).  
+5. **Agent-runtime internal** HTTP to tool-token routes — out of FE scope; not mapped to agent code paths here.  
+6. **Component “zero imports”** false positives for same-file registration / package-internal use (documented in `components.md`).
 
 ### Items that require running the app
 
-- Confirm CORS preflight failure with web → remote daemon + `x-neos-session-id`.  
-- Manual multi-user hard-enforce DELETE/restore/mkdir under `NEOS_SHARED_EDIT=1`.  
-- Deep-link desktop while disconnected.  
-- Full workflow run + artifact preview matrix.
+- CORS preflight for custom headers on true cross-origin deployments (header is allow-listed; still verify browser network tab).  
+- Hard-enforce 423 UX under two simultaneous desktop/web clients.  
+- Media generate end-to-end with real provider keys.  
+- ModeSelection → deep-link restoration behavior.  
+- Whether workspace id `default` always exists on fresh daemon (session create depends on it).
 
 ---
 
-## Severity summary
+## Method
 
-| Severity | Count (unique issues) |
-|----------|----------------------:|
-| P0 | 0 |
-| P1 | 3 (#1 CORS, #2 web delete UI, #3 conversations API) |
-| P2 | 12+ (orphans, dual-surface, dead clients, error UX) |
-
-No **P0** (feature entirely broken for default local desktop happy path) was confirmed: desktop covers the primary product surface; web is intentionally thinner.
+1. Phase 1: Hono route scan of `apps/server/src/routes/*.ts` + `index.ts` mounts; FE `request`/`requestEnvelope`/`fetch` path extraction for web/desktop/cli; React component export scan; RR6 JSX routes + RR7 `createBrowserRouter` object routes.  
+2. Phase 2: Path-template match of every call vs every endpoint; manual verification of phantoms/orphans; grep for product-gap symbols; unused client method scan against pages/hooks/components; bare button/form scan; 401 handling scan.  
+3. Phase 3: This report. No product source modified.

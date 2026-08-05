@@ -15,6 +15,7 @@ import { cmdMemory } from './commands/memory.js';
 import { cmdPlugin } from './commands/plugin.js';
 import { cmdProject } from './commands/project.js';
 import { cmdRun } from './commands/run.js';
+import { cmdCliAgents } from './commands/cli-agents.js';
 import { cmdSkills } from './commands/skills.js';
 import { cmdStatus } from './commands/status.js';
 import { CLI_VERSION, cmdVersion } from './commands/version.js';
@@ -42,6 +43,7 @@ Commands:
   media list|config|generate
   plugin list|atoms
   deploy list
+  cli-agents list|catalog Detected / catalog of CLI agent backends
   env                     Print agent env exports
 
 Environment:
@@ -129,6 +131,10 @@ export async function runCli(
     case 'deploy':
     case 'deployments':
       return cmdDeploy(ctx, client, cfg, rest);
+    case 'cli-agents':
+    case 'cli-agent':
+    case 'agents':
+      return cmdCliAgents(ctx, client, rest);
     case 'env': {
       const env = buildAgentEnv(cfg, { binPath: process.argv[1] });
       if (json) out(JSON.stringify(env, null, 2));

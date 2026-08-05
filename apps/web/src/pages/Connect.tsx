@@ -21,11 +21,17 @@ export function Connect() {
       const client = new WebApiClient(serverUrl.trim(), token.trim());
       const h = await client.health();
       setHealth(`${h.status} · v${h.version ?? '?'} · uptime ${h.uptime ?? 0}s`);
-      // Authenticated probe
+      // Authenticated probe (health is auth-exempt; this validates the Bearer token)
       await client.listProjects();
       saveConnection({ serverUrl: serverUrl.trim(), token: token.trim(), remember });
       nav('/projects');
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        // Do not persist a bad token (mirrors Projects/Settings 401 handling)
+        setError('Invalid auth token (401). Check NEOS_AUTH_TOKEN from the daemon logs.');
+        setHealth(null);
+        return;
+      }
       const msg =
         err instanceof ApiError
           ? err.message

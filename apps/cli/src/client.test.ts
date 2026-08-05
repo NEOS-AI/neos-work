@@ -48,4 +48,21 @@ describe('NeosApiClient', () => {
       exitCode: EXIT.NOT_FOUND,
     });
   });
+
+  it('listCliAgents and listCliAgentsCatalog hit expected paths', async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      urls.push(url);
+      return new Response(JSON.stringify({ ok: true, data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const client = new NeosApiClient(cfg, fetchImpl);
+    await client.listCliAgents();
+    await client.listCliAgentsCatalog();
+    expect(urls[0]).toMatch(/\/api\/cli-agents$/);
+    expect(urls[1]).toMatch(/\/api\/cli-agents\/catalog$/);
+  });
 });

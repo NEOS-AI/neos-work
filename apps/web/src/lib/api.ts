@@ -188,7 +188,7 @@ export class WebApiClient {
     filePath: string,
     content: string,
     opts?: { sessionId?: string },
-  ): Promise<ApiEnvelope<ProjectFileWriteResult & { contentHash?: string; holder?: unknown }>> {
+  ): Promise<ApiEnvelope<ProjectFileWriteResult & { holder?: unknown }>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
     const sessionId = this.collabSessionId(opts?.sessionId);
     const body: { content: string; source: string; sessionId?: string } = {
@@ -197,7 +197,7 @@ export class WebApiClient {
     };
     if (sessionId) body.sessionId = sessionId;
     const envelope = await this.requestEnvelope<
-      ProjectFileWriteResult & { contentHash?: string; holder?: unknown }
+      ProjectFileWriteResult & { holder?: unknown }
     >('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, body, {
       headers: this.collabSessionHeaders(sessionId),
     });
@@ -238,6 +238,26 @@ export class WebApiClient {
       'DELETE',
       `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`,
       sessionId ? { sessionId } : undefined,
+      { headers: this.collabSessionHeaders(sessionId) },
+    );
+  }
+
+  /**
+   * POST /api/projects/:id/mkdir — create a directory under the project root.
+   * Pass `opts.sessionId` for `NEOS_SHARED_EDIT` hard enforce when locked.
+   */
+  mkdir(
+    projectId: string,
+    dirPath: string,
+    opts?: { sessionId?: string },
+  ): Promise<ApiEnvelope<{ path?: string; holder?: unknown }>> {
+    const sessionId = this.collabSessionId(opts?.sessionId);
+    const body: { path: string; sessionId?: string } = { path: dirPath };
+    if (sessionId) body.sessionId = sessionId;
+    return this.requestEnvelope(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/mkdir`,
+      body,
       { headers: this.collabSessionHeaders(sessionId) },
     );
   }
@@ -305,6 +325,107 @@ export class WebApiClient {
       `/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
       sessionId ? { sessionId } : undefined,
       { headers: this.collabSessionHeaders(sessionId) },
+    );
+  }
+
+  // ── Project conversations (persisted multi-turn history) ──
+
+  listConversations(
+    projectId: string,
+  ): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        projectId: string;
+        title: string | null;
+        createdAt: string;
+        updatedAt: string;
+      }>
+    >
+  > {
+    return this.request(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/conversations`,
+    );
+  }
+
+  createConversation(
+    projectId: string,
+    title?: string,
+  ): Promise<
+    ApiEnvelope<{
+      id: string;
+      projectId: string;
+      title: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>
+  > {
+    const body: { title?: string } = {};
+    if (typeof title === 'string' && !/[\0\r\n]/.test(title) && title.trim()) {
+      body.title = title.trim().slice(0, 200);
+    }
+    return this.requestEnvelope(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/conversations`,
+      body,
+    );
+  }
+
+  listMessages(
+    projectId: string,
+    conversationId: string,
+  ): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        conversationId: string;
+        role: 'user' | 'assistant' | 'system';
+        content: string;
+        agentId?: string | null;
+        createdAt: string;
+      }>
+    >
+  > {
+    return this.request(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+    );
+  }
+
+  addMessage(
+    projectId: string,
+    conversationId: string,
+    input: { role?: 'user' | 'assistant' | 'system'; content: string; agentId?: string },
+  ): Promise<
+    ApiEnvelope<{
+      id: string;
+      conversationId: string;
+      role: 'user' | 'assistant' | 'system';
+      content: string;
+      agentId?: string | null;
+      createdAt: string;
+    }>
+  > {
+    if (typeof input.content !== 'string' || /\0/.test(input.content) || !input.content.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid content' });
+    }
+    const body: { role?: string; content: string; agentId?: string } = {
+      content: input.content,
+    };
+    if (input.role) body.role = input.role;
+    if (
+      input.agentId != null
+      && typeof input.agentId === 'string'
+      && !/[\0\r\n]/.test(input.agentId)
+      && input.agentId.trim()
+    ) {
+      body.agentId = input.agentId.trim();
+    }
+    return this.requestEnvelope(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+      body,
     );
   }
 

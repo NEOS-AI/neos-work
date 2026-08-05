@@ -760,11 +760,34 @@ export class EngineClient {
     name: string;
     path?: string;
     type?: string;
-  }): Promise<ApiResponse<{ id: string; name: string; type: string }>> {
+  }): Promise<ApiResponse<{ id: string; name: string; path?: string | null; type: string }>> {
+    const nameRaw = typeof params.name === 'string' ? params.name : '';
+    if (/[\0\r\n]/.test(nameRaw) || !nameRaw.trim() || nameRaw.trim().length > 200) {
+      return { ok: false, error: 'Invalid workspace name' };
+    }
+    const body: { name: string; path?: string; type?: string } = {
+      name: nameRaw.trim(),
+    };
+    if (
+      params.path != null
+      && typeof params.path === 'string'
+      && !/[\0\r\n]/.test(params.path)
+      && params.path.trim()
+    ) {
+      body.path = params.path.trim();
+    }
+    if (
+      params.type != null
+      && typeof params.type === 'string'
+      && !/[\0\r\n]/.test(params.type)
+      && params.type.trim()
+    ) {
+      body.type = params.type.trim();
+    }
     const res = await fetch(`${this.baseUrl}/api/workspace`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify(params),
+      body: JSON.stringify(body),
     });
     return readApiResponse(res);
   }
@@ -772,28 +795,47 @@ export class EngineClient {
   async updateWorkspace(
     id: string,
     params: { name?: string; path?: string },
-  ): Promise<ApiResponse<{ id: string; name: string; type: string }>> {
+  ): Promise<ApiResponse<{ id: string; name: string; path?: string | null; type: string }>> {
     const wid = this.pathSegment(id);
     if (!wid) return this.invalidIdResponse('workspace id');
+    const body: { name?: string; path?: string } = {};
+    if (params.name !== undefined) {
+      const nameRaw = typeof params.name === 'string' ? params.name : '';
+      if (/[\0\r\n]/.test(nameRaw) || !nameRaw.trim() || nameRaw.trim().length > 200) {
+        return { ok: false, error: 'Invalid workspace name' };
+      }
+      body.name = nameRaw.trim();
+    }
+    if (params.path !== undefined) {
+      if (typeof params.path !== 'string' || /[\0\r\n]/.test(params.path) || !params.path.trim()) {
+        return { ok: false, error: 'Invalid workspace path' };
+      }
+      body.path = params.path.trim();
+    }
+    if (body.name === undefined && body.path === undefined) {
+      return { ok: false, error: 'Nothing to update' };
+    }
     const res = await fetch(`${this.baseUrl}/api/workspace/${wid}`, {
       method: 'PUT',
       headers: this.getHeaders(),
-      body: JSON.stringify(params),
+      body: JSON.stringify(body),
     });
     return readApiResponse(res);
   }
 
+  /** Cannot delete the seeded `default` workspace (server enforces). */
   async deleteWorkspace(id: string): Promise<ApiResponse<void>> {
     const wid = this.pathSegment(id);
     if (!wid) return this.invalidIdResponse('workspace id');
+    if (wid === 'default') {
+      return { ok: false, error: 'Cannot delete default workspace' };
+    }
     const res = await fetch(`${this.baseUrl}/api/workspace/${wid}`, {
       method: 'DELETE',
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
-
-  // --- Settings ---
 
   async getSettings(): Promise<ApiResponse<Record<string, string>>> {
     const res = await fetch(`${this.baseUrl}/api/settings`, {
@@ -822,16 +864,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  async deleteSetting(key: string): Promise<ApiResponse<void>> {
-    const seg = this.settingKeySegment(key);
-    if (!seg) return this.invalidIdResponse('setting key');
-    const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
   async verifyApiKey(provider: string, key: string): Promise<ApiResponse<{ valid: boolean }>> {
     const res = await fetch(`${this.baseUrl}/api/settings/verify-key`, {
       method: 'POST',
@@ -840,17 +872,6 @@ export class EngineClient {
     });
     return readApiResponse(res);
   }
-
-  // --- Models ---
-
-  async listModels(): Promise<ApiResponse<{ id: string; name: string; providerId: string }[]>> {
-    const res = await fetch(`${this.baseUrl}/api/models`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  // --- Skills ---
 
   async listSkills(): Promise<ApiResponse<SkillData[]>> {
     const res = await fetch(`${this.baseUrl}/api/skills`, {
@@ -920,13 +941,6 @@ export class EngineClient {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(params),
-    });
-    return readApiResponse(res);
-  }
-
-  async listMcpPresets(): Promise<ApiResponse<McpPresetData[]>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/presets`, {
-      headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }
@@ -1013,19 +1027,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  async refreshMcpOAuth(serverId: string, params: { tokenEndpoint: string; clientId: string }): Promise<ApiResponse<{ connected: boolean; expiresAt?: string }>> {
-    const seg = this.pathSegment(serverId);
-    if (!seg) return this.invalidIdResponse('MCP server id');
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${seg}/refresh`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(params),
-    });
-    return readApiResponse(res);
-  }
-
-  // --- NEOS as MCP server (Task 16 / OD §14.3–14.4) ---
-
   async getMcpInstallInfo(query?: {
     projectId?: string;
     includeToken?: boolean;
@@ -1052,15 +1053,6 @@ export class EngineClient {
     if (query?.includeToken === false) qs.set('includeToken', '0');
     const q = qs.toString();
     const res = await fetch(`${this.baseUrl}/api/mcp/install-info${q ? `?${q}` : ''}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async listNeosMcpTools(): Promise<
-    ApiResponse<Array<{ name: string; description?: string; inputSchema?: unknown }>>
-  > {
-    const res = await fetch(`${this.baseUrl}/api/mcp/tools`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
@@ -2066,32 +2058,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  // --- Project runs (v0.5 agent-runtime) ---
-
-  async listProjectRuns(projectId?: string): Promise<
-    ApiResponse<
-      Array<{
-        id: string;
-        status: string;
-        agentId?: string | null;
-        projectId?: string | null;
-        prompt?: string;
-        error?: string | null;
-        createdAt: string;
-        eventCount?: number;
-      }>
-    >
-  > {
-    let qs = '';
-    if (projectId != null && projectId !== '') {
-      const seg = this.pathSegment(projectId);
-      if (!seg) return this.invalidIdResponse('project id');
-      qs = `?projectId=${seg}`;
-    }
-    const res = await fetch(`${this.baseUrl}/api/runs${qs}`, { headers: this.getHeaders() });
-    return readApiResponse(res);
-  }
-
   async createProjectRun(input: {
     projectId?: string;
     agentId?: string | null;
@@ -2393,13 +2359,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  async getRoutine(id: string): Promise<ApiResponse<Routine>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('routine id');
-    const res = await fetch(`${this.baseUrl}/api/routines/${seg}`, { headers: this.getHeaders() });
-    return readApiResponse(res);
-  }
-
   async createRoutine(input: {
     name: string;
     workflowId: string;
@@ -2432,6 +2391,76 @@ export class EngineClient {
   async listMediaFiles(limit = 100): Promise<ApiResponse<MediaFileInfo[]>> {
     const res = await fetch(`${this.baseUrl}/api/media/files?limit=${limit}`, {
       headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /**
+   * POST /api/media/generate — unified image | audio | video generation.
+   * Image/video use `prompt`; audio uses `text` (mirrors CLI `neos media generate`).
+   * Video may return `{ jobId, status }` for async polling via `getMediaJob`.
+   */
+  async generateMedia(input: {
+    surface: 'image' | 'audio' | 'video';
+    prompt?: string;
+    text?: string;
+    provider?: string;
+    model?: string;
+    size?: '1024x1024' | '1792x1024' | '1024x1792';
+    quality?: 'standard' | 'hd';
+    voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+  }): Promise<
+    ApiResponse<{
+      surface?: string;
+      filename?: string;
+      jobId?: string;
+      status?: string;
+      provider?: string;
+      mimeType?: string;
+    }>
+  > {
+    const surface = input.surface;
+    if (surface !== 'image' && surface !== 'audio' && surface !== 'video') {
+      return { ok: false, error: 'surface must be image, audio, or video' };
+    }
+    const body: Record<string, string> = { surface };
+    if (surface === 'audio') {
+      const text = typeof input.text === 'string' ? input.text : input.prompt;
+      if (typeof text !== 'string' || /\0/.test(text) || !text.trim()) {
+        return { ok: false, error: 'text required for audio' };
+      }
+      body.text = text.trim();
+    } else {
+      const prompt = typeof input.prompt === 'string' ? input.prompt : '';
+      if (!prompt.trim() || /[\0\r\n]/.test(prompt)) {
+        return { ok: false, error: 'prompt required (no control characters)' };
+      }
+      body.prompt = prompt.trim();
+    }
+    if (
+      input.provider != null
+      && typeof input.provider === 'string'
+      && !/[\0\r\n]/.test(input.provider)
+      && input.provider.trim()
+    ) {
+      body.provider = input.provider.trim();
+    }
+    if (
+      input.model != null
+      && typeof input.model === 'string'
+      && !/[\0\r\n]/.test(input.model)
+      && input.model.trim()
+    ) {
+      body.model = input.model.trim();
+    }
+    if (input.size) body.size = input.size;
+    if (input.quality) body.quality = input.quality;
+    if (input.voice) body.voice = input.voice;
+
+    const res = await fetch(`${this.baseUrl}/api/media/generate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
     });
     return readApiResponse(res);
   }
@@ -2503,33 +2532,6 @@ export class EngineClient {
     );
     return readApiResponse(res);
   }
-
-  async createProjectToolToken(
-    projectId: string,
-    opts?: { capabilities?: string[]; runId?: string },
-  ): Promise<
-    ApiResponse<{
-      token: string;
-      projectId: string;
-      capabilities: string[];
-      expiresAt: string;
-    }>
-  > {
-    const pid = this.pathSegment(projectId);
-    if (!pid) return this.invalidIdResponse('project id');
-    const res = await fetch(`${this.baseUrl}/api/live-artifacts/tool-tokens`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        projectId: pid,
-        capabilities: opts?.capabilities ?? ['live-artifacts'],
-        runId: opts?.runId,
-      }),
-    });
-    return readApiResponse(res);
-  }
-
-  /** Media generation readiness (no secrets returned). Task 8 multi-provider. */
   async getMediaConfig(): Promise<
     ApiResponse<{
       openaiConfigured: boolean;
@@ -2590,14 +2592,6 @@ export class EngineClient {
     });
     return readApiResponse(res);
   }
-
-  mediaFileUrl(filename: string): string {
-    const seg = this.mediaFilenameSegment(filename);
-    if (!seg) return '';
-    return `${this.baseUrl}/api/media/file/${seg}`;
-  }
-
-  /** Authenticated fetch of a media file as Blob (for FileViewer). */
   async fetchMediaBlob(filename: string): Promise<Blob> {
     const seg = this.mediaFilenameSegment(filename);
     if (!seg) throw new Error('Invalid media filename');
@@ -2700,36 +2694,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  /** Provider / URL connectivity probe (Task 14) — no secrets returned. */
-  async connectionTest(input: {
-    target: 'openai' | 'anthropic' | 'ollama' | 'url' | 'cli-agents';
-    url?: string;
-  }): Promise<
-    ApiResponse<{
-      target: string;
-      reachable: boolean;
-      blocked?: boolean;
-      status?: number;
-      message?: string;
-      catalogCount?: number;
-    }>
-  > {
-    if (!input?.target || /[\0\r\n]/.test(input.target)) {
-      return { ok: false, error: 'Invalid target' };
-    }
-    const res = await fetch(`${this.baseUrl}/api/connection-test`, {
-      method: 'POST',
-      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        target: input.target,
-        url: input.url,
-      }),
-    });
-    return readApiResponse(res);
-  }
-
-  // --- Remote marketplace (v0.6 M4) ---
-
   async getMarketplaceCatalogUrl(): Promise<ApiResponse<{ url: string | null }>> {
     const res = await fetch(`${this.baseUrl}/api/marketplace/catalog-url`, {
       headers: this.getHeaders(),
@@ -2798,13 +2762,6 @@ export class EngineClient {
   async listPlugins(): Promise<ApiResponse<Plugin[]> & { meta?: PluginListMeta }> {
     const res = await fetch(`${this.baseUrl}/api/plugins`, { headers: this.getHeaders() });
     return readApiResponse(res) as Promise<ApiResponse<Plugin[]> & { meta?: PluginListMeta }>;
-  }
-
-  async getPlugin(id: string): Promise<ApiResponse<Plugin>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('plugin id');
-    const res = await fetch(`${this.baseUrl}/api/plugins/${seg}`, { headers: this.getHeaders() });
-    return readApiResponse(res);
   }
 
   runPlugin(
@@ -3196,20 +3153,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  async getWebhookRateLimit(workflowId: string): Promise<ApiResponse<{
-    limit: number;
-    remaining: number;
-    resetAt: number;
-    windowMs: number;
-  }>> {
-    const seg = this.pathSegment(workflowId);
-    if (!seg) return this.invalidIdResponse('workflow id');
-    const res = await fetch(`${this.baseUrl}/api/webhook/${seg}/rate-limit`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
   async regenerateWebhookSecret(workflowId: string): Promise<ApiResponse<{ secret: string }>> {
     const seg = this.pathSegment(workflowId);
     if (!seg) return this.invalidIdResponse('workflow id');
@@ -3348,15 +3291,6 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  async getDeployment(id: string): Promise<ApiResponse<Deployment>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('deployment id');
-    const res = await fetch(`${this.baseUrl}/api/deploy/${seg}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
   async deleteDeployment(id: string): Promise<ApiResponse<void>> {
     const seg = this.pathSegment(id);
     if (!seg) return this.invalidIdResponse('deployment id');
@@ -3401,33 +3335,11 @@ export class EngineClient {
     });
     return readApiResponse(res);
   }
-
-  async getDomainPack(id: string): Promise<ApiResponse<Record<string, unknown>>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('pack id');
-    const res = await fetch(`${this.baseUrl}/api/domain-packs/${seg}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  /** Install a Domain Pack from a local directory containing pack.json. */
   async installDomainPackFromPath(dirPath: string): Promise<ApiResponse<Record<string, unknown>>> {
     const res = await fetch(`${this.baseUrl}/api/domain-packs/install`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ path: dirPath }),
-    });
-    return readApiResponse(res);
-  }
-
-  async validateDomainPackManifest(
-    manifest: unknown,
-  ): Promise<ApiResponse<{ id: string; name: string; workerCount: number; blockCount: number }>> {
-    const res = await fetch(`${this.baseUrl}/api/domain-packs/validate`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(manifest),
     });
     return readApiResponse(res);
   }
@@ -3501,21 +3413,6 @@ export class EngineClient {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);
-  }
-
-  /** @deprecated Prefer createWorker — routes to `/api/workers`. */
-  async createHarness(input: Omit<AgentHarness, 'isBuiltIn'>): Promise<ApiResponse<AgentHarness>> {
-    return this.createWorker(input);
-  }
-
-  /** @deprecated Prefer updateWorker — routes to `/api/workers`. */
-  async updateHarness(id: string, input: Partial<AgentHarness>): Promise<ApiResponse<AgentHarness>> {
-    return this.updateWorker(id, input);
-  }
-
-  /** @deprecated Prefer deleteWorker — routes to `/api/workers`. */
-  async deleteHarness(id: string): Promise<ApiResponse<void>> {
-    return this.deleteWorker(id);
   }
 
   // --- Blocks ---

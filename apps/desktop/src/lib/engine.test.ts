@@ -137,8 +137,6 @@ describe('EngineClient', () => {
       ok: false,
       error: 'Invalid media filename',
     });
-    expect(client.mediaFileUrl('a b.png')).toBe('');
-    expect(client.mediaFileUrl(`bad${'\0'}.png`)).toBe('');
     await expect(client.fetchMediaBlob('a b.png')).rejects.toThrow(/Invalid media filename/);
     expect(fetchMock).not.toHaveBeenCalled();
 
@@ -156,7 +154,6 @@ describe('EngineClient', () => {
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string).workflowId).toBe('wf-1');
     await client.createSession({ workspaceId: 'ws-1', title: 'T' });
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string).workspaceId).toBe('ws-1');
-    expect(client.mediaFileUrl('img_1.png')).toBe('http://engine.test/api/media/file/img_1.png');
   });
 
   it('rejects control-char / blank / traversal ids across remaining entity APIs without fetch', async () => {
@@ -185,14 +182,6 @@ describe('EngineClient', () => {
     });
 
     // Workspaces / skills / MCP
-    await expect(client.updateWorkspace(blank, { name: 'N' })).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid workspace id',
-    });
-    await expect(client.deleteWorkspace(bad)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid workspace id',
-    });
     await expect(client.toggleSkill(bad, true)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid skill id',
@@ -217,9 +206,6 @@ describe('EngineClient', () => {
       ok: false,
       error: 'Invalid MCP server id',
     });
-    await expect(
-      client.refreshMcpOAuth(bad, { tokenEndpoint: 'https://t', clientId: 'c' }),
-    ).resolves.toMatchObject({ ok: false, error: 'Invalid MCP server id' });
 
     // Design systems / artifacts
     await expect(client.deleteDesignSystem(bad)).resolves.toMatchObject({
@@ -264,10 +250,6 @@ describe('EngineClient', () => {
     });
 
     // Routines / deployments / plugins
-    await expect(client.getRoutine(bad)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid routine id',
-    });
     await expect(client.updateRoutine(blank, { name: 'R' })).resolves.toMatchObject({
       ok: false,
       error: 'Invalid routine id',
@@ -295,10 +277,6 @@ describe('EngineClient', () => {
     await expect(client.refreshDeployment(bad)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid deployment id',
-    });
-    await expect(client.getPlugin(blank)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid plugin id',
     });
     await expect(client.resumePlugin(trav, 'run-1', 'stage', {})).resolves.toMatchObject({
       ok: false,
@@ -339,10 +317,6 @@ describe('EngineClient', () => {
       error: 'Invalid workflow id',
     });
     await expect(client.getWebhookSecret(blank)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid workflow id',
-    });
-    await expect(client.getWebhookRateLimit(trav)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid workflow id',
     });
@@ -397,21 +371,9 @@ describe('EngineClient', () => {
       ok: false,
       error: 'Invalid workflow id',
     });
-    await expect(client.getDeployment(blank)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid deployment id',
-    });
     await expect(client.deleteDeployment(trav)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid deployment id',
-    });
-    await expect(client.updateHarness(bad, { name: 'H' } as never)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid worker id',
-    });
-    await expect(client.deleteHarness(blank)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid worker id',
     });
     await expect(client.updateWorker(bad, { name: 'W' } as never)).resolves.toMatchObject({
       ok: false,
@@ -903,15 +865,9 @@ describe('EngineClient', () => {
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({ value: 'sk-test' });
 
-    await client.deleteSetting('OPENAI_API_KEY');
-    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain(encodeURIComponent('OPENAI_API_KEY'));
-
     await client.verifyApiKey('openai', 'sk-x');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
-
-    await client.listModels();
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/models');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/settings/verify-key');
   });
 
   it('skills and mcp server endpoints', async () => {
@@ -955,9 +911,6 @@ describe('EngineClient', () => {
 
     await client.revokeMcpOAuth('m1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/DELETE|POST/);
-
-    await client.listMcpPresets();
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp-servers\/presets/);
 
     await client.createMcpServerFromPreset({
       presetId: 'tradingview',
@@ -1029,10 +982,57 @@ describe('EngineClient', () => {
     await client.listWorkspaces();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/workspace/);
 
-    await client.createWorkspace({ name: 'w', type: 'local' });
+    await expect(client.createWorkspace({ name: '' })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/name/i),
+    });
+    await expect(client.createWorkspace({ name: `bad${'\n'}n` })).resolves.toMatchObject({
+      ok: false,
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'ws-new', name: 'Lab', type: 'local' } }),
+    );
+    const created = await client.createWorkspace({
+      name: '  Lab  ',
+      path: '  /Users/me/lab  ',
+    });
+    expect(created.ok).toBe(true);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      name: 'Lab',
+      path: '/Users/me/lab',
+    });
 
-    await client.deleteWorkspace('ws1');
+    await expect(client.updateWorkspace('', { name: 'X' })).resolves.toMatchObject({
+      ok: false,
+    });
+    await expect(client.updateWorkspace('ws-new', { name: `bad${'\n'}` })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/name/i),
+    });
+    await expect(
+      client.updateWorkspace('ws-new', { path: `bad${'\0'}path` }),
+    ).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/path/i) });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { id: 'ws-new', name: 'Lab2', type: 'local', path: '/Users/me/lab2' },
+      }),
+    );
+    await client.updateWorkspace('ws-new', { name: '  Lab2  ', path: ' /Users/me/lab2 ' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      name: 'Lab2',
+      path: '/Users/me/lab2',
+    });
+
+    await expect(client.deleteWorkspace('default')).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/default/i),
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await client.deleteWorkspace('ws-new');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workspace\/ws-new$/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
   });
 
@@ -1055,9 +1055,6 @@ describe('EngineClient', () => {
 
     await client.deleteMediaFile('img.png');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
-
-    await client.getDeployment('d1');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/deploy/d1');
 
     await client.deleteDeployment('d1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
@@ -1098,11 +1095,6 @@ describe('EngineClient', () => {
     await client.getWebhookSecret('w1');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
       'http://engine.test/api/webhook/w1/secret',
-    );
-
-    await client.getWebhookRateLimit('w1');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
-      'http://engine.test/api/webhook/w1/rate-limit',
     );
 
     await client.regenerateWebhookSecret('w1');
@@ -1257,14 +1249,8 @@ describe('EngineClient', () => {
     await client.deleteDesignSystem('ds1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
 
-    await client.getRoutine('r1');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/routines/r1');
-
     await client.deleteRoutine('r1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
-
-    await client.getPlugin('p1');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/plugins/p1');
   });
 
   it('session messages, cancel, and tool confirm', async () => {
@@ -1464,26 +1450,6 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/w1$/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
 
-    // Deprecated harness aliases route to workers API
-    await client.createHarness({
-      id: 'h1',
-      name: 'H',
-      domain: 'coding',
-      description: 'd',
-      systemPrompt: 'p',
-      allowedTools: [],
-    });
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers$/);
-    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
-
-    await client.updateHarness('h1', { name: 'H2' });
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/h1$/);
-    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
-
-    await client.deleteHarness('h1');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\/h1$/);
-    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
-
     await client.listBlocks('coding');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('domain=coding');
 
@@ -1527,12 +1493,6 @@ describe('EngineClient', () => {
     await client.updateRoutine('r1', { enabled: false });
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('PUT');
 
-    expect(client.mediaFileUrl('photo-1.png')).toBe(
-      'http://engine.test/api/media/file/photo-1.png',
-    );
-    // Spaces / path separators rejected (align with server isSafeMediaFilename)
-    expect(client.mediaFileUrl('a b.png')).toBe('');
-
     const blob = new Blob(['img-bytes']);
     fetchMock.mockResolvedValueOnce(new Response(blob, { status: 200 }));
     const got = await client.fetchMediaBlob('x.png');
@@ -1545,7 +1505,7 @@ describe('EngineClient', () => {
     await expect(client.fetchMediaBlob('missing.png')).rejects.toThrow(/Failed to load media/);
   });
 
-  it('MCP OAuth start/refresh and workspace update', async () => {
+  it('MCP OAuth start', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockImplementation(async () =>
       jsonResponse({ ok: true, data: { authUrl: 'https://auth', state: 'st' } }),
@@ -1560,13 +1520,6 @@ describe('EngineClient', () => {
     });
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/oauth\/start/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
-
-    await client.refreshMcpOAuth('m1', { tokenEndpoint: 'https://t', clientId: 'cid' });
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/refresh/);
-
-    await client.updateWorkspace('ws1', { name: 'Renamed' });
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/workspace/ws1');
-    expect(fetchMock.mock.calls.at(-1)![1].method).toMatch(/PUT|PATCH/);
   });
 
   it('artifact update, export zip, import claude design, plugin run/resume', async () => {
@@ -2052,10 +2005,6 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/runs/);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
 
-    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
-    await client.listProjectRuns('p1');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/runs\?projectId=p1/);
-
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'run1', status: 'succeeded' } }));
     await client.getProjectRun('run1');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/project-runs|runs/);
@@ -2183,31 +2132,6 @@ describe('EngineClient', () => {
     const del = await client.deleteLiveArtifact('a1', 'p1');
     expect(del.ok).toBe(true);
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
-
-    await expect(client.createProjectToolToken(`p${'\n'}1`)).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid project id',
-    });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        ok: true,
-        data: {
-          token: 'tok',
-          projectId: 'p1',
-          capabilities: ['live-artifacts'],
-          expiresAt: 't',
-        },
-      }),
-    );
-    const tok = await client.createProjectToolToken('p1', {
-      capabilities: ['live-artifacts'],
-      runId: 'run-1',
-    });
-    expect(tok.ok).toBe(true);
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/tool-tokens/);
-    const tokBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
-    expect(tokBody.projectId).toBe('p1');
-    expect(tokBody.runId).toBe('run-1');
   });
 
 
@@ -2249,6 +2173,44 @@ describe('EngineClient', () => {
     const job = await client.getMediaJob('job1');
     expect(job.ok).toBe(true);
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/media\/jobs\/job1/);
+  });
+
+  it('generateMedia posts unified generate body and validates prompt/text', async () => {
+    const client = new EngineClient('http://engine.test');
+
+    await expect(client.generateMedia({ surface: 'image', prompt: '' })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/prompt/i),
+    });
+    await expect(
+      client.generateMedia({ surface: 'image', prompt: `bad${'\n'}line` }),
+    ).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/prompt/i) });
+    await expect(client.generateMedia({ surface: 'audio', text: '' })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/text/i),
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { surface: 'image', filename: 'out.png' } }),
+    );
+    const img = await client.generateMedia({
+      surface: 'image',
+      prompt: '  a cat  ',
+      provider: 'openai',
+    });
+    expect(img.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/media\/generate$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    const imgBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(imgBody).toEqual({ surface: 'image', prompt: 'a cat', provider: 'openai' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { surface: 'audio', filename: 'a.mp3' } }),
+    );
+    await client.generateMedia({ surface: 'audio', text: 'hello world', voice: 'alloy' });
+    const audioBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(audioBody).toMatchObject({ surface: 'audio', text: 'hello world', voice: 'alloy' });
+    expect(audioBody.prompt).toBeUndefined();
   });
 
 
@@ -2294,9 +2256,6 @@ describe('EngineClient', () => {
     await client.getMcpInstallInfo({ projectId: `p${'\n'}1` });
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp\/install-info$/);
 
-    await client.listNeosMcpTools();
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/mcp\/tools$/);
-
     await client.getCodexMcpInstallStatus();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/install\/codex\/status/);
 
@@ -2316,21 +2275,11 @@ describe('EngineClient', () => {
     await client.uninstallCodexMcp();
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
 
-    await expect(client.getDomainPack(`p${'\n'}1`)).resolves.toMatchObject({
-      ok: false,
-      error: expect.stringMatching(/pack id/i),
-    });
-    await client.getDomainPack('legal');
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/domain-packs\/legal/);
-
     await client.installDomainPackFromPath('/tmp/pack');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
       path: '/tmp/pack',
     });
-
-    await client.validateDomainPackManifest({ id: 'x', schema: 'neos.domain-pack/1' });
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/domain-packs\/validate/);
 
     await client.toggleDomainPack('legal', false);
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/legal\/toggle/);
@@ -2455,28 +2404,5 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls[1]![0])).toMatch(/\/api\/harness$/);
   });
 
-  it('connectionTest rejects blank/control targets and posts valid ones', async () => {
-    const client = new EngineClient('http://engine.test');
-    await expect(
-      client.connectionTest({ target: '' as 'openai' }),
-    ).resolves.toMatchObject({
-      ok: false,
-      error: 'Invalid target',
-    });
-    await expect(
-      client.connectionTest({ target: `openai${'\n'}` as 'openai' }),
-    ).resolves.toMatchObject({ ok: false, error: 'Invalid target' });
-
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ ok: true, data: { target: 'openai', reachable: true } }),
-    );
-    const ok = await client.connectionTest({ target: 'openai', url: 'https://api.openai.com' });
-    expect(ok.ok).toBe(true);
-    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
-    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toMatchObject({
-      target: 'openai',
-      url: 'https://api.openai.com',
-    });
-  });
 
 });

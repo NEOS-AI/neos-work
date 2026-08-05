@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 
 const useEngine = vi.fn();
 
@@ -45,11 +45,26 @@ vi.mock('./pages/ProjectWorkspace.js', () => ({
 const App = (await import('./App.js')).default;
 
 describe('App routing gate', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
   it('shows ModeSelection when disconnected', () => {
     useEngine.mockReturnValue({ status: 'disconnected' });
     render(<App />);
     expect(screen.getByTestId('mode-selection')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar')).not.toBeInTheDocument();
+  });
+
+  it('remembers non-root path while disconnected for post-connect restore', async () => {
+    // Simulate deep link open while engine is not connected
+    window.history.pushState({}, '', '/projects/proj-deep');
+    useEngine.mockReturnValue({ status: 'disconnected' });
+    render(<App />);
+    expect(screen.getByTestId('mode-selection')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(sessionStorage.getItem('neos-desktop-pending-path')).toBe('/projects/proj-deep');
+    });
   });
 
   it('shows ModeSelection when connecting', () => {

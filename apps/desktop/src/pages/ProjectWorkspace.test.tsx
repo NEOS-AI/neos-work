@@ -8,6 +8,7 @@ const listProjectFiles = vi.fn();
 const readProjectFile = vi.fn();
 const writeProjectFile = vi.fn();
 const deleteProjectFile = vi.fn();
+const mkdirProjectPath = vi.fn();
 const listProjectPreviewComments = vi.fn();
 const createProjectPreviewComment = vi.fn();
 const deleteProjectPreviewComment = vi.fn();
@@ -70,6 +71,7 @@ const client = {
   readProjectFile,
   writeProjectFile,
   deleteProjectFile,
+  mkdirProjectPath,
   listProjectPreviewComments,
   createProjectPreviewComment,
   deleteProjectPreviewComment,
@@ -314,6 +316,7 @@ describe('ProjectWorkspace', () => {
     readProjectFile.mockReset();
     writeProjectFile.mockReset();
     deleteProjectFile.mockReset();
+    mkdirProjectPath.mockReset();
     listProjectPreviewComments.mockReset().mockResolvedValue({ ok: true, data: [] });
     createProjectPreviewComment.mockReset();
     deleteProjectPreviewComment.mockReset();
@@ -560,6 +563,58 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(screen.getByTestId('file-delete-about.html')).toBeInTheDocument());
     await user.click(screen.getByTestId('file-delete-about.html'));
     expect(deleteProjectFile).not.toHaveBeenCalled();
+  });
+
+  it('creates a folder via mkdir and reloads the file tree', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    vi.spyOn(window, 'prompt').mockReturnValue('assets/icons');
+    mkdirProjectPath.mockResolvedValue({ ok: true, data: { path: 'assets/icons' } });
+    listProjectFiles
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+          { path: 'about.html', name: 'about.html', type: 'file', isEntry: false },
+        ],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [
+          { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+          { path: 'about.html', name: 'about.html', type: 'file', isEntry: false },
+          { path: 'assets', name: 'assets', type: 'directory', isEntry: false },
+          { path: 'assets/icons', name: 'icons', type: 'directory', isEntry: false },
+        ],
+      });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('project-mkdir')).toBeInTheDocument());
+    await user.click(screen.getByTestId('project-mkdir'));
+    await waitFor(() => {
+      expect(mkdirProjectPath).toHaveBeenCalledWith('proj-1', 'assets/icons', undefined);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('icons')).toBeInTheDocument();
+    });
+  });
+
+  it('surfaces mkdir lock holder on 423', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    vi.spyOn(window, 'prompt').mockReturnValue('locked-dir');
+    mkdirProjectPath.mockResolvedValue({
+      ok: false,
+      error: 'File locked',
+      data: {
+        holder: { sessionId: 'peer-b', displayName: 'Bob', path: 'locked-dir' },
+      },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('project-mkdir')).toBeInTheDocument());
+    await user.click(screen.getByTestId('project-mkdir'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/fileLockedBy|Bob/i);
+    });
   });
 
   it('shows save error when write fails', async () => {

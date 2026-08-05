@@ -629,6 +629,68 @@ export function ProjectWorkspace() {
   }, [client, projectId, buffer, collabSessionId, t]);
 
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [mkdirBusy, setMkdirBusy] = useState(false);
+
+  /**
+   * Create a project folder via POST …/mkdir (collab session for hard-enforce).
+   */
+  const handleMkdir = useCallback(async () => {
+    if (!client || !projectId || mkdirBusy) return;
+    const raw = window.prompt(t('project.newFolderPrompt'), '');
+    if (raw == null) return; // cancelled
+    const path = typeof raw === 'string' ? raw.trim() : '';
+    if (!path || /[\0\r\n]/.test(path) || path.includes('..')) {
+      setSaveError(t('project.newFolderInvalid'));
+      return;
+    }
+    setMkdirBusy(true);
+    setSaveError(null);
+    try {
+      const res = await client.mkdirProjectPath(
+        projectId,
+        path,
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
+      if (!res.ok) {
+        const holder =
+          res.data
+          && typeof res.data === 'object'
+          && res.data !== null
+          && 'holder' in res.data
+            ? (res.data as {
+                holder?: { sessionId?: string; displayName?: string; path?: string };
+              }).holder
+            : undefined;
+        if (holder?.displayName && holder.sessionId) {
+          const lockPath =
+            (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
+            || normalizeProjectRelPath(path)
+            || path;
+          setForeignLocks((m) => ({
+            ...m,
+            [lockPath]: {
+              sessionId: holder.sessionId!,
+              displayName: holder.displayName!,
+            },
+          }));
+          setSaveError(t('project.fileLockedBy', { name: holder.displayName }));
+        } else {
+          setSaveError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.newFolderFailed'),
+          );
+        }
+        return;
+      }
+      const filesRes = await client.listProjectFiles(projectId);
+      if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.newFolderFailed');
+      setSaveError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setMkdirBusy(false);
+    }
+  }, [client, projectId, collabSessionId, mkdirBusy, t]);
 
   /**
    * Delete a project file. Passes collab session for NEOS_SHARED_EDIT hard enforce.
@@ -1405,10 +1467,29 @@ export function ProjectWorkspace() {
           style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
         >
           <div
-            className="border-b px-3 py-2 text-[10px] font-semibold uppercase tracking-wide"
-            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-muted)' }}
+            className="flex items-center justify-between gap-1 border-b px-3 py-2"
+            style={{ borderColor: 'var(--border-primary)' }}
           >
-            {t('project.files')}
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wide"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {t('project.files')}
+            </span>
+            <button
+              type="button"
+              data-testid="project-mkdir"
+              disabled={mkdirBusy || !client}
+              onClick={() => void handleMkdir()}
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium disabled:opacity-40"
+              style={{
+                color: 'var(--text-secondary)',
+                backgroundColor: 'var(--bg-tertiary)',
+              }}
+              title={t('project.newFolder')}
+            >
+              {mkdirBusy ? '…' : t('project.newFolder')}
+            </button>
           </div>
           <ul className="flex-1 overflow-auto py-1 text-xs">
             {fileTree.map((f) => {

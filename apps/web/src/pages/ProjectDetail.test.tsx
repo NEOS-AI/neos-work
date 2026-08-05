@@ -4,6 +4,29 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const writeFile = vi.fn(async () => ({ ok: true, data: { hash: 'h1' } }));
 const deleteFile = vi.fn(async () => ({ ok: true, data: { path: 'style.css' } }));
+const mkdir = vi.fn(async () => ({ ok: true, data: { path: 'assets' } }));
+const listConversations = vi.fn(async () => ({ ok: true, data: [] as unknown[] }));
+const createConversation = vi.fn(async () => ({
+  ok: true,
+  data: {
+    id: 'conv-web-1',
+    projectId: 'p1',
+    title: 'Project chat',
+    createdAt: 't0',
+    updatedAt: 't0',
+  },
+}));
+const listMessages = vi.fn(async () => ({ ok: true, data: [] as unknown[] }));
+const addMessage = vi.fn(async (_p: string, _c: string, input: { content: string; role?: string }) => ({
+  ok: true,
+  data: {
+    id: `msg-${Math.random().toString(36).slice(2, 8)}`,
+    conversationId: 'conv-web-1',
+    role: input.role ?? 'user',
+    content: input.content,
+    createdAt: new Date().toISOString(),
+  },
+}));
 const listFiles = vi.fn(async () => ({
   ok: true,
   data: [
@@ -163,6 +186,11 @@ vi.mock('../lib/api.js', () => {
       readFile = readFile;
       writeFile = writeFile;
       deleteFile = deleteFile;
+      mkdir = mkdir;
+      listConversations = listConversations;
+      createConversation = createConversation;
+      listMessages = listMessages;
+      addMessage = addMessage;
       createRun = createRun;
       getRun = getRun;
       listRuns = listRuns;
@@ -239,6 +267,29 @@ describe('ProjectDetail Design Editor', () => {
   beforeEach(() => {
     writeFile.mockClear();
     deleteFile.mockClear().mockResolvedValue({ ok: true, data: { path: 'style.css' } });
+    mkdir.mockClear().mockResolvedValue({ ok: true, data: { path: 'assets' } });
+    listConversations.mockClear().mockResolvedValue({ ok: true, data: [] });
+    createConversation.mockClear().mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'conv-web-1',
+        projectId: 'p1',
+        title: 'Project chat',
+        createdAt: 't0',
+        updatedAt: 't0',
+      },
+    });
+    listMessages.mockClear().mockResolvedValue({ ok: true, data: [] });
+    addMessage.mockClear().mockImplementation(async (_p, _c, input: { content: string; role?: string }) => ({
+      ok: true,
+      data: {
+        id: `msg-${Math.random().toString(36).slice(2, 8)}`,
+        conversationId: 'conv-web-1',
+        role: input.role ?? 'user',
+        content: input.content,
+        createdAt: new Date().toISOString(),
+      },
+    }));
     listFiles.mockClear().mockResolvedValue({
       ok: true,
       data: [
@@ -246,10 +297,10 @@ describe('ProjectDetail Design Editor', () => {
         { path: 'style.css', type: 'file' },
       ],
     });
-    createRun.mockClear();
-    getRun.mockClear();
+    createRun.mockClear().mockResolvedValue({ ok: true, data: { id: 'run1', status: 'queued' } });
+    getRun.mockClear().mockResolvedValue({ ok: true, data: { id: 'run1', status: 'succeeded' } });
     listRuns.mockClear();
-    listRunEvents.mockClear();
+    listRunEvents.mockClear().mockResolvedValue({ ok: true, data: [] });
     cancelRun.mockClear();
     streamRunEvents.mockClear().mockImplementation(
       (
@@ -408,6 +459,80 @@ describe('ProjectDetail Design Editor', () => {
     await waitFor(() => expect(screen.getByTestId('file-delete-style.css')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('file-delete-style.css'));
     expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('creates a folder via New folder button', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('assets/icons');
+    mkdir.mockResolvedValue({ ok: true, data: { path: 'assets/icons' } });
+    renderProject();
+    await waitFor(() => expect(screen.getByTestId('project-mkdir')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-mkdir'));
+    await waitFor(() => {
+      expect(mkdir).toHaveBeenCalledWith('p1', 'assets/icons', undefined);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Created folder assets\/icons/i)).toBeInTheDocument();
+    });
+  });
+
+  it('loads conversation history and persists turns on Edit with AI', async () => {
+    listConversations.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'conv-web-1',
+          projectId: 'p1',
+          title: 'Project chat',
+          createdAt: 't0',
+          updatedAt: 't0',
+        },
+      ],
+    });
+    listMessages.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'msg-old',
+          conversationId: 'conv-web-1',
+          role: 'user',
+          content: 'previous turn',
+          createdAt: 't0',
+        },
+      ],
+    });
+    createRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-conv', status: 'queued' },
+    });
+    getRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-conv', status: 'succeeded' },
+    });
+    renderProject();
+    await waitFor(() => {
+      expect(screen.getByTestId('web-chat-history')).toBeInTheDocument();
+      expect(screen.getByText('previous turn')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByTestId('ai-prompt'), {
+      target: { value: 'Make it blue' },
+    });
+    fireEvent.click(screen.getByTestId('ai-run'));
+    await waitFor(() => {
+      expect(addMessage).toHaveBeenCalledWith(
+        'p1',
+        'conv-web-1',
+        expect.objectContaining({ role: 'user', content: 'Make it blue' }),
+      );
+    });
+    await waitFor(() => {
+      expect(createRun).toHaveBeenCalled();
+      // assistant summary after terminal status
+      expect(addMessage).toHaveBeenCalledWith(
+        'p1',
+        'conv-web-1',
+        expect.objectContaining({ role: 'assistant' }),
+      );
+    });
   });
 
   it('loads project and shows Design Editor for entry file', async () => {

@@ -90,6 +90,62 @@ describe('WebApiClient hard-enforce session transport', () => {
     expect(init.body).toBeUndefined();
   });
 
+  it('mkdir sends path body + optional session header', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'assets' } }));
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await client.mkdir('p1', 'assets/icons', { sessionId: 'sess-mkdir' });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/projects\/p1\/mkdir$/);
+    expect(init.method).toBe('POST');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-neos-session-id']).toBe('sess-mkdir');
+    expect(JSON.parse(String(init.body))).toEqual({
+      path: 'assets/icons',
+      sessionId: 'sess-mkdir',
+    });
+  });
+
+  it('conversation helpers list/create/messages', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: [{ id: 'c1', projectId: 'p1', title: 't' }] }),
+    );
+    await client.listConversations('p1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/projects\/p1\/conversations$/);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'c2', projectId: 'p1', title: 'Project chat' } }),
+    );
+    await client.createConversation('p1', 'Project chat');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      title: 'Project chat',
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listMessages('p1', 'c1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(
+      /\/projects\/p1\/conversations\/c1\/messages$/,
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { id: 'm1', conversationId: 'c1', role: 'user', content: 'hi' },
+      }),
+    );
+    await client.addMessage('p1', 'c1', { role: 'user', content: 'hi' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      role: 'user',
+      content: 'hi',
+    });
+
+    await expect(client.addMessage('p1', 'c1', { content: '' })).resolves.toMatchObject({
+      ok: false,
+    });
+  });
+
   it('restoreRevision sends sessionId body + header', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ ok: true, data: { path: 'a.html', hash: 'restored' } }),

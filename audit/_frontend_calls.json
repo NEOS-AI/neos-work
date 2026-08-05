@@ -1,1770 +1,1542 @@
 [
   {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/health",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 526,
-    "fn": "health"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/session${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 548,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/session",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 563,
-    "fn": "createSession"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/session/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 574,
-    "fn": "deleteSession"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/session/${seg}/messages",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 586,
-    "fn": "listMessages"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/session/${seg}/chat",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 604,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/session/${sid}/agent",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 654,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/session/${sid}/cancel",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 702,
-    "fn": "cancelSession"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/session/${sid}/tool-confirm/${tid}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 720,
-    "fn": "confirmTool"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workspace",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 734,
-    "fn": "listWorkspaces"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workspace",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 745,
-    "fn": "createWorkspace"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/workspace/${wid}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 759,
-    "fn": "updateWorkspace"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/workspace/${wid}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 770,
-    "fn": "deleteWorkspace"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/settings",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 780,
-    "fn": "getSettings"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/settings/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 789,
-    "fn": "getSetting"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/settings/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 798,
-    "fn": "saveSetting"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/settings/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 809,
-    "fn": "deleteSetting"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/settings/verify-key",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 817,
-    "fn": "verifyApiKey"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/models",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 828,
-    "fn": "listModels"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/skills",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 837,
-    "fn": "listSkills"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/skills/scan",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 844,
-    "fn": "scanSkills"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/skills/${seg}/toggle",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 854,
-    "fn": "toggleSkill"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/skills/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 865,
-    "fn": "deleteSkill"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/plugins/upgrade-from-skill",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 876,
-    "fn": "upgradeSkillToPlugin"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 887,
-    "fn": "listMcpServers"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 900,
-    "fn": "createMcpServer"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers/presets",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 909,
-    "fn": "listMcpPresets"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers/from-preset",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 920,
-    "fn": "createMcpServerFromPreset"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers/tradingview/cdp-health${q}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 933,
-    "fn": "checkTradingViewCdp"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers/${seg}/toggle",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 942,
-    "fn": "toggleMcpServer"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/mcp-servers/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 953,
-    "fn": "deleteMcpServer"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers/oauth/start",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 970,
-    "fn": "startMcpOAuth"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/mcp-servers/oauth/${seg}/status",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 981,
-    "fn": "getMcpOAuthStatus"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/mcp-servers/oauth/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 990,
-    "fn": "revokeMcpOAuth"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp-servers/oauth/${seg}/refresh",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1000,
-    "fn": "refreshMcpOAuth"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/mcp/install-info${q ? ",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1035,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/mcp/tools",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1044,
-    "fn": "listNeosMcpTools"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/mcp/install/codex/status",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1058,
-    "fn": "getCodexMcpInstallStatus"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/mcp/install/codex",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1077,
-    "fn": "installCodexMcp"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/mcp/install/codex",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1086,
-    "fn": "uninstallCodexMcp"
-  },
-  {
-    "surface": "desktop",
+    "surface": "cli",
     "method": "GET",
     "url": "/api/cli-agents",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1096,
-    "fn": "listCliAgents"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1123,
-    "fn": "listProjects"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1130,
-    "fn": "getProject"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/import-token",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1143,
-    "fn": "createImportToken"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1172,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/projects/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1205,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/projects/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1216,
-    "fn": "deleteProject"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/export.zip",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1228,
-    "fn": "exportProjectZip"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/import.zip",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1260,
-    "fn": "importProjectZip"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/files",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1274,
-    "fn": "listProjectFiles"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/collab/stream${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1353,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/${seg}/collab/locks",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1495,
-    "fn": "collabLock"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/collab/peers",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1546,
-    "fn": "listCollabPeers"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/collab/locks",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1563,
-    "fn": "listCollabLocks"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/collab/selections",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1589,
-    "fn": "listCollabSelections"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/${seg}/collab/heartbeat",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1602,
-    "fn": "collabHeartbeat"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/collab/status",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1622,
-    "fn": "getCollabStatus"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/${seg}/collab/selection",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1642,
-    "fn": "collabSelection"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/events/stream",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1663,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/files/${pathSeg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1722,
-    "fn": "readProjectFile"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/projects/${seg}/files/${pathSeg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1761,
-    "fn": "trim"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/projects/${seg}/files/${pathSeg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1800,
-    "fn": "trim"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/${seg}/mkdir",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1831,
-    "fn": "trim"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/revisions${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1852,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${pSeg}/revisions/${rSeg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1867,
-    "fn": "getProjectRevision"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/${pSeg}/revisions/${rSeg}/restore",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1896,
-    "fn": "trim"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/projects/${seg}/preview-comments${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1920,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/projects/${seg}/preview-comments",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1942,
-    "fn": "viewComment"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/projects/${pSeg}/preview-comments/${cSeg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1962,
-    "fn": "deleteProjectPreviewComment"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/runs${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 1991,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/runs",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2032,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/runs/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2043,
-    "fn": "getProjectRun"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/runs/${seg}/events${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2058,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/runs/${seg}/events/stream",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2087,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/runs/${seg}/cancel",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2154,
-    "fn": "cancelProjectRun"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/design-systems",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2164,
-    "fn": "listDesignSystems"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/design-systems",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2169,
-    "fn": "createDesignSystem"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/design-systems/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2180,
-    "fn": "deleteDesignSystem"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/design-systems/${seg}/content",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2190,
-    "fn": "getDesignSystemContent"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/design-systems/${seg}/tokens",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2197,
-    "fn": "getDesignSystemTokens"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/design-systems/${seg}/content",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2206,
-    "fn": "saveDesignSystemContent"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/artifacts?runId=${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2220,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/artifacts?workflowId=${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2226,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/artifacts/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2237,
-    "fn": "getArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/artifacts/${seg}/refresh",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2247,
-    "fn": "refreshArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/artifacts/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2258,
-    "fn": "deleteArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "PATCH",
-    "url": "/api/artifacts/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2271,
-    "fn": "updateArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/media/file/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2282,
-    "fn": "deleteMediaFile"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/routines",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2292,
-    "fn": "listRoutines"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/routines/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2299,
-    "fn": "getRoutine"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/routines",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2313,
-    "fn": "createRoutine"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/routines/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2324,
-    "fn": "updateRoutine"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/media/files?limit=${limit}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2333,
-    "fn": "listMediaFiles"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/live-artifacts?projectId=${encodeURIComponent(seg)}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2344,
-    "fn": "listLiveArtifacts"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/live-artifacts",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2363,
-    "fn": "createLiveArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/live-artifacts/${aid}/refresh?projectId=${encodeURIComponent(pid)}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2385,
-    "fn": "refreshLiveArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/live-artifacts/${aid}?projectId=${encodeURIComponent(pid)}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2400,
-    "fn": "deleteLiveArtifact"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/live-artifacts/tool-tokens",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2420,
-    "fn": "createProjectToolToken"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/media/config",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2451,
-    "fn": "getMediaConfig"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/media/providers",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2468,
-    "fn": "listMediaProviders"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/media/jobs/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2488,
-    "fn": "getMediaJob"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/media/file/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2504,
-    "fn": "fetchMediaBlob"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/deploy/${seg}/refresh",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2514,
-    "fn": "refreshDeployment"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/routines/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2524,
-    "fn": "deleteRoutine"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/routines/${seg}/run",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2534,
-    "fn": "runRoutineNow"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/routines/${seg}/runs",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2544,
-    "fn": "listRoutineRuns"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/routines/${rseg}/runs/${runSeg}/crystallize",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2557,
-    "fn": "crystallizeRoutineRun"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/deploy/preflight",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2572,
-    "fn": "deployPreflight"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/deploy/check-link",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2595,
-    "fn": "checkDeployLink"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/connection-test",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2620,
-    "fn": "connectionTest"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/marketplace/catalog-url",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2634,
-    "fn": "getMarketplaceCatalogUrl"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/marketplace/catalog-url",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2641,
-    "fn": "setMarketplaceCatalogUrl"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/marketplace/catalog${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2669,
-    "fn": "fetchMarketplaceCatalog"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/marketplace/install",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2688,
-    "fn": "installMarketplaceEntry"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/plugins",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2699,
-    "fn": "listPlugins"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/plugins/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2706,
-    "fn": "getPlugin"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/plugins/${seg}/run",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2723,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/plugins/${seg}/run/${runSeg}/resume",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2782,
-    "fn": "resumePlugin"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2793,
-    "fn": "listWorkflows"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2802,
-    "fn": "getWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2829,
-    "fn": ""
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/workflow/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2852,
-    "fn": "updateWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/workflow/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2863,
-    "fn": "deleteWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow/${seg}/duplicate",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2873,
-    "fn": "duplicateWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow/${seg}/export",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2887,
-    "fn": "exportWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow/import",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2917,
-    "fn": "importWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow/import.zip",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2931,
-    "fn": "importWorkflowZip"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow/import/claude-design",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2945,
-    "fn": "importClaudeDesignZip"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow/${seg}/export.zip",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2960,
-    "fn": "exportWorkflowZip"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow/${seg}/run",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 2990,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow/${seg}/runs?limit=${limit}&offset=${offset}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3028,
-    "fn": "listWorkflowRuns"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow/${seg1}/runs/${seg2}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3039,
-    "fn": "getWorkflowRun"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/workflow/${seg1}/runs/${seg2}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3050,
-    "fn": "deleteWorkflowRun"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/workflow/${seg}/runs${qs}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3065,
-    "fn": "clearWorkflowRuns"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow/${seg}/preflight",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3078,
-    "fn": "preflightWorkflow"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/webhook/${seg}/secret",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3093,
-    "fn": "getWebhookSecret"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/webhook/${seg}/rate-limit",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3107,
-    "fn": "getWebhookRateLimit"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/webhook/${seg}/regenerate",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3116,
-    "fn": "regenerateWebhookSecret"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/webhook/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3140,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow-revisions/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3167,
-    "fn": "listRevisions"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workflow-revisions/${seg}/${rev}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3178,
-    "fn": "getRevision"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workflow-revisions/${seg}/${rev}/restore",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3193,
-    "fn": "restoreRevision"
-  },
-  {
-    "surface": "desktop",
-    "method": "PATCH",
-    "url": "/api/workflow-revisions/${seg}/${rev}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3205,
-    "fn": "updateRevisionLabel"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/workflow-revisions/${seg}/${rev}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3218,
-    "fn": "deleteRevision"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/deploy${qs ? ",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3245,
-    "fn": "if"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/deploy/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3254,
-    "fn": "getDeployment"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/deploy/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3263,
-    "fn": "deleteDeployment"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/workers${q}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3277,
-    "fn": "listWorkers"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/domain-packs",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3299,
-    "fn": "listDomainPacks"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/domain-packs/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3308,
-    "fn": "getDomainPack"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/domain-packs/install",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3316,
-    "fn": "installDomainPackFromPath"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/domain-packs/validate",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3327,
-    "fn": "validateDomainPackManifest"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/domain-packs/${seg}/toggle",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3341,
-    "fn": "toggleDomainPack"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/domain-packs/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3352,
-    "fn": "deleteDomainPack"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/workers",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3362,
-    "fn": "createWorker"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/workers/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3373,
-    "fn": "updateWorker"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/workers/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3384,
-    "fn": "deleteWorker"
-  },
-  {
-    "surface": "desktop",
-    "method": "GET",
-    "url": "/api/harness",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3400,
-    "fn": "listHarnesses"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/blocks",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3432,
-    "fn": "createBlock"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/blocks/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3443,
-    "fn": "updateBlock"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/blocks/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3454,
-    "fn": "deleteBlock"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/memory",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3474,
-    "fn": "listMemories"
-  },
-  {
-    "surface": "desktop",
-    "method": "POST",
-    "url": "/api/memory",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3479,
-    "fn": "createMemory"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/memory/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3490,
-    "fn": "updateMemory"
-  },
-  {
-    "surface": "desktop",
-    "method": "DELETE",
-    "url": "/api/memory/${seg}",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3501,
-    "fn": "deleteMemory"
-  },
-  {
-    "surface": "desktop",
-    "method": "PUT",
-    "url": "/api/memory/${seg}/toggle",
-    "file": "apps/desktop/src/lib/engine.ts",
-    "line": 3511,
-    "fn": "toggleMemory"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 159,
-    "fn": "listProjects"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(id)}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 163,
-    "fn": "getProject"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 167,
-    "fn": "listFiles"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 175,
-    "fn": "readFile"
-  },
-  {
-    "surface": "web",
-    "method": "PUT",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 199,
-    "fn": ""
-  },
-  {
-    "surface": "web",
-    "method": "DELETE",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 237,
-    "fn": "deleteFile"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/revisions${qs}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 268,
-    "fn": "if"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 286,
-    "fn": "getRevision"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}/restore",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 303,
-    "fn": "restoreRevision"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/runs",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 321,
-    "fn": "createRun"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/runs/${encodeURIComponent(runId)}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 325,
-    "fn": "getRun"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/runs?projectId=${encodeURIComponent(projectId)}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 330,
-    "fn": "listRuns"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/runs/${encodeURIComponent(runId)}/events${qs}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 348,
-    "fn": "if"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/runs/${encodeURIComponent(runId)}/cancel",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 359,
-    "fn": "cancelRun"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/mcp/install-info${q ? ",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 485,
-    "fn": ""
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/settings",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 490,
-    "fn": "getSettings"
-  },
-  {
-    "surface": "web",
-    "method": "PUT",
-    "url": "/api/settings/${encodeURIComponent(key.trim())}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 504,
-    "fn": "if"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/settings/verify-key",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 519,
-    "fn": "verifyApiKey"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/collab/status",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 534,
-    "fn": "getCollabStatus"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/locks",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 755,
-    "fn": "collabLock"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/selection",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 775,
-    "fn": ""
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/peers",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 796,
-    "fn": "getCollabPeers"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/locks",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 816,
-    "fn": "getCollabLocks"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/selections",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 840,
-    "fn": "getCollabSelections"
-  },
-  {
-    "surface": "web",
-    "method": "POST",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/heartbeat",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 851,
-    "fn": "postCollabHeartbeat"
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/runs/${seg}/events/stream",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 394,
-    "fn": ""
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${id}/collab/stream${qs}",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 614,
-    "fn": ""
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/projects/${id}/events/stream",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 866,
-    "fn": ""
-  },
-  {
-    "surface": "web",
-    "method": "GET",
-    "url": "/api/health",
-    "file": "apps/web/src/lib/api.ts",
-    "line": 153,
-    "fn": "health?"
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/projects",
-    "file": "apps/cli/src/client.ts",
-    "line": 165,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "POST",
-    "url": "/api/projects",
-    "file": "apps/cli/src/client.ts",
-    "line": 169,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(id)}",
-    "file": "apps/cli/src/client.ts",
-    "line": 173,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files",
-    "file": "apps/cli/src/client.ts",
-    "line": 177,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
-    "file": "apps/cli/src/client.ts",
-    "line": 182,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "PUT",
-    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
-    "file": "apps/cli/src/client.ts",
-    "line": 191,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "POST",
-    "url": "/api/runs",
-    "file": "apps/cli/src/client.ts",
-    "line": 203,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/runs/${encodeURIComponent(id)}",
-    "file": "apps/cli/src/client.ts",
-    "line": 207,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "POST",
-    "url": "/api/runs/${encodeURIComponent(id)}/cancel",
-    "file": "apps/cli/src/client.ts",
-    "line": 211,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/media/files",
-    "file": "apps/cli/src/client.ts",
-    "line": 215,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/plugins",
-    "file": "apps/cli/src/client.ts",
-    "line": 219,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:317",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "GET",
     "url": "/api/deploy",
-    "file": "apps/cli/src/client.ts",
-    "line": 223,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/skills",
-    "file": "apps/cli/src/client.ts",
-    "line": 229,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "POST",
-    "url": "/api/skills/scan",
-    "file": "apps/cli/src/client.ts",
-    "line": 233,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:223",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "GET",
     "url": "/api/design-systems",
-    "file": "apps/cli/src/client.ts",
-    "line": 237,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/memory",
-    "file": "apps/cli/src/client.ts",
-    "line": 241,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "POST",
-    "url": "/api/memory",
-    "file": "apps/cli/src/client.ts",
-    "line": 250,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/mcp-servers",
-    "file": "apps/cli/src/client.ts",
-    "line": 254,
-    "fn": ""
-  },
-  {
-    "surface": "cli",
-    "method": "GET",
-    "url": "/api/mcp/install-info",
-    "file": "apps/cli/src/client.ts",
-    "line": 261,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:237",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "GET",
     "url": "/api/live-artifacts",
-    "file": "apps/cli/src/client.ts",
-    "line": 270,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:270",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "POST",
     "url": "/api/live-artifacts",
-    "file": "apps/cli/src/client.ts",
-    "line": 281,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:281",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "POST",
     "url": "/api/live-artifacts/${encodeURIComponent(artifactId)}/refresh",
-    "file": "apps/cli/src/client.ts",
-    "line": 288,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:288",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "GET",
-    "url": "/api/plugins/atoms",
-    "file": "apps/cli/src/client.ts",
-    "line": 296,
-    "fn": ""
+    "url": "/api/mcp-servers",
+    "site": "apps/cli/src/client.ts:254",
+    "kind": "request"
   },
   {
     "surface": "cli",
-    "method": "POST",
-    "url": "/api/media/generate",
-    "file": "apps/cli/src/client.ts",
-    "line": 309,
-    "fn": ""
+    "method": "GET",
+    "url": "/api/mcp/install-info",
+    "site": "apps/cli/src/client.ts:261",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "GET",
     "url": "/api/media/config",
-    "file": "apps/cli/src/client.ts",
-    "line": 313,
-    "fn": ""
+    "site": "apps/cli/src/client.ts:313",
+    "kind": "request"
   },
   {
     "surface": "cli",
     "method": "GET",
+    "url": "/api/media/files",
+    "site": "apps/cli/src/client.ts:215",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "POST",
+    "url": "/api/media/generate",
+    "site": "apps/cli/src/client.ts:309",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/memory",
+    "site": "apps/cli/src/client.ts:241",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "POST",
+    "url": "/api/memory",
+    "site": "apps/cli/src/client.ts:250",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/plugins",
+    "site": "apps/cli/src/client.ts:219",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/plugins/atoms",
+    "site": "apps/cli/src/client.ts:296",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/projects",
+    "site": "apps/cli/src/client.ts:165",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "POST",
+    "url": "/api/projects",
+    "site": "apps/cli/src/client.ts:169",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(id)}",
+    "site": "apps/cli/src/client.ts:173",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/files",
+    "site": "apps/cli/src/client.ts:177",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
+    "site": "apps/cli/src/client.ts:182",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "PUT",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
+    "site": "apps/cli/src/client.ts:191",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "POST",
+    "url": "/api/runs",
+    "site": "apps/cli/src/client.ts:203",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/runs/${encodeURIComponent(id)}",
+    "site": "apps/cli/src/client.ts:207",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "POST",
+    "url": "/api/runs/${encodeURIComponent(id)}/cancel",
+    "site": "apps/cli/src/client.ts:211",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "GET",
+    "url": "/api/skills",
+    "site": "apps/cli/src/client.ts:229",
+    "kind": "request"
+  },
+  {
+    "surface": "cli",
+    "method": "POST",
+    "url": "/api/skills/scan",
+    "site": "apps/cli/src/client.ts:233",
+    "kind": "request"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/artifacts?runId=${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2320",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/artifacts?workflowId=${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2326",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/artifacts/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2358",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/artifacts/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2337",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PATCH",
+    "url": "/api/artifacts/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2371",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/artifacts/${seg}/refresh",
+    "site": "apps/desktop/src/lib/engine.ts:2347",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/blocks",
+    "site": "apps/desktop/src/lib/engine.ts:3532",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/blocks/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3554",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/blocks/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3543",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
     "url": "/api/cli-agents",
-    "file": "apps/cli/src/client.ts",
-    "line": 317,
-    "fn": ""
+    "site": "apps/desktop/src/lib/engine.ts:1115",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/collab/status",
+    "site": "apps/desktop/src/lib/engine.ts:1641",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/connection-test",
+    "site": "apps/desktop/src/lib/engine.ts:2720",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/deploy/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3363",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/deploy/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3354",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/deploy/${seg}/refresh",
+    "site": "apps/desktop/src/lib/engine.ts:2614",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/deploy/check-link",
+    "site": "apps/desktop/src/lib/engine.ts:2695",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/deploy/preflight",
+    "site": "apps/desktop/src/lib/engine.ts:2672",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/deploy${qs ? ",
+    "site": "apps/desktop/src/lib/engine.ts:3345",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/design-systems",
+    "site": "apps/desktop/src/lib/engine.ts:2264",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/design-systems",
+    "site": "apps/desktop/src/lib/engine.ts:2269",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/design-systems/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2280",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/design-systems/${seg}/content",
+    "site": "apps/desktop/src/lib/engine.ts:2290",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/design-systems/${seg}/content",
+    "site": "apps/desktop/src/lib/engine.ts:2306",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/design-systems/${seg}/tokens",
+    "site": "apps/desktop/src/lib/engine.ts:2297",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/domain-packs",
+    "site": "apps/desktop/src/lib/engine.ts:3399",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/domain-packs/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3452",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/domain-packs/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3408",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/domain-packs/${seg}/toggle",
+    "site": "apps/desktop/src/lib/engine.ts:3441",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/domain-packs/install",
+    "site": "apps/desktop/src/lib/engine.ts:3416",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/domain-packs/validate",
+    "site": "apps/desktop/src/lib/engine.ts:3427",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/harness",
+    "site": "apps/desktop/src/lib/engine.ts:3500",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/health",
+    "site": "apps/desktop/src/lib/engine.ts:545",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/live-artifacts",
+    "site": "apps/desktop/src/lib/engine.ts:2463",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/live-artifacts?projectId=${encodeURIComponent(seg)}",
+    "site": "apps/desktop/src/lib/engine.ts:2444",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/live-artifacts/${aid}?projectId=${encodeURIComponent(pid)}",
+    "site": "apps/desktop/src/lib/engine.ts:2500",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/live-artifacts/${aid}/refresh?projectId=${encodeURIComponent(pid)}",
+    "site": "apps/desktop/src/lib/engine.ts:2485",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/live-artifacts/tool-tokens",
+    "site": "apps/desktop/src/lib/engine.ts:2520",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/marketplace/catalog-url",
+    "site": "apps/desktop/src/lib/engine.ts:2734",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/marketplace/catalog-url",
+    "site": "apps/desktop/src/lib/engine.ts:2741",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/marketplace/catalog${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:2769",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/marketplace/install",
+    "site": "apps/desktop/src/lib/engine.ts:2788",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp-servers",
+    "site": "apps/desktop/src/lib/engine.ts:906",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers",
+    "site": "apps/desktop/src/lib/engine.ts:919",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/mcp-servers/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:972",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers/${seg}/toggle",
+    "site": "apps/desktop/src/lib/engine.ts:961",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers/from-preset",
+    "site": "apps/desktop/src/lib/engine.ts:939",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/mcp-servers/oauth/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:1009",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers/oauth/${seg}/refresh",
+    "site": "apps/desktop/src/lib/engine.ts:1019",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp-servers/oauth/${seg}/status",
+    "site": "apps/desktop/src/lib/engine.ts:1000",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers/oauth/start",
+    "site": "apps/desktop/src/lib/engine.ts:989",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp-servers/presets",
+    "site": "apps/desktop/src/lib/engine.ts:928",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp-servers/tradingview/cdp-health${q}",
+    "site": "apps/desktop/src/lib/engine.ts:952",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp/install-info${q ? ",
+    "site": "apps/desktop/src/lib/engine.ts:1054",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/mcp/install/codex",
+    "site": "apps/desktop/src/lib/engine.ts:1105",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp/install/codex",
+    "site": "apps/desktop/src/lib/engine.ts:1096",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp/install/codex/status",
+    "site": "apps/desktop/src/lib/engine.ts:1077",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp/tools",
+    "site": "apps/desktop/src/lib/engine.ts:1063",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/media/config",
+    "site": "apps/desktop/src/lib/engine.ts:2551",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/media/file/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2382",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/media/file/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2604",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/media/files?limit=${limit}",
+    "site": "apps/desktop/src/lib/engine.ts:2433",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/media/jobs/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2588",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/media/providers",
+    "site": "apps/desktop/src/lib/engine.ts:2568",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/memory",
+    "site": "apps/desktop/src/lib/engine.ts:3574",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/memory",
+    "site": "apps/desktop/src/lib/engine.ts:3579",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/memory/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3601",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/memory/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3590",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/memory/${seg}/toggle",
+    "site": "apps/desktop/src/lib/engine.ts:3611",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/models",
+    "site": "apps/desktop/src/lib/engine.ts:847",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/plugins",
+    "site": "apps/desktop/src/lib/engine.ts:2799",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/plugins/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2806",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/plugins/${seg}/run",
+    "site": "apps/desktop/src/lib/engine.ts:2823",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/plugins/${seg}/run/${runSeg}/resume",
+    "site": "apps/desktop/src/lib/engine.ts:2882",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/plugins/upgrade-from-skill",
+    "site": "apps/desktop/src/lib/engine.ts:895",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects",
+    "site": "apps/desktop/src/lib/engine.ts:1142",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects",
+    "site": "apps/desktop/src/lib/engine.ts:1191",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${pSeg}/conversations/${cSeg}/messages",
+    "site": "apps/desktop/src/lib/engine.ts:2027",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${pSeg}/conversations/${cSeg}/messages",
+    "site": "apps/desktop/src/lib/engine.ts:2058",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/projects/${pSeg}/preview-comments/${cSeg}",
+    "site": "apps/desktop/src/lib/engine.ts:1981",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${pSeg}/revisions/${rSeg}",
+    "site": "apps/desktop/src/lib/engine.ts:1886",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${pSeg}/revisions/${rSeg}/restore",
+    "site": "apps/desktop/src/lib/engine.ts:1915",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/projects/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:1235",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:1149",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/projects/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:1224",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${seg}/collab/heartbeat",
+    "site": "apps/desktop/src/lib/engine.ts:1621",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/collab/locks",
+    "site": "apps/desktop/src/lib/engine.ts:1582",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${seg}/collab/locks",
+    "site": "apps/desktop/src/lib/engine.ts:1514",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/collab/peers",
+    "site": "apps/desktop/src/lib/engine.ts:1565",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${seg}/collab/selection",
+    "site": "apps/desktop/src/lib/engine.ts:1661",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/collab/selections",
+    "site": "apps/desktop/src/lib/engine.ts:1608",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/collab/stream${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:1372",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/conversations",
+    "site": "apps/desktop/src/lib/engine.ts:1995",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${seg}/conversations",
+    "site": "apps/desktop/src/lib/engine.ts:2011",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/events/stream",
+    "site": "apps/desktop/src/lib/engine.ts:1682",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/export.zip",
+    "site": "apps/desktop/src/lib/engine.ts:1247",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/files",
+    "site": "apps/desktop/src/lib/engine.ts:1293",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/projects/${seg}/files/${pathSeg}",
+    "site": "apps/desktop/src/lib/engine.ts:1819",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/files/${pathSeg}",
+    "site": "apps/desktop/src/lib/engine.ts:1741",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/projects/${seg}/files/${pathSeg}",
+    "site": "apps/desktop/src/lib/engine.ts:1780",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${seg}/mkdir",
+    "site": "apps/desktop/src/lib/engine.ts:1850",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/${seg}/preview-comments",
+    "site": "apps/desktop/src/lib/engine.ts:1961",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/preview-comments${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:1939",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/projects/${seg}/revisions${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:1871",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/import-token",
+    "site": "apps/desktop/src/lib/engine.ts:1162",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/projects/import.zip",
+    "site": "apps/desktop/src/lib/engine.ts:1279",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/routines",
+    "site": "apps/desktop/src/lib/engine.ts:2392",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/routines",
+    "site": "apps/desktop/src/lib/engine.ts:2413",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/routines/${rseg}/runs/${runSeg}/crystallize",
+    "site": "apps/desktop/src/lib/engine.ts:2657",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/routines/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2624",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/routines/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2399",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/routines/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2424",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/routines/${seg}/run",
+    "site": "apps/desktop/src/lib/engine.ts:2634",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/routines/${seg}/runs",
+    "site": "apps/desktop/src/lib/engine.ts:2644",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/runs",
+    "site": "apps/desktop/src/lib/engine.ts:2132",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/runs/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2143",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/runs/${seg}/cancel",
+    "site": "apps/desktop/src/lib/engine.ts:2254",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/runs/${seg}/events/stream",
+    "site": "apps/desktop/src/lib/engine.ts:2187",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/runs/${seg}/events${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:2158",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/runs${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:2091",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/session",
+    "site": "apps/desktop/src/lib/engine.ts:582",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/session/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:593",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/session/${seg}/chat",
+    "site": "apps/desktop/src/lib/engine.ts:623",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/session/${seg}/messages",
+    "site": "apps/desktop/src/lib/engine.ts:605",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/session/${sid}/agent",
+    "site": "apps/desktop/src/lib/engine.ts:673",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/session/${sid}/cancel",
+    "site": "apps/desktop/src/lib/engine.ts:721",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/session/${sid}/tool-confirm/${tid}",
+    "site": "apps/desktop/src/lib/engine.ts:739",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/session${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:567",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/settings",
+    "site": "apps/desktop/src/lib/engine.ts:799",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/settings/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:828",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/settings/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:808",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/settings/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:817",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/settings/verify-key",
+    "site": "apps/desktop/src/lib/engine.ts:836",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/skills",
+    "site": "apps/desktop/src/lib/engine.ts:856",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/skills/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:884",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/skills/${seg}/toggle",
+    "site": "apps/desktop/src/lib/engine.ts:873",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/skills/scan",
+    "site": "apps/desktop/src/lib/engine.ts:863",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/webhook/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3240",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/webhook/${seg}/rate-limit",
+    "site": "apps/desktop/src/lib/engine.ts:3207",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/webhook/${seg}/regenerate",
+    "site": "apps/desktop/src/lib/engine.ts:3216",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/webhook/${seg}/secret",
+    "site": "apps/desktop/src/lib/engine.ts:3193",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workers",
+    "site": "apps/desktop/src/lib/engine.ts:3462",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/workers/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3484",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/workers/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3473",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workers${q}",
+    "site": "apps/desktop/src/lib/engine.ts:3377",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow",
+    "site": "apps/desktop/src/lib/engine.ts:2893",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow",
+    "site": "apps/desktop/src/lib/engine.ts:2929",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow-revisions/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:3267",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/workflow-revisions/${seg}/${rev}",
+    "site": "apps/desktop/src/lib/engine.ts:3318",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow-revisions/${seg}/${rev}",
+    "site": "apps/desktop/src/lib/engine.ts:3278",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PATCH",
+    "url": "/api/workflow-revisions/${seg}/${rev}",
+    "site": "apps/desktop/src/lib/engine.ts:3305",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow-revisions/${seg}/${rev}/restore",
+    "site": "apps/desktop/src/lib/engine.ts:3293",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/workflow/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2963",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2902",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/workflow/${seg}",
+    "site": "apps/desktop/src/lib/engine.ts:2952",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow/${seg}/duplicate",
+    "site": "apps/desktop/src/lib/engine.ts:2973",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow/${seg}/export",
+    "site": "apps/desktop/src/lib/engine.ts:2987",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow/${seg}/export.zip",
+    "site": "apps/desktop/src/lib/engine.ts:3060",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow/${seg}/preflight",
+    "site": "apps/desktop/src/lib/engine.ts:3178",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow/${seg}/run",
+    "site": "apps/desktop/src/lib/engine.ts:3090",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow/${seg}/runs?limit=${limit}&offset=${offset}",
+    "site": "apps/desktop/src/lib/engine.ts:3128",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/workflow/${seg}/runs${qs}",
+    "site": "apps/desktop/src/lib/engine.ts:3165",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/workflow/${seg1}/runs/${seg2}",
+    "site": "apps/desktop/src/lib/engine.ts:3150",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workflow/${seg1}/runs/${seg2}",
+    "site": "apps/desktop/src/lib/engine.ts:3139",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow/import",
+    "site": "apps/desktop/src/lib/engine.ts:3017",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow/import.zip",
+    "site": "apps/desktop/src/lib/engine.ts:3031",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workflow/import/claude-design",
+    "site": "apps/desktop/src/lib/engine.ts:3045",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workspace",
+    "site": "apps/desktop/src/lib/engine.ts:753",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/workspace",
+    "site": "apps/desktop/src/lib/engine.ts:764",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "DELETE",
+    "url": "/api/workspace/${wid}",
+    "site": "apps/desktop/src/lib/engine.ts:789",
+    "kind": "fetch"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/workspace/${wid}",
+    "site": "apps/desktop/src/lib/engine.ts:778",
+    "kind": "fetch"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/collab/status",
+    "site": "apps/web/src/lib/api.ts:534",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/mcp/install-info${q ? ",
+    "site": "apps/web/src/lib/api.ts:485",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects",
+    "site": "apps/web/src/lib/api.ts:159",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(id)}",
+    "site": "apps/web/src/lib/api.ts:163",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/heartbeat",
+    "site": "apps/web/src/lib/api.ts:851",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/locks",
+    "site": "apps/web/src/lib/api.ts:816",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/locks",
+    "site": "apps/web/src/lib/api.ts:755",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/peers",
+    "site": "apps/web/src/lib/api.ts:796",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/selection",
+    "site": "apps/web/src/lib/api.ts:775",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/collab/selections",
+    "site": "apps/web/src/lib/api.ts:840",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/files",
+    "site": "apps/web/src/lib/api.ts:167",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "DELETE",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
+    "site": "apps/web/src/lib/api.ts:237",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/files/${segs}",
+    "site": "apps/web/src/lib/api.ts:175",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}",
+    "site": "apps/web/src/lib/api.ts:286",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}/restore",
+    "site": "apps/web/src/lib/api.ts:303",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/projects/${encodeURIComponent(projectId)}/revisions${qs}",
+    "site": "apps/web/src/lib/api.ts:268",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/runs",
+    "site": "apps/web/src/lib/api.ts:321",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/runs?projectId=${encodeURIComponent(projectId)}",
+    "site": "apps/web/src/lib/api.ts:330",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/runs/${encodeURIComponent(runId)}",
+    "site": "apps/web/src/lib/api.ts:325",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/runs/${encodeURIComponent(runId)}/cancel",
+    "site": "apps/web/src/lib/api.ts:359",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/runs/${encodeURIComponent(runId)}/events${qs}",
+    "site": "apps/web/src/lib/api.ts:348",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/settings",
+    "site": "apps/web/src/lib/api.ts:490",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "PUT",
+    "url": "/api/settings/${encodeURIComponent(key.trim())}",
+    "site": "apps/web/src/lib/api.ts:504",
+    "kind": "request"
+  },
+  {
+    "surface": "web",
+    "method": "POST",
+    "url": "/api/settings/verify-key",
+    "site": "apps/web/src/lib/api.ts:519",
+    "kind": "request"
   }
 ]

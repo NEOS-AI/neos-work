@@ -5,8 +5,18 @@ import userEvent from '@testing-library/user-event';
 const listMediaFiles = vi.fn();
 const deleteMediaFile = vi.fn();
 const fetchMediaBlob = vi.fn();
+const generateMedia = vi.fn();
+const listMediaProviders = vi.fn();
+const getMediaJob = vi.fn();
 
-const client = { listMediaFiles, deleteMediaFile, fetchMediaBlob };
+const client = {
+  listMediaFiles,
+  deleteMediaFile,
+  fetchMediaBlob,
+  generateMedia,
+  listMediaProviders,
+  getMediaJob,
+};
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
@@ -51,6 +61,9 @@ describe('Media page', () => {
     listMediaFiles.mockReset();
     deleteMediaFile.mockReset();
     fetchMediaBlob.mockReset();
+    generateMedia.mockReset();
+    listMediaProviders.mockReset().mockResolvedValue({ ok: true, data: [] });
+    getMediaJob.mockReset();
     createObjectURL.mockClear();
     revokeObjectURL.mockClear();
     localStorage.clear();
@@ -64,6 +77,114 @@ describe('Media page', () => {
     await waitFor(() => {
       expect(screen.getByText(/No media files yet/)).toBeInTheDocument();
     });
+    expect(screen.getByTestId('media-generate-form')).toBeInTheDocument();
+  });
+
+  it('generates image media and reloads list', async () => {
+    const user = userEvent.setup();
+    listMediaFiles
+      .mockResolvedValueOnce({ ok: true, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          {
+            filename: 'gen.png',
+            kind: 'image' as const,
+            size: 99,
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      });
+    generateMedia.mockResolvedValue({
+      ok: true,
+      data: { surface: 'image', filename: 'gen.png' },
+    });
+    render(<Media />);
+    await waitFor(() => expect(screen.getByTestId('media-generate-prompt')).toBeInTheDocument());
+
+    await user.type(screen.getByTestId('media-generate-prompt'), 'a blue cat');
+    await user.click(screen.getByTestId('media-generate-submit'));
+
+    await waitFor(() => {
+      expect(generateMedia).toHaveBeenCalledWith({
+        surface: 'image',
+        prompt: 'a blue cat',
+        text: undefined,
+        provider: undefined,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText('gen.png')).toBeInTheDocument();
+      expect(screen.getByTestId('media-generate-status')).toHaveTextContent(/Generated gen\.png/);
+    });
+  });
+
+  it('polls async video job then reloads', async () => {
+    const user = userEvent.setup();
+    listMediaFiles
+      .mockResolvedValueOnce({ ok: true, data: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          {
+            filename: 'clip.mp4',
+            kind: 'video' as const,
+            size: 500,
+            createdAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      });
+    generateMedia.mockResolvedValue({
+      ok: true,
+      data: { jobId: 'job-abc-123', status: 'queued', surface: 'video' },
+    });
+    getMediaJob
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { id: 'job-abc-123', status: 'running', surface: 'video', provider: 'x' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          id: 'job-abc-123',
+          status: 'succeeded',
+          filename: 'clip.mp4',
+          surface: 'video',
+          provider: 'x',
+        },
+      });
+    render(<Media />);
+    await waitFor(() => expect(screen.getByTestId('media-surface-video')).toBeInTheDocument());
+    await user.click(screen.getByTestId('media-surface-video'));
+    await user.type(screen.getByTestId('media-generate-prompt'), 'sunset waves');
+    await user.click(screen.getByTestId('media-generate-submit'));
+
+    await waitFor(() => {
+      expect(generateMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ surface: 'video', prompt: 'sunset waves' }),
+      );
+    });
+    await waitFor(
+      () => {
+        expect(getMediaJob).toHaveBeenCalledWith('job-abc-123');
+        expect(screen.getByText('clip.mp4')).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
+  });
+
+  it('surfaces generate errors without crashing', async () => {
+    const user = userEvent.setup();
+    listMediaFiles.mockResolvedValue({ ok: true, data: [] });
+    generateMedia.mockResolvedValue({ ok: false, error: `no${'\n'}key${'\0'}` });
+    render(<Media />);
+    await waitFor(() => expect(screen.getByTestId('media-generate-prompt')).toBeInTheDocument());
+    await user.type(screen.getByTestId('media-generate-prompt'), 'hello');
+    await user.click(screen.getByTestId('media-generate-submit'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/no key/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
   });
 
   it('lists files, filters by kind, and previews images', async () => {
@@ -78,7 +199,7 @@ describe('Media page', () => {
     const labels = screen.getAllByRole('button').map((b) => b.textContent).filter((t) => t?.includes('.png') || t?.includes('.mp3'));
     expect(labels[0]).toContain('photo.png');
 
-    await user.click(screen.getByRole('button', { name: 'image' }));
+    await user.click(screen.getByTestId('media-kind-image'));
     expect(screen.getByText('photo.png')).toBeInTheDocument();
     expect(screen.queryByText('clip.mp3')).not.toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
@@ -155,7 +276,7 @@ describe('Media page', () => {
     render(<Media />);
     await waitFor(() => expect(screen.getByText('notes.bin')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'other' }));
+    await user.click(screen.getByTestId('media-kind-other'));
     expect(screen.getByText('notes.bin')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /notes\.bin/i }));
     await waitFor(() => {
@@ -173,7 +294,7 @@ describe('Media page', () => {
     render(<Media />);
     await waitFor(() => expect(screen.getByText('clip.mp3')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'audio' }));
+    await user.click(screen.getByTestId('media-kind-audio'));
     expect(screen.getByText('clip.mp3')).toBeInTheDocument();
     expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
 
@@ -196,7 +317,7 @@ describe('Media page', () => {
     render(<Media />);
     await waitFor(() => expect(screen.getByText('notes.bin')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'other' }));
+    await user.click(screen.getByTestId('media-kind-other'));
     expect(screen.getByText('notes.bin')).toBeInTheDocument();
     expect(screen.queryByText('photo.png')).not.toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();

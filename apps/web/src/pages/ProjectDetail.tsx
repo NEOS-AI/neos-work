@@ -101,6 +101,20 @@ export function ProjectDetail() {
   const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
   /** Path currently being deleted (disables × while request in flight). */
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [mkdirBusy, setMkdirBusy] = useState(false);
+
+  /** Persisted multi-turn project conversation (server /conversations API). */
+  type ChatMessage = {
+    id: string;
+    conversationId: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    createdAt: string;
+  };
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  conversationIdRef.current = conversationId;
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
@@ -150,6 +164,43 @@ export function ProjectDetail() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Load or create project conversation + message history. */
+  const loadChatHistory = useCallback(async () => {
+    if (!conn.token || !id) {
+      setConversationId(null);
+      setChatMessages([]);
+      return;
+    }
+    try {
+      const list = await client.listConversations(id);
+      let convId: string | null = null;
+      if (list.ok && list.data && list.data.length > 0) {
+        convId = list.data[0]!.id;
+      } else {
+        const created = await client.createConversation(id, 'Project chat');
+        if (created.ok && created.data?.id) convId = created.data.id;
+      }
+      setConversationId(convId);
+      if (convId) {
+        const msgs = await client.listMessages(id, convId);
+        setChatMessages(
+          msgs.ok && msgs.data
+            ? (msgs.data as ChatMessage[])
+            : [],
+        );
+      } else {
+        setChatMessages([]);
+      }
+    } catch {
+      setConversationId(null);
+      setChatMessages([]);
+    }
+  }, [client, conn.token, id]);
+
+  useEffect(() => {
+    void loadChatHistory();
+  }, [loadChatHistory]);
 
   // Dirty close guard (web beforeunload)
   useEffect(() => {
@@ -702,6 +753,74 @@ export function ProjectDetail() {
   };
 
   /**
+   * Create a folder via POST …/mkdir (collab session for hard-enforce).
+   */
+  const handleMkdir = async () => {
+    if (!id || mkdirBusy) return;
+    const raw = window.prompt('Folder path (relative to project root)', '');
+    if (raw == null) return;
+    const path = raw.trim();
+    if (!path || /[\0\r\n]/.test(path) || path.includes('..')) {
+      setError('Folder path is invalid');
+      return;
+    }
+    setMkdirBusy(true);
+    setError(null);
+    try {
+      const res = await client.mkdir(
+        id,
+        path,
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
+      if (!res.ok) {
+        const holder =
+          res.data
+          && typeof res.data === 'object'
+          && res.data !== null
+          && 'holder' in res.data
+            ? (res.data as {
+                holder?: { sessionId?: string; displayName?: string; path?: string };
+              }).holder
+            : undefined;
+        if (holder?.displayName && holder.sessionId) {
+          const lockPath =
+            (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
+            || normalizeProjectRelPath(path)
+            || path;
+          setForeignLocks((m) => ({
+            ...m,
+            [lockPath]: {
+              sessionId: holder.sessionId!,
+              displayName: holder.displayName!,
+            },
+          }));
+          setError(`Locked by ${holder.displayName.trim()}`);
+        } else {
+          setError(
+            (typeof res.error === 'string' && res.error ? res.error : 'Failed to create folder')
+              .replace(/[\0\r\n]+/g, ' ')
+              .slice(0, 300),
+          );
+        }
+        return;
+      }
+      const created =
+        res.data && typeof res.data.path === 'string' ? res.data.path : path;
+      setStatus(`Created folder ${created}`);
+      // Refresh file list (directories are filtered from the tree UI)
+      const f = await client.listFiles(id);
+      const list = ((f.data as Array<{ path: string; type?: string }>) ?? []).filter(
+        (x) => x.type !== 'directory',
+      );
+      setFiles(list);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to create folder');
+    } finally {
+      setMkdirBusy(false);
+    }
+  };
+
+  /**
    * Delete a project file. Passes collab session for NEOS_SHARED_EDIT hard enforce.
    * On 423, surfaces "Locked by …" and foreignLocks chip data when holder is present.
    */
@@ -795,18 +914,20 @@ export function ProjectDetail() {
         collabSessionId ? { sessionId: collabSessionId } : undefined,
       );
       if (res.ok) {
-        const data = res.data as { hash?: string; contentHash?: string } | undefined;
+        // writeFile already validates via parseProjectFileWriteResponse (`hash` required)
         const hash =
-          typeof data?.hash === 'string' && data.hash
-            ? data.hash
-            : typeof data?.contentHash === 'string'
-              ? data.contentHash
-              : null;
+          res.data && typeof res.data.hash === 'string' && res.data.hash
+            ? res.data.hash
+            : undefined;
+        if (!hash) {
+          setError('Save succeeded but response missing hash');
+          return;
+        }
         setBuffer((prev) =>
           reduceEditorBuffer(prev, {
             type: 'saved',
             content: prev.local,
-            hash: hash || undefined,
+            hash,
           }),
         );
         setStatus('Saved');
@@ -857,7 +978,27 @@ export function ProjectDetail() {
     setError(null);
     setStatus(null);
     setActiveAiRunStatus(null);
+    const userText = aiPrompt.trim();
     try {
+      // Ensure conversation + persist user turn (multi-turn history)
+      let convId = conversationIdRef.current;
+      if (!convId) {
+        const created = await client.createConversation(id, 'Project chat');
+        if (created.ok && created.data?.id) {
+          convId = created.data.id;
+          setConversationId(convId);
+        }
+      }
+      if (convId) {
+        const um = await client.addMessage(id, convId, {
+          role: 'user',
+          content: userText,
+        });
+        if (um.ok && um.data) {
+          setChatMessages((prev) => [...prev, um.data as ChatMessage]);
+        }
+      }
+
       const editContext =
         selection && buffer.path
           ? editContextFromSelection(selection, {
@@ -867,7 +1008,7 @@ export function ProjectDetail() {
           : undefined;
       const res = await client.createRun({
         projectId: id,
-        prompt: aiPrompt.trim(),
+        prompt: userText,
         editContext,
       });
       if (!res.ok) {
@@ -894,6 +1035,21 @@ export function ProjectDetail() {
       setStatus(`Run ${runId.slice(0, 8)}… (${initialStatus})`);
       void loadRuns();
 
+      const persistAssistant = async (status: string, error?: string | null) => {
+        const cid = conversationIdRef.current;
+        if (!cid) return;
+        const summary = error
+          ? `Run ${status}: ${error}`
+          : `Run ${status} (${runId.slice(0, 8)}…)`;
+        const am = await client.addMessage(id, cid, {
+          role: 'assistant',
+          content: summary.slice(0, 8_000),
+        });
+        if (am.ok && am.data) {
+          setChatMessages((prev) => [...prev, am.data as ChatMessage]);
+        }
+      };
+
       const applyTerminalStatus = async (): Promise<string | null> => {
         try {
           const st = await client.getRun(runId);
@@ -901,12 +1057,17 @@ export function ProjectDetail() {
             st.data && typeof st.data === 'object'
               ? String((st.data as { status?: string }).status ?? '')
               : '';
+          const errMsg =
+            st.data && typeof st.data === 'object' && typeof (st.data as { error?: string }).error === 'string'
+              ? (st.data as { error: string }).error
+              : null;
           if (status) setActiveAiRunStatus(status);
           if (isTerminalRunStatus(status)) {
             setStatus(status === 'succeeded' ? 'Run finished' : `Run ${status}`);
             if (status.toLowerCase() === 'succeeded') {
               await reloadOpenFileFromDisk();
             }
+            await persistAssistant(status, errMsg);
             void loadRuns();
             return status;
           }
@@ -1039,8 +1200,21 @@ export function ProjectDetail() {
 
       <div className="editor-body">
         <aside className="editor-files card" data-testid="file-tree">
-          <div className="muted" style={{ marginBottom: 8 }}>
-            Files
+          <div
+            className="row muted"
+            style={{ marginBottom: 8, justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <span>Files</span>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              data-testid="project-mkdir"
+              disabled={mkdirBusy || busy}
+              onClick={() => void handleMkdir()}
+              style={{ fontSize: 12, padding: '2px 8px' }}
+            >
+              {mkdirBusy ? '…' : 'New folder'}
+            </button>
           </div>
           <ul className="list">
             {files.map((f) => {
@@ -1177,6 +1351,43 @@ export function ProjectDetail() {
 
         <aside className="editor-ai card stack" data-testid="ai-panel">
           <div className="muted">Edit with AI</div>
+          {chatMessages.length > 0 && (
+            <div
+              data-testid="web-chat-history"
+              style={{
+                maxHeight: 180,
+                overflowY: 'auto',
+                fontSize: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                marginBottom: 4,
+              }}
+            >
+              {chatMessages.map((m) => (
+                <div
+                  key={m.id}
+                  data-testid={`web-chat-msg-${m.id}`}
+                  style={{
+                    padding: '6px 8px',
+                    borderRadius: 6,
+                    background:
+                      m.role === 'user'
+                        ? 'color-mix(in srgb, var(--accent, #3b82f6) 15%, transparent)'
+                        : 'var(--bg-tertiary, #1e1e1e)',
+                    border: '1px solid var(--border, #333)',
+                  }}
+                >
+                  <div className="muted" style={{ fontSize: 10, marginBottom: 2 }}>
+                    {m.role}
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {(m.content || '').replace(/\0/g, '').slice(0, 2000)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {selection?.selector && (
             <div className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>
               {selection.selector}

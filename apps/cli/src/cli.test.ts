@@ -186,6 +186,43 @@ describe('runCli expanded commands', () => {
     expect(lines.join('')).toContain('web-landing');
   });
 
+  it('cli-agents list and catalog', async () => {
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/cli-agents/catalog')) {
+        return jsonResponse({
+          ok: true,
+          data: [{ id: 'cli-claude', name: 'Claude', family: 'anthropic', binary: 'claude' }],
+        });
+      }
+      if (url.includes('/api/cli-agents')) {
+        return jsonResponse({
+          ok: true,
+          data: [{ id: 'cli-claude', name: 'Claude', available: true, path: '/usr/bin/claude' }],
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const listCode = await runCli(['cli-agents', 'list'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(listCode).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('cli-claude');
+
+    const catLines: string[] = [];
+    const catCode = await runCli(['cli-agents', 'catalog', '--json'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => catLines.push(s),
+      stderr: () => {},
+    });
+    expect(catCode).toBe(EXIT.OK);
+    expect(JSON.parse(catLines.join(''))[0]).toMatchObject({ id: 'cli-claude' });
+  });
+
   it('memory add', async () => {
     const fetchImpl = mockFetch((url, init) => {
       if (url.endsWith('/api/memory') && init?.method === 'POST') {

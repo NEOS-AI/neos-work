@@ -21,7 +21,7 @@ interface RevisionPanelProps {
     edges: unknown[];
     name?: string;
     description?: string;
-    designSystemId?: string;
+    designSystemId?: string | null;
   }) => void;
 }
 
@@ -111,25 +111,47 @@ export function RevisionPanel({ workflowId, client, isDirty, onClose, onRestore 
       const ok = window.confirm(
         t(
           'workflow.restoreDirtyConfirm',
-          'You have unsaved changes. Restoring this version will discard them. Continue?',
+          'You have unsaved changes. Restoring will write this version to the server and replace the editor. Continue?',
         ),
       );
       if (!ok) return;
     } else {
       const ok = window.confirm(
-        t('workflow.restoreConfirm', 'Restore this version into the editor? Unsaved canvas state will be replaced.'),
+        t(
+          'workflow.restoreConfirm',
+          'Restore this version to the server and load it into the editor? A pre-restore snapshot is kept.',
+        ),
       );
       if (!ok) return;
     }
     setRestoring(rev.id);
     try {
+      // Persist restore on the server first (creates pre-restore revision on the live record)
+      const restored = await client.restoreRevision(wfId, revEntityId);
+      if (restored.ok && restored.data && Array.isArray(restored.data.nodes) && Array.isArray(restored.data.edges)) {
+        onRestore({
+          nodes: restored.data.nodes,
+          edges: restored.data.edges,
+          name: restored.data.name,
+          description: restored.data.description,
+          designSystemId: restored.data.designSystemId,
+        });
+        onClose();
+        return;
+      }
+
+      // Fallback: editor-only load from snapshot if server restore unavailable
       const full = await client.getRevision(wfId, revEntityId);
       if (!full.ok || !full.data?.snapshot) {
         const err =
-          scrubDisplayText((full as { error?: string }).error, {
-            collapseLines: true,
-            maxChars: 300,
-          }) || 'Restore failed';
+          scrubDisplayText(
+            (restored as { error?: string }).error
+              || (full as { error?: string }).error,
+            {
+              collapseLines: true,
+              maxChars: 300,
+            },
+          ) || 'Restore failed';
         window.alert(err);
         return;
       }

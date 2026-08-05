@@ -1,31 +1,82 @@
 # Routes inventory
 
-**Total routes: 25**
+**Total app routes: 24** (web 5 + desktop 19)
 
-| # | Surface | Path | Page component | Declared | Reachability |
-|---|---------|------|----------------|----------|--------------|
-| 1 | web | `/` | `Connect` | `apps/web/src/App.tsx:11` | Entry; also Navigate from `*` and Settings logout |
-| 2 | web | `/projects` | `Projects` | `apps/web/src/App.tsx:12` | After Connect success (`Connect.tsx` navigate); ProjectDetail back links |
-| 3 | web | `/projects/:id` | `ProjectDetail` | `apps/web/src/App.tsx:13` | From Projects list click (programmatic) |
-| 4 | web | `/settings` | `Settings` | `apps/web/src/App.tsx:14` | Linked from web chrome / Projects |
-| 5 | web | `*` | `Navigate` | `apps/web/src/App.tsx:15` | catch-all → `/` |
-| 6 | desktop | `/` | `Dashboard` | `apps/desktop/src/App.tsx:45` | `Sidebar.tsx` nav |
-| 7 | desktop | `/sessions` | `Sessions` | `apps/desktop/src/App.tsx:46` | `Sidebar.tsx` nav |
-| 8 | desktop | `/workflows` | `Workflows` | `apps/desktop/src/App.tsx:47` | `Sidebar.tsx` nav, `apps/desktop/src/pages/WorkflowEditor.tsx:721`, `apps/desktop/src/pages/WorkflowEditor.tsx:740` |
-| 9 | desktop | `/workflows/:id` | `WorkflowEditor` | `apps/desktop/src/App.tsx:48` | **no static link** (router-only / programmatic) |
-| 10 | desktop | `/projects` | `Projects` | `apps/desktop/src/App.tsx:49` | `Sidebar.tsx` nav, `apps/desktop/src/pages/ProjectWorkspace.tsx:1264` |
-| 11 | desktop | `/projects/:id` | `ProjectWorkspace` | `apps/desktop/src/App.tsx:50` | **no static link** (router-only / programmatic) |
-| 12 | desktop | `/harnesses` | `Harnesses` | `apps/desktop/src/App.tsx:51` | `Sidebar.tsx` nav |
-| 13 | desktop | `/domain-packs` | `DomainPacks` | `apps/desktop/src/App.tsx:52` | `Sidebar.tsx` nav |
-| 14 | desktop | `/blocks` | `Blocks` | `apps/desktop/src/App.tsx:53` | `Sidebar.tsx` nav |
-| 15 | desktop | `/templates` | `Templates` | `apps/desktop/src/App.tsx:54` | `Sidebar.tsx` nav, `apps/desktop/src/pages/Workflows.tsx:425` |
-| 16 | desktop | `/skills` | `Skills` | `apps/desktop/src/App.tsx:55` | `Sidebar.tsx` nav |
-| 17 | desktop | `/memory` | `Memory` | `apps/desktop/src/App.tsx:56` | `Sidebar.tsx` nav |
-| 18 | desktop | `/settings` | `Settings` | `apps/desktop/src/App.tsx:57` | `Sidebar.tsx` nav |
-| 19 | desktop | `/design-systems` | `DesignSystems` | `apps/desktop/src/App.tsx:58` | `Sidebar.tsx` nav, `apps/desktop/src/pages/DesignSystemEditor.tsx:135`, `apps/desktop/src/pages/DesignSystemEditor.tsx:190` |
-| 20 | desktop | `/design-systems/:id` | `DesignSystemEditor` | `apps/desktop/src/App.tsx:59` | **no static link** (router-only / programmatic) |
-| 21 | desktop | `/routines` | `Routines` | `apps/desktop/src/App.tsx:60` | `Sidebar.tsx` nav, `apps/desktop/src/pages/WorkflowEditor.tsx:1303` |
-| 22 | desktop | `/plugins` | `Plugins` | `apps/desktop/src/App.tsx:61` | `Sidebar.tsx` nav |
-| 23 | desktop | `/deployments` | `Deployments` | `apps/desktop/src/App.tsx:62` | `Sidebar.tsx` nav |
-| 24 | desktop | `/media` | `Media` | `apps/desktop/src/App.tsx:63` | `Sidebar.tsx` nav |
-| 25 | desktop | `(gate)` | `ModeSelection` | `apps/desktop/src/App.tsx:72` | shown when engine disconnected (`App.tsx:72-74`) |
+## Web — `apps/web/src/App.tsx` (**5**)
+
+| Path | Element | Reachable | Def |
+|------|---------|-----------|-----|
+| `/` | `Connect` | entry + Sign out / Connection links | `apps/web/src/App.tsx:11` |
+| `/projects` | `Projects` | Connect success + Links | `apps/web/src/App.tsx:12` |
+| `/projects/:id` | `ProjectDetail` | Projects list Link | `apps/web/src/App.tsx:13` |
+| `/settings` | `Settings` | Projects header Link | `apps/web/src/App.tsx:14` |
+| `*` | `Navigate` | catch-all → / | `apps/web/src/App.tsx:15` |
+
+## Desktop — `createBrowserRouter` in `apps/desktop/src/App.tsx` (**19**)
+
+Routes only mount when engine is connected (`apps/desktop/src/App.tsx:68-76`). Otherwise `ModeSelection` is shown (not a router path).
+
+| Path | Element | Sidebar? | Def |
+|------|---------|----------|-----|
+| `/` | `Dashboard` | yes | `apps/desktop/src/App.tsx:45` |
+| `/sessions` | `Sessions` | yes | `apps/desktop/src/App.tsx:46` |
+| `/workflows` | `Workflows` | yes | `apps/desktop/src/App.tsx:47` |
+| `/workflows/:id` | `WorkflowEditor` | detail/deep | `apps/desktop/src/App.tsx:48` |
+| `/projects` | `Projects` | yes | `apps/desktop/src/App.tsx:49` |
+| `/projects/:id` | `ProjectWorkspace` | detail/deep | `apps/desktop/src/App.tsx:50` |
+| `/harnesses` | `Harnesses` | yes | `apps/desktop/src/App.tsx:51` |
+| `/domain-packs` | `DomainPacks` | yes | `apps/desktop/src/App.tsx:52` |
+| `/blocks` | `Blocks` | yes | `apps/desktop/src/App.tsx:53` |
+| `/templates` | `Templates` | yes | `apps/desktop/src/App.tsx:54` |
+| `/skills` | `Skills` | yes | `apps/desktop/src/App.tsx:55` |
+| `/memory` | `Memory` | yes | `apps/desktop/src/App.tsx:56` |
+| `/settings` | `Settings` | yes | `apps/desktop/src/App.tsx:57` |
+| `/design-systems` | `DesignSystems` | yes | `apps/desktop/src/App.tsx:58` |
+| `/design-systems/:id` | `DesignSystemEditor` | detail/deep | `apps/desktop/src/App.tsx:59` |
+| `/routines` | `Routines` | yes | `apps/desktop/src/App.tsx:60` |
+| `/plugins` | `Plugins` | yes | `apps/desktop/src/App.tsx:61` |
+| `/deployments` | `Deployments` | yes | `apps/desktop/src/App.tsx:62` |
+| `/media` | `Media` | yes | `apps/desktop/src/App.tsx:63` |
+
+### Sidebar NAV_ITEMS (`apps/desktop/src/components/Sidebar.tsx:8-25`)
+
+- `/`
+- `/sessions`
+- `/workflows`
+- `/projects`
+- `/harnesses`
+- `/domain-packs`
+- `/blocks`
+- `/templates`
+- `/skills`
+- `/memory`
+- `/design-systems`
+- `/routines`
+- `/plugins`
+- `/deployments`
+- `/media`
+- `/settings`
+
+### Link/navigate targets in source (**15**)
+
+- `/blocks`
+- `/deployments`
+- `/design-systems`
+- `/design-systems/:param`
+- `/media`
+- `/plugins`
+- `/projects`
+- `/projects/:param`
+- `/routines`
+- `/sessions`
+- `/settings`
+- `/skills`
+- `/templates`
+- `/workflows`
+- `/workflows/:param`
+
+### Reachability summary
+
+- All desktop NAV_ITEMS paths have matching routes. **confirmed**
+- Detail routes (`/workflows/:id`, `/projects/:id`, `/design-systems/:id`) reached from list pages via Link/navigate. **confirmed** via link scan
+- `ModeSelection` is not a registered route; it is a gate component. Deep-link while disconnected cannot mount target route until connect. Evidence: `App.tsx:68-76`.

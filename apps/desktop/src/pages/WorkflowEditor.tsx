@@ -1199,18 +1199,37 @@ export function WorkflowEditor() {
                 const edge = e as { id: string; source: string; target: string; label?: string };
                 return { id: edge.id, source: edge.source, target: edge.target, label: edge.label };
               });
-              setNodes(rfNodes);
-              setEdges(rfEdges);
-              if (typeof snap.description === 'string') {
-                const d = snap.description;
-                setWorkflowDescription(/\0/.test(d) ? d.replace(/\0/g, '') : d);
-              }
+              const descRaw =
+                typeof snap.description === 'string' ? snap.description : workflowDescription;
+              const descSafe = /\0/.test(descRaw) ? descRaw.replace(/\0/g, '') : descRaw;
+              let dsSafe = '';
               if (typeof snap.designSystemId === 'string') {
                 const id = snap.designSystemId;
-                setDesignSystemId(id && !/[\0\r\n]/.test(id) ? id.trim() : '');
-              } else if (snap.designSystemId === undefined || snap.designSystemId === null) {
-                setDesignSystemId('');
+                dsSafe = id && !/[\0\r\n]/.test(id) ? id.trim() : '';
+              } else if (snap.designSystemId === undefined) {
+                dsSafe = designSystemId;
               }
+              // else null → clear design system
+              setNodes(rfNodes);
+              setEdges(rfEdges);
+              setWorkflowDescription(descSafe);
+              setDesignSystemId(dsSafe);
+              // Server restore already wrote the live record — match saved baseline (not dirty)
+              setSavedDraft(buildWorkflowDraft(rfNodes, rfEdges, descSafe, dsSafe));
+              if (typeof snap.name === 'string' && snap.name.trim() && !/[\0\r\n]/.test(snap.name)) {
+                setWorkflow((prev) =>
+                  prev
+                    ? { ...prev, name: snap.name!.trim(), description: descSafe, designSystemId: dsSafe || undefined }
+                    : prev,
+                );
+              } else {
+                setWorkflow((prev) =>
+                  prev
+                    ? { ...prev, description: descSafe, designSystemId: dsSafe || undefined }
+                    : prev,
+                );
+              }
+              setHistoryRefreshKey((k) => k + 1);
             }
           }}
         />

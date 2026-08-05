@@ -9,6 +9,20 @@ const listMessages = vi.fn();
 const chat = vi.fn();
 const runAgent = vi.fn();
 const confirmTool = vi.fn();
+const listWorkspaces = vi.fn(async () => ({
+  ok: true,
+  data: [{ id: 'default', name: 'Starter', type: 'local' }],
+}));
+const createWorkspace = vi.fn(async () => ({
+  ok: true,
+  data: { id: 'ws-lab', name: 'Lab', type: 'local' },
+}));
+const updateWorkspace = vi.fn(async () => ({
+  ok: true,
+  data: { id: 'ws-lab', name: 'Lab Renamed', type: 'local' },
+}));
+const deleteWorkspace = vi.fn(async () => ({ ok: true }));
+const cancelSession = vi.fn(async () => ({ ok: true }));
 
 const client = {
       listSessions,
@@ -18,6 +32,11 @@ const client = {
       chat,
       runAgent,
       confirmTool,
+      listWorkspaces,
+      createWorkspace,
+      updateWorkspace,
+      deleteWorkspace,
+      cancelSession,
     };
 
 vi.mock('../hooks/useEngine.js', () => ({
@@ -78,6 +97,20 @@ describe('Sessions page', () => {
     listSessions.mockReset();
     createSession.mockReset();
     deleteSession.mockReset();
+    listWorkspaces.mockReset().mockResolvedValue({
+      ok: true,
+      data: [{ id: 'default', name: 'Starter', type: 'local' }],
+    });
+    createWorkspace.mockReset().mockResolvedValue({
+      ok: true,
+      data: { id: 'ws-lab', name: 'Lab', type: 'local' },
+    });
+    updateWorkspace.mockReset().mockResolvedValue({
+      ok: true,
+      data: { id: 'ws-lab', name: 'Lab Renamed', type: 'local' },
+    });
+    deleteWorkspace.mockReset().mockResolvedValue({ ok: true });
+    cancelSession.mockReset().mockResolvedValue({ ok: true });
     listMessages.mockReset();
     chat.mockReset();
     runAgent.mockReset();
@@ -169,6 +202,8 @@ describe('Sessions page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'create' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('session-workspace-select')).toBeInTheDocument());
+    expect(listWorkspaces).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'create' }));
     await waitFor(() => {
@@ -179,6 +214,121 @@ describe('Sessions page', () => {
           thinkingMode: 'none',
         }),
       );
+    });
+  });
+
+  it('creates a workspace from the new-session modal and selects it', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: [] });
+    listWorkspaces
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [{ id: 'default', name: 'Starter', type: 'local' }],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [
+          { id: 'default', name: 'Starter', type: 'local' },
+          { id: 'ws-lab', name: 'Lab', type: 'local', path: '/Users/me/lab' },
+        ],
+      });
+    createWorkspace.mockResolvedValue({
+      ok: true,
+      data: { id: 'ws-lab', name: 'Lab', type: 'local', path: '/Users/me/lab' },
+    });
+    createSession.mockResolvedValue({ ok: true, data: sessions[0] });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('emptyState')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
+    await waitFor(() => expect(screen.getByTestId('session-workspace-new')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('session-workspace-new'));
+    fireEvent.change(screen.getByTestId('session-workspace-name'), {
+      target: { value: 'Lab' },
+    });
+    fireEvent.change(screen.getByTestId('session-workspace-path'), {
+      target: { value: '/Users/me/lab' },
+    });
+    fireEvent.click(screen.getByTestId('session-workspace-create'));
+    await waitFor(() => {
+      expect(createWorkspace).toHaveBeenCalledWith({
+        name: 'Lab',
+        path: '/Users/me/lab',
+      });
+    });
+    await waitFor(() => {
+      const sel = screen.getByTestId('session-workspace-select') as HTMLSelectElement;
+      expect(sel.value).toBe('ws-lab');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+    await waitFor(() => {
+      expect(createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: 'ws-lab' }),
+      );
+    });
+  });
+
+  it('renames and deletes a non-default workspace from the modal', async () => {
+    listSessions.mockResolvedValue({ ok: true, data: [] });
+    listWorkspaces.mockResolvedValue({
+      ok: true,
+      data: [
+        { id: 'default', name: 'Starter', type: 'local' },
+        { id: 'ws-lab', name: 'Lab', type: 'local' },
+      ],
+    });
+    updateWorkspace.mockResolvedValue({
+      ok: true,
+      data: { id: 'ws-lab', name: 'Lab Renamed', type: 'local' },
+    });
+    deleteWorkspace.mockResolvedValue({ ok: true });
+    render(<Sessions />);
+    await waitFor(() => expect(screen.getByText('emptyState')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'newSession' }));
+    await waitFor(() => expect(screen.getByTestId('session-workspace-select')).toBeInTheDocument());
+
+    // Select non-default — manage buttons appear
+    fireEvent.change(screen.getByTestId('session-workspace-select'), {
+      target: { value: 'ws-lab' },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('session-workspace-rename')).toBeInTheDocument();
+      expect(screen.getByTestId('session-workspace-delete')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('session-workspace-rename'));
+    fireEvent.change(screen.getByTestId('session-workspace-rename-input'), {
+      target: { value: 'Lab Renamed' },
+    });
+    fireEvent.change(screen.getByTestId('session-workspace-rename-path'), {
+      target: { value: '/Users/me/lab2' },
+    });
+    fireEvent.click(screen.getByTestId('session-workspace-rename-save'));
+    await waitFor(() => {
+      expect(updateWorkspace).toHaveBeenCalledWith('ws-lab', {
+        name: 'Lab Renamed',
+        path: '/Users/me/lab2',
+      });
+    });
+
+    // default: no manage buttons
+    fireEvent.change(screen.getByTestId('session-workspace-select'), {
+      target: { value: 'default' },
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('session-workspace-delete')).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByTestId('session-workspace-select'), {
+      target: { value: 'ws-lab' },
+    });
+    await waitFor(() => expect(screen.getByTestId('session-workspace-delete')).toBeInTheDocument());
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    listWorkspaces.mockResolvedValue({
+      ok: true,
+      data: [{ id: 'default', name: 'Starter', type: 'local' }],
+    });
+    fireEvent.click(screen.getByTestId('session-workspace-delete'));
+    await waitFor(() => {
+      expect(deleteWorkspace).toHaveBeenCalledWith('ws-lab');
     });
   });
 
@@ -523,6 +673,9 @@ describe('Sessions page', () => {
     fireEvent.click(stopBtn!);
 
     await waitFor(() => expect(capturedSignal!.aborted).toBe(true));
+    await waitFor(() => {
+      expect(cancelSession).toHaveBeenCalledWith('s1');
+    });
     release?.();
   });
 

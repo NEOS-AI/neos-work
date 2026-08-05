@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
 
 import { Sidebar } from './components/Sidebar.js';
@@ -23,6 +24,9 @@ import { Media } from './pages/Media.js';
 import { Projects } from './pages/Projects.js';
 import { ProjectWorkspace } from './pages/ProjectWorkspace.js';
 import { DomainPacks } from './pages/DomainPacks.js';
+
+/** sessionStorage key for path to restore after ModeSelection connect gate. */
+const PENDING_PATH_KEY = 'neos-desktop-pending-path';
 
 export default function App() {
   return (
@@ -65,8 +69,58 @@ const connectedRouter = createBrowserRouter([
   },
 ]);
 
+function isSafePendingPath(raw: string): boolean {
+  if (!raw || raw.length > 500 || /[\0\r\n]/.test(raw)) return false;
+  // App-relative paths only (no protocol / open-redirect)
+  if (!raw.startsWith('/') || raw.startsWith('//')) return false;
+  return true;
+}
+
+function rememberPendingPath(): void {
+  try {
+    const path = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (isSafePendingPath(path) && path !== '/') {
+      sessionStorage.setItem(PENDING_PATH_KEY, path);
+    }
+  } catch {
+    /* private mode / storage blocked */
+  }
+}
+
+function restorePendingPath(): void {
+  try {
+    const pending = sessionStorage.getItem(PENDING_PATH_KEY);
+    if (!pending || !isSafePendingPath(pending)) {
+      sessionStorage.removeItem(PENDING_PATH_KEY);
+      return;
+    }
+    sessionStorage.removeItem(PENDING_PATH_KEY);
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (pending !== current) {
+      void connectedRouter.navigate(pending, { replace: true });
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function AppRouter() {
   const { status } = useEngine();
+
+  // Capture deep link while gated so connect can restore it
+  useEffect(() => {
+    if (status === 'disconnected' || status === 'connecting' || status === 'error') {
+      rememberPendingPath();
+    }
+  }, [status]);
+
+  // After connect, restore intended path if browser location was reset
+  useEffect(() => {
+    if (status !== 'connected') return;
+    // Defer until RouterProvider has mounted the data router
+    const t = window.setTimeout(() => restorePendingPath(), 0);
+    return () => window.clearTimeout(t);
+  }, [status]);
 
   // Show mode selection when not connected
   if (status === 'disconnected' || status === 'connecting' || status === 'error') {

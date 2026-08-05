@@ -13,6 +13,7 @@ vi.mock('react-i18next', () => ({
 describe('RevisionPanel', () => {
   const listRevisions = vi.fn();
   const getRevision = vi.fn();
+  const restoreRevision = vi.fn();
   const updateRevisionLabel = vi.fn();
   const deleteRevision = vi.fn();
   const onClose = vi.fn();
@@ -21,6 +22,7 @@ describe('RevisionPanel', () => {
   const client = {
     listRevisions,
     getRevision,
+    restoreRevision,
     updateRevisionLabel,
     deleteRevision,
   } as unknown as EngineClient;
@@ -28,6 +30,7 @@ describe('RevisionPanel', () => {
   beforeEach(() => {
     listRevisions.mockReset();
     getRevision.mockReset();
+    restoreRevision.mockReset();
     updateRevisionLabel.mockReset();
     deleteRevision.mockReset();
     onClose.mockReset();
@@ -86,17 +89,18 @@ describe('RevisionPanel', () => {
         },
       ],
     });
-    getRevision.mockResolvedValue({
+    restoreRevision.mockResolvedValue({
       ok: true,
       data: {
-        id: 'rev-1',
-        workflowId: 'wf-1',
-        snapshot: JSON.stringify({
-          nodes: [{ id: 'n1' }],
-          edges: [],
-          description: 'd',
-          designSystemId: 'ds-1',
-        }),
+        id: 'wf-1',
+        name: 'W',
+        domain: 'general',
+        nodes: [{ id: 'n1', type: 'output', label: 'Out', position: { x: 0, y: 0 }, config: {} }],
+        edges: [],
+        description: 'd',
+        designSystemId: 'ds-1',
+        createdAt: 't',
+        updatedAt: 't',
       },
     });
 
@@ -119,16 +123,65 @@ describe('RevisionPanel', () => {
 
     await user.click(screen.getByRole('button', { name: /restore/i }));
     await waitFor(() => {
+      expect(restoreRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(getRevision).not.toHaveBeenCalled();
       expect(onRestore).toHaveBeenCalledWith(
         expect.objectContaining({
           designSystemId: 'ds-1',
           description: 'd',
+          nodes: expect.any(Array),
         }),
       );
       expect(onClose).toHaveBeenCalled();
     });
     expect(confirmSpy).toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+
+  it('falls back to getRevision snapshot when server restore fails', async () => {
+    const user = userEvent.setup();
+    listRevisions.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'rev-1',
+          workflowId: 'wf-1',
+          label: 'Snap',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          nodeCount: 1,
+        },
+      ],
+    });
+    restoreRevision.mockResolvedValue({ ok: false, error: 'persist denied' });
+    getRevision.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'rev-1',
+        workflowId: 'wf-1',
+        snapshot: JSON.stringify({
+          nodes: [{ id: 'n1' }],
+          edges: [],
+          description: 'from-snap',
+        }),
+      },
+    });
+    render(
+      <RevisionPanel
+        workflowId="wf-1"
+        client={client}
+        onClose={onClose}
+        onRestore={onRestore}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('Snap')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /restore/i }));
+    await waitFor(() => {
+      expect(restoreRevision).toHaveBeenCalled();
+      expect(getRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(onRestore).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'from-snap' }),
+      );
+    });
   });
 
   it('cancels restore when user declines confirm', async () => {
@@ -156,6 +209,7 @@ describe('RevisionPanel', () => {
     );
     await waitFor(() => expect(screen.getByText(/auto-save/i)).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /restore/i }));
+    expect(restoreRevision).not.toHaveBeenCalled();
     expect(getRevision).not.toHaveBeenCalled();
     expect(onRestore).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
@@ -293,6 +347,10 @@ describe('RevisionPanel', () => {
         },
       ],
     });
+    restoreRevision.mockResolvedValue({
+      ok: false,
+      error: `gone${'\n'}rev${'\0'}!`,
+    });
     getRevision.mockResolvedValue({
       ok: false,
       error: `gone${'\n'}rev${'\0'}!`,
@@ -311,7 +369,7 @@ describe('RevisionPanel', () => {
     await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /restore/i }));
     await waitFor(() => {
-      expect(getRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(restoreRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
       expect(window.alert).toHaveBeenCalledWith('gone rev!');
     });
     expect(onRestore).not.toHaveBeenCalled();
@@ -331,7 +389,7 @@ describe('RevisionPanel', () => {
         },
       ],
     });
-    getRevision.mockRejectedValue(new Error(`sock${'\n'}reset${'\0'}!`));
+    restoreRevision.mockRejectedValue(new Error(`sock${'\n'}reset${'\0'}!`));
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.spyOn(window, 'alert').mockImplementation(() => {});
 
@@ -346,7 +404,7 @@ describe('RevisionPanel', () => {
     await waitFor(() => expect(screen.getByText('Snap A')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: /restore/i }));
     await waitFor(() => {
-      expect(getRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
+      expect(restoreRevision).toHaveBeenCalledWith('wf-1', 'rev-1');
       expect(window.alert).toHaveBeenCalledWith('sock reset!');
     });
     expect(onRestore).not.toHaveBeenCalled();
@@ -367,6 +425,8 @@ describe('RevisionPanel', () => {
         },
       ],
     });
+    // Server restore fails; fallback getRevision returns bad JSON
+    restoreRevision.mockResolvedValue({ ok: false, error: 'no persist' });
     getRevision.mockResolvedValue({
       ok: true,
       data: {
@@ -813,6 +873,7 @@ describe('RevisionPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /workflow\.restore|Restore/i }));
     expect(confirmSpy).not.toHaveBeenCalled();
+    expect(restoreRevision).not.toHaveBeenCalled();
     expect(getRevision).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalledWith('Revision id contains invalid control characters');
 

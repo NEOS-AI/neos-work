@@ -1,28 +1,6 @@
 [
   {
     "method": "GET",
-    "path": "*",
-    "pathParams": [],
-    "body": [],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/index.ts:219"
-  },
-  {
-    "method": "GET",
-    "path": "/",
-    "pathParams": [],
-    "body": [],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/index.ts:231"
-  },
-  {
-    "method": "GET",
     "path": "/api",
     "pathParams": [],
     "body": [],
@@ -81,37 +59,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/blocks",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "json",
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/blocks.ts:27"
-  },
-  {
-    "method": "GET",
-    "path": "/api/blocks/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [
-      "json"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/blocks.ts:140"
-  },
-  {
-    "method": "GET",
     "path": "/api/cli-agents/catalog",
     "pathParams": [],
     "splat": false,
@@ -123,34 +70,6 @@
     ],
     "auth": "Bearer required",
     "def": "apps/server/src/routes/cli-agents.ts:33"
-  },
-  {
-    "method": "POST",
-    "path": "/api/deploy",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "json"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/deploy.ts:212"
-  },
-  {
-    "method": "GET",
-    "path": "/api/design-systems/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/design-systems.ts:70"
   },
   {
     "method": "POST",
@@ -196,22 +115,6 @@
     "def": "apps/server/src/routes/harness.ts:246"
   },
   {
-    "method": "GET",
-    "path": "/api/harness/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [
-      "json"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/harness.ts:88"
-  },
-  {
     "method": "PUT",
     "path": "/api/harness/:id",
     "pathParams": [
@@ -226,6 +129,18 @@
     ],
     "auth": "Bearer required",
     "def": "apps/server/src/routes/harness.ts:170"
+  },
+  {
+    "method": "GET",
+    "path": "/api/harnesses",
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:77"
   },
   {
     "method": "POST",
@@ -288,22 +203,6 @@
     "def": "apps/server/src/routes/harness.ts:170"
   },
   {
-    "method": "GET",
-    "path": "/api/live-artifacts/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [
-      "path-params"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/live-artifacts.ts:112"
-  },
-  {
     "method": "PATCH",
     "path": "/api/live-artifacts/:id",
     "pathParams": [
@@ -354,58 +253,6 @@
     "def": "apps/server/src/routes/live-artifacts.ts:135"
   },
   {
-    "method": "GET",
-    "path": "/api/marketplace/catalog",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/marketplace.ts:50"
-  },
-  {
-    "method": "GET",
-    "path": "/api/mcp-servers/oauth/callback",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "auth-exempt (OAuth PKCE)",
-    "def": "apps/server/src/routes/mcp.ts:563"
-  },
-  {
-    "method": "GET",
-    "path": "/api/mcp-servers/tradingview/cdp-health",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "json",
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/mcp.ts:252"
-  },
-  {
-    "method": "GET",
-    "path": "/api/mcp/oauth/callback",
-    "pathParams": [],
-    "body": [],
-    "responseCodes": [],
-    "auth": "auth-exempt (OAuth PKCE)",
-    "def": "apps/server/src/index.ts:151"
-  },
-  {
     "method": "POST",
     "path": "/api/media/audio",
     "pathParams": [],
@@ -435,37 +282,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/media/jobs",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "json",
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/media.ts:126"
-  },
-  {
-    "method": "GET",
-    "path": "/api/memory/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [
-      "json"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/memory.ts:94"
-  },
-  {
-    "method": "GET",
     "path": "/api/memory/export",
     "pathParams": [],
     "splat": false,
@@ -477,23 +293,6 @@
     ],
     "auth": "Bearer required",
     "def": "apps/server/src/routes/memory.ts:55"
-  },
-  {
-    "method": "GET",
-    "path": "/api/projects/:id/collab/stream",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [
-      "query",
-      "sse"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/projects.ts:387"
   },
   {
     "method": "GET",
@@ -544,49 +343,6 @@
     ],
     "auth": "Bearer required",
     "def": "apps/server/src/routes/runs.ts:363"
-  },
-  {
-    "method": "GET",
-    "path": "/api/session",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "json",
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/session.ts:166"
-  },
-  {
-    "method": "GET",
-    "path": "/api/session/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/session.ts:245"
-  },
-  {
-    "method": "GET",
-    "path": "/api/templates",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/templates.ts:357"
   },
   {
     "method": "POST",
@@ -644,37 +400,6 @@
     ],
     "auth": "auth-exempt (tool token)",
     "def": "apps/server/src/routes/tools-live-artifacts.ts:100"
-  },
-  {
-    "method": "GET",
-    "path": "/api/workers",
-    "pathParams": [],
-    "splat": false,
-    "bodyHints": [
-      "json",
-      "query"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/workers.ts:110"
-  },
-  {
-    "method": "GET",
-    "path": "/api/workers/:id",
-    "pathParams": [
-      "id"
-    ],
-    "splat": false,
-    "bodyHints": [
-      "json"
-    ],
-    "responseCodes": [
-      200
-    ],
-    "auth": "Bearer required",
-    "def": "apps/server/src/routes/workers.ts:119"
   },
   {
     "method": "DELETE",

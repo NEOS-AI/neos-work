@@ -313,7 +313,13 @@ export class NeosApiClient {
     return this.request('GET', '/api/media/config');
   }
 
+  /** GET /api/cli-agents — detected available agents (default). */
   listCliAgents(): Promise<ApiEnvelope<unknown[]>> {
     return this.request('GET', '/api/cli-agents');
+  }
+
+  /** GET /api/cli-agents/catalog — agent defs only (no host detection). */
+  listCliAgentsCatalog(): Promise<ApiEnvelope<unknown[]>> {
+    return this.request('GET', '/api/cli-agents/catalog');
   }
 }

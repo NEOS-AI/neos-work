@@ -118,11 +118,28 @@ export function Sessions() {
     provider: string;
     model: string;
     thinkingMode: string;
+    workspaceId?: string;
   }) => {
     if (!client) return;
     try {
+      // Prefer explicit picker choice; else seeded `default`; else first listed
+      let workspaceId =
+        typeof params.workspaceId === 'string' && params.workspaceId.trim()
+          ? params.workspaceId.trim()
+          : 'default';
+      if (!params.workspaceId) {
+        try {
+          const ws = await client.listWorkspaces();
+          if (ws.ok && Array.isArray(ws.data) && ws.data.length > 0) {
+            const def = ws.data.find((w) => w.id === 'default');
+            workspaceId = def?.id ?? ws.data[0]!.id;
+          }
+        } catch {
+          /* keep default */
+        }
+      }
       const res = await client.createSession({
-        workspaceId: 'default',
+        workspaceId,
         provider: params.provider,
         model: params.model,
         thinkingMode: params.thinkingMode,
@@ -327,29 +344,234 @@ function NewSessionModal({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (params: { provider: string; model: string; thinkingMode: string }) => void;
+  onCreate: (params: {
+    provider: string;
+    model: string;
+    thinkingMode: string;
+    workspaceId?: string;
+  }) => void;
 }) {
   const { t } = useTranslation('chat');
+  const { client } = useEngine();
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929');
   const [thinkingMode, setThinkingMode] = useState('none');
+  type WorkspaceOption = { id: string; name: string; path?: string | null };
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+  const [workspaceId, setWorkspaceId] = useState('default');
+  const [wsLoading, setWsLoading] = useState(true);
+  const [wsCreating, setWsCreating] = useState(false);
+  const [wsBusy, setWsBusy] = useState(false);
+  const [newWsName, setNewWsName] = useState('');
+  const [newWsPath, setNewWsPath] = useState('');
+  const [showNewWs, setShowNewWs] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [renamePath, setRenamePath] = useState('');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
+      if (renameOpen) {
+        setRenameOpen(false);
+        setRenameValue('');
+        setRenamePath('');
+        return;
+      }
+      if (showNewWs) {
+        setShowNewWs(false);
+        setNewWsName('');
+        setNewWsPath('');
+        return;
+      }
       onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, showNewWs, renameOpen]);
+
+  const applyWorkspaceList = useCallback(
+    (
+      data: Array<{ id: string; name: string; path?: string | null }>,
+      preferId?: string,
+    ) => {
+      const list: WorkspaceOption[] = data.map((w) => ({
+        id: w.id,
+        name: scrubDisplayText(w.name, { collapseLines: true, maxChars: 80 }) || w.id,
+        path:
+          typeof w.path === 'string' && !/[\0\r\n]/.test(w.path)
+            ? w.path.trim() || null
+            : null,
+      }));
+      setWorkspaces(list);
+      if (preferId && list.some((w) => w.id === preferId)) {
+        setWorkspaceId(preferId);
+        return;
+      }
+      const def = list.find((w) => w.id === 'default');
+      setWorkspaceId(def?.id ?? list[0]?.id ?? 'default');
+    },
+    [],
+  );
+
+  const reloadWorkspaces = useCallback(
+    async (preferId?: string) => {
+      if (!client) {
+        setWorkspaces([{ id: 'default', name: 'Starter' }]);
+        setWorkspaceId('default');
+        setWsLoading(false);
+        return;
+      }
+      setWsLoading(true);
+      try {
+        const res = await client.listWorkspaces();
+        if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+          applyWorkspaceList(res.data, preferId);
+        } else {
+          setWorkspaces([{ id: 'default', name: 'Starter' }]);
+          setWorkspaceId(preferId ?? 'default');
+        }
+      } catch {
+        setWorkspaces([{ id: 'default', name: 'Starter' }]);
+        setWorkspaceId(preferId ?? 'default');
+      } finally {
+        setWsLoading(false);
+      }
+    },
+    [client, applyWorkspaceList],
+  );
+
+  useEffect(() => {
+    void reloadWorkspaces();
+  }, [reloadWorkspaces]);
+
+  const sanitizeOptionalPath = (raw: string): string | undefined | false => {
+    if (typeof raw !== 'string') return undefined;
+    if (/[\0\r\n]/.test(raw)) return false;
+    const t = raw.trim();
+    return t || undefined;
+  };
+
+  const handleCreateWorkspace = async () => {
+    if (!client || wsCreating) return;
+    const name = newWsName;
+    if (typeof name !== 'string' || /[\0\r\n]/.test(name) || !name.trim()) {
+      window.alert('Workspace name is invalid');
+      return;
+    }
+    const pathOr = sanitizeOptionalPath(newWsPath);
+    if (pathOr === false) {
+      window.alert('Folder path contains invalid control characters');
+      return;
+    }
+    setWsCreating(true);
+    try {
+      const res = await client.createWorkspace({
+        name: name.trim(),
+        ...(pathOr ? { path: pathOr } : {}),
+      });
+      if (!res.ok || !res.data?.id) {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to create workspace',
+        );
+        return;
+      }
+      setNewWsName('');
+      setNewWsPath('');
+      setShowNewWs(false);
+      await reloadWorkspaces(res.data.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create workspace';
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setWsCreating(false);
+    }
+  };
+
+  const handleRenameWorkspace = async () => {
+    if (!client || wsBusy || workspaceId === 'default') return;
+    const name = renameValue;
+    if (typeof name !== 'string' || /[\0\r\n]/.test(name) || !name.trim()) {
+      window.alert('Workspace name is invalid');
+      return;
+    }
+    const pathOr = sanitizeOptionalPath(renamePath);
+    if (pathOr === false) {
+      window.alert('Folder path contains invalid control characters');
+      return;
+    }
+    setWsBusy(true);
+    try {
+      const payload: { name: string; path?: string } = { name: name.trim() };
+      // Only send path when user typed something (server requires non-empty path if present)
+      if (pathOr) payload.path = pathOr;
+      const res = await client.updateWorkspace(workspaceId, payload);
+      if (!res.ok) {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to update workspace',
+        );
+        return;
+      }
+      setRenameOpen(false);
+      setRenameValue('');
+      setRenamePath('');
+      await reloadWorkspaces(workspaceId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update workspace';
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setWsBusy(false);
+    }
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!client || wsBusy || workspaceId === 'default') return;
+    const label =
+      workspaces.find((w) => w.id === workspaceId)?.name ?? workspaceId;
+    if (
+      !window.confirm(
+        `Delete workspace "${label}"? Sessions in it are not deleted from disk lists may break until reassigned.`,
+      )
+    ) {
+      return;
+    }
+    setWsBusy(true);
+    try {
+      const res = await client.deleteWorkspace(workspaceId);
+      if (!res.ok) {
+        window.alert(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Failed to delete workspace',
+        );
+        return;
+      }
+      setRenameOpen(false);
+      await reloadWorkspaces('default');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete workspace';
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setWsBusy(false);
+    }
+  };
 
   const selectedModelInfo = AVAILABLE_MODELS.find((m) => m.id === selectedModel);
+  const canManageSelected = workspaceId !== 'default' && workspaceId.length > 0;
 
   const handleCreate = () => {
     onCreate({
       provider: selectedModelInfo?.providerId ?? 'anthropic',
       model: selectedModel,
       thinkingMode,
+      workspaceId,
     });
   };
 
@@ -357,6 +579,180 @@ function NewSessionModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'var(--overlay-bg)' }}>
       <div className="w-full max-w-sm rounded-xl border p-6 shadow-2xl" style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-secondary)' }}>
         <h2 className="mb-5 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{t('newSession')}</h2>
+
+        {/* Workspace selection */}
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label
+              className="block text-xs font-medium"
+              style={{ color: 'var(--text-secondary)' }}
+              htmlFor="session-workspace"
+            >
+              {t('workspace', 'Workspace')}
+            </label>
+            <button
+              type="button"
+              data-testid="session-workspace-new"
+              className="text-[10px] font-medium"
+              style={{ color: 'var(--text-muted)' }}
+              onClick={() => setShowNewWs((v) => !v)}
+            >
+              {showNewWs ? t('cancel', 'Cancel') : t('newWorkspace', 'New workspace')}
+            </button>
+          </div>
+          {showNewWs && (
+            <div className="mb-2 flex flex-col gap-1">
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  data-testid="session-workspace-name"
+                  value={newWsName}
+                  onChange={(e) => setNewWsName(e.target.value)}
+                  placeholder={t('workspaceNamePlaceholder', 'Workspace name')}
+                  className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-sm outline-none"
+                  style={{
+                    borderColor: 'var(--border-secondary)',
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                  }}
+                  maxLength={200}
+                  disabled={wsCreating}
+                />
+                <button
+                  type="button"
+                  data-testid="session-workspace-create"
+                  disabled={wsCreating || !newWsName.trim()}
+                  onClick={() => void handleCreateWorkspace()}
+                  className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-medium disabled:opacity-40"
+                  style={{ backgroundColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+                >
+                  {wsCreating ? '…' : t('add', 'Add')}
+                </button>
+              </div>
+              <input
+                type="text"
+                data-testid="session-workspace-path"
+                value={newWsPath}
+                onChange={(e) => setNewWsPath(e.target.value)}
+                placeholder={t('workspacePathPlaceholder', 'Folder path (optional, under home)')}
+                className="w-full rounded-lg border px-2 py-1.5 font-mono text-xs outline-none"
+                style={{
+                  borderColor: 'var(--border-secondary)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                }}
+                disabled={wsCreating}
+              />
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {t(
+                  'workspacePathHint',
+                  'Optional absolute path inside your home directory. Leave empty for no bound folder.',
+                )}
+              </p>
+            </div>
+          )}
+          <div className="flex gap-1">
+            <select
+              id="session-workspace"
+              data-testid="session-workspace-select"
+              value={workspaceId}
+              disabled={wsLoading || wsBusy}
+              onChange={(e) => {
+                setWorkspaceId(e.target.value);
+                setRenameOpen(false);
+                setRenameValue('');
+                setRenamePath('');
+              }}
+              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none disabled:opacity-60"
+              style={{ borderColor: 'var(--border-secondary)', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+            >
+              {(workspaces.length ? workspaces : [{ id: 'default', name: 'Starter' }]).map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                  {w.id === 'default' ? ' (default)' : ''}
+                  {w.path ? ` · ${w.path.length > 28 ? `…${w.path.slice(-26)}` : w.path}` : ''}
+                </option>
+              ))}
+            </select>
+            {canManageSelected && (
+              <>
+                <button
+                  type="button"
+                  data-testid="session-workspace-rename"
+                  disabled={wsBusy}
+                  title={t('editWorkspace', 'Edit name / path')}
+                  className="shrink-0 rounded-lg border px-2 py-1 text-[10px] disabled:opacity-40"
+                  style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+                  onClick={() => {
+                    const cur = workspaces.find((w) => w.id === workspaceId);
+                    setRenameValue(cur?.name ?? '');
+                    setRenamePath(cur?.path ?? '');
+                    setRenameOpen((v) => !v);
+                    setShowNewWs(false);
+                  }}
+                >
+                  {t('edit', 'Edit')}
+                </button>
+                <button
+                  type="button"
+                  data-testid="session-workspace-delete"
+                  disabled={wsBusy}
+                  title={t('deleteWorkspace', 'Delete')}
+                  className="shrink-0 rounded-lg border px-2 py-1 text-[10px] text-red-400 disabled:opacity-40"
+                  style={{ borderColor: 'var(--border-secondary)' }}
+                  onClick={() => void handleDeleteWorkspace()}
+                >
+                  {t('delete', 'Delete')}
+                </button>
+              </>
+            )}
+          </div>
+          {renameOpen && canManageSelected && (
+            <div className="mt-2 flex flex-col gap-1">
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  data-testid="session-workspace-rename-input"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  placeholder={t('workspaceNamePlaceholder', 'Workspace name')}
+                  className="min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-sm outline-none"
+                  style={{
+                    borderColor: 'var(--border-secondary)',
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                  }}
+                  maxLength={200}
+                  disabled={wsBusy}
+                />
+                <button
+                  type="button"
+                  data-testid="session-workspace-rename-save"
+                  disabled={wsBusy || !renameValue.trim()}
+                  onClick={() => void handleRenameWorkspace()}
+                  className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-medium disabled:opacity-40"
+                  style={{ backgroundColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+                >
+                  {wsBusy ? '…' : t('save', 'Save')}
+                </button>
+              </div>
+              <input
+                type="text"
+                data-testid="session-workspace-rename-path"
+                value={renamePath}
+                onChange={(e) => setRenamePath(e.target.value)}
+                placeholder={t('workspacePathPlaceholder', 'Folder path (optional, under home)')}
+                className="w-full rounded-lg border px-2 py-1.5 font-mono text-xs outline-none"
+                style={{
+                  borderColor: 'var(--border-secondary)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                }}
+                disabled={wsBusy}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Model selection */}
         <div className="mb-4">
@@ -803,6 +1199,17 @@ function ChatArea({
     }
   };
 
+  /** Abort client stream and ask server to cancel in-flight chat/agent. */
+  const handleStopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+    if (!client) return;
+    const sid = safeEntityId(session.id);
+    if (!sid) return;
+    void client.cancelSession(sid).catch(() => {
+      /* best-effort; AbortController already stopped the reader */
+    });
+  }, [client, session.id]);
+
   // Model display name (scrub provider/model from session API / static catalog)
   const modelInfo = AVAILABLE_MODELS.find((m) => m.id === session.model);
   const modelLabel =
@@ -925,10 +1332,12 @@ function ChatArea({
                 </button>
               </div>
               <button
-                onClick={isStreaming ? () => abortRef.current?.abort() : handleSend}
+                onClick={isStreaming ? handleStopStreaming : handleSend}
                 disabled={!isStreaming && !input.trim()}
                 className="rounded-lg p-1.5 transition-colors disabled:opacity-30"
                 style={{ backgroundColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+                aria-label={isStreaming ? t('cancel', 'Stop') : t('send', 'Send')}
+                data-testid="session-send-stop"
               >
                 {isStreaming ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">

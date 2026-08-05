@@ -1,3089 +1,3124 @@
 [
   {
     "method": "GET",
+    "path": "*",
+    "pathParams": [],
+    "body": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/index.ts:219"
+  },
+  {
+    "method": "GET",
     "path": "/",
-    "params": [],
-    "body": "none",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/index.ts",
-    "line": 230,
-    "auth": "public?"
+    "pathParams": [],
+    "body": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/index.ts:231"
   },
   {
     "method": "GET",
     "path": "/api",
-    "params": [],
-    "body": "none",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/index.ts",
-    "line": 200,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "body": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/index.ts:201"
   },
   {
     "method": "GET",
     "path": "/api/artifacts",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 31,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:31"
   },
   {
     "method": "POST",
     "path": "/api/artifacts",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 75,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:75"
   },
   {
     "method": "DELETE",
     "path": "/api/artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 216,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:216"
   },
   {
     "method": "GET",
     "path": "/api/artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 44,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:44"
   },
   {
     "method": "PATCH",
     "path": "/api/artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 175,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:175"
   },
   {
     "method": "PUT",
     "path": "/api/artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404",
-      "500"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 150,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:150"
   },
   {
     "method": "GET",
     "path": "/api/artifacts/:id/preview",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 56,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:56"
   },
   {
     "method": "POST",
     "path": "/api/artifacts/:id/refresh",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/artifacts.ts",
-    "line": 230,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/artifacts.ts:230"
   },
   {
     "method": "GET",
     "path": "/api/blocks",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/blocks.ts",
-    "line": 27,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/blocks.ts:27"
   },
   {
     "method": "POST",
     "path": "/api/blocks",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/blocks.ts",
-    "line": 45,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/blocks.ts:45"
   },
   {
     "method": "DELETE",
     "path": "/api/blocks/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/blocks.ts",
-    "line": 212,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/blocks.ts:212"
   },
   {
     "method": "GET",
     "path": "/api/blocks/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/blocks.ts",
-    "line": 140,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/blocks.ts:140"
   },
   {
     "method": "PUT",
     "path": "/api/blocks/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/blocks.ts",
-    "line": 152,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/blocks.ts:152"
   },
   {
     "method": "GET",
     "path": "/api/cli-agents",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/cli-agents.ts",
-    "line": 49,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
+    ],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/cli-agents.ts:49"
   },
   {
     "method": "GET",
     "path": "/api/cli-agents/catalog",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/cli-agents.ts",
-    "line": 33,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
+    ],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/cli-agents.ts:33"
   },
   {
     "method": "GET",
     "path": "/api/collab/status",
-    "params": [],
-    "body": "none",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/index.ts",
-    "line": 180,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "body": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/index.ts:181"
   },
   {
     "method": "POST",
     "path": "/api/connection-test",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/connection-test.ts",
-    "line": 29,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/connection-test.ts:29"
   },
   {
     "method": "GET",
     "path": "/api/deploy",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "404",
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 122,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:122"
   },
   {
     "method": "POST",
     "path": "/api/deploy",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 212,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:212"
   },
   {
     "method": "DELETE",
     "path": "/api/deploy/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 204,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:204"
   },
   {
     "method": "GET",
     "path": "/api/deploy/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 140,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:140"
   },
   {
     "method": "POST",
     "path": "/api/deploy/:id/refresh",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 151,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:151"
   },
   {
     "method": "POST",
     "path": "/api/deploy/check-link",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 107,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:107"
   },
   {
     "method": "POST",
     "path": "/api/deploy/preflight",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/deploy.ts",
-    "line": 54,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/deploy.ts:54"
   },
   {
     "method": "GET",
     "path": "/api/design-systems",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 30,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:30"
   },
   {
     "method": "POST",
     "path": "/api/design-systems",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "409"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 38,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:38"
   },
   {
     "method": "DELETE",
     "path": "/api/design-systems/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 78,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:78"
   },
   {
     "method": "GET",
     "path": "/api/design-systems/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 70,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:70"
   },
   {
     "method": "GET",
     "path": "/api/design-systems/:id/content",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 86,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:86"
   },
   {
     "method": "PUT",
     "path": "/api/design-systems/:id/content",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 94,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:94"
   },
   {
     "method": "GET",
     "path": "/api/design-systems/:id/tokens",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/design-systems.ts",
-    "line": 126,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/design-systems.ts:126"
   },
   {
     "method": "GET",
     "path": "/api/domain-packs",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 31,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:31"
   },
   {
     "method": "DELETE",
     "path": "/api/domain-packs/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 159,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:159"
   },
   {
     "method": "GET",
     "path": "/api/domain-packs/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 169,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:169"
   },
   {
     "method": "POST",
     "path": "/api/domain-packs/:id/toggle",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 144,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:144"
   },
   {
     "method": "POST",
     "path": "/api/domain-packs/install",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 81,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:81"
   },
   {
     "method": "POST",
     "path": "/api/domain-packs/install-zip",
-    "params": [],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "form/multipart",
+      "binary"
     ],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 93,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:93"
   },
   {
     "method": "POST",
     "path": "/api/domain-packs/validate",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/domain-packs.ts",
-    "line": 59,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/domain-packs.ts:59"
   },
   {
     "method": "GET",
     "path": "/api/harness",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 77,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:77"
   },
   {
     "method": "POST",
     "path": "/api/harness",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 101,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:101"
   },
   {
     "method": "DELETE",
     "path": "/api/harness/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 246,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:246"
   },
   {
     "method": "GET",
     "path": "/api/harness/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 88,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:88"
   },
   {
     "method": "PUT",
     "path": "/api/harness/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 170,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:170"
   },
   {
     "method": "GET",
     "path": "/api/harnesses",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 77,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:77"
   },
   {
     "method": "POST",
     "path": "/api/harnesses",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 101,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:101"
   },
   {
     "method": "DELETE",
     "path": "/api/harnesses/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 246,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:246"
   },
   {
     "method": "GET",
     "path": "/api/harnesses/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 88,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:88"
   },
   {
     "method": "PUT",
     "path": "/api/harnesses/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/harness.ts",
-    "line": 170,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/harness.ts:170"
   },
   {
     "method": "GET",
     "path": "/api/health",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/health.ts",
-    "line": 9,
-    "auth": "see auth-paths"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "auth-exempt",
+    "def": "apps/server/src/routes/health.ts:9"
   },
   {
     "method": "GET",
     "path": "/api/live-artifacts",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 39,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:39"
   },
   {
     "method": "POST",
     "path": "/api/live-artifacts",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 81,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:81"
   },
   {
     "method": "DELETE",
     "path": "/api/live-artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 178,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:178"
   },
   {
     "method": "GET",
     "path": "/api/live-artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 112,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:112"
   },
   {
     "method": "PATCH",
     "path": "/api/live-artifacts/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 147,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:147"
   },
   {
     "method": "GET",
     "path": "/api/live-artifacts/:id/preview",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "100",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 122,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:122"
   },
   {
     "method": "POST",
     "path": "/api/live-artifacts/:id/refresh",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 188,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:188"
   },
   {
     "method": "GET",
     "path": "/api/live-artifacts/:id/refreshes",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "100",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 135,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:135"
   },
   {
     "method": "POST",
     "path": "/api/live-artifacts/tool-tokens",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/live-artifacts.ts",
-    "line": 50,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/live-artifacts.ts:50"
   },
   {
     "method": "GET",
     "path": "/api/marketplace/catalog",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/marketplace.ts",
-    "line": 50,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
+    ],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/marketplace.ts:50"
   },
   {
     "method": "GET",
     "path": "/api/marketplace/catalog-url",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/marketplace.ts",
-    "line": 30,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/marketplace.ts:30"
   },
   {
     "method": "PUT",
     "path": "/api/marketplace/catalog-url",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/marketplace.ts",
-    "line": 34,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/marketplace.ts:34"
   },
   {
     "method": "POST",
     "path": "/api/marketplace/install",
-    "params": [],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/marketplace.ts",
-    "line": 85,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/marketplace.ts:85"
   },
   {
     "method": "GET",
     "path": "/api/mcp-servers",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 241,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:241"
   },
   {
     "method": "POST",
     "path": "/api/mcp-servers",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 368,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:368"
   },
   {
     "method": "DELETE",
     "path": "/api/mcp-servers/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 465,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:465"
   },
   {
     "method": "POST",
     "path": "/api/mcp-servers/:id/toggle",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 452,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:452"
   },
   {
     "method": "POST",
     "path": "/api/mcp-servers/from-preset",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 267,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:267"
   },
   {
     "method": "DELETE",
     "path": "/api/mcp-servers/oauth/:serverId",
-    "params": [
+    "pathParams": [
       "serverId"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 802,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:802"
   },
   {
     "method": "POST",
     "path": "/api/mcp-servers/oauth/:serverId/refresh",
-    "params": [
+    "pathParams": [
       "serverId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 720,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:720"
   },
   {
     "method": "GET",
     "path": "/api/mcp-servers/oauth/:serverId/status",
-    "params": [
+    "pathParams": [
       "serverId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 708,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:708"
   },
   {
     "method": "GET",
     "path": "/api/mcp-servers/oauth/callback",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 563,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "auth-exempt (OAuth PKCE)",
+    "def": "apps/server/src/routes/mcp.ts:563"
   },
   {
     "method": "POST",
     "path": "/api/mcp-servers/oauth/start",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "200",
-      "400",
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 483,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:483"
   },
   {
     "method": "GET",
     "path": "/api/mcp-servers/presets",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 247,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:247"
   },
   {
     "method": "GET",
     "path": "/api/mcp-servers/tradingview/cdp-health",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400",
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/mcp.ts",
-    "line": 252,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp.ts:252"
   },
   {
     "method": "GET",
     "path": "/api/mcp/install-info",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "100"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/mcp-expose.ts",
-    "line": 80,
-    "auth": "Bearer (default)"
+    "responseCodes": [],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp-expose.ts:80"
   },
   {
     "method": "DELETE",
     "path": "/api/mcp/install/codex",
-    "params": [],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/mcp-expose.ts",
-    "line": 224,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp-expose.ts:224"
   },
   {
     "method": "POST",
     "path": "/api/mcp/install/codex",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "100"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/mcp-expose.ts",
-    "line": 162,
-    "auth": "Bearer (default)"
+    "responseCodes": [],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp-expose.ts:162"
   },
   {
     "method": "GET",
     "path": "/api/mcp/install/codex/status",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "100",
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/mcp-expose.ts",
-    "line": 151,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp-expose.ts:151"
   },
   {
     "method": "GET",
     "path": "/api/mcp/oauth/callback",
-    "params": [],
-    "body": "none",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/index.ts",
-    "line": 150,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "body": [],
+    "responseCodes": [],
+    "auth": "auth-exempt (OAuth PKCE)",
+    "def": "apps/server/src/index.ts:151"
   },
   {
     "method": "GET",
     "path": "/api/mcp/tools",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/mcp-expose.ts",
-    "line": 139,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/mcp-expose.ts:139"
   },
   {
     "method": "POST",
     "path": "/api/media/audio",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 194,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:194"
   },
   {
     "method": "GET",
     "path": "/api/media/config",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 86,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:86"
   },
   {
     "method": "DELETE",
     "path": "/api/media/file/:filename",
-    "params": [
+    "pathParams": [
       "filename"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404",
-      "500"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 334,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:334"
   },
   {
     "method": "GET",
     "path": "/api/media/file/:filename",
-    "params": [
+    "pathParams": [
       "filename"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 242,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:242"
   },
   {
     "method": "GET",
     "path": "/api/media/files",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "500"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 73,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:73"
   },
   {
     "method": "POST",
     "path": "/api/media/generate",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 273,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:273"
   },
   {
     "method": "POST",
     "path": "/api/media/image",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 144,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:144"
   },
   {
     "method": "GET",
     "path": "/api/media/jobs",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "200"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 126,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:126"
   },
   {
     "method": "GET",
     "path": "/api/media/jobs/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 104,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:104"
   },
   {
     "method": "GET",
     "path": "/api/media/providers",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/media.ts",
-    "line": 94,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/media.ts:94"
   },
   {
     "method": "GET",
     "path": "/api/memory",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 50,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:50"
   },
   {
     "method": "POST",
     "path": "/api/memory",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 60,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:60"
   },
   {
     "method": "DELETE",
     "path": "/api/memory/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 140,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:140"
   },
   {
     "method": "GET",
     "path": "/api/memory/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 94,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:94"
   },
   {
     "method": "PUT",
     "path": "/api/memory/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 102,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:102"
   },
   {
     "method": "PUT",
     "path": "/api/memory/:id/toggle",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 148,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:148"
   },
   {
     "method": "GET",
     "path": "/api/memory/export",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/memory.ts",
-    "line": 55,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/memory.ts:55"
   },
   {
     "method": "GET",
     "path": "/api/models",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 898,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:898"
   },
   {
     "method": "GET",
     "path": "/api/plugins",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/plugins.ts",
-    "line": 27,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/plugins.ts:27"
   },
   {
     "method": "GET",
     "path": "/api/plugins/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/plugins.ts",
-    "line": 135,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/plugins.ts:135"
   },
   {
     "method": "POST",
     "path": "/api/plugins/:id/run",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/plugins.ts",
-    "line": 144,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/plugins.ts:144"
   },
   {
     "method": "POST",
     "path": "/api/plugins/:id/run/:runId/resume",
-    "params": [
+    "pathParams": [
       "id",
       "runId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/plugins.ts",
-    "line": 194,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/plugins.ts:194"
   },
   {
     "method": "GET",
     "path": "/api/plugins/atoms",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/plugins.ts",
-    "line": 46,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
+    ],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/plugins.ts:46"
   },
   {
     "method": "POST",
     "path": "/api/plugins/upgrade-from-skill",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/plugins.ts",
-    "line": 60,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/plugins.ts:60"
   },
   {
     "method": "GET",
     "path": "/api/projects",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 145,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:145"
   },
   {
     "method": "POST",
     "path": "/api/projects",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 176,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:176"
   },
   {
     "method": "DELETE",
     "path": "/api/projects/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": true,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "sse"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 372,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:372"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 296,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:296"
   },
   {
     "method": "PUT",
     "path": "/api/projects/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 327,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:327"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/collab/heartbeat",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 471,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:471"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/collab/locks",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 489,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:489"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/collab/locks",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 598,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:598"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/collab/peers",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "sse"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 455,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:455"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/collab/selection",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 527,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:527"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/collab/selections",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 507,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:507"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/collab/stream",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "sse"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 387,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:387"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/conversations",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 969,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:969"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/conversations",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 976,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:976"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/conversations/:conversationId/messages",
-    "params": [
+    "pathParams": [
       "id",
       "conversationId"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 989,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:989"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/conversations/:conversationId/messages",
-    "params": [
+    "pathParams": [
       "id",
       "conversationId"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 997,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:997"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/events/stream",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "sse"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 657,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:657"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/export.zip",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 304,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:304"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/files",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404",
-      "500"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 700,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:700"
   },
   {
     "method": "DELETE",
     "path": "/api/projects/:id/files/*",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404",
-      "423"
+    "splat": true,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 798,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      423
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:798"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/files/*",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404",
-      "500"
+    "splat": true,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 716,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:716"
   },
   {
     "method": "PUT",
     "path": "/api/projects/:id/files/*",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404",
-      "423"
+    "splat": true,
+    "bodyHints": [],
+    "responseCodes": [
+      423
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 734,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:734"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/mkdir",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404",
-      "423"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      423
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 830,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:830"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/preview-comments",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 928,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:928"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/preview-comments",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 936,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:936"
   },
   {
     "method": "DELETE",
     "path": "/api/projects/:id/preview-comments/:commentId",
-    "params": [
+    "pathParams": [
       "id",
       "commentId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 957,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:957"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/revisions",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 861,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:861"
   },
   {
     "method": "GET",
     "path": "/api/projects/:id/revisions/:revisionId",
-    "params": [
+    "pathParams": [
       "id",
       "revisionId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 869,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:869"
   },
   {
     "method": "POST",
     "path": "/api/projects/:id/revisions/:revisionId/restore",
-    "params": [
+    "pathParams": [
       "id",
       "revisionId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404",
-      "423"
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "path-params"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 879,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      423
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:879"
   },
   {
     "method": "POST",
     "path": "/api/projects/import-token",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 153,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:153"
   },
   {
     "method": "POST",
     "path": "/api/projects/import.zip",
-    "params": [],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "form/multipart",
+      "binary"
     ],
-    "file": "apps/server/src/routes/projects.ts",
-    "line": 221,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/projects.ts:221"
   },
   {
     "method": "GET",
     "path": "/api/routines",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 44,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:44"
   },
   {
     "method": "POST",
     "path": "/api/routines",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 56,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:56"
   },
   {
     "method": "DELETE",
     "path": "/api/routines/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404",
-      "500"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 192,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:192"
   },
   {
     "method": "GET",
     "path": "/api/routines/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 48,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:48"
   },
   {
     "method": "PUT",
     "path": "/api/routines/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 129,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:129"
   },
   {
     "method": "POST",
     "path": "/api/routines/:id/run",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": true,
-    "statuses_nearby": [
-      "100",
-      "404",
-      "500"
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 201,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:201"
   },
   {
     "method": "GET",
     "path": "/api/routines/:id/runs",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "100",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 214,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:214"
   },
   {
     "method": "POST",
     "path": "/api/routines/:id/runs/:runId/crystallize",
-    "params": [
+    "pathParams": [
       "id",
       "runId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/routines.ts",
-    "line": 228,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/routines.ts:228"
   },
   {
     "method": "GET",
     "path": "/api/runs",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/runs.ts",
-    "line": 208,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/runs.ts:208"
   },
   {
     "method": "POST",
     "path": "/api/runs",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/runs.ts",
-    "line": 215,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/runs.ts:215"
   },
   {
     "method": "GET",
     "path": "/api/runs/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "sse"
     ],
-    "file": "apps/server/src/routes/runs.ts",
-    "line": 355,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/runs.ts:355"
   },
   {
     "method": "POST",
     "path": "/api/runs/:id/cancel",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404",
-      "409"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/runs.ts",
-    "line": 412,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/runs.ts:412"
   },
   {
     "method": "GET",
     "path": "/api/runs/:id/events",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query",
+      "sse"
     ],
-    "file": "apps/server/src/routes/runs.ts",
-    "line": 363,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/runs.ts:363"
   },
   {
     "method": "GET",
     "path": "/api/runs/:id/events/stream",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "sse"
     ],
-    "file": "apps/server/src/routes/runs.ts",
-    "line": 374,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/runs.ts:374"
   },
   {
     "method": "GET",
     "path": "/api/session",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 166,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:166"
   },
   {
     "method": "POST",
     "path": "/api/session",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 176,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:176"
   },
   {
     "method": "DELETE",
     "path": "/api/session/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "sse"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 253,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:253"
   },
   {
     "method": "GET",
     "path": "/api/session/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 245,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:245"
   },
   {
     "method": "POST",
     "path": "/api/session/:id/agent",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 571,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:571"
   },
   {
     "method": "POST",
     "path": "/api/session/:id/cancel",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 44,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:44"
   },
   {
     "method": "POST",
     "path": "/api/session/:id/chat",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 274,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:274"
   },
   {
     "method": "GET",
     "path": "/api/session/:id/messages",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "sse"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 263,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:263"
   },
   {
     "method": "POST",
     "path": "/api/session/:id/tool-confirm/:toolUseId",
-    "params": [
+    "pathParams": [
       "id",
       "toolUseId"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 63,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:63"
   },
   {
     "method": "GET",
     "path": "/api/settings",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/settings.ts",
-    "line": 35,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/settings.ts:35"
   },
   {
     "method": "DELETE",
     "path": "/api/settings/:key",
-    "params": [
+    "pathParams": [
       "key"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/settings.ts",
-    "line": 98,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/settings.ts:98"
   },
   {
     "method": "GET",
     "path": "/api/settings/:key",
-    "params": [
+    "pathParams": [
       "key"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/settings.ts",
-    "line": 45,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/settings.ts:45"
   },
   {
     "method": "PUT",
     "path": "/api/settings/:key",
-    "params": [
+    "pathParams": [
       "key"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/settings.ts",
-    "line": 56,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/settings.ts:56"
   },
   {
     "method": "POST",
     "path": "/api/settings/verify-key",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/settings.ts",
-    "line": 107,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/settings.ts:107"
   },
   {
     "method": "GET",
     "path": "/api/skills",
-    "params": [],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "100"
-    ],
-    "file": "apps/server/src/routes/skills.ts",
-    "line": 186,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/skills.ts:186"
   },
   {
     "method": "DELETE",
     "path": "/api/skills/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/skills.ts",
-    "line": 289,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/skills.ts:289"
   },
   {
     "method": "POST",
     "path": "/api/skills/:id/toggle",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/skills.ts",
-    "line": 276,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/skills.ts:276"
   },
   {
     "method": "POST",
     "path": "/api/skills/scan",
-    "params": [],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/skills.ts",
-    "line": 233,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/skills.ts:233"
   },
   {
     "method": "GET",
     "path": "/api/templates",
-    "params": [],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [],
-    "file": "apps/server/src/routes/templates.ts",
-    "line": 357,
-    "auth": "Bearer (default)"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
+    ],
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/templates.ts:357"
   },
   {
     "method": "POST",
     "path": "/api/tools/live-artifacts/create",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "201"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/tools-live-artifacts.ts",
-    "line": 54,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "auth-exempt (tool token)",
+    "def": "apps/server/src/routes/tools-live-artifacts.ts:54"
   },
   {
     "method": "GET",
     "path": "/api/tools/live-artifacts/list",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/tools-live-artifacts.ts",
-    "line": 85,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "auth-exempt (tool token)",
+    "def": "apps/server/src/routes/tools-live-artifacts.ts:85"
   },
   {
     "method": "POST",
     "path": "/api/tools/live-artifacts/refresh",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/tools-live-artifacts.ts",
-    "line": 132,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "auth-exempt (tool token)",
+    "def": "apps/server/src/routes/tools-live-artifacts.ts:132"
   },
   {
     "method": "POST",
     "path": "/api/tools/live-artifacts/update",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/tools-live-artifacts.ts",
-    "line": 100,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "auth-exempt (tool token)",
+    "def": "apps/server/src/routes/tools-live-artifacts.ts:100"
   },
   {
     "method": "POST",
     "path": "/api/webhook/:workflowId",
-    "params": [
+    "pathParams": [
       "workflowId"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404",
-      "413",
-      "429"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/webhooks.ts",
-    "line": 75,
-    "auth": "Bearer (default)"
+    "auth": "auth-exempt (HMAC webhook trigger)",
+    "def": "apps/server/src/routes/webhooks.ts:75"
   },
   {
     "method": "GET",
     "path": "/api/webhook/:workflowId/rate-limit",
-    "params": [
+    "pathParams": [
       "workflowId"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/webhooks.ts",
-    "line": 55,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/webhooks.ts:55"
   },
   {
     "method": "POST",
     "path": "/api/webhook/:workflowId/regenerate",
-    "params": [
+    "pathParams": [
       "workflowId"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404",
-      "429"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/webhooks.ts",
-    "line": 64,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/webhooks.ts:64"
   },
   {
     "method": "GET",
     "path": "/api/webhook/:workflowId/secret",
-    "params": [
+    "pathParams": [
       "workflowId"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/webhooks.ts",
-    "line": 38,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/webhooks.ts:38"
   },
   {
     "method": "GET",
     "path": "/api/workers",
-    "params": [],
-    "body": "json",
-    "query": true,
-    "statuses_nearby": [
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json",
+      "query"
     ],
-    "file": "apps/server/src/routes/workers.ts",
-    "line": 110,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workers.ts:110"
   },
   {
     "method": "POST",
     "path": "/api/workers",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workers.ts",
-    "line": 132,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workers.ts:132"
   },
   {
     "method": "DELETE",
     "path": "/api/workers/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workers.ts",
-    "line": 274,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workers.ts:274"
   },
   {
     "method": "GET",
     "path": "/api/workers/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workers.ts",
-    "line": 119,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workers.ts:119"
   },
   {
     "method": "PUT",
     "path": "/api/workers/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "403",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workers.ts",
-    "line": 197,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workers.ts:197"
   },
   {
     "method": "GET",
     "path": "/api/workflow",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 73,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:73"
   },
   {
     "method": "POST",
     "path": "/api/workflow",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 85,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:85"
   },
   {
     "method": "GET",
     "path": "/api/workflow-revisions/:workflowId",
-    "params": [
+    "pathParams": [
       "workflowId"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "path-params"
     ],
-    "file": "apps/server/src/routes/workflow-revisions.ts",
-    "line": 33,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow-revisions.ts:33"
   },
   {
     "method": "DELETE",
     "path": "/api/workflow-revisions/:workflowId/:id",
-    "params": [
+    "pathParams": [
       "workflowId",
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow-revisions.ts",
-    "line": 161,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow-revisions.ts:161"
   },
   {
     "method": "GET",
     "path": "/api/workflow-revisions/:workflowId/:id",
-    "params": [
+    "pathParams": [
       "workflowId",
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow-revisions.ts",
-    "line": 41,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow-revisions.ts:41"
   },
   {
     "method": "PATCH",
     "path": "/api/workflow-revisions/:workflowId/:id",
-    "params": [
+    "pathParams": [
       "workflowId",
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow-revisions.ts",
-    "line": 142,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow-revisions.ts:142"
   },
   {
     "method": "POST",
     "path": "/api/workflow-revisions/:workflowId/:id/restore",
-    "params": [
+    "pathParams": [
       "workflowId",
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow-revisions.ts",
-    "line": 55,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow-revisions.ts:55"
   },
   {
     "method": "DELETE",
     "path": "/api/workflow/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 229,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:229"
   },
   {
     "method": "GET",
     "path": "/api/workflow/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 77,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:77"
   },
   {
     "method": "PUT",
     "path": "/api/workflow/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 141,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:141"
   },
   {
     "method": "POST",
     "path": "/api/workflow/:id/duplicate",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 378,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:378"
   },
   {
     "method": "GET",
     "path": "/api/workflow/:id/export",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 386,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:386"
   },
   {
     "method": "GET",
     "path": "/api/workflow/:id/export.zip",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 402,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:402"
   },
   {
     "method": "POST",
     "path": "/api/workflow/:id/preflight",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "sse"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 866,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:866"
   },
   {
     "method": "POST",
     "path": "/api/workflow/:id/run",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 886,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:886"
   },
   {
     "method": "DELETE",
     "path": "/api/workflow/:id/runs",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": true,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 822,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:822"
   },
   {
     "method": "GET",
     "path": "/api/workflow/:id/runs",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "none/stream",
-    "query": true,
-    "statuses_nearby": [
-      "100",
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 812,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:812"
   },
   {
     "method": "DELETE",
     "path": "/api/workflow/:id/runs/:runId",
-    "params": [
+    "pathParams": [
       "id",
       "runId"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 840,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:840"
   },
   {
     "method": "GET",
     "path": "/api/workflow/:id/runs/:runId",
-    "params": [
+    "pathParams": [
       "id",
       "runId"
     ],
-    "body": "none/stream",
-    "query": false,
-    "statuses_nearby": [
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 851,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:851"
   },
   {
     "method": "POST",
     "path": "/api/workflow/import",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 239,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:239"
   },
   {
     "method": "POST",
     "path": "/api/workflow/import.zip",
-    "params": [],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "201",
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 639,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:639"
   },
   {
     "method": "POST",
     "path": "/api/workflow/import/claude-design",
-    "params": [],
-    "body": "maybe",
-    "query": true,
-    "statuses_nearby": [
-      "100",
-      "201",
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "query"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 793,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:793"
   },
   {
     "method": "POST",
     "path": "/api/workflow/migrate",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/workflow.ts",
-    "line": 319,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/workflow.ts:319"
   },
   {
     "method": "GET",
     "path": "/api/workspace",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 804,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:804"
   },
   {
     "method": "POST",
     "path": "/api/workspace",
-    "params": [],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400"
+    "pathParams": [],
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 809,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:809"
   },
   {
     "method": "DELETE",
     "path": "/api/workspace/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "maybe",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [],
+    "responseCodes": [
+      200
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 885,
-    "auth": "Bearer (default)"
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:885"
   },
   {
     "method": "PUT",
     "path": "/api/workspace/:id",
-    "params": [
+    "pathParams": [
       "id"
     ],
-    "body": "json",
-    "query": false,
-    "statuses_nearby": [
-      "400",
-      "404"
+    "splat": false,
+    "bodyHints": [
+      "json"
     ],
-    "file": "apps/server/src/routes/session.ts",
-    "line": 853,
-    "auth": "Bearer (default)"
+    "responseCodes": [
+      200
+    ],
+    "auth": "Bearer required",
+    "def": "apps/server/src/routes/session.ts:853"
   }
 ]
