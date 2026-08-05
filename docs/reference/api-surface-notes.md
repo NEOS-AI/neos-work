@@ -1,6 +1,6 @@
 # API surface notes (FE/CLI vs server)
 
-Last updated with the FE↔BE integration audit (P2 cleanup).
+Last updated 2026-08-05 (post-remediation inventory refresh + connection probes).
 
 ## Auth-exempt (by design)
 
@@ -18,7 +18,7 @@ See `apps/server/src/lib/auth-paths.ts`:
 | Surface | Primary client |
 |---------|----------------|
 | Desktop | `apps/desktop/src/lib/engine.ts` |
-| Web | `apps/web/src/lib/api.ts` (thin: projects, settings, collab, runs) |
+| Web | `apps/web/src/lib/api.ts` (thin: projects lifecycle + detail, settings, collab, runs) |
 | CLI | `apps/cli/src/client.ts` |
 
 ## Intentional orphans / dual paths
@@ -32,16 +32,28 @@ These exist on the server but are **not** product UI entry points (or are supers
 | `POST/PUT/DELETE /api/harness` and `/api/harnesses` | Prefer **`/api/workers`**; harness mount is a v0.4 alias |
 | ~~`POST /api/media/image`~~, ~~`/audio`~~ | **Removed** after Sunset 2026-04-01 — use **`POST /api/media/generate`** |
 | `GET /api/media/jobs` (list) | Clients poll **`GET /api/media/jobs/:id`** when generate returns `jobId` |
-| `GET /api/memory/export` | CLI: `neos memory export` |
+| `GET /api/webhook/:workflowId/rate-limit` | Rate limit also embedded in **`GET …/secret`** (UI uses secret path) |
 | `POST /api/workflow/migrate` | Ops / dry-run migration |
-| `POST /api/domain-packs/install-zip` | Zip install; UI uses install + validate |
+| `POST /api/domain-packs/install-zip` | Zip install path; UI may use other install flows |
 | `PATCH /api/live-artifacts/:id`, `GET …/preview`, `GET …/refreshes` | Partial live-artifact surface |
 | `/api/tools/live-artifacts/*` | **Agent tool-token only** |
+| Detail GETs (`/session/:id`, `/models`, `/workers/:id`, …) | List + action routes used; single-resource GET often unused |
+
+## Wired after audit cleanup
+
+| Endpoint / feature | Client / UI |
+|--------------------|-------------|
+| `POST /api/connection-test` | Desktop `connectionTest` + Settings **Connection probes** |
+| `GET /api/mcp-servers/presets` | Desktop `listMcpPresets` + Settings MCP presets line |
+| `GET /api/memory/export` | CLI `neos memory export` |
+| Web project create / rename / delete | `WebApiClient` + Projects page |
+| Media generate | Desktop Media page + CLI; unified `/generate` only |
 
 ## Deprecations removed from desktop client
 
-- `createHarness` / `updateHarness` / `deleteHarness` aliases removed from `EngineClient` — use `createWorker` / `updateWorker` / `deleteWorker`.
-- Removed unused EngineClient methods (tests-only): `deleteSetting`, `listModels`, `listMcpPresets`, `refreshMcpOAuth`, `listNeosMcpTools`, `listProjectRuns`, `getRoutine`, `createProjectToolToken`, `connectionTest`, `getPlugin`, `getWebhookRateLimit`, `getDeployment`, `getDomainPack`, `validateDomainPackManifest`, `mediaFileUrl`.
+- `createHarness` / `updateHarness` / `deleteHarness` aliases removed — use `createWorker` / `updateWorker` / `deleteWorker`.
+- Still unused by UI (no client method or tests-only leftovers): `deleteSetting`, `listModels`, `getRoutine`, `getPlugin`, `getDeployment`, `getWebhookRateLimit` (rate limit via secret), etc.
+- **Restored for UI:** `connectionTest`, `listMcpPresets`.
 - Workspace client: **`listWorkspaces`**, **`createWorkspace`**, **`deleteWorkspace`** (blocks deleting `default`).
 
 ## Media paths (unified only)
@@ -61,3 +73,10 @@ These exist on the server but are **not** product UI entry points (or are supers
 
 - `RevisionPanel` uses **`restoreRevision`** (server persist + pre-restore snapshot), then loads the editor.
 - Editor **clears dirty** after a successful server restore (`setSavedDraft`).
+
+## Audit regen
+
+```bash
+node tools/audit/regen.mjs
+# or: npm run audit:regen
+```

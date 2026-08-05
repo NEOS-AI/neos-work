@@ -873,6 +873,51 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
+  /**
+   * POST /api/connection-test — probe provider / custom URL reachability (no secrets returned).
+   * Targets: openai | anthropic | ollama | url | cli-agents.
+   */
+  async connectionTest(input: {
+    target: 'openai' | 'anthropic' | 'ollama' | 'url' | 'cli-agents' | string;
+    url?: string;
+  }): Promise<
+    ApiResponse<{
+      target?: string;
+      reachable?: boolean;
+      blocked?: boolean;
+      status?: number;
+      message?: string;
+      catalogCount?: number;
+    }>
+  > {
+    if (
+      !input
+      || typeof input.target !== 'string'
+      || /[\0\r\n]/.test(input.target)
+      || !input.target.trim()
+    ) {
+      return { ok: false, error: 'Invalid target' };
+    }
+    const target = input.target.trim().toLowerCase();
+    const allowed = new Set(['openai', 'anthropic', 'ollama', 'url', 'cli-agents']);
+    if (!allowed.has(target)) {
+      return { ok: false, error: 'Invalid target' };
+    }
+    const body: { target: string; url?: string } = { target };
+    if (target === 'url') {
+      if (typeof input.url !== 'string' || /[\0\r\n]/.test(input.url) || !input.url.trim()) {
+        return { ok: false, error: 'Invalid url' };
+      }
+      body.url = input.url.trim().slice(0, 2_048);
+    }
+    const res = await fetch(`${this.baseUrl}/api/connection-test`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
+  }
+
   async listSkills(): Promise<ApiResponse<SkillData[]>> {
     const res = await fetch(`${this.baseUrl}/api/skills`, {
       headers: this.getHeaders(),
@@ -925,6 +970,24 @@ export class EngineClient {
 
   async listMcpServers(): Promise<ApiResponse<McpServerData[]>> {
     const res = await fetch(`${this.baseUrl}/api/mcp-servers`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  /** GET /api/mcp-servers/presets — built-in one-click MCP catalogs. */
+  async listMcpPresets(): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        name: string;
+        domain?: string;
+        description?: string;
+        toolHints?: string[];
+      }>
+    >
+  > {
+    const res = await fetch(`${this.baseUrl}/api/mcp-servers/presets`, {
       headers: this.getHeaders(),
     });
     return readApiResponse(res);

@@ -6,6 +6,7 @@ const getSettings = vi.fn();
 const getSetting = vi.fn();
 const saveSetting = vi.fn();
 const verifyApiKey = vi.fn();
+const connectionTest = vi.fn();
 const health = vi.fn();
 const getCollabStatus = vi.fn();
 const getMediaConfig = vi.fn();
@@ -35,6 +36,7 @@ const clientApi = {
   getSetting,
   saveSetting,
   verifyApiKey,
+  connectionTest,
   health,
   getCollabStatus,
   getMediaConfig,
@@ -111,6 +113,10 @@ describe('Settings page', () => {
     getSetting.mockReset().mockResolvedValue({ ok: true, data: null });
     saveSetting.mockReset().mockResolvedValue({ ok: true });
     verifyApiKey.mockReset();
+    connectionTest.mockReset().mockResolvedValue({
+      ok: true,
+      data: { target: 'ollama', reachable: true, message: 'Endpoint reachable', status: 200 },
+    });
     health.mockReset().mockResolvedValue({ status: 'ok', version: '0.8.7', uptime: 3661 });
     getCollabStatus.mockReset().mockResolvedValue({
       ok: true,
@@ -213,8 +219,53 @@ describe('Settings page', () => {
       expect(screen.getByText('Configured')).toBeInTheDocument();
       expect(screen.getByText('workflow, chat')).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(screen.getByTestId('connection-probe-section')).toBeInTheDocument();
+      expect(screen.getByTestId('mcp-presets-list')).toHaveTextContent(/TradingView/);
+    });
+    expect(listMcpPresets).toHaveBeenCalled();
   });
 
+  it('runs connection probes for ollama and custom URL', async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByTestId('connection-probe-ollama')).toBeInTheDocument());
+    await user.click(screen.getByTestId('connection-probe-ollama'));
+    await waitFor(() => {
+      expect(connectionTest).toHaveBeenCalledWith({ target: 'ollama' });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('connection-probe-results')).toHaveTextContent(/reachable/);
+    });
+
+    connectionTest.mockResolvedValueOnce({
+      ok: true,
+      data: { target: 'url', reachable: false, blocked: true, message: 'Redirect target is blocked' },
+    });
+    await user.type(screen.getByTestId('connection-probe-url'), 'https://example.com/v1');
+    await user.click(screen.getByTestId('connection-probe-url-submit'));
+    await waitFor(() => {
+      expect(connectionTest).toHaveBeenCalledWith({
+        target: 'url',
+        url: 'https://example.com/v1',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('connection-probe-results')).toHaveTextContent(/blocked/);
+    });
+  });
+
+  it('surfaces scrubbed connection probe errors', async () => {
+    const user = userEvent.setup();
+    connectionTest.mockResolvedValueOnce({ ok: false, error: `probe${'\n'}fail${'\0'}` });
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByTestId('connection-probe-openai')).toBeInTheDocument());
+    await user.click(screen.getByTestId('connection-probe-openai'));
+    await waitFor(() => {
+      expect(screen.getByTestId('connection-probe-error')).toHaveTextContent(/probe fail/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+  });
 
   it('adds TradingView MCP from preset path and probes CDP', async () => {
     const user = userEvent.setup();

@@ -67,6 +67,7 @@ export function Settings() {
 
       <EngineStatusSection />
       <CollabStatusSection />
+      <ConnectionProbeSection />
 
       {/* API Keys */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -598,6 +599,174 @@ function CollabStatusSection() {
   );
 }
 
+// --- Provider / URL reachability (POST /api/connection-test) ---
+
+type ConnectionProbeTarget = 'openai' | 'anthropic' | 'ollama' | 'cli-agents' | 'url';
+
+function ConnectionProbeSection() {
+  const { client, status } = useEngine();
+  const [busyTarget, setBusyTarget] = useState<string | null>(null);
+  const [customUrl, setCustomUrl] = useState('');
+  const [results, setResults] = useState<
+    Record<string, { reachable?: boolean; blocked?: boolean; message?: string; status?: number }>
+  >({});
+  const [error, setError] = useState<string | null>(null);
+
+  const runProbe = async (target: ConnectionProbeTarget) => {
+    if (!client || busyTarget) return;
+    if (target === 'url') {
+      if (/[\0\r\n]/.test(customUrl) || !customUrl.trim()) {
+        setError('Enter a valid http(s) URL to probe');
+        return;
+      }
+    }
+    setBusyTarget(target);
+    setError(null);
+    try {
+      const res = await client.connectionTest(
+        target === 'url' ? { target: 'url', url: customUrl.trim() } : { target },
+      );
+      if (!res.ok) {
+        setError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || 'Connection test failed',
+        );
+        return;
+      }
+      const key = target === 'url' ? `url:${customUrl.trim().slice(0, 80)}` : target;
+      setResults((prev) => ({
+        ...prev,
+        [key]: {
+          reachable: res.data?.reachable,
+          blocked: res.data?.blocked,
+          message: res.data?.message,
+          status: res.data?.status,
+        },
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Connection test failed';
+      setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      setBusyTarget(null);
+    }
+  };
+
+  if (status !== 'connected') {
+    return (
+      <section
+        className="rounded-xl border p-5"
+        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+        data-testid="connection-probe-section"
+      >
+        <h2 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          Connection probes
+        </h2>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Connect to the engine to probe provider reachability (no secrets returned).
+        </p>
+      </section>
+    );
+  }
+
+  const targets: Array<{ id: ConnectionProbeTarget; label: string }> = [
+    { id: 'ollama', label: 'Ollama' },
+    { id: 'openai', label: 'OpenAI' },
+    { id: 'anthropic', label: 'Anthropic' },
+    { id: 'cli-agents', label: 'CLI agents catalog' },
+  ];
+
+  return (
+    <section
+      className="rounded-xl border p-5"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+      data-testid="connection-probe-section"
+    >
+      <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+        Connection probes
+      </h2>
+      <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+        Reachability checks via the daemon (SSRF-safe). Auth failures often still mean the endpoint is up.
+      </p>
+      {error && (
+        <p className="mb-2 text-xs text-red-400" role="alert" data-testid="connection-probe-error">
+          {scrubDisplayText(error, { collapseLines: true, maxChars: 300 }) || error}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {targets.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            data-testid={`connection-probe-${t.id}`}
+            disabled={!!busyTarget}
+            onClick={() => void runProbe(t.id)}
+            className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
+            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+          >
+            {busyTarget === t.id ? 'Probing…' : `Test ${t.label}`}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="min-w-0 flex-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Custom URL
+          <input
+            className="mt-1 w-full rounded-lg border px-2 py-1.5 text-sm"
+            style={{
+              borderColor: 'var(--border-primary)',
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+            }}
+            data-testid="connection-probe-url"
+            value={customUrl}
+            onChange={(e) => setCustomUrl(e.target.value)}
+            placeholder="https://…"
+            disabled={!!busyTarget}
+            autoComplete="off"
+          />
+        </label>
+        <button
+          type="button"
+          data-testid="connection-probe-url-submit"
+          disabled={!!busyTarget || !customUrl.trim()}
+          onClick={() => void runProbe('url')}
+          className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
+          style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+        >
+          {busyTarget === 'url' ? 'Probing…' : 'Test URL'}
+        </button>
+      </div>
+      {Object.keys(results).length > 0 && (
+        <ul className="mt-3 space-y-1 text-xs" data-testid="connection-probe-results">
+          {Object.entries(results).map(([key, r]) => {
+            const msg =
+              scrubDisplayText(r.message, { collapseLines: true, maxChars: 200 }) || '';
+            const tone = r.blocked
+              ? '#fbbf24'
+              : r.reachable
+                ? '#34d399'
+                : '#f87171';
+            return (
+              <li key={key} className="flex flex-wrap items-baseline gap-2">
+                <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                  {scrubDisplayText(key, { collapseLines: true, maxChars: 60 }) || key}
+                </span>
+                <span style={{ color: tone }}>
+                  {r.blocked ? 'blocked' : r.reachable ? 'reachable' : 'unreachable'}
+                  {typeof r.status === 'number' ? ` (HTTP ${r.status})` : ''}
+                </span>
+                {msg ? (
+                  <span style={{ color: 'var(--text-muted)' }}>— {msg}</span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 // --- Engine status (version / uptime from /api/health) ---
 
 function EngineStatusSection() {
@@ -1046,6 +1215,9 @@ function McpServersSection() {
   const [oauthModal, setOauthModal] = useState<OAuthModalState | null>(null);
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [mcpLoadError, setMcpLoadError] = useState<string | null>(null);
+  const [presets, setPresets] = useState<
+    Array<{ id: string; name: string; domain?: string; description?: string }>
+  >([]);
   // TradingView MCP preset
   const [tvInstallPath, setTvInstallPath] = useState('');
   const [tvAdding, setTvAdding] = useState(false);
@@ -1097,9 +1269,36 @@ function McpServersSection() {
     }
   }, [client]);
 
+  const loadPresets = useCallback(async () => {
+    if (!client) return;
+    try {
+      const res = await client.listMcpPresets();
+      if (res.ok && Array.isArray(res.data)) {
+        setPresets(
+          res.data
+            .filter((p) => p && typeof p.id === 'string' && typeof p.name === 'string')
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              domain: typeof p.domain === 'string' ? p.domain : undefined,
+              description: typeof p.description === 'string' ? p.description : undefined,
+            })),
+        );
+      } else {
+        setPresets([]);
+      }
+    } catch {
+      setPresets([]);
+    }
+  }, [client]);
+
   useEffect(() => {
     loadServers();
   }, [loadServers]);
+
+  useEffect(() => {
+    void loadPresets();
+  }, [loadPresets]);
 
   const tradingViewConnected = servers.some(
     (s) =>
@@ -1455,6 +1654,21 @@ function McpServersSection() {
           + Add
         </button>
       </div>
+
+      {presets.length > 0 && (
+        <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }} data-testid="mcp-presets-list">
+          Built-in presets:{' '}
+          {presets
+            .map((p) => {
+              const name = scrubDisplayText(p.name, { collapseLines: true, maxChars: 40 }) || p.id;
+              const domain = p.domain
+                ? scrubDisplayText(p.domain, { collapseLines: true, maxChars: 24 })
+                : '';
+              return domain ? `${name} (${domain})` : name;
+            })
+            .join(' · ')}
+        </p>
+      )}
 
       {/* TradingView finance preset */}
       <div

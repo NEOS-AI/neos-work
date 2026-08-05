@@ -868,6 +868,26 @@ describe('EngineClient', () => {
     await client.verifyApiKey('openai', 'sk-x');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/settings/verify-key');
+
+    await expect(client.connectionTest({ target: 'bad\ntarget' as 'openai' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid target',
+    });
+    await expect(client.connectionTest({ target: 'url' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid url',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { target: 'ollama', reachable: true, message: 'Endpoint reachable', status: 200 },
+      }),
+    );
+    const probe = await client.connectionTest({ target: 'ollama' });
+    expect(probe.ok).toBe(true);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/connection-test$/);
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({ target: 'ollama' });
   });
 
   it('skills and mcp server endpoints', async () => {
@@ -892,6 +912,9 @@ describe('EngineClient', () => {
 
     await client.listMcpServers();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp/);
+
+    await client.listMcpPresets();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/mcp-servers\/presets/);
 
     await client.createMcpServer({
       name: 'm',
