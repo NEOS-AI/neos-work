@@ -1,0 +1,726 @@
+{
+  "components": [
+    {
+      "name": "App",
+      "file": "apps/web/src/App.tsx",
+      "line": 7
+    },
+    {
+      "name": "Settings",
+      "file": "apps/web/src/pages/Settings.tsx",
+      "line": 35
+    },
+    {
+      "name": "Projects",
+      "file": "apps/web/src/pages/Projects.tsx",
+      "line": 8
+    },
+    {
+      "name": "Connect",
+      "file": "apps/web/src/pages/Connect.tsx",
+      "line": 6
+    },
+    {
+      "name": "ProjectDetail",
+      "file": "apps/web/src/pages/ProjectDetail.tsx",
+      "line": 44
+    },
+    {
+      "name": "App",
+      "file": "apps/desktop/src/App.tsx",
+      "line": 27
+    },
+    {
+      "name": "Sidebar",
+      "file": "apps/desktop/src/components/Sidebar.tsx",
+      "line": 27
+    },
+    {
+      "name": "GenUIForm",
+      "file": "apps/desktop/src/components/workflow/GenUIForm.tsx",
+      "line": 34
+    },
+    {
+      "name": "TextField",
+      "file": "apps/desktop/src/components/workflow/fields.tsx",
+      "line": 39
+    },
+    {
+      "name": "TextAreaField",
+      "file": "apps/desktop/src/components/workflow/fields.tsx",
+      "line": 64
+    },
+    {
+      "name": "NumberField",
+      "file": "apps/desktop/src/components/workflow/fields.tsx",
+      "line": 91
+    },
+    {
+      "name": "SelectField",
+      "file": "apps/desktop/src/components/workflow/fields.tsx",
+      "line": 116
+    },
+    {
+      "name": "CheckboxField",
+      "file": "apps/desktop/src/components/workflow/fields.tsx",
+      "line": 153
+    },
+    {
+      "name": "GenUIChoice",
+      "file": "apps/desktop/src/components/workflow/GenUIChoice.tsx",
+      "line": 33
+    },
+    {
+      "name": "ConfirmLeaveModal",
+      "file": "apps/desktop/src/components/workflow/ConfirmLeaveModal.tsx",
+      "line": 9
+    },
+    {
+      "name": "RunLogPanel",
+      "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx",
+      "line": 131
+    },
+    {
+      "name": "RunInputsDialog",
+      "file": "apps/desktop/src/components/workflow/RunInputsDialog.tsx",
+      "line": 43
+    },
+    {
+      "name": "ArtifactPreview",
+      "file": "apps/desktop/src/components/workflow/ArtifactPreview.tsx",
+      "line": 83
+    },
+    {
+      "name": "BlockSelector",
+      "file": "apps/desktop/src/components/workflow/BlockSelector.tsx",
+      "line": 29
+    },
+    {
+      "name": "HarnessSelector",
+      "file": "apps/desktop/src/components/workflow/HarnessSelector.tsx",
+      "line": 9
+    },
+    {
+      "name": "RunHistoryPanel",
+      "file": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx",
+      "line": 31
+    },
+    {
+      "name": "GenUIConfirmation",
+      "file": "apps/desktop/src/components/workflow/GenUIConfirmation.tsx",
+      "line": 18
+    },
+    {
+      "name": "PipelineRunner",
+      "file": "apps/desktop/src/components/workflow/PipelineRunner.tsx",
+      "line": 45
+    },
+    {
+      "name": "BlockParamForm",
+      "file": "apps/desktop/src/components/workflow/BlockParamForm.tsx",
+      "line": 5
+    },
+    {
+      "name": "RevisionPanel",
+      "file": "apps/desktop/src/components/workflow/RevisionPanel.tsx",
+      "line": 28
+    },
+    {
+      "name": "RunDetailPanel",
+      "file": "apps/desktop/src/components/workflow/RunDetailPanel.tsx",
+      "line": 37
+    },
+    {
+      "name": "NodeConfigPanel",
+      "file": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
+      "line": 56
+    },
+    {
+      "name": "EngineProvider",
+      "file": "apps/desktop/src/hooks/useEngine.tsx",
+      "line": 34
+    },
+    {
+      "name": "ThemeProvider",
+      "file": "apps/desktop/src/hooks/useTheme.tsx",
+      "line": 38
+    },
+    {
+      "name": "MEDIA",
+      "file": "apps/desktop/src/lib/media-node-options.ts",
+      "line": 3
+    },
+    {
+      "name": "MEDIA",
+      "file": "apps/desktop/src/lib/media-node-options.ts",
+      "line": 6
+    },
+    {
+      "name": "MEDIA",
+      "file": "apps/desktop/src/lib/media-node-options.ts",
+      "line": 10
+    },
+    {
+      "name": "MEDIA",
+      "file": "apps/desktop/src/lib/media-node-options.ts",
+      "line": 14
+    },
+    {
+      "name": "MEDIA",
+      "file": "apps/desktop/src/lib/media-node-options.ts",
+      "line": 24
+    },
+    {
+      "name": "MEDIA",
+      "file": "apps/desktop/src/lib/media-node-options.ts",
+      "line": 59
+    },
+    {
+      "name": "RUN",
+      "file": "apps/desktop/src/lib/run-history-filter.ts",
+      "line": 5
+    },
+    {
+      "name": "ARTIFACT",
+      "file": "apps/desktop/src/lib/artifact-preview-prefs.ts",
+      "line": 7
+    },
+    {
+      "name": "EDITOR",
+      "file": "apps/desktop/src/lib/layout-prefs.ts",
+      "line": 10
+    },
+    {
+      "name": "WORKFLOW",
+      "file": "apps/desktop/src/lib/workflow-list-prefs.ts",
+      "line": 15
+    },
+    {
+      "name": "MEMORY",
+      "file": "apps/desktop/src/lib/memory-prefs.ts",
+      "line": 5
+    },
+    {
+      "name": "DEPLOYMENT",
+      "file": "apps/desktop/src/lib/deployment-filter-prefs.ts",
+      "line": 6
+    },
+    {
+      "name": "DEPLOYMENT",
+      "file": "apps/desktop/src/lib/deployment-filter-prefs.ts",
+      "line": 14
+    },
+    {
+      "name": "NODE",
+      "file": "apps/desktop/src/lib/format-duration.ts",
+      "line": 56
+    },
+    {
+      "name": "RUN",
+      "file": "apps/desktop/src/lib/run-log-prefs.ts",
+      "line": 5
+    },
+    {
+      "name": "DOMAIN",
+      "file": "apps/desktop/src/lib/domain-filter-prefs.ts",
+      "line": 6
+    },
+    {
+      "name": "Settings",
+      "file": "apps/desktop/src/pages/Settings.tsx",
+      "line": 12
+    },
+    {
+      "name": "Projects",
+      "file": "apps/desktop/src/pages/Projects.tsx",
+      "line": 14
+    },
+    {
+      "name": "Templates",
+      "file": "apps/desktop/src/pages/Templates.tsx",
+      "line": 27
+    },
+    {
+      "name": "Deployments",
+      "file": "apps/desktop/src/pages/Deployments.tsx",
+      "line": 49
+    },
+    {
+      "name": "WorkflowNodeComponent",
+      "file": "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "line": 107
+    },
+    {
+      "name": "WorkflowEditor",
+      "file": "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "line": 165
+    },
+    {
+      "name": "Routines",
+      "file": "apps/desktop/src/pages/Routines.tsx",
+      "line": 17
+    },
+    {
+      "name": "Sessions",
+      "file": "apps/desktop/src/pages/Sessions.tsx",
+      "line": 62
+    },
+    {
+      "name": "CodeBlock",
+      "file": "apps/desktop/src/pages/Sessions.tsx",
+      "line": 981
+    },
+    {
+      "name": "DesignSystems",
+      "file": "apps/desktop/src/pages/DesignSystems.tsx",
+      "line": 12
+    },
+    {
+      "name": "Blocks",
+      "file": "apps/desktop/src/pages/Blocks.tsx",
+      "line": 449
+    },
+    {
+      "name": "Workflows",
+      "file": "apps/desktop/src/pages/Workflows.tsx",
+      "line": 31
+    },
+    {
+      "name": "Dashboard",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 29
+    },
+    {
+      "name": "Plugins",
+      "file": "apps/desktop/src/pages/Plugins.tsx",
+      "line": 46
+    },
+    {
+      "name": "ModeSelection",
+      "file": "apps/desktop/src/pages/ModeSelection.tsx",
+      "line": 9
+    },
+    {
+      "name": "Harnesses",
+      "file": "apps/desktop/src/pages/Harnesses.tsx",
+      "line": 62
+    },
+    {
+      "name": "DomainPacks",
+      "file": "apps/desktop/src/pages/DomainPacks.tsx",
+      "line": 24
+    },
+    {
+      "name": "Skills",
+      "file": "apps/desktop/src/pages/Skills.tsx",
+      "line": 17
+    },
+    {
+      "name": "DesignSystemEditor",
+      "file": "apps/desktop/src/pages/DesignSystemEditor.tsx",
+      "line": 8
+    },
+    {
+      "name": "ProjectWorkspace",
+      "file": "apps/desktop/src/pages/ProjectWorkspace.tsx",
+      "line": 44
+    },
+    {
+      "name": "Media",
+      "file": "apps/desktop/src/pages/Media.tsx",
+      "line": 17
+    },
+    {
+      "name": "Memory",
+      "file": "apps/desktop/src/pages/Memory.tsx",
+      "line": 175
+    },
+    {
+      "name": "McpInstallPanel",
+      "file": "packages/ui-app/src/McpInstallPanel.tsx",
+      "line": 36
+    },
+    {
+      "name": "PresencePeersBar",
+      "file": "packages/ui-app/src/PresencePeersBar.tsx",
+      "line": 98
+    },
+    {
+      "name": "LayersPanel",
+      "file": "packages/design-editor/src/LayersPanel.tsx",
+      "line": 224
+    },
+    {
+      "name": "CanvasOverlay",
+      "file": "packages/design-editor/src/CanvasOverlay.tsx",
+      "line": 152
+    },
+    {
+      "name": "PreviewFrame",
+      "file": "packages/design-editor/src/PreviewFrame.tsx",
+      "line": 65
+    },
+    {
+      "name": "CANVAS",
+      "file": "packages/design-editor/src/DesignEditor.tsx",
+      "line": 52
+    },
+    {
+      "name": "DesignEditor",
+      "file": "packages/design-editor/src/DesignEditor.tsx",
+      "line": 167
+    },
+    {
+      "name": "NEOS",
+      "file": "packages/design-editor/src/bridge-types.ts",
+      "line": 6
+    },
+    {
+      "name": "DEVICE",
+      "file": "packages/design-editor/src/device-presets.ts",
+      "line": 10
+    },
+    {
+      "name": "CodeEditor",
+      "file": "packages/design-editor/src/CodeEditor.tsx",
+      "line": 37
+    },
+    {
+      "name": "safeOAuthAuthUrl",
+      "file": "apps/desktop/src/pages/Settings.tsx",
+      "line": 1022
+    },
+    {
+      "name": "safeDeployUrl",
+      "file": "apps/desktop/src/pages/Deployments.tsx",
+      "line": 36
+    },
+    {
+      "name": "filterRunLogEvents",
+      "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx",
+      "line": 39
+    },
+    {
+      "name": "safeLogHref",
+      "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx",
+      "line": 79
+    },
+    {
+      "name": "linkifyText",
+      "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx",
+      "line": 94
+    },
+    {
+      "name": "isHtmlContent",
+      "file": "apps/desktop/src/components/workflow/ArtifactPreview.tsx",
+      "line": 34
+    },
+    {
+      "name": "isMarkdownContent",
+      "file": "apps/desktop/src/components/workflow/ArtifactPreview.tsx",
+      "line": 48
+    },
+    {
+      "name": "downloadTextFile",
+      "file": "apps/desktop/src/components/workflow/ArtifactPreview.tsx",
+      "line": 60
+    },
+    {
+      "name": "safeBlockId",
+      "file": "apps/desktop/src/components/workflow/BlockSelector.tsx",
+      "line": 9
+    },
+    {
+      "name": "defaultsForBlock",
+      "file": "apps/desktop/src/components/workflow/BlockSelector.tsx",
+      "line": 14
+    }
+  ],
+  "imports": {
+    "App": [
+      "apps/web/src/App.tsx",
+      "apps/web/src/main.tsx",
+      "apps/web/src/main.tsx",
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/main.tsx",
+      "apps/desktop/src/main.tsx",
+      "apps/desktop/src/pages/Settings.tsx",
+      "apps/desktop/src/pages/Settings.tsx"
+    ],
+    "Settings": [
+      "apps/web/src/App.tsx",
+      "apps/web/src/App.tsx",
+      "apps/web/src/pages/Settings.tsx",
+      "apps/web/src/pages/Projects.tsx",
+      "apps/web/src/pages/Projects.tsx",
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/components/workflow/BlockSelector.tsx",
+      "apps/desktop/src/components/workflow/BlockSelector.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
+      "apps/desktop/src/pages/Settings.tsx",
+      "apps/desktop/src/pages/Deployments.tsx",
+      "apps/desktop/src/pages/Deployments.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/engine.ts"
+    ],
+    "Projects": [
+      "apps/web/src/App.tsx",
+      "apps/web/src/App.tsx",
+      "apps/web/src/pages/Settings.tsx",
+      "apps/web/src/pages/Settings.tsx",
+      "apps/web/src/pages/Projects.tsx",
+      "apps/web/src/pages/ProjectDetail.tsx",
+      "apps/web/src/pages/ProjectDetail.tsx",
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Projects.tsx",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/tauri.ts",
+      "apps/desktop/src/lib/tauri.ts"
+    ],
+    "Connect": [
+      "apps/web/src/App.tsx",
+      "apps/desktop/src/pages/Settings.tsx",
+      "apps/desktop/src/pages/ModeSelection.tsx"
+    ],
+    "ProjectDetail": [
+      "apps/web/src/App.tsx"
+    ],
+    "Sidebar": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "GenUIForm": [
+      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
+    ],
+    "TextField": [
+      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "TextAreaField": [
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "NumberField": [
+      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "SelectField": [
+      "apps/desktop/src/components/workflow/BlockSelector.tsx",
+      "apps/desktop/src/components/workflow/HarnessSelector.tsx",
+      "apps/desktop/src/components/workflow/BlockParamForm.tsx"
+    ],
+    "CheckboxField": [
+      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "GenUIChoice": [
+      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
+    ],
+    "ConfirmLeaveModal": [
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/pages/ProjectWorkspace.tsx"
+    ],
+    "RunLogPanel": [
+      "apps/desktop/src/components/workflow/RunHistoryPanel.tsx",
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/lib/run-log-prefs.ts"
+    ],
+    "RunInputsDialog": [
+      "apps/desktop/src/pages/WorkflowEditor.tsx"
+    ],
+    "ArtifactPreview": [
+      "apps/desktop/src/pages/WorkflowEditor.tsx"
+    ],
+    "BlockSelector": [
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "HarnessSelector": [
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "RunHistoryPanel": [
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/lib/run-history-filter.ts"
+    ],
+    "GenUIConfirmation": [
+      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
+    ],
+    "PipelineRunner": [
+      "apps/desktop/src/pages/Plugins.tsx"
+    ],
+    "BlockParamForm": [
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "RevisionPanel": [
+      "apps/desktop/src/pages/WorkflowEditor.tsx"
+    ],
+    "RunDetailPanel": [
+      "apps/desktop/src/components/workflow/RunHistoryPanel.tsx"
+    ],
+    "NodeConfigPanel": [
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/components/workflow/WorkflowValidation.ts",
+      "apps/desktop/src/lib/media-node-options.ts"
+    ],
+    "EngineProvider": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "ThemeProvider": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "MEDIA": [],
+    "RUN": [],
+    "ARTIFACT": [],
+    "EDITOR": [],
+    "WORKFLOW": [],
+    "MEMORY": [],
+    "DEPLOYMENT": [],
+    "NODE": [],
+    "DOMAIN": [],
+    "Templates": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/domain-filter-prefs.ts"
+    ],
+    "Deployments": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/deployment-filter-prefs.ts"
+    ],
+    "WorkflowNodeComponent": [],
+    "WorkflowEditor": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/lib/layout-prefs.ts",
+      "apps/desktop/src/lib/workflow-draft.ts"
+    ],
+    "Routines": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/enabled-filter-prefs.ts",
+      "apps/desktop/src/lib/engine.ts"
+    ],
+    "Sessions": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/engine.ts"
+    ],
+    "CodeBlock": [],
+    "DesignSystems": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "Blocks": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/components/workflow/WorkflowValidation.ts",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/domain-filter-prefs.ts"
+    ],
+    "Workflows": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/workflow-list-prefs.ts"
+    ],
+    "Dashboard": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/lib/format-uptime.ts"
+    ],
+    "Plugins": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/pages/Skills.tsx",
+      "apps/desktop/src/lib/engine.ts"
+    ],
+    "ModeSelection": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/lib/mode-prefs.ts"
+    ],
+    "Harnesses": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/domain-filter-prefs.ts"
+    ],
+    "DomainPacks": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "Skills": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/lib/enabled-filter-prefs.ts",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/skills-prefs.ts"
+    ],
+    "DesignSystemEditor": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "ProjectWorkspace": [
+      "apps/desktop/src/App.tsx"
+    ],
+    "Media": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
+      "apps/desktop/src/pages/Settings.tsx",
+      "apps/desktop/src/pages/WorkflowEditor.tsx",
+      "apps/desktop/src/pages/Dashboard.tsx",
+      "apps/desktop/src/components/workflow/WorkflowValidation.ts",
+      "apps/desktop/src/lib/template-required-settings.ts",
+      "apps/desktop/src/lib/media-prefs.ts",
+      "apps/desktop/src/lib/media-node-options.ts",
+      "apps/desktop/src/lib/engine.ts"
+    ],
+    "Memory": [
+      "apps/desktop/src/App.tsx",
+      "apps/desktop/src/lib/enabled-filter-prefs.ts",
+      "apps/desktop/src/lib/engine.ts",
+      "apps/desktop/src/lib/memory-prefs.ts"
+    ],
+    "McpInstallPanel": [
+      "apps/web/src/pages/Settings.tsx",
+      "apps/desktop/src/pages/Settings.tsx"
+    ],
+    "PresencePeersBar": [
+      "apps/web/src/pages/ProjectDetail.tsx",
+      "apps/desktop/src/pages/ProjectWorkspace.tsx"
+    ],
+    "LayersPanel": [],
+    "CanvasOverlay": [],
+    "PreviewFrame": [],
+    "CANVAS": [],
+    "DesignEditor": [
+      "apps/web/src/pages/ProjectDetail.tsx",
+      "apps/desktop/src/pages/ProjectWorkspace.tsx"
+    ],
+    "NEOS": [
+      "apps/web/src/pages/Connect.tsx",
+      "apps/web/src/lib/api.ts",
+      "apps/desktop/src/hooks/useEngine.tsx",
+      "apps/desktop/src/pages/Settings.tsx",
+      "apps/desktop/src/pages/Workflows.tsx",
+      "apps/desktop/src/lib/engine.ts"
+    ],
+    "DEVICE": [],
+    "CodeEditor": [],
+    "safeOAuthAuthUrl": [],
+    "safeDeployUrl": [],
+    "filterRunLogEvents": [],
+    "safeLogHref": [],
+    "linkifyText": [],
+    "isHtmlContent": [],
+    "isMarkdownContent": [],
+    "downloadTextFile": [],
+    "safeBlockId": [
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ],
+    "defaultsForBlock": [
+      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
+      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+    ]
+  }
+}

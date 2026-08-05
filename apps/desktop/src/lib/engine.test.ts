@@ -1919,6 +1919,79 @@ describe('EngineClient', () => {
       error: 'Invalid revision id',
     });
 
+    // project conversations / messages
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [
+          {
+            id: 'conv1',
+            projectId: 'p1',
+            title: 'Project chat',
+            createdAt: 't0',
+            updatedAt: 't1',
+          },
+        ],
+      }),
+    );
+    await expect(client.listProjectConversations('p1')).resolves.toMatchObject({
+      ok: true,
+      data: [{ id: 'conv1' }],
+    });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/conversations$/);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: {
+          id: 'conv2',
+          projectId: 'p1',
+          title: 'New',
+          createdAt: 't0',
+          updatedAt: 't0',
+        },
+      }),
+    );
+    await client.createProjectConversation('p1', 'New');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({ title: 'New' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [
+          {
+            id: 'm1',
+            conversationId: 'conv1',
+            role: 'user',
+            content: 'hi',
+            createdAt: 't0',
+          },
+        ],
+      }),
+    );
+    await client.listProjectMessages('p1', 'conv1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/conversations\/conv1\/messages$/);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: {
+          id: 'm2',
+          conversationId: 'conv1',
+          role: 'user',
+          content: 'hello',
+          createdAt: 't1',
+        },
+      }),
+    );
+    await client.addProjectMessage('p1', 'conv1', { role: 'user', content: 'hello' });
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      content: 'hello',
+      role: 'user',
+    });
+
     await client.listProjectPreviewComments('p1', 'index.html');
     await expect(client.listProjectPreviewComments('p1', `f${'\n'}`)).resolves.toMatchObject({
       ok: false,

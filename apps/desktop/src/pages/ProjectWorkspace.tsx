@@ -35,6 +35,7 @@ import type {
   LiveArtifact,
   ProjectFileEntry,
   ProjectFileRevision,
+  ProjectMessage,
   ProjectPreviewComment,
 } from '../lib/engine.js';
 import { normalizeProjectRelPath } from '../lib/engine.js';
@@ -63,6 +64,11 @@ export function ProjectWorkspace() {
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatLog, setChatLog] = useState<string[]>([]);
+  /** Persisted multi-turn history (project conversations API). */
+  const [chatMessages, setChatMessages] = useState<ProjectMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  conversationIdRef.current = conversationId;
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   /** Latest project run status (queued / running / succeeded / failed / canceled). */
   const [runStatus, setRunStatus] = useState<string | null>(null);
@@ -173,6 +179,39 @@ export function ProjectWorkspace() {
   useEffect(() => {
     void loadProject();
   }, [loadProject]);
+
+  /** Load or create the project's chat conversation and message history. */
+  const loadChatHistory = useCallback(async () => {
+    if (!client || !projectId) {
+      setConversationId(null);
+      setChatMessages([]);
+      return;
+    }
+    try {
+      const list = await client.listProjectConversations(projectId);
+      let convId: string | null = null;
+      if (list.ok && list.data && list.data.length > 0) {
+        convId = list.data[0]!.id;
+      } else {
+        const created = await client.createProjectConversation(projectId, 'Project chat');
+        if (created.ok && created.data?.id) convId = created.data.id;
+      }
+      setConversationId(convId);
+      if (convId) {
+        const msgs = await client.listProjectMessages(projectId, convId);
+        setChatMessages(msgs.ok && msgs.data ? msgs.data : []);
+      } else {
+        setChatMessages([]);
+      }
+    } catch {
+      setConversationId(null);
+      setChatMessages([]);
+    }
+  }, [client, projectId]);
+
+  useEffect(() => {
+    void loadChatHistory();
+  }, [loadChatHistory]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -1082,7 +1121,28 @@ export function ProjectWorkspace() {
     setChatBusy(true);
     setChatError(null);
     runCancelRequestedRef.current = false;
+    const userText = chatPrompt.trim();
     try {
+      // Ensure a conversation exists and persist the user turn
+      let convId = conversationIdRef.current;
+      if (!convId) {
+        const created = await client.createProjectConversation(projectId, 'Project chat');
+        if (created.ok && created.data?.id) {
+          convId = created.data.id;
+          setConversationId(convId);
+        }
+      }
+      if (convId) {
+        const um = await client.addProjectMessage(projectId, convId, {
+          role: 'user',
+          content: userText,
+          agentId: chatAgentId || undefined,
+        });
+        if (um.ok && um.data) {
+          setChatMessages((prev) => [...prev, um.data!]);
+        }
+      }
+
       const selectionSnippet =
         selectDetail?.outerHTML?.slice(0, 8_000)
         || (selection?.selector
@@ -1104,7 +1164,7 @@ export function ProjectWorkspace() {
       // dryRun when no agent selected; live CLI when agentId set
       const res = await client.createProjectRun({
         projectId,
-        prompt: chatPrompt.trim(),
+        prompt: userText,
         agentId: chatAgentId || undefined,
         dryRun: !chatAgentId,
         editContext,
@@ -1132,6 +1192,22 @@ export function ProjectWorkspace() {
         appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
       };
 
+      const persistAssistant = async (status: string, error?: string | null) => {
+        const cid = conversationIdRef.current;
+        if (!cid) return;
+        const summary = error
+          ? `Run ${status}: ${error}`
+          : `Run ${status} (${runId.slice(0, 8)}…)`;
+        const am = await client.addProjectMessage(projectId, cid, {
+          role: 'assistant',
+          content: summary.slice(0, 8_000),
+          agentId: chatAgentId || undefined,
+        });
+        if (am.ok && am.data) {
+          setChatMessages((prev) => [...prev, am.data!]);
+        }
+      };
+
       const applyTerminalStatus = async (): Promise<boolean> => {
         const st = await client.getProjectRun(runId);
         if (st.ok && st.data && isTerminalRunStatus(st.data.status)) {
@@ -1142,6 +1218,7 @@ export function ProjectWorkspace() {
             const filesRes = await client.listProjectFiles(projectId);
             if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
           }
+          await persistAssistant(st.data.status, st.data.error);
           return true;
         }
         if (st.ok && st.data?.status) {
@@ -1633,12 +1710,35 @@ export function ProjectWorkspace() {
                 }}
                 data-testid="project-chat-log"
               >
-                {chatLog.length === 0 ? (
+                {chatMessages.length === 0 && chatLog.length === 0 ? (
                   <span style={{ color: 'var(--text-muted)' }}>{t('project.chatEmpty')}</span>
                 ) : (
-                  chatLog.map((line, i) => (
-                    <div key={`${i}-${line.slice(0, 12)}`}>{line}</div>
-                  ))
+                  <>
+                    {chatMessages.map((m) => (
+                      <div
+                        key={m.id}
+                        data-testid={`project-chat-msg-${m.id}`}
+                        style={{
+                          marginBottom: 6,
+                          color:
+                            m.role === 'user'
+                              ? 'var(--text-primary)'
+                              : 'var(--text-secondary)',
+                        }}
+                      >
+                        <span
+                          className="font-semibold uppercase"
+                          style={{ color: 'var(--text-muted)', marginRight: 6 }}
+                        >
+                          {m.role}
+                        </span>
+                        {m.content}
+                      </div>
+                    ))}
+                    {chatLog.map((line, i) => (
+                      <div key={`log-${i}-${line.slice(0, 12)}`}>{line}</div>
+                    ))}
+                  </>
                 )}
               </div>
             </div>

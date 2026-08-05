@@ -99,6 +99,8 @@ export function ProjectDetail() {
   >({});
   /** sessionId → peer selection (v0.7 M2). */
   const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
+  /** Path currently being deleted (disables × while request in flight). */
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
 
   const dirty = isDirty(buffer);
   const bufferRef = useRef(buffer);
@@ -699,6 +701,83 @@ export function ProjectDetail() {
     }
   };
 
+  /**
+   * Delete a project file. Passes collab session for NEOS_SHARED_EDIT hard enforce.
+   * On 423, surfaces "Locked by …" and foreignLocks chip data when holder is present.
+   */
+  const handleDeleteFile = async (path: string) => {
+    if (!id || !path) return;
+    const rel = normalizeProjectRelPath(path);
+    if (!rel) return;
+    const name = rel.split('/').pop() || rel;
+    if (!window.confirm(`Delete file "${name}"? This cannot be undone.`)) return;
+    if (buffer.path && normalizeProjectRelPath(buffer.path) === rel && dirty) {
+      if (!window.confirm('Discard unsaved changes?')) return;
+    }
+    setDeletingPath(rel);
+    setError(null);
+    try {
+      const res = await client.deleteFile(
+        id,
+        rel,
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
+      if (!res.ok) {
+        const holder =
+          res.data
+          && typeof res.data === 'object'
+          && res.data !== null
+          && 'holder' in res.data
+            ? (res.data as {
+                holder?: { sessionId?: string; displayName?: string; path?: string };
+              }).holder
+            : undefined;
+        if (holder?.displayName && holder.sessionId) {
+          const lockPath =
+            (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
+            || rel;
+          setForeignLocks((m) => ({
+            ...m,
+            [lockPath]: {
+              sessionId: holder.sessionId!,
+              displayName: holder.displayName!,
+            },
+          }));
+          setError(`Locked by ${holder.displayName.trim()}`);
+        } else {
+          setError(
+            (typeof res.error === 'string' && res.error ? res.error : 'Delete failed')
+              .replace(/[\0\r\n]+/g, ' ')
+              .slice(0, 300),
+          );
+        }
+        return;
+      }
+      if (buffer.path && normalizeProjectRelPath(buffer.path) === rel) {
+        setBuffer(createEmptyBuffer());
+        setSelection(null);
+        setRevisions([]);
+        setRevisionPreview(null);
+      }
+      setForeignLocks((m) => {
+        if (!(rel in m)) return m;
+        const n = { ...m };
+        delete n[rel];
+        return n;
+      });
+      const f = await client.listFiles(id);
+      const list = ((f.data as Array<{ path: string; type?: string }>) ?? []).filter(
+        (x) => x.type !== 'directory',
+      );
+      setFiles(list);
+      setStatus(`Deleted ${name}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Delete failed');
+    } finally {
+      setDeletingPath(null);
+    }
+  };
+
   const save = async () => {
     if (!id || !buffer.path) return;
     if (/\0/.test(buffer.local)) {
@@ -964,27 +1043,74 @@ export function ProjectDetail() {
             Files
           </div>
           <ul className="list">
-            {files.map((f) => (
-              <li key={f.path} style={{ padding: '0.35rem 0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn-ghost"
+            {files.map((f) => {
+              const pathNorm = normalizeProjectRelPath(f.path) || f.path;
+              const locked = foreignLocks[pathNorm]?.displayName;
+              return (
+                <li
+                  key={f.path}
                   style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: buffer.path === f.path ? 'var(--accent)' : 'var(--text)',
-                    cursor: 'pointer',
-                    padding: 0,
-                    textAlign: 'left',
-                    width: '100%',
+                    padding: '0.35rem 0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
                   }}
-                  onClick={() => void openFile(f.path)}
-                  data-testid={`file-${f.path}`}
                 >
-                  <span className="mono">{f.path}</span>
-                </button>
-              </li>
-            ))}
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: buffer.path === f.path ? 'var(--accent)' : 'var(--text)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      textAlign: 'left',
+                      flex: '1 1 auto',
+                      minWidth: 0,
+                    }}
+                    onClick={() => void openFile(f.path)}
+                    data-testid={`file-${f.path}`}
+                    title={locked ? `${f.path} — Locked by ${locked}` : f.path}
+                  >
+                    <span className="mono">{f.path}</span>
+                    {locked ? (
+                      <span
+                        className="err"
+                        style={{ marginLeft: 6, fontSize: 10 }}
+                        data-testid={`file-lock-chip-${pathNorm}`}
+                      >
+                        🔒
+                      </span>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    data-testid={`file-delete-${pathNorm}`}
+                    aria-label={`Delete ${f.path}`}
+                    disabled={deletingPath === pathNorm || busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDeleteFile(f.path);
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-muted, #888)',
+                      cursor: deletingPath === pathNorm ? 'wait' : 'pointer',
+                      padding: '0 4px',
+                      flex: '0 0 auto',
+                      fontSize: 14,
+                      lineHeight: 1,
+                    }}
+                    title="Delete"
+                  >
+                    {deletingPath === pathNorm ? '…' : '×'}
+                  </button>
+                </li>
+              );
+            })}
             {files.length === 0 && <li className="muted">No files</li>}
           </ul>
         </aside>

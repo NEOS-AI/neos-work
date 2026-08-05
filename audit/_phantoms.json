@@ -1,0 +1,90 @@
+[
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/session${qs}",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 548,
+    "fn": "if"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/skills",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 837,
+    "fn": "listSkills"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers/presets",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 909,
+    "fn": "listMcpPresets"
+  },
+  {
+    "surface": "desktop",
+    "method": "POST",
+    "url": "/api/mcp-servers/tradingview/cdp-health${q}",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 933,
+    "fn": "checkTradingViewCdp"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/mcp/install-info${q ? ",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 1035,
+    "fn": ""
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/runs${qs}",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 1991,
+    "fn": "if"
+  },
+  {
+    "surface": "desktop",
+    "method": "PUT",
+    "url": "/api/design-systems/${seg}/tokens",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 2197,
+    "fn": "getDesignSystemTokens"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/marketplace/catalog${qs}",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 2669,
+    "fn": "fetchMarketplaceCatalog"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/deploy${qs ? ",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 3245,
+    "fn": "if"
+  },
+  {
+    "surface": "desktop",
+    "method": "GET",
+    "url": "/api/workers${q}",
+    "file": "apps/desktop/src/lib/engine.ts",
+    "line": 3277,
+    "fn": "listWorkers"
+  },
+  {
+    "surface": "web",
+    "method": "GET",
+    "url": "/api/mcp/install-info${q ? ",
+    "file": "apps/web/src/lib/api.ts",
+    "line": 485,
+    "fn": ""
+  }
+]

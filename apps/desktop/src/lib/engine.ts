@@ -268,6 +268,25 @@ export interface ProjectPreviewComment {
   updatedAt?: string;
 }
 
+/** Project chat conversation (persisted multi-turn history). */
+export interface ProjectConversation {
+  id: string;
+  projectId: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Message within a project conversation. */
+export interface ProjectMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  agentId?: string | null;
+  createdAt: string;
+}
+
 /** Marketplace channel for plugin list filters (server plugin-store). */
 export type PluginChannel = 'user' | 'official' | 'community' | 'bundled';
 
@@ -1962,6 +1981,87 @@ export class EngineClient {
     const res = await fetch(
       `${this.baseUrl}/api/projects/${pSeg}/preview-comments/${cSeg}`,
       { method: 'DELETE', headers: this.getHeaders() },
+    );
+    return readApiResponse(res);
+  }
+
+  // --- Project conversations / messages ---
+
+  async listProjectConversations(
+    projectId: string,
+  ): Promise<ApiResponse<ProjectConversation[]>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/conversations`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async createProjectConversation(
+    projectId: string,
+    title?: string,
+  ): Promise<ApiResponse<ProjectConversation>> {
+    const seg = this.pathSegment(projectId);
+    if (!seg) return this.invalidIdResponse('project id');
+    const body: { title?: string } = {};
+    if (typeof title === 'string' && !/[\0\r\n]/.test(title) && title.trim()) {
+      body.title = title.trim().slice(0, 200);
+    }
+    const res = await fetch(`${this.baseUrl}/api/projects/${seg}/conversations`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    return readApiResponse(res);
+  }
+
+  async listProjectMessages(
+    projectId: string,
+    conversationId: string,
+  ): Promise<ApiResponse<ProjectMessage[]>> {
+    const pSeg = this.pathSegment(projectId);
+    const cSeg = this.pathSegment(conversationId);
+    if (!pSeg) return this.invalidIdResponse('project id');
+    if (!cSeg) return this.invalidIdResponse('conversation id');
+    const res = await fetch(
+      `${this.baseUrl}/api/projects/${pSeg}/conversations/${cSeg}/messages`,
+      { headers: this.getHeaders() },
+    );
+    return readApiResponse(res);
+  }
+
+  async addProjectMessage(
+    projectId: string,
+    conversationId: string,
+    input: { role?: 'user' | 'assistant' | 'system'; content: string; agentId?: string },
+  ): Promise<ApiResponse<ProjectMessage>> {
+    const pSeg = this.pathSegment(projectId);
+    const cSeg = this.pathSegment(conversationId);
+    if (!pSeg) return this.invalidIdResponse('project id');
+    if (!cSeg) return this.invalidIdResponse('conversation id');
+    if (typeof input.content !== 'string' || /\0/.test(input.content) || !input.content.trim()) {
+      return { ok: false, error: 'Invalid content' };
+    }
+    const body: { role?: string; content: string; agentId?: string } = {
+      content: input.content,
+    };
+    if (input.role) body.role = input.role;
+    if (
+      input.agentId != null
+      && typeof input.agentId === 'string'
+      && !/[\0\r\n]/.test(input.agentId)
+      && input.agentId.trim()
+    ) {
+      body.agentId = input.agentId.trim();
+    }
+    const res = await fetch(
+      `${this.baseUrl}/api/projects/${pSeg}/conversations/${cSeg}/messages`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(body),
+      },
     );
     return readApiResponse(res);
   }

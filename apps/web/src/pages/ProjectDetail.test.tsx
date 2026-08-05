@@ -3,6 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const writeFile = vi.fn(async () => ({ ok: true, data: { hash: 'h1' } }));
+const deleteFile = vi.fn(async () => ({ ok: true, data: { path: 'style.css' } }));
+const listFiles = vi.fn(async () => ({
+  ok: true,
+  data: [
+    { path: 'index.html', type: 'file' },
+    { path: 'style.css', type: 'file' },
+  ],
+}));
 const createRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'queued' } }));
 const getRun = vi.fn(async () => ({ ok: true, data: { id: 'run1', status: 'succeeded' } }));
 const listRuns = vi.fn(async () => ({
@@ -88,6 +96,7 @@ const streamProjectFileEvents = vi.fn((_id: string, cb: SseHandler) => {
     sseHandler = null;
   };
 });
+const streamProjectCollab = vi.fn(() => () => {});
 
 type RunSseHandler = (ev: {
   type: string;
@@ -150,15 +159,10 @@ vi.mock('../lib/api.js', () => {
         ok: true,
         data: { id: 'p1', name: 'Demo', entryFile: 'index.html' },
       }));
-      listFiles = vi.fn(async () => ({
-        ok: true,
-        data: [
-          { path: 'index.html', type: 'file' },
-          { path: 'style.css', type: 'file' },
-        ],
-      }));
+      listFiles = listFiles;
       readFile = readFile;
       writeFile = writeFile;
+      deleteFile = deleteFile;
       createRun = createRun;
       getRun = getRun;
       listRuns = listRuns;
@@ -169,7 +173,7 @@ vi.mock('../lib/api.js', () => {
       restoreRevision = restoreRevision;
       streamProjectFileEvents = streamProjectFileEvents;
       streamRunEvents = streamRunEvents;
-      streamProjectCollab = () => () => {};
+      streamProjectCollab = streamProjectCollab;
       collabLock = vi.fn(async () => ({ ok: true, data: {} }));
       collabSelection = vi.fn(async () => ({ ok: true, data: {} }));
       getCollabPeers = vi.fn(async () => ({ ok: true, data: { peers: [] } }));
@@ -234,6 +238,14 @@ function renderProject() {
 describe('ProjectDetail Design Editor', () => {
   beforeEach(() => {
     writeFile.mockClear();
+    deleteFile.mockClear().mockResolvedValue({ ok: true, data: { path: 'style.css' } });
+    listFiles.mockClear().mockResolvedValue({
+      ok: true,
+      data: [
+        { path: 'index.html', type: 'file' },
+        { path: 'style.css', type: 'file' },
+      ],
+    });
     createRun.mockClear();
     getRun.mockClear();
     listRuns.mockClear();
@@ -258,6 +270,7 @@ describe('ProjectDetail Design Editor', () => {
     getRevision.mockClear();
     restoreRevision.mockClear();
     streamProjectFileEvents.mockClear();
+    streamProjectCollab.mockClear().mockImplementation(() => () => {});
     sseHandler = null;
     readFile.mockImplementation(async (_pid: string, path: string) => ({
       ok: true,
@@ -330,6 +343,71 @@ describe('ProjectDetail Design Editor', () => {
       ok: true,
       data: { id: 'run-abc', status: 'canceled' },
     });
+  });
+
+  it('deletes a file from the tree with sessionId when collab ready', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    streamProjectCollab.mockImplementation(
+      (_id: string, onEvent: (ev: { type: string; sessionId?: string }) => void) => {
+        queueMicrotask(() => onEvent({ type: 'ready', sessionId: 'sess-web-del' }));
+        return () => {};
+      },
+    );
+    listFiles
+      .mockResolvedValueOnce({
+        ok: true,
+        data: [
+          { path: 'index.html', type: 'file' },
+          { path: 'style.css', type: 'file' },
+        ],
+      })
+      .mockResolvedValue({
+        ok: true,
+        data: [{ path: 'index.html', type: 'file' }],
+      });
+    deleteFile.mockResolvedValue({ ok: true, data: { path: 'style.css' } });
+    renderProject();
+    await waitFor(() => expect(screen.getByTestId('file-delete-style.css')).toBeInTheDocument());
+    // Allow collab ready microtask to set session
+    await waitFor(() => expect(streamProjectCollab).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    fireEvent.click(screen.getByTestId('file-delete-style.css'));
+    await waitFor(() => {
+      expect(deleteFile).toHaveBeenCalledWith('p1', 'style.css', {
+        sessionId: 'sess-web-del',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('file-delete-style.css')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows Locked by holder when delete returns 423 holder', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    deleteFile.mockResolvedValue({
+      ok: false,
+      error: 'File locked by Alice',
+      data: {
+        holder: { sessionId: 'peer-a', displayName: 'Alice', path: 'style.css' },
+      },
+    });
+    renderProject();
+    await waitFor(() => expect(screen.getByTestId('file-delete-style.css')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('file-delete-style.css'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/Locked by Alice/i);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('file-lock-chip-style.css')).toBeInTheDocument();
+    });
+  });
+
+  it('does not delete when confirm is cancelled', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderProject();
+    await waitFor(() => expect(screen.getByTestId('file-delete-style.css')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('file-delete-style.css'));
+    expect(deleteFile).not.toHaveBeenCalled();
   });
 
   it('loads project and shows Design Editor for entry file', async () => {

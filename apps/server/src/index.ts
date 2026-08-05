@@ -90,7 +90,8 @@ app.use(
   cors({
     origin: CORS_ORIGINS,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    // x-neos-session-id: collab hard-enforce identity (body alone can be stripped on DELETE)
+    allowHeaders: ['Content-Type', 'Authorization', 'x-neos-session-id'],
   }),
 );
 

@@ -1,0 +1,186 @@
+{
+  "routes": [
+    {
+      "surface": "web",
+      "path": "/",
+      "element": "Connect",
+      "file": "apps/web/src/App.tsx",
+      "line": 11
+    },
+    {
+      "surface": "web",
+      "path": "/projects",
+      "element": "Projects",
+      "file": "apps/web/src/App.tsx",
+      "line": 12
+    },
+    {
+      "surface": "web",
+      "path": "/projects/:id",
+      "element": "ProjectDetail",
+      "file": "apps/web/src/App.tsx",
+      "line": 13
+    },
+    {
+      "surface": "web",
+      "path": "/settings",
+      "element": "Settings",
+      "file": "apps/web/src/App.tsx",
+      "line": 14
+    },
+    {
+      "surface": "web",
+      "path": "*",
+      "element": "Navigate",
+      "file": "apps/web/src/App.tsx",
+      "line": 15
+    }
+  ],
+  "links": [
+    {
+      "to": "/",
+      "file": "apps/web/src/App.tsx",
+      "line": 15
+    },
+    {
+      "to": "/projects",
+      "file": "apps/web/src/pages/Settings.tsx",
+      "line": 221
+    },
+    {
+      "to": "/",
+      "file": "apps/web/src/pages/Settings.tsx",
+      "line": 224
+    },
+    {
+      "to": "/settings",
+      "file": "apps/web/src/pages/Projects.tsx",
+      "line": 45
+    },
+    {
+      "to": "/",
+      "file": "apps/web/src/pages/Projects.tsx",
+      "line": 48
+    },
+    {
+      "to": "/projects",
+      "file": "apps/web/src/pages/ProjectDetail.tsx",
+      "line": 934
+    },
+    {
+      "to": "/workflows",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 148
+    },
+    {
+      "to": "/sessions",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 155
+    },
+    {
+      "to": "/skills",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 162
+    },
+    {
+      "to": "/routines",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 169
+    },
+    {
+      "to": "/design-systems",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 176
+    },
+    {
+      "to": "/deployments",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 183
+    },
+    {
+      "to": "/media",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 190
+    },
+    {
+      "to": "/workflows",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 201
+    },
+    {
+      "to": "/routines",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 239
+    },
+    {
+      "to": "/routines",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 247
+    },
+    {
+      "to": "/deployments",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 283
+    },
+    {
+      "to": "/workflows",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 325
+    },
+    {
+      "to": "/sessions",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 326
+    },
+    {
+      "to": "/templates",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 327
+    },
+    {
+      "to": "/routines",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 328
+    },
+    {
+      "to": "/plugins",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 329
+    },
+    {
+      "to": "/media",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 330
+    },
+    {
+      "to": "/design-systems",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 331
+    },
+    {
+      "to": "/deployments",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 332
+    },
+    {
+      "to": "/blocks",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 333
+    },
+    {
+      "to": "/settings",
+      "file": "apps/desktop/src/pages/Dashboard.tsx",
+      "line": 334
+    },
+    {
+      "to": "/projects",
+      "file": "apps/desktop/src/pages/ProjectWorkspace.tsx",
+      "line": 1239
+    },
+    {
+      "to": "/projects",
+      "file": "apps/desktop/src/pages/ProjectWorkspace.tsx",
+      "line": 1278
+    }
+  ]
+}

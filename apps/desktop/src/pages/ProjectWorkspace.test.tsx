@@ -22,6 +22,28 @@ const createProjectRun = vi.fn();
 const listProjectRunEvents = vi.fn();
 const getProjectRun = vi.fn();
 const cancelProjectRun = vi.fn();
+const listProjectConversations = vi.fn(async () => ({ ok: true, data: [] as unknown[] }));
+const createProjectConversation = vi.fn(async () => ({
+  ok: true,
+  data: {
+    id: 'conv-1',
+    projectId: 'proj-1',
+    title: 'Project chat',
+    createdAt: 't0',
+    updatedAt: 't0',
+  },
+}));
+const listProjectMessages = vi.fn(async () => ({ ok: true, data: [] as unknown[] }));
+const addProjectMessage = vi.fn(async () => ({
+  ok: true,
+  data: {
+    id: 'msg-1',
+    conversationId: 'conv-1',
+    role: 'user',
+    content: 'hi',
+    createdAt: 't0',
+  },
+}));
 const listLiveArtifacts = vi.fn();
 const createLiveArtifact = vi.fn();
 const refreshLiveArtifact = vi.fn();
@@ -62,6 +84,10 @@ const client = {
   listProjectRunEvents,
   getProjectRun,
   cancelProjectRun,
+  listProjectConversations,
+  createProjectConversation,
+  listProjectMessages,
+  addProjectMessage,
   listLiveArtifacts,
   createLiveArtifact,
   refreshLiveArtifact,
@@ -302,6 +328,28 @@ describe('ProjectWorkspace', () => {
     listProjectRunEvents.mockReset();
     getProjectRun.mockReset();
     cancelProjectRun.mockReset();
+    listProjectConversations.mockReset().mockResolvedValue({ ok: true, data: [] });
+    createProjectConversation.mockReset().mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'conv-1',
+        projectId: 'proj-1',
+        title: 'Project chat',
+        createdAt: 't0',
+        updatedAt: 't0',
+      },
+    });
+    listProjectMessages.mockReset().mockResolvedValue({ ok: true, data: [] });
+    addProjectMessage.mockReset().mockImplementation(async (_p, _c, input: { content: string; role?: string }) => ({
+      ok: true,
+      data: {
+        id: `msg-${Math.random().toString(36).slice(2, 8)}`,
+        conversationId: 'conv-1',
+        role: input.role ?? 'user',
+        content: input.content,
+        createdAt: new Date().toISOString(),
+      },
+    }));
     listLiveArtifacts.mockReset().mockResolvedValue({ ok: true, data: [] });
     createLiveArtifact.mockReset();
     refreshLiveArtifact.mockReset();
@@ -904,6 +952,20 @@ describe('ProjectWorkspace', () => {
       expect(log.textContent).toMatch(/succeeded/);
     });
     expect(listProjectRunEvents).not.toHaveBeenCalled();
+    // Persists user + assistant turns via project conversations API
+    await waitFor(() => {
+      expect(createProjectConversation).toHaveBeenCalled();
+      expect(addProjectMessage).toHaveBeenCalledWith(
+        'proj-1',
+        'conv-1',
+        expect.objectContaining({ role: 'user', content: 'Improve the hero' }),
+      );
+      expect(addProjectMessage).toHaveBeenCalledWith(
+        'proj-1',
+        'conv-1',
+        expect.objectContaining({ role: 'assistant' }),
+      );
+    });
   });
 
   it('cancels an active chat run, aborts SSE, and shows canceled status', async () => {

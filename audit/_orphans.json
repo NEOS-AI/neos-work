@@ -1,0 +1,287 @@
+[
+  {
+    "method": "GET",
+    "path": "/api",
+    "loc": "apps/server/src/index.ts:200"
+  },
+  {
+    "method": "POST",
+    "path": "/api/artifacts",
+    "loc": "apps/server/src/routes/artifacts.ts:75"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/artifacts/:id",
+    "loc": "apps/server/src/routes/artifacts.ts:150"
+  },
+  {
+    "method": "GET",
+    "path": "/api/artifacts/:id/preview",
+    "loc": "apps/server/src/routes/artifacts.ts:56"
+  },
+  {
+    "method": "GET",
+    "path": "/api/blocks",
+    "loc": "apps/server/src/routes/blocks.ts:27"
+  },
+  {
+    "method": "GET",
+    "path": "/api/blocks/:id",
+    "loc": "apps/server/src/routes/blocks.ts:140"
+  },
+  {
+    "method": "GET",
+    "path": "/api/cli-agents/catalog",
+    "loc": "apps/server/src/routes/cli-agents.ts:33"
+  },
+  {
+    "method": "POST",
+    "path": "/api/deploy",
+    "loc": "apps/server/src/routes/deploy.ts:212"
+  },
+  {
+    "method": "GET",
+    "path": "/api/deploy/:id",
+    "loc": "apps/server/src/routes/deploy.ts:140"
+  },
+  {
+    "method": "GET",
+    "path": "/api/design-systems/:id/tokens",
+    "loc": "apps/server/src/routes/design-systems.ts:126"
+  },
+  {
+    "method": "GET",
+    "path": "/api/domain-packs/:id",
+    "loc": "apps/server/src/routes/domain-packs.ts:169"
+  },
+  {
+    "method": "POST",
+    "path": "/api/harness",
+    "loc": "apps/server/src/routes/harness.ts:101"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/harness/:id",
+    "loc": "apps/server/src/routes/harness.ts:246"
+  },
+  {
+    "method": "GET",
+    "path": "/api/harness/:id",
+    "loc": "apps/server/src/routes/harness.ts:88"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/harness/:id",
+    "loc": "apps/server/src/routes/harness.ts:170"
+  },
+  {
+    "method": "GET",
+    "path": "/api/harnesses",
+    "loc": "apps/server/src/routes/harness.ts:77"
+  },
+  {
+    "method": "POST",
+    "path": "/api/harnesses",
+    "loc": "apps/server/src/routes/harness.ts:101"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/harnesses/:id",
+    "loc": "apps/server/src/routes/harness.ts:246"
+  },
+  {
+    "method": "GET",
+    "path": "/api/harnesses/:id",
+    "loc": "apps/server/src/routes/harness.ts:88"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/harnesses/:id",
+    "loc": "apps/server/src/routes/harness.ts:170"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live-artifacts/:id",
+    "loc": "apps/server/src/routes/live-artifacts.ts:112"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/live-artifacts/:id",
+    "loc": "apps/server/src/routes/live-artifacts.ts:147"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live-artifacts/:id/preview",
+    "loc": "apps/server/src/routes/live-artifacts.ts:122"
+  },
+  {
+    "method": "GET",
+    "path": "/api/live-artifacts/:id/refreshes",
+    "loc": "apps/server/src/routes/live-artifacts.ts:135"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/catalog",
+    "loc": "apps/server/src/routes/marketplace.ts:50"
+  },
+  {
+    "method": "GET",
+    "path": "/api/marketplace/catalog-url",
+    "loc": "apps/server/src/routes/marketplace.ts:30"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp-servers/oauth/:serverId/status",
+    "loc": "apps/server/src/routes/mcp.ts:708"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp-servers/oauth/callback",
+    "loc": "apps/server/src/routes/mcp.ts:563"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp-servers/presets",
+    "loc": "apps/server/src/routes/mcp.ts:247"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp-servers/tradingview/cdp-health",
+    "loc": "apps/server/src/routes/mcp.ts:252"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mcp/oauth/callback",
+    "loc": "apps/server/src/index.ts:150"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/audio",
+    "loc": "apps/server/src/routes/media.ts:194"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/image",
+    "loc": "apps/server/src/routes/media.ts:144"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/jobs",
+    "loc": "apps/server/src/routes/media.ts:126"
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/:id",
+    "loc": "apps/server/src/routes/memory.ts:94"
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/export",
+    "loc": "apps/server/src/routes/memory.ts:55"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:id/collab/stream",
+    "loc": "apps/server/src/routes/projects.ts:387"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:id/conversations",
+    "loc": "apps/server/src/routes/projects.ts:969"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:id/conversations",
+    "loc": "apps/server/src/routes/projects.ts:976"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:id/conversations/:conversationId/messages",
+    "loc": "apps/server/src/routes/projects.ts:989"
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:id/conversations/:conversationId/messages",
+    "loc": "apps/server/src/routes/projects.ts:997"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:id/preview-comments",
+    "loc": "apps/server/src/routes/projects.ts:928"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:id/revisions",
+    "loc": "apps/server/src/routes/projects.ts:861"
+  },
+  {
+    "method": "GET",
+    "path": "/api/runs/:id/events",
+    "loc": "apps/server/src/routes/runs.ts:363"
+  },
+  {
+    "method": "GET",
+    "path": "/api/session",
+    "loc": "apps/server/src/routes/session.ts:166"
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings/:key",
+    "loc": "apps/server/src/routes/settings.ts:45"
+  },
+  {
+    "method": "GET",
+    "path": "/api/templates",
+    "loc": "apps/server/src/routes/templates.ts:357"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tools/live-artifacts/create",
+    "loc": "apps/server/src/routes/tools-live-artifacts.ts:54"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tools/live-artifacts/list",
+    "loc": "apps/server/src/routes/tools-live-artifacts.ts:85"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tools/live-artifacts/refresh",
+    "loc": "apps/server/src/routes/tools-live-artifacts.ts:132"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tools/live-artifacts/update",
+    "loc": "apps/server/src/routes/tools-live-artifacts.ts:100"
+  },
+  {
+    "method": "GET",
+    "path": "/api/webhook/:workflowId/rate-limit",
+    "loc": "apps/server/src/routes/webhooks.ts:55"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workers",
+    "loc": "apps/server/src/routes/workers.ts:110"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workers/:id",
+    "loc": "apps/server/src/routes/workers.ts:119"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/workflow/:id/runs",
+    "loc": "apps/server/src/routes/workflow.ts:822"
+  },
+  {
+    "method": "POST",
+    "path": "/api/workflow/migrate",
+    "loc": "apps/server/src/routes/workflow.ts:319"
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspace",
+    "loc": "apps/server/src/routes/session.ts:804"
+  }
+]
