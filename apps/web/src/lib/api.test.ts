@@ -90,6 +90,23 @@ describe('WebApiClient hard-enforce session transport', () => {
     expect(init.body).toBeUndefined();
   });
 
+  it('createProject posts name and rejects invalid names', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'p-new', name: 'Landing' } }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.createProject({ name: '' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid name',
+    });
+    const res = await client.createProject({ name: '  Landing  ' });
+    expect(res.ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/projects$/);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ name: 'Landing' });
+  });
+
   it('mkdir sends path body + optional session header', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { path: 'assets' } }));
     const client = new WebApiClient('http://engine.test', 'tok');

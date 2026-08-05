@@ -38,7 +38,7 @@ Commands:
   run create|status|cancel
   skills list|scan
   design-systems list
-  memory list|add
+  memory list|add|export
   mcp list|serve|install-info|live-artifacts
   media list|config|generate
   plugin list|atoms

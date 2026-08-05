@@ -32,7 +32,7 @@ These exist on the server but are **not** product UI entry points (or are supers
 | `POST/PUT/DELETE /api/harness` and `/api/harnesses` | Prefer **`/api/workers`**; harness mount is a v0.4 alias |
 | `POST /api/media/image`, `POST /api/media/audio` | Prefer **`POST /api/media/generate`** (desktop Media + CLI) |
 | `GET /api/media/jobs` (list) | Clients poll **`GET /api/media/jobs/:id`** when generate returns `jobId` |
-| `GET /api/memory/export` | No FE/CLI yet |
+| `GET /api/memory/export` | CLI: `neos memory export` |
 | `POST /api/workflow/migrate` | Ops / dry-run migration |
 | `POST /api/domain-packs/install-zip` | Zip install; UI uses install + validate |
 | `PATCH /api/live-artifacts/:id`, `GET …/preview`, `GET …/refreshes` | Partial live-artifact surface |

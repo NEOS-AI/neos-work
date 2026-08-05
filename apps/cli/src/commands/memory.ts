@@ -59,7 +59,13 @@ export async function cmdMemory(
       }
       return EXIT.OK;
     }
-    ctx.err('usage: neos memory list|add');
+    if (sub === 'export') {
+      const md = await client.exportMemoriesMarkdown();
+      if (ctx.json) printJson(ctx, { markdown: md });
+      else ctx.out(md.endsWith('\n') ? md.slice(0, -1) : md);
+      return EXIT.OK;
+    }
+    ctx.err('usage: neos memory list|add|export');
     return EXIT.USAGE;
   } catch (err) {
     return fail(err);

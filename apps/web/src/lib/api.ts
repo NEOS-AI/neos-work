@@ -159,6 +159,34 @@ export class WebApiClient {
     return this.request('GET', '/api/projects');
   }
 
+  /**
+   * POST /api/projects — create a design project (daemon allocates baseDir when omitted).
+   * Returns full envelope on HTTP errors (does not throw on 4xx/5xx).
+   */
+  createProject(input: {
+    name: string;
+    entryFile?: string | null;
+  }): Promise<
+    ApiEnvelope<{ id: string; name: string; baseDir?: string; entryFile?: string | null }>
+  > {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid name' });
+    }
+    const body: { name: string; entryFile?: string | null } = {
+      name: input.name.trim().slice(0, 200),
+    };
+    if (input.entryFile === null) {
+      body.entryFile = null;
+    } else if (
+      typeof input.entryFile === 'string'
+      && !/[\0\r\n]/.test(input.entryFile)
+      && input.entryFile.trim()
+    ) {
+      body.entryFile = input.entryFile.trim();
+    }
+    return this.requestEnvelope('POST', '/api/projects', body);
+  }
+
   getProject(id: string): Promise<ApiEnvelope<{ id: string; name: string; baseDir?: string; entryFile?: string | null }>> {
     return this.request('GET', `/api/projects/${encodeURIComponent(id)}`);
   }

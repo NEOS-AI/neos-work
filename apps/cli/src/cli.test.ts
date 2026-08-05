@@ -244,6 +244,27 @@ describe('runCli expanded commands', () => {
     expect(lines.join('')).toContain('m1');
   });
 
+  it('memory export prints markdown', async () => {
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/memory/export')) {
+        return new Response('# Memories\n\n- note\n', {
+          status: 200,
+          headers: { 'Content-Type': 'text/markdown' },
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['memory', 'export'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('\n')).toContain('# Memories');
+  });
+
   it('media generate image', async () => {
     const fetchImpl = mockFetch((url, init) => {
       if (url.includes('/api/media/generate') && init?.method === 'POST') {

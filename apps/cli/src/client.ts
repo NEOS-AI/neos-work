@@ -250,6 +250,45 @@ export class NeosApiClient {
     return this.request('POST', '/api/memory', { body: input });
   }
 
+  /**
+   * GET /api/memory/export — Markdown export of enabled memories (text body, not JSON envelope).
+   */
+  async exportMemoriesMarkdown(): Promise<string> {
+    const url = `${this.config.serverUrl}/api/memory/export`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    try {
+      const res = await this.fetchImpl(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'text/markdown, text/plain;q=0.9, */*;q=0.1',
+          Authorization: `Bearer ${this.config.authToken}`,
+          'User-Agent': `neos-cli/${CLI_VERSION}`,
+        },
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new CliHttpError(`HTTP ${res.status}`, exitCodeFromHttp(res.status), res.status);
+      }
+      return await res.text();
+    } catch (err) {
+      if (err instanceof CliHttpError) throw err;
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new CliHttpError('Request timed out', EXIT.NETWORK);
+      }
+      const msg = err instanceof Error ? err.message : 'Network error';
+      if (/ECONNREFUSED|fetch failed|ENOTFOUND|ECONNRESET/i.test(msg)) {
+        throw new CliHttpError(
+          `Daemon unreachable at ${this.config.serverUrl}`,
+          EXIT.DAEMON_DOWN,
+        );
+      }
+      throw new CliHttpError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 500), EXIT.NETWORK);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   listMcpServers(): Promise<ApiEnvelope<unknown[]>> {
     return this.request('GET', '/api/mcp-servers');
   }
