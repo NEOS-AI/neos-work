@@ -2,1633 +2,355 @@
   {
     "name": "App",
     "kind": "function",
-    "def": "apps/web/src/App.tsx:7",
-    "file": "apps/web/src/App.tsx",
-    "importers": [
-      "apps/web/src/main.tsx",
-      "apps/desktop/src/main.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/main.tsx",
-      "apps/desktop/src/main.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "Connect",
-    "kind": "function",
-    "def": "apps/web/src/pages/Connect.tsx:6",
-    "file": "apps/web/src/pages/Connect.tsx",
-    "importers": [
-      "apps/web/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "ProjectDetail",
-    "kind": "function",
-    "def": "apps/web/src/pages/ProjectDetail.tsx:44",
-    "file": "apps/web/src/pages/ProjectDetail.tsx",
-    "importers": [
-      "apps/web/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "Projects",
-    "kind": "function",
-    "def": "apps/web/src/pages/Projects.tsx:8",
-    "file": "apps/web/src/pages/Projects.tsx",
-    "importers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "Settings",
-    "kind": "function",
-    "def": "apps/web/src/pages/Settings.tsx:35",
-    "file": "apps/web/src/pages/Settings.tsx",
-    "importers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
+    "def": "apps/desktop/src/App.tsx:31",
+    "file": "apps/desktop/src/App.tsx"
   },
   {
     "name": "App",
     "kind": "function",
-    "def": "apps/desktop/src/App.tsx:27",
-    "file": "apps/desktop/src/App.tsx",
-    "importers": [
-      "apps/web/src/main.tsx",
-      "apps/desktop/src/main.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/main.tsx",
-      "apps/desktop/src/main.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "AppRouter",
-    "kind": "local",
-    "def": "apps/desktop/src/App.tsx:68",
-    "file": "apps/desktop/src/App.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "MainLayout",
-    "kind": "local",
-    "def": "apps/desktop/src/App.tsx:79",
-    "file": "apps/desktop/src/App.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Sidebar",
-    "kind": "function",
-    "def": "apps/desktop/src/components/Sidebar.tsx:27",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "NAV_ITEMS",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:8",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "DashboardIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:154",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "SessionsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:165",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "TemplatesIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:173",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "SkillsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:183",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "DesignSystemsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:192",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "RoutinesIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:203",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "PluginsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:218",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "DeploymentsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:227",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "MediaIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:237",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "SettingsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:247",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "WorkflowsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:256",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "DomainPacksIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:268",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "ProjectsIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:278",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "HarnessesIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:288",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "BlocksIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:298",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "MemoryIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/components/Sidebar.tsx:309",
-    "file": "apps/desktop/src/components/Sidebar.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "def": "apps/web/src/App.tsx:7",
+    "file": "apps/web/src/App.tsx"
   },
   {
     "name": "ArtifactPreview",
     "kind": "function",
     "def": "apps/desktop/src/components/workflow/ArtifactPreview.tsx:83",
-    "file": "apps/desktop/src/components/workflow/ArtifactPreview.tsx",
-    "importers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
+    "file": "apps/desktop/src/components/workflow/ArtifactPreview.tsx"
   },
   {
     "name": "BlockParamForm",
     "kind": "function",
     "def": "apps/desktop/src/components/workflow/BlockParamForm.tsx:5",
-    "file": "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "BlockSelector",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/BlockSelector.tsx:29",
-    "file": "apps/desktop/src/components/workflow/BlockSelector.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "ConfirmLeaveModal",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/ConfirmLeaveModal.tsx:9",
-    "file": "apps/desktop/src/components/workflow/ConfirmLeaveModal.tsx",
-    "importers": [
-      "apps/desktop/src/pages/ProjectWorkspace.tsx",
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/ProjectWorkspace.tsx",
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "GenUIChoice",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/GenUIChoice.tsx:33",
-    "file": "apps/desktop/src/components/workflow/GenUIChoice.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "GenUIConfirmation",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/GenUIConfirmation.tsx:18",
-    "file": "apps/desktop/src/components/workflow/GenUIConfirmation.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "GenUIForm",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/GenUIForm.tsx:34",
-    "file": "apps/desktop/src/components/workflow/GenUIForm.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/PipelineRunner.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "HarnessSelector",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/HarnessSelector.tsx:9",
-    "file": "apps/desktop/src/components/workflow/HarnessSelector.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "NodeConfigPanel",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx:56",
-    "file": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
-    "importers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "ValidationList",
-    "kind": "local",
-    "def": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx:688",
-    "file": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "WorkflowWebhookSection",
-    "kind": "local",
-    "def": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx:738",
-    "file": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "PipelineRunner",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/PipelineRunner.tsx:45",
-    "file": "apps/desktop/src/components/workflow/PipelineRunner.tsx",
-    "importers": [
-      "apps/desktop/src/pages/Plugins.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Plugins.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "RevisionPanel",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/RevisionPanel.tsx:28",
-    "file": "apps/desktop/src/components/workflow/RevisionPanel.tsx",
-    "importers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "RunDetailPanel",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/RunDetailPanel.tsx:37",
-    "file": "apps/desktop/src/components/workflow/RunDetailPanel.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/RunHistoryPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/RunHistoryPanel.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "RunHistoryPanel",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx:31",
-    "file": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx",
-    "importers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "PAGE_SIZE",
-    "kind": "local",
-    "def": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx:21",
-    "file": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "RunInputsDialog",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/RunInputsDialog.tsx:43",
-    "file": "apps/desktop/src/components/workflow/RunInputsDialog.tsx",
-    "importers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "JSON_TEXT_MAX",
-    "kind": "local",
-    "def": "apps/desktop/src/components/workflow/RunInputsDialog.tsx:12",
-    "file": "apps/desktop/src/components/workflow/RunInputsDialog.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "RunLogPanel",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/RunLogPanel.tsx:131",
-    "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx",
-    "importers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/pages/WorkflowEditor.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "URL_RE",
-    "kind": "local",
-    "def": "apps/desktop/src/components/workflow/RunLogPanel.tsx:28",
-    "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "TextField",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/fields.tsx:39",
-    "file": "apps/desktop/src/components/workflow/fields.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "TextAreaField",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/fields.tsx:64",
-    "file": "apps/desktop/src/components/workflow/fields.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "NumberField",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/fields.tsx:91",
-    "file": "apps/desktop/src/components/workflow/fields.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "SelectField",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/fields.tsx:116",
-    "file": "apps/desktop/src/components/workflow/fields.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/BlockSelector.tsx",
-      "apps/desktop/src/components/workflow/HarnessSelector.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/BlockSelector.tsx",
-      "apps/desktop/src/components/workflow/HarnessSelector.tsx"
-    ],
-    "importCount": 3,
-    "jsxCount": 3
-  },
-  {
-    "name": "CheckboxField",
-    "kind": "function",
-    "def": "apps/desktop/src/components/workflow/fields.tsx:153",
-    "file": "apps/desktop/src/components/workflow/fields.tsx",
-    "importers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/BlockParamForm.tsx",
-      "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "FieldShell",
-    "kind": "local",
-    "def": "apps/desktop/src/components/workflow/fields.tsx:11",
-    "file": "apps/desktop/src/components/workflow/fields.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/components/workflow/fields.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "EngineProvider",
-    "kind": "function",
-    "def": "apps/desktop/src/hooks/useEngine.tsx:34",
-    "file": "apps/desktop/src/hooks/useEngine.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "EngineContext",
-    "kind": "local",
-    "def": "apps/desktop/src/hooks/useEngine.tsx:29",
-    "file": "apps/desktop/src/hooks/useEngine.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "DEFAULT_HOST_URL",
-    "kind": "local",
-    "def": "apps/desktop/src/hooks/useEngine.tsx:31",
-    "file": "apps/desktop/src/hooks/useEngine.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "HEALTH_CHECK_INTERVAL",
-    "kind": "local",
-    "def": "apps/desktop/src/hooks/useEngine.tsx:32",
-    "file": "apps/desktop/src/hooks/useEngine.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "ThemeProvider",
-    "kind": "function",
-    "def": "apps/desktop/src/hooks/useTheme.tsx:38",
-    "file": "apps/desktop/src/hooks/useTheme.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "ThemeContext",
-    "kind": "local",
-    "def": "apps/desktop/src/hooks/useTheme.tsx:18",
-    "file": "apps/desktop/src/hooks/useTheme.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "STORAGE_KEY",
-    "kind": "local",
-    "def": "apps/desktop/src/hooks/useTheme.tsx:20",
-    "file": "apps/desktop/src/hooks/useTheme.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "VALID_THEMES",
-    "kind": "local",
-    "def": "apps/desktop/src/hooks/useTheme.tsx:21",
-    "file": "apps/desktop/src/hooks/useTheme.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "file": "apps/desktop/src/components/workflow/BlockParamForm.tsx"
   },
   {
     "name": "Blocks",
     "kind": "function",
     "def": "apps/desktop/src/pages/Blocks.tsx:449",
-    "file": "apps/desktop/src/pages/Blocks.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
+    "file": "apps/desktop/src/pages/Blocks.tsx"
   },
   {
-    "name": "BlockModal",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Blocks.tsx:39",
-    "file": "apps/desktop/src/pages/Blocks.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Blocks.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "BlockCard",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Blocks.tsx:379",
-    "file": "apps/desktop/src/pages/Blocks.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Blocks.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Dashboard",
+    "name": "BlockSelector",
     "kind": "function",
-    "def": "apps/desktop/src/pages/Dashboard.tsx:29",
-    "file": "apps/desktop/src/pages/Dashboard.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
+    "def": "apps/desktop/src/components/workflow/BlockSelector.tsx:29",
+    "file": "apps/desktop/src/components/workflow/BlockSelector.tsx"
   },
   {
-    "name": "StatusCard",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Dashboard.tsx:341",
-    "file": "apps/desktop/src/pages/Dashboard.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Dashboard.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "QuickAction",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Dashboard.tsx:374",
-    "file": "apps/desktop/src/pages/Dashboard.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Dashboard.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Deployments",
+    "name": "CANVAS_UNDO_CAP",
     "kind": "function",
-    "def": "apps/desktop/src/pages/Deployments.tsx:49",
-    "file": "apps/desktop/src/pages/Deployments.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "DesignSystemEditor",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/DesignSystemEditor.tsx:8",
-    "file": "apps/desktop/src/pages/DesignSystemEditor.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "DesignSystems",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/DesignSystems.tsx:12",
-    "file": "apps/desktop/src/pages/DesignSystems.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "DomainPacks",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/DomainPacks.tsx:24",
-    "file": "apps/desktop/src/pages/DomainPacks.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "Harnesses",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:62",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "PACK_DOMAINS",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:24",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "PROFILES",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:25",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "MODES",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:26",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "WORKSPACES",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:27",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "WorkerCard",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:266",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Harnesses.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "WorkerModal",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:370",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Harnesses.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ModalField",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Harnesses.tsx:625",
-    "file": "apps/desktop/src/pages/Harnesses.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Harnesses.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Media",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Media.tsx:17",
-    "file": "apps/desktop/src/pages/Media.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "Memory",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Memory.tsx:175",
-    "file": "apps/desktop/src/pages/Memory.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "MemoryModal",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Memory.tsx:38",
-    "file": "apps/desktop/src/pages/Memory.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Memory.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ModeSelection",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/ModeSelection.tsx:9",
-    "file": "apps/desktop/src/pages/ModeSelection.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "HostIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/ModeSelection.tsx:142",
-    "file": "apps/desktop/src/pages/ModeSelection.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/ModeSelection.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ClientIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/ModeSelection.tsx:151",
-    "file": "apps/desktop/src/pages/ModeSelection.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/ModeSelection.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Plugins",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Plugins.tsx:46",
-    "file": "apps/desktop/src/pages/Plugins.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "RemoteMarketplaceSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Plugins.tsx:312",
-    "file": "apps/desktop/src/pages/Plugins.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Plugins.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ProjectWorkspace",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/ProjectWorkspace.tsx:45",
-    "file": "apps/desktop/src/pages/ProjectWorkspace.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "Projects",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Projects.tsx:14",
-    "file": "apps/desktop/src/pages/Projects.tsx",
-    "importers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "Routines",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Routines.tsx:17",
-    "file": "apps/desktop/src/pages/Routines.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "Sessions",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Sessions.tsx:62",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "CodeBlock",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Sessions.tsx:981",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "AVAILABLE_MODELS",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:52",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "THINKING_MODES",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:57",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "NewSessionModal",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:325",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "EmptyState",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:430",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ChatArea",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:454",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "MarkdownContent",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:953",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ThinkingBlock",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:1032",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ToolStepCard",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:1115",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ScreenshotToggle",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:1260",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "AgentPlanCard",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Sessions.tsx:1289",
-    "file": "apps/desktop/src/pages/Sessions.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Sessions.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Settings",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Settings.tsx:12",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/App.tsx",
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "MediaStatusSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:281",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "CollabStatusSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:453",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "EngineStatusSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:603",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ApiKeyInput",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:707",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "EyeIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:884",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "EyeOffIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:893",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "SimpleKeyInput",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:906",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "McpServersSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:1035",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "NeosMcpExposeSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:1834",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "CliAgentsSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:1959",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "DevToolsSection",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Settings.tsx:2089",
-    "file": "apps/desktop/src/pages/Settings.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Skills",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Skills.tsx:17",
-    "file": "apps/desktop/src/pages/Skills.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "SkillCard",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Skills.tsx:655",
-    "file": "apps/desktop/src/pages/Skills.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Skills.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "ScanIcon",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/Skills.tsx:827",
-    "file": "apps/desktop/src/pages/Skills.tsx",
-    "importers": [],
-    "jsxUsers": [
-      "apps/desktop/src/pages/Skills.tsx"
-    ],
-    "importCount": 0,
-    "jsxCount": 1
-  },
-  {
-    "name": "Templates",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Templates.tsx:27",
-    "file": "apps/desktop/src/pages/Templates.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "WorkflowNodeComponent",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/WorkflowEditor.tsx:107",
-    "file": "apps/desktop/src/pages/WorkflowEditor.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "WorkflowEditor",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/WorkflowEditor.tsx:165",
-    "file": "apps/desktop/src/pages/WorkflowEditor.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "NODE_TYPES_LIST",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/WorkflowEditor.tsx:71",
-    "file": "apps/desktop/src/pages/WorkflowEditor.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "PALETTE_TABS",
-    "kind": "local",
-    "def": "apps/desktop/src/pages/WorkflowEditor.tsx:92",
-    "file": "apps/desktop/src/pages/WorkflowEditor.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "Workflows",
-    "kind": "function",
-    "def": "apps/desktop/src/pages/Workflows.tsx:31",
-    "file": "apps/desktop/src/pages/Workflows.tsx",
-    "importers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "jsxUsers": [
-      "apps/desktop/src/App.tsx"
-    ],
-    "importCount": 1,
-    "jsxCount": 1
-  },
-  {
-    "name": "McpInstallPanel",
-    "kind": "function",
-    "def": "packages/ui-app/src/McpInstallPanel.tsx:36",
-    "file": "packages/ui-app/src/McpInstallPanel.tsx",
-    "importers": [
-      "apps/web/src/pages/Settings.tsx",
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/pages/Settings.tsx",
-      "apps/desktop/src/pages/Settings.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
-  },
-  {
-    "name": "SnippetBlock",
-    "kind": "local",
-    "def": "packages/ui-app/src/McpInstallPanel.tsx:247",
-    "file": "packages/ui-app/src/McpInstallPanel.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
-  },
-  {
-    "name": "PresencePeersBar",
-    "kind": "function",
-    "def": "packages/ui-app/src/PresencePeersBar.tsx:98",
-    "file": "packages/ui-app/src/PresencePeersBar.tsx",
-    "importers": [
-      "apps/web/src/pages/ProjectDetail.tsx",
-      "apps/desktop/src/pages/ProjectWorkspace.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/pages/ProjectDetail.tsx",
-      "apps/desktop/src/pages/ProjectWorkspace.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
+    "def": "packages/design-editor/src/DesignEditor.tsx:52",
+    "file": "packages/design-editor/src/DesignEditor.tsx"
   },
   {
     "name": "CanvasOverlay",
     "kind": "function",
     "def": "packages/design-editor/src/CanvasOverlay.tsx:152",
-    "file": "packages/design-editor/src/CanvasOverlay.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "file": "packages/design-editor/src/CanvasOverlay.tsx"
+  },
+  {
+    "name": "CheckboxField",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/fields.tsx:153",
+    "file": "apps/desktop/src/components/workflow/fields.tsx"
+  },
+  {
+    "name": "CodeBlock",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Sessions.tsx:1390",
+    "file": "apps/desktop/src/pages/Sessions.tsx"
   },
   {
     "name": "CodeEditor",
     "kind": "function",
     "def": "packages/design-editor/src/CodeEditor.tsx:37",
-    "file": "packages/design-editor/src/CodeEditor.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "file": "packages/design-editor/src/CodeEditor.tsx"
+  },
+  {
+    "name": "ConfirmLeaveModal",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/ConfirmLeaveModal.tsx:9",
+    "file": "apps/desktop/src/components/workflow/ConfirmLeaveModal.tsx"
+  },
+  {
+    "name": "Connect",
+    "kind": "function",
+    "def": "apps/web/src/pages/Connect.tsx:6",
+    "file": "apps/web/src/pages/Connect.tsx"
+  },
+  {
+    "name": "Dashboard",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Dashboard.tsx:29",
+    "file": "apps/desktop/src/pages/Dashboard.tsx"
+  },
+  {
+    "name": "Deployments",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Deployments.tsx:49",
+    "file": "apps/desktop/src/pages/Deployments.tsx"
   },
   {
     "name": "DesignEditor",
     "kind": "function",
     "def": "packages/design-editor/src/DesignEditor.tsx:167",
-    "file": "packages/design-editor/src/DesignEditor.tsx",
-    "importers": [
-      "apps/web/src/pages/ProjectDetail.tsx",
-      "apps/desktop/src/pages/ProjectWorkspace.tsx"
-    ],
-    "jsxUsers": [
-      "apps/web/src/pages/ProjectDetail.tsx",
-      "apps/desktop/src/pages/ProjectWorkspace.tsx"
-    ],
-    "importCount": 2,
-    "jsxCount": 2
+    "file": "packages/design-editor/src/DesignEditor.tsx"
   },
   {
-    "name": "CANVAS_UNDO_CAP",
-    "kind": "const",
-    "def": "packages/design-editor/src/DesignEditor.tsx:52",
-    "file": "packages/design-editor/src/DesignEditor.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "name": "DesignSystemEditor",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/DesignSystemEditor.tsx:8",
+    "file": "apps/desktop/src/pages/DesignSystemEditor.tsx"
+  },
+  {
+    "name": "DesignSystems",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/DesignSystems.tsx:12",
+    "file": "apps/desktop/src/pages/DesignSystems.tsx"
+  },
+  {
+    "name": "DomainPacks",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/DomainPacks.tsx:24",
+    "file": "apps/desktop/src/pages/DomainPacks.tsx"
+  },
+  {
+    "name": "EngineProvider",
+    "kind": "function",
+    "def": "apps/desktop/src/hooks/useEngine.tsx:34",
+    "file": "apps/desktop/src/hooks/useEngine.tsx"
+  },
+  {
+    "name": "GenUIChoice",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/GenUIChoice.tsx:33",
+    "file": "apps/desktop/src/components/workflow/GenUIChoice.tsx"
+  },
+  {
+    "name": "GenUIConfirmation",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/GenUIConfirmation.tsx:18",
+    "file": "apps/desktop/src/components/workflow/GenUIConfirmation.tsx"
+  },
+  {
+    "name": "GenUIForm",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/GenUIForm.tsx:34",
+    "file": "apps/desktop/src/components/workflow/GenUIForm.tsx"
+  },
+  {
+    "name": "Harnesses",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Harnesses.tsx:62",
+    "file": "apps/desktop/src/pages/Harnesses.tsx"
+  },
+  {
+    "name": "HarnessSelector",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/HarnessSelector.tsx:9",
+    "file": "apps/desktop/src/components/workflow/HarnessSelector.tsx"
   },
   {
     "name": "LayersPanel",
     "kind": "function",
     "def": "packages/design-editor/src/LayersPanel.tsx:224",
-    "file": "packages/design-editor/src/LayersPanel.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "file": "packages/design-editor/src/LayersPanel.tsx"
   },
   {
-    "name": "LayerRow",
-    "kind": "local",
-    "def": "packages/design-editor/src/LayersPanel.tsx:55",
-    "file": "packages/design-editor/src/LayersPanel.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "name": "McpInstallPanel",
+    "kind": "function",
+    "def": "packages/ui-app/src/McpInstallPanel.tsx:36",
+    "file": "packages/ui-app/src/McpInstallPanel.tsx"
+  },
+  {
+    "name": "Media",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Media.tsx:27",
+    "file": "apps/desktop/src/pages/Media.tsx"
+  },
+  {
+    "name": "Memory",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Memory.tsx:175",
+    "file": "apps/desktop/src/pages/Memory.tsx"
+  },
+  {
+    "name": "ModeSelection",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/ModeSelection.tsx:9",
+    "file": "apps/desktop/src/pages/ModeSelection.tsx"
+  },
+  {
+    "name": "NodeConfigPanel",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx:56",
+    "file": "apps/desktop/src/components/workflow/NodeConfigPanel.tsx"
+  },
+  {
+    "name": "NumberField",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/fields.tsx:91",
+    "file": "apps/desktop/src/components/workflow/fields.tsx"
+  },
+  {
+    "name": "PipelineRunner",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/PipelineRunner.tsx:45",
+    "file": "apps/desktop/src/components/workflow/PipelineRunner.tsx"
+  },
+  {
+    "name": "Plugins",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Plugins.tsx:46",
+    "file": "apps/desktop/src/pages/Plugins.tsx"
+  },
+  {
+    "name": "PresencePeersBar",
+    "kind": "function",
+    "def": "packages/ui-app/src/PresencePeersBar.tsx:98",
+    "file": "packages/ui-app/src/PresencePeersBar.tsx"
   },
   {
     "name": "PreviewFrame",
     "kind": "function",
     "def": "packages/design-editor/src/PreviewFrame.tsx:65",
-    "file": "packages/design-editor/src/PreviewFrame.tsx",
-    "importers": [],
-    "jsxUsers": [],
-    "importCount": 0,
-    "jsxCount": 0
+    "file": "packages/design-editor/src/PreviewFrame.tsx"
+  },
+  {
+    "name": "ProjectDetail",
+    "kind": "function",
+    "def": "apps/web/src/pages/ProjectDetail.tsx:44",
+    "file": "apps/web/src/pages/ProjectDetail.tsx"
+  },
+  {
+    "name": "Projects",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Projects.tsx:14",
+    "file": "apps/desktop/src/pages/Projects.tsx"
+  },
+  {
+    "name": "Projects",
+    "kind": "function",
+    "def": "apps/web/src/pages/Projects.tsx:18",
+    "file": "apps/web/src/pages/Projects.tsx"
+  },
+  {
+    "name": "ProjectWorkspace",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/ProjectWorkspace.tsx:45",
+    "file": "apps/desktop/src/pages/ProjectWorkspace.tsx"
+  },
+  {
+    "name": "RevisionPanel",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/RevisionPanel.tsx:28",
+    "file": "apps/desktop/src/components/workflow/RevisionPanel.tsx"
+  },
+  {
+    "name": "Routines",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Routines.tsx:17",
+    "file": "apps/desktop/src/pages/Routines.tsx"
+  },
+  {
+    "name": "RunDetailPanel",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/RunDetailPanel.tsx:37",
+    "file": "apps/desktop/src/components/workflow/RunDetailPanel.tsx"
+  },
+  {
+    "name": "RunHistoryPanel",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx:31",
+    "file": "apps/desktop/src/components/workflow/RunHistoryPanel.tsx"
+  },
+  {
+    "name": "RunInputsDialog",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/RunInputsDialog.tsx:43",
+    "file": "apps/desktop/src/components/workflow/RunInputsDialog.tsx"
+  },
+  {
+    "name": "RunLogPanel",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/RunLogPanel.tsx:131",
+    "file": "apps/desktop/src/components/workflow/RunLogPanel.tsx"
+  },
+  {
+    "name": "SelectField",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/fields.tsx:116",
+    "file": "apps/desktop/src/components/workflow/fields.tsx"
+  },
+  {
+    "name": "Sessions",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Sessions.tsx:62",
+    "file": "apps/desktop/src/pages/Sessions.tsx"
+  },
+  {
+    "name": "Settings",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Settings.tsx:12",
+    "file": "apps/desktop/src/pages/Settings.tsx"
+  },
+  {
+    "name": "Settings",
+    "kind": "function",
+    "def": "apps/web/src/pages/Settings.tsx:35",
+    "file": "apps/web/src/pages/Settings.tsx"
+  },
+  {
+    "name": "Sidebar",
+    "kind": "function",
+    "def": "apps/desktop/src/components/Sidebar.tsx:27",
+    "file": "apps/desktop/src/components/Sidebar.tsx"
+  },
+  {
+    "name": "Skills",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Skills.tsx:17",
+    "file": "apps/desktop/src/pages/Skills.tsx"
+  },
+  {
+    "name": "Templates",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Templates.tsx:27",
+    "file": "apps/desktop/src/pages/Templates.tsx"
+  },
+  {
+    "name": "TextAreaField",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/fields.tsx:64",
+    "file": "apps/desktop/src/components/workflow/fields.tsx"
+  },
+  {
+    "name": "TextField",
+    "kind": "function",
+    "def": "apps/desktop/src/components/workflow/fields.tsx:39",
+    "file": "apps/desktop/src/components/workflow/fields.tsx"
+  },
+  {
+    "name": "ThemeProvider",
+    "kind": "function",
+    "def": "apps/desktop/src/hooks/useTheme.tsx:38",
+    "file": "apps/desktop/src/hooks/useTheme.tsx"
+  },
+  {
+    "name": "WorkflowEditor",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/WorkflowEditor.tsx:165",
+    "file": "apps/desktop/src/pages/WorkflowEditor.tsx"
+  },
+  {
+    "name": "WorkflowNodeComponent",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/WorkflowEditor.tsx:107",
+    "file": "apps/desktop/src/pages/WorkflowEditor.tsx"
+  },
+  {
+    "name": "Workflows",
+    "kind": "function",
+    "def": "apps/desktop/src/pages/Workflows.tsx:31",
+    "file": "apps/desktop/src/pages/Workflows.tsx"
   }
 ]

@@ -3,141 +3,148 @@
     {
       "path": "/",
       "element": "Connect",
-      "def": "apps/web/src/App.tsx:11"
+      "def": "apps/web/src/App.tsx:11",
+      "surface": "web"
     },
     {
       "path": "/projects",
       "element": "Projects",
-      "def": "apps/web/src/App.tsx:12"
+      "def": "apps/web/src/App.tsx:12",
+      "surface": "web"
     },
     {
       "path": "/projects/:id",
       "element": "ProjectDetail",
-      "def": "apps/web/src/App.tsx:13"
+      "def": "apps/web/src/App.tsx:13",
+      "surface": "web"
     },
     {
       "path": "/settings",
       "element": "Settings",
-      "def": "apps/web/src/App.tsx:14"
+      "def": "apps/web/src/App.tsx:14",
+      "surface": "web"
     },
     {
       "path": "*",
       "element": "Navigate",
-      "def": "apps/web/src/App.tsx:15"
+      "def": "apps/web/src/App.tsx:15",
+      "surface": "web"
     }
   ],
   "desktop": [
     {
-      "path": "/",
-      "element": "Dashboard",
-      "def": "apps/desktop/src/App.tsx:45"
-    },
-    {
       "path": "/sessions",
       "element": "Sessions",
-      "def": "apps/desktop/src/App.tsx:46"
+      "def": "apps/desktop/src/App.tsx:50",
+      "surface": "desktop"
     },
     {
       "path": "/workflows",
       "element": "Workflows",
-      "def": "apps/desktop/src/App.tsx:47"
+      "def": "apps/desktop/src/App.tsx:51",
+      "surface": "desktop"
     },
     {
       "path": "/workflows/:id",
       "element": "WorkflowEditor",
-      "def": "apps/desktop/src/App.tsx:48"
+      "def": "apps/desktop/src/App.tsx:52",
+      "surface": "desktop"
     },
     {
       "path": "/projects",
       "element": "Projects",
-      "def": "apps/desktop/src/App.tsx:49"
+      "def": "apps/desktop/src/App.tsx:53",
+      "surface": "desktop"
     },
     {
       "path": "/projects/:id",
       "element": "ProjectWorkspace",
-      "def": "apps/desktop/src/App.tsx:50"
+      "def": "apps/desktop/src/App.tsx:54",
+      "surface": "desktop"
     },
     {
       "path": "/harnesses",
       "element": "Harnesses",
-      "def": "apps/desktop/src/App.tsx:51"
+      "def": "apps/desktop/src/App.tsx:55",
+      "surface": "desktop"
     },
     {
       "path": "/domain-packs",
       "element": "DomainPacks",
-      "def": "apps/desktop/src/App.tsx:52"
+      "def": "apps/desktop/src/App.tsx:56",
+      "surface": "desktop"
     },
     {
       "path": "/blocks",
       "element": "Blocks",
-      "def": "apps/desktop/src/App.tsx:53"
+      "def": "apps/desktop/src/App.tsx:57",
+      "surface": "desktop"
     },
     {
       "path": "/templates",
       "element": "Templates",
-      "def": "apps/desktop/src/App.tsx:54"
+      "def": "apps/desktop/src/App.tsx:58",
+      "surface": "desktop"
     },
     {
       "path": "/skills",
       "element": "Skills",
-      "def": "apps/desktop/src/App.tsx:55"
+      "def": "apps/desktop/src/App.tsx:59",
+      "surface": "desktop"
     },
     {
       "path": "/memory",
       "element": "Memory",
-      "def": "apps/desktop/src/App.tsx:56"
+      "def": "apps/desktop/src/App.tsx:60",
+      "surface": "desktop"
     },
     {
       "path": "/settings",
       "element": "Settings",
-      "def": "apps/desktop/src/App.tsx:57"
+      "def": "apps/desktop/src/App.tsx:61",
+      "surface": "desktop"
     },
     {
       "path": "/design-systems",
       "element": "DesignSystems",
-      "def": "apps/desktop/src/App.tsx:58"
+      "def": "apps/desktop/src/App.tsx:62",
+      "surface": "desktop"
     },
     {
       "path": "/design-systems/:id",
       "element": "DesignSystemEditor",
-      "def": "apps/desktop/src/App.tsx:59"
+      "def": "apps/desktop/src/App.tsx:63",
+      "surface": "desktop"
     },
     {
       "path": "/routines",
       "element": "Routines",
-      "def": "apps/desktop/src/App.tsx:60"
+      "def": "apps/desktop/src/App.tsx:64",
+      "surface": "desktop"
     },
     {
       "path": "/plugins",
       "element": "Plugins",
-      "def": "apps/desktop/src/App.tsx:61"
+      "def": "apps/desktop/src/App.tsx:65",
+      "surface": "desktop"
     },
     {
       "path": "/deployments",
       "element": "Deployments",
-      "def": "apps/desktop/src/App.tsx:62"
+      "def": "apps/desktop/src/App.tsx:66",
+      "surface": "desktop"
     },
     {
       "path": "/media",
       "element": "Media",
-      "def": "apps/desktop/src/App.tsx:63"
+      "def": "apps/desktop/src/App.tsx:67",
+      "surface": "desktop"
+    },
+    {
+      "path": "/",
+      "element": "Dashboard",
+      "def": "apps/desktop/src/App.tsx:49",
+      "surface": "desktop"
     }
-  ],
-  "linkTargets": [
-    "/blocks",
-    "/deployments",
-    "/design-systems",
-    "/design-systems/:param",
-    "/media",
-    "/plugins",
-    "/projects",
-    "/projects/:param",
-    "/routines",
-    "/sessions",
-    "/settings",
-    "/skills",
-    "/templates",
-    "/workflows",
-    "/workflows/:param"
   ]
 }

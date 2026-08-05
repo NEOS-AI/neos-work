@@ -1,25 +1,25 @@
 # Audit progress
 
-## Phase 1 inventories — COMPLETE (regenerated 2026-08-05)
+## Phase 1 inventories — COMPLETE (refreshed 2026-08-05 post-remediation)
 
-- [x] `audit/backend-endpoints.md` — **211** endpoints
-- [x] `audit/frontend-calls.md` — **220** call sites (web=24, desktop=170, cli=26)
-- [x] `audit/components.md` — **132** component-like symbols
+Regenerate anytime: `node tools/audit/regen.mjs`
+
+- [x] `audit/backend-endpoints.md` — **208** endpoints (was 211; media image/audio removed)
+- [x] `audit/frontend-calls.md` — **224** call sites (web=36, desktop=159, cli=29)
+- [x] `audit/components.md` — **59** exported PascalCase component symbols (stricter heuristic)
 - [x] `audit/routes.md` — web **5** + desktop **19** = **24**
 
-## Phase 2 cross-reference — COMPLETE
+## Phase 2 cross-reference — COMPLETE (refreshed)
 
-- Orphans: 23 verified after query-template false-positive removal (`_orphans_verified.json`)
-- Phantoms: none confirmed (query-string template artifacts only)
-- Contract: CORS `x-neos-session-id` **present** in allowHeaders (stale prior finding withdrawn)
-- Product gaps: media generate UI missing; mkdir UI missing; web conversations missing
-- Dead client methods catalogued (engine methods tests-only)
-- Bare buttons/forms: 0
-- Dual-surface web thin client confirmed
+- Orphans: **45** with no FE/CLI call site (`_orphans_verified.json`) — many intentional (harness alias, agent tools, ops)
+- Phantoms: **0** confirmed (query-string `${qs}` / `${q}` templates match backend)
+- Contract: CORS `x-neos-session-id` present; write `hash` fail-closed on web
+- Prior product gaps (media generate, mkdir, web conversations, dead clients) **remediated**
+- Dual-surface web thin client confirmed (core project lifecycle now includes create/rename/delete)
 
 ## Phase 3
 
-- [x] `audit/report.md`
+- [x] `audit/report.md` — rewritten as post-remediation status + remaining orphans
 
 ## P2 remediation (implementation) — COMPLETE
 
@@ -38,21 +38,24 @@
 | Workspace picker | New session modal: select + create + edit name/path + delete |
 | Media Sunset | **Removed** POST /image and /audio after Sunset; MediaNode → /generate |
 | Restore dirty flag | WorkflowEditor resets savedDraft after server restore |
-| Thin web dual-surface | Intentional core; web can **create projects** + conversations/mkdir |
+| Thin web dual-surface | Intentional core; web create + conversations/mkdir + **rename/delete** |
 | Memory export | CLI `neos memory export` |
-| Web project delete/rename | `WebApiClient.updateProject`/`deleteProject` + Projects list UI (confirm delete, inline rename) |
+| Web project delete/rename | `WebApiClient.updateProject`/`deleteProject` + Projects list UI |
+| Audit inventory refresh | `tools/audit/regen.mjs` + updated report/counts |
 
 ## Corrections vs earlier draft audit
 
 | Prior claim | Current evidence |
 |-------------|------------------|
-| CORS missing `x-neos-session-id` | **False** — `index.ts:94` includes it |
-| Web `deleteFile` unused | **False** — `ProjectDetail.tsx:720` wires it |
-| Project conversations unused by all FE | **False for desktop** — `ProjectWorkspace.tsx` uses API; **true for web** |
-| Web write lacks hash validation | Partially outdated — `writeFile` uses `parseProjectFileWriteResponse`; UI still has soft contentHash fallback |
+| CORS missing `x-neos-session-id` | **False** — allowHeaders includes it |
+| Web `deleteFile` unused | **False** — ProjectDetail wires it |
+| Project conversations unused by all FE | **False** — desktop + web now |
+| Web write lacks hash validation | **False** — shared parse; UI fail-closed |
+| POST /api/media/image\|audio needed | **False** — hard-deleted after Sunset |
+| Web cannot create/rename/delete projects | **False** — create + rename + delete on Projects list |
 
 ## Method notes
 
-- Backend: Hono `router.method('path')` + dual harness mount expansion
-- Frontend: fetch/request path extraction; SSE fetch streams included
-- Matching: template normalization; query suffixes verified manually
+- Backend: Hono `router.method('path')` per mounted var; dual `/api/harness` + `/api/harnesses`; default-import alias (e.g. `pluginsRoute` → `plugins`)
+- Frontend: `request`/`requestEnvelope` + `fetch`/`fetchImpl` + variable-URL ternaries; SSE streams included
+- Matching: `${qs}`/`${q}` query suffixes stripped; path params → `:param`; splat `files/*`

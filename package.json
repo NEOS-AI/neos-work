@@ -19,6 +19,7 @@
     "inventory": "node tools/inventory/inventory.mjs",
     "inventory:check": "node tools/inventory/inventory.mjs --check",
     "inventory:write": "node tools/inventory/inventory.mjs --write",
+    "audit:regen": "node tools/audit/regen.mjs",
     "e2e:smoke": "node e2e/smoke/run.mjs",
     "e2e:contract": "pnpm --filter @neos-work/server exec vitest run src/routes/contract-fe-be.test.ts",
     "e2e:multi-replica": "node e2e/multi-replica/run.mjs",
