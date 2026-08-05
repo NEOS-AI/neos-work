@@ -4,12 +4,16 @@ import userEvent from '@testing-library/user-event';
 
 const listDomainPacks = vi.fn();
 const installDomainPackFromPath = vi.fn();
+const installDomainPackFromZip = vi.fn();
+const validateDomainPackManifest = vi.fn();
 const toggleDomainPack = vi.fn();
 const deleteDomainPack = vi.fn();
 
 const client = {
   listDomainPacks,
   installDomainPackFromPath,
+  installDomainPackFromZip,
+  validateDomainPackManifest,
   toggleDomainPack,
   deleteDomainPack,
 };
@@ -56,6 +60,8 @@ describe('DomainPacks page', () => {
   beforeEach(() => {
     listDomainPacks.mockReset();
     installDomainPackFromPath.mockReset();
+    installDomainPackFromZip.mockReset();
+    validateDomainPackManifest.mockReset();
     toggleDomainPack.mockReset();
     deleteDomainPack.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -209,5 +215,73 @@ describe('DomainPacks page', () => {
     await waitFor(() => expect(screen.getByText('Legal')).toBeInTheDocument());
     await user.click(screen.getAllByRole('button', { name: 'Uninstall' })[0]!);
     await waitFor(() => expect(screen.getByText('still in use')).toBeInTheDocument());
+  });
+
+  it('installs from zip file input', async () => {
+    const user = userEvent.setup();
+    listDomainPacks.mockResolvedValue({ ok: true, data: samplePacks });
+    installDomainPackFromZip.mockResolvedValue({ ok: true, data: { id: 'from-zip' } });
+    render(<DomainPacks />);
+    await waitFor(() => expect(screen.getByTestId('domain-pack-install-zip')).toBeInTheDocument());
+    const input = screen.getByTestId('domain-pack-zip-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x50, 0x4b])], 'pack.zip', { type: 'application/zip' });
+    await user.upload(input, file);
+    await waitFor(() => {
+      expect(installDomainPackFromZip).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('domain-pack-message')).toHaveTextContent(/from-zip/);
+    });
+  });
+
+  it('validates pack.json via file input', async () => {
+    listDomainPacks.mockResolvedValue({ ok: true, data: [] });
+    validateDomainPackManifest.mockResolvedValue({
+      ok: true,
+      data: { id: 'demo', name: 'Demo Pack', workerCount: 2, blockCount: 3, version: '1.2.0' },
+    });
+    render(<DomainPacks />);
+    await waitFor(() => expect(screen.getByTestId('domain-pack-validate')).toBeInTheDocument());
+    const input = screen.getByTestId('domain-pack-validate-input') as HTMLInputElement;
+    const raw = JSON.stringify({ id: 'demo', name: 'Demo Pack', workers: [], blocks: [] });
+    const file = new File([raw], 'pack.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => raw });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(validateDomainPackManifest).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('domain-pack-message')).toHaveTextContent(/Valid: Demo Pack/);
+      expect(screen.getByTestId('domain-pack-message')).toHaveTextContent(/2 workers/);
+    });
+  });
+
+  it('surfaces scrubbed validate and zip errors', async () => {
+    listDomainPacks.mockResolvedValue({ ok: true, data: [] });
+    validateDomainPackManifest.mockResolvedValue({
+      ok: false,
+      error: `invalid${'\n'}schema${'\0'}`,
+    });
+    render(<DomainPacks />);
+    await waitFor(() => expect(screen.getByTestId('domain-pack-validate-input')).toBeInTheDocument());
+    const vInput = screen.getByTestId('domain-pack-validate-input') as HTMLInputElement;
+    const jsonFile = new File(['{"id":"x"}'], 'pack.json', { type: 'application/json' });
+    Object.defineProperty(jsonFile, 'text', { value: async () => '{"id":"x"}' });
+    fireEvent.change(vInput, { target: { files: [jsonFile] } });
+    await waitFor(() => {
+      expect(screen.getByTestId('domain-pack-message')).toHaveTextContent(/invalid schema/);
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    installDomainPackFromZip.mockResolvedValue({ ok: false, error: `zip${'\n'}bad` });
+    const zInput = screen.getByTestId('domain-pack-zip-input') as HTMLInputElement;
+    fireEvent.change(zInput, {
+      target: {
+        files: [new File([new Uint8Array([0x50, 0x4b])], 'pack.zip', { type: 'application/zip' })],
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('domain-pack-message')).toHaveTextContent(/zip bad/);
+    });
   });
 });

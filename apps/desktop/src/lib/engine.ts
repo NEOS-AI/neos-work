@@ -3399,10 +3399,86 @@ export class EngineClient {
     return readApiResponse(res);
   }
   async installDomainPackFromPath(dirPath: string): Promise<ApiResponse<Record<string, unknown>>> {
+    if (typeof dirPath !== 'string' || /[\0\r\n]/.test(dirPath) || !dirPath.trim()) {
+      return { ok: false, error: 'Invalid path' };
+    }
     const res = await fetch(`${this.baseUrl}/api/domain-packs/install`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({ path: dirPath }),
+      body: JSON.stringify({ path: dirPath.trim() }),
+    });
+    return readApiResponse(res);
+  }
+
+  /**
+   * POST /api/domain-packs/install-zip — multipart `file` (or raw zip).
+   * Max ~10 MiB (server DOMAIN_PACK_ZIP_MAX_BYTES).
+   */
+  async installDomainPackFromZip(
+    zip: Blob | File,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    try {
+      if (!zip || typeof (zip as Blob).size !== 'number') {
+        return { ok: false, error: 'Invalid zip' };
+      }
+      if (zip.size <= 0) return { ok: false, error: 'Empty zip' };
+      if (zip.size > 10 * 1024 * 1024) return { ok: false, error: 'zip too large' };
+      const form = new FormData();
+      const name =
+        zip instanceof File && typeof zip.name === 'string' && zip.name.trim()
+          ? zip.name.replace(/[\0\r\n]/g, '_').slice(0, 200)
+          : 'pack.zip';
+      form.append('file', zip, name);
+      // Auth only — browser sets multipart boundary
+      const headers = { ...this.getHeaders() };
+      delete headers['Content-Type'];
+      const res = await fetch(`${this.baseUrl}/api/domain-packs/install-zip`, {
+        method: 'POST',
+        headers,
+        body: form,
+      });
+      return readApiResponse(res);
+    } catch (err) {
+      return {
+        ok: false,
+        error: scrubApiErrorMessage(
+          err instanceof Error ? err.message : 'Install failed',
+          'Install failed',
+        ),
+      };
+    }
+  }
+
+  /**
+   * POST /api/domain-packs/validate — parse pack.json / manifest without installing.
+   */
+  async validateDomainPackManifest(
+    manifest: unknown,
+  ): Promise<
+    ApiResponse<{
+      id?: string;
+      name?: string;
+      workerCount?: number;
+      blockCount?: number;
+      version?: string;
+    }>
+  > {
+    if (manifest == null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+      return { ok: false, error: 'Invalid manifest' };
+    }
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/validate`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ manifest }),
+    });
+    return readApiResponse(res);
+  }
+
+  async getDomainPack(id: string): Promise<ApiResponse<Record<string, unknown>>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('pack id');
+    const res = await fetch(`${this.baseUrl}/api/domain-packs/${seg}`, {
+      headers: this.getHeaders(),
     });
     return readApiResponse(res);
   }

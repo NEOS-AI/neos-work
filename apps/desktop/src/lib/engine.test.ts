@@ -989,6 +989,39 @@ describe('EngineClient', () => {
     await client.listDomainPacks();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/domain-packs$/);
 
+    fetchMock.mockClear();
+    await expect(client.validateDomainPackManifest(null)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid manifest',
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { id: 'p1', name: 'P', workerCount: 1, blockCount: 0, version: '1' },
+      }),
+    );
+    await client.validateDomainPackManifest({ id: 'p1', name: 'P' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/domain-packs\/validate$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    fetchMock.mockClear();
+    await client.getDomainPack('pack-1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/domain-packs\/pack-1$/);
+
+    fetchMock.mockClear();
+    await expect(client.installDomainPackFromZip(new Blob([]))).resolves.toMatchObject({
+      ok: false,
+      error: 'Empty zip',
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'zip-pack' } }));
+    const zipBlob = new Blob([new Uint8Array([0x50, 0x4b])], { type: 'application/zip' });
+    await client.installDomainPackFromZip(zipBlob);
+    const zipCall = fetchMock.mock.calls.at(-1)!;
+    expect(String(zipCall[0])).toMatch(/\/api\/domain-packs\/install-zip$/);
+    expect(zipCall[1].method).toBe('POST');
+    expect(zipCall[1].body).toBeInstanceOf(FormData);
+    expect((zipCall[1].headers as Record<string, string>)['Content-Type']).toBeUndefined();
+
     // When workers API fails, listHarnesses falls back to harness alias
     fetchMock.mockClear();
     fetchMock

@@ -44,6 +44,7 @@ Regenerate anytime: `node tools/audit/regen.mjs`
 | Audit inventory refresh | `tools/audit/regen.mjs` + updated report/counts |
 | Connection probes | Desktop `connectionTest` + Settings UI (ollama/openai/anthropic/cli-agents/url) |
 | MCP presets list | Desktop `listMcpPresets` + Settings presets line |
+| Domain pack validate/zip | `validateDomainPackManifest` + `installDomainPackFromZip` + DomainPacks UI |
 
 ## Corrections vs earlier draft audit
 

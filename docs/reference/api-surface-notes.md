@@ -34,7 +34,6 @@ These exist on the server but are **not** product UI entry points (or are supers
 | `GET /api/media/jobs` (list) | Clients poll **`GET /api/media/jobs/:id`** when generate returns `jobId` |
 | `GET /api/webhook/:workflowId/rate-limit` | Rate limit also embedded in **`GET …/secret`** (UI uses secret path) |
 | `POST /api/workflow/migrate` | Ops / dry-run migration |
-| `POST /api/domain-packs/install-zip` | Zip install path; UI may use other install flows |
 | `PATCH /api/live-artifacts/:id`, `GET …/preview`, `GET …/refreshes` | Partial live-artifact surface |
 | `/api/tools/live-artifacts/*` | **Agent tool-token only** |
 | Detail GETs (`/session/:id`, `/models`, `/workers/:id`, …) | List + action routes used; single-resource GET often unused |
@@ -48,6 +47,9 @@ These exist on the server but are **not** product UI entry points (or are supers
 | `GET /api/memory/export` | CLI `neos memory export` |
 | Web project create / rename / delete | `WebApiClient` + Projects page |
 | Media generate | Desktop Media page + CLI; unified `/generate` only |
+| `POST /api/domain-packs/validate` | Domain Packs **Validate pack.json…** |
+| `POST /api/domain-packs/install-zip` | Domain Packs **Install from zip…** |
+| `GET /api/domain-packs/:id` | Desktop `getDomainPack` client (detail) |
 
 ## Deprecations removed from desktop client
 

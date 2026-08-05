@@ -1,9 +1,9 @@
 /**
- * Domain Packs UI — list built-in + custom packs, install from path, enable/disable.
+ * Domain Packs UI — list built-in + custom packs, install from path/zip, validate, enable/disable.
  * PLAN_FOR_V0_5_0 Task 15.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
@@ -21,6 +21,34 @@ type PackRow = {
   sourcePath?: string;
 };
 
+const ZIP_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Read text from a Blob/File across browsers and jsdom (File#text may be missing). */
+async function readBlobText(blob: Blob): Promise<string> {
+  const withText = blob as Blob & { text?: () => Promise<string> };
+  if (typeof withText.text === 'function') {
+    try {
+      return await withText.text();
+    } catch {
+      // fall through
+    }
+  }
+  if (typeof blob.arrayBuffer === 'function') {
+    try {
+      const buf = await blob.arrayBuffer();
+      return new TextDecoder().decode(buf);
+    } catch {
+      // fall through
+    }
+  }
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsText(blob);
+  });
+}
+
 export function DomainPacks() {
   const { t } = useTranslation('common');
   const { client } = useEngine();
@@ -30,6 +58,8 @@ export function DomainPacks() {
   const [installPath, setInstallPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+  const validateInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     if (!client) return;
@@ -73,7 +103,7 @@ export function DomainPacks() {
     try {
       const res = await client.installDomainPackFromPath(path);
       if (res.ok) {
-        setMessage(`Installed pack successfully`);
+        setMessage('Installed pack successfully');
         setInstallPath('');
         await load();
       } else {
@@ -89,6 +119,95 @@ export function DomainPacks() {
       setMessage(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleInstallZip = async (file: File | null) => {
+    if (!client || busy || !file) return;
+    if (file.size <= 0) {
+      setMessage('Empty zip file');
+      return;
+    }
+    if (file.size > ZIP_MAX_BYTES) {
+      setMessage('Zip too large (max 10 MiB)');
+      return;
+    }
+    const nameOk = file.name.toLowerCase().endsWith('.zip') || file.type.includes('zip');
+    if (!nameOk && file.type && !file.type.includes('octet-stream')) {
+      setMessage('Choose a .zip domain pack archive');
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await client.installDomainPackFromZip(file);
+      if (res.ok) {
+        const id =
+          res.data && typeof res.data.id === 'string'
+            ? scrubDisplayText(res.data.id, { collapseLines: true, maxChars: 64 })
+            : '';
+        setMessage(id ? `Installed pack “${id}” from zip` : 'Installed pack from zip');
+        await load();
+      } else {
+        setMessage(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Zip install failed',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Zip install failed';
+      setMessage(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+    } finally {
+      setBusy(false);
+      if (zipInputRef.current) zipInputRef.current.value = '';
+    }
+  };
+
+  const handleValidateFile = async (file: File | null) => {
+    if (!client || busy || !file) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const text = await readBlobText(file);
+      if (/\0/.test(text)) {
+        setMessage('pack.json contains invalid null bytes');
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text) as unknown;
+      } catch {
+        setMessage('pack.json is not valid JSON');
+        return;
+      }
+      const res = await client.validateDomainPackManifest(parsed);
+      if (res.ok && res.data) {
+        const name =
+          scrubDisplayText(res.data.name, { collapseLines: true, maxChars: 80 })
+          || scrubDisplayText(res.data.id, { collapseLines: true, maxChars: 64 })
+          || 'pack';
+        const ver = res.data.version
+          ? scrubDisplayText(String(res.data.version), { collapseLines: true, maxChars: 20 })
+          : '';
+        setMessage(
+          `Valid: ${name}${ver ? ` v${ver}` : ''} · ${res.data.workerCount ?? 0} workers · ${res.data.blockCount ?? 0} blocks`,
+        );
+      } else {
+        setMessage(
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Validation failed',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Validation failed';
+      setMessage(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+    } finally {
+      setBusy(false);
+      if (validateInputRef.current) validateInputRef.current.value = '';
     }
   };
 
@@ -142,47 +261,108 @@ export function DomainPacks() {
         </h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
           Built-in and custom Domain Packs (workers + prompt/skill blocks). Install from a local
-          folder with <code className="text-xs">pack.json</code> (
+          folder or zip with <code className="text-xs">pack.json</code> (
           <code className="text-xs">neos-domain-pack/v1</code>).
         </p>
       </div>
 
       <div
-        className="mb-6 rounded-lg border p-4"
+        className="mb-6 space-y-4 rounded-lg border p-4"
         style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
       >
-        <label className="mb-2 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-          Install from local path
-        </label>
+        <div>
+          <label className="mb-2 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Install from local path
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              value={installPath}
+              onChange={(e) => setInstallPath(e.target.value)}
+              placeholder="/path/to/my-pack"
+              data-testid="domain-pack-path"
+              className="min-w-[240px] flex-1 rounded-md border px-3 py-2 text-sm"
+              style={{
+                borderColor: 'var(--border-primary)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+              }}
+              disabled={busy}
+            />
+            <button
+              type="button"
+              onClick={() => void handleInstall()}
+              disabled={busy}
+              data-testid="domain-pack-install-path"
+              className="rounded-md px-4 py-2 text-sm font-medium"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              Install
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <input
-            type="text"
-            value={installPath}
-            onChange={(e) => setInstallPath(e.target.value)}
-            placeholder="/path/to/my-pack"
-            className="min-w-[240px] flex-1 rounded-md border px-3 py-2 text-sm"
-            style={{
-              borderColor: 'var(--border-primary)',
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
+            ref={zipInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            data-testid="domain-pack-zip-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              void handleInstallZip(f);
             }}
-            disabled={busy}
+          />
+          <input
+            ref={validateInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            data-testid="domain-pack-validate-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              void handleValidateFile(f);
+            }}
           />
           <button
             type="button"
-            onClick={() => void handleInstall()}
             disabled={busy}
-            className="rounded-md px-4 py-2 text-sm font-medium"
+            data-testid="domain-pack-install-zip"
+            onClick={() => zipInputRef.current?.click()}
+            className="rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               color: 'var(--text-primary)',
             }}
           >
-            Install
+            Install from zip…
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            data-testid="domain-pack-validate"
+            onClick={() => validateInputRef.current?.click()}
+            className="rounded-md px-3 py-2 text-xs font-medium disabled:opacity-50"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            Validate pack.json…
           </button>
         </div>
+
         {message && (
-          <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          <p
+            className="text-xs"
+            style={{ color: 'var(--text-muted)' }}
+            data-testid="domain-pack-message"
+            role="status"
+          >
             {message}
           </p>
         )}
