@@ -18,8 +18,11 @@
     "dark": "Dark",
     "light": "Light",
     "system": "System",
-    "language": "Language"
+    "language": "Language",
+    "canvasOverlay": "Canvas overlay",
+    "canvasOverlayHint": "Move, resize, align, and z-order selected elements on HTML Preview (default on)"
   },
+
   "defaults": {
     "title": "Defaults",
     "provider": "Default Provider",

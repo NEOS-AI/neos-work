@@ -298,3 +298,173 @@ describe('WebApiClient hard-enforce session transport', () => {
     stop();
   });
 });
+
+describe('WebApiClient preview comments + project zip (v0.9 M2)', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('listPreviewComments with path query', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [
+          {
+            id: 'c1',
+            projectId: 'p1',
+            filePath: 'index.html',
+            selector: 'h1',
+            body: 'hi',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.listPreviewComments('p1', 'index.html');
+    expect(res.ok).toBe(true);
+    expect(res.data?.[0]?.id).toBe('c1');
+    expect(String(fetchMock.mock.calls[0]![0])).toContain(
+      '/api/projects/p1/preview-comments?path=index.html',
+    );
+  });
+
+  it('listPreviewComments fails closed when schema invalid', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [{ id: 'c1', body: 'missing required fields' }],
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.listPreviewComments('p1');
+    expect(res.ok).toBe(false);
+    expect(res.error).toBeTruthy();
+  });
+
+  it('listRevisions validates contentHash domain', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [
+          {
+            id: 'rev1',
+            path: 'a.html',
+            contentHash: 'deadbeef',
+            source: 'user',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.listRevisions('p1', 'a.html');
+    expect(res.ok).toBe(true);
+    expect(res.data?.[0]?.contentHash).toBe('deadbeef');
+  });
+
+  it('createPreviewComment posts validated body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          ok: true,
+          data: {
+            id: 'c2',
+            projectId: 'p1',
+            filePath: 'a.html',
+            selector: '#x',
+            body: 'note',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        201,
+      ),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.createPreviewComment('p1', {
+      filePath: 'a.html',
+      selector: '#x',
+      body: 'note',
+    });
+    expect(res.ok).toBe(true);
+    const init = fetchMock.mock.calls[0]![1] as { method: string; body: string };
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({
+      filePath: 'a.html',
+      selector: '#x',
+      body: 'note',
+    });
+  });
+
+  it('createPreviewComment rejects control chars without fetch', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.createPreviewComment('p1', {
+      filePath: 'a.html',
+      selector: 'h1',
+      body: `bad${'\0'}`,
+    });
+    expect(res.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('deletePreviewComment DELETEs by id', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await client.deletePreviewComment('p1', 'c9');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/preview-comments/c9');
+    expect(init.method).toBe('DELETE');
+  });
+
+  it('exportProjectZip returns blob', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([0x50, 0x4b]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/zip' },
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.exportProjectZip('p1');
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.blob.size).toBe(2);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/export.zip');
+  });
+
+  it('importProjectZip posts application/zip body', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { project: { id: 'p-new', name: 'Imported' }, filesImported: 3 },
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const file = new File([new Uint8Array([1, 2, 3])], 'proj.zip', {
+      type: 'application/zip',
+    });
+    const res = await client.importProjectZip(file);
+    expect(res.ok).toBe(true);
+    expect(res.data?.project.id).toBe('p-new');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/api/projects/import.zip');
+    expect(init.method).toBe('POST');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBe('application/zip');
+    expect(headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('importProjectZip rejects oversized zip without fetch', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const big = new Blob([new Uint8Array(50 * 1024 * 1024 + 1)]);
+    const res = await client.importProjectZip(big);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/50 MiB/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

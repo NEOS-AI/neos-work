@@ -1,42 +1,92 @@
 /**
  * Canvas overlay helpers (v0.6 M2) — apply drag deltas as inline styles in HTML SSOT.
+ * v0.9 M1: default-on (Q23), localStorage pref, align tools.
  */
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Feature flag: NEOS_CANVAS_OVERLAY=1 or VITE_NEOS_CANVAS_OVERLAY=1, or explicit prop. */
-export function isCanvasOverlayEnabled(explicit?: boolean | null): boolean {
-  if (explicit === true) return true;
-  if (explicit === false) return false;
+/** localStorage key for user canvas overlay preference (v0.9 M1). */
+export const CANVAS_OVERLAY_PREF_KEY = 'neos.canvasOverlay';
+
+function parseBoolFlag(v: string | null | undefined): boolean | null {
+  if (v == null) return null;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return null;
+  if (s === '1' || s === 'true' || s === 'on' || s === 'yes') return true;
+  if (s === '0' || s === 'false' || s === 'off' || s === 'no') return false;
+  return null;
+}
+
+function readEnvCanvasFlag(): boolean | null {
   try {
     const g = globalThis as {
       NEOS_CANVAS_OVERLAY?: string;
+      VITE_NEOS_CANVAS_OVERLAY?: string;
       process?: { env?: Record<string, string | undefined> };
     };
-    if (g.NEOS_CANVAS_OVERLAY === '1' || g.NEOS_CANVAS_OVERLAY === 'true') return true;
+    const fromG =
+      parseBoolFlag(g.NEOS_CANVAS_OVERLAY)
+      ?? parseBoolFlag(g.VITE_NEOS_CANVAS_OVERLAY);
+    if (fromG !== null) return fromG;
     const pe = g.process?.env;
-    if (pe?.NEOS_CANVAS_OVERLAY === '1' || pe?.NEOS_CANVAS_OVERLAY === 'true') return true;
+    const fromPe =
+      parseBoolFlag(pe?.NEOS_CANVAS_OVERLAY)
+      ?? parseBoolFlag(pe?.VITE_NEOS_CANVAS_OVERLAY);
+    if (fromPe !== null) return fromPe;
   } catch {
     // ignore
   }
   try {
-    // Vite injects import.meta.env
     const meta = import.meta as { env?: Record<string, string | undefined> };
     const e = meta.env;
-    if (
-      e?.NEOS_CANVAS_OVERLAY === '1'
-      || e?.NEOS_CANVAS_OVERLAY === 'true'
-      || e?.VITE_NEOS_CANVAS_OVERLAY === '1'
-      || e?.VITE_NEOS_CANVAS_OVERLAY === 'true'
-    ) {
-      return true;
-    }
+    return (
+      parseBoolFlag(e?.NEOS_CANVAS_OVERLAY)
+      ?? parseBoolFlag(e?.VITE_NEOS_CANVAS_OVERLAY)
+    );
   } catch {
-    // ignore
+    return null;
   }
-  return false;
+}
+
+/** Read user pref from localStorage; `null` if unset / unavailable. */
+export function readCanvasOverlayPref(): boolean | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return parseBoolFlag(localStorage.getItem(CANVAS_OVERLAY_PREF_KEY));
+  } catch {
+    return null;
+  }
+}
+
+/** Persist user canvas overlay preference (`1` / `0`). */
+export function writeCanvasOverlayPref(on: boolean): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(CANVAS_OVERLAY_PREF_KEY, on ? '1' : '0');
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/**
+ * Whether free-canvas overlay is enabled (v0.9 M1 Q23).
+ *
+ * Precedence:
+ * 1. explicit prop (`true` / `false`)
+ * 2. env `NEOS_CANVAS_OVERLAY` / `VITE_NEOS_CANVAS_OVERLAY` (`0` forces off, `1` on)
+ * 3. localStorage `neos.canvasOverlay`
+ * 4. **default on**
+ */
+export function isCanvasOverlayEnabled(explicit?: boolean | null): boolean {
+  if (explicit === true) return true;
+  if (explicit === false) return false;
+  const env = readEnvCanvasFlag();
+  if (env !== null) return env;
+  const pref = readCanvasOverlayPref();
+  if (pref !== null) return pref;
+  return true;
 }
 
 function parseStyleAttr(style: string): Record<string, string> {
@@ -306,6 +356,160 @@ export function applyGroupResizeToHtml(
       elementId: opts.elementId,
       dx,
       dy,
+    });
+  }
+  return next;
+}
+
+// ─── Align / distribute (v0.9 M1) ───────────────────────────────────────────
+
+export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+
+export type AlignableBox = GroupResizeBBox & {
+  neosId?: string | null;
+  elementId?: string | null;
+};
+
+export type AlignDelta = {
+  neosId?: string | null;
+  elementId?: string | null;
+  dx: number;
+  dy: number;
+};
+
+/**
+ * Compute position deltas so each `others` box aligns to `primary` on `edge`.
+ * Primary itself is not moved. Multi-select ≥ 2 required by host.
+ */
+export function computeAlignDeltas(
+  primary: AlignableBox,
+  others: AlignableBox[],
+  edge: AlignEdge,
+): AlignDelta[] {
+  const out: AlignDelta[] = [];
+  const pL = primary.x;
+  const pT = primary.y;
+  const pR = primary.x + primary.width;
+  const pB = primary.y + primary.height;
+  const pCx = primary.x + primary.width / 2;
+  const pCy = primary.y + primary.height / 2;
+
+  for (const box of others) {
+    let dx = 0;
+    let dy = 0;
+    switch (edge) {
+      case 'left':
+        dx = pL - box.x;
+        break;
+      case 'center':
+        dx = pCx - (box.x + box.width / 2);
+        break;
+      case 'right':
+        dx = pR - (box.x + box.width);
+        break;
+      case 'top':
+        dy = pT - box.y;
+        break;
+      case 'middle':
+        dy = pCy - (box.y + box.height / 2);
+        break;
+      case 'bottom':
+        dy = pB - (box.y + box.height);
+        break;
+      default:
+        break;
+    }
+    dx = Math.round(dx);
+    dy = Math.round(dy);
+    if (dx === 0 && dy === 0) continue;
+    out.push({
+      neosId: box.neosId,
+      elementId: box.elementId,
+      dx,
+      dy,
+    });
+  }
+  return out;
+}
+
+/**
+ * Apply align deltas to HTML (primary stays; others move).
+ */
+export function applyAlignToHtml(
+  html: string,
+  primary: AlignableBox,
+  others: AlignableBox[],
+  edge: AlignEdge,
+): string {
+  const deltas = computeAlignDeltas(primary, others, edge);
+  let next = html;
+  for (const d of deltas) {
+    next = applyPositionDeltaToHtml(next, {
+      neosId: d.neosId,
+      elementId: d.elementId,
+      dx: d.dx,
+      dy: d.dy,
+    });
+  }
+  return next;
+}
+
+/**
+ * Evenly distribute selected boxes along an axis between first and last (by position).
+ * Needs ≥ 3 boxes with bboxes. Returns position deltas (absolute moves via dx/dy).
+ */
+export function computeDistributeDeltas(
+  boxes: AlignableBox[],
+  axis: 'horizontal' | 'vertical',
+): AlignDelta[] {
+  if (boxes.length < 3) return [];
+  const sorted = [...boxes].sort((a, b) =>
+    axis === 'horizontal' ? a.x - b.x : a.y - b.y,
+  );
+  const first = sorted[0]!;
+  const last = sorted[sorted.length - 1]!;
+  const n = sorted.length;
+  const out: AlignDelta[] = [];
+
+  if (axis === 'horizontal') {
+    const span = last.x - first.x;
+    if (span <= 0) return [];
+    const step = span / (n - 1);
+    for (let i = 1; i < n - 1; i++) {
+      const box = sorted[i]!;
+      const targetX = first.x + step * i;
+      const dx = Math.round(targetX - box.x);
+      if (dx === 0) continue;
+      out.push({ neosId: box.neosId, elementId: box.elementId, dx, dy: 0 });
+    }
+  } else {
+    const span = last.y - first.y;
+    if (span <= 0) return [];
+    const step = span / (n - 1);
+    for (let i = 1; i < n - 1; i++) {
+      const box = sorted[i]!;
+      const targetY = first.y + step * i;
+      const dy = Math.round(targetY - box.y);
+      if (dy === 0) continue;
+      out.push({ neosId: box.neosId, elementId: box.elementId, dx: 0, dy });
+    }
+  }
+  return out;
+}
+
+export function applyDistributeToHtml(
+  html: string,
+  boxes: AlignableBox[],
+  axis: 'horizontal' | 'vertical',
+): string {
+  const deltas = computeDistributeDeltas(boxes, axis);
+  let next = html;
+  for (const d of deltas) {
+    next = applyPositionDeltaToHtml(next, {
+      neosId: d.neosId,
+      elementId: d.elementId,
+      dx: d.dx,
+      dy: d.dy,
     });
   }
   return next;

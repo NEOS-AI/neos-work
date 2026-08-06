@@ -36,6 +36,8 @@ const GATES = {
   requireV07Features: true,
   /** v0.8 train (M0–M4 closeout) */
   requireV08Features: true,
+  /** v0.9 train (M0–M4 closeout) */
+  requireV09Features: true,
 };
 
 function existsRel(rel) {
@@ -151,6 +153,60 @@ function scanV08Features() {
     implM2: existsRel('docs/implementation/v0.8/v0.8.2.md'),
     implM3: existsRel('docs/implementation/v0.8/v0.8.3.md'),
     implM4: existsRel('docs/implementation/v0.8/v0.8.4.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.9 capability surface (M0–M4) — Design Editor completion · dual-surface parity.
+ * @see docs/plans/PLAN_FOR_V0_9_0.md
+ */
+function scanV09Features() {
+  const canvasStyle = readText('packages/design-editor/src/canvas-style.ts') ?? '';
+  const htmlLayers = readText('packages/design-editor/src/html-layers.ts') ?? '';
+  const webApi = readText('apps/web/src/lib/api.ts') ?? '';
+  const sharedEnvelopes = readText('packages/shared/src/schemas/api-envelopes.ts') ?? '';
+  const features = {
+    planV09: existsRel('docs/plans/PLAN_FOR_V0_9_0.md'),
+    migrationV09: existsRel('docs/migration/v0.9.0.md'),
+    layersReorder:
+      existsRel('packages/design-editor/src/html-layers.ts')
+      && htmlLayers.includes('reorderSiblingInHtml')
+      && htmlLayers.includes('applyZOrderInHtml'),
+    canvasDefault:
+      existsRel('packages/design-editor/src/canvas-style.ts')
+      && canvasStyle.includes('CANVAS_OVERLAY_PREF_KEY')
+      && canvasStyle.includes('writeCanvasOverlayPref')
+      && canvasStyle.includes('isCanvasOverlayEnabled')
+      // Q23: default on when no env/pref (function ends with return true)
+      && /return true;\s*\}/.test(canvasStyle.replace(/\s+/g, ' ')),
+    webPreviewComments:
+      existsRel('apps/web/src/lib/api.ts')
+      && webApi.includes('listPreviewComments')
+      && webApi.includes('createPreviewComment')
+      && webApi.includes('deletePreviewComment'),
+    webProjectZip:
+      existsRel('apps/web/src/lib/api.ts')
+      && webApi.includes('importProjectZip')
+      && webApi.includes('exportProjectZip'),
+    dualSurfaceDoc: existsRel('docs/reference/dual-surface.md'),
+    sharedPreviewCommentParse:
+      sharedEnvelopes.includes('parsePreviewCommentListResponse')
+      && sharedEnvelopes.includes('previewCommentSchema'),
+    implM0: existsRel('docs/implementation/v0.9/v0.9.0.md'),
+    implM1: existsRel('docs/implementation/v0.9/v0.9.1.md'),
+    implM2: existsRel('docs/implementation/v0.9/v0.9.2.md'),
+    implM3: existsRel('docs/implementation/v0.9/v0.9.3.md'),
+    implM4: existsRel('docs/implementation/v0.9/v0.9.4.md'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -349,6 +405,7 @@ export function buildInventory() {
   const v06 = scanV06Features();
   const v07 = scanV07Features();
   const v08 = scanV08Features();
+  const v09 = scanV09Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -367,6 +424,7 @@ export function buildInventory() {
       v06Features: v06,
       v07Features: v07,
       v08Features: v08,
+      v09Features: v09,
     },
     gates: GATES,
     summary: {
@@ -385,6 +443,8 @@ export function buildInventory() {
       v07FeaturesTotal: v07.total,
       v08Features: v08.count,
       v08FeaturesTotal: v08.total,
+      v09Features: v09.count,
+      v09FeaturesTotal: v09.total,
     },
   };
 
@@ -438,6 +498,17 @@ export function evaluateGates(inventory) {
       missing: v08?.missing ?? [],
     });
   }
+  if (g.requireV09Features) {
+    const v09 = inventory.catalogs?.v09Features;
+    const ok = Boolean(v09?.ok);
+    results.push({
+      id: 'v09Features',
+      ok,
+      actual: v09?.count ?? 0,
+      min: v09?.total ?? 0,
+      missing: v09?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -464,7 +535,12 @@ function main(argv = process.argv.slice(2)) {
     process.stderr.write('inventory gates failed:\n');
     for (const r of inv.checks.results.filter((x) => !x.ok)) {
       if (
-        (r.id === 'v06Features' || r.id === 'v07Features' || r.id === 'v08Features')
+        (
+          r.id === 'v06Features'
+          || r.id === 'v07Features'
+          || r.id === 'v08Features'
+          || r.id === 'v09Features'
+        )
         && Array.isArray(r.missing)
         && r.missing.length
       ) {

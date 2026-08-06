@@ -47,7 +47,11 @@ import { setRuntimeContext } from './lib/runtime-context.js';
 import { isAuthExemptPath } from './lib/auth-paths.js';
 import { initCollabBus, getCollabBus } from './lib/collab-bus.js';
 import { initPresenceRegistry, getPresenceRegistry } from './lib/collab-presence-redis.js';
-import { applyRemoteCollabEvent } from './lib/project-collab.js';
+import {
+  applyRemoteCollabEvent,
+  isSharedEditAgentsHardEnforce,
+  isSharedEditHardEnforce,
+} from './lib/project-collab.js';
 
 /**
  * Auth token: fixed via NEOS_AUTH_TOKEN (Docker / stable CLI) or random per process.
@@ -192,6 +196,10 @@ app.get('/api/collab/status', (c) => {
         kind: pr.kind,
         ready: pr.ready,
         detail: pr.detail ?? null,
+      },
+      sharedEdit: {
+        hardEnforce: isSharedEditHardEnforce(),
+        agentsHardEnforce: isSharedEditAgentsHardEnforce(),
       },
     },
   });

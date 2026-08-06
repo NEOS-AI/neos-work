@@ -1,10 +1,23 @@
 /**
  * Figma-like Layers tree panel (Task 1c / Q13).
+ * v0.9 M0: sibling drag-reorder (same parent only).
  */
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties, type DragEvent } from 'react';
 import type { LayerNode } from '@neos-work/shared';
 import { filterLayers } from './html-layers.js';
+
+const DND_MIME = 'application/x-neos-layer-id';
+
+/** Drop payload for sibling reorder (v0.9 M0). Primary only when multi-select. */
+export type LayerReorderPayload = {
+  source: LayerNode;
+  target: LayerNode;
+  /** Insert source immediately before or after target (same parent). */
+  position: 'before' | 'after';
+  /** Parent layer id, or null for root-level list. */
+  parentId: string | null;
+};
 
 export interface LayersPanelProps {
   layers: LayerNode[];
@@ -25,6 +38,15 @@ export interface LayersPanelProps {
   onToggleLock?: (layer: LayerNode, locked: boolean) => void;
   onEditWithAi?: (layer: LayerNode) => void;
   onCopySelector?: (layer: LayerNode) => void;
+  /**
+   * Sibling reorder (v0.9 M0). Same-parent only; panel enforces parent match.
+   * Disabled when filter is active, or when `reorderEnabled` is false.
+   */
+  onReorderSibling?: (payload: LayerReorderPayload) => void;
+  /**
+   * Allow drag-reorder. Default: true when `onReorderSibling` is set and source is not JSX.
+   */
+  reorderEnabled?: boolean;
   labels?: {
     title?: string;
     search?: string;
@@ -35,6 +57,7 @@ export interface LayersPanelProps {
     sourceJsxPartial?: string;
     editWithAi?: string;
     copySelector?: string;
+    reorderDisabled?: string;
   };
   className?: string;
   style?: CSSProperties;
@@ -50,10 +73,12 @@ const defaultLabels = {
   sourceJsxPartial: 'JSX~',
   editWithAi: 'Edit with AI',
   copySelector: 'Copy selector',
+  reorderDisabled: 'Reorder is HTML-only (clear filter; not available for JSX)',
 };
 
 function LayerRow({
   layer,
+  parentId,
   selectedLayerId,
   selectedSelector,
   selectedLayerIds,
@@ -66,8 +91,16 @@ function LayerRow({
   onToggleLock,
   onContextEdit,
   onContextCopy,
+  reorderActive,
+  dragLayerId,
+  dropHint,
+  onDragLayerStart,
+  onDragLayerEnd,
+  onDragLayerOver,
+  onDropOnLayer,
 }: {
   layer: LayerNode;
+  parentId: string | null;
   selectedLayerId?: string | null;
   selectedSelector?: string | null;
   selectedLayerIds?: string[];
@@ -80,6 +113,21 @@ function LayerRow({
   onToggleLock?: (layer: LayerNode, locked: boolean) => void;
   onContextEdit?: (layer: LayerNode) => void;
   onContextCopy?: (layer: LayerNode) => void;
+  reorderActive: boolean;
+  dragLayerId: string | null;
+  dropHint: { id: string; position: 'before' | 'after' } | null;
+  onDragLayerStart: (layer: LayerNode, parentId: string | null) => void;
+  onDragLayerEnd: () => void;
+  onDragLayerOver: (
+    e: DragEvent,
+    layer: LayerNode,
+    parentId: string | null,
+  ) => void;
+  onDropOnLayer: (
+    e: DragEvent,
+    layer: LayerNode,
+    parentId: string | null,
+  ) => void;
 }) {
   const hasKids = layer.children.length > 0;
   const isCollapsed = collapsed.has(layer.id);
@@ -92,16 +140,27 @@ function LayerRow({
     (selectedLayerIds?.includes(layer.id) ?? false)
     || (selectedSelectors?.includes(layer.selector) ?? false);
   const selected = primarySelected || multiSelected;
+  const canDrag = reorderActive && !layer.locked;
+  const isDropBefore =
+    dropHint?.id === layer.id && dropHint.position === 'before';
+  const isDropAfter =
+    dropHint?.id === layer.id && dropHint.position === 'after';
+  const isDragging = dragLayerId === layer.id;
 
   return (
     <>
       <div
         role="treeitem"
         aria-selected={selected}
+        draggable={canDrag}
         data-testid={`layer-row-${layer.id}`}
         data-layer-id={layer.id}
+        data-parent-id={parentId ?? ''}
         data-selected={selected ? '1' : undefined}
         data-multi-selected={multiSelected && !primarySelected ? '1' : undefined}
+        data-drop-before={isDropBefore ? '1' : undefined}
+        data-drop-after={isDropAfter ? '1' : undefined}
+        data-dragging={isDragging ? '1' : undefined}
         onClick={(e) =>
           onSelect?.(layer, {
             additive: Boolean(e.shiftKey || e.metaKey || e.ctrlKey),
@@ -115,6 +174,19 @@ function LayerRow({
           if (e.shiftKey) onContextEdit?.(layer);
           else onContextCopy?.(layer);
         }}
+        onDragStart={(e) => {
+          if (!canDrag) {
+            e.preventDefault();
+            return;
+          }
+          e.dataTransfer.setData(DND_MIME, layer.id);
+          e.dataTransfer.setData('text/plain', layer.id);
+          e.dataTransfer.effectAllowed = 'move';
+          onDragLayerStart(layer, parentId);
+        }}
+        onDragEnd={() => onDragLayerEnd()}
+        onDragOver={(e) => onDragLayerOver(e, layer, parentId)}
+        onDrop={(e) => onDropOnLayer(e, layer, parentId)}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -122,16 +194,21 @@ function LayerRow({
           padding: '2px 6px',
           paddingLeft: 6 + layer.depth * 12,
           fontSize: 11,
-          cursor: 'pointer',
+          cursor: canDrag ? 'grab' : 'pointer',
           background: primarySelected
             ? 'color-mix(in srgb, var(--accent, #6366f1) 28%, transparent)'
             : multiSelected
               ? 'color-mix(in srgb, var(--accent, #6366f1) 14%, transparent)'
               : 'transparent',
           color: layer.visible ? 'var(--text-primary, inherit)' : 'var(--text-muted, #888)',
-          opacity: layer.visible ? 1 : 0.55,
+          opacity: isDragging ? 0.4 : layer.visible ? 1 : 0.55,
           borderRadius: 4,
           userSelect: 'none',
+          boxShadow: isDropBefore
+            ? 'inset 0 2px 0 0 var(--accent, #6366f1)'
+            : isDropAfter
+              ? 'inset 0 -2px 0 0 var(--accent, #6366f1)'
+              : undefined,
         }}
         title={layer.selector}
       >
@@ -156,6 +233,20 @@ function LayerRow({
         >
           {hasKids ? (isCollapsed ? '▸' : '▾') : '·'}
         </button>
+        {canDrag && (
+          <span
+            aria-hidden
+            data-testid={`layer-drag-${layer.id}`}
+            style={{
+              fontSize: 9,
+              color: 'var(--text-muted, #666)',
+              letterSpacing: -1,
+              lineHeight: 1,
+            }}
+          >
+            ⋮⋮
+          </span>
+        )}
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {layer.name}
         </span>
@@ -203,6 +294,7 @@ function LayerRow({
           <LayerRow
             key={c.id}
             layer={c}
+            parentId={layer.id}
             selectedLayerId={selectedLayerId}
             selectedSelector={selectedSelector}
             selectedLayerIds={selectedLayerIds}
@@ -215,6 +307,13 @@ function LayerRow({
             onToggleLock={onToggleLock}
             onContextEdit={onContextEdit}
             onContextCopy={onContextCopy}
+            reorderActive={reorderActive}
+            dragLayerId={dragLayerId}
+            dropHint={dropHint}
+            onDragLayerStart={onDragLayerStart}
+            onDragLayerEnd={onDragLayerEnd}
+            onDragLayerOver={onDragLayerOver}
+            onDropOnLayer={onDropOnLayer}
           />
         ))}
     </>
@@ -234,6 +333,8 @@ export function LayersPanel({
   onToggleLock,
   onEditWithAi,
   onCopySelector,
+  onReorderSibling,
+  reorderEnabled: reorderEnabledProp,
   labels: labelsProp,
   className,
   style,
@@ -241,8 +342,32 @@ export function LayersPanel({
   const labels = { ...defaultLabels, ...labelsProp };
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [dragLayerId, setDragLayerId] = useState<string | null>(null);
+  const [dragParentId, setDragParentId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{
+    id: string;
+    position: 'before' | 'after';
+  } | null>(null);
 
   const filtered = useMemo(() => filterLayers(layers, query), [layers, query]);
+  const filterActive = query.trim().length > 0;
+  const jsxSource = source === 'jsx' || source === 'jsx-partial';
+  const reorderActive =
+    Boolean(onReorderSibling)
+    && (reorderEnabledProp ?? !jsxSource)
+    && !filterActive;
+
+  const layerById = useMemo(() => {
+    const map = new Map<string, LayerNode>();
+    const walk = (nodes: LayerNode[]) => {
+      for (const n of nodes) {
+        map.set(n.id, n);
+        if (n.children?.length) walk(n.children);
+      }
+    };
+    walk(layers);
+    return map;
+  }, [layers]);
 
   const toggleCollapse = (id: string) => {
     setCollapsed((prev) => {
@@ -253,10 +378,102 @@ export function LayersPanel({
     });
   };
 
+  const clearDrag = () => {
+    setDragLayerId(null);
+    setDragParentId(null);
+    setDropHint(null);
+  };
+
+  const onDragLayerStart = (layer: LayerNode, parentId: string | null) => {
+    setDragLayerId(layer.id);
+    setDragParentId(parentId);
+  };
+
+  const resolveDropPosition = (
+    e: DragEvent,
+    el: EventTarget | null,
+  ): 'before' | 'after' => {
+    const nativeY = e.nativeEvent?.clientY;
+    const clientY =
+      typeof e.clientY === 'number' && e.clientY !== 0
+        ? e.clientY
+        : typeof nativeY === 'number'
+          ? nativeY
+          : 0;
+    const rect =
+      el && 'getBoundingClientRect' in el
+        ? (el as HTMLElement).getBoundingClientRect()
+        : { top: 0, height: 0 };
+    // Zero-height (jsdom): prefer "before" so drops remain meaningful in tests/hosts without layout
+    if (!rect.height) return 'before';
+    const mid = rect.top + rect.height / 2;
+    return clientY < mid ? 'before' : 'after';
+  };
+
+  const onDragLayerOver = (
+    e: DragEvent,
+    layer: LayerNode,
+    parentId: string | null,
+  ) => {
+    if (!reorderActive || !dragLayerId) return;
+    if (dragLayerId === layer.id) return;
+    // Q24: same parent only
+    if (parentId !== dragParentId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const position = resolveDropPosition(e, e.currentTarget);
+    setDropHint((prev) =>
+      prev?.id === layer.id && prev.position === position
+        ? prev
+        : { id: layer.id, position },
+    );
+  };
+
+  const onDropOnLayer = (
+    e: DragEvent,
+    target: LayerNode,
+    parentId: string | null,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!reorderActive || !onReorderSibling) {
+      clearDrag();
+      return;
+    }
+    const raw =
+      e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain');
+    const sourceId = raw || dragLayerId;
+    if (!sourceId || sourceId === target.id) {
+      clearDrag();
+      return;
+    }
+    if (parentId !== dragParentId) {
+      clearDrag();
+      return;
+    }
+    const source = layerById.get(sourceId);
+    if (!source || source.locked) {
+      clearDrag();
+      return;
+    }
+    const position =
+      dropHint?.id === target.id
+        ? dropHint.position
+        : resolveDropPosition(e, e.currentTarget);
+    onReorderSibling({
+      source,
+      target,
+      position,
+      parentId,
+    });
+    clearDrag();
+  };
+
   return (
     <div
       className={className}
       data-testid="layers-panel"
+      data-reorder={reorderActive ? '1' : '0'}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -314,6 +531,24 @@ export function LayersPanel({
                 : labels.sourceParse}
         </span>
       </div>
+      {onReorderSibling && !reorderActive && (
+        <div
+          data-testid="layers-reorder-hint"
+          title={labels.reorderDisabled}
+          style={{
+            padding: '4px 8px',
+            fontSize: 9,
+            color: 'var(--text-muted, #888)',
+            borderBottom: '1px solid var(--border-primary, #333)',
+          }}
+        >
+          {jsxSource
+            ? labels.reorderDisabled
+            : filterActive
+              ? 'Clear filter to reorder layers'
+              : labels.reorderDisabled}
+        </div>
+      )}
       <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-primary, #333)' }}>
         <input
           type="search"
@@ -350,6 +585,7 @@ export function LayersPanel({
             <LayerRow
               key={layer.id}
               layer={layer}
+              parentId={null}
               selectedLayerId={selectedLayerId}
               selectedSelector={selectedSelector}
               selectedLayerIds={selectedLayerIds}
@@ -362,6 +598,13 @@ export function LayersPanel({
               onToggleLock={onToggleLock}
               onContextEdit={onEditWithAi}
               onContextCopy={onCopySelector}
+              reorderActive={reorderActive}
+              dragLayerId={dragLayerId}
+              dropHint={dropHint}
+              onDragLayerStart={onDragLayerStart}
+              onDragLayerEnd={clearDrag}
+              onDragLayerOver={onDragLayerOver}
+              onDropOnLayer={onDropOnLayer}
             />
           ))
         )}

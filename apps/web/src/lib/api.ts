@@ -10,8 +10,13 @@
 
 import {
   parseCollabLockConflict,
+  parseFileRevisionDetailResponse,
+  parseFileRevisionListResponse,
+  parsePreviewCommentDetailResponse,
+  parsePreviewCommentListResponse,
   parseProjectFileWriteResponse,
   type FileRevision,
+  type PreviewComment,
   type ProjectFileContent,
   type ProjectFileEntry,
   type ProjectFileEventPayload,
@@ -19,6 +24,8 @@ import {
   type ProjectRunEvent,
   type ProjectRunSummary,
 } from '@neos-work/shared';
+
+export type { PreviewComment };
 
 export interface ApiEnvelope<T = unknown> {
   ok: boolean;
@@ -349,8 +356,9 @@ export class WebApiClient {
   /**
    * GET /api/projects/:id/revisions?path= — list file revisions (no content).
    * Optional `filePath` is appended as `?path=` when free of control characters.
+   * Success data validated via shared Zod (`contentHash` domain).
    */
-  listRevisions(
+  async listRevisions(
     projectId: string,
     filePath?: string,
   ): Promise<
@@ -362,6 +370,11 @@ export class WebApiClient {
       >
     >
   > {
+    type RevList = Array<
+      Pick<FileRevision, 'id' | 'path' | 'contentHash' | 'source' | 'createdAt'> & {
+        projectId?: string;
+      }
+    >;
     let qs = '';
     if (filePath != null && filePath !== '') {
       if (typeof filePath === 'string' && !/[\0\r\n]/.test(filePath)) {
@@ -369,14 +382,26 @@ export class WebApiClient {
         if (p) qs = `?path=${encodeURIComponent(p)}`;
       }
     }
-    return this.request(
+    const envelope = await this.request<RevList>(
       'GET',
       `/api/projects/${encodeURIComponent(projectId)}/revisions${qs}`,
     );
+    if (!envelope.ok) return envelope;
+    const checked = parseFileRevisionListResponse(envelope);
+    if (!checked.ok) {
+      return { ok: false, error: checked.error };
+    }
+    return {
+      ok: true,
+      data: (checked.data.data ?? []) as RevList,
+    };
   }
 
-  /** GET /api/projects/:id/revisions/:revisionId — full revision with content. */
-  getRevision(
+  /**
+   * GET /api/projects/:id/revisions/:revisionId — full revision with content.
+   * Success data validated via shared Zod (`contentHash` domain).
+   */
+  async getRevision(
     projectId: string,
     revisionId: string,
   ): Promise<
@@ -387,10 +412,26 @@ export class WebApiClient {
       }
     >
   > {
-    return this.request(
+    type RevDetail = Pick<
+      FileRevision,
+      'id' | 'path' | 'contentHash' | 'source' | 'createdAt'
+    > & {
+      projectId?: string;
+      content?: string;
+    };
+    const envelope = await this.request<RevDetail>(
       'GET',
       `/api/projects/${encodeURIComponent(projectId)}/revisions/${encodeURIComponent(revisionId)}`,
     );
+    if (!envelope.ok) return envelope;
+    const checked = parseFileRevisionDetailResponse(envelope);
+    if (!checked.ok) {
+      return { ok: false, error: checked.error };
+    }
+    return {
+      ok: true,
+      data: checked.data.data as RevDetail,
+    };
   }
 
   /**
@@ -410,6 +451,174 @@ export class WebApiClient {
       sessionId ? { sessionId } : undefined,
       { headers: this.collabSessionHeaders(sessionId) },
     );
+  }
+
+  // ── Preview comments (v0.9 M2) ────────────────────────────
+
+  async listPreviewComments(
+    projectId: string,
+    filePath?: string,
+  ): Promise<ApiEnvelope<PreviewComment[]>> {
+    if (typeof projectId !== 'string' || !projectId.trim() || /[\0\r\n]/.test(projectId)) {
+      return { ok: false, error: 'Invalid project id' };
+    }
+    let qs = '';
+    if (filePath != null && filePath !== '') {
+      if (typeof filePath !== 'string' || /[\0\r\n]/.test(filePath)) {
+        return { ok: false, error: 'Invalid file path' };
+      }
+      qs = `?path=${encodeURIComponent(filePath.trim())}`;
+    }
+    const envelope = await this.request<PreviewComment[]>(
+      'GET',
+      `/api/projects/${encodeURIComponent(projectId.trim())}/preview-comments${qs}`,
+    );
+    if (!envelope.ok) return envelope;
+    const checked = parsePreviewCommentListResponse(envelope);
+    if (!checked.ok) {
+      return { ok: false, error: checked.error };
+    }
+    return { ok: true, data: (checked.data.data ?? []) as PreviewComment[] };
+  }
+
+  async createPreviewComment(
+    projectId: string,
+    input: { filePath: string; selector: string; body: string },
+  ): Promise<ApiEnvelope<PreviewComment>> {
+    if (typeof projectId !== 'string' || !projectId.trim() || /[\0\r\n]/.test(projectId)) {
+      return { ok: false, error: 'Invalid project id' };
+    }
+    if (
+      typeof input.filePath !== 'string'
+      || typeof input.selector !== 'string'
+      || typeof input.body !== 'string'
+      || /[\0\r\n]/.test(input.filePath)
+      || /[\0\r\n]/.test(input.selector)
+      || /\0/.test(input.body)
+      || !input.filePath.trim()
+      || !input.selector.trim()
+      || !input.body.trim()
+    ) {
+      return { ok: false, error: 'Invalid comment fields' };
+    }
+    const envelope = await this.requestEnvelope<PreviewComment>(
+      'POST',
+      `/api/projects/${encodeURIComponent(projectId.trim())}/preview-comments`,
+      {
+        filePath: input.filePath.trim(),
+        selector: input.selector.trim(),
+        body: input.body.trim(),
+      },
+    );
+    if (!envelope.ok) return envelope;
+    const checked = parsePreviewCommentDetailResponse(envelope);
+    if (!checked.ok) {
+      return { ok: false, error: checked.error };
+    }
+    return { ok: true, data: checked.data.data as PreviewComment };
+  }
+
+  deletePreviewComment(
+    projectId: string,
+    commentId: string,
+  ): Promise<ApiEnvelope<null>> {
+    if (typeof projectId !== 'string' || !projectId.trim() || /[\0\r\n]/.test(projectId)) {
+      return Promise.resolve({ ok: false, error: 'Invalid project id' });
+    }
+    if (typeof commentId !== 'string' || !commentId.trim() || /[\0\r\n]/.test(commentId)) {
+      return Promise.resolve({ ok: false, error: 'Invalid comment id' });
+    }
+    return this.requestEnvelope(
+      'DELETE',
+      `/api/projects/${encodeURIComponent(projectId.trim())}/preview-comments/${encodeURIComponent(commentId.trim())}`,
+    );
+  }
+
+  // ── Project zip import/export (v0.9 M2) ───────────────────
+
+  /**
+   * Download project as neos-project ZIP.
+   * Returns blob on success (not JSON envelope).
+   */
+  async exportProjectZip(
+    projectId: string,
+  ): Promise<{ ok: true; blob: Blob } | { ok: false; error: string }> {
+    if (typeof projectId !== 'string' || !projectId.trim() || /[\0\r\n]/.test(projectId)) {
+      return { ok: false, error: 'Invalid project id' };
+    }
+    try {
+      const res = await fetch(
+        this.url(`/api/projects/${encodeURIComponent(projectId.trim())}/export.zip`),
+        { headers: this.headers() },
+      );
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => null)) as { error?: string } | null;
+        const raw = errBody?.error || `HTTP ${res.status}`;
+        return { ok: false, error: String(raw).replace(/[\0\r\n]+/g, ' ').slice(0, 300) };
+      }
+      const blob = await res.blob();
+      if (blob.size === 0) return { ok: false, error: 'Empty export' };
+      return { ok: true, blob };
+    } catch (err) {
+      return {
+        ok: false,
+        error: (err instanceof Error ? err.message : 'Export failed')
+          .replace(/[\0\r\n]+/g, ' ')
+          .slice(0, 300),
+      };
+    }
+  }
+
+  /**
+   * Import neos-project ZIP (raw application/zip body).
+   */
+  async importProjectZip(
+    zip: Blob | ArrayBuffer | File,
+  ): Promise<
+    ApiEnvelope<{ project: { id: string; name: string }; filesImported?: number }>
+  > {
+    try {
+      const body =
+        zip instanceof Blob
+          ? zip
+          : new Blob([zip], { type: 'application/zip' });
+      if (body.size > 50 * 1024 * 1024) {
+        return { ok: false, error: 'Zip too large (max 50 MiB)' };
+      }
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'Content-Type': 'application/zip',
+      };
+      if (this.token) headers.Authorization = `Bearer ${this.token}`;
+      const res = await fetch(this.url('/api/projects/import.zip'), {
+        method: 'POST',
+        headers,
+        body,
+      });
+      try {
+        const json: unknown = await res.json();
+        if (json && typeof json === 'object' && !Array.isArray(json)) {
+          const envelope = json as ApiEnvelope<{
+            project: { id: string; name: string };
+            filesImported?: number;
+          }>;
+          if (envelope.ok === undefined) {
+            return { ...envelope, ok: res.ok };
+          }
+          return envelope;
+        }
+        return { ok: res.ok, data: json as { project: { id: string; name: string } } };
+      } catch {
+        return { ok: false, error: res.ok ? 'Invalid response' : `HTTP ${res.status}` };
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        error: (err instanceof Error ? err.message : 'Import failed')
+          .replace(/[\0\r\n]+/g, ' ')
+          .slice(0, 300),
+      };
+    }
   }
 
   // ── Project conversations (persisted multi-turn history) ──

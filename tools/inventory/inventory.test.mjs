@@ -77,4 +77,25 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v08Features.features.implM4);
     assert.ok(inv.checks.results.some((r) => r.id === 'v08Features' && r.ok));
   });
+
+  it('includes v0.9 feature gates (M0–M4 closeout)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v09Features);
+    assert.equal(
+      inv.catalogs.v09Features.ok,
+      true,
+      `v09 missing: ${(inv.catalogs.v09Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v09Features.features.planV09);
+    assert.ok(inv.catalogs.v09Features.features.migrationV09);
+    assert.ok(inv.catalogs.v09Features.features.layersReorder);
+    assert.ok(inv.catalogs.v09Features.features.canvasDefault);
+    assert.ok(inv.catalogs.v09Features.features.webPreviewComments);
+    assert.ok(inv.catalogs.v09Features.features.webProjectZip);
+    assert.ok(inv.catalogs.v09Features.features.dualSurfaceDoc);
+    assert.ok(inv.catalogs.v09Features.features.sharedPreviewCommentParse);
+    assert.ok(inv.catalogs.v09Features.features.implM0);
+    assert.ok(inv.catalogs.v09Features.features.implM4);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v09Features' && r.ok));
+  });
 });

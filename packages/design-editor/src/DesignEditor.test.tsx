@@ -30,10 +30,40 @@ function openHtml(content: string, path = 'index.html') {
 }
 
 describe('DesignEditor chrome', () => {
-  it('shows canvas badge when canvasOverlay is forced on', () => {
+  it('shows canvas badge by default (v0.9 M1) and allows toggle off', () => {
+    try {
+      localStorage.removeItem('neos.canvasOverlay');
+    } catch {
+      // ignore
+    }
     const buffer = openHtml('<div id="hero">Hi</div>');
-    render(<DesignEditor buffer={buffer} mode="inspect" canvasOverlay />);
+    render(<DesignEditor buffer={buffer} mode="inspect" />);
     expect(screen.getByTestId('canvas-overlay-badge')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('canvas-overlay-toggle'));
+    expect(screen.queryByTestId('canvas-overlay-badge')).toBeNull();
+    expect(screen.getByTestId('canvas-overlay-toggle').textContent).toMatch(
+      /off/i,
+    );
+  });
+
+  it('shows canvas tools when selection has multi bbox path', () => {
+    const buffer = openHtml(
+      '<div data-neos-id="a">A</div><div data-neos-id="b">B</div>',
+    );
+    render(
+      <DesignEditor
+        buffer={buffer}
+        mode="inspect"
+        canvasOverlay
+        selection={{
+          filePath: 'index.html',
+          selector: '[data-neos-id="a"]',
+          layerId: 'a',
+        }}
+      />,
+    );
+    expect(screen.getByTestId('canvas-tools')).toBeTruthy();
+    expect(screen.getByTestId('canvas-z-forward')).toBeTruthy();
   });
 
   it('renders modes, marks dirty, invokes save', () => {
@@ -288,6 +318,52 @@ describe('DesignEditor bridge + layers actions', () => {
     });
 
     fireEvent.click(screen.getByTestId('layers-edit-ai'));
+  });
+
+  it('reorders sibling layers via drag-drop into HTML buffer', () => {
+    const onEdit = vi.fn();
+    const html = `<!DOCTYPE html><html><body>
+      <ul data-neos-id="list">
+        <li data-neos-id="a">A</li>
+        <li data-neos-id="b">B</li>
+        <li data-neos-id="c">C</li>
+      </ul>
+    </body></html>`;
+    const buffer = openHtml(html);
+    render(
+      <DesignEditor buffer={buffer} mode="preview" onEdit={onEdit} />,
+    );
+
+    expect(screen.getByTestId('layers-panel').getAttribute('data-reorder')).toBe(
+      '1',
+    );
+    // Move C onto A (before under jsdom zero-height) — always changes order
+    const source = screen.getByTestId('layer-row-c');
+    const target = screen.getByTestId('layer-row-a');
+
+    fireEvent.dragStart(source, {
+      dataTransfer: {
+        setData: vi.fn(),
+        effectAllowed: 'move',
+        getData: () => 'c',
+      },
+    });
+    fireEvent.dragOver(target, {
+      clientY: 0,
+      dataTransfer: { dropEffect: 'move' },
+    });
+    fireEvent.drop(target, {
+      clientY: 0,
+      dataTransfer: {
+        getData: () => 'c',
+      },
+    });
+
+    expect(onEdit).toHaveBeenCalled();
+    const next = onEdit.mock.calls.at(-1)?.[0] as string;
+    expect(next).toMatch(
+      /data-neos-id="c"[\s\S]*data-neos-id="a"[\s\S]*data-neos-id="b"/,
+    );
   });
 
   it('stamps neos ids when toggling unstamped html; clipboard errors are ignored', async () => {

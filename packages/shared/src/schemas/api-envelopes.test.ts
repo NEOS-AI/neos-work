@@ -136,4 +136,24 @@ describe('run + revision schemas', () => {
     });
     expect(r.ok).toBe(true);
   });
+
+  it('parses preview comment list (v0.9 M3)', async () => {
+    const { parsePreviewCommentListResponse, openApiWireFragments } =
+      await import('./api-envelopes.js');
+    const r = parsePreviewCommentListResponse({
+      ok: true,
+      data: [
+        {
+          id: 'c1',
+          projectId: 'p1',
+          filePath: 'index.html',
+          selector: '#hero',
+          body: 'nudge spacing',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    expect(r.ok).toBe(true);
+    expect(openApiWireFragments.PreviewComment.required).toContain('filePath');
+  });
 });

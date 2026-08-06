@@ -143,4 +143,17 @@ describe('Web Settings', () => {
       expect(getCollabStatus.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  it('shows desktop-only dual-surface badge (v0.9.3 Q29)', async () => {
+    renderSettings();
+    await waitFor(() => {
+      expect(screen.getByTestId('dual-surface-badge')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('dual-surface-badge').textContent).toMatch(
+      /marketplace|Plugins/i,
+    );
+    expect(screen.getByTestId('dual-surface-badge').textContent).toMatch(
+      /dual-surface/i,
+    );
+  });
 });

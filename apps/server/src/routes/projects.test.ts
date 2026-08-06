@@ -270,9 +270,11 @@ describe('projects routes', () => {
     }
   });
 
-  it('mkdir respects NEOS_SHARED_EDIT hard-enforce; agent PUT still bypasses', async () => {
+  it('mkdir respects NEOS_SHARED_EDIT hard-enforce; agent PUT still bypasses by default', async () => {
     const prev = process.env.NEOS_SHARED_EDIT;
+    const prevAgents = process.env.NEOS_SHARED_EDIT_AGENTS;
     process.env.NEOS_SHARED_EDIT = '1';
+    delete process.env.NEOS_SHARED_EDIT_AGENTS;
     try {
       const project = await createViaApi();
       // Locks are path keys — no on-disk file required for mkdir hard-enforce
@@ -317,7 +319,7 @@ describe('projects routes', () => {
       });
       expect(allowed.status).toBe(201);
 
-      // Agent PUT bypasses hard-enforce even without session (intentional policy)
+      // Agent PUT bypasses hard-enforce even without session (default policy)
       await app.request(`/api/projects/${project.id}/files/agent-only.html`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -357,6 +359,124 @@ describe('projects routes', () => {
     } finally {
       if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
       else process.env.NEOS_SHARED_EDIT = prev;
+      if (prevAgents === undefined) delete process.env.NEOS_SHARED_EDIT_AGENTS;
+      else process.env.NEOS_SHARED_EDIT_AGENTS = prevAgents;
+    }
+  });
+
+  it('NEOS_SHARED_EDIT_AGENTS hard-enforces agent PUT on locked paths (v0.10 M0)', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    const prevAgents = process.env.NEOS_SHARED_EDIT_AGENTS;
+    process.env.NEOS_SHARED_EDIT = '1';
+    process.env.NEOS_SHARED_EDIT_AGENTS = '1';
+    try {
+      const project = await createViaApi();
+      await app.request(`/api/projects/${project.id}/files/agent-lock.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'v1' }),
+      });
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'HumanHolder',
+        listener: () => {},
+      })!;
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: holder.sessionId,
+          path: 'agent-lock.html',
+        }).ok,
+      ).toBe(true);
+
+      const locks = await app.request(`/api/projects/${project.id}/collab/locks`);
+      expect(locks.status).toBe(200);
+      const locksBody = (await locks.json()) as {
+        data?: { hardEnforce?: boolean; agentsHardEnforce?: boolean };
+      };
+      expect(locksBody.data?.hardEnforce).toBe(true);
+      expect(locksBody.data?.agentsHardEnforce).toBe(true);
+
+      // Agent without session → 423
+      const blocked = await app.request(
+        `/api/projects/${project.id}/files/agent-lock.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'agent-no-session', source: 'agent' }),
+        },
+      );
+      expect(blocked.status).toBe(423);
+      const blockedBody = (await blocked.json()) as {
+        ok: boolean;
+        data?: { holder?: { sessionId?: string } };
+      };
+      expect(blockedBody.ok).toBe(false);
+      expect(blockedBody.data?.holder?.sessionId).toBe(holder.sessionId);
+
+      // Agent as holder session → 200
+      const asHolder = await app.request(
+        `/api/projects/${project.id}/files/agent-lock.html`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-neos-session-id': holder.sessionId,
+          },
+          body: JSON.stringify({
+            content: 'agent-as-holder',
+            source: 'agent',
+            sessionId: holder.sessionId,
+          }),
+        },
+      );
+      expect(asHolder.status).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+      if (prevAgents === undefined) delete process.env.NEOS_SHARED_EDIT_AGENTS;
+      else process.env.NEOS_SHARED_EDIT_AGENTS = prevAgents;
+    }
+  });
+
+  it('NEOS_SHARED_EDIT_AGENTS alone does not enforce without NEOS_SHARED_EDIT', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    const prevAgents = process.env.NEOS_SHARED_EDIT_AGENTS;
+    delete process.env.NEOS_SHARED_EDIT;
+    process.env.NEOS_SHARED_EDIT_AGENTS = '1';
+    try {
+      const project = await createViaApi();
+      await app.request(`/api/projects/${project.id}/files/agents-only-flag.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'v1' }),
+      });
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'H',
+        listener: () => {},
+      })!;
+      expect(
+        acquireFileLock({
+          projectId: project.id,
+          sessionId: holder.sessionId,
+          path: 'agents-only-flag.html',
+        }).ok,
+      ).toBe(true);
+      const agentWrite = await app.request(
+        `/api/projects/${project.id}/files/agents-only-flag.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'agent', source: 'agent' }),
+        },
+      );
+      expect(agentWrite.status).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+      if (prevAgents === undefined) delete process.env.NEOS_SHARED_EDIT_AGENTS;
+      else process.env.NEOS_SHARED_EDIT_AGENTS = prevAgents;
     }
   });
 

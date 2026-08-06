@@ -4,6 +4,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import {
+  isCanvasOverlayEnabled,
+  writeCanvasOverlayPref,
+} from '@neos-work/design-editor';
 import { McpInstallPanel, type McpInstallInfo } from '@neos-work/ui-app';
 import { clearConnection, loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
@@ -48,6 +52,7 @@ export function Settings() {
   const [settingsMap, setSettingsMap] = useState<Record<string, string>>({});
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+  const [canvasOverlay, setCanvasOverlay] = useState(() => isCanvasOverlayEnabled());
   const [verifyState, setVerifyState] = useState<Record<string, VerifyState>>({});
   const [saveState, setSaveState] = useState<Record<string, SaveState>>({});
 
@@ -321,6 +326,58 @@ export function Settings() {
             </div>
           );
         })}
+      </section>
+
+      <section className="card stack" data-testid="editor-prefs-section">
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1rem' }}>Design Editor</h2>
+          <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+            Local preferences for this browser (not stored on the daemon).
+          </p>
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div>Canvas overlay</div>
+            <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: 12 }}>
+              Move, resize, align, and z-order on HTML Preview (default on). Env{' '}
+              <code className="mono">VITE_NEOS_CANVAS_OVERLAY=0</code> forces off.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn"
+            role="switch"
+            aria-checked={canvasOverlay}
+            data-testid="settings-canvas-overlay"
+            onClick={() => {
+              const next = !canvasOverlay;
+              writeCanvasOverlayPref(next);
+              setCanvasOverlay(next);
+            }}
+          >
+            {canvasOverlay ? 'On' : 'Off'}
+          </button>
+        </div>
+      </section>
+
+      <section className="card stack" data-testid="dual-surface-badge">
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1rem' }}>Desktop-only surfaces</h2>
+          <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+            This browser client is the Design Project loop (editor, collab, comments, zip, runs).
+            Full product surfaces stay on the Tauri app.
+          </p>
+        </div>
+        <ul className="muted" style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 13 }}>
+          <li>
+            <strong>Plugins / marketplace</strong> — remote catalog install, trust tiers (desktop
+            Plugins page)
+          </li>
+          <li>Workflow editor · Domain packs · Media studio · Sessions · Memory UI</li>
+        </ul>
+        <p className="muted mono" style={{ margin: 0, fontSize: 11 }}>
+          Policy: docs/reference/dual-surface.md (Q25 · Q29)
+        </p>
       </section>
 
       <section className="card stack" data-testid="collab-status-section">

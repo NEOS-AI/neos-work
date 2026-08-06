@@ -750,12 +750,40 @@ export function listProjectSelections(projectId: string): PeerSelection[] {
  * PUT write (`source=user`), DELETE file, POST revision restore, POST mkdir.
  * Callers identify as the holder via body `sessionId` and/or `x-neos-session-id`.
  *
- * **Agent bypass (intentional):** `source=agent` / run-pipeline disk writes are
- * not hard-enforced — daemon agents remain project-level writers (ADR 0001).
+ * **Agent bypass (default):** `source=agent` writes are not hard-enforced unless
+ * {@link isSharedEditAgentsHardEnforce} is also on (v0.10 M0 / Q30).
  */
 export function isSharedEditHardEnforce(): boolean {
   const v = process.env.NEOS_SHARED_EDIT;
   return v === '1' || v === 'true';
+}
+
+/**
+ * When true (and base {@link isSharedEditHardEnforce} is on), apply the same
+ * lock hard-enforce to `source=agent` PUT writes (v0.10 M0 / Q28).
+ *
+ * Env: `NEOS_SHARED_EDIT_AGENTS=1|true`. Ignored when `NEOS_SHARED_EDIT` is off.
+ */
+export function isSharedEditAgentsHardEnforce(): boolean {
+  if (!isSharedEditHardEnforce()) return false;
+  const v = process.env.NEOS_SHARED_EDIT_AGENTS;
+  return v === '1' || v === 'true';
+}
+
+/**
+ * Whether a file write `source` should run hard-enforce lock checks.
+ * - `user` (and unknown → user): when base hard-enforce on
+ * - `agent`: only when agents hard-enforce on
+ * - `import` / `restore`: not via this write-source path (restore uses its own check)
+ */
+export function shouldHardEnforceWriteSource(
+  source: string | null | undefined,
+): boolean {
+  const s = typeof source === 'string' ? source : 'user';
+  if (s === 'agent') return isSharedEditAgentsHardEnforce();
+  if (s === 'import' || s === 'restore') return false;
+  // user (default)
+  return isSharedEditHardEnforce();
 }
 
 /** Test helper — clear all rooms, locks, selections, and membership. */

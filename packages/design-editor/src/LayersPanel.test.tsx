@@ -51,6 +51,50 @@ const deepLayers: LayerNode[] = [
   },
 ];
 
+const siblingLayers: LayerNode[] = [
+  {
+    id: 'list',
+    tag: 'ul',
+    name: 'ul',
+    selector: 'ul',
+    depth: 0,
+    visible: true,
+    locked: false,
+    children: [
+      {
+        id: 'a',
+        tag: 'li',
+        name: 'li A',
+        selector: 'li:nth-of-type(1)',
+        depth: 1,
+        visible: true,
+        locked: false,
+        children: [],
+      },
+      {
+        id: 'b',
+        tag: 'li',
+        name: 'li B',
+        selector: 'li:nth-of-type(2)',
+        depth: 1,
+        visible: true,
+        locked: false,
+        children: [],
+      },
+      {
+        id: 'c',
+        tag: 'li',
+        name: 'li C',
+        selector: 'li:nth-of-type(3)',
+        depth: 1,
+        visible: true,
+        locked: true,
+        children: [],
+      },
+    ],
+  },
+];
+
 describe('LayersPanel', () => {
   it('renders tree, selects row, toggles visibility', () => {
     const onSelect = vi.fn();
@@ -95,6 +139,86 @@ describe('LayersPanel', () => {
       target: { value: 'no-match-xyz' },
     });
     expect(screen.getByTestId('layers-empty')).toBeTruthy();
+  });
+
+  it('drag-reorders same-parent siblings and blocks locked / cross-parent', () => {
+    const onReorder = vi.fn();
+    render(
+      <LayersPanel
+        layers={siblingLayers}
+        source="parse"
+        onReorderSibling={onReorder}
+      />,
+    );
+    expect(screen.getByTestId('layers-panel').getAttribute('data-reorder')).toBe(
+      '1',
+    );
+    expect(screen.getByTestId('layer-drag-a')).toBeTruthy();
+    // Locked node has no drag handle
+    expect(screen.queryByTestId('layer-drag-c')).toBeNull();
+
+    const source = screen.getByTestId('layer-row-b');
+    const target = screen.getByTestId('layer-row-a');
+
+    fireEvent.dragStart(source, {
+      dataTransfer: {
+        setData: vi.fn(),
+        effectAllowed: 'move',
+        getData: () => 'b',
+      },
+    });
+    fireEvent.dragOver(target, {
+      clientY: 0,
+      dataTransfer: { dropEffect: 'move' },
+    });
+    fireEvent.drop(target, {
+      clientY: 0,
+      dataTransfer: {
+        getData: (type: string) => (type.includes('neos') || type === 'text/plain' ? 'b' : ''),
+      },
+    });
+
+    // jsdom zero-height rows resolve to "before" (still a valid same-parent drop)
+    expect(onReorder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ id: 'b' }),
+        target: expect.objectContaining({ id: 'a' }),
+        position: 'before',
+        parentId: 'list',
+      }),
+    );
+  });
+
+  it('disables reorder for JSX source and while filtering', () => {
+    const onReorder = vi.fn();
+    const { rerender } = render(
+      <LayersPanel
+        layers={siblingLayers}
+        source="jsx"
+        onReorderSibling={onReorder}
+      />,
+    );
+    expect(screen.getByTestId('layers-panel').getAttribute('data-reorder')).toBe(
+      '0',
+    );
+    expect(screen.getByTestId('layers-reorder-hint')).toBeTruthy();
+
+    rerender(
+      <LayersPanel
+        layers={siblingLayers}
+        source="parse"
+        onReorderSibling={onReorder}
+      />,
+    );
+    expect(screen.getByTestId('layers-panel').getAttribute('data-reorder')).toBe(
+      '1',
+    );
+    fireEvent.change(screen.getByTestId('layers-filter'), {
+      target: { value: 'li' },
+    });
+    expect(screen.getByTestId('layers-panel').getAttribute('data-reorder')).toBe(
+      '0',
+    );
   });
 
   it('collapses, locks, hovers, context-menu, and footer actions', () => {

@@ -58,7 +58,9 @@ import {
 import {
   acquireFileLock,
   getFileLock,
+  isSharedEditAgentsHardEnforce,
   isSharedEditHardEnforce,
+  shouldHardEnforceWriteSource,
   hydrateMembershipFromRegistry,
   joinProjectPresence,
   listProjectLocks,
@@ -495,6 +497,7 @@ projects.get('/:id/collab/locks', (c) => {
     data: {
       locks: listProjectLocks(id),
       hardEnforce: isSharedEditHardEnforce(),
+      agentsHardEnforce: isSharedEditAgentsHardEnforce(),
     },
   };
   assertCollabLocksSnapshotResponse(locksBody);
@@ -752,8 +755,8 @@ projects.put('/:id/files/*', async (c) => {
     ? (sourceRaw as FileRevisionSource)
     : 'user';
 
-  // M3 hard enforce: when NEOS_SHARED_EDIT=1, reject user writes if another session holds the lock
-  if (source === 'user') {
+  // Hard enforce: user always when NEOS_SHARED_EDIT=1; agent when NEOS_SHARED_EDIT_AGENTS=1 (v0.10 M0)
+  if (shouldHardEnforceWriteSource(source)) {
     const blocked = hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, body));
     if (blocked) return c.json(blocked, 423);
   }

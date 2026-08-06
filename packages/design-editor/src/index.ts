@@ -30,10 +30,18 @@ export {
   findLayerBySelector,
   flattenLayers,
   parseHtmlToLayerTree,
+  applyZOrderInHtml,
+  reorderSiblingByNeosId,
+  reorderSiblingInHtml,
   stampNeosIds,
   toggleLockByNeosId,
   toggleVisibilityByNeosId,
   toggleVisibilityInHtml,
+  type ReorderSiblingReason,
+  type ReorderSiblingResult,
+  type ReorderSiblingSource,
+  type ReorderSiblingTarget,
+  type ZOrderOp,
 } from './html-layers.js';
 
 export {
@@ -66,7 +74,11 @@ export {
   type PreviewFrameProps,
 } from './PreviewFrame.js';
 export { CodeEditor, type CodeEditorProps } from './CodeEditor.js';
-export { LayersPanel, type LayersPanelProps } from './LayersPanel.js';
+export {
+  LayersPanel,
+  type LayerReorderPayload,
+  type LayersPanelProps,
+} from './LayersPanel.js';
 export {
   DesignEditor,
   CANVAS_UNDO_CAP,
@@ -77,15 +89,25 @@ export {
 } from './DesignEditor.js';
 
 export {
+  applyAlignToHtml,
+  applyDistributeToHtml,
   applyGroupResizeToHtml,
   applyPositionDeltaToHtml,
   applySizeDeltaToHtml,
+  CANVAS_OVERLAY_PREF_KEY,
+  computeAlignDeltas,
+  computeDistributeDeltas,
   computeGroupResizeScales,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
   mergePositionDeltaIntoOpenTag,
   mergeSizeDeltaIntoOpenTag,
+  readCanvasOverlayPref,
   scaleBBoxFromAnchor,
+  writeCanvasOverlayPref,
+  type AlignableBox,
+  type AlignDelta,
+  type AlignEdge,
   type GroupResizeBBox,
 } from './canvas-style.js';
 export {

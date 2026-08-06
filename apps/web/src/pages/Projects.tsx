@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { clearConnection, loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
@@ -18,6 +18,7 @@ function scrubError(raw: unknown, fallback: string): string {
 export function Projects() {
   const nav = useNavigate();
   const conn = loadConnection();
+  const zipInputRef = useRef<HTMLInputElement>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +30,8 @@ export function Projects() {
   const [renameBusy, setRenameBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
 
   const client = useCallback(() => {
     return new WebApiClient(conn.serverUrl, conn.token);
@@ -162,6 +165,66 @@ export function Projects() {
     }
   };
 
+  const handleExportZip = async (id: string, name: string) => {
+    if (zipBusy) return;
+    setZipBusy(true);
+    setZipError(null);
+    try {
+      const res = await client().exportProjectZip(id);
+      if (!res.ok) {
+        setZipError(scrubError(res.error, 'Export failed'));
+        return;
+      }
+      const url = URL.createObjectURL(res.blob);
+      const a = document.createElement('a');
+      const safe =
+        name.replace(/[\0\r\n]+/g, ' ').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60)
+        || id.slice(0, 8);
+      a.href = url;
+      a.download = `${safe}.neos-project.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      setZipError(scrubError(err, 'Export failed'));
+    } finally {
+      setZipBusy(false);
+    }
+  };
+
+  const handleImportZip = async (file: File | null) => {
+    if (!file || zipBusy) return;
+    if (
+      !file.name.toLowerCase().endsWith('.zip')
+      && file.type
+      && !file.type.includes('zip')
+    ) {
+      setZipError('Choose a .zip project archive');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setZipError('Zip too large (max 50 MiB)');
+      return;
+    }
+    setZipBusy(true);
+    setZipError(null);
+    try {
+      const res = await client().importProjectZip(file);
+      if (!res.ok || !res.data?.project?.id) {
+        setZipError(scrubError(res.error, 'Import failed'));
+        return;
+      }
+      await reload();
+      nav(`/projects/${encodeURIComponent(res.data.project.id)}`);
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      setZipError(scrubError(err, 'Import failed'));
+    } finally {
+      setZipBusy(false);
+      if (zipInputRef.current) zipInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="layout stack">
       <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -219,10 +282,35 @@ export function Projects() {
         >
           {creating ? 'Creating…' : 'Create'}
         </button>
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          style={{ display: 'none' }}
+          data-testid="project-import-zip-input"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            void handleImportZip(f);
+          }}
+        />
+        <button
+          type="button"
+          className="btn btn-ghost"
+          data-testid="project-import-zip"
+          disabled={zipBusy || creating}
+          onClick={() => zipInputRef.current?.click()}
+        >
+          {zipBusy ? 'Zip…' : 'Import zip'}
+        </button>
       </form>
       {createError && (
         <p className="err" role="alert" data-testid="project-create-error">
           {createError}
+        </p>
+      )}
+      {zipError && (
+        <p className="err" role="alert" data-testid="project-zip-error">
+          {zipError}
         </p>
       )}
 
@@ -302,8 +390,17 @@ export function Projects() {
                   <button
                     type="button"
                     className="btn btn-ghost"
+                    data-testid={`project-export-${p.id}`}
+                    disabled={!!deletingId || renameBusy || zipBusy}
+                    onClick={() => void handleExportZip(p.id, p.name)}
+                  >
+                    Export
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
                     data-testid={`project-rename-${p.id}`}
-                    disabled={!!deletingId || renameBusy}
+                    disabled={!!deletingId || renameBusy || zipBusy}
                     onClick={() => startRename(p)}
                   >
                     Rename
@@ -312,7 +409,7 @@ export function Projects() {
                     type="button"
                     className="btn btn-ghost"
                     data-testid={`project-delete-${p.id}`}
-                    disabled={!!deletingId || renameBusy}
+                    disabled={!!deletingId || renameBusy || zipBusy}
                     style={{ color: 'var(--danger)' }}
                     onClick={() => void handleDelete(p.id, p.name)}
                   >

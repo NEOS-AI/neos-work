@@ -6,6 +6,8 @@ const listProjects = vi.fn();
 const createProject = vi.fn();
 const updateProject = vi.fn();
 const deleteProject = vi.fn();
+const importProjectZip = vi.fn();
+const exportProjectZip = vi.fn();
 
 vi.mock('../lib/auth.js', () => ({
   loadConnection: () => ({
@@ -24,6 +26,8 @@ vi.mock('../lib/api.js', async () => {
       createProject = createProject;
       updateProject = updateProject;
       deleteProject = deleteProject;
+      importProjectZip = importProjectZip;
+      exportProjectZip = exportProjectZip;
     },
   };
 });
@@ -57,10 +61,23 @@ describe('Projects page', () => {
       data: { id: 'p1', name: 'Renamed' },
     });
     deleteProject.mockReset().mockResolvedValue({ ok: true });
+    importProjectZip.mockReset().mockResolvedValue({
+      ok: true,
+      data: { project: { id: 'p-imp', name: 'FromZip' }, filesImported: 2 },
+    });
+    exportProjectZip.mockReset().mockResolvedValue({
+      ok: true,
+      blob: new Blob([new Uint8Array([0x50, 0x4b])], { type: 'application/zip' }),
+    });
     vi.stubGlobal(
       'confirm',
       vi.fn(() => true),
     );
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:mock'),
+      revokeObjectURL: vi.fn(),
+    });
   });
 
   it('lists projects', async () => {
@@ -176,6 +193,42 @@ describe('Projects page', () => {
       expect(screen.getByTestId('project-action-error')).toHaveTextContent(/del no/);
     });
     expect(screen.getByText('Existing')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('\0');
+  });
+
+  it('imports zip and navigates to new project', async () => {
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-import-zip')).toBeInTheDocument());
+    const input = screen.getByTestId('project-import-zip-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2])], 'proj.zip', { type: 'application/zip' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(importProjectZip).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('project-detail')).toBeInTheDocument();
+    });
+  });
+
+  it('exports zip for a project row', async () => {
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-export-p1')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-export-p1'));
+    await waitFor(() => {
+      expect(exportProjectZip).toHaveBeenCalledWith('p1');
+    });
+  });
+
+  it('surfaces import zip errors', async () => {
+    importProjectZip.mockResolvedValue({ ok: false, error: `bad${'\n'}zip${'\0'}` });
+    renderProjects();
+    await waitFor(() => expect(screen.getByTestId('project-import-zip-input')).toBeInTheDocument());
+    const input = screen.getByTestId('project-import-zip-input');
+    const file = new File([new Uint8Array([1])], 'x.zip', { type: 'application/zip' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(screen.getByTestId('project-zip-error')).toHaveTextContent(/bad zip/);
+    });
     expect(document.body.textContent).not.toContain('\0');
   });
 });

@@ -5,7 +5,9 @@ import {
   clearProjectPresence,
   colorHintFromSessionId,
   getFileLock,
+  isSharedEditAgentsHardEnforce,
   isSharedEditHardEnforce,
+  shouldHardEnforceWriteSource,
   joinProjectPresence,
   listProjectLocks,
   listProjectPeers,
@@ -188,6 +190,31 @@ describe('project-collab presence', () => {
     expect(isSharedEditHardEnforce()).toBe(false);
     if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
     else process.env.NEOS_SHARED_EDIT = prev;
+  });
+
+  it('isSharedEditAgentsHardEnforce requires base + agents env (v0.10)', () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    const prevA = process.env.NEOS_SHARED_EDIT_AGENTS;
+    delete process.env.NEOS_SHARED_EDIT;
+    process.env.NEOS_SHARED_EDIT_AGENTS = '1';
+    expect(isSharedEditAgentsHardEnforce()).toBe(false);
+    expect(shouldHardEnforceWriteSource('agent')).toBe(false);
+
+    process.env.NEOS_SHARED_EDIT = '1';
+    process.env.NEOS_SHARED_EDIT_AGENTS = '1';
+    expect(isSharedEditAgentsHardEnforce()).toBe(true);
+    expect(shouldHardEnforceWriteSource('agent')).toBe(true);
+    expect(shouldHardEnforceWriteSource('user')).toBe(true);
+
+    delete process.env.NEOS_SHARED_EDIT_AGENTS;
+    expect(isSharedEditAgentsHardEnforce()).toBe(false);
+    expect(shouldHardEnforceWriteSource('agent')).toBe(false);
+    expect(shouldHardEnforceWriteSource('user')).toBe(true);
+
+    if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+    else process.env.NEOS_SHARED_EDIT = prev;
+    if (prevA === undefined) delete process.env.NEOS_SHARED_EDIT_AGENTS;
+    else process.env.NEOS_SHARED_EDIT_AGENTS = prevA;
   });
 
   it('sanitizeSelector bounds and strips controls', () => {

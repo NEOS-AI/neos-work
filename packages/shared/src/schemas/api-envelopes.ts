@@ -126,6 +126,8 @@ export const collabLocksSnapshotSchema = apiEnvelopeSchema(
   z.object({
     locks: z.array(fileLockSchema),
     hardEnforce: z.boolean().optional(),
+    /** v0.10: agent writes also hard-enforced when true (requires hardEnforce). */
+    agentsHardEnforce: z.boolean().optional(),
   }),
 );
 
@@ -217,6 +219,24 @@ export const fileRevisionDetailSchema = fileRevisionListItemSchema.extend({
 
 export const fileRevisionDetailResponseSchema = apiEnvelopeSchema(fileRevisionDetailSchema);
 
+// ── Preview comments (v0.9 M3 shared wire) ─────────────────
+
+export const previewCommentSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  filePath: z.string().min(1),
+  selector: z.string().min(1),
+  body: z.string(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().optional(),
+});
+
+export const previewCommentListResponseSchema = apiEnvelopeSchema(
+  z.array(previewCommentSchema),
+);
+
+export const previewCommentDetailResponseSchema = apiEnvelopeSchema(previewCommentSchema);
+
 // ── Parse helpers ──────────────────────────────────────────
 
 export type ParseOk<T> = { ok: true; data: T };
@@ -301,6 +321,14 @@ export function parseFileRevisionDetailResponse(input: unknown) {
 
 export function parseProjectFileEventPayload(input: unknown) {
   return parseWithSchema(projectFileEventPayloadSchema, input);
+}
+
+export function parsePreviewCommentListResponse(input: unknown) {
+  return parseWithSchema(previewCommentListResponseSchema, input);
+}
+
+export function parsePreviewCommentDetailResponse(input: unknown) {
+  return parseWithSchema(previewCommentDetailResponseSchema, input);
 }
 
 // ── Lightweight OpenAPI fragment (JSON Schema 2020-ish) ────
@@ -400,6 +428,19 @@ export const openApiWireFragments = {
       content: { type: 'string' },
       source: { type: 'string' },
       createdAt: { type: 'string' },
+    },
+  },
+  PreviewComment: {
+    type: 'object',
+    required: ['id', 'projectId', 'filePath', 'selector', 'body', 'createdAt'],
+    properties: {
+      id: { type: 'string' },
+      projectId: { type: 'string' },
+      filePath: { type: 'string', description: 'Project-relative path' },
+      selector: { type: 'string', description: 'CSS / bridge selector' },
+      body: { type: 'string' },
+      createdAt: { type: 'string' },
+      updatedAt: { type: 'string' },
     },
   },
   ProjectFileEventPayload: {

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  isCanvasOverlayEnabled,
+  writeCanvasOverlayPref,
+} from '@neos-work/design-editor';
 import { McpInstallPanel, type McpInstallInfo } from '@neos-work/ui-app';
 
 import { useEngine } from '../hooks/useEngine.js';
@@ -13,6 +17,7 @@ export function Settings() {
   const { t, i18n } = useTranslation(['settings', 'common']);
   const { client } = useEngine();
   const { theme, setTheme } = useTheme();
+  const [canvasOverlay, setCanvasOverlay] = useState(() => isCanvasOverlayEnabled());
 
   // Default provider / model
   const [defaultProvider, setDefaultProvider] = useState('anthropic');
@@ -214,6 +219,45 @@ export function Settings() {
               <option value="en">English</option>
               <option value="ko">한국어</option>
             </select>
+          </div>
+
+          {/* Canvas overlay (v0.9 M1) */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <label
+                className="text-sm"
+                style={{ color: 'var(--text-secondary)' }}
+                htmlFor="canvas-overlay-toggle"
+              >
+                {t('settings:appearance.canvasOverlay')}
+              </label>
+              <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                {t('settings:appearance.canvasOverlayHint')}
+              </p>
+            </div>
+            <button
+              id="canvas-overlay-toggle"
+              type="button"
+              role="switch"
+              aria-checked={canvasOverlay}
+              data-testid="settings-canvas-overlay"
+              onClick={() => {
+                const next = !canvasOverlay;
+                writeCanvasOverlayPref(next);
+                setCanvasOverlay(next);
+              }}
+              className="rounded-md px-3 py-1 text-xs transition-colors"
+              style={{
+                border: '1px solid var(--border-secondary)',
+                backgroundColor: canvasOverlay
+                  ? 'var(--border-secondary)'
+                  : 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                minWidth: 52,
+              }}
+            >
+              {canvasOverlay ? 'On' : 'Off'}
+            </button>
           </div>
         </div>
       </section>

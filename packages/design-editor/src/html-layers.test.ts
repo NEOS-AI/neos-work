@@ -6,6 +6,9 @@ import {
   findLayerBySelector,
   flattenLayers,
   parseHtmlToLayerTree,
+  applyZOrderInHtml,
+  reorderSiblingByNeosId,
+  reorderSiblingInHtml,
   stampNeosIds,
   toggleLockByNeosId,
   toggleVisibilityByNeosId,
@@ -80,6 +83,147 @@ describe('stamp + visibility/lock', () => {
     expect(locked).toContain('data-neos-locked');
     const unlocked = toggleLockByNeosId(locked, 'e1', false);
     expect(unlocked).not.toContain('data-neos-locked');
+  });
+});
+
+describe('reorderSiblingInHtml (v0.9 M0)', () => {
+  const LIST = `<!DOCTYPE html><html><body>
+  <ul data-neos-id="list">
+    <li data-neos-id="a">A</li>
+    <li data-neos-id="b">B</li>
+    <li data-neos-id="c">C</li>
+  </ul>
+</body></html>`;
+
+  it('moves B before A (same parent)', () => {
+    const result = reorderSiblingInHtml(
+      LIST,
+      { neosId: 'b' },
+      { beforeNeosId: 'a' },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.html).toMatch(
+      /data-neos-id="b"[\s\S]*data-neos-id="a"[\s\S]*data-neos-id="c"/,
+    );
+  });
+
+  it('moves A after C (append among siblings)', () => {
+    const result = reorderSiblingByNeosId(LIST, 'a', { afterNeosId: 'c' });
+    expect(result.ok).toBe(true);
+    expect(result.html).toMatch(
+      /data-neos-id="b"[\s\S]*data-neos-id="c"[\s\S]*data-neos-id="a"/,
+    );
+  });
+
+  it('supports toIndex as final sibling index', () => {
+    // Move C to index 0
+    const result = reorderSiblingInHtml(LIST, { neosId: 'c' }, { toIndex: 0 });
+    expect(result.ok).toBe(true);
+    expect(result.html).toMatch(
+      /data-neos-id="c"[\s\S]*data-neos-id="a"[\s\S]*data-neos-id="b"/,
+    );
+  });
+
+  it('rejects locked source', () => {
+    const locked = LIST.replace(
+      'data-neos-id="b"',
+      'data-neos-id="b" data-neos-locked="true"',
+    );
+    const result = reorderSiblingInHtml(
+      locked,
+      { neosId: 'b' },
+      { beforeNeosId: 'a' },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('locked');
+    expect(result.html).toBe(locked);
+  });
+
+  it('rejects different parent', () => {
+    const nested = `<body>
+      <div data-neos-id="p1"><span data-neos-id="s1">1</span></div>
+      <div data-neos-id="p2"><span data-neos-id="s2">2</span></div>
+    </body>`;
+    const result = reorderSiblingInHtml(
+      nested,
+      { neosId: 's1' },
+      { beforeNeosId: 's2' },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('different-parent');
+  });
+
+  it('no-op when already in place', () => {
+    const result = reorderSiblingInHtml(
+      LIST,
+      { neosId: 'a' },
+      { beforeNeosId: 'b' },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no-op');
+  });
+
+  it('not-found for missing id', () => {
+    const result = reorderSiblingInHtml(
+      LIST,
+      { neosId: 'missing' },
+      { beforeNeosId: 'a' },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('not-found');
+  });
+
+  it('works after stampNeosIds when only class selectors exist', () => {
+    const raw = '<body><div class="box"><p>one</p><p>two</p></div></body>';
+    const stamped = stampNeosIds(raw);
+    const layers = parseHtmlToLayerTree(stamped);
+    const flat = flattenLayers(layers);
+    const paragraphs = flat.filter((n) => n.tag === 'p');
+    expect(paragraphs.length).toBe(2);
+    const [p1, p2] = paragraphs;
+    const result = reorderSiblingInHtml(
+      stamped,
+      { neosId: p2.id },
+      { beforeNeosId: p1.id },
+    );
+    expect(result.ok).toBe(true);
+    // first <p> in document should now be former p2 text "two"
+    const body = result.html.replace(/\s+/g, ' ');
+    const firstP = /<p[^>]*>[^<]*/.exec(body)?.[0] ?? '';
+    expect(firstP).toMatch(/two/);
+  });
+});
+
+describe('applyZOrderInHtml (v0.9 M1)', () => {
+  const STACK = `<body>
+    <div data-neos-id="a">A</div>
+    <div data-neos-id="b">B</div>
+    <div data-neos-id="c">C</div>
+  </body>`;
+
+  it('brings forward and sends to back', () => {
+    const fwd = applyZOrderInHtml(STACK, { neosId: 'a' }, 'forward');
+    expect(fwd.ok).toBe(true);
+    expect(fwd.html).toMatch(
+      /data-neos-id="b"[\s\S]*data-neos-id="a"[\s\S]*data-neos-id="c"/,
+    );
+    const back = applyZOrderInHtml(STACK, { neosId: 'c' }, 'back');
+    expect(back.ok).toBe(true);
+    expect(back.html).toMatch(
+      /data-neos-id="c"[\s\S]*data-neos-id="a"[\s\S]*data-neos-id="b"/,
+    );
+  });
+
+  it('no-op at edge and locked', () => {
+    expect(applyZOrderInHtml(STACK, { neosId: 'a' }, 'back').reason).toBe('no-op');
+    expect(applyZOrderInHtml(STACK, { neosId: 'c' }, 'front').reason).toBe('no-op');
+    const locked = STACK.replace(
+      'data-neos-id="b"',
+      'data-neos-id="b" data-neos-locked="true"',
+    );
+    expect(applyZOrderInHtml(locked, { neosId: 'b' }, 'forward').reason).toBe(
+      'locked',
+    );
   });
 });
 

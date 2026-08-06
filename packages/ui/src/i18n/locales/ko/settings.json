@@ -18,8 +18,11 @@
     "dark": "다크",
     "light": "라이트",
     "system": "시스템",
-    "language": "언어"
+    "language": "언어",
+    "canvasOverlay": "캔버스 오버레이",
+    "canvasOverlayHint": "HTML Preview에서 선택 요소 이동·리사이즈·정렬·z-order (기본 ON)"
   },
+
   "defaults": {
     "title": "기본값",
     "provider": "기본 프로바이더",

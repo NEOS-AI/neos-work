@@ -1,25 +1,58 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyAlignToHtml,
+  applyDistributeToHtml,
   applyGroupResizeToHtml,
   applyPositionDeltaToHtml,
   applySizeDeltaToHtml,
+  CANVAS_OVERLAY_PREF_KEY,
+  computeAlignDeltas,
+  computeDistributeDeltas,
   computeGroupResizeScales,
   elementIdFromSelector,
   isCanvasOverlayEnabled,
   mergePositionDeltaIntoOpenTag,
   mergeSizeDeltaIntoOpenTag,
+  readCanvasOverlayPref,
   scaleBBoxFromAnchor,
+  writeCanvasOverlayPref,
 } from './canvas-style.js';
 
 describe('canvas-style', () => {
-  it('isCanvasOverlayEnabled respects explicit and env', () => {
+  it('isCanvasOverlayEnabled: default on, explicit, env force off, pref (v0.9 M1)', () => {
+    const g = globalThis as { NEOS_CANVAS_OVERLAY?: string };
+    const prevEnv = g.NEOS_CANVAS_OVERLAY;
+    delete g.NEOS_CANVAS_OVERLAY;
+    try {
+      localStorage.removeItem(CANVAS_OVERLAY_PREF_KEY);
+    } catch {
+      // ignore
+    }
+
     expect(isCanvasOverlayEnabled(true)).toBe(true);
     expect(isCanvasOverlayEnabled(false)).toBe(false);
-    const g = globalThis as { NEOS_CANVAS_OVERLAY?: string };
-    const prev = g.NEOS_CANVAS_OVERLAY;
+    // Q23 default on when no env/pref
+    expect(isCanvasOverlayEnabled()).toBe(true);
+
+    g.NEOS_CANVAS_OVERLAY = '0';
+    expect(isCanvasOverlayEnabled()).toBe(false);
     g.NEOS_CANVAS_OVERLAY = '1';
     expect(isCanvasOverlayEnabled()).toBe(true);
-    g.NEOS_CANVAS_OVERLAY = prev;
+    delete g.NEOS_CANVAS_OVERLAY;
+
+    writeCanvasOverlayPref(false);
+    expect(readCanvasOverlayPref()).toBe(false);
+    expect(isCanvasOverlayEnabled()).toBe(false);
+    writeCanvasOverlayPref(true);
+    expect(isCanvasOverlayEnabled()).toBe(true);
+
+    try {
+      localStorage.removeItem(CANVAS_OVERLAY_PREF_KEY);
+    } catch {
+      // ignore
+    }
+    if (prevEnv === undefined) delete g.NEOS_CANVAS_OVERLAY;
+    else g.NEOS_CANVAS_OVERLAY = prevEnv;
   });
 
   it('mergePositionDeltaIntoOpenTag sets relative left/top', () => {
@@ -133,5 +166,57 @@ describe('canvas-style', () => {
     expect(next).toMatch(/height:\s*40px/);
     expect(next).toMatch(/left:\s*90px/);
     expect(next).toMatch(/top:\s*40px/);
+  });
+
+  it('computeAlignDeltas aligns others to primary (v0.9 M1)', () => {
+    const primary = {
+      neosId: 'p',
+      x: 100,
+      y: 50,
+      width: 40,
+      height: 20,
+    };
+    const others = [
+      { neosId: 'a', x: 10, y: 80, width: 20, height: 10 },
+    ];
+    const left = computeAlignDeltas(primary, others, 'left');
+    expect(left).toEqual([{ neosId: 'a', elementId: undefined, dx: 90, dy: 0 }]);
+    const top = computeAlignDeltas(primary, others, 'top');
+    expect(top[0]?.dy).toBe(-30);
+    const center = computeAlignDeltas(primary, others, 'center');
+    // primary cx=120, other cx=20 → dx=100
+    expect(center[0]?.dx).toBe(100);
+  });
+
+  it('applyAlignToHtml moves non-primary elements', () => {
+    const html =
+      '<div data-neos-id="p" style="position:relative;left:100px;top:0px"></div>'
+      + '<div data-neos-id="a" style="position:relative;left:10px;top:0px"></div>';
+    const next = applyAlignToHtml(
+      html,
+      { neosId: 'p', x: 100, y: 0, width: 40, height: 20 },
+      [{ neosId: 'a', x: 10, y: 0, width: 20, height: 10 }],
+      'left',
+    );
+    expect(next).toMatch(/data-neos-id="a"[^>]*left:\s*100px/);
+  });
+
+  it('computeDistributeDeltas spaces middle boxes', () => {
+    const boxes = [
+      { neosId: 'a', x: 0, y: 0, width: 10, height: 10 },
+      { neosId: 'b', x: 10, y: 0, width: 10, height: 10 },
+      { neosId: 'c', x: 100, y: 0, width: 10, height: 10 },
+    ];
+    const d = computeDistributeDeltas(boxes, 'horizontal');
+    // middle b should move to x=50
+    expect(d.some((x) => x.neosId === 'b' && x.dx === 40)).toBe(true);
+    const html = applyDistributeToHtml(
+      '<i data-neos-id="a" style="left:0px"></i>'
+        + '<i data-neos-id="b" style="left:10px"></i>'
+        + '<i data-neos-id="c" style="left:100px"></i>',
+      boxes,
+      'horizontal',
+    );
+    expect(html).toMatch(/data-neos-id="b"[^>]*left:\s*50px/);
   });
 });

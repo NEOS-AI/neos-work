@@ -1,6 +1,8 @@
 # API surface notes (FE/CLI vs server)
 
-Last updated 2026-08-05 (post-remediation inventory refresh + connection probes).
+Last updated 2026-08-06 (v0.9.3 dual-surface policy + shared wire parsers).
+
+**Product matrix:** [`dual-surface.md`](./dual-surface.md) — Desktop full product; Web Design Project loop; marketplace **desktop-only** (Q29).
 
 ## Auth-exempt (by design)
 
@@ -18,8 +20,9 @@ See `apps/server/src/lib/auth-paths.ts`:
 | Surface | Primary client |
 |---------|----------------|
 | Desktop | `apps/desktop/src/lib/engine.ts` |
-| Web | `apps/web/src/lib/api.ts` (thin: projects lifecycle + detail, settings, collab, runs) |
+| Web | `apps/web/src/lib/api.ts` (thin: projects lifecycle + detail, comments, zip, settings, collab, runs) |
 | CLI | `apps/cli/src/client.ts` |
+| Shared wire | `@neos-work/shared` Zod parse (`hash` / `contentHash` / preview comments) |
 
 ## Intentional orphans / dual paths
 

@@ -48,22 +48,22 @@ only the lock holder may complete these **peer / human** mutations:
 Mismatch or missing session while another peer holds the lock → **HTTP 423** with
 `{ ok: false, error, data: { holder } }` (same shape as lock conflict holder).
 
-### Agent bypass (accepted decision)
+### Agent bypass (default) and optional agent enforce (v0.10 M0)
 
 | Writer | Hard-enforce |
 |---|---|
-| Human / UI (`source: "user"`) | **Yes** |
-| Agent / run pipeline (`source: "agent"` or daemon tool writes) | **No** |
-| `NEOS_SHARED_EDIT` off (default) | Advisory locks only (no 423) |
+| Human / UI (`source: "user"`) | **Yes** when `NEOS_SHARED_EDIT=1` |
+| Agent / run pipeline (`source: "agent"`) | **No by default**; **Yes** when `NEOS_SHARED_EDIT=1` **and** `NEOS_SHARED_EDIT_AGENTS=1` |
+| `NEOS_SHARED_EDIT` off (default) | Advisory locks only (no 423); agents flag ignored |
 
-**Rationale:** Peer locks constrain multi-human clients on a shared project.
+**Rationale (default bypass):** Peer locks constrain multi-human clients.
 Agent runs are daemon-mediated and must still apply file tool writes while a
-human holds a lock (edit-with-AI while “my lock” is normal). Requiring agents to
-impersonate a collab session would couple the run registry to presence without a
-clear multi-user ownership model.
+human holds a lock (edit-with-AI while “my lock” is normal).
 
-**Future (if product requires):** optional `NEOS_SHARED_EDIT_AGENTS=1` to enforce
-locks on agent writes, or bind run → sessionId at create time.
+**Opt-in agent enforce (Q30):** Operators who want agents blocked by foreign
+locks set both env flags. Agents may still succeed if they present the lock
+holder’s collab `sessionId` / `x-neos-session-id` (Q31 — no run→session bind
+required in 0.10.0). Optional future: bind run → sessionId at create time.
 
 Wire/doc conventions for hash fields and envelopes:
 [`skills/api-docs/references/conventions.md`](../../skills/api-docs/references/conventions.md).

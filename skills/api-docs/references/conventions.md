@@ -5,7 +5,8 @@ field names in older notes.
 
 **Schemas:** `packages/shared/src/schemas/api-envelopes.ts`  
 **Types:** `packages/shared/src/types/project.ts`  
-**Contract smoke:** `pnpm e2e:contract` (`apps/server/src/routes/contract-fe-be.test.ts`)
+**Contract smoke:** `pnpm e2e:contract` (`apps/server/src/routes/contract-fe-be.test.ts`)  
+**Dual-surface matrix:** `docs/reference/dual-surface.md` (Desktop full · Web Design loop · CLI headless)
 
 ---
 
@@ -74,13 +75,30 @@ These are **different domains**. Do not mix them in docs or client mapping.
   adapter boundary, not in REST docs.
 - Zod: `parseProjectFileWriteResponse` requires `hash`; revision schemas require
   `contentHash`.
+- Preview comments: `parsePreviewCommentListResponse` /
+  `parsePreviewCommentDetailResponse` (shared wire; web validates on list/create).
+
+### Shared parse helpers (prefer these)
+
+| Domain | Helper |
+|---|---|
+| Live write | `parseProjectFileWriteResponse` |
+| Live file content | `projectFileContentSchema` / content response |
+| Revisions | `parseFileRevisionListResponse` / `parseFileRevisionDetailResponse` |
+| Preview comments | `parsePreviewCommentListResponse` / `parsePreviewCommentDetailResponse` |
+| Collab lock conflict | `parseCollabLockConflict` |
+| Paths | `normalizeProjectRelPath` |
+
+Do **not** invent a second mega client in 0.9 — share Zod + types only (Q26).
 
 ---
 
 ## 3. Collab session identity (hard enforce)
 
 When `NEOS_SHARED_EDIT=1` (or `true`) and a lock exists on the target path,
-user mutations must identify the collab **presence session** (from SSE `ready`):
+**user** mutations must identify the collab **presence session** (from SSE `ready`).
+When **also** `NEOS_SHARED_EDIT_AGENTS=1`, **agent** PUT writes (`source=agent`)
+use the same hard-enforce path (v0.10). Agents flag is ignored if base enforce is off.
 
 | Transport | Name |
 |---|---|

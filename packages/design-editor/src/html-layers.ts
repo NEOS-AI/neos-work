@@ -302,6 +302,270 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Source identity for sibling reorder (prefer `data-neos-id`). */
+export type ReorderSiblingSource = {
+  neosId?: string | null;
+  selector?: string | null;
+};
+
+/**
+ * Target position among the same parent’s element children (Q24: same-parent only).
+ * Prefer before/after sibling identity; `toIndex` is the desired final 0-based index.
+ */
+export type ReorderSiblingTarget = {
+  /** Desired final index among parent.element children after the move. */
+  toIndex?: number;
+  beforeNeosId?: string | null;
+  beforeSelector?: string | null;
+  afterNeosId?: string | null;
+  afterSelector?: string | null;
+};
+
+export type ReorderSiblingReason =
+  | 'invalid-input'
+  | 'not-found'
+  | 'no-parent'
+  | 'locked'
+  | 'target-not-found'
+  | 'different-parent'
+  | 'no-op'
+  | 'no-domparser';
+
+export type ReorderSiblingResult = {
+  html: string;
+  ok: boolean;
+  reason?: ReorderSiblingReason;
+};
+
+function findElementByIdentity(
+  doc: Document,
+  neosId?: string | null,
+  selector?: string | null,
+): Element | null {
+  const id = typeof neosId === 'string' ? neosId.trim() : '';
+  if (id && /^[\w-]+$/.test(id)) {
+    try {
+      const byNeos = doc.querySelector(`[data-neos-id="${id}"]`);
+      if (byNeos) return byNeos;
+    } catch {
+      // ignore bad selector construction
+    }
+  }
+  const sel = typeof selector === 'string' ? selector.trim() : '';
+  if (sel) {
+    try {
+      return doc.querySelector(sel);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function serializeHtmlDocument(html: string, doc: Document): string {
+  const hasDoctype = /^\s*<!DOCTYPE/i.test(html);
+  const serialized = doc.documentElement?.outerHTML ?? html;
+  return hasDoctype ? `<!DOCTYPE html>${serialized}` : serialized;
+}
+
+/**
+ * Reorder a sibling among the same parent in HTML (v0.9 M0).
+ * Disk/file SSOT stays the buffer string — this only rewrites DOM sibling order.
+ *
+ * - Same-parent only (different parent → `different-parent`)
+ * - Locked source (`data-neos-locked`) → `locked`
+ * - Multi-select hosts should pass the **primary** only
+ */
+export function reorderSiblingInHtml(
+  html: string,
+  source: ReorderSiblingSource,
+  target: ReorderSiblingTarget,
+): ReorderSiblingResult {
+  if (typeof DOMParser === 'undefined') {
+    return { html, ok: false, reason: 'no-domparser' };
+  }
+  if (typeof html !== 'string' || !html.trim()) {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+  if (!source?.neosId && !source?.selector) {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+  const hasTarget =
+    typeof target?.toIndex === 'number'
+    || Boolean(target?.beforeNeosId || target?.beforeSelector)
+    || Boolean(target?.afterNeosId || target?.afterSelector);
+  if (!hasTarget) {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const el = findElementByIdentity(doc, source.neosId, source.selector);
+    if (!el) return { html, ok: false, reason: 'not-found' };
+    if (isLocked(el)) return { html, ok: false, reason: 'locked' };
+
+    const parent = el.parentElement;
+    if (!parent) return { html, ok: false, reason: 'no-parent' };
+
+    const childrenBefore = Array.from(parent.children);
+    const fromIndex = childrenBefore.indexOf(el);
+    if (fromIndex < 0) return { html, ok: false, reason: 'not-found' };
+
+    let refNode: ChildNode | null | undefined;
+    // undefined = not resolved; null = append at end
+
+    if (target.beforeNeosId || target.beforeSelector) {
+      const beforeEl = findElementByIdentity(
+        doc,
+        target.beforeNeosId,
+        target.beforeSelector,
+      );
+      if (!beforeEl) return { html, ok: false, reason: 'target-not-found' };
+      if (beforeEl.parentElement !== parent) {
+        return { html, ok: false, reason: 'different-parent' };
+      }
+      if (beforeEl === el) return { html, ok: false, reason: 'no-op' };
+      // Already immediately before target
+      if (el.nextElementSibling === beforeEl) {
+        return { html, ok: false, reason: 'no-op' };
+      }
+      refNode = beforeEl;
+    } else if (target.afterNeosId || target.afterSelector) {
+      const afterEl = findElementByIdentity(
+        doc,
+        target.afterNeosId,
+        target.afterSelector,
+      );
+      if (!afterEl) return { html, ok: false, reason: 'target-not-found' };
+      if (afterEl.parentElement !== parent) {
+        return { html, ok: false, reason: 'different-parent' };
+      }
+      if (afterEl === el) return { html, ok: false, reason: 'no-op' };
+      // Already immediately after target
+      if (afterEl.nextElementSibling === el) {
+        return { html, ok: false, reason: 'no-op' };
+      }
+      refNode = afterEl.nextElementSibling;
+    } else if (typeof target.toIndex === 'number' && Number.isFinite(target.toIndex)) {
+      const desired = Math.floor(target.toIndex);
+      if (desired === fromIndex) return { html, ok: false, reason: 'no-op' };
+      // Remove mentally: remaining siblings; final index among children after re-insert
+      const remaining = childrenBefore.filter((c) => c !== el);
+      const insertAt = Math.max(0, Math.min(desired, remaining.length));
+      refNode = remaining[insertAt] ?? null;
+      // If we would insert at the same visual position, no-op
+      if (refNode === el.nextElementSibling || (refNode == null && fromIndex === childrenBefore.length - 1)) {
+        // fromIndex last and append → no-op already handled by desired === fromIndex
+        // if ref is next sibling, moving before next = no-op
+        if (refNode === el.nextElementSibling) {
+          return { html, ok: false, reason: 'no-op' };
+        }
+      }
+    } else {
+      return { html, ok: false, reason: 'invalid-input' };
+    }
+
+    parent.insertBefore(el, refNode ?? null);
+
+    // Verify order actually changed
+    const childrenAfter = Array.from(parent.children);
+    if (childrenAfter.indexOf(el) === fromIndex) {
+      return { html, ok: false, reason: 'no-op' };
+    }
+
+    return { html: serializeHtmlDocument(html, doc), ok: true };
+  } catch {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+}
+
+/**
+ * Convenience: move by `data-neos-id` before/after another neos id (same parent).
+ */
+export function reorderSiblingByNeosId(
+  html: string,
+  sourceNeosId: string,
+  target: { beforeNeosId?: string; afterNeosId?: string; toIndex?: number },
+): ReorderSiblingResult {
+  return reorderSiblingInHtml(
+    html,
+    { neosId: sourceNeosId },
+    {
+      beforeNeosId: target.beforeNeosId,
+      afterNeosId: target.afterNeosId,
+      toIndex: target.toIndex,
+    },
+  );
+}
+
+/** Z-order among same-parent siblings (v0.9 M1). */
+export type ZOrderOp = 'forward' | 'backward' | 'front' | 'back';
+
+/**
+ * Nudge DOM sibling order (paint order) under the same parent.
+ * - forward: swap with next element sibling
+ * - backward: swap with previous
+ * - front: last child
+ * - back: first child
+ */
+export function applyZOrderInHtml(
+  html: string,
+  source: ReorderSiblingSource,
+  op: ZOrderOp,
+): ReorderSiblingResult {
+  if (typeof DOMParser === 'undefined') {
+    return { html, ok: false, reason: 'no-domparser' };
+  }
+  if (typeof html !== 'string' || !html.trim()) {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+  if (!source?.neosId && !source?.selector) {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const el = findElementByIdentity(doc, source.neosId, source.selector);
+    if (!el) return { html, ok: false, reason: 'not-found' };
+    if (isLocked(el)) return { html, ok: false, reason: 'locked' };
+    const parent = el.parentElement;
+    if (!parent) return { html, ok: false, reason: 'no-parent' };
+
+    const children = Array.from(parent.children);
+    const idx = children.indexOf(el);
+    if (idx < 0) return { html, ok: false, reason: 'not-found' };
+
+    if (op === 'forward') {
+      const next = el.nextElementSibling;
+      if (!next) return { html, ok: false, reason: 'no-op' };
+      parent.insertBefore(el, next.nextElementSibling);
+    } else if (op === 'backward') {
+      const prev = el.previousElementSibling;
+      if (!prev) return { html, ok: false, reason: 'no-op' };
+      parent.insertBefore(el, prev);
+    } else if (op === 'front') {
+      if (idx === children.length - 1) return { html, ok: false, reason: 'no-op' };
+      parent.appendChild(el);
+    } else if (op === 'back') {
+      if (idx === 0) return { html, ok: false, reason: 'no-op' };
+      parent.insertBefore(el, parent.firstElementChild);
+    } else {
+      return { html, ok: false, reason: 'invalid-input' };
+    }
+
+    const after = Array.from(parent.children).indexOf(el);
+    if (after === idx) return { html, ok: false, reason: 'no-op' };
+
+    const hasDoctype = /^\s*<!DOCTYPE/i.test(html);
+    const serialized = doc.documentElement?.outerHTML ?? html;
+    return {
+      html: hasDoctype ? `<!DOCTYPE html>${serialized}` : serialized,
+      ok: true,
+    };
+  } catch {
+    return { html, ok: false, reason: 'invalid-input' };
+  }
+}
+
 /**
  * Stamp stable data-neos-id onto elements in HTML for later buffer rewrites.
  * Best-effort via DOMParser serialize.

@@ -33,7 +33,26 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.6 migration:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md) · **v0.7 migration:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)  
 **v0.8 plan:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md) · **v0.8 migration:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md)  
-**Canvas overlay (opt-in):** `VITE_NEOS_CANVAS_OVERLAY=1` — move + resize + multi-select (Shift/Ctrl/Cmd) + group scale (Shift = uniform) + canvas undo in Preview (HTML)
+**v0.9 plan:** [docs/plans/PLAN_FOR_V0_9_0.md](docs/plans/PLAN_FOR_V0_9_0.md) · **v0.9 migration:** [docs/migration/v0.9.0.md](docs/migration/v0.9.0.md) · **dual-surface:** [docs/reference/dual-surface.md](docs/reference/dual-surface.md)  
+**v0.10 plan (next):** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) — agent lock enforce · shared locks · API hygiene  
+**Canvas overlay (default on since 0.9.1):** move + resize + multi-select + align/z-order + group scale; force off with `VITE_NEOS_CANVAS_OVERLAY=0` or Settings toggle (`neos.canvasOverlay`)
+
+---
+
+## What's new in v0.9
+
+- **0.9.0** Layers **sibling reorder** (drag same-parent → HTML SSOT)  
+- **0.9.1** Canvas **default-on** + align / distribute / z-order tools + Settings toggle  
+- **0.9.2** Web **preview comments** + project zip import/export  
+- **0.9.3** Dual-surface policy + shared wire parsers; marketplace **desktop-only** — [matrix](docs/reference/dual-surface.md)  
+- **0.9.4** Train closeout — [migration](docs/migration/v0.9.0.md) · [release](docs/releases/v0.9.4.md) · inventory `v09Features`
+
+---
+
+## What's new in v0.10
+
+- **0.10.0** Optional **agent lock hard-enforce** — `NEOS_SHARED_EDIT=1` + `NEOS_SHARED_EDIT_AGENTS=1` applies 423 to `source=agent` PUTs on locked paths ([plan](docs/plans/PLAN_FOR_V0_10_0.md))  
+- Planned: multi-replica shared lock registry · harness sunset / API hygiene  
 
 ---
 
