@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { useNavigate, useParams, useBlocker } from 'react-router-dom';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
@@ -162,7 +163,19 @@ type RightPanelTab = EditorRightPanelTab;
 
 // ── WorkflowEditor ────────────────────────────────────────
 
+/**
+ * Public entry: ReactFlowProvider must wrap any component that calls
+ * useReactFlow() (fitView, etc.). Without it React Flow throws error #001.
+ */
 export function WorkflowEditor() {
+  return (
+    <ReactFlowProvider>
+      <WorkflowEditorInner />
+    </ReactFlowProvider>
+  );
+}
+
+function WorkflowEditorInner() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation('common');
   const navigate = useNavigate();

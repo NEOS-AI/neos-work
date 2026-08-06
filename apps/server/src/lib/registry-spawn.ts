@@ -27,6 +27,21 @@ function hasUnsafeControlChars(value: string): boolean {
   return /[\0\r\n]/.test(value);
 }
 
+/** User-facing message when the CLI binary is missing from PATH (e.g. nvm-only installs). */
+export function formatCliNotFoundError(
+  def: { id: string; name: string; settingKey: string; launch: { binary: string } },
+  cause?: string,
+): string {
+  const bin = def.launch.binary;
+  const detail = cause?.trim() || `spawn ${bin} ENOENT`;
+  return (
+    `${detail}: ${def.name} CLI (\`${bin}\`) not found on PATH. `
+    + `Install it, or set Settings → CLI Agents → absolute path `
+    + `(setting key: ${def.settingKey}). `
+    + `Tip: nvm/fnm installs are often invisible to GUI apps — paste the full path from \`which ${bin}\`.`
+  );
+}
+
 export interface SpawnRegistryAgentOptions {
   agentId: string;
   prompt: string;
@@ -191,6 +206,14 @@ export async function spawnRegistryAgent(
 
     child.on('error', (err) => {
       if (signal) signal.removeEventListener('abort', handleAbort);
+      const msg = err instanceof Error ? err.message : String(err);
+      const code = err && typeof err === 'object' && 'code' in err
+        ? String((err as { code?: unknown }).code ?? '')
+        : '';
+      if (code === 'ENOENT' || /ENOENT/i.test(msg)) {
+        reject(new Error(formatCliNotFoundError(def, msg)));
+        return;
+      }
       reject(err);
     });
 
