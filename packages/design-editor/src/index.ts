@@ -89,6 +89,14 @@ export {
 } from './DesignEditor.js';
 
 export {
+  applyHtmlBufferMutation,
+  alignBoxKey,
+  type HtmlBufferMutateOpts,
+} from './html-buffer-mutate.js';
+export { CanvasToolsBar, type CanvasToolsBarProps, type CanvasToolsLabels } from './CanvasToolsBar.js';
+export { useCanvasOverlayPref } from './useCanvasOverlayPref.js';
+
+export {
   applyAlignToHtml,
   applyDistributeToHtml,
   applyGroupResizeToHtml,

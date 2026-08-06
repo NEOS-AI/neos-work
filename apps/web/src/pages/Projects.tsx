@@ -2,18 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { clearConnection, loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
+import { downloadProjectZip } from '../lib/project-zip.js';
+import { scrubError } from '../lib/scrub.js';
 
 type Project = { id: string; name: string; baseDir?: string; entryFile?: string | null };
-
-function scrubError(raw: unknown, fallback: string): string {
-  const s =
-    typeof raw === 'string' && raw
-      ? raw
-      : raw instanceof Error
-        ? raw.message
-        : fallback;
-  return s.replace(/[\0\r\n]+/g, ' ').slice(0, 300) || fallback;
-}
 
 export function Projects() {
   const nav = useNavigate();
@@ -170,20 +162,11 @@ export function Projects() {
     setZipBusy(true);
     setZipError(null);
     try {
-      const res = await client().exportProjectZip(id);
+      const res = await downloadProjectZip(client(), id, name);
       if (!res.ok) {
-        setZipError(scrubError(res.error, 'Export failed'));
+        setZipError(res.error);
         return;
       }
-      const url = URL.createObjectURL(res.blob);
-      const a = document.createElement('a');
-      const safe =
-        name.replace(/[\0\r\n]+/g, ' ').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60)
-        || id.slice(0, 8);
-      a.href = url;
-      a.download = `${safe}.neos-project.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
     } catch (err) {
       if (handleAuthError(err)) return;
       setZipError(scrubError(err, 'Export failed'));

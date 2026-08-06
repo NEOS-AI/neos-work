@@ -27,13 +27,15 @@ import {
   type PeerSelectionInfo,
   type PresencePeerInfo,
 } from '@neos-work/ui-app';
+import { CommentsPanel } from '../components/CommentsPanel.js';
 import { loadConnection } from '../lib/auth.js';
 import {
   ApiError,
   normalizeProjectRelPath,
   WebApiClient,
-  type PreviewComment,
 } from '../lib/api.js';
+import { downloadProjectZip } from '../lib/project-zip.js';
+import { scrubError } from '../lib/scrub.js';
 
 /** Color for run status badge (desktop-parity chrome). */
 function runStatusColor(status: string): string {
@@ -83,11 +85,6 @@ export function ProjectDetail() {
     content?: string;
   } | null>(null);
   const [revisionBusy, setRevisionBusy] = useState(false);
-  /** Preview comments for open file (v0.9 M2). */
-  const [comments, setComments] = useState<PreviewComment[]>([]);
-  const [commentBody, setCommentBody] = useState('');
-  const [commentBusy, setCommentBusy] = useState(false);
-  const [commentError, setCommentError] = useState<string | null>(null);
   /** Project agent runs (list / events / cancel). */
   const [runs, setRuns] = useState<ProjectRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -596,106 +593,9 @@ export function ProjectDetail() {
     }
   }, [client, id, buffer.path]);
 
-  const loadComments = useCallback(async () => {
-    if (!id) {
-      setComments([]);
-      return;
-    }
-    try {
-      const res = await client.listPreviewComments(id, buffer.path ?? undefined);
-      if (res.ok && Array.isArray(res.data)) {
-        setComments(res.data);
-      } else {
-        setComments([]);
-      }
-    } catch {
-      setComments([]);
-    }
-  }, [client, id, buffer.path]);
-
   useEffect(() => {
     void loadRevisions();
   }, [loadRevisions]);
-
-  useEffect(() => {
-    void loadComments();
-  }, [loadComments]);
-
-  const handleAddComment = async () => {
-    if (!id || commentBusy) return;
-    if (!buffer.path) {
-      setCommentError('Open a file to comment');
-      return;
-    }
-    if (!selection?.selector) {
-      setCommentError('Select an element first');
-      return;
-    }
-    const body = commentBody;
-    if (typeof body !== 'string' || !body.trim() || /\0/.test(body)) {
-      setCommentError('Invalid comment body');
-      return;
-    }
-    setCommentBusy(true);
-    setCommentError(null);
-    try {
-      const res = await client.createPreviewComment(id, {
-        filePath: buffer.path,
-        selector: selection.selector,
-        body: body.trim(),
-      });
-      if (!res.ok) {
-        setCommentError(
-          (typeof res.error === 'string' && res.error
-            ? res.error
-            : 'Failed to add comment'
-          )
-            .replace(/[\0\r\n]+/g, ' ')
-            .slice(0, 300),
-        );
-        return;
-      }
-      setCommentBody('');
-      await loadComments();
-    } catch (err) {
-      setCommentError(
-        (err instanceof ApiError ? err.message : 'Failed to add comment')
-          .replace(/[\0\r\n]+/g, ' ')
-          .slice(0, 300),
-      );
-    } finally {
-      setCommentBusy(false);
-    }
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-    if (!id || commentBusy) return;
-    setCommentBusy(true);
-    setCommentError(null);
-    try {
-      const res = await client.deletePreviewComment(id, commentId);
-      if (!res.ok) {
-        setCommentError(
-          (typeof res.error === 'string' && res.error
-            ? res.error
-            : 'Failed to delete comment'
-          )
-            .replace(/[\0\r\n]+/g, ' ')
-            .slice(0, 300),
-        );
-        return;
-      }
-      await loadComments();
-    } catch (err) {
-      setCommentError(
-        (err instanceof ApiError ? err.message : 'Failed to delete comment')
-          .replace(/[\0\r\n]+/g, ' ')
-          .slice(0, 300),
-      );
-    } finally {
-      setCommentBusy(false);
-    }
-  };
 
   const viewRevision = async (revisionId: string) => {
     if (!id || revisionBusy) return;
@@ -1279,31 +1179,14 @@ export function ProjectDetail() {
     setBusy(true);
     setError(null);
     try {
-      const res = await client.exportProjectZip(id);
+      const res = await downloadProjectZip(client, id, name || id);
       if (!res.ok) {
-        setError(
-          (res.error || 'Export failed').replace(/[\0\r\n]+/g, ' ').slice(0, 300),
-        );
+        setError(res.error);
         return;
       }
-      const url = URL.createObjectURL(res.blob);
-      const a = document.createElement('a');
-      const safe =
-        (name || id)
-          .replace(/[\0\r\n]+/g, ' ')
-          .replace(/[^a-z0-9_-]+/gi, '_')
-          .slice(0, 60) || id.slice(0, 8);
-      a.href = url;
-      a.download = `${safe}.neos-project.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
       setStatus('Exported zip');
     } catch (err) {
-      setError(
-        (err instanceof Error ? err.message : 'Export failed')
-          .replace(/[\0\r\n]+/g, ' ')
-          .slice(0, 300),
-      );
+      setError(scrubError(err, 'Export failed'));
     } finally {
       setBusy(false);
     }
@@ -1585,124 +1468,12 @@ export function ProjectDetail() {
             file are injected into the next run automatically.
           </p>
 
-          <div
-            data-testid="web-comments"
-            style={{
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: '1px solid var(--border, #333)',
-            }}
-          >
-            <div className="muted" style={{ marginBottom: 8 }}>
-              Comments
-              {buffer.path ? (
-                <span className="mono" style={{ marginLeft: 6, fontSize: 11 }}>
-                  {buffer.path}
-                </span>
-              ) : null}
-            </div>
-            {!buffer.path ? (
-              <p className="muted" style={{ fontSize: 11, margin: 0 }}>
-                Open a file to list comments.
-              </p>
-            ) : (
-              <>
-                <div className="stack" style={{ gap: 6, marginBottom: 8 }}>
-                  <div className="mono muted" style={{ fontSize: 10, wordBreak: 'break-all' }}>
-                    {selection?.selector
-                      ? `selector: ${selection.selector}`
-                      : 'Select a layer/element to attach a comment'}
-                  </div>
-                  <textarea
-                    className="input"
-                    style={{ minHeight: 56, resize: 'vertical', fontSize: 12 }}
-                    placeholder="Comment on selection…"
-                    value={commentBody}
-                    onChange={(e) => setCommentBody(e.target.value)}
-                    data-testid="web-comment-body"
-                    disabled={commentBusy}
-                  />
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ fontSize: 11, alignSelf: 'flex-start' }}
-                    disabled={
-                      commentBusy
-                      || !commentBody.trim()
-                      || !selection?.selector
-                      || !buffer.path
-                    }
-                    data-testid="web-comment-add"
-                    onClick={() => void handleAddComment()}
-                  >
-                    {commentBusy ? '…' : 'Add comment'}
-                  </button>
-                  {commentError && (
-                    <p
-                      className="err"
-                      role="alert"
-                      data-testid="web-comment-error"
-                      style={{ margin: 0, fontSize: 11 }}
-                    >
-                      {commentError}
-                    </p>
-                  )}
-                </div>
-                {comments.length === 0 ? (
-                  <p className="muted" style={{ fontSize: 11, margin: 0 }}>
-                    No comments on this file.
-                  </p>
-                ) : (
-                  <ul
-                    className="list"
-                    style={{ margin: 0, padding: 0, listStyle: 'none' }}
-                    data-testid="web-comment-list"
-                  >
-                    {comments.map((c) => (
-                      <li
-                        key={c.id}
-                        data-testid={`web-comment-${c.id}`}
-                        style={{
-                          padding: '0.35rem 0',
-                          borderBottom: '1px solid var(--border, #2a2a2a)',
-                          fontSize: 11,
-                        }}
-                      >
-                        <div className="mono muted" style={{ fontSize: 10, wordBreak: 'break-all' }}>
-                          {c.selector}
-                        </div>
-                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                          {(c.body || '').replace(/\0/g, '').slice(0, 500)}
-                        </div>
-                        <div className="row" style={{ marginTop: 4, gap: 8 }}>
-                          <span className="muted" style={{ fontSize: 10 }}>
-                            {c.createdAt}
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-ghost"
-                            style={{
-                              fontSize: 10,
-                              padding: 0,
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              color: 'var(--danger, #f87171)',
-                            }}
-                            disabled={commentBusy}
-                            data-testid={`web-comment-delete-${c.id}`}
-                            onClick={() => void handleDeleteComment(c.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-          </div>
+          <CommentsPanel
+            projectId={id}
+            filePath={buffer.path}
+            selectionSelector={selection?.selector}
+            client={client}
+          />
 
           <div
             data-testid="web-revisions"

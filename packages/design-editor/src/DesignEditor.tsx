@@ -3,14 +3,7 @@
  * Host supplies buffer state and save; package owns panes (Q9 CodeMirror).
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LayerNode, SelectionState } from '@neos-work/shared';
 import { CodeEditor } from './CodeEditor.js';
 import { DEVICE_PRESETS } from './device-presets.js';
@@ -35,6 +28,7 @@ import {
   type CanvasTransformEnd,
   type PeerCanvasFrame,
 } from './CanvasOverlay.js';
+import { CanvasToolsBar } from './CanvasToolsBar.js';
 import {
   applyAlignToHtml,
   applyDistributeToHtml,
@@ -44,12 +38,12 @@ import {
   computeAlignDeltas,
   computeGroupResizeScales,
   elementIdFromSelector,
-  isCanvasOverlayEnabled,
   scaleBBoxFromAnchor,
-  writeCanvasOverlayPref,
   type AlignEdge,
   type AlignableBox,
 } from './canvas-style.js';
+import { alignBoxKey, applyHtmlBufferMutation } from './html-buffer-mutate.js';
+import { useCanvasOverlayPref } from './useCanvasOverlayPref.js';
 import {
   bboxesFromMultiEntries,
   editContextFromSelection,
@@ -196,17 +190,6 @@ function isLayersPath(path: string | null): boolean {
   return isHtmlPath(path) || isJsxPath(path);
 }
 
-const toolBtnStyle: CSSProperties = {
-  fontSize: 11,
-  padding: '2px 6px',
-  borderRadius: 4,
-  border: '1px solid var(--border-primary, #333)',
-  background: 'transparent',
-  color: 'var(--text-secondary, #ccc)',
-  cursor: 'pointer',
-  lineHeight: 1.2,
-};
-
 export function DesignEditor({
   buffer,
   mode: controlledMode,
@@ -317,10 +300,10 @@ export function DesignEditor({
   const htmlLike = isHtmlPath(buffer.path);
   const jsxLike = isJsxPath(buffer.path);
   const showLayers = showLayersProp ?? isLayersPath(buffer.path);
-  /** Bump when user toggles canvas pref so default-on re-reads localStorage. */
-  const [canvasPrefTick, setCanvasPrefTick] = useState(0);
-  const canvasOn =
-    isCanvasOverlayEnabled(canvasOverlayProp) && htmlLike && canvasPrefTick >= 0;
+  const { canvasOn, toggleCanvasOverlay } = useCanvasOverlayPref(
+    canvasOverlayProp,
+    htmlLike,
+  );
 
   const previewHtml = useMemo(() => {
     const base = toPreviewDocument(buffer.local, buffer.path);
@@ -613,29 +596,42 @@ export function DesignEditor({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [canvasOn, undoCanvasTransform, redoCanvasTransform]);
 
-  const handleToggleVisibility = (layer: LayerNode, visible: boolean) => {
-    let next = toggleVisibilityByNeosId(buffer.local, layer.id, visible);
-    if (next === buffer.local) {
-      // Stamp stable data-neos-id then toggle (parse/bridge synthetic ids need attributes in source)
-      const stamped = stampNeosIds(buffer.local);
-      next = toggleVisibilityByNeosId(stamped, layer.id, visible);
-      if (next === stamped) return;
-    }
+  /**
+   * Canonical HTML mutation path: stamp (optional) → mutate → onEdit + clear bridge + reload.
+   * When pushUndo is true, snapshot goes on the canvas undo stack first.
+   */
+  const commitHtmlMutation = (opts: {
+    ensureNeosIds?: Array<string | null | undefined>;
+    mutate: (html: string) => string;
+    pushUndo?: boolean;
+  }): boolean => {
+    if (!buffer.path && opts.pushUndo) return false;
+    const snapshot = buffer.local;
+    const next = applyHtmlBufferMutation({
+      local: buffer.local,
+      ensureNeosIds: opts.ensureNeosIds,
+      mutate: opts.mutate,
+    });
+    if (next == null) return false;
+    if (opts.pushUndo) pushCanvasUndo(snapshot);
     applyHtmlEdit(next);
     setBridgeLayers(null);
     setReloadKey((k) => k + 1);
+    return true;
+  };
+
+  const handleToggleVisibility = (layer: LayerNode, visible: boolean) => {
+    commitHtmlMutation({
+      ensureNeosIds: [layer.id],
+      mutate: (html) => toggleVisibilityByNeosId(html, layer.id, visible),
+    });
   };
 
   const handleToggleLock = (layer: LayerNode, locked: boolean) => {
-    let next = toggleLockByNeosId(buffer.local, layer.id, locked);
-    if (next === buffer.local) {
-      const stamped = stampNeosIds(buffer.local);
-      next = toggleLockByNeosId(stamped, layer.id, locked);
-      if (next === stamped) return;
-    }
-    applyHtmlEdit(next);
-    setBridgeLayers(null);
-    setReloadKey((k) => k + 1);
+    commitHtmlMutation({
+      ensureNeosIds: [layer.id],
+      mutate: (html) => toggleLockByNeosId(html, layer.id, locked),
+    });
   };
 
   /**
@@ -645,7 +641,6 @@ export function DesignEditor({
   const handleReorderSibling = (payload: LayerReorderPayload) => {
     if (!htmlLike || !buffer.path) return;
     if (payload.source.locked) return;
-    // Multi-select: only allow reorder of the primary selection (Q24)
     if (
       multiExtras.length > 0
       && selection?.layerId
@@ -654,37 +649,27 @@ export function DesignEditor({
       return;
     }
 
-    let base = buffer.local;
-    const needsStamp =
-      !base.includes(`data-neos-id="${payload.source.id}"`)
-      || !base.includes(`data-neos-id="${payload.target.id}"`);
-    if (needsStamp) {
-      base = stampNeosIds(base);
-    }
-
-    const target =
-      payload.position === 'before'
-        ? {
-            beforeNeosId: payload.target.id,
-            beforeSelector: payload.target.selector,
-          }
-        : {
-            afterNeosId: payload.target.id,
-            afterSelector: payload.target.selector,
-          };
-
-    const result = reorderSiblingInHtml(
-      base,
-      {
-        neosId: payload.source.id,
-        selector: payload.source.selector,
+    commitHtmlMutation({
+      ensureNeosIds: [payload.source.id, payload.target.id],
+      mutate: (html) => {
+        const target =
+          payload.position === 'before'
+            ? {
+                beforeNeosId: payload.target.id,
+                beforeSelector: payload.target.selector,
+              }
+            : {
+                afterNeosId: payload.target.id,
+                afterSelector: payload.target.selector,
+              };
+        const result = reorderSiblingInHtml(
+          html,
+          { neosId: payload.source.id, selector: payload.source.selector },
+          target,
+        );
+        return result.ok ? result.html : html;
       },
-      target,
-    );
-    if (!result.ok) return;
-    applyHtmlEdit(result.html);
-    setBridgeLayers(null);
-    setReloadKey((k) => k + 1);
+    });
   };
 
   const handleCopySelector = async (layer: LayerNode) => {
@@ -706,22 +691,14 @@ export function DesignEditor({
   const showPreview = mode === 'preview' || mode === 'split' || mode === 'inspect';
   const showCode = mode === 'code' || mode === 'split';
 
-  /** Apply canvas HTML mutation; snapshot pre-transform for Cmd+Z undo. Returns whether applied. */
+  /** Canvas transforms use undo stack. */
   const applyCanvasHtml = (mutate: (html: string) => string): boolean => {
     if (!buffer.path) return false;
-    const snapshot = buffer.local;
-    const layerId = selection?.layerId ?? null;
-    let base = buffer.local;
-    if (layerId && !base.includes(`data-neos-id="${layerId}"`)) {
-      base = stampNeosIds(base);
-    }
-    const next = mutate(base);
-    if (next === base || next === buffer.local) return false;
-    pushCanvasUndo(snapshot);
-    applyHtmlEdit(next);
-    setBridgeLayers(null);
-    setReloadKey((k) => k + 1);
-    return true;
+    return commitHtmlMutation({
+      ensureNeosIds: [selection?.layerId],
+      mutate,
+      pushUndo: true,
+    });
   };
 
   const multiEntriesForMove: MultiSelectEntry[] = (() => {
@@ -731,17 +708,6 @@ export function DesignEditor({
     }
     return list;
   })();
-
-  const toggleCanvasOverlay = () => {
-    if (canvasOverlayProp === true || canvasOverlayProp === false) {
-      // Controlled by host — still write pref for next uncontrolled mount
-      writeCanvasOverlayPref(!canvasOverlayProp);
-      return;
-    }
-    const next = !isCanvasOverlayEnabled();
-    writeCanvasOverlayPref(next);
-    setCanvasPrefTick((t) => t + 1);
-  };
 
   const collectAlignableBoxes = (): AlignableBox[] => {
     const boxes: AlignableBox[] = [];
@@ -760,42 +726,22 @@ export function DesignEditor({
     return boxes;
   };
 
-  const handleAlign = (edge: AlignEdge) => {
-    if (!selection || !selectDetail?.bbox) return;
-    const primaryBox: AlignableBox = {
-      neosId: selection.layerId,
-      elementId: elementIdFromSelector(selection.selector),
-      x: selectDetail.bbox.x,
-      y: selectDetail.bbox.y,
-      width: selectDetail.bbox.width,
-      height: selectDetail.bbox.height,
-    };
-    const rest: AlignableBox[] = [];
-    for (const e of multiExtras) {
-      const bbox = e.detail?.bbox;
-      if (!bbox) continue;
-      rest.push({
-        neosId: e.selection.layerId,
-        elementId: elementIdFromSelector(e.selection.selector),
-        x: bbox.x,
-        y: bbox.y,
-        width: bbox.width,
-        height: bbox.height,
-      });
-    }
-    if (rest.length < 1) return;
-    applyCanvasHtml((base) => applyAlignToHtml(base, primaryBox, rest, edge));
-    const deltas = computeAlignDeltas(primaryBox, rest, edge);
-    const deltasByKey = new Map<string, { dx: number; dy: number }>();
+  const nudgeMultiExtrasByDeltas = (
+    deltas: Array<{ neosId?: string | null; elementId?: string | null; dx: number; dy: number }>,
+  ) => {
+    const byKey = new Map<string, { dx: number; dy: number }>();
     for (const d of deltas) {
-      const key = d.neosId || d.elementId || '';
-      if (key) deltasByKey.set(key, { dx: d.dx, dy: d.dy });
+      const key = alignBoxKey(d);
+      if (key) byKey.set(key, { dx: d.dx, dy: d.dy });
     }
+    if (byKey.size === 0) return;
     setMultiExtras((extras) =>
       extras.map((e) => {
-        const key =
-          e.selection.layerId || elementIdFromSelector(e.selection.selector) || '';
-        const d = deltasByKey.get(key);
+        const key = alignBoxKey({
+          neosId: e.selection.layerId,
+          elementId: elementIdFromSelector(e.selection.selector),
+        });
+        const d = byKey.get(key);
         if (!d || !e.detail?.bbox) return e;
         return {
           ...e,
@@ -812,6 +758,31 @@ export function DesignEditor({
     );
   };
 
+  const handleAlign = (edge: AlignEdge) => {
+    if (!selection || !selectDetail?.bbox) return;
+    const boxes = collectAlignableBoxes();
+    if (boxes.length < 2) return;
+    const primaryKey = alignBoxKey({
+      neosId: selection.layerId,
+      elementId: elementIdFromSelector(selection.selector),
+    });
+    const primaryBox =
+      boxes.find((b) => alignBoxKey(b) === primaryKey)
+      ?? ({
+        neosId: selection.layerId,
+        elementId: elementIdFromSelector(selection.selector),
+        x: selectDetail.bbox.x,
+        y: selectDetail.bbox.y,
+        width: selectDetail.bbox.width,
+        height: selectDetail.bbox.height,
+      } satisfies AlignableBox);
+    const rest = boxes.filter((b) => alignBoxKey(b) !== alignBoxKey(primaryBox));
+    if (rest.length < 1) return;
+    const deltas = computeAlignDeltas(primaryBox, rest, edge);
+    applyCanvasHtml((base) => applyAlignToHtml(base, primaryBox, rest, edge));
+    nudgeMultiExtrasByDeltas(deltas);
+  };
+
   const handleDistribute = (axis: 'horizontal' | 'vertical') => {
     const boxes = collectAlignableBoxes();
     if (boxes.length < 3) return;
@@ -820,14 +791,7 @@ export function DesignEditor({
 
   const handleZOrder = (op: ZOrderOp) => {
     if (!selection) return;
-    applyCanvasHtml((base) => {
-      let html = base;
-      if (
-        selection.layerId
-        && !html.includes(`data-neos-id="${selection.layerId}"`)
-      ) {
-        html = stampNeosIds(html);
-      }
+    applyCanvasHtml((html) => {
       const result = applyZOrderInHtml(
         html,
         { neosId: selection.layerId, selector: selection.selector },
@@ -1088,122 +1052,18 @@ export function DesignEditor({
             {labels.dirty}
           </span>
         )}
-        {htmlLike && (
-          <button
-            type="button"
-            data-testid="canvas-overlay-toggle"
-            title={
-              canvasOn
-                ? 'Canvas overlay on (click to disable)'
-                : 'Canvas overlay off (click to enable)'
-            }
-            onClick={toggleCanvasOverlay}
-            style={{
-              fontSize: 10,
-              padding: '2px 8px',
-              borderRadius: 4,
-              border: '1px solid var(--border-primary, #333)',
-              background: canvasOn ? 'rgba(165,180,252,0.15)' : 'transparent',
-              color: canvasOn ? '#a5b4fc' : 'var(--text-muted, #888)',
-              cursor: 'pointer',
-            }}
-          >
-            {canvasOn ? labels.canvasOn : labels.canvasOff}
-          </button>
-        )}
-        {canvasOn && (
-          <span
-            data-testid="canvas-overlay-badge"
-            title="Canvas overlay: select an element, then drag the frame"
-            style={{ fontSize: 10, color: '#a5b4fc' }}
-          >
-            Canvas
-          </span>
-        )}
-        {canvasOn && selection?.selector && (
-          <div
-            data-testid="canvas-tools"
-            style={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}
-          >
-            {multiSelectCount >= 2 && (
-              <>
-                {(
-                  [
-                    ['left', labels.alignLeft],
-                    ['center', labels.alignCenter],
-                    ['right', labels.alignRight],
-                    ['top', labels.alignTop],
-                    ['middle', labels.alignMiddle],
-                    ['bottom', labels.alignBottom],
-                  ] as const
-                ).map(([edge, label]) => (
-                  <button
-                    key={edge}
-                    type="button"
-                    data-testid={`canvas-align-${edge}`}
-                    title={label}
-                    disabled={!selectDetail?.bbox}
-                    onClick={() => handleAlign(edge)}
-                    style={toolBtnStyle}
-                  >
-                    {edge === 'left'
-                      ? '⫷'
-                      : edge === 'center'
-                        ? '☰'
-                        : edge === 'right'
-                          ? '⫸'
-                          : edge === 'top'
-                            ? '⬆'
-                            : edge === 'middle'
-                              ? '⬌'
-                              : '⬇'}
-                  </button>
-                ))}
-              </>
-            )}
-            {multiSelectCount >= 3 && (
-              <>
-                <button
-                  type="button"
-                  data-testid="canvas-distribute-h"
-                  title={labels.distributeH}
-                  onClick={() => handleDistribute('horizontal')}
-                  style={toolBtnStyle}
-                >
-                  ⇄
-                </button>
-                <button
-                  type="button"
-                  data-testid="canvas-distribute-v"
-                  title={labels.distributeV}
-                  onClick={() => handleDistribute('vertical')}
-                  style={toolBtnStyle}
-                >
-                  ⇅
-                </button>
-              </>
-            )}
-            {(
-              [
-                ['forward', labels.zForward, '↑'],
-                ['backward', labels.zBackward, '↓'],
-                ['front', labels.zFront, '⤒'],
-                ['back', labels.zBack, '⤓'],
-              ] as const
-            ).map(([op, title, icon]) => (
-              <button
-                key={op}
-                type="button"
-                data-testid={`canvas-z-${op}`}
-                title={title}
-                onClick={() => handleZOrder(op)}
-                style={toolBtnStyle}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
-        )}
+        <CanvasToolsBar
+          htmlLike={htmlLike}
+          canvasOn={canvasOn}
+          hasSelection={Boolean(selection?.selector)}
+          multiSelectCount={multiSelectCount}
+          hasPrimaryBbox={Boolean(selectDetail?.bbox)}
+          labels={labels}
+          onToggleCanvas={toggleCanvasOverlay}
+          onAlign={handleAlign}
+          onDistribute={handleDistribute}
+          onZOrder={handleZOrder}
+        />
         {selection?.selector && (
           <span
             data-testid="selection-badge"
