@@ -18,6 +18,9 @@ import {
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import {
+  extractLockHolder,
+  formatLockHolderMessage,
+  formatRunLockFailureMessage,
   isTerminalRunStatus,
   type SelectionState,
 } from '@neos-work/shared';
@@ -118,6 +121,11 @@ export function ProjectWorkspace() {
   const [foreignLocks, setForeignLocks] = useState<
     Record<string, { sessionId: string; displayName: string }>
   >({});
+  /** From collab locks snapshot — shared-edit flags (v0.11 M1). */
+  const [sharedEditFlags, setSharedEditFlags] = useState<{
+    hardEnforce: boolean;
+    agentsHardEnforce: boolean;
+  }>({ hardEnforce: false, agentsHardEnforce: false });
   /** sessionId → peer selection (v0.7 M2). */
   const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
   /** Revision content preview from GET …/revisions/:id */
@@ -387,23 +395,29 @@ export function ProjectWorkspace() {
       void client
         .listCollabLocks(projectId)
         .then((res) => {
-          if (!res.ok || !res.data?.locks || !Array.isArray(res.data.locks)) return;
-          const selfId = collabSessionRef.current;
-          const next: Record<string, { sessionId: string; displayName: string }> = {};
-          for (const l of res.data.locks) {
-            if (!l || typeof l.sessionId !== 'string' || typeof l.path !== 'string') continue;
-            if (selfId && l.sessionId === selfId) continue;
-            const p = normalizeProjectRelPath(l.path);
-            if (!p) continue;
-            next[p] = {
-              sessionId: l.sessionId,
-              displayName:
-                typeof l.displayName === 'string' && l.displayName.trim()
-                  ? l.displayName.trim()
-                  : 'Anonymous',
-            };
+          if (!res.ok || !res.data) return;
+          if (res.data.locks && Array.isArray(res.data.locks)) {
+            const selfId = collabSessionRef.current;
+            const next: Record<string, { sessionId: string; displayName: string }> = {};
+            for (const l of res.data.locks) {
+              if (!l || typeof l.sessionId !== 'string' || typeof l.path !== 'string') continue;
+              if (selfId && l.sessionId === selfId) continue;
+              const p = normalizeProjectRelPath(l.path);
+              if (!p) continue;
+              next[p] = {
+                sessionId: l.sessionId,
+                displayName:
+                  typeof l.displayName === 'string' && l.displayName.trim()
+                    ? l.displayName.trim()
+                    : 'Anonymous',
+              };
+            }
+            setForeignLocks(next);
           }
-          setForeignLocks(next);
+          setSharedEditFlags({
+            hardEnforce: res.data.hardEnforce === true,
+            agentsHardEnforce: res.data.agentsHardEnforce === true,
+          });
         })
         .catch(() => {});
       void client
@@ -615,10 +629,28 @@ export function ProjectWorkspace() {
           if (revRes.ok && revRes.data) setRevisions(revRes.data);
         }
       } else {
-        setSaveError(
-          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
-            || t('project.saveFailed'),
-        );
+        const holder = extractLockHolder(res.data);
+        if (holder) {
+          const lockPath =
+            (holder.path && normalizeProjectRelPath(holder.path))
+            || (buffer.path ? normalizeProjectRelPath(buffer.path) : '')
+            || '';
+          if (lockPath) {
+            setForeignLocks((m) => ({
+              ...m,
+              [lockPath]: {
+                sessionId: holder.sessionId,
+                displayName: holder.displayName,
+              },
+            }));
+          }
+          setSaveError(formatLockHolderMessage(holder));
+        } else {
+          setSaveError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+              || t('project.saveFailed'),
+          );
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('project.saveFailed');
@@ -652,28 +684,20 @@ export function ProjectWorkspace() {
         collabSessionId ? { sessionId: collabSessionId } : undefined,
       );
       if (!res.ok) {
-        const holder =
-          res.data
-          && typeof res.data === 'object'
-          && res.data !== null
-          && 'holder' in res.data
-            ? (res.data as {
-                holder?: { sessionId?: string; displayName?: string; path?: string };
-              }).holder
-            : undefined;
-        if (holder?.displayName && holder.sessionId) {
+        const holder = extractLockHolder(res.data);
+        if (holder) {
           const lockPath =
-            (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
+            (holder.path && normalizeProjectRelPath(holder.path))
             || normalizeProjectRelPath(path)
             || path;
           setForeignLocks((m) => ({
             ...m,
             [lockPath]: {
-              sessionId: holder.sessionId!,
-              displayName: holder.displayName!,
+              sessionId: holder.sessionId,
+              displayName: holder.displayName,
             },
           }));
-          setSaveError(t('project.fileLockedBy', { name: holder.displayName }));
+          setSaveError(formatLockHolderMessage(holder));
         } else {
           setSaveError(
             scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
@@ -720,29 +744,18 @@ export function ProjectWorkspace() {
           collabSessionId ? { sessionId: collabSessionId } : undefined,
         );
         if (!res.ok) {
-          const holder =
-            res.data
-            && typeof res.data === 'object'
-            && res.data !== null
-            && 'holder' in res.data
-              ? (res.data as {
-                  holder?: { sessionId?: string; displayName?: string; path?: string };
-                }).holder
-              : undefined;
-          if (holder?.displayName && holder.sessionId) {
+          const holder = extractLockHolder(res.data);
+          if (holder) {
             const lockPath =
-              (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
-              || rel;
+              (holder.path && normalizeProjectRelPath(holder.path)) || rel;
             setForeignLocks((m) => ({
               ...m,
               [lockPath]: {
-                sessionId: holder.sessionId!,
-                displayName: holder.displayName!,
+                sessionId: holder.sessionId,
+                displayName: holder.displayName,
               },
             }));
-            setSaveError(
-              t('project.fileLockedBy', { name: holder.displayName }),
-            );
+            setSaveError(formatLockHolderMessage(holder));
           } else {
             setSaveError(
               scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
@@ -1224,12 +1237,14 @@ export function ProjectWorkspace() {
             }
           : undefined;
       // dryRun when no agent selected; live CLI when agentId set
+      // sessionId binds run to collab presence for agent lock identity (v0.11 M0)
       const res = await client.createProjectRun({
         projectId,
         prompt: userText,
         agentId: chatAgentId || undefined,
         dryRun: !chatAgentId,
         editContext,
+        sessionId: collabSessionRef.current || undefined,
       });
       if (!res.ok || !res.data) {
         setChatError(
@@ -1252,6 +1267,17 @@ export function ProjectWorkspace() {
               ? String((ev.data as { error: string }).error)
               : '';
         appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
+        // v0.11 M1 — surface lock failures from agent runs (not silent in log only)
+        if (ev.type === 'run.failed' && detail) {
+          const lockMsg = formatRunLockFailureMessage(detail);
+          if (lockMsg) setChatError(lockMsg);
+        } else if (
+          (ev.type === 'run.stdout' || ev.type === 'run.stderr')
+          && detail
+        ) {
+          const lockMsg = formatRunLockFailureMessage(detail);
+          if (lockMsg) setChatError(lockMsg);
+        }
       };
 
       const persistAssistant = async (status: string, error?: string | null) => {
@@ -1280,6 +1306,8 @@ export function ProjectWorkspace() {
             const filesRes = await client.listProjectFiles(projectId);
             if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
           }
+          const lockFail = formatRunLockFailureMessage(st.data.error);
+          if (lockFail) setChatError(lockFail);
           await persistAssistant(st.data.status, st.data.error);
           return true;
         }
@@ -1422,6 +1450,28 @@ export function ProjectWorkspace() {
           {dirty ? ' *' : ''}
         </h1>
         <PresencePeersBar peers={collabPeers} self={collabSelf} selections={peerSelections} />
+        {sharedEditFlags.hardEnforce && (
+          <span
+            className="rounded border px-1.5 py-0.5 text-[10px] font-mono"
+            style={{
+              borderColor: 'var(--border-secondary)',
+              color: sharedEditFlags.agentsHardEnforce
+                ? 'var(--text-primary)'
+                : 'var(--text-muted)',
+              backgroundColor: 'var(--bg-tertiary)',
+            }}
+            data-testid="shared-edit-badge"
+            title={
+              sharedEditFlags.agentsHardEnforce
+                ? 'NEOS_SHARED_EDIT + NEOS_SHARED_EDIT_AGENTS: human and agent writes hard-enforced'
+                : 'NEOS_SHARED_EDIT: human writes hard-enforced (agents bypass)'
+            }
+          >
+            {sharedEditFlags.agentsHardEnforce
+              ? 'locks: enforce + agents'
+              : 'locks: enforce'}
+          </span>
+        )}
         {lockedByOther && (
           <span
             className="text-[11px] text-red-300"

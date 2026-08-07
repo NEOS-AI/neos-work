@@ -64,7 +64,21 @@ human holds a lock (edit-with-AI while “my lock” is normal).
 **Opt-in agent enforce (Q30):** Operators who want agents blocked by foreign
 locks set both env flags. Agents may still succeed if they present the lock
 holder’s collab `sessionId` / `x-neos-session-id` (Q31 — no run→session bind
-required in 0.10.0). Optional future: bind run → sessionId at create time.
+required in 0.10.0).
+
+**Run→session bind (v0.11.0 / Q35):** `POST /api/runs` may accept optional collab
+`sessionId` / `x-neos-session-id` and store it as `collabSessionId` on the run.
+When agent hard-enforce is on, agent `PUT …/files/*` may omit session and instead
+pass `runId` / `x-neos-run-id` to inherit the bound session. Explicit session on
+the write still wins. Session remains collab identity, not auth.
+See [`PLAN_FOR_V0_11_0.md`](../plans/PLAN_FOR_V0_11_0.md) ·
+[`docs/implementation/v0.11/v0.11.0.md`](../implementation/v0.11/v0.11.0.md).
+
+**Tool-path parity (v0.11.2 / Q36):** `POST /api/tools/files/write` (tool token
+capability `files`) always writes as `source=agent` and applies the same
+hard-enforce + run-bind rules. Tool tokens are not daemon Bearer auth; sessionId
+is still collab identity only. See
+[`docs/implementation/v0.11/v0.11.2.md`](../implementation/v0.11/v0.11.2.md).
 
 Wire/doc conventions for hash fields and envelopes:
 [`skills/api-docs/references/conventions.md`](../../skills/api-docs/references/conventions.md).

@@ -497,11 +497,13 @@ describe('buildNeosCliEnv / ensureCliWorkspace', () => {
       authToken: 'tok',
       workflowId: 'wf-1',
       runId: 'run-1',
+      collabSessionId: 'collab-sess-1',
     })).toEqual({
       NEOS_SERVER_URL: 'http://127.0.0.1:3000',
       NEOS_AUTH_TOKEN: 'tok',
       NEOS_WORKFLOW_ID: 'wf-1',
       NEOS_RUN_ID: 'run-1',
+      NEOS_COLLAB_SESSION_ID: 'collab-sess-1',
     });
   });
 

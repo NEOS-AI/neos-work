@@ -44,6 +44,47 @@ function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): stri
   return safeRouteId(c.req.param(key));
 }
 
+/** Collab presence session id for run bind (v0.11 M0 / Q35). Max 64, no control chars. */
+export function normalizeRunCollabSessionId(raw: unknown): string | null {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return null;
+  const s = raw.trim();
+  if (!s || s.length > 64) return null;
+  return s;
+}
+
+/**
+ * Resolve optional collab session bind from body `sessionId` and/or
+ * `x-neos-session-id` (same channels as file hard-enforce).
+ * Returns `{ ok: false }` when a non-empty value is present but invalid.
+ */
+export function resolveRunCollabSessionBind(
+  c: { req: { header: (name: string) => string | undefined } },
+  body: Record<string, unknown> | null | undefined,
+): { ok: true; sessionId: string | null } | { ok: false; error: string } {
+  const candidates: unknown[] = [];
+  if (body && typeof body === 'object') {
+    if ('sessionId' in body) candidates.push(body.sessionId);
+    if ('collabSessionId' in body) candidates.push(body.collabSessionId);
+  }
+  const hdr = c.req.header('x-neos-session-id');
+  if (hdr != null && hdr !== '') candidates.push(hdr);
+
+  let sawNonEmpty = false;
+  for (const raw of candidates) {
+    if (raw == null) continue;
+    if (typeof raw !== 'string') {
+      return { ok: false, error: 'Invalid sessionId' };
+    }
+    if (raw.trim() === '') continue;
+    sawNonEmpty = true;
+    const n = normalizeRunCollabSessionId(raw);
+    if (!n) return { ok: false, error: 'Invalid sessionId' };
+    return { ok: true, sessionId: n };
+  }
+  if (sawNonEmpty) return { ok: false, error: 'Invalid sessionId' };
+  return { ok: true, sessionId: null };
+}
+
 function publicRun(record: {
   id: string;
   status: string;
@@ -56,6 +97,7 @@ function publicRun(record: {
   startedAt?: string | null;
   completedAt?: string | null;
   events: unknown[];
+  collabSessionId?: string | null;
 }): ProjectRunSummary {
   const summary: ProjectRunSummary = {
     id: record.id,
@@ -69,6 +111,7 @@ function publicRun(record: {
     startedAt: record.startedAt ?? null,
     completedAt: record.completedAt ?? null,
     eventCount: record.events.length,
+    collabSessionId: record.collabSessionId ?? null,
   };
   assertProjectRunSummary(summary);
   return summary;
@@ -120,6 +163,7 @@ async function executeCliRun(runId: string): Promise<void> {
       signal: controller.signal,
       runId,
       projectId: run.projectId ?? undefined,
+      collabSessionId: run.collabSessionId ?? undefined,
       serverUrl: getRuntimeServerUrl(),
       authToken: getRuntimeAuthToken(),
       onChunk: (chunk) => {
@@ -251,6 +295,13 @@ runs.post('/', async (c) => {
 
   let { prompt: assembled } = assembleEditContextPrompt(promptRaw, editContext);
 
+  // v0.11 M0 / Q35 — optional collab presence bind for agent lock identity
+  const bind = resolveRunCollabSessionBind(c, body);
+  if (!bind.ok) {
+    return c.json({ ok: false, error: bind.error }, 400);
+  }
+  const collabSessionId = bind.sessionId;
+
   // Inject design system + memory + preview comments for project chat (Tasks 5 / 7 / 1c)
   let commentCount = 0;
   let designSystemInjected = false;
@@ -319,6 +370,7 @@ runs.post('/', async (c) => {
     agentId,
     prompt: assembled,
     editContext: editContext ?? undefined,
+    collabSessionId,
   });
 
   reg.setStatus(run.id, 'running');
@@ -329,6 +381,7 @@ runs.post('/', async (c) => {
     previewComments: commentCount,
     designSystem: designSystemInjected,
     memory: memoryInjected,
+    collabSessionBound: !!collabSessionId,
   });
 
   const dryRun = body.dryRun === true || body.execute === false;

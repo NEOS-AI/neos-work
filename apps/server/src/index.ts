@@ -36,6 +36,7 @@ import projects from './routes/projects.js';
 import runs from './routes/runs.js';
 import liveArtifacts from './routes/live-artifacts.js';
 import toolsLiveArtifacts from './routes/tools-live-artifacts.js';
+import toolsFiles from './routes/tools-files.js';
 import connectionTest from './routes/connection-test.js';
 import { migrateEncryption } from './db/settings.js';
 import { resolveWebDist } from './lib/web-static.js';
@@ -181,6 +182,7 @@ app.route('/api/projects', projects);
 app.route('/api/runs', runs);
 app.route('/api/live-artifacts', liveArtifacts);
 app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
+app.route('/api/tools/files', toolsFiles);
 app.route('/api/connection-test', connectionTest);
 
 /** Collab transport + presence/lock registry status (v0.7–v0.10) — no secrets. */

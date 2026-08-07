@@ -97,4 +97,9 @@ export interface RuntimeRunRecord {
   completedAt?: string | null;
   events: RuntimeRunEvent[];
   abort?: AbortController;
+  /**
+   * Collab presence session bound at create (v0.11 M0 / Q35).
+   * Used as lock identity for agent writes when hard-enforce is on.
+   */
+  collabSessionId?: string | null;
 }

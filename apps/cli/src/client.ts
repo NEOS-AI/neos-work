@@ -186,10 +186,26 @@ export class NeosApiClient {
     projectId: string,
     filePath: string,
     content: string,
+    opts?: {
+      /** When set (e.g. agent/MCP), uses source=agent + collab bind (v0.11). */
+      source?: 'user' | 'agent';
+      sessionId?: string;
+      runId?: string;
+    },
   ): Promise<ApiEnvelope<unknown>> {
     const segs = filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    const source = opts?.source === 'agent' ? 'agent' : 'user';
+    const body: Record<string, unknown> = { content, source };
+    if (opts?.sessionId && !/[\0\r\n]/.test(opts.sessionId)) {
+      const s = opts.sessionId.trim();
+      if (s && s.length <= 64) body.sessionId = s;
+    }
+    if (opts?.runId && !/[\0\r\n]/.test(opts.runId)) {
+      const r = opts.runId.trim();
+      if (r && r.length <= 100) body.runId = r;
+    }
     return this.request('PUT', `/api/projects/${encodeURIComponent(projectId)}/files/${segs}`, {
-      body: { content, source: 'user' },
+      body,
     });
   }
 

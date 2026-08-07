@@ -505,6 +505,8 @@ function CollabStatusSection() {
     ready?: boolean;
     detail?: string | null;
     presence?: { kind?: string; ready?: boolean; detail?: string | null };
+    locks?: { kind?: string; ready?: boolean; detail?: string | null };
+    sharedEdit?: { hardEnforce?: boolean; agentsHardEnforce?: boolean };
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -568,7 +570,7 @@ function CollabStatusSection() {
             Collab status
           </h2>
           <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Multi-replica bus and presence registry (no secrets).
+            Multi-replica bus, presence/lock registry, and shared-edit flags (no secrets).
           </p>
         </div>
         <button
@@ -631,6 +633,30 @@ function CollabStatusSection() {
               <dd style={{ color: 'var(--text-secondary)' }}>{data.presence.detail}</dd>
             </>
           ) : null}
+          <dt style={{ color: 'var(--text-muted)' }}>locks</dt>
+          <dd style={{ color: 'var(--text-primary)' }} data-testid="collab-status-locks">
+            {data.locks?.kind ?? '—'}
+            {typeof data.locks?.ready === 'boolean'
+              ? data.locks.ready
+                ? ' · ready'
+                : ' · not ready'
+              : ''}
+          </dd>
+          {data.locks?.detail ? (
+            <>
+              <dt style={{ color: 'var(--text-muted)' }}>l.detail</dt>
+              <dd style={{ color: 'var(--text-secondary)' }}>{data.locks.detail}</dd>
+            </>
+          ) : null}
+          <dt style={{ color: 'var(--text-muted)' }}>shared-edit</dt>
+          <dd style={{ color: 'var(--text-primary)' }} data-testid="collab-status-shared-edit">
+            {data.sharedEdit?.hardEnforce === true ? 'on' : 'off'}
+            {data.sharedEdit?.hardEnforce === true
+              ? data.sharedEdit?.agentsHardEnforce === true
+                ? ' · agents on'
+                : ' · agents off'
+              : ''}
+          </dd>
         </dl>
       ) : (
         !error && (

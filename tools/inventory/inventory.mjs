@@ -40,6 +40,12 @@ const GATES = {
   requireV09Features: true,
   /** v0.10 train (M0–M3 closeout) */
   requireV10Features: true,
+  /** v0.11 train (M0–M3 closeout) */
+  requireV11Features: true,
+  /** v0.12 train (M0–M3 closeout) */
+  requireV12Features: true,
+  /** v0.13 train (M0–M3 closeout) */
+  requireV13Features: true,
 };
 
 function existsRel(rel) {
@@ -282,6 +288,168 @@ function scanV10Features() {
   };
 }
 
+/**
+ * v0.11 capability surface (M0–M3) — run→session bind · lock UX · tool files · workers rename.
+ * @see docs/plans/PLAN_FOR_V0_11_0.md
+ */
+function scanV11Features() {
+  const runs = readText('apps/server/src/routes/runs.ts') ?? '';
+  const projects = readText('apps/server/src/routes/projects.ts') ?? '';
+  const hardEnforce = readText('apps/server/src/lib/collab-hard-enforce.ts') ?? '';
+  const toolsFiles = readText('apps/server/src/routes/tools-files.ts') ?? '';
+  const toolTokens = readText('apps/server/src/lib/tool-tokens.ts') ?? '';
+  const indexTs = readText('apps/server/src/index.ts') ?? '';
+  const collabUx = readText('packages/shared/src/collab-ux.ts') ?? '';
+  const appTsx = readText('apps/desktop/src/App.tsx') ?? '';
+  const sidebar = readText('apps/desktop/src/components/Sidebar.tsx') ?? '';
+  const harnessPage = readText('apps/desktop/src/pages/Harnesses.tsx') ?? '';
+  const features = {
+    planV11: existsRel('docs/plans/PLAN_FOR_V0_11_0.md'),
+    migrationV11: existsRel('docs/migration/v0.11.0.md'),
+    releaseV11: existsRel('docs/releases/v0.11.3.md'),
+    runSessionBind:
+      runs.includes('resolveRunCollabSessionBind')
+      && runs.includes('collabSessionId')
+      && hardEnforce.includes('resolveCollabSessionIdForWrite')
+      && hardEnforce.includes('fallbackRunId'),
+    lockEnforceUx:
+      existsRel('packages/shared/src/collab-ux.ts')
+      && collabUx.includes('formatLockHolderMessage')
+      && collabUx.includes('formatRunLockFailureMessage')
+      && collabUx.includes('parseCollabStatusData'),
+    toolPathLockParity:
+      existsRel('apps/server/src/routes/tools-files.ts')
+      && toolsFiles.includes("requireToolCapability(rec, 'files')")
+      && toolsFiles.includes('shouldHardEnforceWriteSource')
+      && toolTokens.includes("'files'")
+      && indexTs.includes('tools/files'),
+    workersUiRename:
+      appTsx.includes("path: 'workers'")
+      && appTsx.includes("path: 'harnesses'")
+      && sidebar.includes("id: 'workers'")
+      && sidebar.includes("path: '/workers'")
+      && (harnessPage.includes('export function Workers')
+        || harnessPage.includes('export const Workers')),
+    implM0: existsRel('docs/implementation/v0.11/v0.11.0.md'),
+    implM1: existsRel('docs/implementation/v0.11/v0.11.1.md'),
+    implM2: existsRel('docs/implementation/v0.11/v0.11.2.md'),
+    implM3: existsRel('docs/implementation/v0.11/v0.11.3.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.12 capability surface (M0–M3) — EngineClient modularization · ops docs.
+ * @see docs/plans/PLAN_FOR_V0_12_0.md
+ */
+function scanV12Features() {
+  const engineTs = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const transport = readText('apps/desktop/src/lib/engine-transport.ts') ?? '';
+  const project = readText('apps/desktop/src/lib/engine-project.ts') ?? '';
+  const workflow = readText('apps/desktop/src/lib/engine-workflow.ts') ?? '';
+  const multiOps = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const sticky = readText('docs/ops/sticky-sse.md') ?? '';
+  const features = {
+    planV12: existsRel('docs/plans/PLAN_FOR_V0_12_0.md'),
+    migrationV12: existsRel('docs/migration/v0.12.0.md'),
+    releaseV12: existsRel('docs/releases/v0.12.3.md'),
+    engineTransport:
+      existsRel('apps/desktop/src/lib/engine-transport.ts')
+      && transport.includes('export class EngineTransport'),
+    engineProject:
+      existsRel('apps/desktop/src/lib/engine-project.ts')
+      && project.includes('export class EngineProjectClient')
+      && project.includes('extends EngineTransport'),
+    engineWorkflow:
+      existsRel('apps/desktop/src/lib/engine-workflow.ts')
+      && workflow.includes('export class EngineWorkflowClient')
+      && workflow.includes('extends EngineProjectClient'),
+    engineClientExtends:
+      engineTs.includes('export class EngineClient extends EngineWorkflowClient'),
+    stickySseDoc:
+      existsRel('docs/ops/sticky-sse.md')
+      && sticky.includes('not implemented')
+      && (sticky.includes('Sticky SSE') || sticky.includes('sticky SSE')),
+    fileSsotOps:
+      multiOps.includes('File content SSOT')
+      && multiOps.includes('NEOS_DATA_DIR')
+      && multiOps.toLowerCase().includes('multi-writer'),
+    implM0: existsRel('docs/implementation/v0.12/v0.12.0.md'),
+    implM1: existsRel('docs/implementation/v0.12/v0.12.1.md'),
+    implM2: existsRel('docs/implementation/v0.12/v0.12.2.md'),
+    implM3: existsRel('docs/implementation/v0.12/v0.12.3.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.13 capability surface (M0–M3) — FE/BE contract gates for shared-edit.
+ * @see docs/plans/PLAN_FOR_V0_13_0.md
+ */
+function scanV13Features() {
+  const contract = readText('apps/server/src/routes/contract-fe-be.test.ts') ?? '';
+  const sharedEnvTest = readText('packages/shared/src/schemas/api-envelopes.test.ts') ?? '';
+  const features = {
+    planV13: existsRel('docs/plans/PLAN_FOR_V0_13_0.md'),
+    migrationV13: existsRel('docs/migration/v0.13.0.md'),
+    releaseV13: existsRel('docs/releases/v0.13.3.md'),
+    contractAgent423:
+      contract.includes('agent hard-enforce 423')
+      && contract.includes('NEOS_SHARED_EDIT_AGENTS')
+      && contract.includes('parseCollabLockConflict'),
+    contractRunBind:
+      contract.includes('collabSessionId bind')
+      && contract.includes('runId')
+      && contract.includes('parseProjectRunSummaryResponse'),
+    contractToolsFiles:
+      contract.includes('tools/files write')
+      && contract.includes("/api/tools/files")
+      && contract.includes("capabilities: ['files']"),
+    contractLocksFlags:
+      contract.includes('hardEnforce')
+      && contract.includes('agentsHardEnforce')
+      && contract.includes('parseCollabLocksSnapshot'),
+    contractCollabSessionId:
+      contract.includes('collabSessionId on summary')
+      || contract.includes('returns collabSessionId'),
+    sharedParseLocksFlags:
+      sharedEnvTest.includes('collab locks snapshot with enforce flags')
+      && sharedEnvTest.includes('collabSessionId: null'),
+    implM0: existsRel('docs/implementation/v0.13/v0.13.0.md'),
+    implM1: existsRel('docs/implementation/v0.13/v0.13.1.md'),
+    implM2: existsRel('docs/implementation/v0.13/v0.13.2.md'),
+    implM3: existsRel('docs/implementation/v0.13/v0.13.3.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
 function readText(rel) {
   const abs = path.join(ROOT, rel);
   if (!fs.existsSync(abs)) return null;
@@ -469,6 +637,9 @@ export function buildInventory() {
   const v08 = scanV08Features();
   const v09 = scanV09Features();
   const v10 = scanV10Features();
+  const v11 = scanV11Features();
+  const v12 = scanV12Features();
+  const v13 = scanV13Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -489,6 +660,9 @@ export function buildInventory() {
       v08Features: v08,
       v09Features: v09,
       v10Features: v10,
+      v11Features: v11,
+      v12Features: v12,
+      v13Features: v13,
     },
     gates: GATES,
     summary: {
@@ -511,6 +685,12 @@ export function buildInventory() {
       v09FeaturesTotal: v09.total,
       v10Features: v10.count,
       v10FeaturesTotal: v10.total,
+      v11Features: v11.count,
+      v11FeaturesTotal: v11.total,
+      v12Features: v12.count,
+      v12FeaturesTotal: v12.total,
+      v13Features: v13.count,
+      v13FeaturesTotal: v13.total,
     },
   };
 
@@ -586,6 +766,39 @@ export function evaluateGates(inventory) {
       missing: v10?.missing ?? [],
     });
   }
+  if (g.requireV11Features) {
+    const v11 = inventory.catalogs?.v11Features;
+    const ok = Boolean(v11?.ok);
+    results.push({
+      id: 'v11Features',
+      ok,
+      actual: v11?.count ?? 0,
+      min: v11?.total ?? 0,
+      missing: v11?.missing ?? [],
+    });
+  }
+  if (g.requireV12Features) {
+    const v12 = inventory.catalogs?.v12Features;
+    const ok = Boolean(v12?.ok);
+    results.push({
+      id: 'v12Features',
+      ok,
+      actual: v12?.count ?? 0,
+      min: v12?.total ?? 0,
+      missing: v12?.missing ?? [],
+    });
+  }
+  if (g.requireV13Features) {
+    const v13 = inventory.catalogs?.v13Features;
+    const ok = Boolean(v13?.ok);
+    results.push({
+      id: 'v13Features',
+      ok,
+      actual: v13?.count ?? 0,
+      min: v13?.total ?? 0,
+      missing: v13?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -618,6 +831,9 @@ function main(argv = process.argv.slice(2)) {
           || r.id === 'v08Features'
           || r.id === 'v09Features'
           || r.id === 'v10Features'
+          || r.id === 'v11Features'
+          || r.id === 'v12Features'
+          || r.id === 'v13Features'
         )
         && Array.isArray(r.missing)
         && r.missing.length

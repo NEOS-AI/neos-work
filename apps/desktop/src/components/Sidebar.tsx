@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { id: 'sessions', path: '/sessions', icon: SessionsIcon },
   { id: 'workflows', path: '/workflows', icon: WorkflowsIcon },
   { id: 'projects', path: '/projects', icon: ProjectsIcon },
-  { id: 'harnesses', path: '/harnesses', icon: HarnessesIcon },
+  { id: 'workers', path: '/workers', icon: WorkersIcon },
   { id: 'domain-packs', path: '/domain-packs', icon: DomainPacksIcon },
   { id: 'blocks', path: '/blocks', icon: BlocksIcon },
   { id: 'templates', path: '/templates', icon: TemplatesIcon },
@@ -285,7 +285,7 @@ function ProjectsIcon() {
   );
 }
 
-function HarnessesIcon() {
+function WorkersIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2a10 10 0 1 0 10 10H12V2Z" />

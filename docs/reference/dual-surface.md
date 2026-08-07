@@ -98,7 +98,7 @@ Revisit thin web catalog install only if product pull requires browser-first plu
 | App | Routes (approx) |
 |---|---|
 | Web | Connect · Projects · ProjectDetail · Settings |
-| Desktop | ModeSelection · Sessions · Workflows · Projects · Harnesses · Domain packs · Blocks · Templates · Skills · Memory · Settings · Design systems · Routines · Plugins · Deployments · Media |
+| Desktop | ModeSelection · Sessions · Workflows · Projects · **Workers** (`/workers`; alias `/harnesses`) · Domain packs · Blocks · Templates · Skills · Memory · Settings · Design systems · Routines · Plugins · Deployments · Media |
 
 ---
 

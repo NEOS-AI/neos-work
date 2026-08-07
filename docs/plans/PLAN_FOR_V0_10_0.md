@@ -2,7 +2,7 @@
 
 **Status:** **M0–M3 complete** through **0.10.3** (train closed)  
 **Baseline:** monorepo **0.10.3**  
-**Parent backlog:** (none for v0.10 — next train TBD)
+**Parent backlog:** next train → [`PLAN_FOR_V0_11_0.md`](./PLAN_FOR_V0_11_0.md) (run→session bind · lock UX · tool-path parity)
 ## One-line
 
 Make shared-edit optional for **agent writers**, share file-lock membership across replicas when Redis is on, and trim deprecated API surface — without opening CRDT.

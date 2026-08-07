@@ -205,6 +205,8 @@ export function buildNeosCliEnv(opts: {
   runId?: string;
   serverUrl?: string;
   authToken?: string;
+  /** Collab presence session for agent lock identity (v0.11 M0). */
+  collabSessionId?: string;
 }): Record<string, string> {
   const env: Record<string, string> = {};
   const safeField = (raw: unknown, max: number): string => {
@@ -222,10 +224,13 @@ export function buildNeosCliEnv(opts: {
   const authToken = safeField(opts.authToken, 8_192);
   const workflowId = safeField(opts.workflowId, 100);
   const runId = safeField(opts.runId, 100);
+  // Same cap as collab presence / lock session ids
+  const collabSessionId = safeField(opts.collabSessionId, 64);
   if (serverUrl) env.NEOS_SERVER_URL = serverUrl;
   if (authToken) env.NEOS_AUTH_TOKEN = authToken;
   if (workflowId) env.NEOS_WORKFLOW_ID = workflowId;
   if (runId) env.NEOS_RUN_ID = runId;
+  if (collabSessionId) env.NEOS_COLLAB_SESSION_ID = collabSessionId;
   return env;
 }
 

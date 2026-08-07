@@ -20,6 +20,11 @@ import { stream } from 'hono/streaming';
 import type { FileRevisionSource } from '@neos-work/shared';
 import * as db from '../db/projects.js';
 import {
+  hardEnforceLockBlock,
+  resolveCollabSessionId,
+  resolveCollabSessionIdForWrite,
+} from '../lib/collab-hard-enforce.js';
+import {
   deleteProjectPath,
   listProjectFiles,
   mkdirProjectPath,
@@ -57,7 +62,6 @@ import {
 } from '../lib/project-file-events.js';
 import {
   acquireFileLock,
-  getFileLockHydrated,
   isSharedEditAgentsHardEnforce,
   isSharedEditHardEnforce,
   shouldHardEnforceWriteSource,
@@ -78,52 +82,6 @@ const projects = new Hono();
 
 function paramId(c: { req: { param: (k: string) => string } }, key = 'id'): string {
   return safeRouteId(c.req.param(key));
-}
-
-/**
- * Resolve collab session id for hard-enforce lock checks (body preferred, then header).
- */
-function resolveCollabSessionId(
-  c: { req: { header: (name: string) => string | undefined } },
-  body: { sessionId?: unknown } | null | undefined,
-): string {
-  if (
-    body
-    && typeof body.sessionId === 'string'
-    && !/[\0\r\n]/.test(body.sessionId)
-  ) {
-    const s = body.sessionId.trim();
-    if (s) return s;
-  }
-  const hdr = c.req.header('x-neos-session-id') ?? '';
-  if (typeof hdr === 'string' && !/[\0\r\n]/.test(hdr)) {
-    return hdr.trim();
-  }
-  return '';
-}
-
-/**
- * When NEOS_SHARED_EDIT hard-enforce is on and a lock exists, only the holder may mutate.
- * Hydrate is owned by getFileLockHydrated (v0.10 M1).
- */
-async function hardEnforceLockBlock(
-  projectId: string,
-  relPath: string,
-  sessionId: string,
-): Promise<{
-  ok: false;
-  error: string;
-  data: { holder: NonNullable<Awaited<ReturnType<typeof getFileLockHydrated>>> };
-} | null> {
-  if (!isSharedEditHardEnforce()) return null;
-  const holder = await getFileLockHydrated(projectId, relPath);
-  if (!holder) return null;
-  if (sessionId && sessionId === holder.sessionId) return null;
-  return {
-    ok: false,
-    error: `File locked by ${holder.displayName}`,
-    data: { holder },
-  };
 }
 
 /** Safe parallel hydrate for SSE join / peers. */
@@ -749,7 +707,7 @@ projects.put('/:id/files/*', async (c) => {
   if (!rel) return c.json({ ok: false, error: 'path required' }, 400);
 
   const body = await c.req
-    .json<{ content?: string; source?: string; sessionId?: string }>()
+    .json<{ content?: string; source?: string; sessionId?: string; runId?: string }>()
     .catch(() => null);
   if (!body || typeof body.content !== 'string') {
     return c.json({ ok: false, error: 'content string required' }, 400);
@@ -762,8 +720,10 @@ projects.put('/:id/files/*', async (c) => {
     : 'user';
 
   // Hard enforce: user always when NEOS_SHARED_EDIT=1; agent when NEOS_SHARED_EDIT_AGENTS=1 (v0.10 M0)
+  // Agent writes may inherit collab session from run bind via runId / x-neos-run-id (v0.11 M0)
   if (shouldHardEnforceWriteSource(source)) {
-    const blocked = await hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, body));
+    const sessionId = resolveCollabSessionIdForWrite(c, body, source);
+    const blocked = await hardEnforceLockBlock(id, rel, sessionId);
     if (blocked) return c.json(blocked, 423);
   }
 

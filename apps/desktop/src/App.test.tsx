@@ -22,7 +22,10 @@ vi.mock('./components/Sidebar.js', () => ({
 
 // Stub heavy pages so connected routing is lightweight
 vi.mock('./pages/Dashboard.js', () => ({ Dashboard: () => <div>Dashboard</div> }));
-vi.mock('./pages/Harnesses.js', () => ({ Harnesses: () => <div>Harnesses</div> }));
+vi.mock('./pages/Harnesses.js', () => ({
+  Harnesses: () => <div>Workers</div>,
+  Workers: () => <div>Workers</div>,
+}));
 vi.mock('./pages/Blocks.js', () => ({ Blocks: () => <div>Blocks</div> }));
 vi.mock('./pages/Sessions.js', () => ({ Sessions: () => <div>Sessions</div> }));
 vi.mock('./pages/Settings.js', () => ({ Settings: () => <div>Settings</div> }));

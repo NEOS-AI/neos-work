@@ -35,7 +35,45 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.8 plan:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md) · **v0.8 migration:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md)  
 **v0.9 plan:** [docs/plans/PLAN_FOR_V0_9_0.md](docs/plans/PLAN_FOR_V0_9_0.md) · **v0.9 migration:** [docs/migration/v0.9.0.md](docs/migration/v0.9.0.md) · **dual-surface:** [docs/reference/dual-surface.md](docs/reference/dual-surface.md)  
 **v0.10 plan:** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) · **migration:** [docs/migration/v0.10.0.md](docs/migration/v0.10.0.md) · **release:** [docs/releases/v0.10.3.md](docs/releases/v0.10.3.md) · inventory `v10Features`  
+**v0.11 plan:** [docs/plans/PLAN_FOR_V0_11_0.md](docs/plans/PLAN_FOR_V0_11_0.md) · **migration:** [docs/migration/v0.11.0.md](docs/migration/v0.11.0.md) · **release:** [docs/releases/v0.11.3.md](docs/releases/v0.11.3.md) · inventory `v11Features`  
+**v0.12 plan:** [docs/plans/PLAN_FOR_V0_12_0.md](docs/plans/PLAN_FOR_V0_12_0.md) · **migration:** [docs/migration/v0.12.0.md](docs/migration/v0.12.0.md) · **release:** [docs/releases/v0.12.3.md](docs/releases/v0.12.3.md) · inventory `v12Features`  
+**v0.13 plan:** [docs/plans/PLAN_FOR_V0_13_0.md](docs/plans/PLAN_FOR_V0_13_0.md) · **migration:** [docs/migration/v0.13.0.md](docs/migration/v0.13.0.md) · **release:** [docs/releases/v0.13.3.md](docs/releases/v0.13.3.md) · inventory `v13Features`  
+
+## What's new in v0.13
+
+- **0.13.0** **Contract smoke** covers agent hard-enforce 423, run→session bind inherit, and tools/files write ([plan](docs/plans/PLAN_FOR_V0_13_0.md) · [impl](docs/implementation/v0.13/v0.13.0.md))  
+- **0.13.1** Locks snapshot **hardEnforce / agentsHardEnforce** + run summary **collabSessionId** in contract ([impl](docs/implementation/v0.13/v0.13.1.md))  
+- **0.13.2** **CI hygiene** — contract suite case map + shared Zod unit tests for bind/flags ([impl](docs/implementation/v0.13/v0.13.2.md))  
+- **0.13.3** Train closeout — [migration](docs/migration/v0.13.0.md) · [release](docs/releases/v0.13.3.md) · inventory `v13Features`  
+
 **Canvas overlay (default on since 0.9.1):** move + resize + multi-select + align/z-order + group scale; force off with `VITE_NEOS_CANVAS_OVERLAY=0` or Settings toggle (`neos.canvasOverlay`)
+
+---
+
+## What's new in v0.12
+
+- **0.12.0** Desktop **EngineClient split** — `engine-transport` + `engine-project` (Design Project/collab API); public `engine.js` imports unchanged ([plan](docs/plans/PLAN_FOR_V0_12_0.md) · [impl](docs/implementation/v0.12/v0.12.0.md))  
+- **0.12.1** **Workflow client extract** — `engine-workflow` (workflows / webhook / revisions / deployments); hierarchy Transport → Project → Workflow → EngineClient ([impl](docs/implementation/v0.12/v0.12.1.md))  
+- **0.12.2** **Ops docs** — [sticky SSE design note](docs/ops/sticky-sse.md) (not implemented) + multi-replica [file SSOT / `NEOS_DATA_DIR`](docs/ops/multi-replica-collab.md#file-content-ssot-neos_data_dir) ([impl](docs/implementation/v0.12/v0.12.2.md))  
+- **0.12.3** Train closeout — [migration](docs/migration/v0.12.0.md) · [release](docs/releases/v0.12.3.md) · inventory `v12Features`  
+
+---
+
+## What's new in v0.11
+
+- **0.11.0** **Run → collab session bind** — optional `sessionId` on `POST /api/runs`; agent PUTs inherit via `runId` / `x-neos-run-id` under agent lock enforce ([plan](docs/plans/PLAN_FOR_V0_11_0.md) · [impl](docs/implementation/v0.11/v0.11.0.md))  
+- **0.11.1** **Lock / agent-enforce UX** — collab status shows locks registry + shared-edit/agents flags; consistent 423 holder copy; project badge + run lock failures ([impl](docs/implementation/v0.11/v0.11.1.md))  
+- **0.11.2** **Tool-path lock parity** — `POST /api/tools/files/write` (tool token `files`) same 423 rules as agent PUT; CLI/MCP pass run/session env ([impl](docs/implementation/v0.11/v0.11.2.md))  
+- **0.11.3** Train closeout — primary **`/workers`** (alias `/harnesses`); [migration](docs/migration/v0.11.0.md) · [release](docs/releases/v0.11.3.md) · inventory `v11Features`  
+
+---
+
+## What's new in v0.10
+
+- **0.10.0** Optional **agent lock hard-enforce** — `NEOS_SHARED_EDIT=1` + `NEOS_SHARED_EDIT_AGENTS=1` applies 423 to `source=agent` PUTs on locked paths ([plan](docs/plans/PLAN_FOR_V0_10_0.md))  
+- **0.10.1** Multi-replica **shared lock registry** — `NEOS_COLLAB_LOCKS=auto` dual-writes file locks to Redis (like presence); hydrate on list / hard-enforce ([impl](docs/implementation/v0.10/v0.10.1.md) · [ops](docs/ops/multi-replica-collab.md))  
+- **0.10.2** **Harness HTTP sunset** — `/api/harness(es)` → **410 Gone**; use `/api/workers` ([migration](docs/migration/v0.10.0.md) · [impl](docs/implementation/v0.10/v0.10.2.md))  
+- **0.10.3** Train closeout — [migration](docs/migration/v0.10.0.md) · [release](docs/releases/v0.10.3.md) · inventory `v10Features`  
 
 ---
 
@@ -46,15 +84,6 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 - **0.9.2** Web **preview comments** + project zip import/export  
 - **0.9.3** Dual-surface policy + shared wire parsers; marketplace **desktop-only** — [matrix](docs/reference/dual-surface.md)  
 - **0.9.4** Train closeout — [migration](docs/migration/v0.9.0.md) · [release](docs/releases/v0.9.4.md) · inventory `v09Features`
-
----
-
-## What's new in v0.10
-
-- **0.10.0** Optional **agent lock hard-enforce** — `NEOS_SHARED_EDIT=1` + `NEOS_SHARED_EDIT_AGENTS=1` applies 423 to `source=agent` PUTs on locked paths ([plan](docs/plans/PLAN_FOR_V0_10_0.md))  
-- **0.10.1** Multi-replica **shared lock registry** — `NEOS_COLLAB_LOCKS=auto` dual-writes file locks to Redis (like presence); hydrate on list / hard-enforce ([impl](docs/implementation/v0.10/v0.10.1.md) · [ops](docs/ops/multi-replica-collab.md))  
-- **0.10.2** **Harness HTTP sunset** — `/api/harness(es)` → **410 Gone**; use `/api/workers` ([migration](docs/migration/v0.10.0.md) · [impl](docs/implementation/v0.10/v0.10.2.md))  
-- **0.10.3** Train closeout — [migration](docs/migration/v0.10.0.md) · [release](docs/releases/v0.10.3.md) · inventory `v10Features`  
 
 ---
 

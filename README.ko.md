@@ -33,7 +33,26 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.7 마이그레이션:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) · **v0.8 계획:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md)  
 **v0.8 마이그레이션:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **v0.9 계획:** [docs/plans/PLAN_FOR_V0_9_0.md](docs/plans/PLAN_FOR_V0_9_0.md) · **v0.9 마이그레이션:** [docs/migration/v0.9.0.md](docs/migration/v0.9.0.md) · **듀얼 서피스:** [docs/reference/dual-surface.md](docs/reference/dual-surface.md)  
-**v0.10 계획:** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) · **마이그레이션:** [docs/migration/v0.10.0.md](docs/migration/v0.10.0.md) · **릴리스:** [docs/releases/v0.10.3.md](docs/releases/v0.10.3.md) · inventory `v10Features`
+**v0.10 계획:** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) · **마이그레이션:** [docs/migration/v0.10.0.md](docs/migration/v0.10.0.md) · **릴리스:** [docs/releases/v0.10.3.md](docs/releases/v0.10.3.md) · inventory `v10Features`  
+**v0.11 계획:** [docs/plans/PLAN_FOR_V0_11_0.md](docs/plans/PLAN_FOR_V0_11_0.md) · **마이그레이션:** [docs/migration/v0.11.0.md](docs/migration/v0.11.0.md) · **릴리스:** [docs/releases/v0.11.3.md](docs/releases/v0.11.3.md) · inventory `v11Features`  
+**v0.12 계획:** [docs/plans/PLAN_FOR_V0_12_0.md](docs/plans/PLAN_FOR_V0_12_0.md) · **마이그레이션:** [docs/migration/v0.12.0.md](docs/migration/v0.12.0.md) · **릴리스:** [docs/releases/v0.12.3.md](docs/releases/v0.12.3.md) · inventory `v12Features`  
+**v0.13 계획:** [docs/plans/PLAN_FOR_V0_13_0.md](docs/plans/PLAN_FOR_V0_13_0.md) · **마이그레이션:** [docs/migration/v0.13.0.md](docs/migration/v0.13.0.md) · **릴리스:** [docs/releases/v0.13.3.md](docs/releases/v0.13.3.md) · inventory `v13Features`  
+
+## v0.13 주요 변경
+
+- **0.13.0** **Contract smoke** — agent 423, run→session bind, tools/files write ([계획](docs/plans/PLAN_FOR_V0_13_0.md) · [구현](docs/implementation/v0.13/v0.13.0.md))  
+- **0.13.1** Locks snapshot flags + run `collabSessionId` contract ([구현](docs/implementation/v0.13/v0.13.1.md))  
+- **0.13.2** **CI hygiene** — contract case map + shared Zod unit tests ([구현](docs/implementation/v0.13/v0.13.2.md))  
+- **0.13.3** 트레인 클로즈아웃 — [마이그레이션](docs/migration/v0.13.0.md) · [릴리스](docs/releases/v0.13.3.md) · inventory `v13Features`  
+  
+
+## v0.12 주요 변경
+
+- **0.12.0** Desktop **EngineClient 분리** — `engine-transport` + `engine-project` (Design Project/collab API); `engine.js` import 호환 ([계획](docs/plans/PLAN_FOR_V0_12_0.md) · [구현](docs/implementation/v0.12/v0.12.0.md))  
+- **0.12.1** **Workflow 클라이언트 추출** — `engine-workflow` (workflows / webhook / revisions / deployments) ([구현](docs/implementation/v0.12/v0.12.1.md))  
+- **0.12.2** **Ops 문서** — [sticky SSE 설계 노트](docs/ops/sticky-sse.md) (미구현) + multi-replica [file SSOT / `NEOS_DATA_DIR`](docs/ops/multi-replica-collab.md#file-content-ssot-neos_data_dir) ([구현](docs/implementation/v0.12/v0.12.2.md))  
+- **0.12.3** 트레인 클로즈아웃 — [마이그레이션](docs/migration/v0.12.0.md) · [릴리스](docs/releases/v0.12.3.md) · inventory `v12Features`  
+
 
 ---
 
@@ -46,6 +65,13 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 - **0.9.4** 트레인 클로즈아웃 — [마이그레이션](docs/migration/v0.9.0.md) · [릴리스](docs/releases/v0.9.4.md) · inventory `v09Features`
 
 ---
+
+## v0.11 주요 변경
+
+- **0.11.0** **Run → collab session bind** — `POST /api/runs`에 optional `sessionId`; 에이전트 PUT은 `runId` / `x-neos-run-id`로 상속 ([계획](docs/plans/PLAN_FOR_V0_11_0.md) · [구현](docs/implementation/v0.11/v0.11.0.md))  
+- **0.11.1** **Lock / agent-enforce UX** — collab status에 locks + shared-edit/agents 플래그; 일관된 423 holder 메시지; 프로젝트 배지 + run lock 실패 표시 ([구현](docs/implementation/v0.11/v0.11.1.md))  
+- **0.11.2** **Tool-path lock parity** — `POST /api/tools/files/write` (tool token `files`)가 agent PUT과 동일한 423 규칙; CLI/MCP run/session env 전달 ([구현](docs/implementation/v0.11/v0.11.2.md))  
+- **0.11.3** 트레인 클로즈아웃 — 기본 **`/workers`** (별칭 `/harnesses`); [마이그레이션](docs/migration/v0.11.0.md) · [릴리스](docs/releases/v0.11.3.md) · inventory `v11Features`  
 
 ## v0.10 주요 변경
 

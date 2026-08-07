@@ -58,7 +58,37 @@ function createHttpBackend(client: NeosApiClient, cfg: CliConfig): NeosMcpBacken
       };
     },
     async writeFile(projectId, path, content) {
-      const res = await client.writeProjectFile(projectId, path, content);
+      // Prefer agent source + collab env when spawned under a run (v0.11)
+      const runId = process.env.NEOS_RUN_ID?.trim();
+      const sessionId = process.env.NEOS_COLLAB_SESSION_ID?.trim();
+      const agentCtx = Boolean(
+        (runId && runId.length <= 100 && !/[\0\r\n]/.test(runId))
+        || (sessionId && sessionId.length <= 64 && !/[\0\r\n]/.test(sessionId)),
+      );
+      const res = await client.writeProjectFile(projectId, path, content, {
+        source: agentCtx ? 'agent' : 'user',
+        runId: runId && runId.length <= 100 && !/[\0\r\n]/.test(runId) ? runId : undefined,
+        sessionId:
+          sessionId && sessionId.length <= 64 && !/[\0\r\n]/.test(sessionId)
+            ? sessionId
+            : undefined,
+      });
+      if (!res.ok) {
+        const err =
+          typeof res.error === 'string' && res.error
+            ? res.error
+            : 'Write failed';
+        // Surface 423 lock holder in MCP tool result text
+        const holder =
+          res.data && typeof res.data === 'object' && res.data !== null && 'holder' in res.data
+            ? (res.data as { holder?: { displayName?: string } }).holder
+            : undefined;
+        const msg =
+          holder && typeof holder.displayName === 'string' && holder.displayName.trim()
+            ? `File locked by ${holder.displayName.trim()}`
+            : err;
+        throw new Error(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
+      }
       const data = (res.data ?? {}) as Record<string, unknown>;
       return {
         path,

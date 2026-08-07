@@ -69,11 +69,22 @@ describe('tool-tokens edge cases', () => {
   it('normalizes capabilities and clamps ttl', () => {
     const issued = issueToolToken({
       projectId: 'p1',
-      capabilities: ['MEDIA', 'live-artifacts', 'media', 'x'],
+      capabilities: ['MEDIA', 'live-artifacts', 'media', 'x', 'files'],
       ttlMs: 1,
     });
-    expect(issued.capabilities).toEqual(['media', 'live-artifacts']);
+    expect(issued.capabilities).toEqual(['media', 'live-artifacts', 'files']);
     expect(issued.expiresInMs).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it('accepts files capability (v0.11 M2)', () => {
+    const issued = issueToolToken({
+      projectId: 'p1',
+      capabilities: ['files'],
+      runId: 'run-abc',
+    });
+    const rec = resolveToolToken(issued.token);
+    requireToolCapability(rec, 'files');
+    expect(rec.runId).toBe('run-abc');
   });
 
   it('expires tokens and purges', () => {

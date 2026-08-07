@@ -20,7 +20,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-const { Harnesses } = await import('./Harnesses.js');
+const { Harnesses, Workers } = await import('./Harnesses.js');
 
 const workers = [
   {
@@ -48,7 +48,10 @@ const workers = [
   },
 ];
 
-describe('Harnesses page (Domain Workers)', () => {
+describe('Workers page (Domain Workers /harnesses alias)', () => {
+  it('exports Workers as primary and Harnesses as alias', () => {
+    expect(Workers).toBe(Harnesses);
+  });
   beforeEach(() => {
     listWorkers.mockReset();
     createWorker.mockReset();

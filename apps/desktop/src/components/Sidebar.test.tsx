@@ -63,7 +63,7 @@ describe('Sidebar', () => {
       'sessions',
       'workflows',
       'projects',
-      'harnesses',
+      'workers',
       'blocks',
       'templates',
       'skills',

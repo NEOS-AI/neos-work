@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-07T08:59:25.573Z",
-  "version": "0.10.3",
+  "generatedAt": "2026-08-07T15:04:27.420Z",
+  "version": "0.13.3",
   "root": "/Users/yeonwoosung/Desktop/neos-work",
   "catalogs": {
     "agentCliDefs": {
@@ -264,6 +264,67 @@
         "implM3": true
       },
       "missing": []
+    },
+    "v11Features": {
+      "ok": true,
+      "count": 11,
+      "total": 11,
+      "features": {
+        "planV11": true,
+        "migrationV11": true,
+        "releaseV11": true,
+        "runSessionBind": true,
+        "lockEnforceUx": true,
+        "toolPathLockParity": true,
+        "workersUiRename": true,
+        "implM0": true,
+        "implM1": true,
+        "implM2": true,
+        "implM3": true
+      },
+      "missing": []
+    },
+    "v12Features": {
+      "ok": true,
+      "count": 13,
+      "total": 13,
+      "features": {
+        "planV12": true,
+        "migrationV12": true,
+        "releaseV12": true,
+        "engineTransport": true,
+        "engineProject": true,
+        "engineWorkflow": true,
+        "engineClientExtends": true,
+        "stickySseDoc": true,
+        "fileSsotOps": true,
+        "implM0": true,
+        "implM1": true,
+        "implM2": true,
+        "implM3": true
+      },
+      "missing": []
+    },
+    "v13Features": {
+      "ok": true,
+      "count": 13,
+      "total": 13,
+      "features": {
+        "planV13": true,
+        "migrationV13": true,
+        "releaseV13": true,
+        "contractAgent423": true,
+        "contractRunBind": true,
+        "contractToolsFiles": true,
+        "contractLocksFlags": true,
+        "contractCollabSessionId": true,
+        "sharedParseLocksFlags": true,
+        "implM0": true,
+        "implM1": true,
+        "implM2": true,
+        "implM3": true
+      },
+      "missing": []
     }
   },
   "gates": {
@@ -279,7 +340,10 @@
     "requireV07Features": true,
     "requireV08Features": true,
     "requireV09Features": true,
-    "requireV10Features": true
+    "requireV10Features": true,
+    "requireV11Features": true,
+    "requireV12Features": true,
+    "requireV13Features": true
   },
   "summary": {
     "agentCliDefs": 13,
@@ -300,7 +364,13 @@
     "v09Features": 13,
     "v09FeaturesTotal": 13,
     "v10Features": 14,
-    "v10FeaturesTotal": 14
+    "v10FeaturesTotal": 14,
+    "v11Features": 11,
+    "v11FeaturesTotal": 11,
+    "v12Features": 13,
+    "v12FeaturesTotal": 13,
+    "v13Features": 13,
+    "v13FeaturesTotal": 13
   },
   "checks": {
     "ok": true,
@@ -386,6 +456,27 @@
         "ok": true,
         "actual": 14,
         "min": 14,
+        "missing": []
+      },
+      {
+        "id": "v11Features",
+        "ok": true,
+        "actual": 11,
+        "min": 11,
+        "missing": []
+      },
+      {
+        "id": "v12Features",
+        "ok": true,
+        "actual": 13,
+        "min": 13,
+        "missing": []
+      },
+      {
+        "id": "v13Features",
+        "ok": true,
+        "actual": 13,
+        "min": 13,
         "missing": []
       }
     ]

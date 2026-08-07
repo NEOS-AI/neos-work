@@ -107,6 +107,67 @@ describe('run + revision schemas', () => {
       data: { id: 'r1', status: 'succeeded', eventCount: 3 },
     });
     expect(r.ok).toBe(true);
+
+    const withBind = parseProjectRunSummaryResponse({
+      ok: true,
+      data: {
+        id: 'r2',
+        status: 'running',
+        collabSessionId: 'presence-1',
+      },
+    });
+    expect(withBind.ok).toBe(true);
+    if (withBind.ok) {
+      expect(withBind.data.data?.collabSessionId).toBe('presence-1');
+    }
+
+    // unbound run (v0.11 M0 / contract v0.13)
+    const unbound = parseProjectRunSummaryResponse({
+      ok: true,
+      data: { id: 'r3', status: 'succeeded', collabSessionId: null },
+    });
+    expect(unbound.ok).toBe(true);
+    if (unbound.ok) {
+      expect(unbound.data.data?.collabSessionId).toBeNull();
+    }
+  });
+
+  it('parses collab locks snapshot with enforce flags (v0.13 M2)', async () => {
+    const { parseCollabLocksSnapshot } = await import('./api-envelopes.js');
+    const off = parseCollabLocksSnapshot({
+      ok: true,
+      data: {
+        locks: [],
+        hardEnforce: false,
+        agentsHardEnforce: false,
+      },
+    });
+    expect(off.ok).toBe(true);
+    if (off.ok) {
+      expect(off.data.data?.hardEnforce).toBe(false);
+      expect(off.data.data?.agentsHardEnforce).toBe(false);
+    }
+
+    const on = parseCollabLocksSnapshot({
+      ok: true,
+      data: {
+        locks: [
+          {
+            path: 'index.html',
+            sessionId: 'abc123',
+            displayName: 'Alice',
+          },
+        ],
+        hardEnforce: true,
+        agentsHardEnforce: true,
+      },
+    });
+    expect(on.ok).toBe(true);
+    if (on.ok) {
+      expect(on.data.data?.hardEnforce).toBe(true);
+      expect(on.data.data?.agentsHardEnforce).toBe(true);
+      expect(on.data.data?.locks).toHaveLength(1);
+    }
   });
 
   it('parses revision list (contentHash domain)', async () => {

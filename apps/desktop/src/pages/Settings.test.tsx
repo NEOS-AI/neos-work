@@ -126,6 +126,8 @@ describe('Settings page', () => {
         ready: true,
         detail: null,
         presence: { kind: 'memory', ready: true, detail: null },
+        locks: { kind: 'memory', ready: true, detail: null },
+        sharedEdit: { hardEnforce: true, agentsHardEnforce: true },
       },
     });
     getMediaConfig.mockReset().mockResolvedValue({
@@ -214,6 +216,10 @@ describe('Settings page', () => {
       expect(getCollabStatus).toHaveBeenCalled();
       expect(screen.getByTestId('collab-status-bus').textContent).toMatch(/memory/);
       expect(screen.getByTestId('collab-status-node').textContent).toBe('node-desktop-test');
+      expect(screen.getByTestId('collab-status-locks').textContent).toMatch(/memory/);
+      expect(screen.getByTestId('collab-status-shared-edit').textContent).toMatch(
+        /on.*agents on/i,
+      );
     });
     await waitFor(() => {
       expect(screen.getByText('Configured')).toBeInTheDocument();

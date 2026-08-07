@@ -42,6 +42,10 @@ pnpm --filter @neos-work/cli exec neos status
 |---|---|
 | `/data` (`neos_data`) | SQLite `data.db`, media, durable state |
 
+Default compose is **single process**. Multi-replica + shared volume caveats
+(file SSOT, no multi-writer SQLite): [docs/ops/multi-replica-collab.md](../docs/ops/multi-replica-collab.md#file-content-ssot-neos_data_dir).  
+Sticky SSE is **not** implemented — design note: [docs/ops/sticky-sse.md](../docs/ops/sticky-sse.md).
+
 ## Environment
 
 | Variable | Default | Notes |

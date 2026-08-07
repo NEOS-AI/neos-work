@@ -2102,6 +2102,28 @@ describe('EngineClient', () => {
     expect(body.agentId).toBe('cli-claude');
     expect(body.execute).toBe(false);
     expect(body.dryRun).toBe(true);
+
+    // v0.11 M0 — sessionId bind on body + header
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { id: 'run3', status: 'succeeded', collabSessionId: 'sess-1' },
+      }),
+    );
+    const bound = await client.createProjectRun({
+      prompt: 'bound',
+      dryRun: true,
+      sessionId: 'sess-1',
+    });
+    expect(bound.ok).toBe(true);
+    const boundCall = fetchMock.mock.calls.at(-1)!;
+    const boundBody = JSON.parse(boundCall[1].body as string);
+    expect(boundBody.sessionId).toBe('sess-1');
+    expect(boundCall[1].headers['x-neos-session-id']).toBe('sess-1');
+
+    await expect(
+      client.createProjectRun({ prompt: 'x', sessionId: `bad${'\n'}id` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid sessionId' });
   });
 
   it('design system content/tokens/save and live artifact APIs', async () => {

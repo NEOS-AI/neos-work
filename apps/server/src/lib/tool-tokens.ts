@@ -7,7 +7,8 @@
 
 import { randomBytes } from 'node:crypto';
 
-export type ToolCapability = 'live-artifacts' | 'media';
+/** Agent tool-token capabilities (v0.5 Task 9 + v0.11 M2 files). */
+export type ToolCapability = 'live-artifacts' | 'media' | 'files';
 
 export class ToolTokenError extends Error {
   constructor(
@@ -49,7 +50,7 @@ function safeId(raw: unknown, max = 100): string {
   return s;
 }
 
-const CAPS = new Set<string>(['live-artifacts', 'media']);
+const CAPS = new Set<string>(['live-artifacts', 'media', 'files']);
 
 function normalizeCaps(raw: unknown): ToolCapability[] {
   if (!Array.isArray(raw)) return [];

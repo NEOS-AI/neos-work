@@ -34,10 +34,16 @@ export class RunRegistry {
     projectId?: string | null;
     prompt?: string;
     editContext?: unknown;
+    /** Collab presence session for agent lock identity (v0.11 M0). */
+    collabSessionId?: string | null;
   }): RuntimeRunRecord {
     this.gc();
     const id = input.id ?? crypto.randomUUID();
     const now = new Date().toISOString();
+    const collabSessionId =
+      typeof input.collabSessionId === 'string' && input.collabSessionId
+        ? input.collabSessionId
+        : null;
     const record: RuntimeRunRecord = {
       id,
       status: 'queued',
@@ -45,6 +51,7 @@ export class RunRegistry {
       projectId: input.projectId ?? null,
       prompt: input.prompt,
       editContext: input.editContext,
+      collabSessionId,
       error: null,
       createdAt: now,
       startedAt: null,

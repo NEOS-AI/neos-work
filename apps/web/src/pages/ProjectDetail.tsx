@@ -16,6 +16,9 @@ import {
   type EditorBufferState,
 } from '@neos-work/design-editor';
 import {
+  extractLockHolder,
+  formatLockHolderMessage,
+  formatRunLockFailureMessage,
   isTerminalRunStatus,
   type ProjectRunEvent,
   type ProjectRunSummary,
@@ -104,6 +107,11 @@ export function ProjectDetail() {
   const [foreignLocks, setForeignLocks] = useState<
     Record<string, { sessionId: string; displayName: string }>
   >({});
+  /** From collab locks snapshot — shared-edit flags (v0.11 M1). */
+  const [sharedEditFlags, setSharedEditFlags] = useState<{
+    hardEnforce: boolean;
+    agentsHardEnforce: boolean;
+  }>({ hardEnforce: false, agentsHardEnforce: false });
   /** sessionId → peer selection (v0.7 M2). */
   const [peerSelections, setPeerSelections] = useState<Record<string, PeerSelectionInfo>>({});
   /** Path currently being deleted (disables × while request in flight). */
@@ -378,23 +386,29 @@ export function ProjectDetail() {
       void client
         .getCollabLocks(id)
         .then((res) => {
-          if (!res.ok || !res.data?.locks || !Array.isArray(res.data.locks)) return;
-          const selfId = collabSessionRef.current;
-          const next: Record<string, { sessionId: string; displayName: string }> = {};
-          for (const l of res.data.locks) {
-            if (!l || typeof l.sessionId !== 'string' || typeof l.path !== 'string') continue;
-            if (selfId && l.sessionId === selfId) continue;
-            const lp = normalizeProjectRelPath(l.path);
-            if (!lp) continue;
-            next[lp] = {
-              sessionId: l.sessionId,
-              displayName:
-                typeof l.displayName === 'string' && l.displayName.trim()
-                  ? l.displayName.trim()
-                  : 'Anonymous',
-            };
+          if (!res.ok || !res.data) return;
+          if (res.data.locks && Array.isArray(res.data.locks)) {
+            const selfId = collabSessionRef.current;
+            const next: Record<string, { sessionId: string; displayName: string }> = {};
+            for (const l of res.data.locks) {
+              if (!l || typeof l.sessionId !== 'string' || typeof l.path !== 'string') continue;
+              if (selfId && l.sessionId === selfId) continue;
+              const lp = normalizeProjectRelPath(l.path);
+              if (!lp) continue;
+              next[lp] = {
+                sessionId: l.sessionId,
+                displayName:
+                  typeof l.displayName === 'string' && l.displayName.trim()
+                    ? l.displayName.trim()
+                    : 'Anonymous',
+              };
+            }
+            setForeignLocks(next);
           }
-          setForeignLocks(next);
+          setSharedEditFlags({
+            hardEnforce: res.data.hardEnforce === true,
+            agentsHardEnforce: res.data.agentsHardEnforce === true,
+          });
         })
         .catch(() => {});
       void client
@@ -780,28 +794,20 @@ export function ProjectDetail() {
         collabSessionId ? { sessionId: collabSessionId } : undefined,
       );
       if (!res.ok) {
-        const holder =
-          res.data
-          && typeof res.data === 'object'
-          && res.data !== null
-          && 'holder' in res.data
-            ? (res.data as {
-                holder?: { sessionId?: string; displayName?: string; path?: string };
-              }).holder
-            : undefined;
-        if (holder?.displayName && holder.sessionId) {
+        const holder = extractLockHolder(res.data);
+        if (holder) {
           const lockPath =
-            (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
+            (holder.path && normalizeProjectRelPath(holder.path))
             || normalizeProjectRelPath(path)
             || path;
           setForeignLocks((m) => ({
             ...m,
             [lockPath]: {
-              sessionId: holder.sessionId!,
-              displayName: holder.displayName!,
+              sessionId: holder.sessionId,
+              displayName: holder.displayName,
             },
           }));
-          setError(`Locked by ${holder.displayName.trim()}`);
+          setError(formatLockHolderMessage(holder));
         } else {
           setError(
             (typeof res.error === 'string' && res.error ? res.error : 'Failed to create folder')
@@ -849,27 +855,18 @@ export function ProjectDetail() {
         collabSessionId ? { sessionId: collabSessionId } : undefined,
       );
       if (!res.ok) {
-        const holder =
-          res.data
-          && typeof res.data === 'object'
-          && res.data !== null
-          && 'holder' in res.data
-            ? (res.data as {
-                holder?: { sessionId?: string; displayName?: string; path?: string };
-              }).holder
-            : undefined;
-        if (holder?.displayName && holder.sessionId) {
+        const holder = extractLockHolder(res.data);
+        if (holder) {
           const lockPath =
-            (typeof holder.path === 'string' && normalizeProjectRelPath(holder.path))
-            || rel;
+            (holder.path && normalizeProjectRelPath(holder.path)) || rel;
           setForeignLocks((m) => ({
             ...m,
             [lockPath]: {
-              sessionId: holder.sessionId!,
-              displayName: holder.displayName!,
+              sessionId: holder.sessionId,
+              displayName: holder.displayName,
             },
           }));
-          setError(`Locked by ${holder.displayName.trim()}`);
+          setError(formatLockHolderMessage(holder));
         } else {
           setError(
             (typeof res.error === 'string' && res.error ? res.error : 'Delete failed')
@@ -940,16 +937,27 @@ export function ProjectDetail() {
         setStatus('Saved');
         void loadRevisions();
       } else {
-        let msg =
-          typeof res.error === 'string' && res.error ? res.error : 'Save failed';
-        const holder =
-          res.data && typeof res.data === 'object' && res.data !== null && 'holder' in res.data
-            ? (res.data as { holder?: { displayName?: string } }).holder
-            : undefined;
-        if (holder && typeof holder.displayName === 'string' && holder.displayName.trim()) {
-          msg = `Locked by ${holder.displayName.trim()}`;
+        const holder = extractLockHolder(res.data);
+        if (holder) {
+          const lockPath =
+            (holder.path && normalizeProjectRelPath(holder.path))
+            || (buffer.path ? normalizeProjectRelPath(buffer.path) : '')
+            || '';
+          if (lockPath) {
+            setForeignLocks((m) => ({
+              ...m,
+              [lockPath]: {
+                sessionId: holder.sessionId,
+                displayName: holder.displayName,
+              },
+            }));
+          }
+          setError(formatLockHolderMessage(holder));
+        } else {
+          const msg =
+            typeof res.error === 'string' && res.error ? res.error : 'Save failed';
+          setError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
         }
-        setError(msg.replace(/[\0\r\n]+/g, ' ').slice(0, 300));
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Save failed');
@@ -1017,6 +1025,8 @@ export function ProjectDetail() {
         projectId: id,
         prompt: userText,
         editContext,
+        // Bind run to collab presence for agent lock identity (v0.11 M0)
+        sessionId: collabSessionRef.current || undefined,
       });
       if (!res.ok) {
         const msg =
@@ -1074,6 +1084,8 @@ export function ProjectDetail() {
             if (status.toLowerCase() === 'succeeded') {
               await reloadOpenFileFromDisk();
             }
+            const lockFail = formatRunLockFailureMessage(errMsg);
+            if (lockFail) setError(lockFail);
             await persistAssistant(status, errMsg);
             void loadRuns();
             return status;
@@ -1112,12 +1124,26 @@ export function ProjectDetail() {
               setStatus(
                 hint === 'succeeded' ? 'Run finished' : `Run ${hint}`,
               );
+              if (ev.type === 'run.failed' && ev.data && typeof ev.data === 'object') {
+                const errRaw =
+                  'error' in ev.data
+                    ? String((ev.data as { error?: unknown }).error ?? '')
+                    : '';
+                const lockMsg = formatRunLockFailureMessage(errRaw);
+                if (lockMsg) setError(lockMsg);
+              }
             } else if (ev.type === 'run.started') {
               setActiveAiRunStatus('running');
               setStatus(`Run ${runId.slice(0, 8)}… (running)`);
             } else if (ev.type === 'run.stdout' || ev.type === 'run.stderr') {
               // Keep status line compact; list panel has full event history
               setActiveAiRunStatus((prev) => prev || 'running');
+              if (ev.data && typeof ev.data === 'object' && 'chunk' in ev.data) {
+                const lockMsg = formatRunLockFailureMessage(
+                  String((ev.data as { chunk?: unknown }).chunk ?? ''),
+                );
+                if (lockMsg) setError(lockMsg);
+              }
             }
           },
           {
@@ -1214,6 +1240,22 @@ export function ProjectDetail() {
           </button>
           {dirty && <span data-testid="web-dirty">Unsaved</span>}
           <PresencePeersBar peers={collabPeers} self={collabSelf} selections={peerSelections} />
+          {sharedEditFlags.hardEnforce && (
+            <span
+              data-testid="shared-edit-badge"
+              className="mono"
+              style={{ fontSize: 10 }}
+              title={
+                sharedEditFlags.agentsHardEnforce
+                  ? 'NEOS_SHARED_EDIT + NEOS_SHARED_EDIT_AGENTS: human and agent writes hard-enforced'
+                  : 'NEOS_SHARED_EDIT: human writes hard-enforced (agents bypass)'
+              }
+            >
+              {sharedEditFlags.agentsHardEnforce
+                ? 'locks: enforce + agents'
+                : 'locks: enforce'}
+            </span>
+          )}
           {lockedByOther && (
             <span
               data-testid="file-lock-banner"

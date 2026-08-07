@@ -273,6 +273,12 @@ export interface ProjectRunSummary {
   startedAt?: string | null;
   completedAt?: string | null;
   eventCount?: number;
+  /**
+   * Optional collab presence session bound at run create (v0.11 M0 / Q35).
+   * Used as lock identity for agent writes when hard-enforce is on.
+   * Not an auth credential.
+   */
+  collabSessionId?: string | null;
 }
 
 export interface ProjectRun {

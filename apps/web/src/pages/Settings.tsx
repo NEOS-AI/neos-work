@@ -62,6 +62,8 @@ export function Settings() {
     ready?: boolean;
     detail?: string | null;
     presence?: { kind?: string; ready?: boolean; detail?: string | null };
+    locks?: { kind?: string; ready?: boolean; detail?: string | null };
+    sharedEdit?: { hardEnforce?: boolean; agentsHardEnforce?: boolean };
   } | null>(null);
   const [collabError, setCollabError] = useState<string | null>(null);
   const [collabLoading, setCollabLoading] = useState(false);
@@ -385,7 +387,7 @@ export function Settings() {
           <div>
             <h2 style={{ margin: 0, fontSize: '1rem' }}>Collab status</h2>
             <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Multi-replica bus and presence registry (no secrets).
+              Multi-replica bus, presence/lock registry, and shared-edit flags (no secrets).
             </p>
           </div>
           <button
@@ -459,6 +461,40 @@ export function Settings() {
                 <dd style={{ margin: 0 }}>{collabStatus.presence.detail}</dd>
               </div>
             )}
+            <div className="row" style={{ gap: 8 }}>
+              <dt className="muted" style={{ minWidth: 72 }}>
+                locks
+              </dt>
+              <dd style={{ margin: 0 }} data-testid="collab-status-locks">
+                {collabStatus.locks?.kind ?? '—'}
+                {typeof collabStatus.locks?.ready === 'boolean'
+                  ? collabStatus.locks.ready
+                    ? ' · ready'
+                    : ' · not ready'
+                  : ''}
+              </dd>
+            </div>
+            {collabStatus.locks?.detail != null && collabStatus.locks.detail !== '' && (
+              <div className="row" style={{ gap: 8 }}>
+                <dt className="muted" style={{ minWidth: 72 }}>
+                  l.detail
+                </dt>
+                <dd style={{ margin: 0 }}>{collabStatus.locks.detail}</dd>
+              </div>
+            )}
+            <div className="row" style={{ gap: 8 }}>
+              <dt className="muted" style={{ minWidth: 72 }}>
+                shared-edit
+              </dt>
+              <dd style={{ margin: 0 }} data-testid="collab-status-shared-edit">
+                {collabStatus.sharedEdit?.hardEnforce === true ? 'on' : 'off'}
+                {collabStatus.sharedEdit?.hardEnforce === true
+                  ? collabStatus.sharedEdit?.agentsHardEnforce === true
+                    ? ' · agents on'
+                    : ' · agents off'
+                  : ''}
+              </dd>
+            </div>
           </dl>
         )}
         {!collabStatus && !collabError && !collabLoading && (

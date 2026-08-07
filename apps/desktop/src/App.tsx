@@ -5,7 +5,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { EngineProvider, useEngine } from './hooks/useEngine.js';
 import { ThemeProvider } from './hooks/useTheme.js';
 import { Dashboard } from './pages/Dashboard.js';
-import { Harnesses } from './pages/Harnesses.js';
+import { Harnesses, Workers } from './pages/Harnesses.js';
 import { Blocks } from './pages/Blocks.js';
 import { ModeSelection } from './pages/ModeSelection.js';
 import { Sessions } from './pages/Sessions.js';
@@ -52,6 +52,8 @@ const connectedRouter = createBrowserRouter([
       { path: 'workflows/:id', element: <WorkflowEditor /> },
       { path: 'projects', element: <Projects /> },
       { path: 'projects/:id', element: <ProjectWorkspace /> },
+      // Primary: /workers (v0.11 M3). Alias: /harnesses for bookmarks (Q37).
+      { path: 'workers', element: <Workers /> },
       { path: 'harnesses', element: <Harnesses /> },
       { path: 'domain-packs', element: <DomainPacks /> },
       { path: 'blocks', element: <Blocks /> },

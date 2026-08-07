@@ -1,8 +1,8 @@
-/** Persist domain filter chips for Blocks / Templates / Harnesses lists. */
+/** Persist domain filter chips for Blocks / Templates / Workers lists. */
 
 export type DomainFilterPref = 'all' | 'finance' | 'coding' | 'research' | 'general';
 
-/** Shared chip order for Blocks / Templates / Harnesses toolbars. */
+/** Shared chip order for Blocks / Templates / Workers toolbars. */
 export const DOMAIN_FILTER_OPTIONS: readonly DomainFilterPref[] = [
   'all',
   'finance',
@@ -14,6 +14,9 @@ export const DOMAIN_FILTER_OPTIONS: readonly DomainFilterPref[] = [
 const KEYS = {
   blocks: 'neos-blocks-domain',
   templates: 'neos-templates-domain',
+  /** Preferred scope (v0.11 M3). */
+  workers: 'neos-workers-domain',
+  /** Legacy scope — still read when workers key empty. */
   harnesses: 'neos-harnesses-domain',
 } as const;
 
@@ -29,7 +32,13 @@ function parseDomain(raw: unknown): DomainFilterPref | null {
 
 export function loadDomainFilter(scope: DomainFilterScope): DomainFilterPref {
   try {
-    return parseDomain(localStorage.getItem(KEYS[scope])) ?? 'all';
+    const primary = parseDomain(localStorage.getItem(KEYS[scope]));
+    if (primary) return primary;
+    // Workers page: fall back to legacy harnesses key once
+    if (scope === 'workers') {
+      return parseDomain(localStorage.getItem(KEYS.harnesses)) ?? 'all';
+    }
+    return 'all';
   } catch {
     return 'all';
   }

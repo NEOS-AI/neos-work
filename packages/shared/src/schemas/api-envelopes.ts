@@ -131,6 +131,31 @@ export const collabLocksSnapshotSchema = apiEnvelopeSchema(
   }),
 );
 
+/** GET /api/collab/status registry slice (presence or locks). */
+export const collabRegistryStatusSchema = z.object({
+  kind: z.string().optional(),
+  ready: z.boolean().optional(),
+  detail: z.string().nullable().optional(),
+});
+
+/** GET /api/collab/status success `data` (v0.10+ locks + sharedEdit). */
+export const collabStatusDataSchema = z.object({
+  bus: z.string().optional(),
+  nodeId: z.string().optional(),
+  ready: z.boolean().optional(),
+  detail: z.string().nullable().optional(),
+  presence: collabRegistryStatusSchema.optional(),
+  locks: collabRegistryStatusSchema.optional(),
+  sharedEdit: z
+    .object({
+      hardEnforce: z.boolean().optional(),
+      agentsHardEnforce: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const collabStatusResponseSchema = apiEnvelopeSchema(collabStatusDataSchema);
+
 export const collabSelectionsSnapshotSchema = apiEnvelopeSchema(
   z.object({
     selections: z.array(peerSelectionSchema),
@@ -179,6 +204,8 @@ export const projectRunSummarySchema = z.object({
   startedAt: z.string().nullable().optional(),
   completedAt: z.string().nullable().optional(),
   eventCount: z.number().nonnegative().optional(),
+  /** Collab presence bind for agent lock identity (v0.11 M0). */
+  collabSessionId: z.string().nullable().optional(),
 });
 
 export const projectRunSummaryResponseSchema = apiEnvelopeSchema(projectRunSummarySchema);
@@ -299,6 +326,10 @@ export function parseCollabSelectionsSnapshot(input: unknown) {
   return parseWithSchema(collabSelectionsSnapshotSchema, input);
 }
 
+export function parseCollabStatusResponse(input: unknown) {
+  return parseWithSchema(collabStatusResponseSchema, input);
+}
+
 export function parseProjectRunSummaryResponse(input: unknown) {
   return parseWithSchema(projectRunSummaryResponseSchema, input);
 }
@@ -412,6 +443,10 @@ export const openApiWireFragments = {
       error: { type: ['string', 'null'] },
       createdAt: { type: 'string' },
       eventCount: { type: 'number' },
+      collabSessionId: {
+        type: ['string', 'null'],
+        description: 'Optional collab presence bind for agent lock identity (v0.11)',
+      },
     },
   },
   FileRevisionListItem: {

@@ -19,15 +19,23 @@ describe('domain-filter-prefs', () => {
   it('defaults domain filters to all', () => {
     expect(loadDomainFilter('blocks')).toBe('all');
     expect(loadDomainFilter('templates')).toBe('all');
+    expect(loadDomainFilter('workers')).toBe('all');
     expect(loadDomainFilter('harnesses')).toBe('all');
   });
 
   it('round-trips per scope independently', () => {
     saveDomainFilter('blocks', 'coding');
     saveDomainFilter('templates', 'finance');
+    saveDomainFilter('workers', 'research');
     expect(loadDomainFilter('blocks')).toBe('coding');
     expect(loadDomainFilter('templates')).toBe('finance');
+    expect(loadDomainFilter('workers')).toBe('research');
     expect(loadDomainFilter('harnesses')).toBe('all');
+  });
+
+  it('workers scope falls back to legacy harnesses key', () => {
+    saveDomainFilter('harnesses', 'coding');
+    expect(loadDomainFilter('workers')).toBe('coding');
   });
 
   it('ignores invalid domain values', () => {

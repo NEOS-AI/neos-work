@@ -3,6 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
+import {
+  getGlobalRunRegistry,
+  resetGlobalRunRegistry,
+} from '@neos-work/agent-runtime';
 import projects from './projects.js';
 import * as db from '../db/projects.js';
 import { getDb } from '../db/schema.js';
@@ -42,6 +46,7 @@ function cleanup() {
 afterEach(() => {
   clearImportTokens();
   clearProjectPresence();
+  resetGlobalRunRegistry();
   cleanup();
 });
 
@@ -459,6 +464,185 @@ describe('projects routes', () => {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: 'agent', source: 'agent' }),
+        },
+      );
+      expect(agentWrite.status).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+      if (prevAgents === undefined) delete process.env.NEOS_SHARED_EDIT_AGENTS;
+      else process.env.NEOS_SHARED_EDIT_AGENTS = prevAgents;
+    }
+  });
+
+  it('agent PUT inherits collab session from run bind via runId (v0.11 M0)', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    const prevAgents = process.env.NEOS_SHARED_EDIT_AGENTS;
+    process.env.NEOS_SHARED_EDIT = '1';
+    process.env.NEOS_SHARED_EDIT_AGENTS = '1';
+    try {
+      const project = await createViaApi();
+      await app.request(`/api/projects/${project.id}/files/run-bind.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'v1' }),
+      });
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'BindHolder',
+        listener: () => {},
+      })!;
+      expect((await acquireFileLock({
+        projectId: project.id,
+        sessionId: holder.sessionId,
+        path: 'run-bind.html',
+      })).ok).toBe(true);
+
+      const reg = getGlobalRunRegistry();
+      const boundRun = reg.create({
+        projectId: project.id,
+        prompt: 'edit',
+        collabSessionId: holder.sessionId,
+      });
+      const foreignRun = reg.create({
+        projectId: project.id,
+        prompt: 'edit',
+        collabSessionId: 'not-the-holder',
+      });
+      const unboundRun = reg.create({
+        projectId: project.id,
+        prompt: 'edit',
+      });
+
+      // Inherit holder session via body runId → 200
+      const viaBody = await app.request(
+        `/api/projects/${project.id}/files/run-bind.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: 'from-bound-run',
+            source: 'agent',
+            runId: boundRun.id,
+          }),
+        },
+      );
+      expect(viaBody.status).toBe(200);
+
+      // Inherit via x-neos-run-id header
+      const viaHdr = await app.request(
+        `/api/projects/${project.id}/files/run-bind.html`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-neos-run-id': boundRun.id,
+          },
+          body: JSON.stringify({
+            content: 'from-header-run',
+            source: 'agent',
+          }),
+        },
+      );
+      expect(viaHdr.status).toBe(200);
+
+      // Run bound to non-holder → 423
+      const foreign = await app.request(
+        `/api/projects/${project.id}/files/run-bind.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: 'foreign',
+            source: 'agent',
+            runId: foreignRun.id,
+          }),
+        },
+      );
+      expect(foreign.status).toBe(423);
+
+      // Unbound run → 423 (no session to inherit)
+      const unbound = await app.request(
+        `/api/projects/${project.id}/files/run-bind.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: 'unbound',
+            source: 'agent',
+            runId: unboundRun.id,
+          }),
+        },
+      );
+      expect(unbound.status).toBe(423);
+
+      // Explicit session still wins over wrong run bind
+      const explicit = await app.request(
+        `/api/projects/${project.id}/files/run-bind.html`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-neos-session-id': holder.sessionId,
+          },
+          body: JSON.stringify({
+            content: 'explicit',
+            source: 'agent',
+            runId: foreignRun.id,
+            sessionId: holder.sessionId,
+          }),
+        },
+      );
+      expect(explicit.status).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_SHARED_EDIT;
+      else process.env.NEOS_SHARED_EDIT = prev;
+      if (prevAgents === undefined) delete process.env.NEOS_SHARED_EDIT_AGENTS;
+      else process.env.NEOS_SHARED_EDIT_AGENTS = prevAgents;
+    }
+  });
+
+  it('run bind is ignored for agent writes when agents hard-enforce is off', async () => {
+    const prev = process.env.NEOS_SHARED_EDIT;
+    const prevAgents = process.env.NEOS_SHARED_EDIT_AGENTS;
+    process.env.NEOS_SHARED_EDIT = '1';
+    delete process.env.NEOS_SHARED_EDIT_AGENTS;
+    try {
+      const project = await createViaApi();
+      await app.request(`/api/projects/${project.id}/files/bind-bypass.html`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'v1' }),
+      });
+      const holder = joinProjectPresence({
+        projectId: project.id,
+        displayName: 'BypassH',
+        listener: () => {},
+      })!;
+      expect((await acquireFileLock({
+        projectId: project.id,
+        sessionId: holder.sessionId,
+        path: 'bind-bypass.html',
+      })).ok).toBe(true);
+
+      const reg = getGlobalRunRegistry();
+      const run = reg.create({
+        projectId: project.id,
+        prompt: 'x',
+        collabSessionId: 'someone-else',
+      });
+
+      // Agent bypass still applies when agents flag off — foreign bind irrelevant
+      const agentWrite = await app.request(
+        `/api/projects/${project.id}/files/bind-bypass.html`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: 'agent-bypass',
+            source: 'agent',
+            runId: run.id,
+          }),
         },
       );
       expect(agentWrite.status).toBe(200);

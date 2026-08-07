@@ -1,6 +1,6 @@
 # API surface notes (FE/CLI vs server)
 
-Last updated 2026-08-07 (v0.10.2 harness sunset + orphan triage).
+Last updated 2026-08-07 (v0.11.2 tool files write + v0.10.2 harness sunset).
 
 **Product matrix:** [`dual-surface.md`](./dual-surface.md) — Desktop full product; Web Design Project loop; marketplace **desktop-only** (Q29).  
 **v0.10 M2:** [`docs/implementation/v0.10/v0.10.2.md`](../implementation/v0.10/v0.10.2.md)
@@ -13,7 +13,7 @@ See `apps/server/src/lib/auth-paths.ts`:
 |------|-----|
 | `GET /api/health` | Connection probe before token is known |
 | `POST /api/webhook/:workflowId` (one segment only) | HMAC-signed trigger |
-| `/api/tools/*` | Short-lived agent **tool tokens** (not human Bearer) |
+| `/api/tools/*` | Short-lived agent **tool tokens** (not human Bearer) — includes `/api/tools/files/write` (v0.11.2, capability `files`) |
 | `GET /api/mcp-servers/oauth/callback`, `GET /api/mcp/oauth/callback` | Browser OAuth redirect (PKCE) |
 
 ## Human clients

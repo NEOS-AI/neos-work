@@ -245,6 +245,88 @@ describe('runs routes', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('binds collab sessionId on create and rejects invalid (v0.11 M0)', async () => {
+    const p = projects.createProject({ name: `${NAME}_bind` });
+    ids.push(p.id);
+
+    const bound = await app.request('/api/runs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-neos-session-id': 'abc123collab',
+      },
+      body: JSON.stringify({
+        projectId: p.id,
+        prompt: 'bound run',
+        dryRun: true,
+        sessionId: 'abc123collab',
+      }),
+    });
+    expect(bound.status).toBe(201);
+    const boundJson = (await bound.json()) as {
+      ok: boolean;
+      data: { id: string; collabSessionId?: string | null };
+    };
+    expect(boundJson.data.collabSessionId).toBe('abc123collab');
+
+    const getRes = await app.request(`/api/runs/${boundJson.data.id}`);
+    const got = (await getRes.json()) as {
+      data: { collabSessionId?: string | null };
+    };
+    expect(got.data.collabSessionId).toBe('abc123collab');
+
+    // header-only bind
+    const hdrOnly = await app.request('/api/runs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-neos-session-id': 'header-only-sess',
+      },
+      body: JSON.stringify({ prompt: 'hdr', dryRun: true }),
+    });
+    expect(hdrOnly.status).toBe(201);
+    const hdrJson = (await hdrOnly.json()) as {
+      data: { collabSessionId?: string | null };
+    };
+    expect(hdrJson.data.collabSessionId).toBe('header-only-sess');
+
+    // no bind → null
+    const unbound = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'unbound', dryRun: true }),
+    });
+    expect(unbound.status).toBe(201);
+    const u = (await unbound.json()) as {
+      data: { collabSessionId?: string | null };
+    };
+    expect(u.data.collabSessionId == null || u.data.collabSessionId === null).toBe(true);
+
+    // invalid control chars
+    const bad = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'x',
+        dryRun: true,
+        sessionId: 'bad\nsession',
+      }),
+    });
+    expect(bad.status).toBe(400);
+
+    // overlong
+    const long = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'x',
+        dryRun: true,
+        sessionId: 's'.repeat(65),
+      }),
+    });
+    expect(long.status).toBe(400);
+  });
 });
 
 describe('runs execute path with mocked spawn', () => {

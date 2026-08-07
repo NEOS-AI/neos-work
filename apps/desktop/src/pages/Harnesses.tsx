@@ -58,8 +58,11 @@ function normalizeWorkspaceKind(raw: unknown): WorkspaceKind {
   return 'run';
 }
 
-/** Domain Workers page (route `/harnesses` kept for URL stability). */
-export function Harnesses() {
+/**
+ * Domain Workers page.
+ * Primary route: `/workers` (v0.11 M3 / Q37). Alias: `/harnesses` for bookmarks.
+ */
+export function Workers() {
   const { t } = useTranslation('common');
   const { client } = useEngine();
   const [workers, setWorkers] = useState<DomainWorker[]>([]);
@@ -67,11 +70,15 @@ export function Harnesses() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<DomainWorker | null>(null);
-  const [domainFilter, setDomainFilter] = useState<DomainFilterPref>(() => loadDomainFilter('harnesses'));
+  const [domainFilter, setDomainFilter] = useState<DomainFilterPref>(() =>
+    loadDomainFilter('workers'),
+  );
   const [search, setSearch] = useState('');
 
   const handleDomainFilter = (d: DomainFilterPref) => {
     setDomainFilter(d);
+    saveDomainFilter('workers', d);
+    // Keep legacy key in sync for older prefs readers
     saveDomainFilter('harnesses', d);
   };
 
@@ -642,3 +649,6 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
   boxSizing: 'border-box',
 };
+
+/** @deprecated Prefer {@link Workers} — alias for `/harnesses` route stability. */
+export const Harnesses = Workers;

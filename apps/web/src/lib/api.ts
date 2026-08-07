@@ -731,8 +731,24 @@ export class WebApiClient {
     prompt: string;
     agentId?: string;
     editContext?: unknown;
+    /** Collab presence session bind for agent lock identity (v0.11 M0). */
+    sessionId?: string;
   }): Promise<ApiEnvelope<ProjectRunSummary>> {
-    return this.requestEnvelope('POST', '/api/runs', input);
+    const body: Record<string, unknown> = {
+      projectId: input.projectId,
+      prompt: input.prompt,
+    };
+    if (input.agentId) body.agentId = input.agentId;
+    if (input.editContext != null) body.editContext = input.editContext;
+    const sessionId = this.collabSessionId(input.sessionId);
+    if (sessionId && sessionId.length <= 64) {
+      body.sessionId = sessionId;
+    }
+    return this.requestEnvelope('POST', '/api/runs', body, {
+      headers: this.collabSessionHeaders(
+        sessionId && sessionId.length <= 64 ? sessionId : '',
+      ),
+    });
   }
 
   getRun(runId: string): Promise<ApiEnvelope<ProjectRunSummary>> {
@@ -934,7 +950,7 @@ export class WebApiClient {
   }
 
   /**
-   * GET /api/collab/status — bus + presence registry (ops, no secrets).
+   * GET /api/collab/status — bus + presence/lock registry + shared-edit flags (ops, no secrets).
    */
   getCollabStatus(): Promise<
     ApiEnvelope<{
@@ -943,6 +959,8 @@ export class WebApiClient {
       ready?: boolean;
       detail?: string | null;
       presence?: { kind?: string; ready?: boolean; detail?: string | null };
+      locks?: { kind?: string; ready?: boolean; detail?: string | null };
+      sharedEdit?: { hardEnforce?: boolean; agentsHardEnforce?: boolean };
     }>
   > {
     return this.request('GET', '/api/collab/status');
@@ -1225,6 +1243,7 @@ export class WebApiClient {
         acquiredAt?: string;
       }>;
       hardEnforce?: boolean;
+      agentsHardEnforce?: boolean;
     }>
   > {
     return this.requestEnvelope(

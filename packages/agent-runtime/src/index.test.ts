@@ -77,6 +77,14 @@ describe('@neos-work/agent-runtime', () => {
       },
     });
     expect(run.status).toBe('queued');
+    expect(run.collabSessionId).toBeNull();
+    const bound = reg.create({
+      agentId: 'cli-claude',
+      prompt: 'bound',
+      collabSessionId: 'presence-abc',
+    });
+    expect(bound.collabSessionId).toBe('presence-abc');
+
     reg.setStatus(run.id, 'running');
     reg.appendEvent(run.id, 'run.started');
     reg.appendEvent(run.id, 'run.stdout', { chunk: 'hello' });

@@ -51,6 +51,8 @@ export interface SpawnRegistryAgentOptions {
   projectId?: string;
   workflowId?: string;
   runId?: string;
+  /** Collab presence session for agent lock identity (v0.11 M0). */
+  collabSessionId?: string;
   serverUrl?: string;
   authToken?: string;
 }
@@ -115,6 +117,7 @@ export async function spawnRegistryAgent(
   const runId = safeOpt(opts.runId, 100);
   const workflowId = safeOpt(opts.workflowId, 100);
   const projectId = safeOpt(opts.projectId, 100);
+  const collabSessionId = safeOpt(opts.collabSessionId, 64);
   const serverUrl = safeOpt(opts.serverUrl, 2_048);
   const authToken = safeOpt(opts.authToken, 8_192);
 
@@ -144,7 +147,13 @@ export async function spawnRegistryAgent(
   cwd = cwd ?? process.cwd();
 
   const mcpTokenEnv = loadMcpTokenEnvVars();
-  const neosEnv = buildNeosCliEnv({ workflowId, runId, serverUrl, authToken });
+  const neosEnv = buildNeosCliEnv({
+    workflowId,
+    runId,
+    serverUrl,
+    authToken,
+    collabSessionId,
+  });
   if (projectId) {
     neosEnv.NEOS_PROJECT_ID = projectId;
     neosEnv.NEOS_PROJECT_DIR = cwd;

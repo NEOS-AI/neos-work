@@ -61,7 +61,21 @@ export async function cmdFiles(
         ctx.err('content contains null bytes');
         return EXIT.VALIDATION;
       }
-      const res = await client.writeProjectFile(projectId, path, content);
+      // Agent/MCP context: NEOS_RUN_ID / NEOS_COLLAB_SESSION_ID (v0.11 M0/M2)
+      const runId = process.env.NEOS_RUN_ID?.trim();
+      const sessionId = process.env.NEOS_COLLAB_SESSION_ID?.trim();
+      const agentCtx = Boolean(
+        (runId && runId.length <= 100 && !/[\0\r\n]/.test(runId))
+        || (sessionId && sessionId.length <= 64 && !/[\0\r\n]/.test(sessionId)),
+      );
+      const res = await client.writeProjectFile(projectId, path, content, {
+        source: agentCtx ? 'agent' : 'user',
+        runId: runId && runId.length <= 100 && !/[\0\r\n]/.test(runId) ? runId : undefined,
+        sessionId:
+          sessionId && sessionId.length <= 64 && !/[\0\r\n]/.test(sessionId)
+            ? sessionId
+            : undefined,
+      });
       if (ctx.json) printJson(ctx, res.data ?? { ok: true });
       else ctx.out(`wrote ${path}`);
       return EXIT.OK;

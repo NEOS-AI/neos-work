@@ -10,9 +10,11 @@ in-memory.
 | Migration v0.7 | [docs/migration/v0.7.0.md](../migration/v0.7.0.md) (CollabBus) |
 | Migration v0.8 | [docs/migration/v0.8.0.md](../migration/v0.8.0.md) (presence registry) |
 | v0.10 M1 locks | [docs/implementation/v0.10/v0.10.1.md](../implementation/v0.10/v0.10.1.md) |
+| Sticky SSE (design only) | [docs/ops/sticky-sse.md](./sticky-sse.md) (v0.12 M2 — **not implemented**) |
 | Deploy Docker / Helm | [deploy/README.md](../../deploy/README.md) |
 
-**Baseline:** monorepo **≥ 0.10.1** recommended for multi-replica presence **and** shared file locks.
+**Baseline:** monorepo **≥ 0.10.1** recommended for multi-replica presence **and** shared file locks.  
+**Data dir / file SSOT:** see [File content SSOT (`NEOS_DATA_DIR`)](#file-content-ssot-neos_data_dir) below (v0.12 M2).
 
 ---
 
@@ -232,13 +234,74 @@ volumes:
 
 Notes:
 
-- Sharing one SQLite volume across writers is **risky**; use for collab *event*
-  tests or put a reverse proxy + single primary for writes. File SSOT remains
+- Sharing one SQLite volume across writers is **risky**; see
+  [File content SSOT](#file-content-ssot-neos_data_dir). File SSOT remains
   disk (see ADR).
 - Image must include the optional `redis` package (or install at build) for real
   Redis, not stub.
 - Helm chart remains **single-replica by default** (`replicaCount: 1`). See
   [deploy/helm/neos-work/README.md](../../deploy/helm/neos-work/README.md).
+
+---
+
+## File content SSOT (`NEOS_DATA_DIR`)
+
+Collab **events** (presence, locks, selection) can be multi-node via Redis.
+**Project file bytes** and most durable state still live on the filesystem under
+`NEOS_DATA_DIR` (default: `~/.config/neos-work` or image `/data`). Disk remains
+SSOT for Design Project content (ADR 0001 — lock + LWW, not CRDT).
+
+### What lives under the data dir (typical)
+
+| Path / area | Multi-replica note |
+|---|---|
+| SQLite (`data.db` etc.) | **Not** a multi-writer database. Concurrent writers on a shared volume risk corruption. |
+| Design project trees | Path sandboxed project roots; concurrent writers need shared FS **and** lock discipline |
+| Media / packs / skills | Same volume semantics as projects |
+| Ephemeral run registry | **In-memory per process** — not under `NEOS_DATA_DIR` |
+
+### Supported operator postures
+
+| Posture | When to use | Requirements |
+|---|---|---|
+| **A. Single engine** | Local-first, default Helm | One process; no Redis required |
+| **B. Multi-engine, single writer for files** | Scale collab SSE readers / API fan-out carefully | Shared Redis for bus/registries; **route file mutates** to one primary (or accept LWW races) |
+| **C. Multi-engine, shared volume** | Lab / e2e (`e2e:multi-replica:live`) | All replicas same `NEOS_DATA_DIR` mount; **still prefer one writer**; SQLite multi-writer **unsupported** |
+| **D. Split data dirs** | Independent nodes | **No** shared project files; collab peers/locks can still fan out via Redis but file content diverges |
+
+### Recommended production pattern
+
+1. **`replicaCount: 1`** (Helm default) for any deployment that **writes** Design
+   Project files or SQLite.  
+2. If you add replicas for HA **read** or collab fan-out experiments:
+   - Shared **`NEOS_AUTH_TOKEN`**
+   - `NEOS_COLLAB_BUS=redis` + working Redis
+   - `NEOS_COLLAB_PRESENCE=auto` / `NEOS_COLLAB_LOCKS=auto`
+   - **Do not** put two SQLite writers on one volume  
+3. Prefer a reverse proxy that sends **mutating** `/api/projects/*/files*` (and
+   restore/mkdir) to a **primary** replica; optional sticky for SSE is a separate
+   concern — see [sticky-sse.md](./sticky-sse.md).  
+4. Shared project files require a coherent FS (NFS/CSI with proper locking is
+   operator territory). LWW still applies: last successful write wins.
+
+### Explicit risks
+
+| Risk | Mitigation |
+|---|---|
+| Two pods write SQLite on one PVC | **Avoid** — single writer or separate data dirs |
+| Two pods write same project path without locks | Enable `NEOS_SHARED_EDIT` (+ agents flag if needed); use lock registry |
+| Split-brain content (different `NEOS_DATA_DIR`) | Same mount or single writer; clients must hit the node that owns files |
+| “Redis will sync files” | **False** — Redis is collab bus/registry only |
+
+### Lab / CI shared dir
+
+Live multi-replica e2e intentionally shares one temp `NEOS_DATA_DIR` to exercise
+lock hydrate + 423 across engines. That is a **test harness**, not a production
+SQLite multi-writer endorsement.
+
+```bash
+pnpm e2e:multi-replica:live
+```
 
 ---
 
@@ -309,7 +372,9 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | **redis-stub** | If `NEOS_COLLAB_BUS=redis` but URL missing, package missing, or connect fails, the process uses **local-only** fan-out (`kind: redis-stub`). Multi-replica **will not** share events until Redis is healthy. Check `GET /api/collab/status` detail. |
 | **CRDT out of scope** | No multi-caret CRDT; conflict model remains **lock + LWW** on files (ADR). |
 | **Cold replica** | Without Redis presence/lock registry, a cold node has empty remote membership/locks until bus events arrive. With registries (`auto`/`redis` + working Redis), hydrate fills peers on stream/join and locks on list/acquire/hard-enforce. |
-| **Sticky sessions** | Not required for presence/lock lists when registries are on; still required if you expect a single long-lived SSE pin to a given pod without reconnect. |
+| **Sticky sessions** | Not required for presence/lock lists when registries are on; still required if you expect a single long-lived SSE pin to a given pod without reconnect. Design note: [sticky-sse.md](./sticky-sse.md) (**not implemented**). |
+| **File / SQLite SSOT** | Content under `NEOS_DATA_DIR` is disk SSOT; multi-writer SQLite **unsupported**. See [File content SSOT](#file-content-ssot-neos_data_dir). |
+| **Run registry** | In-memory per process — run SSE/cancel are node-local unless sticky or future shared store. |
 | **Helm default** | Chart is single-replica; multi-replica is operator-configured (Redis + env + shared data policy). |
 
 ---
@@ -324,12 +389,17 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | Status ready false | Redis still connecting; check logs / detail string |
 | Locks disagree across nodes | `NEOS_COLLAB_LOCKS=off` / redis-stub; bus not redis; or missed hydrate — check `GET /api/collab/status` → `locks` |
 | Hard-enforce only on one replica | Lock registry off + missed bus event; enable `NEOS_COLLAB_LOCKS=auto` with working Redis |
+| File content missing / diverges across pods | Split `NEOS_DATA_DIR` or no shared volume — see [File content SSOT](#file-content-ssot-neos_data_dir) |
+| SQLite errors under multi-replica | Multiple writers on one DB file — use single writer |
+| Run cancel 404 on “other” pod | Run registry is per process — cancel on creator node or use sticky SSE later |
 
 ---
 
 ## See also
 
+- [docs/ops/sticky-sse.md](./sticky-sse.md) — sticky SSE design note (v0.12; not implemented)  
 - [docs/releases/v0.8.4.md](../releases/v0.8.4.md) — train highlights  
 - [docs/migration/v0.8.0.md](../migration/v0.8.0.md) — upgrade steps  
 - [docs/adr/0001-shared-edit-strategy.md](../adr/0001-shared-edit-strategy.md) — edit model  
 - [docs/security/v0.5.md](../security/v0.5.md) — auth / exposure guidance  
+- [deploy/README.md](../../deploy/README.md) — single-process Docker volume defaults  

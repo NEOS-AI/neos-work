@@ -27,6 +27,8 @@ const getCollabStatus = vi.fn(async () => ({
     ready: true,
     detail: null,
     presence: { kind: 'memory', ready: true, detail: null },
+    locks: { kind: 'memory', ready: true, detail: null },
+    sharedEdit: { hardEnforce: true, agentsHardEnforce: false },
   },
 }));
 
@@ -81,6 +83,8 @@ describe('Web Settings', () => {
         ready: true,
         detail: null,
         presence: { kind: 'memory', ready: true, detail: null },
+        locks: { kind: 'memory', ready: true, detail: null },
+        sharedEdit: { hardEnforce: true, agentsHardEnforce: false },
       },
     });
   });
@@ -136,6 +140,10 @@ describe('Web Settings', () => {
       expect(screen.getByTestId('collab-status-bus').textContent).toMatch(/memory/);
       expect(screen.getByTestId('collab-status-node').textContent).toBe('node-test');
       expect(screen.getByTestId('collab-status-presence').textContent).toMatch(/memory/);
+      expect(screen.getByTestId('collab-status-locks').textContent).toMatch(/memory/);
+      expect(screen.getByTestId('collab-status-shared-edit').textContent).toMatch(
+        /on.*agents off/i,
+      );
     });
     expect(getCollabStatus).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('collab-status-refresh'));

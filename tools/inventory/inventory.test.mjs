@@ -120,4 +120,68 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v10Features.features.implM3);
     assert.ok(inv.checks.results.some((r) => r.id === 'v10Features' && r.ok));
   });
+
+  it('includes v0.11 feature gates (M0–M3 closeout)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v11Features);
+    assert.equal(
+      inv.catalogs.v11Features.ok,
+      true,
+      `v11 missing: ${(inv.catalogs.v11Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v11Features.features.planV11);
+    assert.ok(inv.catalogs.v11Features.features.migrationV11);
+    assert.ok(inv.catalogs.v11Features.features.releaseV11);
+    assert.ok(inv.catalogs.v11Features.features.runSessionBind);
+    assert.ok(inv.catalogs.v11Features.features.lockEnforceUx);
+    assert.ok(inv.catalogs.v11Features.features.toolPathLockParity);
+    assert.ok(inv.catalogs.v11Features.features.workersUiRename);
+    assert.ok(inv.catalogs.v11Features.features.implM0);
+    assert.ok(inv.catalogs.v11Features.features.implM3);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v11Features' && r.ok));
+  });
+
+  it('includes v0.12 feature gates (M0–M3 closeout)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v12Features);
+    assert.equal(
+      inv.catalogs.v12Features.ok,
+      true,
+      `v12 missing: ${(inv.catalogs.v12Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v12Features.features.planV12);
+    assert.ok(inv.catalogs.v12Features.features.migrationV12);
+    assert.ok(inv.catalogs.v12Features.features.releaseV12);
+    assert.ok(inv.catalogs.v12Features.features.engineTransport);
+    assert.ok(inv.catalogs.v12Features.features.engineProject);
+    assert.ok(inv.catalogs.v12Features.features.engineWorkflow);
+    assert.ok(inv.catalogs.v12Features.features.engineClientExtends);
+    assert.ok(inv.catalogs.v12Features.features.stickySseDoc);
+    assert.ok(inv.catalogs.v12Features.features.fileSsotOps);
+    assert.ok(inv.catalogs.v12Features.features.implM0);
+    assert.ok(inv.catalogs.v12Features.features.implM3);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v12Features' && r.ok));
+  });
+
+  it('includes v0.13 feature gates (M0–M3 closeout)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v13Features);
+    assert.equal(
+      inv.catalogs.v13Features.ok,
+      true,
+      `v13 missing: ${(inv.catalogs.v13Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v13Features.features.planV13);
+    assert.ok(inv.catalogs.v13Features.features.migrationV13);
+    assert.ok(inv.catalogs.v13Features.features.releaseV13);
+    assert.ok(inv.catalogs.v13Features.features.contractAgent423);
+    assert.ok(inv.catalogs.v13Features.features.contractRunBind);
+    assert.ok(inv.catalogs.v13Features.features.contractToolsFiles);
+    assert.ok(inv.catalogs.v13Features.features.contractLocksFlags);
+    assert.ok(inv.catalogs.v13Features.features.contractCollabSessionId);
+    assert.ok(inv.catalogs.v13Features.features.sharedParseLocksFlags);
+    assert.ok(inv.catalogs.v13Features.features.implM0);
+    assert.ok(inv.catalogs.v13Features.features.implM3);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v13Features' && r.ok));
+  });
 });
