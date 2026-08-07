@@ -24,6 +24,7 @@ Defer full CRDT (Yjs / Loro) until product validates multi-user demand and WebSo
 - Ephemeral **file locks** keyed by project + relative path  
 - Lock holders broadcast on collab channel; released on leave/idle/unsub  
 - Optional **hard enforce** when `NEOS_SHARED_EDIT=1` (see surface below)  
+- Optional **multi-replica lock registry** when `NEOS_COLLAB_LOCKS=auto|redis` (v0.10 M1) — dual-write + hydrate like presence  
 - UI shows “locked by …” when another session holds the open file  
 
 ### Hard enforce surface (0.6.3 → extended 0.8.x)

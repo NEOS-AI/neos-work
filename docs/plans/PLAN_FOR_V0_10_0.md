@@ -1,9 +1,8 @@
 # PLAN_FOR_V0_10_0 — Agent lock enforce · Multi-replica lock SSOT · API hygiene
 
-**Status:** **M0 complete** through **0.10.0** · M1–M3 open  
-**Baseline:** monorepo **0.10.0**  
-**Parent backlog:** multi-replica lock locality; harness sunset / orphan triage (v0.9 stretch)
-
+**Status:** **M0–M3 complete** through **0.10.3** (train closed)  
+**Baseline:** monorepo **0.10.3**  
+**Parent backlog:** (none for v0.10 — next train TBD)
 ## One-line
 
 Make shared-edit optional for **agent writers**, share file-lock membership across replicas when Redis is on, and trim deprecated API surface — without opening CRDT.
@@ -31,9 +30,9 @@ v0.9 closed Design Editor completion and dual-surface parity. Remaining ops/secu
 | M | Theme | Exit | Target |
 |---|---|---|---|
 | **M0** | Agent lock enforce | Env + tests + status field | **done 0.10.0** |
-| **M1** | Shared lock registry | Multi-replica lock hydrate/list | **0.10.1** |
-| **M2** | API hygiene | Harness sunset + orphan doc/action | **0.10.2** |
-| **M3** | Docs / inventory | Migration + `v10Features` + closeout | **0.10.3** |
+| **M1** | Shared lock registry | Multi-replica lock hydrate/list | **done 0.10.1** |
+| **M2** | API hygiene | Harness sunset + orphan doc/action | **done 0.10.2** |
+| **M3** | Docs / inventory | Migration + `v10Features` + closeout | **done 0.10.3** |
 
 ---
 
@@ -66,11 +65,11 @@ v0.9 closed Design Editor completion and dual-surface parity. Remaining ops/secu
 
 **Exit:** Two engine replicas with Redis see the same lock holder for a path (list + hard-enforce).
 
-- [ ] Design: mirror presence pattern (memory + optional Redis TTL keys)  
-- [ ] Dual-write acquire/release/touch; hydrate on REST lock list  
-- [ ] Env `NEOS_COLLAB_LOCKS=auto|memory|redis|off` (default `auto` with bus)  
-- [ ] Ops doc update  
-- [ ] Tests + impl note + version **0.10.1**  
+- [x] Design: mirror presence pattern (memory + optional Redis TTL keys)  
+- [x] Dual-write acquire/release/touch; hydrate on REST lock list  
+- [x] Env `NEOS_COLLAB_LOCKS=auto|memory|redis|off` (default `auto` with bus)  
+- [x] Ops doc update  
+- [x] Tests + impl note + version **0.10.1**  
 
 ---
 
@@ -78,19 +77,19 @@ v0.9 closed Design Editor completion and dual-surface parity. Remaining ops/secu
 
 **Exit:** Harness aliases removed or hard-deprecated; orphan catalog triaged.
 
-- [ ] Sunset `/api/harness` + `/api/harnesses` (prefer `/api/workers`; breaking with migration note)  
-- [ ] Orphan table: keep / delete / wire (doc in api-surface-notes)  
-- [ ] Tests for 410/404 on removed paths if removed  
-- [ ] Impl note + version **0.10.2**  
+- [x] Sunset `/api/harness` + `/api/harnesses` (prefer `/api/workers`; breaking with migration note)  
+- [x] Orphan table: keep / delete / wire (doc in api-surface-notes)  
+- [x] Tests for 410/404 on removed paths if removed  
+- [x] Impl note + version **0.10.2**  
 
 ---
 
 ## Task M3 (0.10.3) — Docs · inventory · closeout
 
-- [ ] `docs/migration/v0.10.0.md`  
-- [ ] Inventory `v10Features` gate  
-- [ ] README / release note  
-- [ ] Version **0.10.3**  
+- [x] `docs/migration/v0.10.0.md` (started in M2; polish in M3)  
+- [x] Inventory `v10Features` gate  
+- [x] README / release note  
+- [x] Version **0.10.3**  
 
 ---
 
@@ -100,8 +99,8 @@ v0.9 closed Design Editor completion and dual-surface parity. Remaining ops/secu
 |---|---|---|---|
 | **Q30** | Agent lock enforce | Opt-in via `NEOS_SHARED_EDIT_AGENTS` only when base `NEOS_SHARED_EDIT` is on | **locked (M0)** |
 | **Q31** | Agent identity for locks | Same session channels as humans (`sessionId` / header); no run→session bind in M0 | **locked (M0)** |
-| **Q32** | Multi-replica locks | Optional Redis registry (like presence); memory default | recommended |
-| **Q33** | Harness routes | Hard remove after deprecation notice in 0.10.2 | recommended |
+| **Q32** | Multi-replica locks | Optional Redis registry (like presence); memory default | **locked (M1)** |
+| **Q33** | Harness routes | Hard remove (410 Gone) in 0.10.2 | **locked (M2)** |
 | Q34 | CRDT | Still deferred | locked (carry-forward) |
 
 ---

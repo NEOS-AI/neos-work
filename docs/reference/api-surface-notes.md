@@ -1,8 +1,9 @@
 # API surface notes (FE/CLI vs server)
 
-Last updated 2026-08-06 (v0.9.3 dual-surface policy + shared wire parsers).
+Last updated 2026-08-07 (v0.10.2 harness sunset + orphan triage).
 
-**Product matrix:** [`dual-surface.md`](./dual-surface.md) — Desktop full product; Web Design Project loop; marketplace **desktop-only** (Q29).
+**Product matrix:** [`dual-surface.md`](./dual-surface.md) — Desktop full product; Web Design Project loop; marketplace **desktop-only** (Q29).  
+**v0.10 M2:** [`docs/implementation/v0.10/v0.10.2.md`](../implementation/v0.10/v0.10.2.md)
 
 ## Auth-exempt (by design)
 
@@ -24,22 +25,66 @@ See `apps/server/src/lib/auth-paths.ts`:
 | CLI | `apps/cli/src/client.ts` |
 | Shared wire | `@neos-work/shared` Zod parse (`hash` / `contentHash` / preview comments) |
 
-## Intentional orphans / dual paths
+## Breaking: harness HTTP removed (0.10.2)
 
-These exist on the server but are **not** product UI entry points (or are superseded):
+| Old | New |
+|-----|-----|
+| `GET/POST /api/harness`, `/api/harnesses` | **`/api/workers`** |
+| `GET/PUT/DELETE /api/harness/:id`, `/api/harnesses/:id` | **`/api/workers/:id`** |
+
+Server mounts still exist only to return **HTTP 410 Gone** + `Link: </api/workers>; rel="successor-version"` and
+`data.successor` / `data.removedIn`. Desktop `listHarnesses()` is a thin alias of `listWorkers()` (no harness fallback).
+
+UI route `/harnesses` is **desktop URL stability only** — it loads Domain Workers via `/api/workers`.
+
+## Orphan triage (keep / delete / wire)
+
+Decisions for endpoints with no FE/CLI call site (from `audit/report.md` + inventories).  
+Regenerate: `pnpm audit:regen`.
+
+### Keep (intentional)
+
+| Endpoint | Decision | Notes |
+|----------|----------|--------|
+| `GET /api` | **keep** | Ops / version banner |
+| `POST/PUT /api/artifacts…`, `GET …/preview` | **keep** | Engine-created; UI uses list/get/patch/delete/refresh subset |
+| `/api/tools/live-artifacts/*` | **keep** | Agent tool-token only |
+| OAuth callbacks | **keep** | Browser redirect, not client method |
+| `POST /api/workflow/migrate` | **keep** | Ops / dry-run migration |
+| `GET /api/media/jobs` | **keep** | List jobs; clients poll `/jobs/:id` when needed |
+| Detail GETs (`/session/:id`, `/workers/:id`, `/blocks/:id`, `/plugins/:id`, `/routines/:id`, `/memory/:id`, `/deploy/:id`, `/design-systems/:id`) | **keep** | REST completeness; list+action paths used by UI |
+| `GET /api/webhook/:workflowId/rate-limit` | **keep** | Also embedded in secret path; optional admin |
+| Live-artifact partial (`PATCH`, preview, refreshes) | **keep** | Partial surface; agent tools cover main path |
+| `DELETE /api/settings/:key` | **keep** | UI may clear via PUT empty; DELETE valid for scripts |
+| `GET /api/models` | **keep** | Optional / future UI; not harmful |
+
+### Removed / gone
+
+| Endpoint | Decision | Notes |
+|----------|----------|--------|
+| `* /api/harness`, `* /api/harnesses` | **gone (410)** | Use `/api/workers` — **0.10.2** |
+| ~~`POST /api/media/image`~~, ~~`/audio`~~ | **deleted** | Sunset 2026-04-01 → `/api/media/generate` |
+
+### Wire (already done or product-optional)
+
+| Endpoint | Decision | Notes |
+|----------|----------|--------|
+| `POST /api/connection-test` | **wired** | Desktop Settings connection probes |
+| `GET /api/mcp-servers/presets` | **wired** | Desktop Settings |
+| `POST /api/domain-packs/validate`, `install-zip` | **wired** | Domain Packs UI |
+| `GET /api/mcp/tools`, oauth refresh | **optional** | Admin / incomplete OAuth UX — **document-only**, no delete |
+
+No mass deletion of unused detail GETs: low risk, useful for CLI/scripts and future UI.
+
+## Intentional orphans / dual paths (summary)
 
 | Endpoint | Notes |
 |----------|--------|
 | `GET /api` | Version banner |
-| `POST /api/artifacts`, `PUT …`, `GET …/preview` | Created by workflow runs; UI uses list/get/patch/delete/refresh |
-| `POST/PUT/DELETE /api/harness` and `/api/harnesses` | Prefer **`/api/workers`**; harness mount is a v0.4 alias |
-| ~~`POST /api/media/image`~~, ~~`/audio`~~ | **Removed** after Sunset 2026-04-01 — use **`POST /api/media/generate`** |
-| `GET /api/media/jobs` (list) | Clients poll **`GET /api/media/jobs/:id`** when generate returns `jobId` |
-| `GET /api/webhook/:workflowId/rate-limit` | Rate limit also embedded in **`GET …/secret`** (UI uses secret path) |
-| `POST /api/workflow/migrate` | Ops / dry-run migration |
-| `PATCH /api/live-artifacts/:id`, `GET …/preview`, `GET …/refreshes` | Partial live-artifact surface |
-| `/api/tools/live-artifacts/*` | **Agent tool-token only** |
-| Detail GETs (`/session/:id`, `/models`, `/workers/:id`, …) | List + action routes used; single-resource GET often unused |
+| Artifact create/put/preview subset | Engine + partial UI |
+| ~~`/api/harness(es)`~~ | **410** → `/api/workers` |
+| `/api/tools/*` | Agent tool-token |
+| Detail GETs | REST completeness without UI |
 
 ## Wired after audit cleanup
 
@@ -57,6 +102,7 @@ These exist on the server but are **not** product UI entry points (or are supers
 ## Deprecations removed from desktop client
 
 - `createHarness` / `updateHarness` / `deleteHarness` aliases removed — use `createWorker` / `updateWorker` / `deleteWorker`.
+- `listHarnesses` → thin `listWorkers` only (no `/api/harness` HTTP fallback as of **0.10.2**).
 - Still unused by UI (no client method or tests-only leftovers): `deleteSetting`, `listModels`, `getRoutine`, `getPlugin`, `getDeployment`, `getWebhookRateLimit` (rate limit via secret), etc.
 - **Restored for UI:** `connectionTest`, `listMcpPresets`.
 - Workspace client: **`listWorkspaces`**, **`createWorkspace`**, **`deleteWorkspace`** (blocks deleting `default`).
@@ -83,5 +129,5 @@ These exist on the server but are **not** product UI entry points (or are supers
 
 ```bash
 node tools/audit/regen.mjs
-# or: npm run audit:regen
+# or: pnpm audit:regen
 ```

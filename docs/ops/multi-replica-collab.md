@@ -9,9 +9,10 @@ in-memory.
 | Release summary | [docs/releases/v0.8.4.md](../releases/v0.8.4.md) |
 | Migration v0.7 | [docs/migration/v0.7.0.md](../migration/v0.7.0.md) (CollabBus) |
 | Migration v0.8 | [docs/migration/v0.8.0.md](../migration/v0.8.0.md) (presence registry) |
+| v0.10 M1 locks | [docs/implementation/v0.10/v0.10.1.md](../implementation/v0.10/v0.10.1.md) |
 | Deploy Docker / Helm | [deploy/README.md](../../deploy/README.md) |
 
-**Baseline:** monorepo **≥ 0.8.4** recommended for multi-replica presence.
+**Baseline:** monorepo **≥ 0.10.1** recommended for multi-replica presence **and** shared file locks.
 
 ---
 
@@ -22,7 +23,8 @@ Client A ──SSE──► Replica 1 ──publish──► Redis pub/sub (neos
 Client B ──SSE──► Replica 2 ◄─subscribe─┘
                       │
                       ├─ membership memory (local + remote-mirrored)
-                      └─ optional Redis presence registry (TTL keys)
+                      ├─ optional Redis presence registry (TTL keys)
+                      └─ optional Redis lock registry (TTL keys)  ← v0.10 M1
 ```
 
 | Surface | Where it lives |
@@ -30,6 +32,7 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | SSE connection | **Local to one replica** (not shared) |
 | Collab events (join/leave/heartbeat/selection/locks…) | Bus fan-out (`memory` or `redis`) |
 | Peer membership list | In-process store + bus mirror; optional Redis hydrate |
+| File locks | In-process map + bus mirror; optional Redis lock registry (hydrate on list/acquire/hard-enforce) |
 | File content | Disk / SQLite under `NEOS_DATA_DIR` (shared volume or single writer) |
 
 ---
@@ -42,7 +45,9 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | `NEOS_COLLAB_REDIS_URL` | unset | Preferred Redis URL when bus/registry need Redis |
 | `REDIS_URL` | unset | Fallback URL if `NEOS_COLLAB_REDIS_URL` unset |
 | `NEOS_COLLAB_PRESENCE` | `auto` | `auto` \| `memory` \| `redis` \| `off` — membership registry |
+| `NEOS_COLLAB_LOCKS` | `auto` | `auto` \| `memory` \| `redis` \| `off` — **file lock registry** (v0.10 M1) |
 | `NEOS_SHARED_EDIT` | off | Hard file-lock enforce for multi-client edit (see below) |
+| `NEOS_SHARED_EDIT_AGENTS` | off | Also hard-enforce `source=agent` PUTs when base shared-edit is on (v0.10 M0) |
 | `NEOS_AUTH_TOKEN` | (process random) | Use a **stable** shared secret across replicas |
 
 ### Hard enforce (`NEOS_SHARED_EDIT=1`)
@@ -54,6 +59,9 @@ When a peer holds a file lock, other sessions get **HTTP 423** + `data.holder` o
 - `POST /api/projects/:id/revisions/:revisionId/restore`
 - `POST /api/projects/:id/mkdir` (lock on the mkdir target path)
 
+With **`NEOS_SHARED_EDIT_AGENTS=1`**, the same 423 applies to `source: "agent"` PUTs
+(see [ADR 0001](../adr/0001-shared-edit-strategy.md)).
+
 Lock holders must send collab **session id** (from SSE `ready`):
 
 | Transport | How |
@@ -64,8 +72,8 @@ Lock holders must send collab **session id** (from SSE `ready`):
 Clients (web + desktop) send **both** on file mutates. Prefer the header when DELETE
 bodies may be stripped by a proxy.
 
-**Agent bypass:** run-pipeline / `source: "agent"` writes are **not** hard-enforced
-(intentional — see [ADR 0001](../adr/0001-shared-edit-strategy.md)).
+**Agent bypass (default):** run-pipeline / `source: "agent"` writes are **not** hard-enforced
+unless `NEOS_SHARED_EDIT_AGENTS=1` is also set.
 
 ### Presence modes
 
@@ -76,6 +84,18 @@ bodies may be stripped by a proxy.
 | `redis` | Force Redis registry (needs URL + optional `redis` package) |
 | `off` | No registry dual-write / hydrate (membership still updates from local + bus) |
 
+### Lock registry modes (v0.10 M1)
+
+| `NEOS_COLLAB_LOCKS` | Behavior |
+|---|---|
+| `auto` | Redis lock registry **when** `NEOS_COLLAB_BUS=redis`; else in-process locks only |
+| `memory` | In-process only (bus still mirrors `lock.*` events) |
+| `redis` | Force Redis lock registry (needs URL + `redis` package) |
+| `off` | No lock dual-write / hydrate (list/hard-enforce use local + bus only) |
+
+Hard-enforce and REST lock list **hydrate** from the lock registry before reading,
+so a cold replica agrees on the holder even if it missed the bus event.
+
 ### Redis presence keys (0.8.1+)
 
 | Key | Type | TTL |
@@ -83,8 +103,15 @@ bodies may be stripped by a proxy.
 | `neos:collab:presence:peer:{projectId}:{sessionId}` | string JSON peer | ~270s |
 | `neos:collab:presence:members:{projectId}` | set of sessionIds | ~270s |
 
-Bus channel: `neos:collab:events` (pub/sub).
+### Redis lock registry keys (0.10.1+)
 
+| Key | Type | TTL |
+|---|---|---|
+| `neos:collab:lock:{projectId}:{path}` | string JSON `FileLock` | ~270s |
+| `neos:collab:locks:{projectId}` | set of paths | ~270s |
+
+TTL is refreshed on re-acquire and while the holder’s presence session is touched
+(SSE heartbeat / touch). Bus channel: `neos:collab:events` (pub/sub).
 ---
 
 ## Run with Redis
@@ -112,6 +139,8 @@ NEOS_PORT=3000 \
 NEOS_COLLAB_BUS=redis \
 NEOS_COLLAB_REDIS_URL=redis://127.0.0.1:6379 \
 NEOS_COLLAB_PRESENCE=auto \
+NEOS_COLLAB_LOCKS=auto \
+NEOS_SHARED_EDIT=1 \
 NEOS_AUTH_TOKEN=dev-shared-token \
   pnpm --filter @neos-work/server dev
 
@@ -121,6 +150,8 @@ NEOS_DATA_DIR=/tmp/neos-b \
 NEOS_COLLAB_BUS=redis \
 NEOS_COLLAB_REDIS_URL=redis://127.0.0.1:6379 \
 NEOS_COLLAB_PRESENCE=auto \
+NEOS_COLLAB_LOCKS=auto \
+NEOS_SHARED_EDIT=1 \
 NEOS_AUTH_TOKEN=dev-shared-token \
   pnpm --filter @neos-work/server dev
 ```
@@ -130,7 +161,7 @@ Check status on each:
 ```bash
 curl -s -H "Authorization: Bearer dev-shared-token" \
   http://127.0.0.1:3000/api/collab/status
-# expect bus redis (or redis-stub), presence.kind redis|memory, ready true
+# expect bus redis, presence.kind redis|memory, locks.kind redis|memory, ready true
 ```
 
 For Design Editor multi-select / group scale UI, enable canvas overlay on web:
@@ -168,6 +199,7 @@ services:
       NEOS_COLLAB_BUS: redis
       NEOS_COLLAB_REDIS_URL: redis://redis:6379
       NEOS_COLLAB_PRESENCE: auto
+      NEOS_COLLAB_LOCKS: auto
     volumes:
       - neos_data:/data
     ports:
@@ -187,6 +219,7 @@ services:
       NEOS_COLLAB_BUS: redis
       NEOS_COLLAB_REDIS_URL: redis://redis:6379
       NEOS_COLLAB_PRESENCE: auto
+      NEOS_COLLAB_LOCKS: auto
     volumes:
       - neos_data:/data
     ports:
@@ -218,7 +251,7 @@ pnpm e2e:multi-replica
 ```
 
 Live two-engine probe (starts Redis via Docker when needed, shared `NEOS_DATA_DIR`,
-asserts collab status, cross-node peers, selection fan-out):
+asserts collab status, cross-node peers, selection fan-out, **shared lock list + 423**):
 
 ```bash
 # requires: built server (pnpm --filter @neos-work/server build), Docker, redis npm dep
@@ -275,8 +308,8 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | **SSE local** | Each SSE stream stays on the replica that accepted the connection. Events from other nodes arrive via the bus and are re-emitted to **local** SSE clients only. |
 | **redis-stub** | If `NEOS_COLLAB_BUS=redis` but URL missing, package missing, or connect fails, the process uses **local-only** fan-out (`kind: redis-stub`). Multi-replica **will not** share events until Redis is healthy. Check `GET /api/collab/status` detail. |
 | **CRDT out of scope** | No multi-caret CRDT; conflict model remains **lock + LWW** on files (ADR). |
-| **Cold replica** | Without Redis presence registry, a cold node has empty remote membership until bus events arrive. With registry (`auto`/`redis` + working Redis), hydrate fills peers on stream/join. |
-| **Sticky sessions** | Not required for presence lists when registry is on; still required if you expect a single long-lived SSE pin to a given pod without reconnect. |
+| **Cold replica** | Without Redis presence/lock registry, a cold node has empty remote membership/locks until bus events arrive. With registries (`auto`/`redis` + working Redis), hydrate fills peers on stream/join and locks on list/acquire/hard-enforce. |
+| **Sticky sessions** | Not required for presence/lock lists when registries are on; still required if you expect a single long-lived SSE pin to a given pod without reconnect. |
 | **Helm default** | Chart is single-replica; multi-replica is operator-configured (Redis + env + shared data policy). |
 
 ---
@@ -287,8 +320,10 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 |---|---|
 | Peers never appear on other node | Bus is `memory` or `redis-stub`; Redis URL/package; different `NEOS_AUTH_TOKEN` / project |
 | `presence.kind` is memory with bus redis | `NEOS_COLLAB_PRESENCE=memory` or registry connect failed |
+| `locks.kind` is memory with bus redis | `NEOS_COLLAB_LOCKS=memory` or lock registry connect failed |
 | Status ready false | Redis still connecting; check logs / detail string |
-| Locks disagree across nodes | Separate `NEOS_DATA_DIR` without shared storage — locks are process/disk local to data dir |
+| Locks disagree across nodes | `NEOS_COLLAB_LOCKS=off` / redis-stub; bus not redis; or missed hydrate — check `GET /api/collab/status` → `locks` |
+| Hard-enforce only on one replica | Lock registry off + missed bus event; enable `NEOS_COLLAB_LOCKS=auto` with working Redis |
 
 ---
 

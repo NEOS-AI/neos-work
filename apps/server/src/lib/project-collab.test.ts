@@ -142,13 +142,13 @@ describe('project-collab presence', () => {
     expect(normalizeLockPath(null)).toBe('');
   });
 
-  it('file locks: acquire conflict release and clear on leave', () => {
+  it('file locks: acquire conflict release and clear on leave', async () => {
     const a = vi.fn();
     const b = vi.fn();
     const ja = joinProjectPresence({ projectId: 'p1', displayName: 'A', listener: a })!;
     const jb = joinProjectPresence({ projectId: 'p1', displayName: 'B', listener: b })!;
 
-    const ok = acquireFileLock({
+    const ok = await acquireFileLock({
       projectId: 'p1',
       sessionId: ja.sessionId,
       path: 'index.html',
@@ -158,7 +158,7 @@ describe('project-collab presence', () => {
     expect(listProjectLocks('p1')).toHaveLength(1);
     expect(getFileLock('p1', 'index.html')?.sessionId).toBe(ja.sessionId);
 
-    const conflict = acquireFileLock({
+    const conflict = await acquireFileLock({
       projectId: 'p1',
       sessionId: jb.sessionId,
       path: 'index.html',
@@ -173,10 +173,10 @@ describe('project-collab presence', () => {
     }
     jc.unsub();
 
-    releaseFileLock({ projectId: 'p1', sessionId: ja.sessionId, path: 'index.html' });
+    await releaseFileLock({ projectId: 'p1', sessionId: ja.sessionId, path: 'index.html' });
     expect(getFileLock('p1', 'index.html')).toBeNull();
 
-    acquireFileLock({ projectId: 'p1', sessionId: ja.sessionId, path: 'a.html' });
+    await acquireFileLock({ projectId: 'p1', sessionId: ja.sessionId, path: 'a.html' });
     ja.unsub(); // should release locks
     expect(listProjectLocks('p1')).toHaveLength(0);
     jb.unsub();

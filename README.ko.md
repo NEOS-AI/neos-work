@@ -33,7 +33,7 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.7 마이그레이션:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) · **v0.8 계획:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md)  
 **v0.8 마이그레이션:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **v0.9 계획:** [docs/plans/PLAN_FOR_V0_9_0.md](docs/plans/PLAN_FOR_V0_9_0.md) · **v0.9 마이그레이션:** [docs/migration/v0.9.0.md](docs/migration/v0.9.0.md) · **듀얼 서피스:** [docs/reference/dual-surface.md](docs/reference/dual-surface.md)  
-**v0.10 계획 (다음):** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) — 에이전트 lock enforce · 공유 lock · API 정리
+**v0.10 계획:** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) · **마이그레이션:** [docs/migration/v0.10.0.md](docs/migration/v0.10.0.md) · **릴리스:** [docs/releases/v0.10.3.md](docs/releases/v0.10.3.md) · inventory `v10Features`
 
 ---
 
@@ -50,7 +50,9 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 ## v0.10 주요 변경
 
 - **0.10.0** 선택적 **에이전트 lock hard-enforce** — `NEOS_SHARED_EDIT=1` + `NEOS_SHARED_EDIT_AGENTS=1`  
-- 예정: multi-replica 공유 lock 레지스트리 · harness sunset / API 정리  
+- **0.10.1** 멀티 레플리카 **공유 lock 레지스트리** — `NEOS_COLLAB_LOCKS=auto` (presence와 동일한 Redis 패턴)  
+- **0.10.2** **Harness HTTP 제거** — `/api/harness(es)` → **410 Gone**; `/api/workers` 사용  
+- **0.10.3** 트레인 클로즈아웃 — [마이그레이션](docs/migration/v0.10.0.md) · [릴리스](docs/releases/v0.10.3.md) · inventory `v10Features`  
 
 ---
 
@@ -75,7 +77,7 @@ v0.4.0은 **도메인 워커(Domain Workers)** 와 워크플로우 **schemaVersi
 - 통합 노드: `agent` + `workerId` (`agent_finance` / `agent_coding` 대체)
 - 내장 **Domain Pack**: finance, coding, research, general
 - **코디네이터** 모드 (`spawn_worker` / `await_workers`) — 별도 노드 타입 없음
-- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` 는 호환 별칭)
+- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` 는 **0.10.2** 에서 410 Gone)
 - Typed ports MVP (기본 경고; `strictPorts=1` 이면 하드 실패)
 
 **마이그레이션:** 기존 워크플로우는 로드 시 자동 변환됩니다. 전체 브레이킹

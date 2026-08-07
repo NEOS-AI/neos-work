@@ -137,12 +137,15 @@ describe('workers routes', () => {
   });
 });
 
-describe('harness deprecation alias', () => {
-  it('serves list with Deprecation headers and Link to /api/workers', async () => {
+describe('harness HTTP sunset (0.10.2)', () => {
+  it('returns 410 Gone with Deprecation headers and Link to /api/workers', async () => {
     const res = await harness.request('/');
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(410);
     expect(res.headers.get('Deprecation')).toBe('true');
     expect(res.headers.get('Link')).toMatch(/\/api\/workers/);
+    const body = (await res.json()) as { ok: boolean; data?: { successor?: string } };
+    expect(body.ok).toBe(false);
+    expect(body.data?.successor).toBe('/api/workers');
   });
 });
 

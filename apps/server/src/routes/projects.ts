@@ -57,13 +57,14 @@ import {
 } from '../lib/project-file-events.js';
 import {
   acquireFileLock,
-  getFileLock,
+  getFileLockHydrated,
   isSharedEditAgentsHardEnforce,
   isSharedEditHardEnforce,
   shouldHardEnforceWriteSource,
+  hydrateLocksFromRegistry,
   hydrateMembershipFromRegistry,
   joinProjectPresence,
-  listProjectLocks,
+  listProjectLocksHydrated,
   listProjectPeers,
   listProjectSelections,
   releaseFileLock,
@@ -103,15 +104,19 @@ function resolveCollabSessionId(
 
 /**
  * When NEOS_SHARED_EDIT hard-enforce is on and a lock exists, only the holder may mutate.
- * Returns a 423 JSON body when blocked; null when allowed.
+ * Hydrate is owned by getFileLockHydrated (v0.10 M1).
  */
-function hardEnforceLockBlock(
+async function hardEnforceLockBlock(
   projectId: string,
   relPath: string,
   sessionId: string,
-): { ok: false; error: string; data: { holder: NonNullable<ReturnType<typeof getFileLock>> } } | null {
+): Promise<{
+  ok: false;
+  error: string;
+  data: { holder: NonNullable<Awaited<ReturnType<typeof getFileLockHydrated>>> };
+} | null> {
   if (!isSharedEditHardEnforce()) return null;
-  const holder = getFileLock(projectId, relPath);
+  const holder = await getFileLockHydrated(projectId, relPath);
   if (!holder) return null;
   if (sessionId && sessionId === holder.sessionId) return null;
   return {
@@ -119,6 +124,14 @@ function hardEnforceLockBlock(
     error: `File locked by ${holder.displayName}`,
     data: { holder },
   };
+}
+
+/** Safe parallel hydrate for SSE join / peers. */
+async function hydrateCollabFromRegistries(projectId: string): Promise<void> {
+  await Promise.all([
+    hydrateMembershipFromRegistry(projectId).catch(() => 0),
+    hydrateLocksFromRegistry(projectId).catch(() => 0),
+  ]);
 }
 
 /** Extract splat path from Hono /* route (may be "path" or include slashes). */
@@ -404,12 +417,8 @@ projects.get('/:id/collab/stream', (c) => {
     const MAX_QUEUE = 64;
     let closed = false;
 
-    // v0.8 M1: pull Redis registry peers before join so presence.sync is complete
-    try {
-      await hydrateMembershipFromRegistry(id);
-    } catch {
-      /* registry optional */
-    }
+    // v0.8 M1 / v0.10 M1: pull Redis presence + locks before join so sync is complete
+    await hydrateCollabFromRegistries(id);
 
     const joined = joinProjectPresence({
       projectId: id,
@@ -458,11 +467,7 @@ projects.get('/:id/collab/peers', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
-  try {
-    await hydrateMembershipFromRegistry(id);
-  } catch {
-    /* optional */
-  }
+  await hydrateCollabFromRegistries(id);
   sweepIdlePresence(id);
   const peersBody = { ok: true as const, data: { peers: listProjectPeers(id) } };
   assertCollabPeersSnapshotResponse(peersBody);
@@ -487,15 +492,15 @@ projects.post('/:id/collab/heartbeat', async (c) => {
   return c.json({ ok: true, data: { touched: true } });
 });
 
-/** List advisory file locks (M3). */
-projects.get('/:id/collab/locks', (c) => {
+/** List advisory file locks (M3). Hydrates Redis registry (v0.10 M1). */
+projects.get('/:id/collab/locks', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   if (!db.getProject(id)) return c.json({ ok: false, error: 'Not found' }, 404);
   const locksBody = {
     ok: true as const,
     data: {
-      locks: listProjectLocks(id),
+      locks: await listProjectLocksHydrated(id),
       hardEnforce: isSharedEditHardEnforce(),
       agentsHardEnforce: isSharedEditAgentsHardEnforce(),
     },
@@ -625,8 +630,9 @@ projects.post('/:id/collab/locks', async (c) => {
   if (actionRaw !== 'acquire' && actionRaw !== 'release') {
     return c.json({ ok: false, error: "action must be 'acquire' or 'release'" }, 400);
   }
+  // acquireFileLock / releaseFileLock own hydrate + dual-write (v0.10 M1)
   if (actionRaw === 'release') {
-    const r = releaseFileLock({ projectId: id, sessionId, path });
+    const r = await releaseFileLock({ projectId: id, sessionId, path });
     if (!r.ok) {
       const conflictBody = { ok: false as const, error: r.error };
       assertCollabLockConflictResponse(conflictBody);
@@ -636,7 +642,7 @@ projects.post('/:id/collab/locks', async (c) => {
     assertCollabLockSuccessResponse(releaseBody);
     return c.json(releaseBody);
   }
-  const r = acquireFileLock({ projectId: id, sessionId, path });
+  const r = await acquireFileLock({ projectId: id, sessionId, path });
   if (!r.ok) {
     const conflictBody = {
       ok: false as const,
@@ -757,7 +763,7 @@ projects.put('/:id/files/*', async (c) => {
 
   // Hard enforce: user always when NEOS_SHARED_EDIT=1; agent when NEOS_SHARED_EDIT_AGENTS=1 (v0.10 M0)
   if (shouldHardEnforceWriteSource(source)) {
-    const blocked = hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, body));
+    const blocked = await hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, body));
     if (blocked) return c.json(blocked, 423);
   }
 
@@ -811,7 +817,7 @@ projects.delete('/:id/files/*', async (c) => {
     body && typeof body === 'object' && !Array.isArray(body)
       ? (body as { sessionId?: unknown })
       : null;
-  const blocked = hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, sessionBody));
+  const blocked = await hardEnforceLockBlock(id, rel, resolveCollabSessionId(c, sessionBody));
   if (blocked) return c.json(blocked, 423);
   try {
     const result = deleteProjectPath(project.baseDir, rel);
@@ -842,7 +848,7 @@ projects.post('/:id/mkdir', async (c) => {
     return c.json({ ok: false, error: 'path string required' }, 400);
   }
   // Hard-enforce when a lock exists on the mkdir target path (same session rules as files)
-  const blocked = hardEnforceLockBlock(
+  const blocked = await hardEnforceLockBlock(
     id,
     body.path,
     resolveCollabSessionId(c, body),
@@ -895,7 +901,7 @@ projects.post('/:id/revisions/:revisionId/restore', async (c) => {
     body && typeof body === 'object' && !Array.isArray(body)
       ? (body as { sessionId?: unknown })
       : null;
-  const blocked = hardEnforceLockBlock(
+  const blocked = await hardEnforceLockBlock(
     id,
     rev.path,
     resolveCollabSessionId(c, sessionBody),

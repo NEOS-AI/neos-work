@@ -1,5 +1,5 @@
 /**
- * In-process project collaboration presence + file locks + selection (v0.6–v0.8).
+ * In-process project collaboration presence + file locks + selection (v0.6–v0.10).
  * Powers GET /api/projects/:id/collab/stream — presence.* / lock.* / selection.*.
  * Ephemeral only; no disk persistence. Disk files remain SSOT for content.
  *
@@ -8,11 +8,25 @@
  * v0.7 M1: fan-out via CollabBus (memory default; redis optional).
  * v0.7 M2: selection awareness (path + selector) for peer indicators.
  * v0.8 M0: shared presence membership (remote peers in sync/list via bus).
+ * v0.10 M1: optional Redis lock registry (dual-write + hydrate) for multi-replica SSOT.
  */
 
 import { randomBytes } from 'node:crypto';
-import { normalizeProjectRelPath } from '@neos-work/shared';
 import { getCollabBus, isCollabBusFanoutEvent } from './collab-bus.js';
+import {
+  applyRemoteLockAcquired,
+  applyRemoteLockReleased,
+  clearLockStore,
+  getStoredLock,
+  hydrateLocksFromRegistry,
+  listStoredLocks,
+  MAX_LOCKS_PER_PROJECT,
+  normalizeLockPath,
+  putLocalLock,
+  releaseAllLocksForSessionMemory,
+  removeLocalLock,
+  touchLocksForSession,
+} from './collab-lock-store.js';
 import {
   clearMembershipStore,
   hydrateMembershipFromRegistry,
@@ -34,6 +48,7 @@ export {
   PRESENCE_REMOTE_IDLE_MS,
   hydrateMembershipFromRegistry,
 } from './collab-presence-store.js';
+export { hydrateLocksFromRegistry, normalizeLockPath } from './collab-lock-store.js';
 
 type RoomListener = (event: CollabEvent) => void;
 
@@ -48,12 +63,9 @@ type Session = {
 };
 
 const rooms = new Map<string, Map<string, Session>>();
-/** projectId → path → FileLock */
-const lockRooms = new Map<string, Map<string, FileLock>>();
 /** projectId → sessionId → PeerSelection (local + remote-mirrored) */
 const selectionRooms = new Map<string, Map<string, PeerSelection>>();
 const MAX_PEERS_PER_PROJECT = 32;
-const MAX_LOCKS_PER_PROJECT = 64;
 const MAX_SELECTIONS_PER_PROJECT = 64;
 const MAX_SELECTOR_LEN = 400;
 /** Max multi-select selectors per session (v0.8 M3). */
@@ -77,18 +89,6 @@ export function sanitizeDisplayName(raw: unknown): string {
 
 function newSessionId(): string {
   return randomBytes(12).toString('hex');
-}
-
-/**
- * Normalize project-relative file path for locks (no .., no abs, bounded).
- * Alias of shared `normalizeProjectRelPath` — keep export name for collab call sites/tests.
- */
-export const normalizeLockPath = normalizeProjectRelPath;
-
-function listLocks(projectId: string): FileLock[] {
-  const m = lockRooms.get(projectId);
-  if (!m) return [];
-  return [...m.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 function listSelections(projectId: string): PeerSelection[] {
@@ -129,20 +129,16 @@ function clearSelectionForSession(
 }
 
 function releaseAllLocksForSession(projectId: string, sessionId: string): void {
-  const m = lockRooms.get(projectId);
-  if (!m) return;
-  for (const [path, lock] of [...m.entries()]) {
-    if (lock.sessionId !== sessionId) continue;
-    m.delete(path);
+  const released = releaseAllLocksForSessionMemory(projectId, sessionId);
+  for (const lock of released) {
     broadcast(projectId, {
       type: 'lock.released',
       projectId,
-      path,
+      path: lock.path,
       sessionId,
       ts: new Date().toISOString(),
     });
   }
-  if (m.size === 0) lockRooms.delete(projectId);
 }
 
 /** Sanitize CSS/layer selector for awareness (no control chars, bounded). */
@@ -243,20 +239,11 @@ export function applyRemoteCollabEvent(projectId: string, event: CollabEvent): v
   if (!id) return;
 
   if (event.type === 'lock.acquired' && event.lock) {
-    let m = lockRooms.get(id);
-    if (!m) {
-      m = new Map();
-      lockRooms.set(id, m);
-    }
-    m.set(event.lock.path, event.lock);
-    // Activity from remote session refreshes membership TTL
+    applyRemoteLockAcquired(id, event.lock);
+    // Origin already dual-wrote registry; local mirror only
     touchMembership(id, event.lock.sessionId);
   } else if (event.type === 'lock.released' && event.path) {
-    const m = lockRooms.get(id);
-    if (m) {
-      m.delete(event.path);
-      if (m.size === 0) lockRooms.delete(id);
-    }
+    applyRemoteLockReleased(id, event.path);
     if (event.sessionId) touchMembership(id, event.sessionId);
   } else if (event.type === 'selection.changed' && event.selection) {
     const sel = event.selection;
@@ -408,7 +395,7 @@ export function joinProjectPresence(input: {
     projectId,
     self: peerPublic(session),
     peers: listPeers(projectId, session.sessionId),
-    locks: listLocks(projectId),
+    locks: listStoredLocks(projectId),
     selections: listSelections(projectId).filter((s) => s.sessionId !== session.sessionId),
     ts,
   };
@@ -431,9 +418,10 @@ export function joinProjectPresence(input: {
     const t = Date.now();
     s.lastSeen = t;
     touchMembership(projectId, sessionId);
-    // Periodic multi-replica liveness (v0.8 M0)
+    // Periodic multi-replica liveness + lock TTL refresh (not every SSE tick)
     if (t - s.lastHeartbeatAt >= PRESENCE_HEARTBEAT_INTERVAL_MS) {
       s.lastHeartbeatAt = t;
+      void touchLocksForSession(projectId, sessionId);
       broadcast(
         projectId,
         {
@@ -471,6 +459,7 @@ export function touchProjectPresence(projectId: string, sessionId: string): bool
   touchMembership(id, sid);
   if (t - s.lastHeartbeatAt >= PRESENCE_HEARTBEAT_INTERVAL_MS) {
     s.lastHeartbeatAt = t;
+    void touchLocksForSession(id, sid);
     broadcast(
       id,
       {
@@ -534,13 +523,14 @@ export function projectPresenceCount(projectId: string): number {
 
 /**
  * Acquire advisory lock on a project file path.
+ * Hydrates registry first; awaits dual-write (v0.10 M1 multi-replica).
  * Same session may re-acquire (refresh). Other session → conflict.
  */
-export function acquireFileLock(input: {
+export async function acquireFileLock(input: {
   projectId: string;
   sessionId: string;
   path: string;
-}): { ok: true; lock: FileLock } | { ok: false; error: string; holder?: FileLock } {
+}): Promise<{ ok: true; lock: FileLock } | { ok: false; error: string; holder?: FileLock }> {
   const projectId = normalizeProjectId(input.projectId);
   const path = normalizeLockPath(input.path);
   if (!projectId || !path) return { ok: false, error: 'Invalid project or path' };
@@ -551,16 +541,17 @@ export function acquireFileLock(input: {
   const session = rooms.get(projectId)?.get(sessionId);
   if (!session) return { ok: false, error: 'Session not in presence room' };
 
-  let m = lockRooms.get(projectId);
-  if (!m) {
-    m = new Map();
-    lockRooms.set(projectId, m);
+  try {
+    await hydrateLocksFromRegistry(projectId);
+  } catch {
+    /* optional */
   }
-  const existing = m.get(path);
+
+  const existing = getStoredLock(projectId, path);
   if (existing && existing.sessionId !== sessionId) {
     return { ok: false, error: 'Locked by another session', holder: existing };
   }
-  if (!existing && m.size >= MAX_LOCKS_PER_PROJECT) {
+  if (!existing && listStoredLocks(projectId).length >= MAX_LOCKS_PER_PROJECT) {
     return { ok: false, error: 'Too many locks on project' };
   }
 
@@ -570,7 +561,7 @@ export function acquireFileLock(input: {
     displayName: session.displayName,
     acquiredAt: existing?.acquiredAt ?? new Date().toISOString(),
   };
-  m.set(path, lock);
+  await putLocalLock(projectId, lock);
   broadcast(projectId, {
     type: 'lock.acquired',
     projectId,
@@ -580,11 +571,11 @@ export function acquireFileLock(input: {
   return { ok: true, lock };
 }
 
-export function releaseFileLock(input: {
+export async function releaseFileLock(input: {
   projectId: string;
   sessionId: string;
   path: string;
-}): { ok: true } | { ok: false; error: string } {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const projectId = normalizeProjectId(input.projectId);
   const path = normalizeLockPath(input.path);
   if (!projectId || !path) return { ok: false, error: 'Invalid project or path' };
@@ -592,14 +583,12 @@ export function releaseFileLock(input: {
     return { ok: false, error: 'Invalid session' };
   }
   const sessionId = input.sessionId.trim();
-  const m = lockRooms.get(projectId);
-  const existing = m?.get(path);
+  const existing = getStoredLock(projectId, path);
   if (!existing) return { ok: true }; // idempotent
   if (existing.sessionId !== sessionId) {
     return { ok: false, error: 'Not lock holder' };
   }
-  m!.delete(path);
-  if (m!.size === 0) lockRooms.delete(projectId);
+  await removeLocalLock(projectId, path);
   broadcast(projectId, {
     type: 'lock.released',
     projectId,
@@ -611,17 +600,37 @@ export function releaseFileLock(input: {
 }
 
 export function listProjectLocks(projectId: string): FileLock[] {
-  const id = normalizeProjectId(projectId);
-  if (!id) return [];
-  return listLocks(id);
+  return listStoredLocks(projectId);
 }
 
-/** Who holds a lock on path, if any. */
+/** Who holds a lock on path, if any (local memory after hydrate). */
 export function getFileLock(projectId: string, path: string): FileLock | null {
-  const id = normalizeProjectId(projectId);
-  const p = normalizeLockPath(path);
-  if (!id || !p) return null;
-  return lockRooms.get(id)?.get(p) ?? null;
+  return getStoredLock(projectId, path);
+}
+
+/**
+ * Hydrate then return holder — owns multi-replica invariant for hard-enforce.
+ */
+export async function getFileLockHydrated(
+  projectId: string,
+  path: string,
+): Promise<FileLock | null> {
+  try {
+    await hydrateLocksFromRegistry(projectId);
+  } catch {
+    /* optional */
+  }
+  return getStoredLock(projectId, path);
+}
+
+/** Hydrate then list locks (REST lock list). */
+export async function listProjectLocksHydrated(projectId: string): Promise<FileLock[]> {
+  try {
+    await hydrateLocksFromRegistry(projectId);
+  } catch {
+    /* optional */
+  }
+  return listStoredLocks(projectId);
 }
 
 /**
@@ -789,7 +798,7 @@ export function shouldHardEnforceWriteSource(
 /** Test helper — clear all rooms, locks, selections, and membership. */
 export function clearProjectPresence(): void {
   rooms.clear();
-  lockRooms.clear();
+  clearLockStore();
   selectionRooms.clear();
   clearMembershipStore();
 }

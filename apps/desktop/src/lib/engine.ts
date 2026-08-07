@@ -3539,19 +3539,12 @@ export class EngineClient {
     return readApiResponse(res);
   }
 
-  /** @deprecated Prefer listWorkers */
+  /**
+   * @deprecated Prefer listWorkers.
+   * Thin alias — `/api/harness` HTTP routes were removed in 0.10.2 (410 Gone).
+   */
   async listHarnesses(): Promise<ApiResponse<AgentHarness[]>> {
-    // Prefer workers API; fall back to harness alias for older servers
-    try {
-      const primary = await this.listWorkers();
-      if (primary.ok) return primary;
-    } catch {
-      // fall through
-    }
-    const res = await fetch(`${this.baseUrl}/api/harness`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
+    return this.listWorkers();
   }
 
   // --- Blocks ---

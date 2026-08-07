@@ -34,7 +34,7 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md) · **v0.7 migration:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)  
 **v0.8 plan:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md) · **v0.8 migration:** [docs/migration/v0.8.0.md](docs/migration/v0.8.0.md)  
 **v0.9 plan:** [docs/plans/PLAN_FOR_V0_9_0.md](docs/plans/PLAN_FOR_V0_9_0.md) · **v0.9 migration:** [docs/migration/v0.9.0.md](docs/migration/v0.9.0.md) · **dual-surface:** [docs/reference/dual-surface.md](docs/reference/dual-surface.md)  
-**v0.10 plan (next):** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) — agent lock enforce · shared locks · API hygiene  
+**v0.10 plan:** [docs/plans/PLAN_FOR_V0_10_0.md](docs/plans/PLAN_FOR_V0_10_0.md) · **migration:** [docs/migration/v0.10.0.md](docs/migration/v0.10.0.md) · **release:** [docs/releases/v0.10.3.md](docs/releases/v0.10.3.md) · inventory `v10Features`  
 **Canvas overlay (default on since 0.9.1):** move + resize + multi-select + align/z-order + group scale; force off with `VITE_NEOS_CANVAS_OVERLAY=0` or Settings toggle (`neos.canvasOverlay`)
 
 ---
@@ -52,7 +52,9 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 ## What's new in v0.10
 
 - **0.10.0** Optional **agent lock hard-enforce** — `NEOS_SHARED_EDIT=1` + `NEOS_SHARED_EDIT_AGENTS=1` applies 423 to `source=agent` PUTs on locked paths ([plan](docs/plans/PLAN_FOR_V0_10_0.md))  
-- Planned: multi-replica shared lock registry · harness sunset / API hygiene  
+- **0.10.1** Multi-replica **shared lock registry** — `NEOS_COLLAB_LOCKS=auto` dual-writes file locks to Redis (like presence); hydrate on list / hard-enforce ([impl](docs/implementation/v0.10/v0.10.1.md) · [ops](docs/ops/multi-replica-collab.md))  
+- **0.10.2** **Harness HTTP sunset** — `/api/harness(es)` → **410 Gone**; use `/api/workers` ([migration](docs/migration/v0.10.0.md) · [impl](docs/implementation/v0.10/v0.10.2.md))  
+- **0.10.3** Train closeout — [migration](docs/migration/v0.10.0.md) · [release](docs/releases/v0.10.3.md) · inventory `v10Features`  
 
 ---
 
@@ -98,7 +100,7 @@ v0.4.0 redesigns agents around **Domain Workers** and workflow **schemaVersion 2
 - Unified graph node: `agent` + `workerId` (replaces `agent_finance` / `agent_coding`)
 - Built-in **Domain Packs**: finance, coding, research, general
 - **Coordinator** mode (`spawn_worker` / `await_workers`) without a separate node type
-- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` deprecated alias)
+- API: **`/api/workers`**, **`/api/domain-packs`** (`/api/harness` removed in **0.10.2** — 410 Gone)
 - Typed ports MVP (soft warnings; set `strictPorts=1` for hard fail)
 
 **Migration:** existing workflows upgrade automatically on load. See

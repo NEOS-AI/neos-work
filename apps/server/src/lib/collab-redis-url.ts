@@ -1,5 +1,5 @@
 /**
- * Shared Redis URL resolution for collab bus + presence registry (v0.7–v0.8).
+ * Shared Redis URL resolution for collab bus + presence + lock registries (v0.7–v0.10).
  */
 
 export function resolveCollabRedisUrl(env: NodeJS.ProcessEnv = process.env): string | null {

@@ -972,7 +972,7 @@ describe('EngineClient', () => {
     await client.listBlocks();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/block/);
 
-    // listHarnesses prefers /api/workers (v0.4); falls back to /api/harness only on failure
+    // listHarnesses is a thin alias of listWorkers (harness HTTP removed 0.10.2)
     await client.listHarnesses();
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers/);
 
@@ -1022,13 +1022,13 @@ describe('EngineClient', () => {
     expect(zipCall[1].body).toBeInstanceOf(FormData);
     expect((zipCall[1].headers as Record<string, string>)['Content-Type']).toBeUndefined();
 
-    // When workers API fails, listHarnesses falls back to harness alias
+    // listHarnesses no longer falls back to /api/harness (removed 0.10.2)
     fetchMock.mockClear();
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'gone' }, { status: 404 }))
-      .mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
-    await client.listHarnesses();
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/harness$/);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: 'gone' }, { status: 404 }));
+    const harnessAlias = await client.listHarnesses();
+    expect(harnessAlias.ok).toBe(false);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers/);
+    expect(fetchMock.mock.calls.length).toBe(1);
 
     fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: [] }));
 
@@ -2449,15 +2449,16 @@ describe('EngineClient', () => {
     noop();
   });
 
-  it('listHarnesses falls back to /api/harness when workers fail', async () => {
+  it('listHarnesses only calls /api/workers (no harness fallback)', async () => {
     const client = new EngineClient('http://engine.test');
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'no workers' }, { status: 500 }))
-      .mockResolvedValueOnce(jsonResponse({ ok: true, data: [{ id: 'h1', name: 'H' }] }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: [{ id: 'w1', name: 'W' }] }),
+    );
     const res = await client.listHarnesses();
     expect(res.ok).toBe(true);
-    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/workers|harness/);
-    expect(String(fetchMock.mock.calls[1]![0])).toMatch(/\/api\/harness$/);
+    expect(fetchMock.mock.calls.length).toBe(1);
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/\/api\/workers/);
+    expect(String(fetchMock.mock.calls[0]![0])).not.toMatch(/\/api\/harness/);
   });
 
 

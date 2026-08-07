@@ -67,7 +67,7 @@ No new **P0/P1** product blockers found in static FE↔BE matching.
 |--------|------|-------|
 | GET | `/api` | ops banner |
 | POST/PUT/GET preview | `/api/artifacts…` | engine-created artifacts; FE uses list/get/patch/delete/refresh subset |
-| * | `/api/harness`, `/api/harnesses` CRUD | superseded by `/api/workers` |
+| * | `/api/harness`, `/api/harnesses` | **410 Gone** as of 0.10.2 — use `/api/workers` |
 | * | `/api/tools/live-artifacts/*` | agent tool-token (auth-exempt) |
 | GET | `/api/mcp/oauth/callback`, mcp-servers oauth callback | browser redirect, not client method |
 | POST | `/api/workflow/migrate` | one-shot/ops |

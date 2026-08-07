@@ -200,13 +200,11 @@ describe('projects routes', () => {
         displayName: 'Other',
         listener: () => {},
       })!;
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: holder.sessionId,
           path: 'index.html',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
 
       const blocked = await app.request(
         `/api/projects/${project.id}/revisions/${older!.id}/restore`,
@@ -288,13 +286,11 @@ describe('projects routes', () => {
         displayName: 'MkdirOther',
         listener: () => {},
       })!;
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: holder.sessionId,
           path: 'locked-dir',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
 
       const blocked = await app.request(`/api/projects/${project.id}/mkdir`, {
         method: 'POST',
@@ -330,13 +326,11 @@ describe('projects routes', () => {
         displayName: 'AgentLock',
         listener: () => {},
       })!;
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: agentHolder.sessionId,
           path: 'agent-only.html',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
       const agentWrite = await app.request(
         `/api/projects/${project.id}/files/agent-only.html`,
         {
@@ -381,13 +375,11 @@ describe('projects routes', () => {
         displayName: 'HumanHolder',
         listener: () => {},
       })!;
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: holder.sessionId,
           path: 'agent-lock.html',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
 
       const locks = await app.request(`/api/projects/${project.id}/collab/locks`);
       expect(locks.status).toBe(200);
@@ -456,13 +448,11 @@ describe('projects routes', () => {
         displayName: 'H',
         listener: () => {},
       })!;
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: holder.sessionId,
           path: 'agents-only-flag.html',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
       const agentWrite = await app.request(
         `/api/projects/${project.id}/files/agents-only-flag.html`,
         {
@@ -495,13 +485,11 @@ describe('projects routes', () => {
         displayName: 'HdrHolder',
         listener: () => {},
       })!;
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: holder.sessionId,
           path: 'only-hdr.html',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
 
       // No body — header alone identifies the lock holder (proxy-safe DELETE)
       const allowed = await app.request(
@@ -519,13 +507,11 @@ describe('projects routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: 'y' }),
       });
-      expect(
-        acquireFileLock({
+      expect((await acquireFileLock({
           projectId: project.id,
           sessionId: holder.sessionId,
           path: 'only-hdr.html',
-        }).ok,
-      ).toBe(true);
+        })).ok).toBe(true);
       const blocked = await app.request(
         `/api/projects/${project.id}/files/only-hdr.html`,
         { method: 'DELETE' },

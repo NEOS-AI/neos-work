@@ -188,6 +188,8 @@ function startServer({ port, dataDir, token, redisUrl, logLabel }) {
     NEOS_COLLAB_BUS: 'redis',
     NEOS_COLLAB_REDIS_URL: redisUrl,
     NEOS_COLLAB_PRESENCE: 'auto',
+    NEOS_COLLAB_LOCKS: 'auto',
+    NEOS_SHARED_EDIT: '1',
     // avoid clobbering parent
     NODE_ENV: process.env.NODE_ENV || 'test',
   };
@@ -266,6 +268,10 @@ if (exists('deploy/docker-compose.multi.yml')) {
     /NEOS_COLLAB_PRESENCE/.test(yml),
   );
   ok(
+    'compose sets NEOS_COLLAB_LOCKS',
+    /NEOS_COLLAB_LOCKS/.test(yml),
+  );
+  ok(
     'compose uses distinct host ports for A/B',
     /NEOS_PORT_A|3000:3000/.test(yml) && /NEOS_PORT_B|3001:3000/.test(yml),
   );
@@ -275,6 +281,8 @@ if (exists('docs/ops/multi-replica-collab.md')) {
   const doc = read('docs/ops/multi-replica-collab.md');
   ok('ops doc mentions collab/status', /collab\/status/.test(doc));
   ok('ops doc mentions peers checklist', /collab\/peers|Presence count/i.test(doc));
+  ok('ops doc mentions NEOS_COLLAB_LOCKS', /NEOS_COLLAB_LOCKS/.test(doc));
+  ok('ops doc mentions lock registry keys or collab:lock', /neos:collab:lock|lock registry/i.test(doc));
 }
 
 {
@@ -516,6 +524,111 @@ if (redisUrl && redisPkgOk) {
               && (s.selector === '#hero' || s.path === 'index.html'),
           ),
           `count=${selections.length}`,
+        );
+
+        // v0.10 M1: shared lock registry — acquire on A, list + hard-enforce on B
+        const lockAcq = await fetchJson(
+          `${baseA}/api/projects/${projectId}/collab/locks`,
+          {
+            method: 'POST',
+            headers: authHeaders(token),
+            body: JSON.stringify({
+              sessionId: streamA.sessionId,
+              path: 'index.html',
+              action: 'acquire',
+            }),
+          },
+        );
+        ok(
+          'acquire lock on A',
+          lockAcq.res.ok && lockAcq.body?.ok === true,
+          lockAcq.body?.error || '',
+        );
+        // Allow dual-write + bus + registry connect
+        await sleep(1_200);
+
+        let locksB = [];
+        for (let i = 0; i < 15; i++) {
+          const locksRes = await fetchJson(
+            `${baseB}/api/projects/${projectId}/collab/locks`,
+            { headers: authHeaders(token) },
+          );
+          locksB = locksRes.body?.data?.locks ?? [];
+          if (
+            locksB.some(
+              (l) => l.path === 'index.html' && l.sessionId === streamA.sessionId,
+            )
+          ) {
+            break;
+          }
+          await sleep(200);
+        }
+        ok(
+          'lock list on B shows A holder (registry and/or bus)',
+          locksB.some(
+            (l) => l.path === 'index.html' && l.sessionId === streamA.sessionId,
+          ),
+          `locks=${JSON.stringify(locksB.map((l) => l.sessionId))}`,
+        );
+
+        // Seed a file so PUT hard-enforce can run on B
+        const putHolder = await fetchJson(
+          `${baseA}/api/projects/${projectId}/files/index.html`,
+          {
+            method: 'PUT',
+            headers: {
+              ...authHeaders(token),
+              'x-neos-session-id': streamA.sessionId,
+            },
+            body: JSON.stringify({
+              content: '<html><body>lock-e2e</body></html>',
+              source: 'user',
+              sessionId: streamA.sessionId,
+            }),
+          },
+        );
+        ok(
+          'holder PUT on A succeeds under hard-enforce',
+          putHolder.res.ok && putHolder.body?.ok === true,
+          `status=${putHolder.res.status}`,
+        );
+
+        if (streamB.ok && streamB.sessionId) {
+          const putForeign = await fetchJson(
+            `${baseB}/api/projects/${projectId}/files/index.html`,
+            {
+              method: 'PUT',
+              headers: {
+                ...authHeaders(token),
+                'x-neos-session-id': streamB.sessionId,
+              },
+              body: JSON.stringify({
+                content: '<html><body>should-block</body></html>',
+                source: 'user',
+                sessionId: streamB.sessionId,
+              }),
+            },
+          );
+          ok(
+            'foreign PUT on B returns 423 (shared lock hard-enforce)',
+            putForeign.res.status === 423,
+            `status=${putForeign.res.status} err=${putForeign.body?.error || ''}`,
+          );
+          ok(
+            '423 includes holder session from A',
+            putForeign.body?.data?.holder?.sessionId === streamA.sessionId,
+            putForeign.body?.data?.holder?.sessionId || 'no holder',
+          );
+        }
+
+        const stLocks = await fetchJson(`${baseA}/api/collab/status`, {
+          headers: authHeaders(token),
+        });
+        const lockKind = stLocks.body?.data?.locks?.kind;
+        ok(
+          'collab status exposes locks registry',
+          lockKind === 'redis' || lockKind === 'memory' || lockKind === 'redis-stub',
+          `locks.kind=${lockKind}`,
         );
       }
 

@@ -6,7 +6,7 @@
 #   docker compose -f deploy/docker-compose.multi.yml up -d --build
 #   docker compose -f deploy/docker-compose.multi.yml logs -f
 #
-# Engines: neos-a :3000, neos-b :3001 — shared Redis bus/presence.
+# Engines: neos-a :3000, neos-b :3001 — shared Redis bus/presence/locks.
 # Volumes are separate by default (safer for SQLite). For shared-data /
 # single-writer experiments, mount the same volume on both services.
 # See docs/ops/multi-replica-collab.md
@@ -45,6 +45,7 @@ services:
       NEOS_COLLAB_BUS: redis
       NEOS_COLLAB_REDIS_URL: redis://redis:6379
       NEOS_COLLAB_PRESENCE: auto
+      NEOS_COLLAB_LOCKS: auto
     volumes:
       - neos_data_a:/data
     depends_on:
@@ -83,6 +84,7 @@ services:
       NEOS_COLLAB_BUS: redis
       NEOS_COLLAB_REDIS_URL: redis://redis:6379
       NEOS_COLLAB_PRESENCE: auto
+      NEOS_COLLAB_LOCKS: auto
     volumes:
       - neos_data_b:/data
     depends_on:

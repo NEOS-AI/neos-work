@@ -38,6 +38,8 @@ const GATES = {
   requireV08Features: true,
   /** v0.9 train (M0–M4 closeout) */
   requireV09Features: true,
+  /** v0.10 train (M0–M3 closeout) */
+  requireV10Features: true,
 };
 
 function existsRel(rel) {
@@ -207,6 +209,66 @@ function scanV09Features() {
     implM2: existsRel('docs/implementation/v0.9/v0.9.2.md'),
     implM3: existsRel('docs/implementation/v0.9/v0.9.3.md'),
     implM4: existsRel('docs/implementation/v0.9/v0.9.4.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.10 capability surface (M0–M3) — agent locks · shared lock registry · harness sunset.
+ * @see docs/plans/PLAN_FOR_V0_10_0.md
+ */
+function scanV10Features() {
+  const projectCollab = readText('apps/server/src/lib/project-collab.ts') ?? '';
+  const lockStore = readText('apps/server/src/lib/collab-lock-store.ts') ?? '';
+  const ttlReg = readText('apps/server/src/lib/collab-ttl-registry.ts') ?? '';
+  const locksRedis = readText('apps/server/src/lib/collab-locks-redis.ts') ?? '';
+  const harness = readText('apps/server/src/routes/harness.ts') ?? '';
+  const indexTs = readText('apps/server/src/index.ts') ?? '';
+  const ops = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const features = {
+    planV10: existsRel('docs/plans/PLAN_FOR_V0_10_0.md'),
+    migrationV10: existsRel('docs/migration/v0.10.0.md'),
+    releaseV10: existsRel('docs/releases/v0.10.3.md'),
+    agentLockEnforce:
+      projectCollab.includes('isSharedEditAgentsHardEnforce')
+      && projectCollab.includes('shouldHardEnforceWriteSource')
+      && projectCollab.includes('NEOS_SHARED_EDIT_AGENTS'),
+    sharedLockRegistry:
+      existsRel('apps/server/src/lib/collab-ttl-registry.ts')
+      && existsRel('apps/server/src/lib/collab-locks-redis.ts')
+      && existsRel('apps/server/src/lib/collab-lock-store.ts')
+      && ttlReg.includes('createTtlJsonRegistry')
+      && locksRedis.includes('NEOS_COLLAB_LOCKS')
+      && lockStore.includes('hydrateLocksFromRegistry')
+      && lockStore.includes('fill-missing'),
+    lockSafeHydrate:
+      lockStore.includes('releaseTombstones')
+      || (lockStore.includes('tombstone') && lockStore.includes('hydrateLocksFromRegistry')),
+    harnessHttpGone:
+      harness.includes('410')
+      && harness.includes('/api/workers')
+      && (harness.includes('GONE') || harness.includes('Gone')),
+    collabStatusLocks:
+      indexTs.includes('getLockRegistry')
+      && indexTs.includes('initLockRegistry')
+      && /locks:\s*\{/.test(indexTs),
+    opsCollabLocks:
+      ops.includes('NEOS_COLLAB_LOCKS')
+      && ops.includes('neos:collab:lock'),
+    apiSurfaceOrphans: existsRel('docs/reference/api-surface-notes.md'),
+    implM0: existsRel('docs/implementation/v0.10/v0.10.0.md'),
+    implM1: existsRel('docs/implementation/v0.10/v0.10.1.md'),
+    implM2: existsRel('docs/implementation/v0.10/v0.10.2.md'),
+    implM3: existsRel('docs/implementation/v0.10/v0.10.3.md'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -406,6 +468,7 @@ export function buildInventory() {
   const v07 = scanV07Features();
   const v08 = scanV08Features();
   const v09 = scanV09Features();
+  const v10 = scanV10Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -425,6 +488,7 @@ export function buildInventory() {
       v07Features: v07,
       v08Features: v08,
       v09Features: v09,
+      v10Features: v10,
     },
     gates: GATES,
     summary: {
@@ -445,6 +509,8 @@ export function buildInventory() {
       v08FeaturesTotal: v08.total,
       v09Features: v09.count,
       v09FeaturesTotal: v09.total,
+      v10Features: v10.count,
+      v10FeaturesTotal: v10.total,
     },
   };
 
@@ -509,6 +575,17 @@ export function evaluateGates(inventory) {
       missing: v09?.missing ?? [],
     });
   }
+  if (g.requireV10Features) {
+    const v10 = inventory.catalogs?.v10Features;
+    const ok = Boolean(v10?.ok);
+    results.push({
+      id: 'v10Features',
+      ok,
+      actual: v10?.count ?? 0,
+      min: v10?.total ?? 0,
+      missing: v10?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -540,6 +617,7 @@ function main(argv = process.argv.slice(2)) {
           || r.id === 'v07Features'
           || r.id === 'v08Features'
           || r.id === 'v09Features'
+          || r.id === 'v10Features'
         )
         && Array.isArray(r.missing)
         && r.missing.length

@@ -20,7 +20,7 @@ export function HarnessSelector(props: {
     if (!client) return;
     setLoadError(null);
 
-    // Prefer /api/workers (v0.4); EngineClient.listHarnesses falls back to /api/harness
+    // Domain Workers only — /api/harness HTTP aliases removed in 0.10.2
     const load = client.listWorkers
       ? client.listWorkers()
       : client.listHarnesses();
