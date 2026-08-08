@@ -28,7 +28,7 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 
 **Migration (v0.4 → v0.5):** [docs/migration/v0.5.0.md](docs/migration/v0.5.0.md)  
 **Security:** [docs/security/v0.5.md](docs/security/v0.5.md)  
-**Capability dump:** `pnpm inventory` / `pnpm inventory:check` · smoke: `pnpm e2e:smoke` · C5: `pnpm e2e:c5` · live (opt-in): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
+**Capability dump:** `pnpm inventory` / `pnpm inventory:check` · smoke: `pnpm e2e:smoke` · contract: `pnpm e2e:contract` · journey: `pnpm e2e:journey` · browser: `pnpm e2e:browser` · C5: `pnpm e2e:c5` · live (opt-in): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
 **v0.5 closeout:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md) · **v0.6 plan:** [docs/plans/PLAN_FOR_V0_6_0.md](docs/plans/PLAN_FOR_V0_6_0.md)  
 **v0.6 migration:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **Helm:** [deploy/helm/neos-work](deploy/helm/neos-work)  
 **v0.7 plan:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md) · **v0.7 migration:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md)  
@@ -38,6 +38,21 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.11 plan:** [docs/plans/PLAN_FOR_V0_11_0.md](docs/plans/PLAN_FOR_V0_11_0.md) · **migration:** [docs/migration/v0.11.0.md](docs/migration/v0.11.0.md) · **release:** [docs/releases/v0.11.3.md](docs/releases/v0.11.3.md) · inventory `v11Features`  
 **v0.12 plan:** [docs/plans/PLAN_FOR_V0_12_0.md](docs/plans/PLAN_FOR_V0_12_0.md) · **migration:** [docs/migration/v0.12.0.md](docs/migration/v0.12.0.md) · **release:** [docs/releases/v0.12.3.md](docs/releases/v0.12.3.md) · inventory `v12Features`  
 **v0.13 plan:** [docs/plans/PLAN_FOR_V0_13_0.md](docs/plans/PLAN_FOR_V0_13_0.md) · **migration:** [docs/migration/v0.13.0.md](docs/migration/v0.13.0.md) · **release:** [docs/releases/v0.13.3.md](docs/releases/v0.13.3.md) · inventory `v13Features`  
+**v0.14 plan:** [docs/plans/PLAN_FOR_V0_14_0.md](docs/plans/PLAN_FOR_V0_14_0.md) · **migration:** [docs/migration/v0.14.0.md](docs/migration/v0.14.0.md) · **release:** [docs/releases/v0.14.1.md](docs/releases/v0.14.1.md) · inventory `v14Features`  
+**v0.15 plan:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **migration:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **release:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
+
+## What's new in v0.15
+
+- **0.15.0** **Browser Design Project E2E** — `pnpm e2e:browser` (Playwright Chromium: Connect → create → Code → Save → Preview; Node 22+; PR CI) ([plan](docs/plans/PLAN_FOR_V0_15_0.md) · [migration](docs/migration/v0.15.0.md) · [release](docs/releases/v0.15.0.md) · [impl](docs/implementation/v0.15/v0.15.0.md) · inventory `v15Features`)
+
+---
+
+## What's new in v0.14
+
+- **0.14.0** **Process API golden path** — `pnpm e2e:journey` boots built server and covers health → project → file `hash` → collab → lock 409/423 → dry-run (Node 22+; PR CI) ([plan](docs/plans/PLAN_FOR_V0_14_0.md) · [impl](docs/implementation/v0.14/v0.14.0.md))  
+- **0.14.1** Multi-replica live **L7** agent hard-enforce 423 + train closeout — [migration](docs/migration/v0.14.0.md) · [release](docs/releases/v0.14.1.md) · inventory `v14Features` ([impl](docs/implementation/v0.14/v0.14.1.md))  
+
+---
 
 ## What's new in v0.13
 

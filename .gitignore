@@ -39,3 +39,7 @@ apps/server/_cov_sess_write_*.txt
 .tools-dev/
 deploy/.env
 *.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/

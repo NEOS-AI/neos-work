@@ -17,6 +17,11 @@
  * Live requires: Node 22, built @neos-work/server, optional `redis` package for real bus,
  * Docker (to start redis:7-alpine) unless NEOS_COLLAB_REDIS_URL points at a live Redis.
  *
+ * Live case map (v0.14 M3):
+ *   L1 dual health + redis bus · L2 shared project · L3 peers · L4 selection fan-out
+ *   L5 lock acquire A → list B · L6 foreign user PUT 423 · L7 foreign agent PUT 423
+ *   L8 collab status locks.kind
+ *
  * Exit 0 on success or structural-only pass; 1 on failure.
  */
 
@@ -190,6 +195,8 @@ function startServer({ port, dataDir, token, redisUrl, logLabel }) {
     NEOS_COLLAB_PRESENCE: 'auto',
     NEOS_COLLAB_LOCKS: 'auto',
     NEOS_SHARED_EDIT: '1',
+    // v0.14 M3 L7 — agent hard-enforce across replicas
+    NEOS_SHARED_EDIT_AGENTS: '1',
     // avoid clobbering parent
     NODE_ENV: process.env.NODE_ENV || 'test',
   };
@@ -610,14 +617,40 @@ if (redisUrl && redisPkgOk) {
             },
           );
           ok(
-            'foreign PUT on B returns 423 (shared lock hard-enforce)',
+            'L6 foreign user PUT on B returns 423 (shared lock hard-enforce)',
             putForeign.res.status === 423,
             `status=${putForeign.res.status} err=${putForeign.body?.error || ''}`,
           );
           ok(
-            '423 includes holder session from A',
+            'L6 423 includes holder session from A',
             putForeign.body?.data?.holder?.sessionId === streamA.sessionId,
             putForeign.body?.data?.holder?.sessionId || 'no holder',
+          );
+
+          // L7: agent source also hard-enforced when NEOS_SHARED_EDIT_AGENTS=1
+          const putAgent = await fetchJson(
+            `${baseB}/api/projects/${projectId}/files/index.html`,
+            {
+              method: 'PUT',
+              headers: {
+                ...authHeaders(token),
+                // deliberate: no holder session — agent without bind should 423
+              },
+              body: JSON.stringify({
+                content: '<html><body>agent-should-block</body></html>',
+                source: 'agent',
+              }),
+            },
+          );
+          ok(
+            'L7 foreign agent PUT on B returns 423 (agents hard-enforce)',
+            putAgent.res.status === 423,
+            `status=${putAgent.res.status} err=${putAgent.body?.error || ''}`,
+          );
+          ok(
+            'L7 agent 423 includes holder session from A',
+            putAgent.body?.data?.holder?.sessionId === streamA.sessionId,
+            putAgent.body?.data?.holder?.sessionId || 'no holder',
           );
         }
 

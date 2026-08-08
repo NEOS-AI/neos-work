@@ -184,4 +184,44 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v13Features.features.implM3);
     assert.ok(inv.checks.results.some((r) => r.id === 'v13Features' && r.ok));
   });
+
+  it('includes v0.14 feature gates (M1 process e2e + M3 multi-replica)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v14Features);
+    assert.equal(
+      inv.catalogs.v14Features.ok,
+      true,
+      `v14 missing: ${(inv.catalogs.v14Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v14Features.features.planV14);
+    assert.ok(inv.catalogs.v14Features.features.migrationV14);
+    assert.ok(inv.catalogs.v14Features.features.releaseV14);
+    assert.ok(inv.catalogs.v14Features.features.journeyScript);
+    assert.ok(inv.catalogs.v14Features.features.journeyPackageScript);
+    assert.ok(inv.catalogs.v14Features.features.journeyCi);
+    assert.ok(inv.catalogs.v14Features.features.multiReplicaAgent423);
+    assert.ok(inv.catalogs.v14Features.features.implM1);
+    assert.ok(inv.catalogs.v14Features.features.implM3);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v14Features' && r.ok));
+  });
+
+  it('includes v0.15 feature gates (M2 Playwright browser e2e)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v15Features);
+    assert.equal(
+      inv.catalogs.v15Features.ok,
+      true,
+      `v15 missing: ${(inv.catalogs.v15Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v15Features.features.planV15);
+    assert.ok(inv.catalogs.v15Features.features.migrationV15);
+    assert.ok(inv.catalogs.v15Features.features.releaseV15);
+    assert.ok(inv.catalogs.v15Features.features.browserScript);
+    assert.ok(inv.catalogs.v15Features.features.browserSpec);
+    assert.ok(inv.catalogs.v15Features.features.browserPackageScript);
+    assert.ok(inv.catalogs.v15Features.features.browserCi);
+    assert.ok(inv.catalogs.v15Features.features.playwrightConfig);
+    assert.ok(inv.catalogs.v15Features.features.implM2);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v15Features' && r.ok));
+  });
 });
