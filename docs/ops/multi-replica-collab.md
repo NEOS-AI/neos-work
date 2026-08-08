@@ -26,7 +26,8 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
                       │
                       ├─ membership memory (local + remote-mirrored)
                       ├─ optional Redis presence registry (TTL keys)
-                      └─ optional Redis lock registry (TTL keys)  ← v0.10 M1
+                      ├─ optional Redis lock registry (TTL keys)  ← v0.10 M1
+                      └─ optional Redis run summary + cancel channel  ← v0.16 B0
 ```
 
 | Surface | Where it lives |
@@ -35,6 +36,8 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | Collab events (join/leave/heartbeat/selection/locks…) | Bus fan-out (`memory` or `redis`) |
 | Peer membership list | In-process store + bus mirror; optional Redis hydrate |
 | File locks | In-process map + bus mirror; optional Redis lock registry (hydrate on list/acquire/hard-enforce) |
+| Agent run abort + events | **Local to owner process** |
+| Agent run summary (status/get/cancel) | Optional shared store (`NEOS_RUN_REGISTRY`) |
 | File content | Disk / SQLite under `NEOS_DATA_DIR` (shared volume or single writer) |
 
 ---
@@ -48,6 +51,7 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | `REDIS_URL` | unset | Fallback URL if `NEOS_COLLAB_REDIS_URL` unset |
 | `NEOS_COLLAB_PRESENCE` | `auto` | `auto` \| `memory` \| `redis` \| `off` — membership registry |
 | `NEOS_COLLAB_LOCKS` | `auto` | `auto` \| `memory` \| `redis` \| `off` — **file lock registry** (v0.10 M1) |
+| `NEOS_RUN_REGISTRY` | `auto` | `auto` \| `memory` \| `redis` \| `off` — **run summary registry** (v0.16 B0) for cross-pod GET/cancel |
 | `NEOS_SHARED_EDIT` | off | Hard file-lock enforce for multi-client edit (see below) |
 | `NEOS_SHARED_EDIT_AGENTS` | off | Also hard-enforce `source=agent` PUTs when base shared-edit is on (v0.10 M0) |
 | `NEOS_AUTH_TOKEN` | (process random) | Use a **stable** shared secret across replicas |
@@ -98,6 +102,34 @@ unless `NEOS_SHARED_EDIT_AGENTS=1` is also set.
 Hard-enforce and REST lock list **hydrate** from the lock registry before reading,
 so a cold replica agrees on the holder even if it missed the bus event.
 
+### Run summary registry modes (v0.16 B0)
+
+Agent/project runs still execute **locally** (abort + event log stay in-process).
+An optional **shared summary** dual-write lets other pods answer
+`GET /api/runs/:id` and `POST /api/runs/:id/cancel` without 404.
+
+| `NEOS_RUN_REGISTRY` | Behavior |
+|---|---|
+| `auto` | Redis when `NEOS_COLLAB_BUS=redis` **or** a Redis URL is set and `redis` connects; else in-process memory mirror |
+| `memory` | In-process summary mirror only (single process; useful for tests) |
+| `redis` | Force Redis summaries + cancel pub/sub (needs URL + `redis` package) |
+| `off` | Local registry only — same as pre-v0.16 (cancel/get 404 on wrong pod) |
+
+| Path | Multi-replica behaviour |
+|---|---|
+| Create / status transitions | Dual-write summary (`id`, `status`, `nodeId`, project/agent/collab bind, timestamps, error) |
+| `GET /api/runs/:id` | Local first; else hydrate summary from shared store (`eventCount: 0`) |
+| `POST /api/runs/:id/cancel` | Local cancel if owned; else publish cancel command + mark canceled in store |
+| Owner node | Subscribes to cancel channel and aborts its local run |
+| Events / SSE | **Still local to owner** — not fan-out (see [sticky-sse.md](./sticky-sse.md)) |
+
+```bash
+NEOS_COLLAB_BUS=redis \
+NEOS_COLLAB_REDIS_URL=redis://127.0.0.1:6379 \
+NEOS_RUN_REGISTRY=auto \
+  pnpm --filter @neos-work/server dev
+```
+
 ### Redis presence keys (0.8.1+)
 
 | Key | Type | TTL |
@@ -114,6 +146,17 @@ so a cold replica agrees on the holder even if it missed the bus event.
 
 TTL is refreshed on re-acquire and while the holder’s presence session is touched
 (SSE heartbeat / touch). Bus channel: `neos:collab:events` (pub/sub).
+
+### Redis run summary keys (0.16.1+)
+
+| Key / channel | Type | TTL |
+|---|---|---|
+| `neos:run:summary:{id}` | string JSON run summary | ~3600s |
+| `neos:run:commands` | pub/sub cancel intents | — |
+
+Summary fields: `id`, `status`, `nodeId`, `projectId`, `collabSessionId`,
+`agentId`, `error`, `createdAt`, `startedAt`, `completedAt`, `updatedAt`.
+No event log is stored.
 ---
 
 ## Run with Redis
@@ -258,7 +301,7 @@ SSOT for Design Project content (ADR 0001 — lock + LWW, not CRDT).
 | SQLite (`data.db` etc.) | **Not** a multi-writer database. Concurrent writers on a shared volume risk corruption. |
 | Design project trees | Path sandboxed project roots; concurrent writers need shared FS **and** lock discipline |
 | Media / packs / skills | Same volume semantics as projects |
-| Ephemeral run registry | **In-memory per process** — not under `NEOS_DATA_DIR` |
+| Ephemeral run registry | Local abort/events **in-memory per process**; optional shared **summary** via `NEOS_RUN_REGISTRY` (not under `NEOS_DATA_DIR`) |
 
 ### Supported operator postures
 
@@ -374,7 +417,7 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | **Cold replica** | Without Redis presence/lock registry, a cold node has empty remote membership/locks until bus events arrive. With registries (`auto`/`redis` + working Redis), hydrate fills peers on stream/join and locks on list/acquire/hard-enforce. |
 | **Sticky sessions** | Not required for presence/lock lists when registries are on; still required if you expect a single long-lived SSE pin to a given pod without reconnect. Design note: [sticky-sse.md](./sticky-sse.md) (**not implemented**). |
 | **File / SQLite SSOT** | Content under `NEOS_DATA_DIR` is disk SSOT; multi-writer SQLite **unsupported**. See [File content SSOT](#file-content-ssot-neos_data_dir). |
-| **Run registry** | In-memory per process — run SSE/cancel are node-local unless sticky or future shared store. |
+| **Run registry** | Abort + event log stay **in-memory per process**. With `NEOS_RUN_REGISTRY` memory/redis, **summary** dual-write enables cross-pod GET/cancel; **event SSE is still owner-local** (no multi-node event fan-out in v0.16). |
 | **Helm default** | Chart is single-replica; multi-replica is operator-configured (Redis + env + shared data policy). |
 
 ---
@@ -391,7 +434,8 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | Hard-enforce only on one replica | Lock registry off + missed bus event; enable `NEOS_COLLAB_LOCKS=auto` with working Redis |
 | File content missing / diverges across pods | Split `NEOS_DATA_DIR` or no shared volume — see [File content SSOT](#file-content-ssot-neos_data_dir) |
 | SQLite errors under multi-replica | Multiple writers on one DB file — use single writer |
-| Run cancel 404 on “other” pod | Run registry is per process — cancel on creator node or use sticky SSE later |
+| Run cancel 404 on “other” pod | `NEOS_RUN_REGISTRY=off` or redis-stub without shared store — set `NEOS_RUN_REGISTRY=auto` with working Redis (or memory for single process); check `GET /api/collab/status` → `runs` |
+| Run events empty on non-owner pod | Expected — only summary is shared; stream on the owner node or accept poll gaps |
 
 ---
 

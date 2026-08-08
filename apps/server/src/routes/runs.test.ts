@@ -17,6 +17,14 @@ import { resetGlobalRunRegistry } from '@neos-work/agent-runtime';
 import runs from './runs.js';
 import * as projects from '../db/projects.js';
 import { getDb } from '../db/schema.js';
+import {
+  createMemorySharedRunStore,
+  createSharedMemoryBackendForTests,
+  resetSharedRunStoreForTests,
+  setRunRegistryNodeIdForTests,
+  setSharedRunStoreForTests,
+  summaryFromRecord,
+} from '../lib/run-registry-shared.js';
 import fs from 'node:fs';
 
 const app = new Hono();
@@ -27,6 +35,8 @@ const ids: string[] = [];
 
 function cleanup() {
   resetGlobalRunRegistry();
+  resetSharedRunStoreForTests();
+  setRunRegistryNodeIdForTests(null);
   const db = getDb();
   for (const id of ids.splice(0)) {
     const row = db
@@ -549,5 +559,172 @@ describe('runs remaining id and cancel branches', () => {
     } finally {
       deleteMemory(mem.id);
     }
+  });
+});
+
+describe('runs shared registry multi-replica MVP', () => {
+  it('GET hydrates from shared store when not in local registry', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'owner-node', backend });
+    setSharedRunStoreForTests(store);
+
+    await store.put({
+      id: 'remote-run-1',
+      status: 'running',
+      nodeId: 'owner-node',
+      projectId: 'proj-r',
+      collabSessionId: 'sess-r',
+      agentId: 'cli-claude',
+      error: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      startedAt: '2026-01-01T00:00:01.000Z',
+      completedAt: null,
+      updatedAt: '2026-01-01T00:00:01.000Z',
+    });
+
+    // Local registry empty — simulate other pod
+    resetGlobalRunRegistry();
+
+    const res = await app.request('/api/runs/remote-run-1');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: {
+        id: string;
+        status: string;
+        agentId: string | null;
+        projectId: string | null;
+        eventCount: number;
+        collabSessionId: string | null;
+      };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.id).toBe('remote-run-1');
+    expect(body.data.status).toBe('running');
+    expect(body.data.agentId).toBe('cli-claude');
+    expect(body.data.projectId).toBe('proj-r');
+    expect(body.data.collabSessionId).toBe('sess-r');
+    expect(body.data.eventCount).toBe(0);
+  });
+
+  it('cancel remote summary publishes + marks canceled without 404', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    // Peer store for the HTTP pod (no local run)
+    const peerStore = createMemorySharedRunStore({ nodeId: 'peer-node', backend });
+    setSharedRunStoreForTests(peerStore);
+
+    // Owner has the live run + dual-write into shared backend
+    const { getGlobalRunRegistry } = await import('@neos-work/agent-runtime');
+    const reg = getGlobalRunRegistry();
+    const run = reg.create({
+      id: 'cross-cancel-1',
+      agentId: 'cli-claude',
+      prompt: 'long',
+    });
+    reg.setStatus(run.id, 'running');
+    await peerStore.put(summaryFromRecord(run, 'owner-node'));
+
+    // Clear local so cancel must go through shared path
+    resetGlobalRunRegistry();
+    // Re-create owner local registry simulation on same process via backend handlers:
+    // wire a second store that owns the run and listens on shared backend
+    const ownerReg = getGlobalRunRegistry();
+    const owned = ownerReg.create({
+      id: 'cross-cancel-1',
+      agentId: 'cli-claude',
+      prompt: 'long',
+    });
+    ownerReg.setStatus(owned.id, 'running');
+    // But HTTP cancel will find local first — so clear again and only use shared
+    resetGlobalRunRegistry();
+
+    // Peer-only: run not local
+    const cancel = await app.request('/api/runs/cross-cancel-1/cancel', {
+      method: 'POST',
+    });
+    expect(cancel.status).toBe(200);
+    const body = (await cancel.json()) as {
+      ok: boolean;
+      data: { id: string; status: string };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.status).toBe('canceled');
+
+    const get = await app.request('/api/runs/cross-cancel-1');
+    expect(get.status).toBe(200);
+    expect(
+      ((await get.json()) as { data: { status: string } }).data.status,
+    ).toBe('canceled');
+  });
+
+  it('cancel remote terminal summary returns 409', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'peer', backend });
+    setSharedRunStoreForTests(store);
+    await store.put({
+      id: 'term-remote',
+      status: 'succeeded',
+      nodeId: 'owner',
+      projectId: null,
+      collabSessionId: null,
+      agentId: 'cli-claude',
+      error: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      completedAt: '2026-01-01T00:00:05.000Z',
+      updatedAt: '2026-01-01T00:00:05.000Z',
+    });
+    resetGlobalRunRegistry();
+    const cancel = await app.request('/api/runs/term-remote/cancel', {
+      method: 'POST',
+    });
+    expect(cancel.status).toBe(409);
+  });
+
+  it('create dry-run dual-writes summary into memory store', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'local', backend });
+    setSharedRunStoreForTests(store);
+
+    const res = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'dual write me', dryRun: true }),
+    });
+    expect(res.status).toBe(201);
+    const id = ((await res.json()) as { data: { id: string } }).data.id;
+    const summary = await store.get(id);
+    expect(summary).not.toBeNull();
+    expect(summary!.status).toBe('succeeded');
+    expect(summary!.nodeId).toBe('local');
+  });
+
+  it('local cancel dual-writes canceled status', async () => {
+    spawnMock.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* hang until cancel */
+        }),
+    );
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'local', backend });
+    setSharedRunStoreForTests(store);
+
+    const create = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'cli-claude',
+        prompt: 'cancel dual',
+        dryRun: false,
+      }),
+    });
+    expect(create.status).toBe(201);
+    const id = ((await create.json()) as { data: { id: string } }).data.id;
+
+    const cancel = await app.request(`/api/runs/${id}/cancel`, { method: 'POST' });
+    expect(cancel.status).toBe(200);
+    const summary = await store.get(id);
+    expect(summary?.status).toBe('canceled');
   });
 });

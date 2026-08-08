@@ -1,2 +1,2 @@
 /** Monorepo product version — keep in sync with root package.json. */
-export const NEOS_VERSION = '0.13.3';
+export const NEOS_VERSION = '0.17.0';

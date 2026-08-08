@@ -1,6 +1,8 @@
 /**
  * Engine client — communicates with the NEOS Work engine server.
  * v0.12: Design Project API on EngineProjectClient; Workflows on EngineWorkflowClient.
+ * v0.16: Settings + MCP on EngineSettingsClient.
+ * v0.17: Skills + media + live artifacts on EngineMediaClient.
  */
 
 import {
@@ -55,23 +57,32 @@ export {
   type WorkflowBlock,
 } from './engine-workflow.js';
 
+export {
+  EngineSettingsClient,
+  type McpServerData,
+  type McpPresetData,
+  type TradingViewCdpHealthData,
+} from './engine-settings.js';
+
+export {
+  EngineMediaClient,
+  type SkillData,
+  type SkillExampleCard,
+} from './engine-media.js';
+
 import {
-  EngineProjectClient,
   type Artifact,
-  type LiveArtifact,
-  type LiveArtifactRefresh,
-  type MediaFileInfo,
   type Plugin,
   type PluginListMeta,
   type Routine,
 } from './engine-project.js';
 import {
-  EngineWorkflowClient,
   type AgentHarness,
   type Deployment,
   type DomainWorker,
   type WorkflowBlock,
 } from './engine-workflow.js';
+import { EngineMediaClient } from './engine-media.js';
 import {
   formatHttpErrorMessage,
   parseSseDataPayload,
@@ -124,43 +135,6 @@ export interface AgentTask {
   completedAt?: string;
 }
 
-export interface McpServerData {
-  id: string;
-  name: string;
-  transport: 'stdio' | 'http';
-  command: string | null;
-  args: string[] | null;
-  url: string | null;
-  enabled: boolean;
-  createdAt: string;
-}
-
-/** Built-in MCP server preset (e.g. TradingView). */
-export interface McpPresetData {
-  id: string;
-  name: string;
-  description: string;
-  docsUrl: string;
-  transport: 'stdio' | 'http';
-  command?: string;
-  argsTemplate?: string[];
-  entryRelativePath?: string;
-  requirements: string[];
-  toolHints: string[];
-  domain?: 'finance' | 'coding' | 'general';
-}
-
-export interface TradingViewCdpHealthData {
-  ok: boolean;
-  cdpConnected: boolean;
-  port: number;
-  browser?: string;
-  protocolVersion?: string;
-  webSocketDebuggerUrl?: string;
-  targetCount?: number;
-  error?: string;
-}
-
 export interface DesignSystem {
   id: string;
   name: string;
@@ -185,36 +159,6 @@ export interface RoutineRun {
   error?: string;
 }
 
-export interface SkillExampleCard {
-  id?: string;
-  key?: string;
-  title?: string;
-  path?: string;
-}
-
-export interface SkillData {
-  id: string;
-  name: string;
-  description: string | null;
-  source: string;
-  path: string;
-  version: string | null;
-  enabled: boolean;
-  installedAt: string;
-  mode?: string;
-  category?: string;
-  featured?: boolean;
-  triggers?: string[];
-  examplePrompt?: string;
-  /** Package root label when skill is dir/SKILL.md layout (v0.5.7). */
-  packageDir?: string;
-  exampleCount?: number;
-  /** Derived example cards (sanitized basenames). */
-  examples?: SkillExampleCard[];
-  assets?: string[];
-  references?: string[];
-}
-
 export type AgentChunk =
   | { type: 'plan'; steps: AgentStep[] }
   | { type: 'step_start'; step: AgentStep }
@@ -226,7 +170,7 @@ export type AgentChunk =
   | { type: 'error'; error: string };
 
 
-export class EngineClient extends EngineWorkflowClient {
+export class EngineClient extends EngineMediaClient {
   // --- Health ---
 
   async health(): Promise<HealthResponse> {
@@ -525,333 +469,6 @@ export class EngineClient extends EngineWorkflowClient {
     return readApiResponse(res);
   }
 
-  async getSettings(): Promise<ApiResponse<Record<string, string>>> {
-    const res = await fetch(`${this.baseUrl}/api/settings`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async getSetting(key: string): Promise<ApiResponse<{ key: string; value: string }>> {
-    const seg = this.settingKeySegment(key);
-    if (!seg) return this.invalidIdResponse('setting key');
-    const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async saveSetting(key: string, value: string): Promise<ApiResponse<void>> {
-    const seg = this.settingKeySegment(key);
-    if (!seg) return this.invalidIdResponse('setting key');
-    const res = await fetch(`${this.baseUrl}/api/settings/${seg}`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ value }),
-    });
-    return readApiResponse(res);
-  }
-
-  async verifyApiKey(provider: string, key: string): Promise<ApiResponse<{ valid: boolean }>> {
-    const res = await fetch(`${this.baseUrl}/api/settings/verify-key`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ provider, key }),
-    });
-    return readApiResponse(res);
-  }
-
-  /**
-   * POST /api/connection-test — probe provider / custom URL reachability (no secrets returned).
-   * Targets: openai | anthropic | ollama | url | cli-agents.
-   */
-  async connectionTest(input: {
-    target: 'openai' | 'anthropic' | 'ollama' | 'url' | 'cli-agents' | string;
-    url?: string;
-  }): Promise<
-    ApiResponse<{
-      target?: string;
-      reachable?: boolean;
-      blocked?: boolean;
-      status?: number;
-      message?: string;
-      catalogCount?: number;
-    }>
-  > {
-    if (
-      !input
-      || typeof input.target !== 'string'
-      || /[\0\r\n]/.test(input.target)
-      || !input.target.trim()
-    ) {
-      return { ok: false, error: 'Invalid target' };
-    }
-    const target = input.target.trim().toLowerCase();
-    const allowed = new Set(['openai', 'anthropic', 'ollama', 'url', 'cli-agents']);
-    if (!allowed.has(target)) {
-      return { ok: false, error: 'Invalid target' };
-    }
-    const body: { target: string; url?: string } = { target };
-    if (target === 'url') {
-      if (typeof input.url !== 'string' || /[\0\r\n]/.test(input.url) || !input.url.trim()) {
-        return { ok: false, error: 'Invalid url' };
-      }
-      body.url = input.url.trim().slice(0, 2_048);
-    }
-    const res = await fetch(`${this.baseUrl}/api/connection-test`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(body),
-    });
-    return readApiResponse(res);
-  }
-
-  async listSkills(): Promise<ApiResponse<SkillData[]>> {
-    const res = await fetch(`${this.baseUrl}/api/skills`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async scanSkills(): Promise<ApiResponse<{ scanned: number; total: number }>> {
-    const res = await fetch(`${this.baseUrl}/api/skills/scan`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async toggleSkill(id: string, enabled: boolean): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('skill id');
-    const res = await fetch(`${this.baseUrl}/api/skills/${seg}/toggle`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ enabled }),
-    });
-    return readApiResponse(res);
-  }
-
-  async deleteSkill(id: string): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('skill id');
-    const res = await fetch(`${this.baseUrl}/api/skills/${seg}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async upgradeSkillToPlugin(skillId: string): Promise<ApiResponse<Plugin>> {
-    // Validate skill id before body send (control-char / blank / traversal fail closed)
-    const safeId = this.sanitizeId(skillId);
-    if (!safeId) return this.invalidIdResponse('skill id');
-    const res = await fetch(`${this.baseUrl}/api/plugins/upgrade-from-skill`, {
-      method: 'POST',
-      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skillId: safeId }),
-    });
-    return readApiResponse(res);
-  }
-
-  // --- MCP Servers ---
-
-  async listMcpServers(): Promise<ApiResponse<McpServerData[]>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  /** GET /api/mcp-servers/presets — built-in one-click MCP catalogs. */
-  async listMcpPresets(): Promise<
-    ApiResponse<
-      Array<{
-        id: string;
-        name: string;
-        domain?: string;
-        description?: string;
-        toolHints?: string[];
-      }>
-    >
-  > {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/presets`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async createMcpServer(params: {
-    name: string;
-    transport: 'stdio' | 'http';
-    command?: string;
-    args?: string[];
-    url?: string;
-  }): Promise<ApiResponse<McpServerData>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(params),
-    });
-    return readApiResponse(res);
-  }
-
-  async createMcpServerFromPreset(params: {
-    presetId: string;
-    installPath?: string;
-    name?: string;
-  }): Promise<ApiResponse<McpServerData>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/from-preset`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(params),
-    });
-    return readApiResponse(res);
-  }
-
-  async checkTradingViewCdp(port?: number): Promise<ApiResponse<TradingViewCdpHealthData>> {
-    const q =
-      typeof port === 'number' && Number.isFinite(port)
-        ? `?port=${encodeURIComponent(String(Math.floor(port)))}`
-        : '';
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/tradingview/cdp-health${q}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async toggleMcpServer(id: string, enabled: boolean): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('MCP server id');
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/${seg}/toggle`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({ enabled }),
-    });
-    return readApiResponse(res);
-  }
-
-  async deleteMcpServer(id: string): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('MCP server id');
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/${seg}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  // --- MCP OAuth ---
-
-  async startMcpOAuth(params: {
-    serverId: string;
-    authorizationEndpoint: string;
-    tokenEndpoint: string;
-    clientId: string;
-    redirectUri: string;
-    scope?: string;
-  }): Promise<ApiResponse<{ authUrl: string; state: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/start`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(params),
-    });
-    return readApiResponse(res);
-  }
-
-  async getMcpOAuthStatus(serverId: string): Promise<ApiResponse<{ connected: boolean; expiresAt?: string; scope?: string }>> {
-    const seg = this.pathSegment(serverId);
-    if (!seg) return this.invalidIdResponse('MCP server id');
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${seg}/status`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async revokeMcpOAuth(serverId: string): Promise<ApiResponse<void>> {
-    const seg = this.pathSegment(serverId);
-    if (!seg) return this.invalidIdResponse('MCP server id');
-    const res = await fetch(`${this.baseUrl}/api/mcp-servers/oauth/${seg}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async getMcpInstallInfo(query?: {
-    projectId?: string;
-    includeToken?: boolean;
-  }): Promise<
-    ApiResponse<{
-      serverName?: string;
-      command?: string;
-      args?: string[];
-      env?: Record<string, string>;
-      shellSnippet?: string;
-      codexAddCommand?: string;
-      codexRemoveCommand?: string;
-      claudeDesktop?: unknown;
-      tools?: Array<{ name: string; description?: string }>;
-      notes?: string[];
-      version?: string;
-    }>
-  > {
-    const qs = new URLSearchParams();
-    if (query?.projectId && !/[\0\r\n]/.test(query.projectId)) {
-      const p = query.projectId.trim().slice(0, 100);
-      if (p) qs.set('projectId', p);
-    }
-    if (query?.includeToken === false) qs.set('includeToken', '0');
-    const q = qs.toString();
-    const res = await fetch(`${this.baseUrl}/api/mcp/install-info${q ? `?${q}` : ''}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async getCodexMcpInstallStatus(): Promise<
-    ApiResponse<{
-      available: boolean;
-      installed: boolean;
-      codexPath: string | null;
-      detail: string | null;
-    }>
-  > {
-    const res = await fetch(`${this.baseUrl}/api/mcp/install/codex/status`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async installCodexMcp(params?: {
-    projectId?: string;
-    neosBin?: string;
-  }): Promise<ApiResponse<{ installed?: boolean; command?: string; stdout?: string; serverName?: string }>> {
-    const body: Record<string, string> = {};
-    if (params?.projectId && !/[\0\r\n]/.test(params.projectId)) {
-      const p = params.projectId.trim().slice(0, 100);
-      if (p) body.projectId = p;
-    }
-    if (params?.neosBin && !/[\0\r\n]/.test(params.neosBin)) {
-      const b = params.neosBin.trim().slice(0, 4096);
-      if (b) body.neosBin = b;
-    }
-    const res = await fetch(`${this.baseUrl}/api/mcp/install/codex`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(body),
-    });
-    return readApiResponse(res);
-  }
-
-  async uninstallCodexMcp(): Promise<ApiResponse<{ removed?: boolean; stdout?: string }>> {
-    const res = await fetch(`${this.baseUrl}/api/mcp/install/codex`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
   // --- CLI Agents ---
 
   async listCliAgents(): Promise<ApiResponse<{ id: string; name: string; path: string; version?: string }[]>> {
@@ -979,16 +596,6 @@ export class EngineClient extends EngineWorkflowClient {
     return readApiResponse(res);
   }
 
-  async deleteMediaFile(filename: string): Promise<ApiResponse<void>> {
-    const seg = this.mediaFilenameSegment(filename);
-    if (!seg) return this.invalidIdResponse('media filename');
-    const res = await fetch(`${this.baseUrl}/api/media/file/${seg}`, {
-      method: 'DELETE',
-      headers: this.mediaAuthHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
   // --- Routines ---
 
   async listRoutines(): Promise<ApiResponse<Routine[]>> {
@@ -1023,220 +630,6 @@ export class EngineClient extends EngineWorkflowClient {
       body: JSON.stringify(input),
     });
     return readApiResponse(res);
-  }
-
-  async listMediaFiles(limit = 100): Promise<ApiResponse<MediaFileInfo[]>> {
-    const res = await fetch(`${this.baseUrl}/api/media/files?limit=${limit}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  /**
-   * POST /api/media/generate — unified image | audio | video generation.
-   * Image/video use `prompt`; audio uses `text` (mirrors CLI `neos media generate`).
-   * Video may return `{ jobId, status }` for async polling via `getMediaJob`.
-   */
-  async generateMedia(input: {
-    surface: 'image' | 'audio' | 'video';
-    prompt?: string;
-    text?: string;
-    provider?: string;
-    model?: string;
-    size?: '1024x1024' | '1792x1024' | '1024x1792';
-    quality?: 'standard' | 'hd';
-    voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
-  }): Promise<
-    ApiResponse<{
-      surface?: string;
-      filename?: string;
-      jobId?: string;
-      status?: string;
-      provider?: string;
-      mimeType?: string;
-    }>
-  > {
-    const surface = input.surface;
-    if (surface !== 'image' && surface !== 'audio' && surface !== 'video') {
-      return { ok: false, error: 'surface must be image, audio, or video' };
-    }
-    const body: Record<string, string> = { surface };
-    if (surface === 'audio') {
-      const text = typeof input.text === 'string' ? input.text : input.prompt;
-      if (typeof text !== 'string' || /\0/.test(text) || !text.trim()) {
-        return { ok: false, error: 'text required for audio' };
-      }
-      body.text = text.trim();
-    } else {
-      const prompt = typeof input.prompt === 'string' ? input.prompt : '';
-      if (!prompt.trim() || /[\0\r\n]/.test(prompt)) {
-        return { ok: false, error: 'prompt required (no control characters)' };
-      }
-      body.prompt = prompt.trim();
-    }
-    if (
-      input.provider != null
-      && typeof input.provider === 'string'
-      && !/[\0\r\n]/.test(input.provider)
-      && input.provider.trim()
-    ) {
-      body.provider = input.provider.trim();
-    }
-    if (
-      input.model != null
-      && typeof input.model === 'string'
-      && !/[\0\r\n]/.test(input.model)
-      && input.model.trim()
-    ) {
-      body.model = input.model.trim();
-    }
-    if (input.size) body.size = input.size;
-    if (input.quality) body.quality = input.quality;
-    if (input.voice) body.voice = input.voice;
-
-    const res = await fetch(`${this.baseUrl}/api/media/generate`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(body),
-    });
-    return readApiResponse(res);
-  }
-
-  // --- Live artifacts (Task 9) ---
-
-  async listLiveArtifacts(projectId: string): Promise<ApiResponse<LiveArtifact[]>> {
-    const seg = this.pathSegment(projectId);
-    if (!seg) return this.invalidIdResponse('project id');
-    const res = await fetch(
-      `${this.baseUrl}/api/live-artifacts?projectId=${encodeURIComponent(seg)}`,
-      { headers: this.getHeaders() },
-    );
-    return readApiResponse(res);
-  }
-
-  async createLiveArtifact(input: {
-    projectId: string;
-    name: string;
-    sourceTemplate?: string;
-    inputs?: Record<string, unknown>;
-    contentType?: string;
-  }): Promise<ApiResponse<LiveArtifact>> {
-    const seg = this.pathSegment(input.projectId);
-    if (!seg) return this.invalidIdResponse('project id');
-    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
-      return { ok: false, error: 'Invalid name' };
-    }
-    const res = await fetch(`${this.baseUrl}/api/live-artifacts`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        projectId: seg,
-        name: input.name.trim(),
-        sourceTemplate: input.sourceTemplate,
-        inputs: input.inputs,
-        contentType: input.contentType,
-      }),
-    });
-    return readApiResponse(res);
-  }
-
-  async refreshLiveArtifact(
-    id: string,
-    projectId: string,
-    inputs?: Record<string, unknown>,
-  ): Promise<ApiResponse<{ artifact: LiveArtifact; refresh: LiveArtifactRefresh }>> {
-    const aid = this.pathSegment(id);
-    const pid = this.pathSegment(projectId);
-    if (!aid || !pid) return this.invalidIdResponse('id');
-    const res = await fetch(
-      `${this.baseUrl}/api/live-artifacts/${aid}/refresh?projectId=${encodeURIComponent(pid)}`,
-      {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(inputs ? { inputs } : {}),
-      },
-    );
-    return readApiResponse(res);
-  }
-
-  async deleteLiveArtifact(id: string, projectId: string): Promise<ApiResponse<null>> {
-    const aid = this.pathSegment(id);
-    const pid = this.pathSegment(projectId);
-    if (!aid || !pid) return this.invalidIdResponse('id');
-    const res = await fetch(
-      `${this.baseUrl}/api/live-artifacts/${aid}?projectId=${encodeURIComponent(pid)}`,
-      { method: 'DELETE', headers: this.getHeaders() },
-    );
-    return readApiResponse(res);
-  }
-  async getMediaConfig(): Promise<
-    ApiResponse<{
-      openaiConfigured: boolean;
-      openaiBaseUrl: string | null;
-      surfaces: string[];
-      imageModels: string[];
-      audioModels: string[];
-      videoModels?: string[];
-      stubsAllowed?: boolean;
-      providers?: Array<{
-        id: string;
-        label: string;
-        surfaces: string[];
-        configured: boolean;
-        isStub?: boolean;
-      }>;
-    }>
-  > {
-    const res = await fetch(`${this.baseUrl}/api/media/config`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async listMediaProviders(): Promise<
-    ApiResponse<
-      Array<{
-        id: string;
-        label: string;
-        surfaces: string[];
-        configured: boolean;
-        isStub?: boolean;
-      }>
-    >
-  > {
-    const res = await fetch(`${this.baseUrl}/api/media/providers`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-
-  async getMediaJob(
-    id: string,
-  ): Promise<
-    ApiResponse<{
-      id: string;
-      surface: string;
-      provider: string;
-      status: string;
-      filename?: string;
-      error?: string;
-    }>
-  > {
-    const seg = this.pathSegment(id);
-    if (!seg) return this.invalidIdResponse('job id');
-    const res = await fetch(`${this.baseUrl}/api/media/jobs/${seg}`, {
-      headers: this.getHeaders(),
-    });
-    return readApiResponse(res);
-  }
-  async fetchMediaBlob(filename: string): Promise<Blob> {
-    const seg = this.mediaFilenameSegment(filename);
-    if (!seg) throw new Error('Invalid media filename');
-    const res = await fetch(`${this.baseUrl}/api/media/file/${seg}`, {
-      headers: this.mediaAuthHeaders(),
-    });
-    if (!res.ok) throw new Error(`Failed to load media (${res.status})`);
-    return res.blob();
   }
 
   async refreshDeployment(id: string): Promise<ApiResponse<Deployment>> {

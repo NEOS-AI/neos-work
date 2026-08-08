@@ -57,13 +57,13 @@ are healthy (see multi-replica Limits table).
 | Scenario | Effect |
 |---|---|
 | Mid-stream load-balancer rebalance drops SSE | Client must reconnect; brief gap until re-subscribe |
-| Run event SSE on replica A, cancel hits replica B | Cancel is REST by run id (in-memory registry is **per process**) — cancel may 404 if run lives only on A |
+| Run event SSE on replica A, cancel hits replica B | Cancel is REST by run id; with **v0.16 shared run summary** (`NEOS_RUN_REGISTRY`) cancel no longer 404s when the summary exists (owner aborts via pub/sub). **Event SSE** remains local to A |
 | File write REST on B, file SSE only open on A | A learns via file events bus/SSE only if path is wired; design projects rely on shared disk + local publish |
 | Expect “one SSE pin forever without reconnect” | Not guaranteed under multi-pod LB without sticky or client reconnect logic |
 
-**Runs registry** (`@neos-work/agent-runtime` in-memory) is **not** multi-replica
-SSOT. Sticky affinity to the replica that created the run helps cancel/stream
-UX; it is **not** a substitute for a shared run store (also out of scope here).
+**Runs registry** abort/events stay in-process. v0.16 ships an optional **shared
+run summary** store for GET/cancel across pods (`NEOS_RUN_REGISTRY`); full event
+SSE fan-out remains out of scope. Sticky affinity still helps stream UX.
 
 ---
 

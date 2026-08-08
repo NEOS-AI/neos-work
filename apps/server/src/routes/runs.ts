@@ -1,12 +1,13 @@
 /**
  * Project / agent run API (v0.5.10 — DS + memory + comment inject, CLI execute).
+ * v0.16 B0: optional shared run summary dual-write for multi-replica GET/cancel.
  *
  * POST   /api/runs              — create + start (background CLI when agentId set)
- * GET    /api/runs              — list (?projectId=)
- * GET    /api/runs/:id          — get run
- * GET    /api/runs/:id/events   — events (?after=eventId)
- * GET    /api/runs/:id/events/stream — SSE of new events
- * POST   /api/runs/:id/cancel   — cancel
+ * GET    /api/runs              — list (?projectId=; local only)
+ * GET    /api/runs/:id          — get run (local or shared summary)
+ * GET    /api/runs/:id/events   — events (?after=eventId; local only)
+ * GET    /api/runs/:id/events/stream — SSE of new events (local only)
+ * POST   /api/runs/:id/cancel   — cancel (local or remote via shared store)
  */
 
 import { Hono } from 'hono';
@@ -18,7 +19,11 @@ import {
   getDefById,
   getGlobalRunRegistry,
 } from '@neos-work/agent-runtime';
-import { normalizeEditContext, type ProjectRunSummary } from '@neos-work/shared';
+import {
+  isTerminalRunStatus,
+  normalizeEditContext,
+  type ProjectRunSummary,
+} from '@neos-work/shared';
 import { assertProjectRunSummary } from '../lib/wire-assert.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
@@ -37,6 +42,12 @@ import {
 } from '../lib/project-files.js';
 import { exportMemories } from '../lib/memory-store.js';
 import { publishProjectFileEvent } from '../lib/project-file-events.js';
+import {
+  dualWriteRunRecord,
+  getSharedRunStore,
+  syncRunSummary,
+  type SharedRunSummary,
+} from '../lib/run-registry-shared.js';
 
 const runs = new Hono();
 
@@ -117,6 +128,29 @@ function publicRun(record: {
   return summary;
 }
 
+/** Hydrate GET from shared summary when run is not local (no events / prompt). */
+function publicRunFromShared(s: SharedRunSummary): ProjectRunSummary {
+  const summary: ProjectRunSummary = {
+    id: s.id,
+    status: s.status,
+    agentId: s.agentId,
+    projectId: s.projectId,
+    error: s.error,
+    createdAt: s.createdAt,
+    startedAt: s.startedAt,
+    completedAt: s.completedAt,
+    eventCount: 0,
+    collabSessionId: s.collabSessionId,
+  };
+  assertProjectRunSummary(summary);
+  return summary;
+}
+
+/** Best-effort dual-write after local status mutation. */
+function dualWrite(runId: string): void {
+  void syncRunSummary(runId);
+}
+
 /**
  * Background CLI execution for a run. Uses project baseDir as cwd when present.
  */
@@ -132,6 +166,7 @@ async function executeCliRun(runId: string): Promise<void> {
   if (!def) {
     reg.setStatus(runId, 'failed', 'Unknown agent');
     reg.appendEvent(runId, 'run.failed', { error: 'Unknown agent' });
+    dualWrite(runId);
     return;
   }
 
@@ -235,10 +270,12 @@ async function executeCliRun(runId: string): Promise<void> {
         outputChars: result.output.length,
       });
       reg.setStatus(runId, 'succeeded');
+      dualWrite(runId);
     } else {
       const err = `CLI exited with code ${result.exitCode}`;
       reg.appendEvent(runId, 'run.failed', { error: err, exitCode: result.exitCode });
       reg.setStatus(runId, 'failed', err);
+      dualWrite(runId);
     }
   } catch (err) {
     const current = reg.get(runId);
@@ -246,6 +283,7 @@ async function executeCliRun(runId: string): Promise<void> {
     const msg = publicErrorMessage(err, 'Agent run failed');
     reg.appendEvent(runId, 'run.failed', { error: msg });
     reg.setStatus(runId, 'failed', msg);
+    dualWrite(runId);
   }
 }
 
@@ -396,8 +434,13 @@ runs.post('/', async (c) => {
     });
     reg.setStatus(run.id, 'succeeded');
     reg.appendEvent(run.id, 'run.succeeded', { deferred: true, dryRun });
-    return c.json({ ok: true, data: publicRun(reg.get(run.id)!) }, 201);
+    const final = reg.get(run.id)!;
+    await dualWriteRunRecord(final);
+    return c.json({ ok: true, data: publicRun(final) }, 201);
   }
+
+  // Dual-write running summary before fire-and-forget so other pods can GET/cancel
+  await dualWriteRunRecord(reg.get(run.id)!);
 
   // Fire-and-forget live CLI spawn (events polled/streamed by client)
   void executeCliRun(run.id);
@@ -405,12 +448,17 @@ runs.post('/', async (c) => {
   return c.json({ ok: true, data: publicRun(reg.get(run.id)!) }, 201);
 });
 
-runs.get('/:id', (c) => {
+runs.get('/:id', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const run = getGlobalRunRegistry().get(id);
-  if (!run) return c.json({ ok: false, error: 'Not found' }, 404);
-  return c.json({ ok: true, data: publicRun(run) });
+  if (run) return c.json({ ok: true, data: publicRun(run) });
+
+  // Multi-replica: hydrate summary from shared store when not local
+  const shared = await getSharedRunStore().get(id);
+  if (shared) return c.json({ ok: true, data: publicRunFromShared(shared) });
+
+  return c.json({ ok: false, error: 'Not found' }, 404);
 });
 
 runs.get('/:id/events', (c) => {
@@ -462,16 +510,38 @@ runs.get('/:id/events/stream', (c) => {
   });
 });
 
-runs.post('/:id/cancel', (c) => {
+runs.post('/:id/cancel', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const reg = getGlobalRunRegistry();
-  if (!reg.get(id)) return c.json({ ok: false, error: 'Not found' }, 404);
-  const ok = reg.cancel(id);
-  if (!ok) {
+  const local = reg.get(id);
+
+  if (local) {
+    const ok = reg.cancel(id);
+    if (!ok) {
+      return c.json({ ok: false, error: 'Run already terminal' }, 409);
+    }
+    await dualWriteRunRecord(reg.get(id)!);
+    return c.json({ ok: true, data: publicRun(reg.get(id)!) });
+  }
+
+  // Not local — resolve via shared summary (multi-replica cancel)
+  const sharedStore = getSharedRunStore();
+  const summary = await sharedStore.get(id);
+  if (!summary) return c.json({ ok: false, error: 'Not found' }, 404);
+
+  if (isTerminalRunStatus(summary.status)) {
     return c.json({ ok: false, error: 'Run already terminal' }, 409);
   }
-  return c.json({ ok: true, data: publicRun(reg.get(id)!) });
+
+  // Publish cancel so the owner node aborts its local run; also mark canceled
+  // in the shared store so GET does not 404 / still look running.
+  await sharedStore.publishCancel(id);
+  const marked = await sharedStore.markCanceled(id);
+  return c.json({
+    ok: true,
+    data: publicRunFromShared(marked ?? { ...summary, status: 'canceled' }),
+  });
 });
 
 export default runs;
