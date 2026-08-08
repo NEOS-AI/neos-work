@@ -52,6 +52,8 @@ const GATES = {
   requireV15Features: true,
   /** v0.16 train (A0 EngineSettings + B0 shared run registry) */
   requireV16Features: true,
+  /** v0.17 train (EngineMediaClient skills/media/live-artifacts extract) */
+  requireV17Features: true,
 };
 
 function existsRel(rel) {
@@ -379,12 +381,13 @@ function scanV12Features() {
       existsRel('apps/desktop/src/lib/engine-workflow.ts')
       && workflow.includes('export class EngineWorkflowClient')
       && workflow.includes('extends EngineProjectClient'),
-    // v0.12: EngineClient extends EngineWorkflowClient; v0.16 inserts EngineSettingsClient
+    // v0.12: EngineClient extends EngineWorkflowClient; v0.16 Settings; v0.17 Media
     engineClientExtends:
-      /export class EngineClient extends Engine(Workflow|Settings)Client/.test(engineTs)
+      /export class EngineClient extends Engine(Workflow|Settings|Media)Client/.test(engineTs)
       && (
         engineTs.includes('extends EngineWorkflowClient')
         || engineTs.includes('EngineSettingsClient')
+        || engineTs.includes('EngineMediaClient')
       ),
     stickySseDoc:
       existsRel('docs/ops/sticky-sse.md')
@@ -553,6 +556,14 @@ function scanV16Features() {
   const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
   const runRegistryShared = readText('apps/server/src/lib/run-registry-shared.ts') ?? '';
   const multiReplica = readText('docs/ops/multi-replica-collab.md') ?? '';
+  // v0.17 inserts EngineMediaClient between EngineSettingsClient and EngineClient
+  const settingsInChain =
+    engine.includes('extends EngineSettingsClient')
+    || engine.includes('class EngineClient extends EngineSettingsClient')
+    || engine.includes('EngineMediaClient')
+    || (readText('apps/desktop/src/lib/engine-media.ts') ?? '').includes(
+      'extends EngineSettingsClient',
+    );
   const features = {
     planV16: existsRel('docs/plans/PLAN_FOR_V0_16_0.md'),
     migrationV16: existsRel('docs/migration/v0.16.0.md'),
@@ -560,10 +571,7 @@ function scanV16Features() {
     engineSettings:
       existsRel('apps/desktop/src/lib/engine-settings.ts')
       && engineSettings.includes('EngineSettingsClient')
-      && (
-        engine.includes('extends EngineSettingsClient')
-        || engine.includes('class EngineClient extends EngineSettingsClient')
-      ),
+      && settingsInChain,
     runRegistryShared:
       existsRel('apps/server/src/lib/run-registry-shared.ts')
       && (
@@ -578,6 +586,39 @@ function scanV16Features() {
         multiReplica.includes('NEOS_RUN_REGISTRY')
         || multiReplica.toLowerCase().includes('run registry')
       ),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.17 capability surface (EngineMediaClient skills + media + live artifacts).
+ * @see docs/plans/PLAN_FOR_V0_17_0.md
+ */
+function scanV17Features() {
+  const engineMedia = readText('apps/desktop/src/lib/engine-media.ts') ?? '';
+  const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const features = {
+    planV17: existsRel('docs/plans/PLAN_FOR_V0_17_0.md'),
+    migrationV17: existsRel('docs/migration/v0.17.0.md'),
+    releaseV17: existsRel('docs/releases/v0.17.0.md'),
+    engineMedia:
+      existsRel('apps/desktop/src/lib/engine-media.ts')
+      && engineMedia.includes('EngineMediaClient')
+      && engineMedia.includes('extends EngineSettingsClient')
+      && (
+        engine.includes('extends EngineMediaClient')
+        || engine.includes('class EngineClient extends EngineMediaClient')
+      ),
+    implM0: existsRel('docs/implementation/v0.17/v0.17.0.md'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -784,6 +825,7 @@ export function buildInventory() {
   const v14 = scanV14Features();
   const v15 = scanV15Features();
   const v16 = scanV16Features();
+  const v17 = scanV17Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -810,6 +852,7 @@ export function buildInventory() {
       v14Features: v14,
       v15Features: v15,
       v16Features: v16,
+      v17Features: v17,
     },
     gates: GATES,
     summary: {
@@ -844,6 +887,8 @@ export function buildInventory() {
       v15FeaturesTotal: v15.total,
       v16Features: v16.count,
       v16FeaturesTotal: v16.total,
+      v17Features: v17.count,
+      v17FeaturesTotal: v17.total,
     },
   };
 
@@ -985,6 +1030,17 @@ export function evaluateGates(inventory) {
       missing: v16?.missing ?? [],
     });
   }
+  if (g.requireV17Features) {
+    const v17 = inventory.catalogs?.v17Features;
+    const ok = Boolean(v17?.ok);
+    results.push({
+      id: 'v17Features',
+      ok,
+      actual: v17?.count ?? 0,
+      min: v17?.total ?? 0,
+      missing: v17?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -1022,6 +1078,8 @@ function main(argv = process.argv.slice(2)) {
           || r.id === 'v13Features'
           || r.id === 'v14Features'
           || r.id === 'v15Features'
+          || r.id === 'v16Features'
+          || r.id === 'v17Features'
         )
         && Array.isArray(r.missing)
         && r.missing.length

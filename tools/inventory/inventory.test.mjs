@@ -243,4 +243,20 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v16Features.features.multiReplicaRunsDoc);
     assert.ok(inv.checks.results.some((r) => r.id === 'v16Features' && r.ok));
   });
+
+  it('includes v0.17 feature gates (EngineMediaClient skills/media extract)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v17Features);
+    assert.equal(
+      inv.catalogs.v17Features.ok,
+      true,
+      `v17 missing: ${(inv.catalogs.v17Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v17Features.features.planV17);
+    assert.ok(inv.catalogs.v17Features.features.migrationV17);
+    assert.ok(inv.catalogs.v17Features.features.releaseV17);
+    assert.ok(inv.catalogs.v17Features.features.engineMedia);
+    assert.ok(inv.catalogs.v17Features.features.implM0);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v17Features' && r.ok));
+  });
 });

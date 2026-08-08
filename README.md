@@ -41,6 +41,13 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.14 plan:** [docs/plans/PLAN_FOR_V0_14_0.md](docs/plans/PLAN_FOR_V0_14_0.md) · **migration:** [docs/migration/v0.14.0.md](docs/migration/v0.14.0.md) · **release:** [docs/releases/v0.14.1.md](docs/releases/v0.14.1.md) · inventory `v14Features`  
 **v0.15 plan:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **migration:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **release:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
 **v0.16 plan:** [docs/plans/PLAN_FOR_V0_16_0.md](docs/plans/PLAN_FOR_V0_16_0.md) · **migration:** [docs/migration/v0.16.0.md](docs/migration/v0.16.0.md) · **release:** [docs/releases/v0.16.2.md](docs/releases/v0.16.2.md) · inventory `v16Features`  
+**v0.17 plan:** [docs/plans/PLAN_FOR_V0_17_0.md](docs/plans/PLAN_FOR_V0_17_0.md) · **migration:** [docs/migration/v0.17.0.md](docs/migration/v0.17.0.md) · **release:** [docs/releases/v0.17.0.md](docs/releases/v0.17.0.md) · inventory `v17Features`  
+
+## What's new in v0.17
+
+- **0.17.0** **EngineMediaClient** — skills + media + live artifacts extract; `EngineClient extends EngineMediaClient` ([plan](docs/plans/PLAN_FOR_V0_17_0.md) · [impl](docs/implementation/v0.17/v0.17.0.md) · [migration](docs/migration/v0.17.0.md) · [release](docs/releases/v0.17.0.md))
+
+---
 
 ## What's new in v0.16
 
