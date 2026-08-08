@@ -273,31 +273,43 @@ describe('Settings page', () => {
     expect(document.body.textContent).not.toContain('\0');
   });
 
-  it('adds TradingView MCP from preset path and probes CDP', async () => {
-    const user = userEvent.setup();
-    render(<Settings />);
-    await waitFor(() => {
-      expect(screen.getByText('TradingView MCP')).toBeInTheDocument();
-    });
+  it(
+    'adds TradingView MCP from preset path and probes CDP',
+    async () => {
+      const user = userEvent.setup();
+      render(<Settings />);
+      // findBy* avoids flaky getBy before paint; longer timeout for slow CI hosts
+      await screen.findByText('TradingView MCP', {}, { timeout: 10_000 });
 
-    const pathInput = screen.getByPlaceholderText(/Full path to tradingview-mcp/i);
-    await user.type(pathInput, '/Users/me/tradingview-mcp');
-    await user.click(screen.getByRole('button', { name: 'Add TradingView' }));
+      const pathInput = screen.getByPlaceholderText(/Full path to tradingview-mcp/i);
+      // fireEvent.change: userEvent.type is too slow on long paths under 5s default suite budget
+      fireEvent.change(pathInput, { target: { value: '/Users/me/tradingview-mcp' } });
+      expect(pathInput).toHaveValue('/Users/me/tradingview-mcp');
 
-    await waitFor(() => {
-      expect(createMcpServerFromPreset).toHaveBeenCalledWith({
-        presetId: 'tradingview',
-        installPath: '/Users/me/tradingview-mcp',
-        name: 'TradingView',
-      });
-    });
+      await user.click(screen.getByRole('button', { name: 'Add TradingView' }));
 
-    await user.click(screen.getByRole('button', { name: /Test CDP/i }));
-    await waitFor(() => {
-      expect(checkTradingViewCdp).toHaveBeenCalledWith(9222);
-      expect(screen.getByText(/Connected on port 9222/i)).toBeInTheDocument();
-    });
-  });
+      await waitFor(
+        () => {
+          expect(createMcpServerFromPreset).toHaveBeenCalledWith({
+            presetId: 'tradingview',
+            installPath: '/Users/me/tradingview-mcp',
+            name: 'TradingView',
+          });
+        },
+        { timeout: 10_000 },
+      );
+
+      await user.click(screen.getByRole('button', { name: /Test CDP/i }));
+      await waitFor(
+        () => {
+          expect(checkTradingViewCdp).toHaveBeenCalledWith(9222);
+          expect(screen.getByText(/Connected on port 9222/i)).toBeInTheDocument();
+        },
+        { timeout: 10_000 },
+      );
+    },
+    20_000,
+  );
 
   it('shows TradingView connected badge when server already listed', async () => {
     listMcpServers.mockResolvedValue({
