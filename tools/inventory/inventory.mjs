@@ -46,6 +46,10 @@ const GATES = {
   requireV12Features: true,
   /** v0.13 train (M0–M3 closeout) */
   requireV13Features: true,
+  /** v0.14 train (M1 process e2e + M3 multi-replica lock depth) */
+  requireV14Features: true,
+  /** v0.15 train (M2 Playwright browser Design Project loop) */
+  requireV15Features: true,
 };
 
 function existsRel(rel) {
@@ -450,6 +454,89 @@ function scanV13Features() {
   };
 }
 
+/**
+ * v0.14 capability surface (M1 process e2e + M3 multi-replica lock depth).
+ * @see docs/plans/PLAN_FOR_V0_14_0.md
+ */
+function scanV14Features() {
+  const journey = readText('e2e/journey/run.mjs') ?? '';
+  const multiReplica = readText('e2e/multi-replica/run.mjs') ?? '';
+  const pkg = readText('package.json') ?? '';
+  const ci = readText('.github/workflows/ci.yml') ?? '';
+  const features = {
+    planV14: existsRel('docs/plans/PLAN_FOR_V0_14_0.md'),
+    migrationV14: existsRel('docs/migration/v0.14.0.md'),
+    releaseV14: existsRel('docs/releases/v0.14.1.md'),
+    journeyScript:
+      existsRel('e2e/journey/run.mjs')
+      && (
+        journey.includes('e2e:journey')
+        || journey.includes('golden path')
+        || journey.includes('NEOS_SHARED_EDIT')
+      ),
+    journeyPackageScript:
+      pkg.includes('"e2e:journey"') || pkg.includes("'e2e:journey'"),
+    journeyCi: ci.includes('e2e:journey'),
+    multiReplicaAgent423:
+      multiReplica.includes('NEOS_SHARED_EDIT_AGENTS')
+      && (
+        multiReplica.includes('L7')
+        || multiReplica.includes('agent PUT 423')
+        || (multiReplica.includes('agent') && multiReplica.includes('423'))
+      ),
+    implM1: existsRel('docs/implementation/v0.14/v0.14.0.md'),
+    implM3: existsRel('docs/implementation/v0.14/v0.14.1.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.15 capability surface (M2 Playwright browser Design Project loop).
+ * @see docs/plans/PLAN_FOR_V0_15_0.md
+ */
+function scanV15Features() {
+  const browserSpec = readText('e2e/browser/specs/design-project.spec.ts') ?? '';
+  const pkg = readText('package.json') ?? '';
+  const ci = readText('.github/workflows/ci.yml') ?? '';
+  const features = {
+    planV15: existsRel('docs/plans/PLAN_FOR_V0_15_0.md'),
+    migrationV15: existsRel('docs/migration/v0.15.0.md'),
+    releaseV15: existsRel('docs/releases/v0.15.0.md'),
+    browserScript: existsRel('e2e/browser/run.mjs'),
+    browserSpec:
+      existsRel('e2e/browser/specs/design-project.spec.ts')
+      && (
+        browserSpec.includes('connect')
+        || browserSpec.includes('design-editor')
+        || browserSpec.includes('preview-frame')
+      ),
+    browserPackageScript:
+      pkg.includes('"e2e:browser"') || pkg.includes("'e2e:browser'"),
+    browserCi: ci.includes('e2e:browser'),
+    playwrightConfig: existsRel('e2e/browser/playwright.config.ts'),
+    implM2: existsRel('docs/implementation/v0.15/v0.15.0.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
 function readText(rel) {
   const abs = path.join(ROOT, rel);
   if (!fs.existsSync(abs)) return null;
@@ -640,6 +727,8 @@ export function buildInventory() {
   const v11 = scanV11Features();
   const v12 = scanV12Features();
   const v13 = scanV13Features();
+  const v14 = scanV14Features();
+  const v15 = scanV15Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -663,6 +752,8 @@ export function buildInventory() {
       v11Features: v11,
       v12Features: v12,
       v13Features: v13,
+      v14Features: v14,
+      v15Features: v15,
     },
     gates: GATES,
     summary: {
@@ -691,6 +782,10 @@ export function buildInventory() {
       v12FeaturesTotal: v12.total,
       v13Features: v13.count,
       v13FeaturesTotal: v13.total,
+      v14Features: v14.count,
+      v14FeaturesTotal: v14.total,
+      v15Features: v15.count,
+      v15FeaturesTotal: v15.total,
     },
   };
 
@@ -799,6 +894,28 @@ export function evaluateGates(inventory) {
       missing: v13?.missing ?? [],
     });
   }
+  if (g.requireV14Features) {
+    const v14 = inventory.catalogs?.v14Features;
+    const ok = Boolean(v14?.ok);
+    results.push({
+      id: 'v14Features',
+      ok,
+      actual: v14?.count ?? 0,
+      min: v14?.total ?? 0,
+      missing: v14?.missing ?? [],
+    });
+  }
+  if (g.requireV15Features) {
+    const v15 = inventory.catalogs?.v15Features;
+    const ok = Boolean(v15?.ok);
+    results.push({
+      id: 'v15Features',
+      ok,
+      actual: v15?.count ?? 0,
+      min: v15?.total ?? 0,
+      missing: v15?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -834,6 +951,8 @@ function main(argv = process.argv.slice(2)) {
           || r.id === 'v11Features'
           || r.id === 'v12Features'
           || r.id === 'v13Features'
+          || r.id === 'v14Features'
+          || r.id === 'v15Features'
         )
         && Array.isArray(r.missing)
         && r.missing.length

@@ -27,7 +27,7 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 
 **마이그레이션 (v0.4 → v0.5):** [docs/migration/v0.5.0.md](docs/migration/v0.5.0.md)  
 **보안:** [docs/security/v0.5.md](docs/security/v0.5.md)  
-**능력 목록:** `pnpm inventory` / `pnpm inventory:check` · 스모크: `pnpm e2e:smoke` · 라이브(옵트인): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
+**능력 목록:** `pnpm inventory` / `pnpm inventory:check` · 스모크: `pnpm e2e:smoke` · contract: `pnpm e2e:contract` · journey: `pnpm e2e:journey` · browser: `pnpm e2e:browser` · 라이브(옵트인): `NEOS_LIVE_SMOKE=1 pnpm e2e:live-smoke`  
 **v0.5 클로즈아웃 계획:** [docs/plans/PLAN_FOR_V0_5_29.md](docs/plans/PLAN_FOR_V0_5_29.md)  
 **v0.6 마이그레이션:** [docs/migration/v0.6.0.md](docs/migration/v0.6.0.md) · **v0.7 계획:** [docs/plans/PLAN_FOR_V0_7_0.md](docs/plans/PLAN_FOR_V0_7_0.md)  
 **v0.7 마이그레이션:** [docs/migration/v0.7.0.md](docs/migration/v0.7.0.md) · **v0.8 계획:** [docs/plans/PLAN_FOR_V0_8_0.md](docs/plans/PLAN_FOR_V0_8_0.md)  
@@ -37,6 +37,17 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.11 계획:** [docs/plans/PLAN_FOR_V0_11_0.md](docs/plans/PLAN_FOR_V0_11_0.md) · **마이그레이션:** [docs/migration/v0.11.0.md](docs/migration/v0.11.0.md) · **릴리스:** [docs/releases/v0.11.3.md](docs/releases/v0.11.3.md) · inventory `v11Features`  
 **v0.12 계획:** [docs/plans/PLAN_FOR_V0_12_0.md](docs/plans/PLAN_FOR_V0_12_0.md) · **마이그레이션:** [docs/migration/v0.12.0.md](docs/migration/v0.12.0.md) · **릴리스:** [docs/releases/v0.12.3.md](docs/releases/v0.12.3.md) · inventory `v12Features`  
 **v0.13 계획:** [docs/plans/PLAN_FOR_V0_13_0.md](docs/plans/PLAN_FOR_V0_13_0.md) · **마이그레이션:** [docs/migration/v0.13.0.md](docs/migration/v0.13.0.md) · **릴리스:** [docs/releases/v0.13.3.md](docs/releases/v0.13.3.md) · inventory `v13Features`  
+**v0.14 계획:** [docs/plans/PLAN_FOR_V0_14_0.md](docs/plans/PLAN_FOR_V0_14_0.md) · **마이그레이션:** [docs/migration/v0.14.0.md](docs/migration/v0.14.0.md) · **릴리스:** [docs/releases/v0.14.1.md](docs/releases/v0.14.1.md) · inventory `v14Features`  
+**v0.15 계획:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **마이그레이션:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **릴리스:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
+
+## v0.15 주요 변경
+
+- **0.15.0** **Browser Design Project E2E** — `pnpm e2e:browser` (Playwright Chromium: Connect → 프로젝트 생성 → Code → Save → Preview; Node 22+; PR CI) ([계획](docs/plans/PLAN_FOR_V0_15_0.md) · [마이그레이션](docs/migration/v0.15.0.md) · [릴리스](docs/releases/v0.15.0.md) · [구현](docs/implementation/v0.15/v0.15.0.md) · inventory `v15Features`)
+
+## v0.14 주요 변경
+
+- **0.14.0** **Process API golden path** — `pnpm e2e:journey` (빌드된 서버 HTTP 골든 패스, Node 22+, PR CI) ([계획](docs/plans/PLAN_FOR_V0_14_0.md) · [구현](docs/implementation/v0.14/v0.14.0.md))  
+- **0.14.1** Multi-replica live **L7** agent 423 + 트레인 클로즈아웃 — [마이그레이션](docs/migration/v0.14.0.md) · [릴리스](docs/releases/v0.14.1.md) · inventory `v14Features`  
 
 ## v0.13 주요 변경
 

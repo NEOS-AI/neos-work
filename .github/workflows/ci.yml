@@ -46,6 +46,18 @@ jobs:
       - name: FE/BE contract smoke
         run: pnpm e2e:contract
 
+      - name: Build server for process journey e2e
+        run: pnpm --filter @neos-work/server... build
+
+      - name: Process API golden path (e2e:journey)
+        run: pnpm e2e:journey
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Browser Design Project e2e (e2e:browser)
+        run: pnpm e2e:browser
+
       - name: Multi-replica collab structural e2e
         run: pnpm e2e:multi-replica
 
