@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runCli } from './cli.js';
+import { CLI_VERSION } from './commands/version.js';
 import { EXIT } from './exit-codes.js';
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Promise<Response> | Response) {
@@ -33,7 +34,10 @@ describe('runCli', () => {
       stdout: (s) => lines.push(s),
     });
     expect(code).toBe(EXIT.OK);
-    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: '0.8.7' });
+    // Must track @neos-work/shared NEOS_VERSION (not a frozen train pin)
+    expect(JSON.parse(lines.join(''))).toMatchObject({ name: 'neos', version: CLI_VERSION });
+    expect(typeof CLI_VERSION).toBe('string');
+    expect(CLI_VERSION.length).toBeGreaterThan(0);
   });
 
   it('status when daemon healthy', async () => {

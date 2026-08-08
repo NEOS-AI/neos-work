@@ -40,6 +40,15 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.13 plan:** [docs/plans/PLAN_FOR_V0_13_0.md](docs/plans/PLAN_FOR_V0_13_0.md) · **migration:** [docs/migration/v0.13.0.md](docs/migration/v0.13.0.md) · **release:** [docs/releases/v0.13.3.md](docs/releases/v0.13.3.md) · inventory `v13Features`  
 **v0.14 plan:** [docs/plans/PLAN_FOR_V0_14_0.md](docs/plans/PLAN_FOR_V0_14_0.md) · **migration:** [docs/migration/v0.14.0.md](docs/migration/v0.14.0.md) · **release:** [docs/releases/v0.14.1.md](docs/releases/v0.14.1.md) · inventory `v14Features`  
 **v0.15 plan:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **migration:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **release:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
+**v0.16 plan:** [docs/plans/PLAN_FOR_V0_16_0.md](docs/plans/PLAN_FOR_V0_16_0.md) · **migration:** [docs/migration/v0.16.0.md](docs/migration/v0.16.0.md) · **release:** [docs/releases/v0.16.2.md](docs/releases/v0.16.2.md) · inventory `v16Features`  
+
+## What's new in v0.16
+
+- **0.16.0** **EngineSettingsClient** — desktop settings + connection-test + MCP extract; `EngineClient extends EngineSettingsClient` ([plan](docs/plans/PLAN_FOR_V0_16_0.md) · [impl](docs/implementation/v0.16/v0.16.0.md))  
+- **0.16.1** **Shared run registry MVP** — `NEOS_RUN_REGISTRY` dual-write for cross-pod GET/cancel ([impl](docs/implementation/v0.16/v0.16.1.md) · [ops](docs/ops/multi-replica-collab.md))  
+- **0.16.2** Train closeout — [migration](docs/migration/v0.16.0.md) · [release](docs/releases/v0.16.2.md) · inventory `v16Features`  
+
+---
 
 ## What's new in v0.15
 

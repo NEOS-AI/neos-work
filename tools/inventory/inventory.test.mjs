@@ -224,4 +224,23 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v15Features.features.implM2);
     assert.ok(inv.checks.results.some((r) => r.id === 'v15Features' && r.ok));
   });
+
+  it('includes v0.16 feature gates (EngineSettings + shared run registry)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v16Features);
+    assert.equal(
+      inv.catalogs.v16Features.ok,
+      true,
+      `v16 missing: ${(inv.catalogs.v16Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v16Features.features.planV16);
+    assert.ok(inv.catalogs.v16Features.features.migrationV16);
+    assert.ok(inv.catalogs.v16Features.features.releaseV16);
+    assert.ok(inv.catalogs.v16Features.features.engineSettings);
+    assert.ok(inv.catalogs.v16Features.features.runRegistryShared);
+    assert.ok(inv.catalogs.v16Features.features.implA);
+    assert.ok(inv.catalogs.v16Features.features.implB);
+    assert.ok(inv.catalogs.v16Features.features.multiReplicaRunsDoc);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v16Features' && r.ok));
+  });
 });

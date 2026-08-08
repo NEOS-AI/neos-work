@@ -50,6 +50,8 @@ const GATES = {
   requireV14Features: true,
   /** v0.15 train (M2 Playwright browser Design Project loop) */
   requireV15Features: true,
+  /** v0.16 train (A0 EngineSettings + B0 shared run registry) */
+  requireV16Features: true,
 };
 
 function existsRel(rel) {
@@ -377,8 +379,13 @@ function scanV12Features() {
       existsRel('apps/desktop/src/lib/engine-workflow.ts')
       && workflow.includes('export class EngineWorkflowClient')
       && workflow.includes('extends EngineProjectClient'),
+    // v0.12: EngineClient extends EngineWorkflowClient; v0.16 inserts EngineSettingsClient
     engineClientExtends:
-      engineTs.includes('export class EngineClient extends EngineWorkflowClient'),
+      /export class EngineClient extends Engine(Workflow|Settings)Client/.test(engineTs)
+      && (
+        engineTs.includes('extends EngineWorkflowClient')
+        || engineTs.includes('EngineSettingsClient')
+      ),
     stickySseDoc:
       existsRel('docs/ops/sticky-sse.md')
       && sticky.includes('not implemented')
@@ -524,6 +531,53 @@ function scanV15Features() {
     browserCi: ci.includes('e2e:browser'),
     playwrightConfig: existsRel('e2e/browser/playwright.config.ts'),
     implM2: existsRel('docs/implementation/v0.15/v0.15.0.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.16 capability surface (A0 EngineSettings + B0 shared run registry).
+ * @see docs/plans/PLAN_FOR_V0_16_0.md
+ */
+function scanV16Features() {
+  const engineSettings = readText('apps/desktop/src/lib/engine-settings.ts') ?? '';
+  const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const runRegistryShared = readText('apps/server/src/lib/run-registry-shared.ts') ?? '';
+  const multiReplica = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const features = {
+    planV16: existsRel('docs/plans/PLAN_FOR_V0_16_0.md'),
+    migrationV16: existsRel('docs/migration/v0.16.0.md'),
+    releaseV16: existsRel('docs/releases/v0.16.2.md'),
+    engineSettings:
+      existsRel('apps/desktop/src/lib/engine-settings.ts')
+      && engineSettings.includes('EngineSettingsClient')
+      && (
+        engine.includes('extends EngineSettingsClient')
+        || engine.includes('class EngineClient extends EngineSettingsClient')
+      ),
+    runRegistryShared:
+      existsRel('apps/server/src/lib/run-registry-shared.ts')
+      && (
+        runRegistryShared.includes('NEOS_RUN_REGISTRY')
+        || (readText('apps/server/src/index.ts') ?? '').includes('NEOS_RUN_REGISTRY')
+      ),
+    implA: existsRel('docs/implementation/v0.16/v0.16.0.md'),
+    implB: existsRel('docs/implementation/v0.16/v0.16.1.md'),
+    multiReplicaRunsDoc:
+      existsRel('docs/ops/multi-replica-collab.md')
+      && (
+        multiReplica.includes('NEOS_RUN_REGISTRY')
+        || multiReplica.toLowerCase().includes('run registry')
+      ),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -729,6 +783,7 @@ export function buildInventory() {
   const v13 = scanV13Features();
   const v14 = scanV14Features();
   const v15 = scanV15Features();
+  const v16 = scanV16Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -754,6 +809,7 @@ export function buildInventory() {
       v13Features: v13,
       v14Features: v14,
       v15Features: v15,
+      v16Features: v16,
     },
     gates: GATES,
     summary: {
@@ -786,6 +842,8 @@ export function buildInventory() {
       v14FeaturesTotal: v14.total,
       v15Features: v15.count,
       v15FeaturesTotal: v15.total,
+      v16Features: v16.count,
+      v16FeaturesTotal: v16.total,
     },
   };
 
@@ -914,6 +972,17 @@ export function evaluateGates(inventory) {
       actual: v15?.count ?? 0,
       min: v15?.total ?? 0,
       missing: v15?.missing ?? [],
+    });
+  }
+  if (g.requireV16Features) {
+    const v16 = inventory.catalogs?.v16Features;
+    const ok = Boolean(v16?.ok);
+    results.push({
+      id: 'v16Features',
+      ok,
+      actual: v16?.count ?? 0,
+      min: v16?.total ?? 0,
+      missing: v16?.missing ?? [],
     });
   }
   return {

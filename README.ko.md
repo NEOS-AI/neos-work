@@ -39,6 +39,13 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.13 계획:** [docs/plans/PLAN_FOR_V0_13_0.md](docs/plans/PLAN_FOR_V0_13_0.md) · **마이그레이션:** [docs/migration/v0.13.0.md](docs/migration/v0.13.0.md) · **릴리스:** [docs/releases/v0.13.3.md](docs/releases/v0.13.3.md) · inventory `v13Features`  
 **v0.14 계획:** [docs/plans/PLAN_FOR_V0_14_0.md](docs/plans/PLAN_FOR_V0_14_0.md) · **마이그레이션:** [docs/migration/v0.14.0.md](docs/migration/v0.14.0.md) · **릴리스:** [docs/releases/v0.14.1.md](docs/releases/v0.14.1.md) · inventory `v14Features`  
 **v0.15 계획:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **마이그레이션:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **릴리스:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
+**v0.16 계획:** [docs/plans/PLAN_FOR_V0_16_0.md](docs/plans/PLAN_FOR_V0_16_0.md) · **마이그레이션:** [docs/migration/v0.16.0.md](docs/migration/v0.16.0.md) · **릴리스:** [docs/releases/v0.16.2.md](docs/releases/v0.16.2.md) · inventory `v16Features`  
+
+## v0.16 주요 변경
+
+- **0.16.0** **EngineSettingsClient** — 데스크톱 settings + connection-test + MCP 추출; `EngineClient extends EngineSettingsClient` ([계획](docs/plans/PLAN_FOR_V0_16_0.md) · [구현](docs/implementation/v0.16/v0.16.0.md))  
+- **0.16.1** **Shared run registry MVP** — `NEOS_RUN_REGISTRY` dual-write로 크로스-pod GET/cancel ([구현](docs/implementation/v0.16/v0.16.1.md) · [ops](docs/ops/multi-replica-collab.md))  
+- **0.16.2** 트레인 클로즈아웃 — [마이그레이션](docs/migration/v0.16.0.md) · [릴리스](docs/releases/v0.16.2.md) · inventory `v16Features`  
 
 ## v0.15 주요 변경
 

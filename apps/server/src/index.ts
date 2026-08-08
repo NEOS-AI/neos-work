@@ -49,6 +49,7 @@ import { isAuthExemptPath } from './lib/auth-paths.js';
 import { initCollabBus, getCollabBus } from './lib/collab-bus.js';
 import { initLockRegistry, getLockRegistry } from './lib/collab-locks-redis.js';
 import { initPresenceRegistry, getPresenceRegistry } from './lib/collab-presence-redis.js';
+import { initSharedRunStore, getSharedRunStore } from './lib/run-registry-shared.js';
 import {
   applyRemoteCollabEvent,
   isSharedEditAgentsHardEnforce,
@@ -185,11 +186,12 @@ app.route('/api/tools/live-artifacts', toolsLiveArtifacts);
 app.route('/api/tools/files', toolsFiles);
 app.route('/api/connection-test', connectionTest);
 
-/** Collab transport + presence/lock registry status (v0.7–v0.10) — no secrets. */
+/** Collab transport + presence/lock/run registry status (v0.7–v0.16) — no secrets. */
 app.get('/api/collab/status', (c) => {
   const st = getCollabBus().status();
   const pr = getPresenceRegistry().status();
   const lr = getLockRegistry().status();
+  const rr = getSharedRunStore().status();
   return c.json({
     ok: true,
     data: {
@@ -206,6 +208,12 @@ app.get('/api/collab/status', (c) => {
         kind: lr.kind,
         ready: lr.ready,
         detail: lr.detail ?? null,
+      },
+      runs: {
+        kind: rr.kind,
+        ready: rr.ready,
+        detail: rr.detail ?? null,
+        nodeId: rr.nodeId,
       },
       sharedEdit: {
         hardEnforce: isSharedEditHardEnforce(),
@@ -276,6 +284,12 @@ console.log(
 const lockReg = initLockRegistry();
 console.log(
   `NEOS_COLLAB_LOCKS=${lockReg.status().kind}${lockReg.status().detail ? ` (${lockReg.status().detail})` : ''}`,
+);
+
+// Shared run summary registry (v0.16 B0): dual-write + cross-node get/cancel
+const runShared = initSharedRunStore();
+console.log(
+  `NEOS_RUN_REGISTRY=${runShared.status().kind}${runShared.status().detail ? ` (${runShared.status().detail})` : ''}`,
 );
 
 // Register built-in domain blocks
