@@ -458,14 +458,8 @@ export async function generateMediaUnified(input: {
   } else if (typeof input.provider === 'string' && /[\0\r\n]/.test(input.provider)) {
     throw new Error('Invalid media provider');
   }
-  const resolved = resolveMediaProvider(providerId);
-  if (!resolved.configured) {
-    throw new Error(resolved.reason || `Provider ${providerId} is not configured`);
-  }
-  if (!resolved.def.surfaces.includes(surface)) {
-    throw new Error(`Provider ${providerId} does not support surface ${surface}`);
-  }
-
+  // Validate request fields before provider config so bad input (empty prompt)
+  // is not masked by "API key not configured" (CI media.test expectations).
   if (surface === 'image') {
     const rawPrompt = input.prompt ?? input.text ?? '';
     if (typeof rawPrompt === 'string' && /[\0\r\n]/.test(rawPrompt)) {
@@ -473,6 +467,17 @@ export async function generateMediaUnified(input: {
     }
     const prompt = typeof rawPrompt === 'string' ? rawPrompt.trim() : '';
     if (!prompt) throw new Error('prompt is required for image');
+    if (prompt.length > IMAGE_PROMPT_MAX) {
+      throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
+    }
+
+    const resolved = resolveMediaProvider(providerId);
+    if (!resolved.configured) {
+      throw new Error(resolved.reason || `Provider ${providerId} is not configured`);
+    }
+    if (!resolved.def.surfaces.includes(surface)) {
+      throw new Error(`Provider ${providerId} does not support surface ${surface}`);
+    }
 
     let result: GenerateImageResult;
     if (resolved.def.isStub) {
@@ -506,6 +511,14 @@ export async function generateMediaUnified(input: {
     const text = typeof rawText === 'string' ? rawText.trim() : '';
     if (!text) throw new Error('text is required for audio');
 
+    const resolved = resolveMediaProvider(providerId);
+    if (!resolved.configured) {
+      throw new Error(resolved.reason || `Provider ${providerId} is not configured`);
+    }
+    if (!resolved.def.surfaces.includes(surface)) {
+      throw new Error(`Provider ${providerId} does not support surface ${surface}`);
+    }
+
     let result: GenerateAudioResult;
     if (resolved.def.isStub) {
       result = await generateStubAudio(text);
@@ -526,7 +539,7 @@ export async function generateMediaUnified(input: {
     };
   }
 
-  // video — async job
+  // video — validate prompt before provider config, then async job
   const rawPrompt = input.prompt ?? input.text ?? '';
   if (typeof rawPrompt === 'string' && /[\0\r\n]/.test(rawPrompt)) {
     throw new Error('prompt contains invalid control characters');
@@ -535,6 +548,14 @@ export async function generateMediaUnified(input: {
   if (!prompt) throw new Error('prompt is required for video');
   if (prompt.length > IMAGE_PROMPT_MAX) {
     throw new Error(`prompt too long (max ${IMAGE_PROMPT_MAX})`);
+  }
+
+  const resolved = resolveMediaProvider(providerId);
+  if (!resolved.configured) {
+    throw new Error(resolved.reason || `Provider ${providerId} is not configured`);
+  }
+  if (!resolved.def.surfaces.includes(surface)) {
+    throw new Error(`Provider ${providerId} does not support surface ${surface}`);
   }
 
   const job = createMediaJob({
