@@ -468,3 +468,344 @@ describe('WebApiClient preview comments + project zip (v0.9 M2)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('WebApiClient media (v0.23)', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('listMediaFiles GETs /api/media/files with clamped limit', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [
+          {
+            filename: 'a.png',
+            size: 10,
+            kind: 'image',
+            mimeType: 'image/png',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            urlPath: '/api/media/file/a.png',
+          },
+        ],
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.listMediaFiles(50);
+    expect(res.ok).toBe(true);
+    expect(res.data?.[0]?.filename).toBe('a.png');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'http://engine.test/api/media/files?limit=50',
+    );
+  });
+
+  it('listMediaProviders GETs /api/media/providers', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [{ id: 'openai', label: 'OpenAI', surfaces: ['image'], configured: true }],
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.listMediaProviders();
+    expect(res.ok).toBe(true);
+    expect(res.data?.[0]?.id).toBe('openai');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://engine.test/api/media/providers');
+  });
+
+  it('generateMedia posts unified body and validates prompt/text', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+
+    await expect(client.generateMedia({ surface: 'image', prompt: '' })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/prompt/i),
+    });
+    await expect(
+      client.generateMedia({ surface: 'image', prompt: `bad${'\n'}line` }),
+    ).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/prompt/i) });
+    await expect(client.generateMedia({ surface: 'audio', text: '' })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/text/i),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { surface: 'image', filename: 'out.png' } }),
+    );
+    const img = await client.generateMedia({
+      surface: 'image',
+      prompt: '  a cat  ',
+      provider: 'openai',
+    });
+    expect(img.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/media\/generate$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    const imgBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(imgBody).toEqual({ surface: 'image', prompt: 'a cat', provider: 'openai' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { surface: 'audio', filename: 'a.mp3' } }),
+    );
+    await client.generateMedia({ surface: 'audio', text: 'hello world', voice: 'alloy' });
+    const audioBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string);
+    expect(audioBody).toMatchObject({ surface: 'audio', text: 'hello world', voice: 'alloy' });
+    expect(audioBody.prompt).toBeUndefined();
+  });
+
+  it('getMediaJob GETs job id and rejects invalid id', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.getMediaJob(`bad${'\n'}id`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid job id',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: { id: 'job1', surface: 'video', provider: 'x', status: 'running' },
+      }),
+    );
+    const job = await client.getMediaJob('job1');
+    expect(job.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/media\/jobs\/job1/);
+  });
+
+  it('mediaFileUrl and fetchMediaBlob use safe filename segment', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    expect(client.mediaFileUrl('photo.png')).toBe('http://engine.test/api/media/file/photo.png');
+    expect(client.mediaFileUrl('../escape.png')).toBeNull();
+    expect(client.mediaFileUrl(`bad${'\0'}.png`)).toBeNull();
+
+    await expect(client.fetchMediaBlob('../x.png')).rejects.toThrow(/Invalid media filename/);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      }),
+    );
+    const blob = await client.fetchMediaBlob('photo.png');
+    expect(blob.size).toBe(3);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'http://engine.test/api/media/file/photo.png',
+    );
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({
+      headers: { Authorization: 'Bearer tok' },
+    });
+  });
+});
+
+describe('WebApiClient workflows (v0.24)', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('listWorkflows GETs /api/workflow', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [{ id: 'w1', name: 'A', domain: 'general', updatedAt: '2026-01-01T00:00:00.000Z' }],
+      }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.listWorkflows();
+    expect(res.ok).toBe(true);
+    expect(res.data?.[0]?.id).toBe('w1');
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://engine.test/api/workflow');
+  });
+
+  it('getWorkflow GETs id and rejects control-char / blank id', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.getWorkflow('')).rejects.toMatchObject({
+      message: expect.stringMatching(/Invalid workflow id/i),
+    });
+    await expect(client.getWorkflow(`bad${'\n'}id`)).rejects.toMatchObject({
+      message: expect.stringMatching(/Invalid workflow id/i),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: {
+          id: 'w1',
+          name: 'N',
+          domain: 'coding',
+          nodes: [],
+          edges: [],
+        },
+      }),
+    );
+    const res = await client.getWorkflow('w1');
+    expect(res.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://engine.test/api/workflow/w1');
+  });
+
+  it('createWorkflow posts name/domain/nodes and rejects invalid name', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.createWorkflow({ name: '' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid name',
+    });
+    await expect(
+      client.createWorkflow({ name: `bad${'\0'}x` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid name' });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'w-new', name: 'Landing', domain: 'general' } }, 201),
+    );
+    const res = await client.createWorkflow({
+      name: '  Landing  ',
+      domain: 'general',
+      nodes: [{ id: 't1', type: 'trigger', label: 'Trigger', position: { x: 0, y: 0 }, config: {} }],
+      edges: [],
+    });
+    expect(res.ok).toBe(true);
+    expect(res.data?.id).toBe('w-new');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/workflow$/);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      name: 'Landing',
+      primaryDomain: 'general',
+      domain: 'general',
+    });
+  });
+
+  it('updateWorkflow puts patch and validates id/name', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.updateWorkflow('', { name: 'x' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    await expect(
+      client.updateWorkflow('w1', { name: `bad${'\n'}name` }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid name' });
+    await expect(client.updateWorkflow('w1', {})).resolves.toMatchObject({
+      ok: false,
+      error: 'No fields to update',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'w1', name: 'Renamed', domain: 'general' } }),
+    );
+    const res = await client.updateWorkflow('w1', {
+      name: '  Renamed  ',
+      nodes: [],
+      edges: [],
+    });
+    expect(res.ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/workflow\/w1$/);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(String(init.body))).toEqual({
+      name: 'Renamed',
+      nodes: [],
+      edges: [],
+    });
+  });
+
+  it('deleteWorkflow DELETEs and rejects invalid id', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.deleteWorkflow(`bad${'\0'}id`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const res = await client.deleteWorkflow('w1');
+    expect(res.ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/api\/workflow\/w1$/);
+    expect(init.method).toBe('DELETE');
+  });
+
+  it('listWorkflowRuns GETs runs with clamped limit', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.listWorkflowRuns(`bad${'\n'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        data: [{ id: 'r1', workflowId: 'w1', status: 'completed' }],
+      }),
+    );
+    const res = await client.listWorkflowRuns('w1', 10, 5);
+    expect(res.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'http://engine.test/api/workflow/w1/runs?limit=10&offset=5',
+    );
+  });
+
+  it('runWorkflow posts SSE run and parses data lines; abort cancels', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"type":"run.started","runId":"r1"}\n\ndata: {"type":"run.completed","runId":"r1","duration":1}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    );
+
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const events: Array<{ type: string }> = [];
+    const stop = client.runWorkflow('w1', (e) => events.push(e), { foo: 1 });
+
+    await vi.waitFor(() => {
+      expect(events.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://engine.test/api/workflow/w1/run');
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({
+      method: 'POST',
+      headers: expect.objectContaining({
+        Accept: 'text/event-stream',
+        Authorization: 'Bearer tok',
+      }),
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1].body))).toEqual({ inputs: { foo: 1 } });
+    expect(events[0]).toMatchObject({ type: 'run.started', runId: 'r1' });
+    stop();
+  });
+
+  it('runWorkflow emits failed for invalid id without fetch', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const prev = fetchMock.mock.calls.length;
+    const events: Array<{ type: string; error?: string }> = [];
+    const stop = client.runWorkflow(`wf${'\0'}x`, (e) => events.push(e));
+    await vi.waitFor(() => {
+      expect(events.some((e) => e.type === 'run.failed')).toBe(true);
+    });
+    expect(fetchMock.mock.calls.length).toBe(prev);
+    expect(events[0]?.error).toMatch(/Invalid workflow id/i);
+    stop();
+  });
+});

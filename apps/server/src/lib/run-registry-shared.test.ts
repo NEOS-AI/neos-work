@@ -4,16 +4,21 @@ import {
   resetGlobalRunRegistry,
 } from '@neos-work/agent-runtime';
 import {
+  appendRunEvent,
   applyLocalCancelFromCommand,
   createMemorySharedRunStore,
   createSharedMemoryBackendForTests,
   createSharedRunStore,
+  dualWriteRunEvent,
   dualWriteRunRecord,
   getSharedRunStore,
   initSharedRunStore,
+  parseRuntimeRunEvent,
   parseSharedRunSummary,
   resetSharedRunStoreForTests,
   resolveRunRegistryMode,
+  RUN_EVENT_BUFFER_MAX,
+  serializeRuntimeRunEvent,
   serializeSharedRunSummary,
   setRunRegistryNodeIdForTests,
   setSharedRunStoreForTests,
@@ -286,5 +291,103 @@ describe('setSharedRunStoreForTests', () => {
     setSharedRunStoreForTests(mock);
     expect(getSharedRunStore().nodeId).toBe('test-inject');
     await put();
+  });
+});
+
+describe('shared run event buffer (v0.19)', () => {
+  it('memory dual-process: store A appends; store B eventsAfter sees them', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const a = createMemorySharedRunStore({ nodeId: 'owner', backend });
+    const b = createMemorySharedRunStore({ nodeId: 'peer', backend });
+
+    const e1 = {
+      id: 'ev-1',
+      type: 'run.started',
+      ts: '2026-01-01T00:00:00.000Z',
+      data: { agentId: 'cli-claude' },
+    };
+    const e2 = {
+      id: 'ev-2',
+      type: 'run.stdout',
+      ts: '2026-01-01T00:00:01.000Z',
+      data: { chunk: 'hello' },
+    };
+    await a.appendEvent('run-ev', e1);
+    await a.appendEvent('run-ev', e2);
+
+    const all = await b.eventsAfter('run-ev');
+    expect(all).toHaveLength(2);
+    expect(all[0]!.id).toBe('ev-1');
+    expect(all[1]!.type).toBe('run.stdout');
+
+    const after = await b.eventsAfter('run-ev', 'ev-1');
+    expect(after).toHaveLength(1);
+    expect(after[0]!.id).toBe('ev-2');
+  });
+
+  it('onRunEvent notifies memory subscribers on append', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const a = createMemorySharedRunStore({ nodeId: 'a', backend });
+    const b = createMemorySharedRunStore({ nodeId: 'b', backend });
+    const seen: string[] = [];
+    b.onRunEvent((runId, ev) => seen.push(`${runId}:${ev.id}`));
+    await a.appendEvent('r1', {
+      id: 'e1',
+      type: 'run.progress',
+      ts: '2026-01-01T00:00:00.000Z',
+    });
+    expect(seen).toEqual(['r1:e1']);
+  });
+
+  it('caps buffer at RUN_EVENT_BUFFER_MAX', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const s = createMemorySharedRunStore({ nodeId: 'cap', backend });
+    for (let i = 0; i < RUN_EVENT_BUFFER_MAX + 50; i++) {
+      await s.appendEvent('big', {
+        id: `e-${i}`,
+        type: 'run.stdout',
+        ts: '2026-01-01T00:00:00.000Z',
+        data: { i },
+      });
+    }
+    const all = await s.eventsAfter('big');
+    expect(all.length).toBe(RUN_EVENT_BUFFER_MAX);
+    expect(all[0]!.id).toBe('e-50');
+    expect(all[all.length - 1]!.id).toBe(`e-${RUN_EVENT_BUFFER_MAX + 49}`);
+  });
+
+  it('off mode skips event dual-write', async () => {
+    initSharedRunStore({ NEOS_RUN_REGISTRY: 'off' });
+    await dualWriteRunEvent('r', {
+      id: 'e',
+      type: 'run.started',
+      ts: '2026-01-01T00:00:00.000Z',
+    });
+    expect(await getSharedRunStore().eventsAfter('r')).toEqual([]);
+  });
+
+  it('appendRunEvent dual-writes to shared store', async () => {
+    setRunRegistryNodeIdForTests('append-node');
+    initSharedRunStore({ NEOS_RUN_REGISTRY: 'memory' });
+    const reg = getGlobalRunRegistry();
+    const run = reg.create({ agentId: 'cli-claude', prompt: 'p' });
+    const ev = appendRunEvent(reg, run.id, 'run.started', { ok: true });
+    expect(ev).toBeDefined();
+    // fire-and-forget dual-write — await a tick for microtask
+    await dualWriteRunEvent(run.id, ev!);
+    const shared = await getSharedRunStore().eventsAfter(run.id);
+    expect(shared.some((e) => e.id === ev!.id)).toBe(true);
+  });
+
+  it('parse/serialize runtime events', () => {
+    const ev = {
+      id: 'x',
+      type: 'run.failed',
+      ts: '2026-01-01T00:00:00.000Z',
+      data: { error: 'boom' },
+    };
+    const raw = serializeRuntimeRunEvent(ev);
+    expect(parseRuntimeRunEvent(raw)).toEqual(ev);
+    expect(parseRuntimeRunEvent('not-json')).toBeNull();
   });
 });

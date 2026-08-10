@@ -17,10 +17,13 @@
  * Live requires: Node 22, built @neos-work/server, optional `redis` package for real bus,
  * Docker (to start redis:7-alpine) unless NEOS_COLLAB_REDIS_URL points at a live Redis.
  *
- * Live case map (v0.14 M3):
+ * Live case map (v0.14 M3 + v0.21 run events):
  *   L1 dual health + redis bus · L2 shared project · L3 peers · L4 selection fan-out
  *   L5 lock acquire A → list B · L6 foreign user PUT 423 · L7 foreign agent PUT 423
  *   L8 collab status locks.kind
+ *   L9 dry-run on A → GET run + events on B (shared run registry)
+ *   L10 durable events.jsonl under shared NEOS_DATA_DIR
+ *   L11 durable summary.json under shared NEOS_DATA_DIR (v0.22 M1)
  *
  * Exit 0 on success or structural-only pass; 1 on failure.
  */
@@ -194,6 +197,9 @@ function startServer({ port, dataDir, token, redisUrl, logLabel }) {
     NEOS_COLLAB_REDIS_URL: redisUrl,
     NEOS_COLLAB_PRESENCE: 'auto',
     NEOS_COLLAB_LOCKS: 'auto',
+    // v0.16/v0.19/v0.21 — shared run summary + event buffer + durable JSONL
+    NEOS_RUN_REGISTRY: 'auto',
+    NEOS_RUN_EVENT_LOG: 'on',
     NEOS_SHARED_EDIT: '1',
     // v0.14 M3 L7 — agent hard-enforce across replicas
     NEOS_SHARED_EDIT_AGENTS: '1',
@@ -290,6 +296,75 @@ if (exists('docs/ops/multi-replica-collab.md')) {
   ok('ops doc mentions peers checklist', /collab\/peers|Presence count/i.test(doc));
   ok('ops doc mentions NEOS_COLLAB_LOCKS', /NEOS_COLLAB_LOCKS/.test(doc));
   ok('ops doc mentions lock registry keys or collab:lock', /neos:collab:lock|lock registry/i.test(doc));
+  ok(
+    'ops doc mentions NEOS_RUN_REGISTRY or run event',
+    /NEOS_RUN_REGISTRY|run event|neos:run:events/i.test(doc),
+  );
+  ok(
+    'ops doc mentions durable run event log or NEOS_RUN_EVENT_LOG',
+    /NEOS_RUN_EVENT_LOG|events\.jsonl|durable run/i.test(doc),
+  );
+  ok(
+    'ops doc mentions run log retention or MAX_AGE / MAX_RUNS',
+    /NEOS_RUN_EVENT_LOG_MAX_AGE|NEOS_RUN_EVENT_LOG_MAX_RUNS|retention|prune/i.test(doc),
+  );
+  ok(
+    'ops doc mentions summary.json durable summary',
+    /summary\.json/i.test(doc),
+  );
+}
+
+ok(
+  'run-event-log module exists',
+  exists('apps/server/src/lib/run-event-log.ts'),
+);
+
+{
+  const logSrc = exists('apps/server/src/lib/run-event-log.ts')
+    ? read('apps/server/src/lib/run-event-log.ts')
+    : '';
+  ok(
+    'run-event-log exports pruneRunEventLogs (M0 retention)',
+    /export function pruneRunEventLogs/.test(logSrc),
+  );
+  ok(
+    'run-event-log exports writeRunSummaryLog (M1 summary)',
+    /export function writeRunSummaryLog/.test(logSrc),
+  );
+}
+
+ok(
+  'run-warehouse module exists (v0.23 Track P)',
+  exists('apps/server/src/lib/run-warehouse.ts'),
+);
+{
+  const whSrc = exists('apps/server/src/lib/run-warehouse.ts')
+    ? read('apps/server/src/lib/run-warehouse.ts')
+    : '';
+  ok(
+    'run-warehouse exports createRunWarehouse',
+    /export function createRunWarehouse/.test(whSrc),
+  );
+  ok(
+    'run-warehouse exports initRunWarehouse',
+    /export function initRunWarehouse/.test(whSrc),
+  );
+}
+
+ok(
+  'nightly multi-replica workflow exists (M2)',
+  exists('.github/workflows/nightly-multi-replica.yml'),
+);
+if (exists('.github/workflows/nightly-multi-replica.yml')) {
+  const nw = read('.github/workflows/nightly-multi-replica.yml');
+  ok(
+    'nightly workflow runs e2e:multi-replica:live',
+    /e2e:multi-replica:live|multi-replica\/run\.mjs --live/.test(nw),
+  );
+  ok(
+    'nightly workflow has schedule or workflow_dispatch',
+    /schedule:|workflow_dispatch:/.test(nw),
+  );
 }
 
 {
@@ -662,6 +737,111 @@ if (redisUrl && redisPkgOk) {
           'collab status exposes locks registry',
           lockKind === 'redis' || lockKind === 'memory' || lockKind === 'redis-stub',
           `locks.kind=${lockKind}`,
+        );
+      }
+
+      // L9: dry-run on A → GET run + events on B (shared run registry / durable log)
+      const createRun = await fetchJson(`${baseA}/api/runs`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          projectId,
+          prompt: 'multi-replica e2e dry-run L9',
+          dryRun: true,
+        }),
+      });
+      const runId = createRun.body?.data?.id;
+      ok(
+        'L9 create dry-run on A',
+        createRun.res.ok && createRun.body?.ok === true && typeof runId === 'string',
+        `status=${createRun.res.status} id=${runId || ''}`,
+      );
+      if (typeof runId === 'string' && runId) {
+        await sleep(500);
+        let getB = null;
+        for (let i = 0; i < 15; i++) {
+          getB = await fetchJson(`${baseB}/api/runs/${encodeURIComponent(runId)}`, {
+            headers: authHeaders(token),
+          });
+          if (getB.res.ok && getB.body?.ok === true) break;
+          await sleep(200);
+        }
+        ok(
+          'L9 GET run on B (shared summary)',
+          getB?.res?.ok === true && getB?.body?.ok === true,
+          `status=${getB?.res?.status} err=${getB?.body?.error || ''}`,
+        );
+
+        let eventsB = null;
+        for (let i = 0; i < 15; i++) {
+          eventsB = await fetchJson(
+            `${baseB}/api/runs/${encodeURIComponent(runId)}/events`,
+            { headers: authHeaders(token) },
+          );
+          const list = eventsB.body?.data;
+          if (
+            eventsB.res.ok
+            && Array.isArray(list)
+            && list.some((e) => e?.type === 'run.started' || e?.type === 'run.succeeded')
+          ) {
+            break;
+          }
+          await sleep(200);
+        }
+        const evList = eventsB?.body?.data;
+        ok(
+          'L9 GET events on B (shared buffer and/or durable log)',
+          eventsB?.res?.ok === true
+            && Array.isArray(evList)
+            && evList.some(
+              (e) => e?.type === 'run.started' || e?.type === 'run.succeeded',
+            ),
+          `count=${Array.isArray(evList) ? evList.length : 0}`,
+        );
+
+        // L10 durable JSONL on shared data dir
+        const jsonl = path.join(dataDir, 'runs', runId, 'events.jsonl');
+        let durableOk = false;
+        for (let i = 0; i < 15; i++) {
+          if (fs.existsSync(jsonl)) {
+            try {
+              const text = fs.readFileSync(jsonl, 'utf8');
+              durableOk = /run\.started|run\.succeeded/.test(text);
+              if (durableOk) break;
+            } catch {
+              /* retry */
+            }
+          }
+          await sleep(100);
+        }
+        ok(
+          'L10 durable events.jsonl under shared NEOS_DATA_DIR',
+          durableOk,
+          durableOk ? jsonl : `missing ${jsonl}`,
+        );
+
+        // L11 durable summary.json (v0.22 M1)
+        const summaryPath = path.join(dataDir, 'runs', runId, 'summary.json');
+        let summaryOk = false;
+        for (let i = 0; i < 15; i++) {
+          if (fs.existsSync(summaryPath)) {
+            try {
+              const j = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              summaryOk =
+                j
+                && typeof j.id === 'string'
+                && (j.status === 'succeeded' || j.status === 'running' || j.status === 'failed');
+              if (summaryOk) break;
+            } catch {
+              /* retry */
+            }
+          }
+          await sleep(100);
+        }
+        ok(
+          'L11 durable summary.json under shared NEOS_DATA_DIR',
+          summaryOk,
+          summaryOk ? summaryPath : `missing ${summaryPath}`,
         );
       }
 

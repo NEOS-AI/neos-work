@@ -34,6 +34,12 @@ const API_KEY_ROWS: Array<{
     verifyProvider: 'google',
     placeholder: 'AIza…',
   },
+  {
+    label: 'OpenAI',
+    settingKey: 'OPENAI_API_KEY',
+    verifyProvider: null,
+    placeholder: 'sk-…',
+  },
 ];
 
 export function Settings() {
@@ -228,6 +234,12 @@ export function Settings() {
           <Link to="/projects" className="btn btn-ghost">
             Projects
           </Link>
+          <Link to="/workflows" className="btn btn-ghost" data-testid="nav-workflows">
+            Workflows
+          </Link>
+          <Link to="/media" className="btn btn-ghost" data-testid="nav-media">
+            Media
+          </Link>
           <Link to="/" className="btn btn-ghost">
             Connection
           </Link>
@@ -366,8 +378,8 @@ export function Settings() {
         <div>
           <h2 style={{ margin: 0, fontSize: '1rem' }}>Desktop-only surfaces</h2>
           <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-            This browser client is the Design Project loop (editor, collab, comments, zip, runs).
-            Full product surfaces stay on the Tauri app.
+            This browser client covers the Design Project loop plus Media generate (v0.23). Full
+            product surfaces stay on the Tauri app.
           </p>
         </div>
         <ul className="muted" style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 13 }}>
@@ -375,7 +387,7 @@ export function Settings() {
             <strong>Plugins / marketplace</strong> — remote catalog install, trust tiers (desktop
             Plugins page)
           </li>
-          <li>Workflow editor · Domain packs · Media studio · Sessions · Memory UI</li>
+          <li>Workflow editor · Domain packs · Sessions · Memory UI</li>
         </ul>
         <p className="muted mono" style={{ margin: 0, fontSize: 11 }}>
           Policy: docs/reference/dual-surface.md (Q25 · Q29)

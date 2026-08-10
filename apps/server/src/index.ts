@@ -39,6 +39,7 @@ import toolsLiveArtifacts from './routes/tools-live-artifacts.js';
 import toolsFiles from './routes/tools-files.js';
 import connectionTest from './routes/connection-test.js';
 import { migrateEncryption } from './db/settings.js';
+import { getEncryptionKeySource } from './db/crypto.js';
 import { resolveWebDist } from './lib/web-static.js';
 import { loadInstalledDomainPacks } from './lib/domain-pack-store.js';
 import { registerCodingBlocks, registerFinanceBlocks, registerWorker } from '@neos-work/workflow-engine';
@@ -50,6 +51,8 @@ import { initCollabBus, getCollabBus } from './lib/collab-bus.js';
 import { initLockRegistry, getLockRegistry } from './lib/collab-locks-redis.js';
 import { initPresenceRegistry, getPresenceRegistry } from './lib/collab-presence-redis.js';
 import { initSharedRunStore, getSharedRunStore } from './lib/run-registry-shared.js';
+import { pruneRunEventLogs, runEventLogStatus } from './lib/run-event-log.js';
+import { initRunWarehouse } from './lib/run-warehouse.js';
 import {
   applyRemoteCollabEvent,
   isSharedEditAgentsHardEnforce,
@@ -263,6 +266,9 @@ if (webDist) {
   });
 }
 
+// Encryption master key source (env | keychain | file | legacy) — never log material
+console.log(`NEOS_SECRETS_KEY_SOURCE=${getEncryptionKeySource()}`);
+
 // Migrate plaintext API keys to encrypted format
 migrateEncryption();
 
@@ -291,6 +297,31 @@ const runShared = initSharedRunStore();
 console.log(
   `NEOS_RUN_REGISTRY=${runShared.status().kind}${runShared.status().detail ? ` (${runShared.status().detail})` : ''}`,
 );
+
+// Durable run event log retention (v0.22 M0): opportunistic GC on startup
+{
+  const logSt = runEventLogStatus();
+  console.log(
+    `NEOS_RUN_EVENT_LOG=${logSt.mode}${logSt.enabled ? ` root=${logSt.root}` : ' (disabled)'}`,
+  );
+  if (logSt.enabled) {
+    const pruned = pruneRunEventLogs();
+    if (pruned.removed > 0) {
+      console.log(
+        `Run event log prune: removed=${pruned.removed} (age=${pruned.reasons.age} count=${pruned.reasons.count}) scanned=${pruned.scanned}`,
+      );
+    }
+  }
+}
+
+// Optional Postgres run warehouse (v0.23 Track P): long-lived summary + events
+{
+  const wh = initRunWarehouse();
+  const st = wh.status();
+  console.log(
+    `NEOS_RUN_WAREHOUSE=${st.kind}${st.detail ? ` (${st.detail})` : ''}${st.schema ? ` schema=${st.schema}` : ''}`,
+  );
+}
 
 // Register built-in domain blocks
 registerFinanceBlocks();

@@ -54,6 +54,20 @@ const GATES = {
   requireV16Features: true,
   /** v0.17 train (EngineMediaClient skills/media/live-artifacts extract) */
   requireV17Features: true,
+  /** v0.18 train (EngineSessionsClient + EnginePluginsClient extracts) */
+  requireV18Features: true,
+  /** v0.19 train (EngineOpsClient + shared run event fan-out) */
+  requireV19Features: true,
+  /** v0.20 train (EngineCatalogClient + project client split) */
+  requireV20Features: true,
+  /** v0.21 train (durable run event log + multi-replica e2e L9/L10) */
+  requireV21Features: true,
+  /** v0.22 train (run log retention + durable summary + nightly live e2e) */
+  requireV22Features: true,
+  /** v0.23 train (keychain master key + web media + postgres warehouse) */
+  requireV23Features: true,
+  /** v0.24 train (OS keyring + web workflow editor) */
+  requireV24Features: true,
 };
 
 function existsRel(rel) {
@@ -376,18 +390,31 @@ function scanV12Features() {
     engineProject:
       existsRel('apps/desktop/src/lib/engine-project.ts')
       && project.includes('export class EngineProjectClient')
-      && project.includes('extends EngineTransport'),
+      && (
+        project.includes('extends EngineTransport')
+        // v0.20: leaf extends Files → … → Core → Transport
+        || project.includes('extends EngineProjectFilesClient')
+        || (readText('apps/desktop/src/lib/engine-project-core.ts') ?? '').includes(
+          'extends EngineTransport',
+        )
+      ),
     engineWorkflow:
       existsRel('apps/desktop/src/lib/engine-workflow.ts')
       && workflow.includes('export class EngineWorkflowClient')
       && workflow.includes('extends EngineProjectClient'),
-    // v0.12: EngineClient extends EngineWorkflowClient; v0.16 Settings; v0.17 Media
+    // v0.12+: EngineClient extends leaf of modular hierarchy (Workflow…Catalog)
     engineClientExtends:
-      /export class EngineClient extends Engine(Workflow|Settings|Media)Client/.test(engineTs)
+      /export class EngineClient extends Engine(Workflow|Settings|Media|Sessions|Plugins|Ops|Catalog)Client/.test(
+        engineTs,
+      )
       && (
         engineTs.includes('extends EngineWorkflowClient')
         || engineTs.includes('EngineSettingsClient')
         || engineTs.includes('EngineMediaClient')
+        || engineTs.includes('EngineSessionsClient')
+        || engineTs.includes('EnginePluginsClient')
+        || engineTs.includes('EngineOpsClient')
+        || engineTs.includes('EngineCatalogClient')
       ),
     stickySseDoc:
       existsRel('docs/ops/sticky-sse.md')
@@ -606,6 +633,14 @@ function scanV16Features() {
 function scanV17Features() {
   const engineMedia = readText('apps/desktop/src/lib/engine-media.ts') ?? '';
   const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const engineSessions = readText('apps/desktop/src/lib/engine-sessions.ts') ?? '';
+  // v0.18 inserts sessions/plugins between media and EngineClient
+  const mediaInChain =
+    engine.includes('extends EngineMediaClient')
+    || engine.includes('class EngineClient extends EngineMediaClient')
+    || engine.includes('EngineSessionsClient')
+    || engine.includes('EnginePluginsClient')
+    || engineSessions.includes('extends EngineMediaClient');
   const features = {
     planV17: existsRel('docs/plans/PLAN_FOR_V0_17_0.md'),
     migrationV17: existsRel('docs/migration/v0.17.0.md'),
@@ -614,11 +649,363 @@ function scanV17Features() {
       existsRel('apps/desktop/src/lib/engine-media.ts')
       && engineMedia.includes('EngineMediaClient')
       && engineMedia.includes('extends EngineSettingsClient')
-      && (
-        engine.includes('extends EngineMediaClient')
-        || engine.includes('class EngineClient extends EngineMediaClient')
-      ),
+      && mediaInChain,
     implM0: existsRel('docs/implementation/v0.17/v0.17.0.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.18 capability surface (EngineSessionsClient + EnginePluginsClient extracts).
+ * @see docs/plans/PLAN_FOR_V0_18_0.md
+ */
+function scanV18Features() {
+  const engineSessions = readText('apps/desktop/src/lib/engine-sessions.ts') ?? '';
+  const enginePlugins = readText('apps/desktop/src/lib/engine-plugins.ts') ?? '';
+  const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const engineOps = readText('apps/desktop/src/lib/engine-ops.ts') ?? '';
+  // v0.19 inserts EngineOpsClient between plugins and EngineClient
+  const pluginsInChain =
+    engine.includes('extends EnginePluginsClient')
+    || engine.includes('class EngineClient extends EnginePluginsClient')
+    || engine.includes('EngineOpsClient')
+    || engineOps.includes('extends EnginePluginsClient');
+  const features = {
+    planV18: existsRel('docs/plans/PLAN_FOR_V0_18_0.md'),
+    migrationV18: existsRel('docs/migration/v0.18.0.md'),
+    releaseV18: existsRel('docs/releases/v0.18.0.md'),
+    engineSessions:
+      existsRel('apps/desktop/src/lib/engine-sessions.ts')
+      && engineSessions.includes('EngineSessionsClient')
+      && engineSessions.includes('extends EngineMediaClient'),
+    enginePlugins:
+      existsRel('apps/desktop/src/lib/engine-plugins.ts')
+      && enginePlugins.includes('EnginePluginsClient')
+      && enginePlugins.includes('extends EngineSessionsClient')
+      && pluginsInChain,
+    implM0: existsRel('docs/implementation/v0.18/v0.18.0.md'),
+    implM1: existsRel('docs/implementation/v0.18/v0.18.1.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.19 capability surface (EngineOpsClient + shared run event fan-out).
+ * @see docs/plans/PLAN_FOR_V0_19_0.md
+ */
+function scanV19Features() {
+  const engineOps = readText('apps/desktop/src/lib/engine-ops.ts') ?? '';
+  const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const engineCatalog = readText('apps/desktop/src/lib/engine-catalog.ts') ?? '';
+  const runShared = readText('apps/server/src/lib/run-registry-shared.ts') ?? '';
+  const multiReplica = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const sticky = readText('docs/ops/sticky-sse.md') ?? '';
+  // v0.20 inserts EngineCatalogClient between Ops and EngineClient
+  const opsInChain =
+    engine.includes('extends EngineOpsClient')
+    || engine.includes('class EngineClient extends EngineOpsClient')
+    || engine.includes('EngineCatalogClient')
+    || engineCatalog.includes('extends EngineOpsClient');
+  const features = {
+    planV19: existsRel('docs/plans/PLAN_FOR_V0_19_0.md'),
+    migrationV19: existsRel('docs/migration/v0.19.0.md'),
+    releaseV19: existsRel('docs/releases/v0.19.0.md'),
+    engineOps:
+      existsRel('apps/desktop/src/lib/engine-ops.ts')
+      && engineOps.includes('EngineOpsClient')
+      && engineOps.includes('extends EnginePluginsClient')
+      && opsInChain,
+    runEventFanout:
+      runShared.includes('appendRunEvent')
+      && runShared.includes('dualWriteRunEvent')
+      && runShared.includes('RUN_EVENT_BUFFER_MAX')
+      && (
+        multiReplica.toLowerCase().includes('run event')
+        || multiReplica.includes('neos:run:events')
+      ),
+    stickyDocUpdated:
+      existsRel('docs/ops/sticky-sse.md')
+      && (
+        sticky.toLowerCase().includes('fan-out')
+        || sticky.toLowerCase().includes('fan out')
+        || sticky.includes('run event')
+      ),
+    implA: existsRel('docs/implementation/v0.19/v0.19.0.md'),
+    implB: existsRel('docs/implementation/v0.19/v0.19.1.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.24 capability surface (OS keyring + web workflow editor).
+ * @see docs/plans/PLAN_FOR_V0_24_0.md
+ */
+function scanV24Features() {
+  const keychain = readText('apps/server/src/db/keychain.ts') ?? '';
+  const cryptoKey = readText('apps/server/src/db/crypto-key.ts') ?? '';
+  const serverPkg = readText('apps/server/package.json') ?? '';
+  const tauriLib = readText('apps/desktop/src-tauri/src/lib.rs') ?? '';
+  const tauriCargo = readText('apps/desktop/src-tauri/Cargo.toml') ?? '';
+  const deskKeyring = readText('apps/desktop/src/lib/keyring.ts') ?? '';
+  const webApi = readText('apps/web/src/lib/api.ts') ?? '';
+  const webApp = readText('apps/web/src/App.tsx') ?? '';
+  const webWf = readText('apps/web/src/pages/Workflows.tsx') ?? '';
+  const webEd = readText('apps/web/src/pages/WorkflowEditor.tsx') ?? '';
+  const dual = readText('docs/reference/dual-surface.md') ?? '';
+  const webPkg = readText('apps/web/package.json') ?? '';
+  const features = {
+    planV24: existsRel('docs/plans/PLAN_FOR_V0_24_0.md'),
+    migrationV24: existsRel('docs/migration/v0.24.0.md'),
+    releaseV24: existsRel('docs/releases/v0.24.0.md'),
+    osKeyring:
+      keychain.includes('OsKeychain')
+      && keychain.includes('tryCreateOsKeychain')
+      && cryptoKey.includes("'os'")
+      && serverPkg.includes('keytar')
+      && tauriLib.includes('get_master_key')
+      && tauriCargo.includes('keyring')
+      && deskKeyring.includes('getMasterKeyFromOs'),
+    webWorkflow:
+      existsRel('apps/web/src/pages/Workflows.tsx')
+      && existsRel('apps/web/src/pages/WorkflowEditor.tsx')
+      && webWf.includes('listWorkflows')
+      && webEd.includes('ReactFlow')
+      && webApi.includes('listWorkflows')
+      && webApi.includes('runWorkflow')
+      && webApp.includes('/workflows')
+      && webPkg.includes('@xyflow/react')
+      && /Workflow editor.*yes/i.test(dual),
+    implOs: existsRel('docs/implementation/v0.24/v0.24.0.md'),
+    implWf: existsRel('docs/implementation/v0.24/v0.24.1.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.23 capability surface (keychain + web media + postgres warehouse).
+ * @see docs/plans/PLAN_FOR_V0_23_0.md
+ */
+function scanV23Features() {
+  const cryptoKey = readText('apps/server/src/db/crypto-key.ts') ?? '';
+  const keychain = readText('apps/server/src/db/keychain.ts') ?? '';
+  const crypto = readText('apps/server/src/db/crypto.ts') ?? '';
+  const indexTs = readText('apps/server/src/index.ts') ?? '';
+  const webApi = readText('apps/web/src/lib/api.ts') ?? '';
+  const webMedia = readText('apps/web/src/pages/Media.tsx') ?? '';
+  const webApp = readText('apps/web/src/App.tsx') ?? '';
+  const dual = readText('docs/reference/dual-surface.md') ?? '';
+  const warehouse = readText('apps/server/src/lib/run-warehouse.ts') ?? '';
+  const runShared = readText('apps/server/src/lib/run-registry-shared.ts') ?? '';
+  const multiOps = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const features = {
+    planV23: existsRel('docs/plans/PLAN_FOR_V0_23_0.md'),
+    migrationV23: existsRel('docs/migration/v0.23.0.md'),
+    releaseV23: existsRel('docs/releases/v0.23.0.md'),
+    keychainK:
+      existsRel('apps/server/src/db/crypto-key.ts')
+      && existsRel('apps/server/src/db/keychain.ts')
+      && cryptoKey.includes('resolveEncryptionKey')
+      && keychain.includes('FileKeychain')
+      && crypto.includes('getEncryptionKey')
+      && indexTs.includes('NEOS_SECRETS_KEY_SOURCE'),
+    webMediaW:
+      existsRel('apps/web/src/pages/Media.tsx')
+      && webMedia.includes('generateMedia')
+      && webApi.includes('listMediaFiles')
+      && webApi.includes('generateMedia')
+      && webApp.includes('/media')
+      && /Media generate UI.*yes/i.test(dual),
+    warehouseP:
+      existsRel('apps/server/src/lib/run-warehouse.ts')
+      && warehouse.includes('createRunWarehouse')
+      && warehouse.includes('initRunWarehouse')
+      && runShared.includes('getRunWarehouse')
+      && indexTs.includes('initRunWarehouse')
+      && multiOps.includes('NEOS_RUN_WAREHOUSE'),
+    implK: existsRel('docs/implementation/v0.23/v0.23.0.md'),
+    implW: existsRel('docs/implementation/v0.23/v0.23.1.md'),
+    implP: existsRel('docs/implementation/v0.23/v0.23.2.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.22 capability surface (retention + durable summary + nightly live e2e).
+ * @see docs/plans/PLAN_FOR_V0_22_0.md
+ */
+function scanV22Features() {
+  const runLog = readText('apps/server/src/lib/run-event-log.ts') ?? '';
+  const runShared = readText('apps/server/src/lib/run-registry-shared.ts') ?? '';
+  const runsRoute = readText('apps/server/src/routes/runs.ts') ?? '';
+  const multiE2e = readText('e2e/multi-replica/run.mjs') ?? '';
+  const multiOps = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const nightly = readText('.github/workflows/nightly-multi-replica.yml') ?? '';
+  const indexTs = readText('apps/server/src/index.ts') ?? '';
+  const features = {
+    planV22: existsRel('docs/plans/PLAN_FOR_V0_22_0.md'),
+    migrationV22: existsRel('docs/migration/v0.22.0.md'),
+    releaseV22: existsRel('docs/releases/v0.22.0.md'),
+    retentionM0:
+      runLog.includes('pruneRunEventLogs')
+      && runLog.includes('NEOS_RUN_EVENT_LOG_MAX_AGE_HOURS')
+      && runLog.includes('NEOS_RUN_EVENT_LOG_MAX_RUNS')
+      && indexTs.includes('pruneRunEventLogs'),
+    durableSummaryM1:
+      runLog.includes('writeRunSummaryLog')
+      && runLog.includes('readRunSummaryLog')
+      && runLog.includes('summary.json')
+      && runShared.includes('writeRunSummaryLog')
+      && runsRoute.includes('readRunSummaryLog'),
+    multiReplicaE2eL11:
+      multiE2e.includes('L11')
+      && multiE2e.includes('summary.json'),
+    nightlyLiveM2:
+      existsRel('.github/workflows/nightly-multi-replica.yml')
+      && /e2e:multi-replica:live/.test(nightly)
+      && (/schedule:/.test(nightly) || /cron:/.test(nightly)),
+    opsRetentionDoc:
+      multiOps.includes('NEOS_RUN_EVENT_LOG_MAX_AGE')
+      && multiOps.includes('summary.json'),
+    implM0: existsRel('docs/implementation/v0.22/v0.22.0.md'),
+    implM1: existsRel('docs/implementation/v0.22/v0.22.1.md'),
+    implM2: existsRel('docs/implementation/v0.22/v0.22.2.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.21 capability surface (durable run event log + multi-replica e2e L9/L10).
+ * @see docs/plans/PLAN_FOR_V0_21_0.md
+ */
+function scanV21Features() {
+  const runLog = readText('apps/server/src/lib/run-event-log.ts') ?? '';
+  const runShared = readText('apps/server/src/lib/run-registry-shared.ts') ?? '';
+  const runsRoute = readText('apps/server/src/routes/runs.ts') ?? '';
+  const multiE2e = readText('e2e/multi-replica/run.mjs') ?? '';
+  const multiOps = readText('docs/ops/multi-replica-collab.md') ?? '';
+  const features = {
+    planV21: existsRel('docs/plans/PLAN_FOR_V0_21_0.md'),
+    migrationV21: existsRel('docs/migration/v0.21.0.md'),
+    releaseV21: existsRel('docs/releases/v0.21.0.md'),
+    runEventLog:
+      existsRel('apps/server/src/lib/run-event-log.ts')
+      && runLog.includes('appendRunEventLog')
+      && runLog.includes('NEOS_RUN_EVENT_LOG')
+      && runLog.includes('events.jsonl')
+      && runShared.includes('appendRunEventLog')
+      && runsRoute.includes('readRunEventLogAfter'),
+    multiReplicaE2eL9L10:
+      existsRel('e2e/multi-replica/run.mjs')
+      && multiE2e.includes('L9')
+      && multiE2e.includes('L10')
+      && multiE2e.includes('NEOS_RUN_REGISTRY')
+      && multiE2e.includes('events.jsonl'),
+    opsDurableDoc:
+      multiOps.includes('NEOS_RUN_EVENT_LOG')
+      && multiOps.includes('events.jsonl'),
+    impl1: existsRel('docs/implementation/v0.21/v0.21.0.md'),
+    impl2: existsRel('docs/implementation/v0.21/v0.21.1.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+/**
+ * v0.20 capability surface (EngineCatalogClient + project client split).
+ * @see docs/plans/PLAN_FOR_V0_20_0.md
+ */
+function scanV20Features() {
+  const engineCatalog = readText('apps/desktop/src/lib/engine-catalog.ts') ?? '';
+  const engine = readText('apps/desktop/src/lib/engine.ts') ?? '';
+  const projectCore = readText('apps/desktop/src/lib/engine-project-core.ts') ?? '';
+  const projectCollab = readText('apps/desktop/src/lib/engine-project-collab.ts') ?? '';
+  const projectFiles = readText('apps/desktop/src/lib/engine-project-files.ts') ?? '';
+  const projectLeaf = readText('apps/desktop/src/lib/engine-project.ts') ?? '';
+  const features = {
+    planV20: existsRel('docs/plans/PLAN_FOR_V0_20_0.md'),
+    migrationV20: existsRel('docs/migration/v0.20.0.md'),
+    releaseV20: existsRel('docs/releases/v0.20.0.md'),
+    engineCatalog:
+      existsRel('apps/desktop/src/lib/engine-catalog.ts')
+      && engineCatalog.includes('EngineCatalogClient')
+      && engineCatalog.includes('extends EngineOpsClient')
+      && (
+        engine.includes('extends EngineCatalogClient')
+        || engine.includes('class EngineClient extends EngineCatalogClient')
+      ),
+    projectSplit:
+      existsRel('apps/desktop/src/lib/engine-project-core.ts')
+      && existsRel('apps/desktop/src/lib/engine-project-collab.ts')
+      && existsRel('apps/desktop/src/lib/engine-project-files.ts')
+      && projectCore.includes('EngineProjectCoreClient')
+      && projectCollab.includes('extends EngineProjectCoreClient')
+      && projectFiles.includes('extends EngineProjectCollabClient')
+      && projectLeaf.includes('extends EngineProjectFilesClient')
+      && projectLeaf.includes('export class EngineProjectClient'),
+    implC: existsRel('docs/implementation/v0.20/v0.20.0.md'),
+    implD: existsRel('docs/implementation/v0.20/v0.20.1.md'),
   };
   const missing = Object.entries(features)
     .filter(([, ok]) => !ok)
@@ -826,6 +1213,13 @@ export function buildInventory() {
   const v15 = scanV15Features();
   const v16 = scanV16Features();
   const v17 = scanV17Features();
+  const v18 = scanV18Features();
+  const v19 = scanV19Features();
+  const v20 = scanV20Features();
+  const v21 = scanV21Features();
+  const v22 = scanV22Features();
+  const v23 = scanV23Features();
+  const v24 = scanV24Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -853,6 +1247,13 @@ export function buildInventory() {
       v15Features: v15,
       v16Features: v16,
       v17Features: v17,
+      v18Features: v18,
+      v19Features: v19,
+      v20Features: v20,
+      v21Features: v21,
+      v22Features: v22,
+      v23Features: v23,
+      v24Features: v24,
     },
     gates: GATES,
     summary: {
@@ -889,6 +1290,20 @@ export function buildInventory() {
       v16FeaturesTotal: v16.total,
       v17Features: v17.count,
       v17FeaturesTotal: v17.total,
+      v18Features: v18.count,
+      v18FeaturesTotal: v18.total,
+      v19Features: v19.count,
+      v19FeaturesTotal: v19.total,
+      v20Features: v20.count,
+      v20FeaturesTotal: v20.total,
+      v21Features: v21.count,
+      v21FeaturesTotal: v21.total,
+      v22Features: v22.count,
+      v22FeaturesTotal: v22.total,
+      v23Features: v23.count,
+      v23FeaturesTotal: v23.total,
+      v24Features: v24.count,
+      v24FeaturesTotal: v24.total,
     },
   };
 
@@ -1041,6 +1456,83 @@ export function evaluateGates(inventory) {
       missing: v17?.missing ?? [],
     });
   }
+  if (g.requireV18Features) {
+    const v18 = inventory.catalogs?.v18Features;
+    const ok = Boolean(v18?.ok);
+    results.push({
+      id: 'v18Features',
+      ok,
+      actual: v18?.count ?? 0,
+      min: v18?.total ?? 0,
+      missing: v18?.missing ?? [],
+    });
+  }
+  if (g.requireV19Features) {
+    const v19 = inventory.catalogs?.v19Features;
+    const ok = Boolean(v19?.ok);
+    results.push({
+      id: 'v19Features',
+      ok,
+      actual: v19?.count ?? 0,
+      min: v19?.total ?? 0,
+      missing: v19?.missing ?? [],
+    });
+  }
+  if (g.requireV20Features) {
+    const v20 = inventory.catalogs?.v20Features;
+    const ok = Boolean(v20?.ok);
+    results.push({
+      id: 'v20Features',
+      ok,
+      actual: v20?.count ?? 0,
+      min: v20?.total ?? 0,
+      missing: v20?.missing ?? [],
+    });
+  }
+  if (g.requireV21Features) {
+    const v21 = inventory.catalogs?.v21Features;
+    const ok = Boolean(v21?.ok);
+    results.push({
+      id: 'v21Features',
+      ok,
+      actual: v21?.count ?? 0,
+      min: v21?.total ?? 0,
+      missing: v21?.missing ?? [],
+    });
+  }
+  if (g.requireV22Features) {
+    const v22 = inventory.catalogs?.v22Features;
+    const ok = Boolean(v22?.ok);
+    results.push({
+      id: 'v22Features',
+      ok,
+      actual: v22?.count ?? 0,
+      min: v22?.total ?? 0,
+      missing: v22?.missing ?? [],
+    });
+  }
+  if (g.requireV23Features) {
+    const v23 = inventory.catalogs?.v23Features;
+    const ok = Boolean(v23?.ok);
+    results.push({
+      id: 'v23Features',
+      ok,
+      actual: v23?.count ?? 0,
+      min: v23?.total ?? 0,
+      missing: v23?.missing ?? [],
+    });
+  }
+  if (g.requireV24Features) {
+    const v24 = inventory.catalogs?.v24Features;
+    const ok = Boolean(v24?.ok);
+    results.push({
+      id: 'v24Features',
+      ok,
+      actual: v24?.count ?? 0,
+      min: v24?.total ?? 0,
+      missing: v24?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -1080,6 +1572,13 @@ function main(argv = process.argv.slice(2)) {
           || r.id === 'v15Features'
           || r.id === 'v16Features'
           || r.id === 'v17Features'
+          || r.id === 'v18Features'
+          || r.id === 'v19Features'
+          || r.id === 'v20Features'
+          || r.id === 'v21Features'
+          || r.id === 'v22Features'
+          || r.id === 'v23Features'
+          || r.id === 'v24Features'
         )
         && Array.isArray(r.missing)
         && r.missing.length

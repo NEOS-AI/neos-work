@@ -259,4 +259,138 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v17Features.features.implM0);
     assert.ok(inv.checks.results.some((r) => r.id === 'v17Features' && r.ok));
   });
+
+  it('includes v0.18 feature gates (EngineSessions + EnginePlugins extracts)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v18Features);
+    assert.equal(
+      inv.catalogs.v18Features.ok,
+      true,
+      `v18 missing: ${(inv.catalogs.v18Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v18Features.features.planV18);
+    assert.ok(inv.catalogs.v18Features.features.migrationV18);
+    assert.ok(inv.catalogs.v18Features.features.releaseV18);
+    assert.ok(inv.catalogs.v18Features.features.engineSessions);
+    assert.ok(inv.catalogs.v18Features.features.enginePlugins);
+    assert.ok(inv.catalogs.v18Features.features.implM0);
+    assert.ok(inv.catalogs.v18Features.features.implM1);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v18Features' && r.ok));
+  });
+
+  it('includes v0.19 feature gates (EngineOps + run event fan-out)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v19Features);
+    assert.equal(
+      inv.catalogs.v19Features.ok,
+      true,
+      `v19 missing: ${(inv.catalogs.v19Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v19Features.features.planV19);
+    assert.ok(inv.catalogs.v19Features.features.migrationV19);
+    assert.ok(inv.catalogs.v19Features.features.releaseV19);
+    assert.ok(inv.catalogs.v19Features.features.engineOps);
+    assert.ok(inv.catalogs.v19Features.features.runEventFanout);
+    assert.ok(inv.catalogs.v19Features.features.stickyDocUpdated);
+    assert.ok(inv.catalogs.v19Features.features.implA);
+    assert.ok(inv.catalogs.v19Features.features.implB);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v19Features' && r.ok));
+  });
+
+  it('includes v0.20 feature gates (EngineCatalog + project split)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v20Features);
+    assert.equal(
+      inv.catalogs.v20Features.ok,
+      true,
+      `v20 missing: ${(inv.catalogs.v20Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v20Features.features.planV20);
+    assert.ok(inv.catalogs.v20Features.features.migrationV20);
+    assert.ok(inv.catalogs.v20Features.features.releaseV20);
+    assert.ok(inv.catalogs.v20Features.features.engineCatalog);
+    assert.ok(inv.catalogs.v20Features.features.projectSplit);
+    assert.ok(inv.catalogs.v20Features.features.implC);
+    assert.ok(inv.catalogs.v20Features.features.implD);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v20Features' && r.ok));
+  });
+
+  it('includes v0.21 feature gates (durable run log + multi-replica e2e)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v21Features);
+    assert.equal(
+      inv.catalogs.v21Features.ok,
+      true,
+      `v21 missing: ${(inv.catalogs.v21Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v21Features.features.planV21);
+    assert.ok(inv.catalogs.v21Features.features.migrationV21);
+    assert.ok(inv.catalogs.v21Features.features.releaseV21);
+    assert.ok(inv.catalogs.v21Features.features.runEventLog);
+    assert.ok(inv.catalogs.v21Features.features.multiReplicaE2eL9L10);
+    assert.ok(inv.catalogs.v21Features.features.opsDurableDoc);
+    assert.ok(inv.catalogs.v21Features.features.impl1);
+    assert.ok(inv.catalogs.v21Features.features.impl2);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v21Features' && r.ok));
+  });
+
+  it('includes v0.22 feature gates (retention + summary + nightly live)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v22Features);
+    assert.equal(
+      inv.catalogs.v22Features.ok,
+      true,
+      `v22 missing: ${(inv.catalogs.v22Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v22Features.features.planV22);
+    assert.ok(inv.catalogs.v22Features.features.migrationV22);
+    assert.ok(inv.catalogs.v22Features.features.releaseV22);
+    assert.ok(inv.catalogs.v22Features.features.retentionM0);
+    assert.ok(inv.catalogs.v22Features.features.durableSummaryM1);
+    assert.ok(inv.catalogs.v22Features.features.multiReplicaE2eL11);
+    assert.ok(inv.catalogs.v22Features.features.nightlyLiveM2);
+    assert.ok(inv.catalogs.v22Features.features.opsRetentionDoc);
+    assert.ok(inv.catalogs.v22Features.features.implM0);
+    assert.ok(inv.catalogs.v22Features.features.implM1);
+    assert.ok(inv.catalogs.v22Features.features.implM2);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v22Features' && r.ok));
+  });
+
+  it('includes v0.23 feature gates (keychain + web media + warehouse)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v23Features);
+    assert.equal(
+      inv.catalogs.v23Features.ok,
+      true,
+      `v23 missing: ${(inv.catalogs.v23Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v23Features.features.planV23);
+    assert.ok(inv.catalogs.v23Features.features.migrationV23);
+    assert.ok(inv.catalogs.v23Features.features.releaseV23);
+    assert.ok(inv.catalogs.v23Features.features.keychainK);
+    assert.ok(inv.catalogs.v23Features.features.webMediaW);
+    assert.ok(inv.catalogs.v23Features.features.warehouseP);
+    assert.ok(inv.catalogs.v23Features.features.implK);
+    assert.ok(inv.catalogs.v23Features.features.implW);
+    assert.ok(inv.catalogs.v23Features.features.implP);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v23Features' && r.ok));
+  });
+
+  it('includes v0.24 feature gates (OS keyring + web workflow editor)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v24Features);
+    assert.equal(
+      inv.catalogs.v24Features.ok,
+      true,
+      `v24 missing: ${(inv.catalogs.v24Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v24Features.features.planV24);
+    assert.ok(inv.catalogs.v24Features.features.migrationV24);
+    assert.ok(inv.catalogs.v24Features.features.releaseV24);
+    assert.ok(inv.catalogs.v24Features.features.osKeyring);
+    assert.ok(inv.catalogs.v24Features.features.webWorkflow);
+    assert.ok(inv.catalogs.v24Features.features.implOs);
+    assert.ok(inv.catalogs.v24Features.features.implWf);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v24Features' && r.ok));
+  });
 });

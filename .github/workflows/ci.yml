@@ -60,6 +60,7 @@ jobs:
 
       - name: Multi-replica collab structural e2e
         run: pnpm e2e:multi-replica
+        # Live Redis dual-engine path is nightly: .github/workflows/nightly-multi-replica.yml (v0.22 M2)
 
       - name: E2E smoke
         run: pnpm e2e:smoke

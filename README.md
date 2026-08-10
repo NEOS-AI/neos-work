@@ -42,6 +42,55 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.15 plan:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **migration:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **release:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
 **v0.16 plan:** [docs/plans/PLAN_FOR_V0_16_0.md](docs/plans/PLAN_FOR_V0_16_0.md) · **migration:** [docs/migration/v0.16.0.md](docs/migration/v0.16.0.md) · **release:** [docs/releases/v0.16.2.md](docs/releases/v0.16.2.md) · inventory `v16Features`  
 **v0.17 plan:** [docs/plans/PLAN_FOR_V0_17_0.md](docs/plans/PLAN_FOR_V0_17_0.md) · **migration:** [docs/migration/v0.17.0.md](docs/migration/v0.17.0.md) · **release:** [docs/releases/v0.17.0.md](docs/releases/v0.17.0.md) · inventory `v17Features`  
+**v0.18 plan:** [docs/plans/PLAN_FOR_V0_18_0.md](docs/plans/PLAN_FOR_V0_18_0.md) · **migration:** [docs/migration/v0.18.0.md](docs/migration/v0.18.0.md) · **release:** [docs/releases/v0.18.0.md](docs/releases/v0.18.0.md) · inventory `v18Features`  
+**v0.19 plan:** [docs/plans/PLAN_FOR_V0_19_0.md](docs/plans/PLAN_FOR_V0_19_0.md) · **migration:** [docs/migration/v0.19.0.md](docs/migration/v0.19.0.md) · **release:** [docs/releases/v0.19.0.md](docs/releases/v0.19.0.md) · inventory `v19Features`  
+**v0.20 plan:** [docs/plans/PLAN_FOR_V0_20_0.md](docs/plans/PLAN_FOR_V0_20_0.md) · **migration:** [docs/migration/v0.20.0.md](docs/migration/v0.20.0.md) · **release:** [docs/releases/v0.20.0.md](docs/releases/v0.20.0.md) · inventory `v20Features`  
+**v0.21 plan:** [docs/plans/PLAN_FOR_V0_21_0.md](docs/plans/PLAN_FOR_V0_21_0.md) · **migration:** [docs/migration/v0.21.0.md](docs/migration/v0.21.0.md) · **release:** [docs/releases/v0.21.0.md](docs/releases/v0.21.0.md) · inventory `v21Features`  
+**v0.22 plan:** [docs/plans/PLAN_FOR_V0_22_0.md](docs/plans/PLAN_FOR_V0_22_0.md) · **migration:** [docs/migration/v0.22.0.md](docs/migration/v0.22.0.md) · **release:** [docs/releases/v0.22.0.md](docs/releases/v0.22.0.md) · inventory `v22Features`  
+**v0.23 plan:** [docs/plans/PLAN_FOR_V0_23_0.md](docs/plans/PLAN_FOR_V0_23_0.md) · **migration:** [docs/migration/v0.23.0.md](docs/migration/v0.23.0.md) · **release:** [docs/releases/v0.23.0.md](docs/releases/v0.23.0.md) · inventory `v23Features`  
+**v0.24 plan:** [docs/plans/PLAN_FOR_V0_24_0.md](docs/plans/PLAN_FOR_V0_24_0.md) · **migration:** [docs/migration/v0.24.0.md](docs/migration/v0.24.0.md) · **release:** [docs/releases/v0.24.0.md](docs/releases/v0.24.0.md) · inventory `v24Features`  
+
+## What's new in v0.24
+
+- **0.24.0** **OS keyring + web Workflow editor** — optional `keytar` + Tauri master-key commands; browser Workflows list + React Flow editor ([plan](docs/plans/PLAN_FOR_V0_24_0.md) · [OS](docs/implementation/v0.24/v0.24.0.md) · [WF](docs/implementation/v0.24/v0.24.1.md) · [migration](docs/migration/v0.24.0.md) · [release](docs/releases/v0.24.0.md))
+
+---
+
+## What's new in v0.23
+
+- **0.23.0** **Keychain master key + web Media + Postgres warehouse** — operator-controlled AES key source; browser Media generate; optional `NEOS_RUN_WAREHOUSE=postgres` ([plan](docs/plans/PLAN_FOR_V0_23_0.md) · [K](docs/implementation/v0.23/v0.23.0.md) · [W](docs/implementation/v0.23/v0.23.1.md) · [P](docs/implementation/v0.23/v0.23.2.md) · [migration](docs/migration/v0.23.0.md) · [release](docs/releases/v0.23.0.md))
+
+---
+
+## What's new in v0.22
+
+- **0.22.0** **Run log retention + durable summary + nightly live e2e** — GC/env caps, `summary.json`, GitHub Actions Redis live job L1–L11 ([plan](docs/plans/PLAN_FOR_V0_22_0.md) · [M0](docs/implementation/v0.22/v0.22.0.md) · [M1](docs/implementation/v0.22/v0.22.1.md) · [M2](docs/implementation/v0.22/v0.22.2.md) · [migration](docs/migration/v0.22.0.md) · [release](docs/releases/v0.22.0.md))
+
+---
+
+## What's new in v0.21
+
+- **0.21.0** **Durable run event log + multi-replica e2e L9/L10** — JSONL under `NEOS_DATA_DIR/runs/{id}/events.jsonl`; live cross-pod run events gate ([plan](docs/plans/PLAN_FOR_V0_21_0.md) · [impl](docs/implementation/v0.21/v0.21.0.md) · [e2e](docs/implementation/v0.21/v0.21.1.md) · [migration](docs/migration/v0.21.0.md) · [release](docs/releases/v0.21.0.md))
+
+---
+
+## What's new in v0.20
+
+- **0.20.0** **EngineCatalogClient + project split** — blocks/templates/memory extract; Design Project client Core→Collab→Files→ProjectClient ([plan](docs/plans/PLAN_FOR_V0_20_0.md) · [impl C](docs/implementation/v0.20/v0.20.0.md) · [impl D](docs/implementation/v0.20/v0.20.1.md) · [migration](docs/migration/v0.20.0.md) · [release](docs/releases/v0.20.0.md))
+
+---
+
+## What's new in v0.19
+
+- **0.19.0** **EngineOpsClient + run event fan-out** — design systems/artifacts/routines/deploy extract; multi-replica run event GET/SSE via shared buffer ([plan](docs/plans/PLAN_FOR_V0_19_0.md) · [impl A](docs/implementation/v0.19/v0.19.0.md) · [impl B](docs/implementation/v0.19/v0.19.1.md) · [migration](docs/migration/v0.19.0.md) · [release](docs/releases/v0.19.0.md))
+
+---
+
+## What's new in v0.18
+
+- **0.18.0** **EngineSessionsClient + EnginePluginsClient** — sessions/chat/agent/workspaces + plugins/marketplace/workers/packs extracts; `EngineClient extends EnginePluginsClient` ([plan](docs/plans/PLAN_FOR_V0_18_0.md) · [impl M0](docs/implementation/v0.18/v0.18.0.md) · [impl M1](docs/implementation/v0.18/v0.18.1.md) · [migration](docs/migration/v0.18.0.md) · [release](docs/releases/v0.18.0.md))
+
+---
 
 ## What's new in v0.17
 

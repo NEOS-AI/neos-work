@@ -113,6 +113,58 @@ async fn get_engine_port(state: tauri::State<'_, EngineState>) -> Result<Option<
     Ok(*guard)
 }
 
+const KEYRING_SERVICE: &str = "neos-work";
+const KEYRING_ACCOUNT: &str = "master-key";
+
+/// Read AES master key (base64 of 32 raw bytes) from the OS keyring.
+/// Returns `None` when no entry exists.
+#[tauri::command]
+fn get_master_key() -> Result<Option<String>, String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| format!("keyring entry: {e}"))?;
+    match entry.get_password() {
+        Ok(pw) => {
+            let t = pw.trim().to_string();
+            if t.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(t))
+            }
+        }
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("keyring get: {e}")),
+    }
+}
+
+/// Store AES master key (base64 of 32 raw bytes) in the OS keyring.
+#[tauri::command]
+fn set_master_key(key_b64: String) -> Result<(), String> {
+    if key_b64.chars().any(|c| c == '\0' || c == '\n' || c == '\r') {
+        return Err("invalid key material".into());
+    }
+    let t = key_b64.trim();
+    if t.is_empty() || t.len() > 128 {
+        return Err("invalid key material length".into());
+    }
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| format!("keyring entry: {e}"))?;
+    entry
+        .set_password(t)
+        .map_err(|e| format!("keyring set: {e}"))
+}
+
+/// Delete AES master key from the OS keyring (no-op if missing).
+#[tauri::command]
+fn delete_master_key() -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| format!("keyring entry: {e}"))?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("keyring delete: {e}")),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -123,7 +175,15 @@ pub fn run() {
             auth_token: Mutex::new(None),
             port: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![start_engine, stop_engine, get_auth_token, get_engine_port])
+        .invoke_handler(tauri::generate_handler![
+            start_engine,
+            stop_engine,
+            get_auth_token,
+            get_engine_port,
+            get_master_key,
+            set_master_key,
+            delete_master_key
+        ])
         .on_window_event(|window, event| {
             // Stop engine when window is destroyed (app close)
             if let tauri::WindowEvent::Destroyed = event {

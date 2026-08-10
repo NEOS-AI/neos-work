@@ -57,13 +57,16 @@ are healthy (see multi-replica Limits table).
 | Scenario | Effect |
 |---|---|
 | Mid-stream load-balancer rebalance drops SSE | Client must reconnect; brief gap until re-subscribe |
-| Run event SSE on replica A, cancel hits replica B | Cancel is REST by run id; with **v0.16 shared run summary** (`NEOS_RUN_REGISTRY`) cancel no longer 404s when the summary exists (owner aborts via pub/sub). **Event SSE** remains local to A |
+| Run event SSE on replica A, cancel hits replica B | Cancel is REST by run id; with **v0.16 shared run summary** (`NEOS_RUN_REGISTRY`) cancel no longer 404s when the summary exists (owner aborts via pub/sub). **v0.19 event buffer** lets B serve run event SSE by polling the shared buffer (no sticky required for run streams) |
 | File write REST on B, file SSE only open on A | A learns via file events bus/SSE only if path is wired; design projects rely on shared disk + local publish |
 | Expect “one SSE pin forever without reconnect” | Not guaranteed under multi-pod LB without sticky or client reconnect logic |
 
-**Runs registry** abort/events stay in-process. v0.16 ships an optional **shared
-run summary** store for GET/cancel across pods (`NEOS_RUN_REGISTRY`); full event
-SSE fan-out remains out of scope. Sticky affinity still helps stream UX.
+**Runs registry** abort stays in-process. v0.16 ships an optional **shared run
+summary** for GET/cancel; **v0.19** adds a capped **shared event buffer** so
+run event GET/SSE fan-out works without sticky routing when
+`NEOS_RUN_REGISTRY` is not `off`. Collab reconnect remains status quo (bus +
+registries). Sticky affinity is still **optional ops** for reducing mid-stream
+reconnect gaps on long-lived collab SSE — not required for run event fan-out MVP.
 
 ---
 
@@ -71,13 +74,13 @@ SSE fan-out remains out of scope. Sticky affinity still helps stream UX.
 
 | Option | Pros | Cons |
 |---|---|---|
-| **A. Client reconnect only** (status quo + good clients) | Simple ops; registries cover peers/locks | Run cancel/stream still node-local |
+| **A. Client reconnect only** (status quo + good clients) | Simple ops; registries cover peers/locks | Collab mid-stream gaps still need reconnect |
 | **B. LB cookie / consistent-hash sticky** | Keeps SSE + REST on same pod | Sticky loss on scale-in; thrash if cookie missing |
-| **C. Shared run registry (Redis)** | Cancel/stream any node | New SSOT; complexity; not planned |
+| **C. Shared run registry (Redis)** | Cancel + event stream any node | **v0.16 summary + v0.19 event buffer MVP** (capped, not durable log) |
 | **D. WebSocket mesh** | Full duplex; one protocol | Large product change; CRDT-adjacent cost |
 
-**Default for now:** **A** — document limits; clients already reconnect collab
-SSE; operators use single-replica or accept run locality.
+**Default for now:** **A + partial C** — collab clients reconnect SSE; run
+GET/cancel/events use shared registry when enabled; sticky remains optional.
 
 ---
 
@@ -95,7 +98,7 @@ SSE; operators use single-replica or accept run locality.
 ## Explicit non-goals
 
 - Implementing sticky cookies in NEOS or Helm chart defaults  
-- Moving run registry to Redis  
+- Durable multi-node event log / Postgres run store (v0.19 buffer is capped + TTL only)  
 - Replacing SSE with WebSocket for collab  
 - CRDT multi-caret (see ADR 0001)
 

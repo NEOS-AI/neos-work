@@ -133,6 +133,21 @@ describe('Web Settings', () => {
     });
   });
 
+  it('shows OpenAI API key row (save only, no verify)', async () => {
+    renderSettings();
+    await waitFor(() => {
+      expect(screen.getByTestId('api-key-row-OPENAI_API_KEY')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('api-key-input-OPENAI_API_KEY')).toBeInTheDocument();
+    expect(screen.queryByTestId('api-key-verify-OPENAI_API_KEY')).not.toBeInTheDocument();
+    const input = screen.getByTestId('api-key-input-OPENAI_API_KEY') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'sk-openai-test' } });
+    fireEvent.click(screen.getByTestId('api-key-save-OPENAI_API_KEY'));
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('OPENAI_API_KEY', 'sk-openai-test');
+    });
+  });
+
   it('loads collab status ops panel', async () => {
     renderSettings();
     await waitFor(() => {

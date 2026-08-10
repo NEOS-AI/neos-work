@@ -216,6 +216,12 @@ export function Projects() {
           <p className="muted">Design projects on the daemon</p>
         </div>
         <div className="row">
+          <Link to="/workflows" className="btn btn-ghost" data-testid="nav-workflows">
+            Workflows
+          </Link>
+          <Link to="/media" className="btn btn-ghost" data-testid="nav-media">
+            Media
+          </Link>
           <Link to="/settings" className="btn btn-ghost">
             Settings
           </Link>

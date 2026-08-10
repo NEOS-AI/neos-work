@@ -1,13 +1,40 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   decrypt,
   encrypt,
   ENCRYPT_PLAINTEXT_MAX_CHARS,
+  getEncryptionKeySource,
   isEncrypted,
   isSensitiveKey,
+  resetEncryptionKeyCache,
 } from './crypto.js';
 
+// Stable master key for this suite (operator-controlled env path).
+const TEST_MASTER_KEY = 'a'.repeat(64);
+
+beforeAll(() => {
+  process.env.NEOS_MASTER_KEY = TEST_MASTER_KEY;
+  process.env.NEOS_SECRETS_KEY_BACKEND = 'env';
+  resetEncryptionKeyCache();
+});
+
+afterEach(() => {
+  // Keep env pin; only re-assert cache if something else cleared it.
+  if (!process.env.NEOS_MASTER_KEY) {
+    process.env.NEOS_MASTER_KEY = TEST_MASTER_KEY;
+    process.env.NEOS_SECRETS_KEY_BACKEND = 'env';
+    resetEncryptionKeyCache();
+  }
+});
+
 describe('crypto helpers', () => {
+  it('resolves master key from NEOS_MASTER_KEY (source=env)', () => {
+    resetEncryptionKeyCache();
+    process.env.NEOS_MASTER_KEY = TEST_MASTER_KEY;
+    process.env.NEOS_SECRETS_KEY_BACKEND = 'env';
+    expect(getEncryptionKeySource()).toBe('env');
+  });
+
   it('detects sensitive keys', () => {
     expect(isSensitiveKey('apiKey.anthropic')).toBe(true);
     expect(isSensitiveKey('apiKey.openai')).toBe(true);

@@ -1,17 +1,42 @@
 /**
  * Encryption utilities for sensitive settings (API keys).
- * Uses AES-256-GCM with a machine-derived key.
+ * Uses AES-256-GCM with a pluggable master key (env / OS keychain / file / legacy).
  */
 
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
-import { hostname, homedir } from 'node:os';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import {
+  resolveEncryptionKey,
+  type SecretsKeySource,
+} from './crypto-key.js';
 
 const ALGO = 'aes-256-gcm';
 
-/** Derive a 256-bit key from machine-specific attributes. */
-const KEY = createHash('sha256')
-  .update(`${hostname()}:${homedir()}:neos-work-v1`)
-  .digest();
+let _cachedKey: Buffer | null = null;
+let _cachedSource: SecretsKeySource | null = null;
+
+/** Lazy-resolve and cache the AES-256 key (and source label for startup logs). */
+export function getEncryptionKey(): Buffer {
+  if (!_cachedKey) {
+    const resolved = resolveEncryptionKey();
+    _cachedKey = resolved.key;
+    _cachedSource = resolved.source;
+  }
+  return _cachedKey;
+}
+
+/** Source of the current master key: env | os | keychain | file | legacy. Never includes material. */
+export function getEncryptionKeySource(): SecretsKeySource {
+  if (!_cachedSource) {
+    getEncryptionKey();
+  }
+  return _cachedSource!;
+}
+
+/** Test helper: drop lazy cache so the next encrypt/decrypt re-resolves. */
+export function resetEncryptionKeyCache(): void {
+  _cachedKey = null;
+  _cachedSource = null;
+}
 
 const SENSITIVE_PREFIXES = [
   'apiKey.',
@@ -61,7 +86,7 @@ export function encrypt(plaintext: string): string {
     );
   }
   const iv = randomBytes(12);
-  const cipher = createCipheriv(ALGO, KEY, iv);
+  const cipher = createCipheriv(ALGO, getEncryptionKey(), iv);
   const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
@@ -76,7 +101,7 @@ export function decrypt(encoded: string): string {
     throw new Error('Invalid encrypted value');
   }
   const [ivHex, tagHex, dataHex] = raw.split(':');
-  const decipher = createDecipheriv(ALGO, KEY, Buffer.from(ivHex!, 'hex'));
+  const decipher = createDecipheriv(ALGO, getEncryptionKey(), Buffer.from(ivHex!, 'hex'));
   decipher.setAuthTag(Buffer.from(tagHex!, 'hex'));
   return decipher.update(Buffer.from(dataHex!, 'hex'), undefined, 'utf8') + decipher.final('utf8');
 }

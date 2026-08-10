@@ -1,13 +1,16 @@
 /**
  * Project / agent run API (v0.5.10 — DS + memory + comment inject, CLI execute).
  * v0.16 B0: optional shared run summary dual-write for multi-replica GET/cancel.
+ * v0.19 Track B: shared event buffer dual-write + cross-pod GET/SSE events.
  *
  * POST   /api/runs              — create + start (background CLI when agentId set)
  * GET    /api/runs              — list (?projectId=; local only)
- * GET    /api/runs/:id          — get run (local or shared summary)
- * GET    /api/runs/:id/events   — events (?after=eventId; local only)
- * GET    /api/runs/:id/events/stream — SSE of new events (local only)
+ * GET    /api/runs/:id          — get run (local / shared / durable / warehouse)
+ * GET    /api/runs/:id/events   — events (?after=eventId; local / shared / durable / warehouse)
+ * GET    /api/runs/:id/events/stream — SSE of new events (local / shared / durable poll)
  * POST   /api/runs/:id/cancel   — cancel (local or remote via shared store)
+ * v0.21: durable JSONL under NEOS_DATA_DIR/runs/{id}/events.jsonl
+ * v0.23: optional Postgres warehouse fallback (NEOS_RUN_WAREHOUSE)
  */
 
 import { Hono } from 'hono';
@@ -43,11 +46,18 @@ import {
 import { exportMemories } from '../lib/memory-store.js';
 import { publishProjectFileEvent } from '../lib/project-file-events.js';
 import {
+  appendRunEvent,
+  dualWriteRunEvent,
   dualWriteRunRecord,
   getSharedRunStore,
   syncRunSummary,
   type SharedRunSummary,
 } from '../lib/run-registry-shared.js';
+import {
+  readRunEventLogAfter,
+  readRunSummaryLog,
+} from '../lib/run-event-log.js';
+import { getRunWarehouse } from '../lib/run-warehouse.js';
 
 const runs = new Hono();
 
@@ -165,7 +175,7 @@ async function executeCliRun(runId: string): Promise<void> {
   const def = getDefById(run.agentId);
   if (!def) {
     reg.setStatus(runId, 'failed', 'Unknown agent');
-    reg.appendEvent(runId, 'run.failed', { error: 'Unknown agent' });
+    appendRunEvent(reg, runId, 'run.failed', { error: 'Unknown agent' });
     dualWrite(runId);
     return;
   }
@@ -205,7 +215,7 @@ async function executeCliRun(runId: string): Promise<void> {
         // Re-check cancel
         const current = reg.get(runId);
         if (!current || current.status === 'canceled') return;
-        reg.appendEvent(runId, 'run.stdout', { chunk: chunk.slice(0, 16_384) });
+        appendRunEvent(reg, runId, 'run.stdout', { chunk: chunk.slice(0, 16_384) });
       },
     });
 
@@ -224,7 +234,7 @@ async function executeCliRun(runId: string): Promise<void> {
           else if (kind === 'modified') changed.push({ path: filePath, hash: sig.hash });
         }
         if (created.length > 0) {
-          reg.appendEvent(runId, 'run.files_changed', {
+          appendRunEvent(reg, runId, 'run.files_changed', {
             paths: created.slice(0, 200).map((c) => c.path),
             kind: 'created',
           });
@@ -239,7 +249,7 @@ async function executeCliRun(runId: string): Promise<void> {
           }
         }
         if (changed.length > 0) {
-          reg.appendEvent(runId, 'run.files_changed', {
+          appendRunEvent(reg, runId, 'run.files_changed', {
             paths: changed.slice(0, 200).map((c) => c.path),
             kind: 'modified',
           });
@@ -265,7 +275,7 @@ async function executeCliRun(runId: string): Promise<void> {
     }
 
     if (result.exitCode === 0 || result.exitCode === null) {
-      reg.appendEvent(runId, 'run.succeeded', {
+      appendRunEvent(reg, runId, 'run.succeeded', {
         exitCode: result.exitCode,
         outputChars: result.output.length,
       });
@@ -273,7 +283,7 @@ async function executeCliRun(runId: string): Promise<void> {
       dualWrite(runId);
     } else {
       const err = `CLI exited with code ${result.exitCode}`;
-      reg.appendEvent(runId, 'run.failed', { error: err, exitCode: result.exitCode });
+      appendRunEvent(reg, runId, 'run.failed', { error: err, exitCode: result.exitCode });
       reg.setStatus(runId, 'failed', err);
       dualWrite(runId);
     }
@@ -281,7 +291,7 @@ async function executeCliRun(runId: string): Promise<void> {
     const current = reg.get(runId);
     if (!current || current.status === 'canceled') return;
     const msg = publicErrorMessage(err, 'Agent run failed');
-    reg.appendEvent(runId, 'run.failed', { error: msg });
+    appendRunEvent(reg, runId, 'run.failed', { error: msg });
     reg.setStatus(runId, 'failed', msg);
     dualWrite(runId);
   }
@@ -412,7 +422,7 @@ runs.post('/', async (c) => {
   });
 
   reg.setStatus(run.id, 'running');
-  reg.appendEvent(run.id, 'run.started', {
+  appendRunEvent(reg, run.id, 'run.started', {
     agentId,
     projectId: projectId || null,
     hasEditContext: !!editContext,
@@ -426,14 +436,14 @@ runs.post('/', async (c) => {
   const shouldExecute = !dryRun && !!agentId;
 
   if (!shouldExecute) {
-    reg.appendEvent(run.id, 'run.progress', {
+    appendRunEvent(reg, run.id, 'run.progress', {
       message: dryRun
         ? 'Dry-run: prompt assembled, CLI not spawned'
         : 'No agentId: run recorded without execution (set agentId to spawn CLI)',
       promptChars: assembled.length,
     });
     reg.setStatus(run.id, 'succeeded');
-    reg.appendEvent(run.id, 'run.succeeded', { deferred: true, dryRun });
+    appendRunEvent(reg, run.id, 'run.succeeded', { deferred: true, dryRun });
     const final = reg.get(run.id)!;
     await dualWriteRunRecord(final);
     return c.json({ ok: true, data: publicRun(final) }, 201);
@@ -458,25 +468,123 @@ runs.get('/:id', async (c) => {
   const shared = await getSharedRunStore().get(id);
   if (shared) return c.json({ ok: true, data: publicRunFromShared(shared) });
 
+  // Durable summary.json on shared volume (v0.22 M1)
+  const durable = readRunSummaryLog(id);
+  if (durable) return c.json({ ok: true, data: publicRunFromShared(durable) });
+
+  // Optional Postgres warehouse (v0.23 Track P) after local + shared + JSONL miss
+  const warehouseSummary = await getRunWarehouse().getSummary(id);
+  if (warehouseSummary) {
+    return c.json({ ok: true, data: publicRunFromShared(warehouseSummary) });
+  }
+
   return c.json({ ok: false, error: 'Not found' }, 404);
 });
 
-runs.get('/:id/events', (c) => {
+runs.get('/:id/events', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const reg = getGlobalRunRegistry();
-  if (!reg.get(id)) return c.json({ ok: false, error: 'Not found' }, 404);
   const after = safeRouteId(c.req.query('after') ?? '') || undefined;
-  const events = reg.eventsAfter(id, after);
-  return c.json({ ok: true, data: events });
+
+  if (reg.get(id)) {
+    const events = reg.eventsAfter(id, after);
+    return c.json({ ok: true, data: events });
+  }
+
+  // Multi-replica: shared event buffer when summary exists
+  const sharedStore = getSharedRunStore();
+  if (sharedStore.kind !== 'off') {
+    const summary = await sharedStore.get(id);
+    if (summary) {
+      const events = await sharedStore.eventsAfter(id, after);
+      if (events.length > 0) return c.json({ ok: true, data: events });
+      // Shared volume durable log (buffer may be empty after TTL)
+      const durable = readRunEventLogAfter(id, after);
+      if (durable.length > 0) return c.json({ ok: true, data: durable });
+      // Warehouse fallback when buffer + JSONL empty
+      const wh = await getRunWarehouse().listEventsAfter(id, after);
+      return c.json({ ok: true, data: wh });
+    }
+  }
+
+  // Durable-only recovery (summary gone but JSONL remains on shared volume)
+  const durableOnly = readRunEventLogAfter(id, after);
+  if (durableOnly.length > 0) return c.json({ ok: true, data: durableOnly });
+
+  // Warehouse-only recovery (v0.23)
+  const warehouseEvents = await getRunWarehouse().listEventsAfter(id, after);
+  if (warehouseEvents.length > 0) {
+    return c.json({ ok: true, data: warehouseEvents });
+  }
+
+  return c.json({ ok: false, error: 'Not found' }, 404);
 });
 
-/** Lightweight SSE: poll registry and push new events until terminal. */
-runs.get('/:id/events/stream', (c) => {
+/** Lightweight SSE: poll registry (or shared buffer) and push new events until terminal. */
+runs.get('/:id/events/stream', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const reg = getGlobalRunRegistry();
-  if (!reg.get(id)) return c.json({ ok: false, error: 'Not found' }, 404);
+  const local = reg.get(id);
+
+  if (!local) {
+    const sharedStore = getSharedRunStore();
+    const hasShared =
+      sharedStore.kind !== 'off' && !!(await sharedStore.get(id));
+    const hasDurable = readRunEventLogAfter(id).length > 0;
+    if (!hasShared && !hasDurable) {
+      return c.json({ ok: false, error: 'Not found' }, 404);
+    }
+
+    c.header('Content-Type', 'text/event-stream');
+    c.header('Cache-Control', 'no-cache');
+    c.header('Connection', 'keep-alive');
+
+    return stream(c, async (s) => {
+      let after: string | undefined;
+      const started = Date.now();
+      const maxMs = 10 * 60 * 1000;
+
+      while (Date.now() - started < maxMs) {
+        if (c.req.raw.signal.aborted) break;
+
+        const current =
+          sharedStore.kind !== 'off' ? await sharedStore.get(id) : null;
+        let batch =
+          current && sharedStore.kind !== 'off'
+            ? await sharedStore.eventsAfter(id, after)
+            : [];
+        if (batch.length === 0) {
+          batch = readRunEventLogAfter(id, after);
+        }
+        for (const ev of batch) {
+          after = ev.id;
+          await s.write(`id: ${ev.id}\nevent: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+        }
+
+        // No live summary → durable is static; exit after one full drain.
+        if (!current) {
+          if (batch.length === 0) break;
+          continue;
+        }
+
+        const terminal = isTerminalRunStatus(current.status);
+        if (terminal && batch.length === 0) break;
+        if (terminal) {
+          let more = await sharedStore.eventsAfter(id, after);
+          if (more.length === 0) more = readRunEventLogAfter(id, after);
+          if (more.length === 0) break;
+          for (const ev of more) {
+            after = ev.id;
+            await s.write(`id: ${ev.id}\nevent: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+          }
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    });
+  }
 
   c.header('Content-Type', 'text/event-stream');
   c.header('Cache-Control', 'no-cache');
@@ -521,8 +629,14 @@ runs.post('/:id/cancel', async (c) => {
     if (!ok) {
       return c.json({ ok: false, error: 'Run already terminal' }, 409);
     }
-    await dualWriteRunRecord(reg.get(id)!);
-    return c.json({ ok: true, data: publicRun(reg.get(id)!) });
+    const canceled = reg.get(id)!;
+    await dualWriteRunRecord(canceled);
+    // reg.cancel appends run.canceled locally — dual-write that event for peer SSE
+    const last = canceled.events[canceled.events.length - 1];
+    if (last?.type === 'run.canceled') {
+      await dualWriteRunEvent(id, last);
+    }
+    return c.json({ ok: true, data: publicRun(canceled) });
   }
 
   // Not local — resolve via shared summary (multi-replica cancel)

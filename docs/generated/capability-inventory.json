@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-07T15:04:27.420Z",
-  "version": "0.13.3",
+  "generatedAt": "2026-08-10T12:30:35.475Z",
+  "version": "0.24.0",
   "root": "/Users/yeonwoosung/Desktop/neos-work",
   "catalogs": {
     "agentCliDefs": {
@@ -325,6 +325,182 @@
         "implM3": true
       },
       "missing": []
+    },
+    "v14Features": {
+      "ok": true,
+      "count": 9,
+      "total": 9,
+      "features": {
+        "planV14": true,
+        "migrationV14": true,
+        "releaseV14": true,
+        "journeyScript": true,
+        "journeyPackageScript": true,
+        "journeyCi": true,
+        "multiReplicaAgent423": true,
+        "implM1": true,
+        "implM3": true
+      },
+      "missing": []
+    },
+    "v15Features": {
+      "ok": true,
+      "count": 9,
+      "total": 9,
+      "features": {
+        "planV15": true,
+        "migrationV15": true,
+        "releaseV15": true,
+        "browserScript": true,
+        "browserSpec": true,
+        "browserPackageScript": true,
+        "browserCi": true,
+        "playwrightConfig": true,
+        "implM2": true
+      },
+      "missing": []
+    },
+    "v16Features": {
+      "ok": true,
+      "count": 8,
+      "total": 8,
+      "features": {
+        "planV16": true,
+        "migrationV16": true,
+        "releaseV16": true,
+        "engineSettings": true,
+        "runRegistryShared": true,
+        "implA": true,
+        "implB": true,
+        "multiReplicaRunsDoc": true
+      },
+      "missing": []
+    },
+    "v17Features": {
+      "ok": true,
+      "count": 5,
+      "total": 5,
+      "features": {
+        "planV17": true,
+        "migrationV17": true,
+        "releaseV17": true,
+        "engineMedia": true,
+        "implM0": true
+      },
+      "missing": []
+    },
+    "v18Features": {
+      "ok": true,
+      "count": 7,
+      "total": 7,
+      "features": {
+        "planV18": true,
+        "migrationV18": true,
+        "releaseV18": true,
+        "engineSessions": true,
+        "enginePlugins": true,
+        "implM0": true,
+        "implM1": true
+      },
+      "missing": []
+    },
+    "v19Features": {
+      "ok": true,
+      "count": 8,
+      "total": 8,
+      "features": {
+        "planV19": true,
+        "migrationV19": true,
+        "releaseV19": true,
+        "engineOps": true,
+        "runEventFanout": true,
+        "stickyDocUpdated": true,
+        "implA": true,
+        "implB": true
+      },
+      "missing": []
+    },
+    "v20Features": {
+      "ok": true,
+      "count": 7,
+      "total": 7,
+      "features": {
+        "planV20": true,
+        "migrationV20": true,
+        "releaseV20": true,
+        "engineCatalog": true,
+        "projectSplit": true,
+        "implC": true,
+        "implD": true
+      },
+      "missing": []
+    },
+    "v21Features": {
+      "ok": true,
+      "count": 8,
+      "total": 8,
+      "features": {
+        "planV21": true,
+        "migrationV21": true,
+        "releaseV21": true,
+        "runEventLog": true,
+        "multiReplicaE2eL9L10": true,
+        "opsDurableDoc": true,
+        "impl1": true,
+        "impl2": true
+      },
+      "missing": []
+    },
+    "v22Features": {
+      "ok": true,
+      "count": 11,
+      "total": 11,
+      "features": {
+        "planV22": true,
+        "migrationV22": true,
+        "releaseV22": true,
+        "retentionM0": true,
+        "durableSummaryM1": true,
+        "multiReplicaE2eL11": true,
+        "nightlyLiveM2": true,
+        "opsRetentionDoc": true,
+        "implM0": true,
+        "implM1": true,
+        "implM2": true
+      },
+      "missing": []
+    },
+    "v23Features": {
+      "ok": true,
+      "count": 9,
+      "total": 9,
+      "features": {
+        "planV23": true,
+        "migrationV23": true,
+        "releaseV23": true,
+        "keychainK": true,
+        "webMediaW": true,
+        "warehouseP": true,
+        "implK": true,
+        "implW": true,
+        "implP": true
+      },
+      "missing": []
+    },
+    "v24Features": {
+      "ok": true,
+      "count": 7,
+      "total": 7,
+      "features": {
+        "planV24": true,
+        "migrationV24": true,
+        "releaseV24": true,
+        "osKeyring": true,
+        "webWorkflow": true,
+        "implOs": true,
+        "implWf": true
+      },
+      "missing": []
     }
   },
   "gates": {
@@ -343,7 +519,18 @@
     "requireV10Features": true,
     "requireV11Features": true,
     "requireV12Features": true,
-    "requireV13Features": true
+    "requireV13Features": true,
+    "requireV14Features": true,
+    "requireV15Features": true,
+    "requireV16Features": true,
+    "requireV17Features": true,
+    "requireV18Features": true,
+    "requireV19Features": true,
+    "requireV20Features": true,
+    "requireV21Features": true,
+    "requireV22Features": true,
+    "requireV23Features": true,
+    "requireV24Features": true
   },
   "summary": {
     "agentCliDefs": 13,
@@ -370,7 +557,29 @@
     "v12Features": 13,
     "v12FeaturesTotal": 13,
     "v13Features": 13,
-    "v13FeaturesTotal": 13
+    "v13FeaturesTotal": 13,
+    "v14Features": 9,
+    "v14FeaturesTotal": 9,
+    "v15Features": 9,
+    "v15FeaturesTotal": 9,
+    "v16Features": 8,
+    "v16FeaturesTotal": 8,
+    "v17Features": 5,
+    "v17FeaturesTotal": 5,
+    "v18Features": 7,
+    "v18FeaturesTotal": 7,
+    "v19Features": 8,
+    "v19FeaturesTotal": 8,
+    "v20Features": 7,
+    "v20FeaturesTotal": 7,
+    "v21Features": 8,
+    "v21FeaturesTotal": 8,
+    "v22Features": 11,
+    "v22FeaturesTotal": 11,
+    "v23Features": 9,
+    "v23FeaturesTotal": 9,
+    "v24Features": 7,
+    "v24FeaturesTotal": 7
   },
   "checks": {
     "ok": true,
@@ -477,6 +686,83 @@
         "ok": true,
         "actual": 13,
         "min": 13,
+        "missing": []
+      },
+      {
+        "id": "v14Features",
+        "ok": true,
+        "actual": 9,
+        "min": 9,
+        "missing": []
+      },
+      {
+        "id": "v15Features",
+        "ok": true,
+        "actual": 9,
+        "min": 9,
+        "missing": []
+      },
+      {
+        "id": "v16Features",
+        "ok": true,
+        "actual": 8,
+        "min": 8,
+        "missing": []
+      },
+      {
+        "id": "v17Features",
+        "ok": true,
+        "actual": 5,
+        "min": 5,
+        "missing": []
+      },
+      {
+        "id": "v18Features",
+        "ok": true,
+        "actual": 7,
+        "min": 7,
+        "missing": []
+      },
+      {
+        "id": "v19Features",
+        "ok": true,
+        "actual": 8,
+        "min": 8,
+        "missing": []
+      },
+      {
+        "id": "v20Features",
+        "ok": true,
+        "actual": 7,
+        "min": 7,
+        "missing": []
+      },
+      {
+        "id": "v21Features",
+        "ok": true,
+        "actual": 8,
+        "min": 8,
+        "missing": []
+      },
+      {
+        "id": "v22Features",
+        "ok": true,
+        "actual": 11,
+        "min": 11,
+        "missing": []
+      },
+      {
+        "id": "v23Features",
+        "ok": true,
+        "actual": 9,
+        "min": 9,
+        "missing": []
+      },
+      {
+        "id": "v24Features",
+        "ok": true,
+        "actual": 7,
+        "min": 7,
         "missing": []
       }
     ]

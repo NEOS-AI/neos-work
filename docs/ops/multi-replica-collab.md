@@ -36,8 +36,9 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | Collab events (join/leave/heartbeat/selection/locks…) | Bus fan-out (`memory` or `redis`) |
 | Peer membership list | In-process store + bus mirror; optional Redis hydrate |
 | File locks | In-process map + bus mirror; optional Redis lock registry (hydrate on list/acquire/hard-enforce) |
-| Agent run abort + events | **Local to owner process** |
+| Agent run abort | **Local to owner process** |
 | Agent run summary (status/get/cancel) | Optional shared store (`NEOS_RUN_REGISTRY`) |
+| Agent run events / SSE | Optional **shared event buffer** (`NEOS_RUN_REGISTRY`) + **durable JSONL** (`NEOS_RUN_EVENT_LOG`, under `NEOS_DATA_DIR/runs/{id}/events.jsonl`) |
 | File content | Disk / SQLite under `NEOS_DATA_DIR` (shared volume or single writer) |
 
 ---
@@ -51,7 +52,14 @@ Client B ──SSE──► Replica 2 ◄─subscribe─┘
 | `REDIS_URL` | unset | Fallback URL if `NEOS_COLLAB_REDIS_URL` unset |
 | `NEOS_COLLAB_PRESENCE` | `auto` | `auto` \| `memory` \| `redis` \| `off` — membership registry |
 | `NEOS_COLLAB_LOCKS` | `auto` | `auto` \| `memory` \| `redis` \| `off` — **file lock registry** (v0.10 M1) |
-| `NEOS_RUN_REGISTRY` | `auto` | `auto` \| `memory` \| `redis` \| `off` — **run summary registry** (v0.16 B0) for cross-pod GET/cancel |
+| `NEOS_RUN_REGISTRY` | `auto` | `auto` \| `memory` \| `redis` \| `off` — **run summary + event buffer** (v0.16 B0 / v0.19 B) for cross-pod GET/cancel/events |
+| `NEOS_RUN_EVENT_LOG` | `auto` | `auto` \| `on` \| `off` — **durable run event JSONL** under `{NEOS_DATA_DIR}/runs/{id}/events.jsonl` (v0.21) |
+| `NEOS_RUN_EVENT_LOG_MAX_AGE_HOURS` | `168` | Retention: delete run dirs older than N hours (`0` = no age prune) (v0.22 M0) |
+| `NEOS_RUN_EVENT_LOG_MAX_RUNS` | `500` | Retention: keep at most N run dirs (oldest first; `0` = no count prune) (v0.22 M0) |
+| `NEOS_RUN_EVENT_LOG_MAX_FILE_BYTES` | `8388608` | Trim single `events.jsonl` when larger (keep tail; `0` = no trim) (v0.22 M0) |
+| `NEOS_RUN_WAREHOUSE` | `off` | `off` \| `postgres` — optional **long-lived Postgres warehouse** for run summary + events (v0.23 Track P); default off |
+| `NEOS_RUN_WAREHOUSE_URL` | unset | Preferred Postgres URL for the warehouse (`DATABASE_URL` fallback) |
+| `NEOS_RUN_WAREHOUSE_SCHEMA` | `public` | Schema for `neos_run_summary` / `neos_run_event` tables (e.g. `neos`) |
 | `NEOS_SHARED_EDIT` | off | Hard file-lock enforce for multi-client edit (see below) |
 | `NEOS_SHARED_EDIT_AGENTS` | off | Also hard-enforce `source=agent` PUTs when base shared-edit is on (v0.10 M0) |
 | `NEOS_AUTH_TOKEN` | (process random) | Use a **stable** shared secret across replicas |
@@ -102,26 +110,31 @@ unless `NEOS_SHARED_EDIT_AGENTS=1` is also set.
 Hard-enforce and REST lock list **hydrate** from the lock registry before reading,
 so a cold replica agrees on the holder even if it missed the bus event.
 
-### Run summary registry modes (v0.16 B0)
+### Run summary + event buffer registry (v0.16 B0 / v0.19 Track B)
 
-Agent/project runs still execute **locally** (abort + event log stay in-process).
+Agent/project runs still execute **locally** (abort controller stays in-process).
 An optional **shared summary** dual-write lets other pods answer
 `GET /api/runs/:id` and `POST /api/runs/:id/cancel` without 404.
+**v0.19** also dual-writes a **capped event buffer** so non-owner pods can serve
+`GET /api/runs/:id/events` and `GET /api/runs/:id/events/stream` (poll shared LIST;
+no sticky SSE required for run events).
 
 | `NEOS_RUN_REGISTRY` | Behavior |
 |---|---|
 | `auto` | Redis when `NEOS_COLLAB_BUS=redis` **or** a Redis URL is set and `redis` connects; else in-process memory mirror |
-| `memory` | In-process summary mirror only (single process; useful for tests) |
-| `redis` | Force Redis summaries + cancel pub/sub (needs URL + `redis` package) |
-| `off` | Local registry only — same as pre-v0.16 (cancel/get 404 on wrong pod) |
+| `memory` | In-process summary + event mirror only (single process; useful for tests) |
+| `redis` | Force Redis summaries, event LIST, cancel pub/sub (needs URL + `redis` package) |
+| `off` | Local registry only — same as pre-v0.16 (cancel/get/events 404 on wrong pod) |
 
 | Path | Multi-replica behaviour |
 |---|---|
 | Create / status transitions | Dual-write summary (`id`, `status`, `nodeId`, project/agent/collab bind, timestamps, error) |
+| Event emit (owner) | Dual-write each event into shared buffer (cap ~500; TTL ~3600s) |
 | `GET /api/runs/:id` | Local first; else hydrate summary from shared store (`eventCount: 0`) |
+| `GET /api/runs/:id/events` | Local first; else shared buffer when summary exists |
+| `GET /api/runs/:id/events/stream` | Local first; else SSE poll of shared buffer + summary status (250ms / 10min) |
 | `POST /api/runs/:id/cancel` | Local cancel if owned; else publish cancel command + mark canceled in store |
 | Owner node | Subscribes to cancel channel and aborts its local run |
-| Events / SSE | **Still local to owner** — not fan-out (see [sticky-sse.md](./sticky-sse.md)) |
 
 ```bash
 NEOS_COLLAB_BUS=redis \
@@ -147,16 +160,40 @@ NEOS_RUN_REGISTRY=auto \
 TTL is refreshed on re-acquire and while the holder’s presence session is touched
 (SSE heartbeat / touch). Bus channel: `neos:collab:events` (pub/sub).
 
-### Redis run summary keys (0.16.1+)
+### Redis run summary + event keys (0.16.1+ / 0.19+)
 
 | Key / channel | Type | TTL |
 |---|---|---|
 | `neos:run:summary:{id}` | string JSON run summary | ~3600s |
+| `neos:run:events:{id}` | LIST JSON events (RPUSH + LTRIM last ~500) | ~3600s |
 | `neos:run:commands` | pub/sub cancel intents | — |
+| `neos:run:eventbus` | pub/sub `{ runId, event }` (optional live notify) | — |
 
 Summary fields: `id`, `status`, `nodeId`, `projectId`, `collabSessionId`,
 `agentId`, `error`, `createdAt`, `startedAt`, `completedAt`, `updatedAt`.
-No event log is stored.
+Redis event buffer is still **capped + TTL** (~500 / ~1h). **v0.21 durable log**
+appends the same events to `{NEOS_DATA_DIR}/runs/{id}/events.jsonl` (shared volume
+recommended for multi-replica). GET `/events` falls back to JSONL when the buffer
+is empty or after restart.
+
+### Durable run event log (0.21+) + summary + retention (0.22)
+
+| Path | Role |
+|---|---|
+| `{NEOS_DATA_DIR}/runs/{runId}/events.jsonl` | Append-only JSON lines (`id`, `type`, `ts`, `data`) |
+| `{NEOS_DATA_DIR}/runs/{runId}/summary.json` | Last-known run summary snapshot (v0.22 M1) — hydrates `GET /api/runs/:id` when Redis summary TTL expired |
+
+| `NEOS_RUN_EVENT_LOG` | Behaviour |
+|---|---|
+| `auto` (default) | Write under `resolveDbDir()` (NEOS_DATA_DIR or `~/.neos-work`) |
+| `on` | Same as auto (explicit) |
+| `off` | No disk writes; remote still uses Redis buffer only |
+
+**Retention (v0.22 M0):** startup `pruneRunEventLogs()` removes old/excess run directories by
+`NEOS_RUN_EVENT_LOG_MAX_AGE_HOURS` and `NEOS_RUN_EVENT_LOG_MAX_RUNS`. Per-file
+`events.jsonl` may be head-trimmed when over `NEOS_RUN_EVENT_LOG_MAX_FILE_BYTES`.
+
+Not a Postgres warehouse: best-effort, line size capped, opportunistic GC.
 ---
 
 ## Run with Redis
@@ -301,7 +338,7 @@ SSOT for Design Project content (ADR 0001 — lock + LWW, not CRDT).
 | SQLite (`data.db` etc.) | **Not** a multi-writer database. Concurrent writers on a shared volume risk corruption. |
 | Design project trees | Path sandboxed project roots; concurrent writers need shared FS **and** lock discipline |
 | Media / packs / skills | Same volume semantics as projects |
-| Ephemeral run registry | Local abort/events **in-memory per process**; optional shared **summary** via `NEOS_RUN_REGISTRY` (not under `NEOS_DATA_DIR`) |
+| Ephemeral run registry | Local abort **in-memory per process**; optional shared **summary + event buffer** via `NEOS_RUN_REGISTRY`; durable **events.jsonl** under `NEOS_DATA_DIR` when `NEOS_RUN_EVENT_LOG` not `off` |
 
 ### Supported operator postures
 
@@ -417,7 +454,7 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | **Cold replica** | Without Redis presence/lock registry, a cold node has empty remote membership/locks until bus events arrive. With registries (`auto`/`redis` + working Redis), hydrate fills peers on stream/join and locks on list/acquire/hard-enforce. |
 | **Sticky sessions** | Not required for presence/lock lists when registries are on; still required if you expect a single long-lived SSE pin to a given pod without reconnect. Design note: [sticky-sse.md](./sticky-sse.md) (**not implemented**). |
 | **File / SQLite SSOT** | Content under `NEOS_DATA_DIR` is disk SSOT; multi-writer SQLite **unsupported**. See [File content SSOT](#file-content-ssot-neos_data_dir). |
-| **Run registry** | Abort + event log stay **in-memory per process**. With `NEOS_RUN_REGISTRY` memory/redis, **summary** dual-write enables cross-pod GET/cancel; **event SSE is still owner-local** (no multi-node event fan-out in v0.16). |
+| **Run registry** | Abort stays **in-memory per process**. With `NEOS_RUN_REGISTRY` memory/redis, **summary** dual-write enables cross-pod GET/cancel; **v0.19 event buffer** dual-write enables cross-pod GET/SSE events (capped ~500, TTL ~1h). **v0.21 durable JSONL** (`NEOS_RUN_EVENT_LOG`) survives buffer TTL and restart when pods share `NEOS_DATA_DIR`. **v0.23 Postgres warehouse** (`NEOS_RUN_WAREHOUSE=postgres`) dual-writes long-lived summary/events and hydrates GET after local+shared+JSONL miss. When `NEOS_RUN_REGISTRY=off` and no durable log/warehouse, events still 404 on non-owner. |
 | **Helm default** | Chart is single-replica; multi-replica is operator-configured (Redis + env + shared data policy). |
 
 ---
@@ -435,7 +472,22 @@ curl -s -H "Authorization: Bearer $NEOS_AUTH_TOKEN" \
 | File content missing / diverges across pods | Split `NEOS_DATA_DIR` or no shared volume — see [File content SSOT](#file-content-ssot-neos_data_dir) |
 | SQLite errors under multi-replica | Multiple writers on one DB file — use single writer |
 | Run cancel 404 on “other” pod | `NEOS_RUN_REGISTRY=off` or redis-stub without shared store — set `NEOS_RUN_REGISTRY=auto` with working Redis (or memory for single process); check `GET /api/collab/status` → `runs` |
-| Run events empty on non-owner pod | Expected — only summary is shared; stream on the owner node or accept poll gaps |
+| Run events empty / 404 on non-owner | Need summary + event dual-write (`NEOS_RUN_REGISTRY` not `off`) and/or shared-volume durable log (`NEOS_RUN_EVENT_LOG` not `off`) and/or warehouse (`NEOS_RUN_WAREHOUSE=postgres`); buffer is capped — check `runs/{id}/events.jsonl` on `NEOS_DATA_DIR` |
+
+### Optional Postgres run warehouse (v0.23)
+
+Long-lived history beyond Redis TTL and local disk retention. Complements Redis
+buffer + JSONL; **does not** replace SQLite app DB.
+
+```bash
+NEOS_RUN_WAREHOUSE=postgres
+NEOS_RUN_WAREHOUSE_URL=postgres://user:pass@host:5432/neos   # or DATABASE_URL
+NEOS_RUN_WAREHOUSE_SCHEMA=neos   # optional; default public
+```
+
+Startup log: `NEOS_RUN_WAREHOUSE=off|postgres|postgres-stub …`. Tables
+`neos_run_summary` / `neos_run_event` are created idempotently on connect.
+See [v0.23.2 implementation](../implementation/v0.23/v0.23.2.md).
 
 ---
 

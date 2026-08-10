@@ -25,6 +25,12 @@ import {
   setSharedRunStoreForTests,
   summaryFromRecord,
 } from '../lib/run-registry-shared.js';
+import {
+  createMemoryWarehouse,
+  createOffWarehouse,
+  resetRunWarehouseForTests,
+  setRunWarehouseForTests,
+} from '../lib/run-warehouse.js';
 import fs from 'node:fs';
 
 const app = new Hono();
@@ -36,6 +42,7 @@ const ids: string[] = [];
 function cleanup() {
   resetGlobalRunRegistry();
   resetSharedRunStoreForTests();
+  resetRunWarehouseForTests();
   setRunRegistryNodeIdForTests(null);
   const db = getDb();
   for (const id of ids.splice(0)) {
@@ -726,5 +733,171 @@ describe('runs shared registry multi-replica MVP', () => {
     expect(cancel.status).toBe(200);
     const summary = await store.get(id);
     expect(summary?.status).toBe('canceled');
+  });
+
+  it('GET /events hydrates from shared buffer when not local', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'owner-node', backend });
+    setSharedRunStoreForTests(store);
+
+    await store.put({
+      id: 'remote-ev-run',
+      status: 'running',
+      nodeId: 'owner-node',
+      projectId: null,
+      collabSessionId: null,
+      agentId: 'cli-claude',
+      error: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      completedAt: null,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await store.appendEvent('remote-ev-run', {
+      id: 'evt-a',
+      type: 'run.started',
+      ts: '2026-01-01T00:00:00.000Z',
+      data: { agentId: 'cli-claude' },
+    });
+    await store.appendEvent('remote-ev-run', {
+      id: 'evt-b',
+      type: 'run.stdout',
+      ts: '2026-01-01T00:00:01.000Z',
+      data: { chunk: 'hi' },
+    });
+
+    resetGlobalRunRegistry();
+
+    const res = await app.request('/api/runs/remote-ev-run/events');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: Array<{ id: string; type: string }>;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data).toHaveLength(2);
+    expect(body.data[0]!.id).toBe('evt-a');
+    expect(body.data[1]!.type).toBe('run.stdout');
+
+    const after = await app.request('/api/runs/remote-ev-run/events?after=evt-a');
+    expect(after.status).toBe(200);
+    const afterBody = (await after.json()) as {
+      data: Array<{ id: string }>;
+    };
+    expect(afterBody.data).toHaveLength(1);
+    expect(afterBody.data[0]!.id).toBe('evt-b');
+  });
+
+  it('GET /events 404 when no local and no shared summary', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'peer', backend });
+    setSharedRunStoreForTests(store);
+    resetGlobalRunRegistry();
+    const res = await app.request('/api/runs/missing-run/events');
+    expect(res.status).toBe(404);
+  });
+
+  it('create dry-run dual-writes events into shared buffer', async () => {
+    const backend = createSharedMemoryBackendForTests();
+    const store = createMemorySharedRunStore({ nodeId: 'local', backend });
+    setSharedRunStoreForTests(store);
+
+    const res = await app.request('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'event dual', dryRun: true }),
+    });
+    expect(res.status).toBe(201);
+    const id = ((await res.json()) as { data: { id: string } }).data.id;
+    // appendRunEvent dual-writes fire-and-forget; flush via direct read after microtasks
+    await new Promise((r) => setTimeout(r, 10));
+    const events = await store.eventsAfter(id);
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(events.some((e) => e.type === 'run.started')).toBe(true);
+    expect(events.some((e) => e.type === 'run.succeeded')).toBe(true);
+  });
+});
+
+describe('runs warehouse fallback (v0.23 Track P)', () => {
+  it('GET /:id hydrates from warehouse after local+shared+durable miss', async () => {
+    resetGlobalRunRegistry();
+    setSharedRunStoreForTests(
+      createMemorySharedRunStore({
+        nodeId: 'peer',
+        backend: createSharedMemoryBackendForTests(),
+      }),
+    );
+    const wh = createMemoryWarehouse();
+    setRunWarehouseForTests(wh);
+    await wh.putSummary({
+      id: 'wh-run-1',
+      status: 'succeeded',
+      nodeId: 'owner',
+      projectId: 'p1',
+      collabSessionId: null,
+      agentId: 'cli-claude',
+      error: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      startedAt: '2026-01-01T00:00:01.000Z',
+      completedAt: '2026-01-01T00:00:02.000Z',
+      updatedAt: '2026-01-01T00:00:02.000Z',
+    });
+
+    const res = await app.request('/api/runs/wh-run-1');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { id: string; status: string; projectId: string | null };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data.id).toBe('wh-run-1');
+    expect(body.data.status).toBe('succeeded');
+    expect(body.data.projectId).toBe('p1');
+  });
+
+  it('GET /:id/events hydrates from warehouse when buffer+jsonl empty', async () => {
+    resetGlobalRunRegistry();
+    setSharedRunStoreForTests(
+      createMemorySharedRunStore({
+        nodeId: 'peer',
+        backend: createSharedMemoryBackendForTests(),
+      }),
+    );
+    const wh = createMemoryWarehouse();
+    setRunWarehouseForTests(wh);
+    await wh.appendEvent('wh-ev-run', {
+      id: 'we1',
+      type: 'run.started',
+      ts: '2026-01-01T00:00:00.000Z',
+    });
+    await wh.appendEvent('wh-ev-run', {
+      id: 'we2',
+      type: 'run.succeeded',
+      ts: '2026-01-01T00:00:01.000Z',
+    });
+
+    const res = await app.request('/api/runs/wh-ev-run/events');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: Array<{ id: string; type: string }>;
+    };
+    expect(body.data.map((e) => e.id)).toEqual(['we1', 'we2']);
+
+    const after = await app.request('/api/runs/wh-ev-run/events?after=we1');
+    const afterBody = (await after.json()) as { data: Array<{ id: string }> };
+    expect(afterBody.data.map((e) => e.id)).toEqual(['we2']);
+  });
+
+  it('warehouse off does not hydrate', async () => {
+    resetGlobalRunRegistry();
+    setSharedRunStoreForTests(
+      createMemorySharedRunStore({
+        nodeId: 'peer',
+        backend: createSharedMemoryBackendForTests(),
+      }),
+    );
+    setRunWarehouseForTests(createOffWarehouse());
+    const res = await app.request('/api/runs/no-such-warehouse-run');
+    expect(res.status).toBe(404);
   });
 });

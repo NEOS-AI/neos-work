@@ -1,9 +1,10 @@
 /**
- * Optional shared run summary store (v0.16 Track B / B0).
+ * Optional shared run summary + event buffer store (v0.16 B0 / v0.19 Track B).
  *
  * Dual-writes lightweight run summaries so multi-replica GET / cancel can
- * resolve runs that live on another process. Local RunRegistry remains the
- * source of truth for abort controllers and event streams.
+ * resolve runs that live on another process. Also dual-writes a capped event
+ * buffer so non-owner pods can serve GET/SSE events when summary exists.
+ * Local RunRegistry remains the source of truth for abort controllers.
  *
  * Env: NEOS_RUN_REGISTRY=auto|memory|redis|off
  *   auto → redis when NEOS_COLLAB_BUS=redis or a Redis URL is set and the
@@ -12,13 +13,28 @@
  *
  * Keys / channel:
  *   neos:run:summary:{id}   SET EX ttl  (JSON SharedRunSummary)
+ *   neos:run:events:{id}    LIST JSON events (RPUSH + LTRIM last N + EXPIRE)
  *   neos:run:commands       pub/sub     (cancel intents)
+ *   neos:run:eventbus       pub/sub     (optional live { runId, event })
  *
- * Non-goals: multi-node SSE event fan-out, durable event log, Postgres store.
+ * Durable JSONL (v0.21): optional disk append via `run-event-log.ts`
+ * (`NEOS_RUN_EVENT_LOG`). Shared buffer remains the live multi-replica path.
+ *
+ * Optional Postgres warehouse (v0.23 Track P): long-lived summary/events via
+ * `run-warehouse.ts` (`NEOS_RUN_WAREHOUSE=postgres`). Best-effort dual-write;
+ * not a replacement for Redis buffer or JSONL.
+ *
+ * Non-goals: sticky SSE requirement.
  */
 
 import { randomBytes } from 'node:crypto';
-import { getGlobalRunRegistry, type RuntimeRunRecord } from '@neos-work/agent-runtime';
+import {
+  getGlobalRunRegistry,
+  type RunRegistry,
+  type RuntimeRunEvent,
+  type RuntimeRunEventType,
+  type RuntimeRunRecord,
+} from '@neos-work/agent-runtime';
 import { isTerminalRunStatus } from '@neos-work/shared';
 import { getCollabBus } from './collab-bus.js';
 import { resolveCollabRedisUrl } from './collab-redis-url.js';
@@ -28,12 +44,26 @@ import {
   type RegistryMode,
   type RegistryStatus,
 } from './collab-ttl-registry.js';
+import {
+  appendRunEventLog,
+  writeRunSummaryLog,
+  type DurableRunSummary,
+} from './run-event-log.js';
+import { getRunWarehouse } from './run-warehouse.js';
 
 /** Default summary TTL — match local RunRegistry (1h). */
 export const RUN_SUMMARY_TTL_SEC = 60 * 60;
 
+/** Capped shared event buffer per run (MVP; local registry may hold more). */
+export const RUN_EVENT_BUFFER_MAX = 500;
+
+/** Soft cap for serialized event JSON (truncate data if larger). */
+const RUN_EVENT_JSON_MAX = 64 * 1024;
+
 const SUMMARY_KEY_PREFIX = 'neos:run:summary:';
+const EVENTS_KEY_PREFIX = 'neos:run:events:';
 const COMMAND_CHANNEL = 'neos:run:commands';
+const EVENT_BUS_CHANNEL = 'neos:run:eventbus';
 
 export type SharedRunSummary = {
   id: string;
@@ -63,6 +93,8 @@ export type SharedRunStoreStatus = RegistryStatus & {
 
 export type CancelCommandHandler = (cmd: RunCancelCommand) => void;
 
+export type RunEventHandler = (runId: string, event: RuntimeRunEvent) => void;
+
 export interface SharedRunStore {
   readonly kind: RegistryKind;
   readonly nodeId: string;
@@ -72,6 +104,12 @@ export interface SharedRunStore {
   markCanceled(id: string): Promise<SharedRunSummary | null>;
   publishCancel(runId: string): Promise<void>;
   onCancelCommand(handler: CancelCommandHandler): () => void;
+  /** Append one event to the shared buffer (capped) and notify subscribers. */
+  appendEvent(runId: string, event: RuntimeRunEvent): Promise<void>;
+  /** Events after cursor (or all buffered if no after). */
+  eventsAfter(runId: string, afterEventId?: string): Promise<RuntimeRunEvent[]>;
+  /** Optional live notify (memory always; redis via pub/sub when connected). */
+  onRunEvent(handler: RunEventHandler): () => void;
   status(): SharedRunStoreStatus;
   close(): Promise<void>;
 }
@@ -81,6 +119,10 @@ type RedisClientLike = {
   duplicate: () => RedisClientLike;
   set: (key: string, value: string, opts?: { EX?: number }) => Promise<unknown>;
   get: (key: string) => Promise<string | null>;
+  rPush?: (key: string, ...elements: string[]) => Promise<unknown>;
+  lRange?: (key: string, start: number, stop: number) => Promise<string[]>;
+  lTrim?: (key: string, start: number, stop: number) => Promise<unknown>;
+  expire?: (key: string, seconds: number) => Promise<unknown>;
   publish: (channel: string, message: string) => Promise<unknown>;
   subscribe: (channel: string, listener: (message: string) => void) => Promise<unknown>;
   quit: () => Promise<unknown>;
@@ -160,6 +202,70 @@ export function serializeSharedRunSummary(s: SharedRunSummary): string {
   });
 }
 
+/** Normalize / sanitize a run event for shared storage. */
+export function sanitizeRuntimeRunEvent(raw: unknown): RuntimeRunEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== 'string' || /[\0\r\n]/.test(o.id)) return null;
+  const id = o.id.trim();
+  if (!id || id.length > 128) return null;
+  if (typeof o.type !== 'string' || /[\0\r\n]/.test(o.type)) return null;
+  const type = o.type.trim().slice(0, 64);
+  if (!type) return null;
+  let ts: string;
+  if (typeof o.ts === 'string' && !/[\0\r\n]/.test(o.ts)) {
+    const t = o.ts.trim();
+    ts = t && t.length <= 40 ? t : new Date().toISOString();
+  } else {
+    ts = new Date().toISOString();
+  }
+  const event: RuntimeRunEvent = { id, type, ts };
+  if ('data' in o && o.data !== undefined) {
+    event.data = o.data;
+  }
+  return event;
+}
+
+export function parseRuntimeRunEvent(raw: string): RuntimeRunEvent | null {
+  try {
+    return sanitizeRuntimeRunEvent(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** Serialize event; truncate `data` if JSON exceeds soft cap. */
+export function serializeRuntimeRunEvent(event: RuntimeRunEvent): string {
+  const base = { id: event.id, type: event.type, ts: event.ts, data: event.data };
+  let raw = JSON.stringify(base);
+  if (raw.length <= RUN_EVENT_JSON_MAX) return raw;
+  // Drop data first
+  raw = JSON.stringify({
+    id: event.id,
+    type: event.type,
+    ts: event.ts,
+    data: { truncated: true, reason: 'event_too_large' },
+  });
+  if (raw.length <= RUN_EVENT_JSON_MAX) return raw;
+  return JSON.stringify({ id: event.id, type: event.type, ts: event.ts });
+}
+
+function eventsAfterInList(
+  events: RuntimeRunEvent[],
+  afterEventId?: string,
+): RuntimeRunEvent[] {
+  if (!afterEventId) return [...events];
+  const idx = events.findIndex((e) => e.id === afterEventId);
+  if (idx < 0) return [...events];
+  return events.slice(idx + 1);
+}
+
+function trimEventBuffer(events: RuntimeRunEvent[]): void {
+  if (events.length > RUN_EVENT_BUFFER_MAX) {
+    events.splice(0, events.length - RUN_EVENT_BUFFER_MAX);
+  }
+}
+
 export function summaryFromRecord(
   record: RuntimeRunRecord,
   nodeId: string,
@@ -208,10 +314,18 @@ export function setRunRegistryNodeIdForTests(id: string | null): void {
 type MemoryBackend = {
   map: Map<string, SharedRunSummary>;
   handlers: Set<CancelCommandHandler>;
+  /** Per-run capped event buffers (shared across dual-process test stores). */
+  events: Map<string, RuntimeRunEvent[]>;
+  eventHandlers: Set<RunEventHandler>;
 };
 
 function createMemoryBackend(): MemoryBackend {
-  return { map: new Map(), handlers: new Set() };
+  return {
+    map: new Map(),
+    handlers: new Set(),
+    events: new Map(),
+    eventHandlers: new Set(),
+  };
 }
 
 /** Process-wide memory backend so dual-write works within one process. */
@@ -296,6 +410,43 @@ export function createMemorySharedRunStore(opts?: {
         backend.handlers.delete(handler);
       };
     },
+    async appendEvent(runId, event) {
+      if (kind === 'off') return;
+      const sid = sanitizeRunId(runId);
+      if (!sid) return;
+      const ev = sanitizeRuntimeRunEvent(event);
+      if (!ev) return;
+      let buf = backend.events.get(sid);
+      if (!buf) {
+        buf = [];
+        backend.events.set(sid, buf);
+      }
+      // Dedup by event id (best-effort; owner may retry dual-write)
+      if (buf.some((e) => e.id === ev.id)) return;
+      buf.push(ev);
+      trimEventBuffer(buf);
+      for (const h of [...backend.eventHandlers]) {
+        try {
+          h(sid, ev);
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    async eventsAfter(runId, afterEventId) {
+      if (kind === 'off') return [];
+      const sid = sanitizeRunId(runId);
+      if (!sid) return [];
+      const buf = backend.events.get(sid) ?? [];
+      return eventsAfterInList(buf, afterEventId);
+    },
+    onRunEvent(handler) {
+      if (kind === 'off') return () => {};
+      backend.eventHandlers.add(handler);
+      return () => {
+        backend.eventHandlers.delete(handler);
+      };
+    },
     status() {
       return {
         kind,
@@ -335,6 +486,7 @@ function createRedisSharedRunStore(
   let closed = false;
   let kind: RegistryKind = 'redis-stub';
   const handlers = new Set<CancelCommandHandler>();
+  const eventHandlers = new Set<RunEventHandler>();
   // Local memory mirror while connecting / if redis drops
   const mirror = createMemoryBackend();
 
@@ -346,6 +498,28 @@ function createRedisSharedRunStore(
         /* ignore */
       }
     }
+  };
+
+  const deliverRunEvent = (runId: string, event: RuntimeRunEvent) => {
+    for (const h of [...eventHandlers]) {
+      try {
+        h(runId, event);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+
+  const mirrorAppend = (sid: string, ev: RuntimeRunEvent): boolean => {
+    let buf = mirror.events.get(sid);
+    if (!buf) {
+      buf = [];
+      mirror.events.set(sid, buf);
+    }
+    if (buf.some((e) => e.id === ev.id)) return false;
+    buf.push(ev);
+    trimEventBuffer(buf);
+    return true;
   };
 
   const store: SharedRunStore = {
@@ -429,12 +603,68 @@ function createRedisSharedRunStore(
         handlers.delete(handler);
       };
     },
+    async appendEvent(runId, event) {
+      const sid = sanitizeRunId(runId);
+      if (!sid) return;
+      const ev = sanitizeRuntimeRunEvent(event);
+      if (!ev) return;
+      const added = mirrorAppend(sid, ev);
+      if (!added) return;
+      deliverRunEvent(sid, ev);
+      if (pub && connected && pub.rPush) {
+        try {
+          const key = `${EVENTS_KEY_PREFIX}${sid}`;
+          await pub.rPush(key, serializeRuntimeRunEvent(ev));
+          if (pub.lTrim) {
+            await pub.lTrim(key, -RUN_EVENT_BUFFER_MAX, -1);
+          }
+          if (pub.expire) {
+            await pub.expire(key, RUN_SUMMARY_TTL_SEC);
+          }
+          await pub.publish(
+            EVENT_BUS_CHANNEL,
+            JSON.stringify({ runId: sid, event: ev }),
+          );
+        } catch {
+          detail = 'run event append failed';
+        }
+      }
+    },
+    async eventsAfter(runId, afterEventId) {
+      const sid = sanitizeRunId(runId);
+      if (!sid) return [];
+      if (pub && connected && pub.lRange) {
+        try {
+          const rawList = await pub.lRange(`${EVENTS_KEY_PREFIX}${sid}`, 0, -1);
+          if (Array.isArray(rawList) && rawList.length > 0) {
+            const parsed: RuntimeRunEvent[] = [];
+            for (const raw of rawList) {
+              if (typeof raw !== 'string') continue;
+              const ev = parseRuntimeRunEvent(raw);
+              if (ev) parsed.push(ev);
+            }
+            // Refresh mirror from redis
+            mirror.events.set(sid, parsed);
+            return eventsAfterInList(parsed, afterEventId);
+          }
+        } catch {
+          detail = 'run event list failed';
+        }
+      }
+      return eventsAfterInList(mirror.events.get(sid) ?? [], afterEventId);
+    },
+    onRunEvent(handler) {
+      eventHandlers.add(handler);
+      return () => {
+        eventHandlers.delete(handler);
+      };
+    },
     status() {
       return {
         kind,
         ready: !connecting,
         detail: connected
-          ? `redis channel=${COMMAND_CHANNEL} TTL=${RUN_SUMMARY_TTL_SEC}s`
+          ? `redis channel=${COMMAND_CHANNEL} events TTL=${RUN_SUMMARY_TTL_SEC}s cap=${RUN_EVENT_BUFFER_MAX}`
           : detail,
         nodeId,
       };
@@ -443,6 +673,7 @@ function createRedisSharedRunStore(
       closed = true;
       connecting = false;
       handlers.clear();
+      eventHandlers.clear();
       try {
         await sub?.quit();
       } catch {
@@ -494,6 +725,22 @@ function createRedisSharedRunStore(
           /* ignore bad messages */
         }
       });
+      // Optional live event fan-out (SSE still poll-based; this is for onRunEvent)
+      await sub.subscribe(EVENT_BUS_CHANNEL, (message: string) => {
+        if (typeof message !== 'string' || !message || /[\0]/.test(message)) return;
+        try {
+          const o = JSON.parse(message) as { runId?: unknown; event?: unknown };
+          if (typeof o.runId !== 'string') return;
+          const sid = sanitizeRunId(o.runId);
+          if (!sid) return;
+          const ev = sanitizeRuntimeRunEvent(o.event);
+          if (!ev) return;
+          const added = mirrorAppend(sid, ev);
+          if (added) deliverRunEvent(sid, ev);
+        } catch {
+          /* ignore bad messages */
+        }
+      });
       if (closed) {
         await store.close();
         return;
@@ -501,7 +748,7 @@ function createRedisSharedRunStore(
       connected = true;
       connecting = false;
       kind = 'redis';
-      detail = `redis channel=${COMMAND_CHANNEL} TTL=${RUN_SUMMARY_TTL_SEC}s`;
+      detail = `redis channel=${COMMAND_CHANNEL} events TTL=${RUN_SUMMARY_TTL_SEC}s cap=${RUN_EVENT_BUFFER_MAX}`;
     } catch (err) {
       connecting = false;
       connected = false;
@@ -590,8 +837,13 @@ function wireCancelListener(s: SharedRunStore): void {
   cancelUnsub = s.onCancelCommand((cmd) => {
     const canceled = applyLocalCancelFromCommand(cmd);
     if (canceled) {
-      // Dual-write terminal status after local abort
+      // Dual-write terminal status + cancel event after local abort
       void syncRunSummary(cmd.runId);
+      const run = getGlobalRunRegistry().get(cmd.runId);
+      const last = run?.events[run.events.length - 1];
+      if (last?.type === 'run.canceled') {
+        void dualWriteRunEvent(cmd.runId, last);
+      }
     }
   });
 }
@@ -646,20 +898,78 @@ export function setSharedRunStoreForTests(s: SharedRunStore | null): void {
   if (s) wireCancelListener(s);
 }
 
-/** Dual-write local run → shared summary (best-effort, fire-and-forget safe). */
-export async function syncRunSummary(runId: string): Promise<void> {
-  const s = getSharedRunStore();
-  if (s.kind === 'off') return;
-  const run = getGlobalRunRegistry().get(runId);
-  if (!run) return;
-  await s.put(summaryFromRecord(run, s.nodeId));
+function durableFromSummary(s: SharedRunSummary): DurableRunSummary {
+  return {
+    id: s.id,
+    status: s.status,
+    nodeId: s.nodeId,
+    projectId: s.projectId,
+    collabSessionId: s.collabSessionId,
+    agentId: s.agentId,
+    error: s.error,
+    createdAt: s.createdAt,
+    startedAt: s.startedAt,
+    completedAt: s.completedAt,
+    updatedAt: s.updatedAt,
+  };
 }
 
-/** Dual-write from an already-fetched record. */
+/** Dual-write local run → shared summary + durable summary.json + warehouse. */
+export async function syncRunSummary(runId: string): Promise<void> {
+  const run = getGlobalRunRegistry().get(runId);
+  if (!run) return;
+  const s = getSharedRunStore();
+  const summary = summaryFromRecord(run, s.nodeId);
+  writeRunSummaryLog(durableFromSummary(summary));
+  // Best-effort warehouse (off mode no-ops)
+  void getRunWarehouse().putSummary(summary);
+  if (s.kind === 'off') return;
+  await s.put(summary);
+}
+
+/** Dual-write from an already-fetched record (+ durable summary.json + warehouse). */
 export async function dualWriteRunRecord(record: RuntimeRunRecord): Promise<void> {
   const s = getSharedRunStore();
+  const summary = summaryFromRecord(record, s.nodeId);
+  writeRunSummaryLog(durableFromSummary(summary));
+  // Best-effort warehouse (off mode no-ops)
+  void getRunWarehouse().putSummary(summary);
   if (s.kind === 'off') return;
-  await s.put(summaryFromRecord(record, s.nodeId));
+  await s.put(summary);
+}
+
+/**
+ * Best-effort dual-write of a single run event to the shared buffer,
+ * durable JSONL (when enabled), and optional Postgres warehouse.
+ * Shared store no-ops when kind is `off`; disk log is independent of registry mode.
+ */
+export async function dualWriteRunEvent(
+  runId: string,
+  event: RuntimeRunEvent,
+): Promise<void> {
+  // Durable first so shared-volume peers can read even if Redis buffer fails.
+  appendRunEventLog(runId, event);
+  // Best-effort warehouse (off mode no-ops)
+  void getRunWarehouse().appendEvent(runId, event);
+  const s = getSharedRunStore();
+  if (s.kind === 'off') return;
+  await s.appendEvent(runId, event);
+}
+
+/**
+ * Local append + best-effort dual-write to shared event buffer + durable log.
+ * Use this instead of `reg.appendEvent` on the owner path so peer pods can
+ * read/stream events via the shared store.
+ */
+export function appendRunEvent(
+  reg: RunRegistry,
+  id: string,
+  type: RuntimeRunEventType,
+  data?: unknown,
+): RuntimeRunEvent | undefined {
+  const event = reg.appendEvent(id, type, data);
+  if (event) void dualWriteRunEvent(id, event);
+  return event;
 }
 
 /** Export memory backend factory for multi-node simulation in tests. */

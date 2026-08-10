@@ -13,7 +13,7 @@
 | Surface | Role |
 |---|---|
 | **Desktop (Tauri)** | Full product: Workflow + Design Project + ops |
-| **Web (browser)** | **Design Project loop** only — editor, collab, comments, zip, runs, settings keys |
+| **Web (browser)** | Design Project loop + Media generate + Workflow editor — editor, collab, comments, zip, runs, settings keys, media list/generate (v0.23), workflow list/graph edit/save/run (v0.24) |
 | **CLI** | Headless / automation (`neos` doctor, project, mcp, memory, …) |
 
 Web is intentionally **not** a clone of every desktop route. Expanding web is a product decision; see gaps below.
@@ -34,11 +34,11 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 | Collab presence / locks / selection | yes | yes | — | SSE + REST poll; multi-replica bus |
 | File revisions list/view/restore | yes | yes | — | Live tip uses **`hash`**; revisions **`contentHash`** |
 | Project runs + cancel + SSE | yes | yes | — | Shared run types |
-| API keys / settings | yes | yes (subset) | env/settings CLI | Web: Anthropic/Google + collab status |
-| Workflow editor | **yes** | **no** | import/export CLI | Intentional |
+| API keys / settings | yes | yes (subset) | env/settings CLI | Web: Anthropic/Google/OpenAI + collab status |
+| Workflow editor | **yes** | **yes (v0.24)** | import/export CLI | Web: list + React Flow graph + save + run (simplified vs desktop) |
 | Domain packs / workers UI | **yes** | **no** | — | Intentional |
 | Plugins / remote marketplace | **yes** | **no** (badge) | — | **Q29:** desktop-only full marketplace (0.9.3) |
-| Media generate UI | **yes** | **no** | yes | Desktop Media page + CLI |
+| Media generate UI | **yes** | **yes** (v0.23) | yes | Web: list + generate; Desktop full studio |
 | Sessions / workspaces | **yes** | **no** | — | Intentional |
 | MCP install snippets | yes | yes | `neos mcp serve` | Thin panel on web Settings |
 | Memory UI | **yes** | **no** | `neos memory export` | — |
@@ -76,7 +76,7 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 
 - Big-bang merge into one mega client in 0.9  
 - Map revision `contentHash` into live tip `hash` (or the reverse) outside adapter boundaries  
-- Assume web can open `/workflows` or marketplace install
+- Assume web marketplace install (workflows yes since v0.24; plugins still desktop-only)
 
 Wire conventions: [`skills/api-docs/references/conventions.md`](../../skills/api-docs/references/conventions.md).
 
@@ -97,7 +97,7 @@ Revisit thin web catalog install only if product pull requires browser-first plu
 
 | App | Routes (approx) |
 |---|---|
-| Web | Connect · Projects · ProjectDetail · Settings |
+| Web | Connect · Projects · ProjectDetail · Media · Workflows · WorkflowEditor · Settings |
 | Desktop | ModeSelection · Sessions · Workflows · Projects · **Workers** (`/workers`; alias `/harnesses`) · Domain packs · Blocks · Templates · Skills · Memory · Settings · Design systems · Routines · Plugins · Deployments · Media |
 
 ---

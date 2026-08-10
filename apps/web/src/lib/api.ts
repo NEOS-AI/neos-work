@@ -949,6 +949,181 @@ export class WebApiClient {
     return this.requestEnvelope('POST', '/api/settings/verify-key', { provider, key });
   }
 
+  // ── Media generate (v0.23 dual-surface web) ─────────────────
+
+  /** Media list item from GET /api/media/files. */
+  // types inlined so web stays free of desktop engine types
+
+  /**
+   * GET /api/media/files?limit= — list generated media files.
+   */
+  listMediaFiles(
+    limit = 100,
+  ): Promise<
+    ApiEnvelope<
+      Array<{
+        filename: string;
+        size: number;
+        kind: 'image' | 'audio' | 'video' | 'other';
+        mimeType?: string;
+        createdAt?: string;
+        urlPath?: string;
+      }>
+    >
+  > {
+    const n =
+      typeof limit === 'number' && Number.isFinite(limit)
+        ? Math.min(Math.max(Math.floor(limit), 1), 500)
+        : 100;
+    return this.request('GET', `/api/media/files?limit=${n}`);
+  }
+
+  /**
+   * GET /api/media/providers — provider catalog (configured flags, no secrets).
+   */
+  listMediaProviders(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        label: string;
+        surfaces: string[];
+        configured: boolean;
+        isStub?: boolean;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/media/providers');
+  }
+
+  /**
+   * POST /api/media/generate — unified image | audio | video.
+   * Image/video use `prompt`; audio uses `text` (or falls back to `prompt`).
+   * Video may return `{ jobId, status }` for async polling via `getMediaJob`.
+   * Envelope: does not throw on HTTP errors.
+   */
+  generateMedia(input: {
+    surface: 'image' | 'audio' | 'video';
+    prompt?: string;
+    text?: string;
+    provider?: string;
+    model?: string;
+    size?: '1024x1024' | '1792x1024' | '1024x1792';
+    quality?: 'standard' | 'hd';
+    voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+  }): Promise<
+    ApiEnvelope<{
+      surface?: string;
+      filename?: string;
+      jobId?: string;
+      status?: string;
+      provider?: string;
+      mimeType?: string;
+    }>
+  > {
+    const surface = input.surface;
+    if (surface !== 'image' && surface !== 'audio' && surface !== 'video') {
+      return Promise.resolve({ ok: false, error: 'surface must be image, audio, or video' });
+    }
+    const body: Record<string, string> = { surface };
+    if (surface === 'audio') {
+      const text = typeof input.text === 'string' ? input.text : input.prompt;
+      if (typeof text !== 'string' || /\0/.test(text) || !text.trim()) {
+        return Promise.resolve({ ok: false, error: 'text required for audio' });
+      }
+      body.text = text.trim();
+    } else {
+      const prompt = typeof input.prompt === 'string' ? input.prompt : '';
+      if (!prompt.trim() || /[\0\r\n]/.test(prompt)) {
+        return Promise.resolve({ ok: false, error: 'prompt required (no control characters)' });
+      }
+      body.prompt = prompt.trim();
+    }
+    if (
+      input.provider != null
+      && typeof input.provider === 'string'
+      && !/[\0\r\n]/.test(input.provider)
+      && input.provider.trim()
+    ) {
+      body.provider = input.provider.trim();
+    }
+    if (
+      input.model != null
+      && typeof input.model === 'string'
+      && !/[\0\r\n]/.test(input.model)
+      && input.model.trim()
+    ) {
+      body.model = input.model.trim();
+    }
+    if (input.size) body.size = input.size;
+    if (input.quality) body.quality = input.quality;
+    if (input.voice) body.voice = input.voice;
+
+    return this.requestEnvelope('POST', '/api/media/generate', body);
+  }
+
+  /**
+   * GET /api/media/jobs/:id — poll async video job.
+   */
+  getMediaJob(
+    id: string,
+  ): Promise<
+    ApiEnvelope<{
+      id: string;
+      surface: string;
+      provider: string;
+      status: string;
+      filename?: string;
+      error?: string;
+    }>
+  > {
+    if (typeof id !== 'string' || !id.trim() || /[\0\r\n]/.test(id) || id.length > 200) {
+      return Promise.resolve({ ok: false, error: 'Invalid job id' });
+    }
+    return this.request(
+      'GET',
+      `/api/media/jobs/${encodeURIComponent(id.trim())}`,
+    );
+  }
+
+  /**
+   * Absolute URL for a media file (GET /api/media/file/:filename).
+   * Returns null when filename fails safe-filename rules.
+   */
+  mediaFileUrl(filename: string): string | null {
+    const seg = this.mediaFilenameSegment(filename);
+    if (!seg) return null;
+    return this.url(`/api/media/file/${seg}`);
+  }
+
+  /**
+   * Fetch media file as Blob (auth header; not JSON envelope).
+   */
+  async fetchMediaBlob(filename: string): Promise<Blob> {
+    const seg = this.mediaFilenameSegment(filename);
+    if (!seg) throw new Error('Invalid media filename');
+    const headers: Record<string, string> = {};
+    if (this.token && !/[\0\r\n]/.test(this.token) && this.token.trim()) {
+      headers.Authorization = `Bearer ${this.token}`;
+    }
+    const res = await fetch(this.url(`/api/media/file/${seg}`), { headers });
+    if (!res.ok) throw new Error(`Failed to load media (${res.status})`);
+    return res.blob();
+  }
+
+  /**
+   * Media filename path segment (align with server isSafeMediaFilename).
+   */
+  private mediaFilenameSegment(raw: unknown, maxChars = 200): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const name = raw.trim();
+    if (!name || name === '.' || name === '..') return '';
+    if (name.startsWith('.')) return '';
+    const max = typeof maxChars === 'number' && maxChars > 0 ? maxChars : 200;
+    if (name.length > max) return '';
+    if (!/^[a-zA-Z0-9_\-.]+$/.test(name)) return '';
+    return encodeURIComponent(name);
+  }
+
   /**
    * GET /api/collab/status — bus + presence/lock registry + shared-edit flags (ops, no secrets).
    */
@@ -964,6 +1139,337 @@ export class WebApiClient {
     }>
   > {
     return this.request('GET', '/api/collab/status');
+  }
+
+  // ── Workflows (v0.24 dual-surface web editor) ──────────────
+
+  /** Workflow list/detail shape from GET /api/workflow. */
+  // types inlined so web stays free of desktop engine types
+
+  private safeWorkflowId(raw: unknown, maxChars = 200): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const s = raw.trim();
+    if (!s || s.length > maxChars) return '';
+    return s;
+  }
+
+  /**
+   * GET /api/workflow — list workflows.
+   * Read path: throws ApiError on non-OK HTTP.
+   */
+  listWorkflows(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        description?: string;
+        domain: string;
+        primaryDomain?: string;
+        domainPackIds?: string[];
+        nodes?: unknown[];
+        edges?: unknown[];
+        designSystemId?: string;
+        createdAt?: string;
+        updatedAt?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/workflow');
+  }
+
+  /**
+   * GET /api/workflow/:id — workflow document with graph.
+   * Read path: throws ApiError on non-OK HTTP.
+   */
+  getWorkflow(id: string): Promise<
+    ApiEnvelope<{
+      id: string;
+      name: string;
+      description?: string;
+      domain: string;
+      primaryDomain?: string;
+      domainPackIds?: string[];
+      nodes: Array<{
+        id: string;
+        type: string;
+        label: string;
+        position: { x: number; y: number };
+        config: Record<string, unknown>;
+      }>;
+      edges: Array<{
+        id: string;
+        source: string;
+        target: string;
+        label?: string;
+      }>;
+      designSystemId?: string;
+      schemaVersion?: number;
+      createdAt?: string;
+      updatedAt?: string;
+    }>
+  > {
+    const safe = this.safeWorkflowId(id);
+    if (!safe) {
+      return Promise.reject(new ApiError('Invalid workflow id', 400));
+    }
+    return this.request('GET', `/api/workflow/${encodeURIComponent(safe)}`);
+  }
+
+  /**
+   * POST /api/workflow — create workflow.
+   * Envelope: does not throw on HTTP errors.
+   */
+  createWorkflow(input: {
+    name: string;
+    description?: string;
+    domain?: string;
+    primaryDomain?: string;
+    domainPackIds?: string[];
+    nodes?: unknown[];
+    edges?: unknown[];
+  }): Promise<
+    ApiEnvelope<{
+      id: string;
+      name: string;
+      description?: string;
+      domain: string;
+      primaryDomain?: string;
+      nodes?: unknown[];
+      edges?: unknown[];
+      createdAt?: string;
+      updatedAt?: string;
+    }>
+  > {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid name' });
+    }
+    const body: Record<string, unknown> = {
+      name: input.name.trim().slice(0, 200),
+    };
+    if (typeof input.description === 'string' && !/\0/.test(input.description)) {
+      const d = input.description.trim();
+      if (d) body.description = d;
+    }
+    const primary =
+      typeof input.primaryDomain === 'string' && input.primaryDomain.trim() && !/[\0\r\n]/.test(input.primaryDomain)
+        ? input.primaryDomain.trim().toLowerCase()
+        : typeof input.domain === 'string' && input.domain.trim() && !/[\0\r\n]/.test(input.domain)
+          ? input.domain.trim().toLowerCase()
+          : undefined;
+    if (primary) {
+      body.primaryDomain = primary;
+      body.domain = primary;
+    }
+    if (Array.isArray(input.domainPackIds)) {
+      body.domainPackIds = input.domainPackIds
+        .map((p) => (typeof p === 'string' && !/[\0\r\n]/.test(p) ? p.trim().toLowerCase() : ''))
+        .filter(Boolean);
+    }
+    if (Array.isArray(input.nodes)) body.nodes = input.nodes;
+    if (Array.isArray(input.edges)) body.edges = input.edges;
+    return this.requestEnvelope('POST', '/api/workflow', body);
+  }
+
+  /**
+   * PUT /api/workflow/:id — update name/domain/graph.
+   * Envelope: does not throw on HTTP errors.
+   */
+  updateWorkflow(
+    id: string,
+    patch: {
+      name?: string;
+      description?: string;
+      domain?: string;
+      primaryDomain?: string;
+      domainPackIds?: string[] | null;
+      designSystemId?: string;
+      nodes?: unknown[];
+      edges?: unknown[];
+    },
+  ): Promise<
+    ApiEnvelope<{
+      id: string;
+      name: string;
+      description?: string;
+      domain: string;
+      primaryDomain?: string;
+      nodes?: unknown[];
+      edges?: unknown[];
+      updatedAt?: string;
+    }>
+  > {
+    const safe = this.safeWorkflowId(id);
+    if (!safe) {
+      return Promise.resolve({ ok: false, error: 'Invalid workflow id' });
+    }
+    const body: Record<string, unknown> = {};
+    if (patch.name !== undefined) {
+      if (typeof patch.name !== 'string' || /[\0\r\n]/.test(patch.name) || !patch.name.trim()) {
+        return Promise.resolve({ ok: false, error: 'Invalid name' });
+      }
+      body.name = patch.name.trim().slice(0, 200);
+    }
+    if (patch.description !== undefined) {
+      if (typeof patch.description === 'string' && !/\0/.test(patch.description)) {
+        body.description = patch.description.trim();
+      } else if (typeof patch.description !== 'string') {
+        return Promise.resolve({ ok: false, error: 'Invalid description' });
+      }
+    }
+    if (patch.primaryDomain !== undefined || patch.domain !== undefined) {
+      const raw = patch.primaryDomain ?? patch.domain;
+      if (typeof raw === 'string' && !/[\0\r\n]/.test(raw) && raw.trim()) {
+        const d = raw.trim().toLowerCase();
+        body.primaryDomain = d;
+        body.domain = d;
+      }
+    }
+    if (patch.domainPackIds === null) {
+      body.domainPackIds = null;
+    } else if (Array.isArray(patch.domainPackIds)) {
+      body.domainPackIds = patch.domainPackIds
+        .map((p) => (typeof p === 'string' && !/[\0\r\n]/.test(p) ? p.trim().toLowerCase() : ''))
+        .filter(Boolean);
+    }
+    if (
+      patch.designSystemId !== undefined
+      && typeof patch.designSystemId === 'string'
+      && !/[\0\r\n]/.test(patch.designSystemId)
+    ) {
+      body.designSystemId = patch.designSystemId.trim() || undefined;
+    }
+    if (Array.isArray(patch.nodes)) body.nodes = patch.nodes;
+    if (Array.isArray(patch.edges)) body.edges = patch.edges;
+    if (Object.keys(body).length === 0) {
+      return Promise.resolve({ ok: false, error: 'No fields to update' });
+    }
+    return this.requestEnvelope('PUT', `/api/workflow/${encodeURIComponent(safe)}`, body);
+  }
+
+  /**
+   * DELETE /api/workflow/:id
+   * Envelope: does not throw on HTTP errors.
+   */
+  deleteWorkflow(id: string): Promise<ApiEnvelope<null>> {
+    const safe = this.safeWorkflowId(id);
+    if (!safe) {
+      return Promise.resolve({ ok: false, error: 'Invalid workflow id' });
+    }
+    return this.requestEnvelope('DELETE', `/api/workflow/${encodeURIComponent(safe)}`);
+  }
+
+  /**
+   * GET /api/workflow/:id/runs — list recent runs.
+   * Read path: throws ApiError on non-OK HTTP. Returns ok:false envelope for bad id.
+   */
+  listWorkflowRuns(
+    workflowId: string,
+    limit = 20,
+    offset = 0,
+  ): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        workflowId: string;
+        status: string;
+        startedAt?: string;
+        completedAt?: string;
+        error?: string;
+      }>
+    >
+  > {
+    const safe = this.safeWorkflowId(workflowId);
+    if (!safe) {
+      return Promise.resolve({ ok: false, error: 'Invalid workflow id' });
+    }
+    const lim =
+      typeof limit === 'number' && Number.isFinite(limit)
+        ? Math.min(Math.max(Math.floor(limit), 1), 100)
+        : 20;
+    const off =
+      typeof offset === 'number' && Number.isFinite(offset)
+        ? Math.max(Math.floor(offset), 0)
+        : 0;
+    return this.request(
+      'GET',
+      `/api/workflow/${encodeURIComponent(safe)}/runs?limit=${lim}&offset=${off}`,
+    );
+  }
+
+  /**
+   * POST /api/workflow/:id/run — execute workflow (SSE stream).
+   * Returns abort callback. Emits parsed JSON events to onEvent.
+   * Invalid id emits a synthetic run.failed without fetch.
+   */
+  runWorkflow(
+    id: string,
+    onEvent: (event: { type: string; runId?: string; nodeId?: string; error?: string; [k: string]: unknown }) => void,
+    inputs?: Record<string, unknown>,
+  ): () => void {
+    const controller = new AbortController();
+    const safe = this.safeWorkflowId(id);
+    if (!safe) {
+      queueMicrotask(() =>
+        onEvent({ type: 'run.failed', runId: '', error: 'Invalid workflow id' }),
+      );
+      return () => {};
+    }
+    void (async () => {
+      try {
+        const body =
+          inputs && typeof inputs === 'object' ? JSON.stringify({ inputs }) : undefined;
+        const res = await fetch(this.url(`/api/workflow/${encodeURIComponent(safe)}/run`), {
+          method: 'POST',
+          headers: {
+            Accept: 'text/event-stream',
+            ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+            ...(body ? { 'Content-Type': 'application/json' } : {}),
+          },
+          body,
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          if (!controller.signal.aborted) {
+            onEvent({
+              type: 'run.failed',
+              runId: '',
+              error: res.statusText || `HTTP ${res.status}` || 'Run failed',
+            });
+          }
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            let payload = line.slice(5);
+            if (payload.startsWith(' ')) payload = payload.slice(1);
+            if (payload.endsWith('\r')) payload = payload.slice(0, -1);
+            payload = payload.trim();
+            if (!payload || /\0/.test(payload)) continue;
+            try {
+              const parsed = JSON.parse(payload) as Record<string, unknown>;
+              if (parsed && typeof parsed === 'object' && typeof parsed.type === 'string') {
+                onEvent(parsed as { type: string; [k: string]: unknown });
+              }
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+        // network error — silent (caller can treat missing completion as failure)
+      }
+    })();
+    return () => controller.abort();
   }
 
   /**

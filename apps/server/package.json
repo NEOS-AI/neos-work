@@ -1,6 +1,6 @@
 {
   "name": "@neos-work/server",
-  "version": "0.17.0",
+  "version": "0.24.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -27,6 +27,7 @@
     "nanoid": "^5.1.6",
     "node-cron": "^4.2.1",
     "openai": "^6.48.0",
+    "pg": "^8.16.0",
     "redis": "^4.7.0",
     "unzipper": "^0.12.3",
     "@neos-work/agent-runtime": "workspace:*",
@@ -37,11 +38,15 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.15.4",
     "@types/unzipper": "^0.10.11",
     "@vitest/coverage-v8": "4.1.10",
     "tsx": "^4.19.0",
     "typescript": "^5.8.2",
     "vitest": "^4.1.10"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
   },
   "main": "./dist/index.js",
   "exports": {

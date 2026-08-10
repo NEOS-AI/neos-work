@@ -41,6 +41,55 @@ CLI: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.15 계획:** [docs/plans/PLAN_FOR_V0_15_0.md](docs/plans/PLAN_FOR_V0_15_0.md) · **마이그레이션:** [docs/migration/v0.15.0.md](docs/migration/v0.15.0.md) · **릴리스:** [docs/releases/v0.15.0.md](docs/releases/v0.15.0.md) · inventory `v15Features`  
 **v0.16 계획:** [docs/plans/PLAN_FOR_V0_16_0.md](docs/plans/PLAN_FOR_V0_16_0.md) · **마이그레이션:** [docs/migration/v0.16.0.md](docs/migration/v0.16.0.md) · **릴리스:** [docs/releases/v0.16.2.md](docs/releases/v0.16.2.md) · inventory `v16Features`  
 **v0.17 계획:** [docs/plans/PLAN_FOR_V0_17_0.md](docs/plans/PLAN_FOR_V0_17_0.md) · **마이그레이션:** [docs/migration/v0.17.0.md](docs/migration/v0.17.0.md) · **릴리스:** [docs/releases/v0.17.0.md](docs/releases/v0.17.0.md) · inventory `v17Features`  
+**v0.18 계획:** [docs/plans/PLAN_FOR_V0_18_0.md](docs/plans/PLAN_FOR_V0_18_0.md) · **마이그레이션:** [docs/migration/v0.18.0.md](docs/migration/v0.18.0.md) · **릴리스:** [docs/releases/v0.18.0.md](docs/releases/v0.18.0.md) · inventory `v18Features`  
+**v0.19 계획:** [docs/plans/PLAN_FOR_V0_19_0.md](docs/plans/PLAN_FOR_V0_19_0.md) · **마이그레이션:** [docs/migration/v0.19.0.md](docs/migration/v0.19.0.md) · **릴리스:** [docs/releases/v0.19.0.md](docs/releases/v0.19.0.md) · inventory `v19Features`  
+**v0.20 계획:** [docs/plans/PLAN_FOR_V0_20_0.md](docs/plans/PLAN_FOR_V0_20_0.md) · **마이그레이션:** [docs/migration/v0.20.0.md](docs/migration/v0.20.0.md) · **릴리스:** [docs/releases/v0.20.0.md](docs/releases/v0.20.0.md) · inventory `v20Features`  
+**v0.21 계획:** [docs/plans/PLAN_FOR_V0_21_0.md](docs/plans/PLAN_FOR_V0_21_0.md) · **마이그레이션:** [docs/migration/v0.21.0.md](docs/migration/v0.21.0.md) · **릴리스:** [docs/releases/v0.21.0.md](docs/releases/v0.21.0.md) · inventory `v21Features`  
+**v0.22 계획:** [docs/plans/PLAN_FOR_V0_22_0.md](docs/plans/PLAN_FOR_V0_22_0.md) · **마이그레이션:** [docs/migration/v0.22.0.md](docs/migration/v0.22.0.md) · **릴리스:** [docs/releases/v0.22.0.md](docs/releases/v0.22.0.md) · inventory `v22Features`  
+**v0.23 계획:** [docs/plans/PLAN_FOR_V0_23_0.md](docs/plans/PLAN_FOR_V0_23_0.md) · **마이그레이션:** [docs/migration/v0.23.0.md](docs/migration/v0.23.0.md) · **릴리스:** [docs/releases/v0.23.0.md](docs/releases/v0.23.0.md) · inventory `v23Features`  
+**v0.24 계획:** [docs/plans/PLAN_FOR_V0_24_0.md](docs/plans/PLAN_FOR_V0_24_0.md) · **마이그레이션:** [docs/migration/v0.24.0.md](docs/migration/v0.24.0.md) · **릴리스:** [docs/releases/v0.24.0.md](docs/releases/v0.24.0.md) · inventory `v24Features`  
+
+## v0.24 주요 변경
+
+- **0.24.0** **OS keyring + web Workflow editor** — optional `keytar` + Tauri master-key 명령; 브라우저 Workflows + React Flow 편집기 ([계획](docs/plans/PLAN_FOR_V0_24_0.md) · [OS](docs/implementation/v0.24/v0.24.0.md) · [WF](docs/implementation/v0.24/v0.24.1.md) · [마이그레이션](docs/migration/v0.24.0.md) · [릴리스](docs/releases/v0.24.0.md))
+
+---
+
+## v0.23 주요 변경
+
+- **0.23.0** **Keychain master key + web Media + Postgres warehouse** — AES 키 소스 제어; 브라우저 Media generate; optional `NEOS_RUN_WAREHOUSE=postgres` ([계획](docs/plans/PLAN_FOR_V0_23_0.md) · [K](docs/implementation/v0.23/v0.23.0.md) · [W](docs/implementation/v0.23/v0.23.1.md) · [P](docs/implementation/v0.23/v0.23.2.md) · [마이그레이션](docs/migration/v0.23.0.md) · [릴리스](docs/releases/v0.23.0.md))
+
+---
+
+## v0.22 주요 변경
+
+- **0.22.0** **Run log retention + durable summary + nightly live e2e** — GC/env caps, `summary.json`, nightly Redis live L1–L11 ([계획](docs/plans/PLAN_FOR_V0_22_0.md) · [M0](docs/implementation/v0.22/v0.22.0.md) · [M1](docs/implementation/v0.22/v0.22.1.md) · [M2](docs/implementation/v0.22/v0.22.2.md) · [마이그레이션](docs/migration/v0.22.0.md) · [릴리스](docs/releases/v0.22.0.md))
+
+---
+
+## v0.21 주요 변경
+
+- **0.21.0** **Durable run event log + multi-replica e2e L9/L10** — `NEOS_DATA_DIR/runs/{id}/events.jsonl`; 크로스-pod run events 게이트 ([계획](docs/plans/PLAN_FOR_V0_21_0.md) · [구현](docs/implementation/v0.21/v0.21.0.md) · [e2e](docs/implementation/v0.21/v0.21.1.md) · [마이그레이션](docs/migration/v0.21.0.md) · [릴리스](docs/releases/v0.21.0.md))
+
+---
+
+## v0.20 주요 변경
+
+- **0.20.0** **EngineCatalogClient + project split** — blocks/templates/memory 추출; Design Project 클라이언트 Core→Collab→Files→ProjectClient ([계획](docs/plans/PLAN_FOR_V0_20_0.md) · [구현 C](docs/implementation/v0.20/v0.20.0.md) · [구현 D](docs/implementation/v0.20/v0.20.1.md) · [마이그레이션](docs/migration/v0.20.0.md) · [릴리스](docs/releases/v0.20.0.md))
+
+---
+
+## v0.19 주요 변경
+
+- **0.19.0** **EngineOpsClient + run event fan-out** — design systems/artifacts/routines/deploy 추출; multi-replica run event GET/SSE shared buffer ([계획](docs/plans/PLAN_FOR_V0_19_0.md) · [구현 A](docs/implementation/v0.19/v0.19.0.md) · [구현 B](docs/implementation/v0.19/v0.19.1.md) · [마이그레이션](docs/migration/v0.19.0.md) · [릴리스](docs/releases/v0.19.0.md))
+
+---
+
+## v0.18 주요 변경
+
+- **0.18.0** **EngineSessionsClient + EnginePluginsClient** — sessions/chat/agent/workspaces + plugins/marketplace/workers/packs 추출; `EngineClient extends EnginePluginsClient` ([계획](docs/plans/PLAN_FOR_V0_18_0.md) · [구현 M0](docs/implementation/v0.18/v0.18.0.md) · [구현 M1](docs/implementation/v0.18/v0.18.1.md) · [마이그레이션](docs/migration/v0.18.0.md) · [릴리스](docs/releases/v0.18.0.md))
+
+---
 
 ## v0.17 주요 변경
 

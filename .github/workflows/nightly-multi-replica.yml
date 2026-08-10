@@ -1,5 +1,6 @@
-# Opt-in live multi-replica collab e2e (Redis + two engines).
+# Live multi-replica collab + run event e2e (Redis + two engines).
 # Structural multi-replica checks already run in ci.yml on every PR.
+# v0.22 M2: scheduled nightly + manual dispatch; L1–L11 live cases.
 name: Nightly multi-replica live
 
 on:
@@ -16,6 +17,17 @@ jobs:
   multi-replica-live:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - name: Checkout
@@ -49,7 +61,19 @@ jobs:
       - name: Multi-replica structural e2e
         run: pnpm e2e:multi-replica
 
-      - name: Multi-replica live e2e (Redis + dual engines)
+      - name: Multi-replica live e2e (Redis service + dual engines)
         run: pnpm e2e:multi-replica:live
         env:
           NEOS_MULTI_REPLICA_VERBOSE: '0'
+          NEOS_COLLAB_REDIS_URL: redis://127.0.0.1:6379
+          # Use the workflow Redis service; skip docker run inside the script
+          # (script flag --skip-redis-docker still starts only if no URL — URL is set)
+        # Retry once on flake (port bind / redis ready race)
+      - name: Multi-replica live e2e (retry on failure)
+        if: failure()
+        run: |
+          sleep 5
+          pnpm e2e:multi-replica:live
+        env:
+          NEOS_MULTI_REPLICA_VERBOSE: '1'
+          NEOS_COLLAB_REDIS_URL: redis://127.0.0.1:6379
