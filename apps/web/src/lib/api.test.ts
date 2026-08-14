@@ -808,4 +808,200 @@ describe('WebApiClient workflows (v0.24)', () => {
     expect(events[0]?.error).toMatch(/Invalid workflow id/i);
     stop();
   });
+
+  it('listSessions and createSession hit /api/session', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSessions('default');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/session\?workspaceId=default$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 's1' } }));
+    const created = await client.createSession({
+      workspaceId: 'default',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+    });
+    expect(created.ok).toBe(true);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toMatchObject({
+      workspaceId: 'default',
+      provider: 'anthropic',
+    });
+    await expect(client.createSession({ workspaceId: '' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workspace id',
+    });
+  });
+
+  it('memory CRUD rejects invalid payloads', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(
+      client.createMemory({ name: '', type: 'user', content: 'x' }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid name' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'm1' } }));
+    await client.createMemory({ name: 'N', type: 'user', content: 'hello' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/memory$/);
+    await expect(client.deleteWorkspace('default')).resolves.toMatchObject({
+      ok: false,
+      error: 'Cannot delete default workspace',
+    });
+  });
+
+  it('listWorkers / listDomainPacks / listPlugins / catalog', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listWorkers('coding');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/workers\?domain=coding$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listDomainPacks();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/domain-packs$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listPlugins();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/plugins$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { entries: [] } }));
+    await client.fetchMarketplaceCatalog('https://example.com/c.json');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/marketplace/catalog?url=');
+
+    await expect(client.installMarketplaceEntry({})).resolves.toMatchObject({
+      ok: false,
+      error: 'id or url required',
+    });
+  });
+
+  it('skills / blocks / templates / design systems / routines / deploy', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listSkills();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/skills$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listBlocks('coding');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/blocks\?domain=coding$/);
+
+    await expect(client.createBlock({ id: '', name: 'x' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid id',
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listTemplates();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/templates$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listDesignSystems();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/design-systems$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listRoutines();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/routines$/);
+
+    await expect(client.createRoutine({ name: '', workflowId: 'w1', schedule: '* * * * *' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid name',
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listDeployments();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/deploy$/);
+
+    await expect(
+      client.createDeployment({ provider: 'vercel', content: '' }),
+    ).resolves.toMatchObject({ ok: false, error: 'content required' });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { url: null } }));
+    await client.getMarketplaceCatalogUrl();
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/marketplace\/catalog-url$/);
+  });
+
+  it('listWorkflowRuns clamps limit/offset and rejects bad ids', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.listWorkflowRuns(`wf${'\0'}x`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid workflow id',
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
+    await client.listWorkflowRuns('w1', 999, -4);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe(
+      'http://engine.test/api/workflow/w1/runs?limit=100&offset=0',
+    );
+  });
+
+  it('createBlock / toggleSkill / createRoutine / deployPreflight validate', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.createBlock({ id: 'my_block', name: '' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid name',
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'my_block' } }));
+    await client.createBlock({
+      id: 'my_block',
+      name: 'Mine',
+      implementationType: 'prompt',
+      promptTemplate: 'Do X',
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toMatchObject({
+      id: 'my_block',
+      name: 'Mine',
+      implementationType: 'prompt',
+    });
+
+    await expect(client.toggleSkill('')).resolves.toMatchObject({ ok: false, error: 'Invalid skill id' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await client.toggleSkill('code-review', false);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/skills\/code-review\/toggle$/);
+
+    await expect(
+      client.createRoutine({ name: 'Night', workflowId: '', schedule: '0 9 * * *' }),
+    ).resolves.toMatchObject({ ok: false, error: 'Invalid workflow id' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'r1' } }));
+    await client.createRoutine({ name: 'Night', workflowId: 'w1', schedule: '0 9 * * *' });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toMatchObject({
+      name: 'Night',
+      workflowId: 'w1',
+      schedule: '0 9 * * *',
+    });
+
+    await expect(client.deployPreflight('aws' as 'vercel')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid provider',
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { ready: true } }));
+    const pf = await client.deployPreflight('vercel', 'neos-deploy');
+    expect(pf.ok).toBe(true);
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/deploy\/preflight$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { id: 'd1' } }));
+    await client.createDeployment({
+      provider: 'vercel',
+      content: '<html></html>',
+      projectName: 'site',
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toMatchObject({
+      provider: 'vercel',
+      projectName: 'site',
+    });
+  });
+
+  it('design system content and pack zip reject bad input', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.saveDesignSystemContent('', '# x')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemContent('ds1', `ok${'\0'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid content',
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { content: '# D' } }));
+    await client.getDesignSystemContent('ds1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/design-systems\/ds1\/content$/);
+
+    await expect(client.installDomainPackFromZip(new Blob())).resolves.toMatchObject({
+      ok: false,
+      error: 'Empty zip',
+    });
+  });
 });

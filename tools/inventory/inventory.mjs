@@ -68,6 +68,12 @@ const GATES = {
   requireV23Features: true,
   /** v0.24 train (OS keyring + web workflow editor) */
   requireV24Features: true,
+  /** v0.25 train (web ops + cowork skills + collab reconnect + shared draft) */
+  requireV25Features: true,
+  /** v0.26 train (remaining desktop surfaces on web) */
+  requireV26Features: true,
+  /** v0.27 train (web workflow editor v2) */
+  requireV27Features: true,
 };
 
 function existsRel(rel) {
@@ -817,6 +823,139 @@ function scanV24Features() {
   };
 }
 
+function scanV25Features() {
+  const webApi = readText('apps/web/src/lib/api.ts') ?? '';
+  const webApp = readText('apps/web/src/App.tsx') ?? '';
+  const dual = readText('docs/reference/dual-surface.md') ?? '';
+  const collab = readText('packages/shared/src/collab-ux.ts') ?? '';
+  const draft = readText('packages/shared/src/workflow-draft.ts') ?? '';
+  const detail = readText('apps/web/src/pages/ProjectDetail.tsx') ?? '';
+  const wfEd = readText('apps/web/src/pages/WorkflowEditor.tsx') ?? '';
+  const features = {
+    planV25: existsRel('docs/plans/PLAN_FOR_V0_25_0.md'),
+    migrationV25: existsRel('docs/migration/v0.25.0.md'),
+    releaseV25: existsRel('docs/releases/v0.25.0.md'),
+    webOps:
+      existsRel('apps/web/src/pages/Sessions.tsx')
+      && existsRel('apps/web/src/pages/Memory.tsx')
+      && existsRel('apps/web/src/pages/Plugins.tsx')
+      && existsRel('apps/web/src/pages/Workers.tsx')
+      && existsRel('apps/web/src/pages/DomainPacks.tsx')
+      && webApi.includes('listSessions')
+      && webApi.includes('listMemories')
+      && webApi.includes('listPlugins')
+      && webApi.includes('listWorkers')
+      && webApi.includes('listDomainPacks')
+      && webApp.includes('/sessions')
+      && /Sessions.*yes/i.test(dual),
+    coworkSkills:
+      existsRel('skills/pptx-deck/SKILL.md')
+      && existsRel('skills/docx-report/SKILL.md')
+      && detail.includes('project-new-file')
+      && webApi.includes('writeFile'),
+    collabReconnect:
+      collab.includes('nextSseReconnectDelay')
+      && collab.includes('shouldReconnectSse')
+      && webApi.includes('onStatus')
+      && wfEd.includes('workflow-leave-modal'),
+    sharedDraft:
+      existsRel('packages/shared/src/workflow-draft.ts')
+      && draft.includes('buildWorkflowDraft')
+      && draft.includes('toReactFlowNodes'),
+    implA: existsRel('docs/implementation/v0.25/v0.25.0.md'),
+    implB: existsRel('docs/implementation/v0.25/v0.25.1.md'),
+    implC: existsRel('docs/implementation/v0.25/v0.25.2.md'),
+    implD: existsRel('docs/implementation/v0.25/v0.25.3.md'),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+function scanV27Features() {
+  const webEd = readText('apps/web/src/pages/WorkflowEditor.tsx') ?? '';
+  const dual = readText('docs/reference/dual-surface.md') ?? '';
+  const features = {
+    planV27: existsRel('docs/plans/PLAN_FOR_V0_27_0.md'),
+    migrationV27: existsRel('docs/migration/v0.27.0.md'),
+    releaseV27: existsRel('docs/releases/v0.27.0.md'),
+    implV27: existsRel('docs/implementation/v0.27/v0.27.0.md'),
+    paletteV2:
+      webEd.includes("type: 'media'")
+      && webEd.includes("type: 'block'")
+      && webEd.includes("type: 'slack_message'")
+      && webEd.includes('palette-tabs')
+      && webEd.includes('workflow-config-mode'),
+    runHistory:
+      webEd.includes('workflow-run-history')
+      && webEd.includes('listWorkflowRuns'),
+    dualV27: /Workflow editor.*v0\.27|yes \(v0\.27\)/i.test(dual),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
+function scanV26Features() {
+  const webApi = readText('apps/web/src/lib/api.ts') ?? '';
+  const webApp = readText('apps/web/src/App.tsx') ?? '';
+  const dual = readText('docs/reference/dual-surface.md') ?? '';
+  const features = {
+    planV26: existsRel('docs/plans/PLAN_FOR_V0_26_0.md'),
+    migrationV26: existsRel('docs/migration/v0.26.0.md'),
+    releaseV26: existsRel('docs/releases/v0.26.0.md'),
+    implV26: existsRel('docs/implementation/v0.26/v0.26.0.md'),
+    webPages:
+      existsRel('apps/web/src/pages/Blocks.tsx')
+      && existsRel('apps/web/src/pages/Templates.tsx')
+      && existsRel('apps/web/src/pages/Skills.tsx')
+      && existsRel('apps/web/src/pages/DesignSystems.tsx')
+      && existsRel('apps/web/src/pages/DesignSystemEditor.tsx')
+      && existsRel('apps/web/src/pages/Routines.tsx')
+      && existsRel('apps/web/src/pages/Deployments.tsx')
+      && webApp.includes('/blocks')
+      && webApp.includes('/routines')
+      && webApp.includes('/deployments'),
+    webApi:
+      webApi.includes('listSkills')
+      && webApi.includes('listBlocks')
+      && webApi.includes('listTemplates')
+      && webApi.includes('listDesignSystems')
+      && webApi.includes('listRoutines')
+      && webApi.includes('listDeployments')
+      && webApi.includes('installDomainPackFromZip')
+      && webApi.includes('setMarketplaceCatalogUrl'),
+    dualYes:
+      /Blocks.*yes/i.test(dual)
+      && /Routines.*yes/i.test(dual)
+      && /Deployments.*yes/i.test(dual),
+  };
+  const missing = Object.entries(features)
+    .filter(([, ok]) => !ok)
+    .map(([k]) => k);
+  return {
+    ok: missing.length === 0,
+    count: Object.values(features).filter(Boolean).length,
+    total: Object.keys(features).length,
+    features,
+    missing,
+  };
+}
+
 /**
  * v0.23 capability surface (keychain + web media + postgres warehouse).
  * @see docs/plans/PLAN_FOR_V0_23_0.md
@@ -1220,6 +1359,9 @@ export function buildInventory() {
   const v22 = scanV22Features();
   const v23 = scanV23Features();
   const v24 = scanV24Features();
+  const v25 = scanV25Features();
+  const v26 = scanV26Features();
+  const v27 = scanV27Features();
   const version = monorepoVersion();
 
   const inventory = {
@@ -1254,6 +1396,9 @@ export function buildInventory() {
       v22Features: v22,
       v23Features: v23,
       v24Features: v24,
+      v25Features: v25,
+      v26Features: v26,
+      v27Features: v27,
     },
     gates: GATES,
     summary: {
@@ -1304,6 +1449,12 @@ export function buildInventory() {
       v23FeaturesTotal: v23.total,
       v24Features: v24.count,
       v24FeaturesTotal: v24.total,
+      v25Features: v25.count,
+      v25FeaturesTotal: v25.total,
+      v26Features: v26.count,
+      v26FeaturesTotal: v26.total,
+      v27Features: v27.count,
+      v27FeaturesTotal: v27.total,
     },
   };
 
@@ -1533,6 +1684,39 @@ export function evaluateGates(inventory) {
       missing: v24?.missing ?? [],
     });
   }
+  if (g.requireV25Features) {
+    const v25 = inventory.catalogs?.v25Features;
+    const ok = Boolean(v25?.ok);
+    results.push({
+      id: 'v25Features',
+      ok,
+      actual: v25?.count ?? 0,
+      min: v25?.total ?? 0,
+      missing: v25?.missing ?? [],
+    });
+  }
+  if (g.requireV26Features) {
+    const v26 = inventory.catalogs?.v26Features;
+    const ok = Boolean(v26?.ok);
+    results.push({
+      id: 'v26Features',
+      ok,
+      actual: v26?.count ?? 0,
+      min: v26?.total ?? 0,
+      missing: v26?.missing ?? [],
+    });
+  }
+  if (g.requireV27Features) {
+    const v27 = inventory.catalogs?.v27Features;
+    const ok = Boolean(v27?.ok);
+    results.push({
+      id: 'v27Features',
+      ok,
+      actual: v27?.count ?? 0,
+      min: v27?.total ?? 0,
+      missing: v27?.missing ?? [],
+    });
+  }
   return {
     ok: results.every((r) => r.ok),
     results,
@@ -1579,6 +1763,9 @@ function main(argv = process.argv.slice(2)) {
           || r.id === 'v22Features'
           || r.id === 'v23Features'
           || r.id === 'v24Features'
+          || r.id === 'v25Features'
+          || r.id === 'v26Features'
+          || r.id === 'v27Features'
         )
         && Array.isArray(r.missing)
         && r.missing.length

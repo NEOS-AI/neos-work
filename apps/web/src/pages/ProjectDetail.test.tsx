@@ -519,6 +519,20 @@ describe('ProjectDetail Design Editor', () => {
     expect(deleteFile).not.toHaveBeenCalled();
   });
 
+  it('creates an empty file via New file button', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('notes.md');
+    writeFile.mockResolvedValue({ ok: true, data: { hash: 'new-h' } });
+    renderProject();
+    await waitFor(() => expect(screen.getByTestId('project-new-file')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('project-new-file'));
+    await waitFor(() => {
+      expect(writeFile).toHaveBeenCalledWith('p1', 'notes.md', '', undefined);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Created notes.md/i)).toBeInTheDocument();
+    });
+  });
+
   it('creates a folder via New folder button', async () => {
     vi.spyOn(window, 'prompt').mockReturnValue('assets/icons');
     mkdir.mockResolvedValue({ ok: true, data: { path: 'assets/icons' } });

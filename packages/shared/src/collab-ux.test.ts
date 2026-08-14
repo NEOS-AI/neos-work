@@ -5,7 +5,9 @@ import {
   formatRunLockFailureMessage,
   formatSharedEditFlags,
   isFileLockErrorMessage,
+  nextSseReconnectDelay,
   parseCollabStatusData,
+  shouldReconnectSse,
   shortSessionId,
 } from './collab-ux.js';
 
@@ -37,6 +39,12 @@ describe('collab-ux (v0.11 M1)', () => {
     expect(formatRunLockFailureMessage('File locked by Bob')).toBe(
       'File locked by Bob',
     );
+    expect(nextSseReconnectDelay(1)).toBe(400);
+    expect(nextSseReconnectDelay(2)).toBe(800);
+    expect(nextSseReconnectDelay(8)).toBeLessThanOrEqual(8_000);
+    expect(shouldReconnectSse({ attempts: 0 })).toBe(true);
+    expect(shouldReconnectSse({ attempts: 8 })).toBe(false);
+    expect(shouldReconnectSse({ aborted: true, attempts: 0 })).toBe(false);
     expect(formatRunLockFailureMessage('something 423 else')).toMatch(
       /Agent write blocked by file lock/,
     );

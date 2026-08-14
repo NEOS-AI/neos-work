@@ -9,12 +9,14 @@
  */
 
 import {
+  nextSseReconnectDelay,
   parseCollabLockConflict,
   parseFileRevisionDetailResponse,
   parseFileRevisionListResponse,
   parsePreviewCommentDetailResponse,
   parsePreviewCommentListResponse,
   parseProjectFileWriteResponse,
+  shouldReconnectSse,
   type FileRevision,
   type PreviewComment,
   type ProjectFileContent,
@@ -23,6 +25,7 @@ import {
   type ProjectFileWriteResult,
   type ProjectRunEvent,
   type ProjectRunSummary,
+  type SseStreamStatus,
 } from '@neos-work/shared';
 
 export type { PreviewComment };
@@ -1124,6 +1127,31 @@ export class WebApiClient {
     return encodeURIComponent(name);
   }
 
+  /** Abort-aware backoff used by collab / file SSE reconnect (v0.25 C). */
+  private waitReconnect(ms: number, signal: AbortSignal): Promise<boolean> {
+    if (signal.aborted) return Promise.resolve(false);
+    const delay = Number.isFinite(ms) ? Math.max(0, ms) : 400;
+    return new Promise((resolve) => {
+      const done = () => resolve(!signal.aborted);
+      const t = setTimeout(done, delay);
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(t);
+          done();
+        },
+        { once: true },
+      );
+    });
+  }
+
+  private safeEntityId(raw: unknown, maxChars = 200): string {
+    if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+    const s = raw.trim();
+    if (!s || s.length > maxChars) return '';
+    return s;
+  }
+
   /**
    * GET /api/collab/status — bus + presence/lock registry + shared-edit flags (ops, no secrets).
    */
@@ -1539,7 +1567,11 @@ export class WebApiClient {
         updatedAt?: string;
       };
     }) => void,
-    opts?: { displayName?: string },
+    opts?: {
+      displayName?: string;
+      onStatus?: (status: SseStreamStatus) => void;
+      reconnect?: boolean;
+    },
   ): () => void {
     const controller = new AbortController();
     const id = encodeURIComponent(projectId);
@@ -1547,8 +1579,19 @@ export class WebApiClient {
       opts?.displayName && !/[\0\r\n]/.test(opts.displayName)
         ? `?name=${encodeURIComponent(opts.displayName.trim().slice(0, 48))}`
         : '';
+    const reconnect = opts?.reconnect !== false;
     void (async () => {
+      let attempts = 0;
+      while (!controller.signal.aborted) {
       try {
+        if (attempts > 0) {
+          opts?.onStatus?.('reconnecting');
+          const waited = await this.waitReconnect(
+            nextSseReconnectDelay(attempts),
+            controller.signal,
+          );
+          if (!waited) break;
+        }
         const res = await fetch(this.url(`/api/projects/${id}/collab/stream${qs}`), {
           method: 'GET',
           headers: {
@@ -1557,7 +1600,18 @@ export class WebApiClient {
           },
           signal: controller.signal,
         });
-        if (!res.ok || !res.body) return;
+        if (!res.ok || !res.body) {
+          attempts += 1;
+          if (
+            !reconnect
+            || !shouldReconnectSse({ aborted: controller.signal.aborted, attempts })
+          ) {
+            break;
+          }
+          continue;
+        }
+        attempts = 0;
+        opts?.onStatus?.('open');
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -1675,9 +1729,21 @@ export class WebApiClient {
             }
           }
         }
+        attempts += 1;
+        if (
+          !reconnect
+          || controller.signal.aborted
+          || !shouldReconnectSse({ aborted: controller.signal.aborted, attempts })
+        ) {
+          break;
+        }
       } catch {
-        // abort
+        if (controller.signal.aborted) break;
+        attempts += 1;
+        if (!reconnect || !shouldReconnectSse({ attempts })) break;
       }
+      }
+      opts?.onStatus?.('closed');
     })();
     return () => controller.abort();
   }
@@ -1797,11 +1863,23 @@ export class WebApiClient {
   streamProjectFileEvents(
     projectId: string,
     onEvent: (event: ProjectFileEventPayload & { type: string }) => void,
+    opts?: { onStatus?: (status: SseStreamStatus) => void; reconnect?: boolean },
   ): () => void {
     const controller = new AbortController();
     const id = encodeURIComponent(projectId);
+    const reconnect = opts?.reconnect !== false;
     void (async () => {
+      let attempts = 0;
+      while (!controller.signal.aborted) {
       try {
+        if (attempts > 0) {
+          opts?.onStatus?.('reconnecting');
+          const waited = await this.waitReconnect(
+            nextSseReconnectDelay(attempts),
+            controller.signal,
+          );
+          if (!waited) break;
+        }
         const res = await fetch(this.url(`/api/projects/${id}/events/stream`), {
           method: 'GET',
           headers: {
@@ -1810,7 +1888,18 @@ export class WebApiClient {
           },
           signal: controller.signal,
         });
-        if (!res.ok || !res.body) return;
+        if (!res.ok || !res.body) {
+          attempts += 1;
+          if (
+            !reconnect
+            || !shouldReconnectSse({ aborted: controller.signal.aborted, attempts })
+          ) {
+            break;
+          }
+          continue;
+        }
+        attempts = 0;
+        opts?.onStatus?.('open');
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -1846,10 +1935,810 @@ export class WebApiClient {
             }
           }
         }
+        attempts += 1;
+        if (
+          !reconnect
+          || controller.signal.aborted
+          || !shouldReconnectSse({ aborted: controller.signal.aborted, attempts })
+        ) {
+          break;
+        }
       } catch {
-        // abort / network — silent
+        if (controller.signal.aborted) break;
+        attempts += 1;
+        if (!reconnect || !shouldReconnectSse({ attempts })) break;
+      }
+      }
+      opts?.onStatus?.('closed');
+    })();
+    return () => controller.abort();
+  }
+
+  // ── Sessions / workspaces (v0.25 Track A) ─────────────────
+
+  listSessions(workspaceId?: string): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        workspace_id?: string;
+        workspaceId?: string;
+        title: string | null;
+        provider: string;
+        model: string;
+        thinking_mode?: string;
+        thinkingMode?: string;
+        created_at?: string;
+        updated_at?: string;
+      }>
+    >
+  > {
+    let qs = '';
+    if (workspaceId != null && workspaceId !== '') {
+      const id = this.safeEntityId(workspaceId);
+      if (!id) return Promise.resolve({ ok: false, error: 'Invalid workspace id' });
+      qs = `?workspaceId=${encodeURIComponent(id)}`;
+    }
+    return this.request('GET', `/api/session${qs}`);
+  }
+
+  createSession(input: {
+    workspaceId: string;
+    title?: string;
+    provider?: string;
+    model?: string;
+    thinkingMode?: string;
+  }): Promise<
+    ApiEnvelope<{
+      id: string;
+      workspace_id?: string;
+      title: string | null;
+      provider: string;
+      model: string;
+    }>
+  > {
+    const workspaceId = this.safeEntityId(input.workspaceId);
+    if (!workspaceId) {
+      return Promise.resolve({ ok: false, error: 'Invalid workspace id' });
+    }
+    const body: Record<string, string> = { workspaceId };
+    if (typeof input.title === 'string' && input.title.trim() && !/[\0\r\n]/.test(input.title)) {
+      body.title = input.title.trim().slice(0, 200);
+    }
+    if (typeof input.provider === 'string' && input.provider.trim() && !/[\0\r\n]/.test(input.provider)) {
+      body.provider = input.provider.trim().toLowerCase();
+    }
+    if (typeof input.model === 'string' && input.model.trim() && !/[\0\r\n]/.test(input.model)) {
+      body.model = input.model.trim();
+    }
+    if (
+      typeof input.thinkingMode === 'string'
+      && input.thinkingMode.trim()
+      && !/[\0\r\n]/.test(input.thinkingMode)
+    ) {
+      body.thinkingMode = input.thinkingMode.trim().toLowerCase();
+    }
+    return this.requestEnvelope('POST', '/api/session', body);
+  }
+
+  deleteSession(id: string): Promise<ApiEnvelope<null>> {
+    const sid = this.safeEntityId(id);
+    if (!sid) return Promise.resolve({ ok: false, error: 'Invalid session id' });
+    return this.requestEnvelope('DELETE', `/api/session/${encodeURIComponent(sid)}`);
+  }
+
+  listSessionMessages(sessionId: string): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        session_id?: string;
+        role: string;
+        content: string;
+        created_at?: string;
+      }>
+    >
+  > {
+    const sid = this.safeEntityId(sessionId);
+    if (!sid) return Promise.resolve({ ok: false, error: 'Invalid session id' });
+    return this.request('GET', `/api/session/${encodeURIComponent(sid)}/messages`);
+  }
+
+  cancelSession(sessionId: string): Promise<ApiEnvelope<null>> {
+    const sid = this.safeEntityId(sessionId);
+    if (!sid) return Promise.resolve({ ok: false, error: 'Invalid session id' });
+    return this.requestEnvelope('POST', `/api/session/${encodeURIComponent(sid)}/cancel`);
+  }
+
+  confirmSessionTool(
+    sessionId: string,
+    toolUseId: string,
+    approved: boolean,
+  ): Promise<ApiEnvelope<null>> {
+    const sid = this.safeEntityId(sessionId);
+    const tid = this.safeEntityId(toolUseId);
+    if (!sid) return Promise.resolve({ ok: false, error: 'Invalid session id' });
+    if (!tid) return Promise.resolve({ ok: false, error: 'Invalid tool use id' });
+    return this.requestEnvelope(
+      'POST',
+      `/api/session/${encodeURIComponent(sid)}/tool-confirm/${encodeURIComponent(tid)}`,
+      { approved: approved === true },
+    );
+  }
+
+  streamSessionChat(
+    sessionId: string,
+    content: string,
+    onChunk: (chunk: { type: string; content?: string; toolUseId?: string; toolName?: string }) => void,
+    opts?: { onDone?: () => void; onError?: (err: unknown) => void },
+  ): () => void {
+    const controller = new AbortController();
+    const sid = this.safeEntityId(sessionId);
+    if (!sid || typeof content !== 'string' || /\0/.test(content) || !content.trim()) {
+      queueMicrotask(() => opts?.onError?.(new Error('Invalid chat')));
+      return () => {};
+    }
+    void (async () => {
+      try {
+        const res = await fetch(this.url(`/api/session/${encodeURIComponent(sid)}/chat`), {
+          method: 'POST',
+          headers: {
+            Accept: 'text/event-stream',
+            'Content-Type': 'application/json',
+            ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          },
+          body: JSON.stringify({ content: content.trim() }),
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          if (!controller.signal.aborted) {
+            opts?.onError?.(new Error(res.statusText || `HTTP ${res.status}` || 'Chat failed'));
+          }
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            let payload = line.slice(5);
+            if (payload.startsWith(' ')) payload = payload.slice(1);
+            payload = payload.trim();
+            if (!payload || /\0/.test(payload)) continue;
+            try {
+              const parsed = JSON.parse(payload) as Record<string, unknown>;
+              onChunk({
+                type: typeof parsed.type === 'string' ? parsed.type : 'text',
+                content: typeof parsed.content === 'string' ? parsed.content : undefined,
+                toolUseId: typeof parsed.toolUseId === 'string' ? parsed.toolUseId : undefined,
+                toolName: typeof parsed.toolName === 'string' ? parsed.toolName : undefined,
+              });
+            } catch {
+              // skip
+            }
+          }
+        }
+        if (!controller.signal.aborted) opts?.onDone?.();
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        opts?.onError?.(err);
       }
     })();
     return () => controller.abort();
+  }
+
+  listWorkspaces(): Promise<
+    ApiEnvelope<Array<{ id: string; name: string; path?: string | null; type: string }>>
+  > {
+    return this.request('GET', '/api/workspace');
+  }
+
+  createWorkspace(input: { name: string; path?: string; type?: string }): Promise<
+    ApiEnvelope<{ id: string; name: string; path?: string | null; type: string }>
+  > {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid workspace name' });
+    }
+    const body: { name: string; path?: string; type?: string } = {
+      name: input.name.trim().slice(0, 200),
+    };
+    if (typeof input.path === 'string' && input.path.trim() && !/[\0\r\n]/.test(input.path)) {
+      body.path = input.path.trim();
+    }
+    if (typeof input.type === 'string' && input.type.trim() && !/[\0\r\n]/.test(input.type)) {
+      body.type = input.type.trim();
+    }
+    return this.requestEnvelope('POST', '/api/workspace', body);
+  }
+
+  deleteWorkspace(id: string): Promise<ApiEnvelope<null>> {
+    const wid = this.safeEntityId(id);
+    if (!wid) return Promise.resolve({ ok: false, error: 'Invalid workspace id' });
+    if (wid === 'default') {
+      return Promise.resolve({ ok: false, error: 'Cannot delete default workspace' });
+    }
+    return this.requestEnvelope('DELETE', `/api/workspace/${encodeURIComponent(wid)}`);
+  }
+
+  // ── Memory (v0.25 Track A) ────────────────────────────────
+
+  listMemories(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        type: string;
+        enabled: boolean;
+        content: string;
+        filePath?: string;
+        createdAt?: string;
+        updatedAt?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/memory');
+  }
+
+  createMemory(input: {
+    name: string;
+    type: string;
+    content: string;
+    enabled?: boolean;
+  }): Promise<ApiEnvelope<{ id: string; name: string; type: string; enabled: boolean; content: string }>> {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid name' });
+    }
+    if (typeof input.content !== 'string' || /\0/.test(input.content) || !input.content.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid content' });
+    }
+    const type =
+      typeof input.type === 'string' && !/[\0\r\n]/.test(input.type) ? input.type.trim() : '';
+    if (!type || !['user', 'session', 'skill', 'reference'].includes(type)) {
+      return Promise.resolve({ ok: false, error: 'Invalid type' });
+    }
+    return this.requestEnvelope('POST', '/api/memory', {
+      name: input.name.trim().slice(0, 200),
+      type,
+      content: input.content.trim(),
+      enabled: input.enabled !== false,
+    });
+  }
+
+  updateMemory(
+    id: string,
+    input: { name?: string; type?: string; content?: string; enabled?: boolean },
+  ): Promise<ApiEnvelope<{ id: string; name: string; type: string; enabled: boolean; content: string }>> {
+    const mid = this.safeEntityId(id);
+    if (!mid) return Promise.resolve({ ok: false, error: 'Invalid memory id' });
+    const body: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+        return Promise.resolve({ ok: false, error: 'Invalid name' });
+      }
+      body.name = input.name.trim().slice(0, 200);
+    }
+    if (input.type !== undefined) {
+      if (
+        typeof input.type !== 'string'
+        || /[\0\r\n]/.test(input.type)
+        || !['user', 'session', 'skill', 'reference'].includes(input.type.trim())
+      ) {
+        return Promise.resolve({ ok: false, error: 'Invalid type' });
+      }
+      body.type = input.type.trim();
+    }
+    if (input.content !== undefined) {
+      if (typeof input.content !== 'string' || /\0/.test(input.content)) {
+        return Promise.resolve({ ok: false, error: 'Invalid content' });
+      }
+      body.content = input.content;
+    }
+    if (typeof input.enabled === 'boolean') body.enabled = input.enabled;
+    if (Object.keys(body).length === 0) {
+      return Promise.resolve({ ok: false, error: 'No fields to update' });
+    }
+    return this.requestEnvelope('PUT', `/api/memory/${encodeURIComponent(mid)}`, body);
+  }
+
+  deleteMemory(id: string): Promise<ApiEnvelope<null>> {
+    const mid = this.safeEntityId(id);
+    if (!mid) return Promise.resolve({ ok: false, error: 'Invalid memory id' });
+    return this.requestEnvelope('DELETE', `/api/memory/${encodeURIComponent(mid)}`);
+  }
+
+  toggleMemory(id: string): Promise<
+    ApiEnvelope<{ id: string; name: string; type: string; enabled: boolean; content: string }>
+  > {
+    const mid = this.safeEntityId(id);
+    if (!mid) return Promise.resolve({ ok: false, error: 'Invalid memory id' });
+    return this.requestEnvelope('PUT', `/api/memory/${encodeURIComponent(mid)}/toggle`);
+  }
+
+  // ── Plugins / workers / packs (v0.25 Track A) ─────────────
+
+  listPlugins(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        description?: string;
+        version?: string;
+        channel?: string;
+        trust?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/plugins');
+  }
+
+  fetchMarketplaceCatalog(url?: string): Promise<
+    ApiEnvelope<{
+      schemaVersion?: string;
+      name?: string;
+      entries?: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        version: string;
+        trust: string;
+        packageUrl: string;
+      }>;
+      sourceUrl?: string;
+    }>
+  > {
+    const qs =
+      url && typeof url === 'string' && !/[\0\r\n]/.test(url) && url.trim()
+        ? `?url=${encodeURIComponent(url.trim())}`
+        : '';
+    return this.request('GET', `/api/marketplace/catalog${qs}`);
+  }
+
+  installMarketplaceEntry(input: {
+    id?: string;
+    url?: string;
+  }): Promise<ApiEnvelope<{ id?: string; version?: string; message?: string }>> {
+    const body: { id?: string; url?: string } = {};
+    if (typeof input.id === 'string' && input.id.trim() && !/[\0\r\n]/.test(input.id)) {
+      body.id = input.id.trim();
+    }
+    if (typeof input.url === 'string' && input.url.trim() && !/[\0\r\n]/.test(input.url)) {
+      body.url = input.url.trim();
+    }
+    if (!body.id && !body.url) {
+      return Promise.resolve({ ok: false, error: 'id or url required' });
+    }
+    return this.requestEnvelope('POST', '/api/marketplace/install', body);
+  }
+
+  listWorkers(domain?: string): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        description?: string;
+        domain?: string;
+        isBuiltIn?: boolean;
+        mode?: string;
+      }>
+    >
+  > {
+    const q =
+      typeof domain === 'string' && domain.trim() && !/[\0\r\n]/.test(domain)
+        ? `?domain=${encodeURIComponent(domain.trim().toLowerCase())}`
+        : '';
+    return this.request('GET', `/api/workers${q}`);
+  }
+
+  listDomainPacks(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        description?: string;
+        workerCount?: number;
+        blockCount?: number;
+        isBuiltIn?: boolean;
+        enabled?: boolean;
+        version?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/domain-packs');
+  }
+
+  installDomainPackFromZip(zip: Blob | File): Promise<ApiEnvelope<Record<string, unknown>>> {
+    return this.postZip('/api/domain-packs/install-zip', zip, 10 * 1024 * 1024);
+  }
+
+  getMarketplaceCatalogUrl(): Promise<ApiEnvelope<{ url: string | null }>> {
+    return this.request('GET', '/api/marketplace/catalog-url');
+  }
+
+  setMarketplaceCatalogUrl(url: string): Promise<ApiEnvelope<{ url: string | null }>> {
+    if (typeof url !== 'string' || /[\0\r\n]/.test(url)) {
+      return Promise.resolve({ ok: false, error: 'Invalid catalog URL' });
+    }
+    return this.requestEnvelope('PUT', '/api/marketplace/catalog-url', { url: url.trim() });
+  }
+
+  // ── Skills / blocks / templates / design systems / routines / deploy (v0.26) ─
+
+  listSkills(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        description?: string | null;
+        source?: string;
+        version?: string | null;
+        enabled: boolean;
+        category?: string;
+        mode?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/skills');
+  }
+
+  scanSkills(): Promise<ApiEnvelope<{ scanned?: number; total?: number }>> {
+    return this.requestEnvelope('POST', '/api/skills/scan');
+  }
+
+  toggleSkill(id: string, enabled: boolean): Promise<ApiEnvelope<null>> {
+    const sid = this.safeEntityId(id);
+    if (!sid) return Promise.resolve({ ok: false, error: 'Invalid skill id' });
+    return this.requestEnvelope('POST', `/api/skills/${encodeURIComponent(sid)}/toggle`, {
+      enabled: enabled === true,
+    });
+  }
+
+  deleteSkill(id: string): Promise<ApiEnvelope<null>> {
+    const sid = this.safeEntityId(id);
+    if (!sid) return Promise.resolve({ ok: false, error: 'Invalid skill id' });
+    return this.requestEnvelope('DELETE', `/api/skills/${encodeURIComponent(sid)}`);
+  }
+
+  listBlocks(domain?: string): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        domain: string;
+        category?: string;
+        description?: string;
+        isBuiltIn?: boolean;
+        implementationType?: string;
+        promptTemplate?: string;
+      }>
+    >
+  > {
+    const q =
+      typeof domain === 'string' && domain.trim() && !/[\0\r\n]/.test(domain)
+        ? `?domain=${encodeURIComponent(domain.trim().toLowerCase())}`
+        : '';
+    return this.request('GET', `/api/blocks${q}`);
+  }
+
+  createBlock(input: {
+    id: string;
+    name: string;
+    domain?: string;
+    category?: string;
+    description?: string;
+    implementationType?: string;
+    promptTemplate?: string;
+    inputDescription?: string;
+    outputDescription?: string;
+    paramDefs?: unknown[];
+  }): Promise<ApiEnvelope<{ id: string; name: string }>> {
+    if (typeof input.id !== 'string' || /[\0\r\n]/.test(input.id) || !input.id.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid id' });
+    }
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid name' });
+    }
+    const impl = input.implementationType ?? 'prompt';
+    if (impl !== 'native' && impl !== 'prompt' && impl !== 'skill') {
+      return Promise.resolve({ ok: false, error: 'Invalid implementationType' });
+    }
+    const body: Record<string, unknown> = {
+      id: input.id.trim(),
+      name: input.name.trim().slice(0, 200),
+      domain: input.domain?.trim() || 'general',
+      category: input.category?.trim() || 'custom',
+      description: input.description ?? '',
+      implementationType: impl,
+      paramDefs: Array.isArray(input.paramDefs) ? input.paramDefs : [],
+      inputDescription: input.inputDescription ?? '',
+      outputDescription: input.outputDescription ?? '',
+    };
+    if (typeof input.promptTemplate === 'string' && !/\0/.test(input.promptTemplate)) {
+      body.promptTemplate = input.promptTemplate;
+    }
+    return this.requestEnvelope('POST', '/api/blocks', body);
+  }
+
+  deleteBlock(id: string): Promise<ApiEnvelope<null>> {
+    const bid = this.safeEntityId(id);
+    if (!bid) return Promise.resolve({ ok: false, error: 'Invalid block id' });
+    return this.requestEnvelope('DELETE', `/api/blocks/${encodeURIComponent(bid)}`);
+  }
+
+  listTemplates(domain?: string): Promise<
+    ApiEnvelope<
+      Array<{
+        name: string;
+        description?: string;
+        domain?: string;
+        primaryDomain?: string;
+        nodes?: unknown[];
+        edges?: unknown[];
+      }>
+    >
+  > {
+    const q =
+      typeof domain === 'string' && domain.trim() && !/[\0\r\n]/.test(domain)
+        ? `?domain=${encodeURIComponent(domain.trim().toLowerCase())}`
+        : '';
+    return this.request('GET', `/api/templates${q}`);
+  }
+
+  listDesignSystems(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        description?: string;
+        source?: string;
+        hasManifest?: boolean;
+        createdAt?: string;
+        updatedAt?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/design-systems');
+  }
+
+  createDesignSystem(name: string, description?: string): Promise<
+    ApiEnvelope<{ id: string; name: string; description?: string }>
+  > {
+    if (typeof name !== 'string' || /[\0\r\n]/.test(name) || !name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid name' });
+    }
+    const body: { name: string; description?: string } = { name: name.trim().slice(0, 200) };
+    if (typeof description === 'string' && !/\0/.test(description) && description.trim()) {
+      body.description = description.trim();
+    }
+    return this.requestEnvelope('POST', '/api/design-systems', body);
+  }
+
+  deleteDesignSystem(id: string): Promise<ApiEnvelope<null>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
+    return this.requestEnvelope('DELETE', `/api/design-systems/${encodeURIComponent(did)}`);
+  }
+
+  getDesignSystemContent(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(did)}/content`);
+  }
+
+  saveDesignSystemContent(id: string, content: string): Promise<ApiEnvelope<null>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
+    if (typeof content !== 'string' || /\0/.test(content)) {
+      return Promise.resolve({ ok: false, error: 'Invalid content' });
+    }
+    return this.requestEnvelope('PUT', `/api/design-systems/${encodeURIComponent(did)}/content`, {
+      content,
+    });
+  }
+
+  listRoutines(): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        name: string;
+        workflowId: string;
+        schedule: string;
+        timezone?: string;
+        enabled: boolean;
+        lastRunAt?: string;
+      }>
+    >
+  > {
+    return this.request('GET', '/api/routines');
+  }
+
+  createRoutine(input: {
+    name: string;
+    workflowId: string;
+    schedule: string;
+    timezone?: string;
+    enabled?: boolean;
+  }): Promise<ApiEnvelope<{ id: string; name: string; workflowId: string; schedule: string }>> {
+    if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid name' });
+    }
+    const workflowId = this.safeEntityId(input.workflowId);
+    if (!workflowId) return Promise.resolve({ ok: false, error: 'Invalid workflow id' });
+    if (typeof input.schedule !== 'string' || /[\0\r\n]/.test(input.schedule) || !input.schedule.trim()) {
+      return Promise.resolve({ ok: false, error: 'Invalid schedule' });
+    }
+    const body: Record<string, unknown> = {
+      name: input.name.trim().slice(0, 200),
+      workflowId,
+      schedule: input.schedule.trim(),
+      enabled: input.enabled !== false,
+    };
+    if (typeof input.timezone === 'string' && input.timezone.trim() && !/[\0\r\n]/.test(input.timezone)) {
+      body.timezone = input.timezone.trim();
+    }
+    return this.requestEnvelope('POST', '/api/routines', body);
+  }
+
+  updateRoutine(
+    id: string,
+    input: { name?: string; schedule?: string; timezone?: string; enabled?: boolean },
+  ): Promise<ApiEnvelope<{ id: string; enabled?: boolean }>> {
+    const rid = this.safeEntityId(id);
+    if (!rid) return Promise.resolve({ ok: false, error: 'Invalid routine id' });
+    const body: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      if (typeof input.name !== 'string' || /[\0\r\n]/.test(input.name) || !input.name.trim()) {
+        return Promise.resolve({ ok: false, error: 'Invalid name' });
+      }
+      body.name = input.name.trim();
+    }
+    if (input.schedule !== undefined) {
+      if (typeof input.schedule !== 'string' || /[\0\r\n]/.test(input.schedule) || !input.schedule.trim()) {
+        return Promise.resolve({ ok: false, error: 'Invalid schedule' });
+      }
+      body.schedule = input.schedule.trim();
+    }
+    if (input.timezone !== undefined) {
+      if (typeof input.timezone !== 'string' || /[\0\r\n]/.test(input.timezone)) {
+        return Promise.resolve({ ok: false, error: 'Invalid timezone' });
+      }
+      body.timezone = input.timezone.trim();
+    }
+    if (typeof input.enabled === 'boolean') body.enabled = input.enabled;
+    if (Object.keys(body).length === 0) {
+      return Promise.resolve({ ok: false, error: 'No fields to update' });
+    }
+    return this.requestEnvelope('PUT', `/api/routines/${encodeURIComponent(rid)}`, body);
+  }
+
+  deleteRoutine(id: string): Promise<ApiEnvelope<null>> {
+    const rid = this.safeEntityId(id);
+    if (!rid) return Promise.resolve({ ok: false, error: 'Invalid routine id' });
+    return this.requestEnvelope('DELETE', `/api/routines/${encodeURIComponent(rid)}`);
+  }
+
+  runRoutineNow(id: string): Promise<ApiEnvelope<{ runId?: string }>> {
+    const rid = this.safeEntityId(id);
+    if (!rid) return Promise.resolve({ ok: false, error: 'Invalid routine id' });
+    return this.requestEnvelope('POST', `/api/routines/${encodeURIComponent(rid)}/run`);
+  }
+
+  listDeployments(workflowId?: string): Promise<
+    ApiEnvelope<
+      Array<{
+        id: string;
+        workflowId?: string;
+        provider: string;
+        projectName?: string;
+        url?: string;
+        status: string;
+        statusMessage?: string;
+        createdAt?: string;
+      }>
+    >
+  > {
+    const qs =
+      typeof workflowId === 'string' && workflowId.trim() && !/[\0\r\n]/.test(workflowId)
+        ? `?workflowId=${encodeURIComponent(workflowId.trim())}`
+        : '';
+    return this.request('GET', `/api/deploy${qs}`);
+  }
+
+  createDeployment(input: {
+    provider: 'vercel' | 'cloudflare';
+    content: string;
+    projectName?: string;
+    workflowId?: string;
+  }): Promise<ApiEnvelope<{ id: string; status?: string; url?: string }>> {
+    if (input.provider !== 'vercel' && input.provider !== 'cloudflare') {
+      return Promise.resolve({ ok: false, error: 'provider must be vercel or cloudflare' });
+    }
+    if (typeof input.content !== 'string' || /\0/.test(input.content) || !input.content.trim()) {
+      return Promise.resolve({ ok: false, error: 'content required' });
+    }
+    const body: Record<string, string> = {
+      provider: input.provider,
+      content: input.content,
+    };
+    if (typeof input.projectName === 'string' && input.projectName.trim() && !/[\0\r\n]/.test(input.projectName)) {
+      body.projectName = input.projectName.trim();
+    }
+    const wf = this.safeEntityId(input.workflowId ?? '');
+    if (wf) body.workflowId = wf;
+    return this.requestEnvelope('POST', '/api/deploy', body);
+  }
+
+  refreshDeployment(id: string): Promise<ApiEnvelope<{ id: string; status?: string }>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid deployment id' });
+    return this.requestEnvelope('POST', `/api/deploy/${encodeURIComponent(did)}/refresh`);
+  }
+
+  deleteDeployment(id: string): Promise<ApiEnvelope<null>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid deployment id' });
+    return this.requestEnvelope('DELETE', `/api/deploy/${encodeURIComponent(did)}`);
+  }
+
+  deployPreflight(
+    provider: 'vercel' | 'cloudflare',
+    projectName?: string,
+  ): Promise<
+    ApiEnvelope<{
+      provider?: string;
+      ready?: boolean;
+      checks?: Array<{ key: string; ok: boolean; message: string }>;
+    }>
+  > {
+    if (provider !== 'vercel' && provider !== 'cloudflare') {
+      return Promise.resolve({ ok: false, error: 'Invalid provider' });
+    }
+    const body: { provider: string; projectName?: string } = { provider };
+    if (typeof projectName === 'string' && projectName.trim() && !/[\0\r\n]/.test(projectName)) {
+      body.projectName = projectName.trim();
+    }
+    return this.requestEnvelope('POST', '/api/deploy/preflight', body);
+  }
+
+  private async postZip(
+    path: string,
+    zip: Blob | File,
+    maxBytes: number,
+  ): Promise<ApiEnvelope<Record<string, unknown>>> {
+    try {
+      if (!zip || typeof zip.size !== 'number') return { ok: false, error: 'Invalid zip' };
+      if (zip.size <= 0) return { ok: false, error: 'Empty zip' };
+      if (zip.size > maxBytes) return { ok: false, error: 'zip too large' };
+      const form = new FormData();
+      const name =
+        zip instanceof File && typeof zip.name === 'string' && zip.name.trim()
+          ? zip.name.replace(/[\0\r\n]/g, '_').slice(0, 200)
+          : 'pack.zip';
+      form.append('file', zip, name);
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (this.token) headers.Authorization = `Bearer ${this.token}`;
+      const res = await fetch(this.url(path), { method: 'POST', headers, body: form });
+      try {
+        const json: unknown = await res.json();
+        if (json && typeof json === 'object' && !Array.isArray(json)) {
+          const envelope = json as ApiEnvelope<Record<string, unknown>>;
+          if (envelope.ok === undefined) return { ...envelope, ok: res.ok };
+          return envelope;
+        }
+        return { ok: res.ok, data: json as Record<string, unknown> };
+      } catch {
+        return { ok: false, error: res.ok ? 'Invalid response' : `HTTP ${res.status}` };
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        error: (err instanceof Error ? err.message : 'Install failed')
+          .replace(/[\0\r\n]+/g, ' ')
+          .slice(0, 300),
+      };
+    }
   }
 }

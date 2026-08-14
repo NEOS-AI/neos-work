@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-10T12:30:35.475Z",
-  "version": "0.24.0",
+  "generatedAt": "2026-08-14T01:57:55.590Z",
+  "version": "0.27.0",
   "root": "/Users/yeonwoosung/Desktop/neos-work",
   "catalogs": {
     "agentCliDefs": {
@@ -57,7 +57,7 @@
       ]
     },
     "skills": {
-      "count": 5,
+      "count": 7,
       "items": [
         {
           "id": "api-docs",
@@ -73,6 +73,16 @@
           "id": "design-critique",
           "kind": "package",
           "path": "skills/design-critique/SKILL.md"
+        },
+        {
+          "id": "docx-report",
+          "kind": "package",
+          "path": "skills/docx-report/SKILL.md"
+        },
+        {
+          "id": "pptx-deck",
+          "kind": "package",
+          "path": "skills/pptx-deck/SKILL.md"
         },
         {
           "id": "refactor-safe",
@@ -501,6 +511,55 @@
         "implWf": true
       },
       "missing": []
+    },
+    "v25Features": {
+      "ok": true,
+      "count": 11,
+      "total": 11,
+      "features": {
+        "planV25": true,
+        "migrationV25": true,
+        "releaseV25": true,
+        "webOps": true,
+        "coworkSkills": true,
+        "collabReconnect": true,
+        "sharedDraft": true,
+        "implA": true,
+        "implB": true,
+        "implC": true,
+        "implD": true
+      },
+      "missing": []
+    },
+    "v26Features": {
+      "ok": true,
+      "count": 7,
+      "total": 7,
+      "features": {
+        "planV26": true,
+        "migrationV26": true,
+        "releaseV26": true,
+        "implV26": true,
+        "webPages": true,
+        "webApi": true,
+        "dualYes": true
+      },
+      "missing": []
+    },
+    "v27Features": {
+      "ok": true,
+      "count": 7,
+      "total": 7,
+      "features": {
+        "planV27": true,
+        "migrationV27": true,
+        "releaseV27": true,
+        "implV27": true,
+        "paletteV2": true,
+        "runHistory": true,
+        "dualV27": true
+      },
+      "missing": []
     }
   },
   "gates": {
@@ -530,12 +589,15 @@
     "requireV21Features": true,
     "requireV22Features": true,
     "requireV23Features": true,
-    "requireV24Features": true
+    "requireV24Features": true,
+    "requireV25Features": true,
+    "requireV26Features": true,
+    "requireV27Features": true
   },
   "summary": {
     "agentCliDefs": 13,
     "pluginAtoms": 15,
-    "skills": 5,
+    "skills": 7,
     "designSystems": 2,
     "plugins": 3,
     "mediaProviders": 6,
@@ -579,7 +641,13 @@
     "v23Features": 9,
     "v23FeaturesTotal": 9,
     "v24Features": 7,
-    "v24FeaturesTotal": 7
+    "v24FeaturesTotal": 7,
+    "v25Features": 11,
+    "v25FeaturesTotal": 11,
+    "v26Features": 7,
+    "v26FeaturesTotal": 7,
+    "v27Features": 7,
+    "v27FeaturesTotal": 7
   },
   "checks": {
     "ok": true,
@@ -599,7 +667,7 @@
       {
         "id": "skills",
         "ok": true,
-        "actual": 5,
+        "actual": 7,
         "min": 5
       },
       {
@@ -760,6 +828,27 @@
       },
       {
         "id": "v24Features",
+        "ok": true,
+        "actual": 7,
+        "min": 7,
+        "missing": []
+      },
+      {
+        "id": "v25Features",
+        "ok": true,
+        "actual": 11,
+        "min": 11,
+        "missing": []
+      },
+      {
+        "id": "v26Features",
+        "ok": true,
+        "actual": 7,
+        "min": 7,
+        "missing": []
+      },
+      {
+        "id": "v27Features",
         "ok": true,
         "actual": 7,
         "min": 7,

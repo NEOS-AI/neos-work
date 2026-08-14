@@ -393,4 +393,46 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v24Features.features.implWf);
     assert.ok(inv.checks.results.some((r) => r.id === 'v24Features' && r.ok));
   });
+
+  it('includes v0.25 feature gates (web ops + skills + reconnect + shared draft)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v25Features);
+    assert.equal(
+      inv.catalogs.v25Features.ok,
+      true,
+      `v25 missing: ${(inv.catalogs.v25Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v25Features.features.planV25);
+    assert.ok(inv.catalogs.v25Features.features.webOps);
+    assert.ok(inv.catalogs.v25Features.features.coworkSkills);
+    assert.ok(inv.catalogs.v25Features.features.collabReconnect);
+    assert.ok(inv.catalogs.v25Features.features.sharedDraft);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v25Features' && r.ok));
+  });
+
+  it('includes v0.26 feature gates (remaining desktop surfaces on web)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v26Features);
+    assert.equal(
+      inv.catalogs.v26Features.ok,
+      true,
+      `v26 missing: ${(inv.catalogs.v26Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v26Features.features.webPages);
+    assert.ok(inv.catalogs.v26Features.features.webApi);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v26Features' && r.ok));
+  });
+
+  it('includes v0.27 feature gates (web workflow editor v2)', () => {
+    const inv = buildInventory();
+    assert.ok(inv.catalogs.v27Features);
+    assert.equal(
+      inv.catalogs.v27Features.ok,
+      true,
+      `v27 missing: ${(inv.catalogs.v27Features.missing || []).join(', ')}`,
+    );
+    assert.ok(inv.catalogs.v27Features.features.paletteV2);
+    assert.ok(inv.catalogs.v27Features.features.runHistory);
+    assert.ok(inv.checks.results.some((r) => r.id === 'v27Features' && r.ok));
+  });
 });

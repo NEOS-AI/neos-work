@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { WebNav } from '../components/WebNav.js';
 import {
   isCanvasOverlayEnabled,
   writeCanvasOverlayPref,
@@ -230,16 +231,8 @@ export function Settings() {
           <h1 style={{ margin: 0 }}>Settings</h1>
           <p className="muted">Daemon connection, API keys, collab ops</p>
         </div>
-        <div className="row">
-          <Link to="/projects" className="btn btn-ghost">
-            Projects
-          </Link>
-          <Link to="/workflows" className="btn btn-ghost" data-testid="nav-workflows">
-            Workflows
-          </Link>
-          <Link to="/media" className="btn btn-ghost" data-testid="nav-media">
-            Media
-          </Link>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <WebNav current="/settings" />
           <Link to="/" className="btn btn-ghost">
             Connection
           </Link>
@@ -378,16 +371,17 @@ export function Settings() {
         <div>
           <h2 style={{ margin: 0, fontSize: '1rem' }}>Desktop-only surfaces</h2>
           <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-            This browser client covers the Design Project loop plus Media generate (v0.23). Full
-            product surfaces stay on the Tauri app.
+            This browser client covers the same product surfaces as desktop (v0.26): Projects,
+            Sessions, Workflows, Workers, Packs, Blocks, Templates, Skills, Plugins, Memory, Design
+            systems, Routines, Deployments, and Media. Desktop still has the richer Host/Client
+            shell and plugin-run studio.
           </p>
         </div>
         <ul className="muted" style={{ margin: 0, paddingLeft: '1.2rem', fontSize: 13 }}>
           <li>
-            <strong>Plugins / marketplace</strong> — remote catalog install, trust tiers (desktop
-            Plugins page)
+            <strong>Plugins / marketplace</strong> — catalog URL, install, and pack zip on web;
+            desktop keeps plugin pipeline run SSE
           </li>
-          <li>Workflow editor · Domain packs · Sessions · Memory UI</li>
         </ul>
         <p className="muted mono" style={{ margin: 0, fontSize: 11 }}>
           Policy: docs/reference/dual-surface.md (Q25 · Q29)

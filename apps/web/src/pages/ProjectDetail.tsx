@@ -117,6 +117,10 @@ export function ProjectDetail() {
   /** Path currently being deleted (disables × while request in flight). */
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [mkdirBusy, setMkdirBusy] = useState(false);
+  const [newFileBusy, setNewFileBusy] = useState(false);
+  const [collabStreamStatus, setCollabStreamStatus] = useState<
+    'open' | 'reconnecting' | 'closed' | null
+  >(null);
 
   /** Persisted multi-turn project conversation (server /conversations API). */
   type ChatMessage = {
@@ -348,7 +352,10 @@ export function ProjectDetail() {
           });
         }
       },
-      { displayName: 'Web' },
+      {
+        displayName: 'Web',
+        onStatus: (status) => setCollabStreamStatus(status),
+      },
     );
     return () => stop();
   }, [client, conn.token, id]);
@@ -834,6 +841,53 @@ export function ProjectDetail() {
   };
 
   /**
+   * Create an empty file via PUT …/files/* (collab session for hard-enforce).
+   */
+  const handleNewFile = async () => {
+    if (!id || newFileBusy) return;
+    const raw = window.prompt('File path (relative to project root)', 'untitled.html');
+    if (raw == null) return;
+    const path = raw.trim();
+    if (!path || /[\0\r\n]/.test(path) || path.includes('..')) {
+      setError('File path is invalid');
+      return;
+    }
+    setNewFileBusy(true);
+    setError(null);
+    try {
+      const res = await client.writeFile(
+        id,
+        path,
+        '',
+        collabSessionId ? { sessionId: collabSessionId } : undefined,
+      );
+      if (!res.ok) {
+        const holder = extractLockHolder(res.data);
+        if (holder) {
+          setError(formatLockHolderMessage(holder));
+        } else {
+          setError(
+            (typeof res.error === 'string' && res.error ? res.error : 'Failed to create file')
+              .replace(/[\0\r\n]+/g, ' ')
+              .slice(0, 300),
+          );
+        }
+        return;
+      }
+      setStatus(`Created ${path}`);
+      const f = await client.listFiles(id);
+      const list = ((f.data as Array<{ path: string; type?: string }>) ?? []).filter(
+        (x) => x.type !== 'directory',
+      );
+      setFiles(list);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to create file');
+    } finally {
+      setNewFileBusy(false);
+    }
+  };
+
+  /**
    * Delete a project file. Passes collab session for NEOS_SHARED_EDIT hard enforce.
    * On 423, surfaces "Locked by …" and foreignLocks chip data when holder is present.
    */
@@ -1240,6 +1294,11 @@ export function ProjectDetail() {
           </button>
           {dirty && <span data-testid="web-dirty">Unsaved</span>}
           <PresencePeersBar peers={collabPeers} self={collabSelf} selections={peerSelections} />
+          {collabStreamStatus === 'reconnecting' && (
+            <span className="muted" data-testid="collab-reconnecting">
+              Reconnecting…
+            </span>
+          )}
           {sharedEditFlags.hardEnforce && (
             <span
               data-testid="shared-edit-badge"
@@ -1291,6 +1350,16 @@ export function ProjectDetail() {
               style={{ fontSize: 12, padding: '2px 8px' }}
             >
               {mkdirBusy ? '…' : 'New folder'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              data-testid="project-new-file"
+              disabled={newFileBusy || busy}
+              onClick={() => void handleNewFile()}
+              style={{ fontSize: 12, padding: '2px 8px' }}
+            >
+              {newFileBusy ? '…' : 'New file'}
             </button>
           </div>
           <ul className="list">

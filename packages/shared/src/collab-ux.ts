@@ -126,6 +126,46 @@ export function formatSharedEditFlags(sharedEdit: CollabStatusData['sharedEdit']
 /**
  * Loosely parse GET /api/collab/status `data` (tolerates partial payloads).
  */
+/** SSE reconnect policy (v0.25 Track C). CRDT / sticky LB still out of scope. */
+export interface SseReconnectPolicy {
+  maxAttempts: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+export const DEFAULT_SSE_RECONNECT: SseReconnectPolicy = {
+  maxAttempts: 8,
+  baseDelayMs: 400,
+  maxDelayMs: 8_000,
+};
+
+export type SseStreamStatus = 'open' | 'reconnecting' | 'closed';
+
+/** Exponential backoff delay for attempt 1..n (attempt 0 = first connect). */
+export function nextSseReconnectDelay(
+  attempt: number,
+  policy?: Partial<SseReconnectPolicy>,
+): number {
+  const maxAttempts = policy?.maxAttempts ?? DEFAULT_SSE_RECONNECT.maxAttempts;
+  const base = policy?.baseDelayMs ?? DEFAULT_SSE_RECONNECT.baseDelayMs;
+  const cap = policy?.maxDelayMs ?? DEFAULT_SSE_RECONNECT.maxDelayMs;
+  const n = Number.isFinite(attempt) ? Math.max(1, Math.floor(attempt)) : 1;
+  if (n > maxAttempts) return cap;
+  const ms = base * 2 ** (n - 1);
+  return Math.min(cap, Math.max(0, ms));
+}
+
+export function shouldReconnectSse(opts: {
+  aborted?: boolean;
+  attempts: number;
+  maxAttempts?: number;
+}): boolean {
+  if (opts.aborted) return false;
+  const max = opts.maxAttempts ?? DEFAULT_SSE_RECONNECT.maxAttempts;
+  const attempts = Number.isFinite(opts.attempts) ? Math.floor(opts.attempts) : 0;
+  return attempts >= 0 && attempts < max;
+}
+
 export function parseCollabStatusData(input: unknown): CollabStatusData | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const o = input as Record<string, unknown>;

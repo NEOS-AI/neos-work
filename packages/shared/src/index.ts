@@ -12,4 +12,5 @@ export * from './migrate-workflow.js';
 export * from './project-path.js';
 export * from './schemas/api-envelopes.js';
 export * from './collab-ux.js';
+export * from './workflow-draft.js';
 export * from './version.js';

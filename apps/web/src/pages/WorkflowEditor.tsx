@@ -1,6 +1,6 @@
 /**
- * Web Workflow graph editor (v0.24) — simplified React Flow surface vs desktop.
- * Core: load · palette · connect · config · save · run (SSE).
+ * Web Workflow graph editor (v0.24 + v0.27 v2).
+ * Palette (desktop types) · per-type config · run history · save · run SSE.
  */
 
 import {
@@ -12,7 +12,7 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -31,6 +31,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { ALL_MODELS } from '@neos-work/shared';
 import { clearConnection, loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
 import { scrubError } from '../lib/scrub.js';
@@ -43,20 +44,125 @@ import {
 const NODE_COLORS: Record<string, string> = {
   trigger: '#6b7280',
   agent: '#8b5cf6',
+  block: '#f59e0b',
   output: '#6b7280',
   gate_and: '#f59e0b',
   gate_or: '#f97316',
+  or_gate: '#f97316',
+  parallel_start: '#0ea5e9',
+  parallel_end: '#0ea5e9',
   web_search: '#8b5cf6',
+  slack_message: '#4CAF50',
+  discord_message: '#5865F2',
+  media: '#ec4899',
+  deploy: '#14b8a6',
 };
 
-/** Minimal palette for web editor (subset of desktop). */
-const PALETTE = [
-  { type: 'trigger', label: 'Trigger' },
-  { type: 'agent', label: 'Agent', defaultWorkerId: 'general_generalist' },
-  { type: 'output', label: 'Output' },
-  { type: 'gate_and', label: 'AND Gate' },
-  { type: 'gate_or', label: 'OR Gate' },
-  { type: 'web_search', label: 'Web Search' },
+type PaletteItem = {
+  type: string;
+  label: string;
+  group: 'control' | 'agent' | 'block' | 'delivery';
+  pack: string;
+  paletteKey?: string;
+  defaultWorkerId?: string;
+  defaultMode?: string;
+  defaultConfig?: Record<string, unknown>;
+};
+
+/** Desktop-aligned palette (v0.27). Agent variants drop as type `agent`. */
+const PALETTE: PaletteItem[] = [
+  { type: 'trigger', label: 'Trigger', group: 'control', pack: 'control' },
+  { type: 'output', label: 'Output', group: 'control', pack: 'control' },
+  { type: 'gate_and', label: 'AND Gate', group: 'control', pack: 'control' },
+  { type: 'gate_or', label: 'OR Gate (logic)', group: 'control', pack: 'control' },
+  { type: 'or_gate', label: 'OR Gate (race)', group: 'control', pack: 'control' },
+  { type: 'parallel_start', label: 'Parallel Start', group: 'control', pack: 'control' },
+  { type: 'parallel_end', label: 'Parallel End', group: 'control', pack: 'control' },
+  {
+    type: 'agent',
+    label: 'Agent',
+    group: 'agent',
+    pack: 'general',
+    defaultWorkerId: 'general_generalist',
+    defaultMode: 'solo',
+  },
+  {
+    type: 'agent',
+    label: 'Coordinator',
+    group: 'agent',
+    pack: 'general',
+    paletteKey: 'agent_coordinator',
+    defaultWorkerId: 'general_coordinator',
+    defaultMode: 'coordinator',
+  },
+  {
+    type: 'agent',
+    label: 'Finance Analyst',
+    group: 'agent',
+    pack: 'finance',
+    paletteKey: 'agent_finance',
+    defaultWorkerId: 'finance_analyst',
+    defaultMode: 'solo',
+  },
+  {
+    type: 'agent',
+    label: 'Coding Reviewer',
+    group: 'agent',
+    pack: 'coding',
+    paletteKey: 'agent_coding',
+    defaultWorkerId: 'coding_reviewer',
+    defaultMode: 'solo',
+  },
+  {
+    type: 'agent',
+    label: 'Research Web',
+    group: 'agent',
+    pack: 'research',
+    paletteKey: 'agent_research',
+    defaultWorkerId: 'research_web',
+    defaultMode: 'solo',
+  },
+  { type: 'block', label: 'Block', group: 'block', pack: 'general' },
+  { type: 'web_search', label: 'Web Search', group: 'delivery', pack: 'research' },
+  { type: 'slack_message', label: 'Slack Message', group: 'delivery', pack: 'delivery' },
+  { type: 'discord_message', label: 'Discord Message', group: 'delivery', pack: 'delivery' },
+  {
+    type: 'media',
+    label: 'Media',
+    group: 'delivery',
+    pack: 'delivery',
+    defaultConfig: { mediaType: 'image', mediaProvider: 'openai' },
+  },
+  {
+    type: 'deploy',
+    label: 'Deploy',
+    group: 'delivery',
+    pack: 'delivery',
+    defaultConfig: { provider: 'vercel' },
+  },
+];
+
+const PALETTE_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'control', label: 'Control' },
+  { id: 'agent', label: 'Agents' },
+  { id: 'delivery', label: 'Delivery' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'coding', label: 'Coding' },
+  { id: 'research', label: 'Research' },
+  { id: 'general', label: 'General' },
+] as const;
+
+type PaletteTabId = (typeof PALETTE_TABS)[number]['id'];
+
+const LLM_PROVIDERS = [
+  'anthropic',
+  'google',
+  'openai',
+  'ollama',
+  'cli-claude',
+  'cli-gemini',
+  'cli-codex',
 ] as const;
 
 function scrubText(raw: unknown, max = 200): string {
@@ -154,11 +260,41 @@ function WorkflowEditorInner() {
   const [running, setRunning] = useState(false);
   const [runStatus, setRunStatus] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [paletteTab, setPaletteTab] = useState<PaletteTabId>('all');
+  const [workers, setWorkers] = useState<Array<{ id: string; name: string; domain?: string }>>([]);
+  const [blocks, setBlocks] = useState<Array<{ id: string; name: string; domain?: string }>>([]);
+  const [runs, setRuns] = useState<
+    Array<{ id: string; status: string; startedAt?: string; completedAt?: string; error?: string }>
+  >([]);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const [runsLoading, setRunsLoading] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const stopRunRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
+  const requestLeave = useCallback(
+    (to: string) => {
+      if (!dirty) {
+        nav(to);
+        return;
+      }
+      setLeaveTo(to);
+    },
+    [dirty, nav],
+  );
 
   const handleAuthError = useCallback(
     (err: unknown) => {
@@ -171,6 +307,40 @@ function WorkflowEditorInner() {
     },
     [nav],
   );
+
+  const loadRuns = useCallback(async () => {
+    if (!workflowId || !conn.token) return;
+    setRunsLoading(true);
+    setRunsError(null);
+    try {
+      const res = await client.listWorkflowRuns(workflowId, 20, 0);
+      if (!res.ok) {
+        setRuns([]);
+        setRunsError(scrubError(res.error, 'Failed to load runs'));
+        return;
+      }
+      setRuns(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      setRuns([]);
+      setRunsError(scrubError(err, 'Failed to load runs'));
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [client, conn.token, workflowId]);
+
+  useEffect(() => {
+    if (!conn.token) return;
+    void client.listWorkers().then((res) => {
+      if (res.ok && Array.isArray(res.data)) setWorkers(res.data);
+    }).catch(() => {});
+    void client.listBlocks().then((res) => {
+      if (res.ok && Array.isArray(res.data)) setBlocks(res.data);
+    }).catch(() => {});
+  }, [client, conn.token]);
+
+  useEffect(() => {
+    void loadRuns();
+  }, [loadRuns]);
 
   const load = useCallback(async () => {
     if (!conn.token) {
@@ -264,7 +434,7 @@ function WorkflowEditorInner() {
 
   const updateSelected = (patch: {
     label?: string;
-    workerId?: string;
+    config?: Record<string, unknown>;
   }) => {
     if (!selectedId) return;
     setNodes((nds) =>
@@ -274,14 +444,8 @@ function WorkflowEditorInner() {
         if (patch.label !== undefined) {
           data.label = patch.label;
         }
-        if (patch.workerId !== undefined) {
-          const cfg = { ...(data.config ?? {}) };
-          if (patch.workerId.trim()) {
-            cfg.workerId = patch.workerId.trim();
-          } else {
-            delete cfg.workerId;
-          }
-          data.config = cfg;
+        if (patch.config) {
+          data.config = { ...(data.config ?? {}), ...patch.config };
         }
         return { ...n, data };
       }),
@@ -289,11 +453,20 @@ function WorkflowEditorInner() {
     markDirty();
   };
 
-  const onDragStart = (e: DragEvent, item: (typeof PALETTE)[number]) => {
+  const cfg = (selectedNode?.data as NodeData | undefined)?.config ?? {};
+  const nodeType = String((selectedNode?.data as NodeData | undefined)?.nodeType ?? '');
+
+  const onDragStart = (e: DragEvent, item: PaletteItem) => {
     e.dataTransfer.setData('application/neos-node-type', item.type);
     e.dataTransfer.setData('application/neos-node-label', item.label);
-    if ('defaultWorkerId' in item && item.defaultWorkerId) {
+    if (item.defaultWorkerId) {
       e.dataTransfer.setData('application/neos-worker-id', item.defaultWorkerId);
+    }
+    if (item.defaultMode) {
+      e.dataTransfer.setData('application/neos-mode', item.defaultMode);
+    }
+    if (item.defaultConfig) {
+      e.dataTransfer.setData('application/neos-config', JSON.stringify(item.defaultConfig));
     }
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -311,14 +484,26 @@ function WorkflowEditorInner() {
     const label =
       labelRaw && !/[\0\r\n]/.test(labelRaw) ? labelRaw.trim() || nodeType : nodeType;
     const workerId = e.dataTransfer.getData('application/neos-worker-id');
+    const mode = e.dataTransfer.getData('application/neos-mode');
+    const extraRaw = e.dataTransfer.getData('application/neos-config');
     const bounds = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const position = {
       x: e.clientX - bounds.left - 60,
       y: e.clientY - bounds.top - 20,
     };
     const config: Record<string, unknown> = {};
+    if (extraRaw && extraRaw.startsWith('{')) {
+      try {
+        Object.assign(config, JSON.parse(extraRaw) as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
+    }
     if (workerId && !/[\0\r\n]/.test(workerId) && workerId.trim()) {
       config.workerId = workerId.trim();
+    }
+    if (mode && (mode === 'solo' || mode === 'coordinator')) {
+      config.mode = mode;
     }
     const id = newId('n');
     const node: Node = {
@@ -428,11 +613,13 @@ function WorkflowEditorInner() {
         setRunStatus('Completed');
         setRunning(false);
         stopRunRef.current = null;
+        void loadRuns();
       } else if (t === 'run.failed') {
         setRunStatus(null);
         setError(scrubError(event.error, 'Run failed'));
         setRunning(false);
         stopRunRef.current = null;
+        void loadRuns();
       }
     });
     stopRunRef.current = stop;
@@ -473,9 +660,14 @@ function WorkflowEditorInner() {
         }}
       >
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-          <Link to="/workflows" className="btn btn-ghost" data-testid="workflow-editor-back">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-testid="workflow-editor-back"
+            onClick={() => requestLeave('/workflows')}
+          >
             ← Workflows
-          </Link>
+          </button>
           <input
             className="input"
             style={{ width: 220 }}
@@ -522,14 +714,60 @@ function WorkflowEditorInner() {
               Run
             </button>
           )}
-          <Link to="/projects" className="btn btn-ghost" data-testid="workflow-editor-nav-projects">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-testid="workflow-editor-nav-projects"
+            onClick={() => requestLeave('/projects')}
+          >
             Projects
-          </Link>
-          <Link to="/settings" className="btn btn-ghost" data-testid="workflow-editor-nav-settings">
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-testid="workflow-editor-nav-settings"
+            onClick={() => requestLeave('/settings')}
+          >
             Settings
-          </Link>
+          </button>
         </div>
       </div>
+
+      {leaveTo && (
+        <div
+          className="card stack"
+          data-testid="workflow-leave-modal"
+          style={{ margin: '0.75rem 1rem', maxWidth: 360 }}
+        >
+          <strong>Unsaved changes</strong>
+          <p className="muted" style={{ margin: 0 }}>
+            Leave this workflow and discard unsaved edits?
+          </p>
+          <div className="row">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              data-testid="workflow-leave-stay"
+              onClick={() => setLeaveTo(null)}
+            >
+              Stay
+            </button>
+            <button
+              type="button"
+              className="btn"
+              data-testid="workflow-leave-discard"
+              onClick={() => {
+                const to = leaveTo;
+                setLeaveTo(null);
+                setDirty(false);
+                nav(to);
+              }}
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      )}
 
       {(error || saveStatus || runStatus) && (
         <div className="row" style={{ padding: '0.5rem 1rem', gap: 12 }}>
@@ -563,7 +801,7 @@ function WorkflowEditorInner() {
         <aside
           data-testid="workflow-palette"
           style={{
-            width: 160,
+            width: 176,
             borderRight: '1px solid var(--border)',
             padding: '0.75rem',
             background: 'var(--bg-elevated)',
@@ -573,26 +811,50 @@ function WorkflowEditorInner() {
           <p className="muted" style={{ margin: '0 0 0.5rem', fontSize: 11 }}>
             Drag onto canvas
           </p>
-          <div className="stack" style={{ gap: 6 }}>
-            {PALETTE.map((item) => (
-              <div
-                key={item.type}
-                draggable
-                data-testid={`palette-${item.type}`}
-                onDragStart={(e) => onDragStart(e, item)}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: (NODE_COLORS[item.type] ?? '#6b7280') + '33',
-                  cursor: 'grab',
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
+          <div className="row" style={{ flexWrap: 'wrap', gap: 4, marginBottom: 8 }} data-testid="palette-tabs">
+            {PALETTE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className="btn btn-ghost"
+                data-testid={`palette-tab-${tab.id}`}
+                aria-pressed={paletteTab === tab.id}
+                onClick={() => setPaletteTab(tab.id)}
+                style={{ fontSize: 10, padding: '2px 6px', fontWeight: paletteTab === tab.id ? 700 : 400 }}
               >
-                {item.label}
-              </div>
+                {tab.label}
+              </button>
             ))}
+          </div>
+          <div className="stack" style={{ gap: 6 }}>
+            {PALETTE.filter((item) => {
+              if (paletteTab === 'all') return true;
+              if (paletteTab === 'control' || paletteTab === 'agent' || paletteTab === 'delivery') {
+                return item.group === paletteTab;
+              }
+              return item.pack === paletteTab;
+            }).map((item) => {
+              const key = item.paletteKey ?? item.type;
+              return (
+                <div
+                  key={key}
+                  draggable
+                  data-testid={`palette-${key}`}
+                  onDragStart={(e) => onDragStart(e, item)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: (NODE_COLORS[item.type] ?? '#6b7280') + '33',
+                    cursor: 'grab',
+                    fontSize: 12,
+                    fontWeight: 500,
+                  }}
+                >
+                  {item.label}
+                </div>
+              );
+            })}
           </div>
         </aside>
 
@@ -628,11 +890,11 @@ function WorkflowEditorInner() {
           </ReactFlow>
         </div>
 
-        {/* Config panel */}
+        {/* Config + run history */}
         <aside
           data-testid="workflow-config-panel"
           style={{
-            width: 240,
+            width: 280,
             borderLeft: '1px solid var(--border)',
             padding: '0.75rem',
             background: 'var(--bg-elevated)',
@@ -644,14 +906,14 @@ function WorkflowEditorInner() {
           </p>
           {!selectedNode ? (
             <p className="muted" data-testid="workflow-config-empty">
-              Select a node to edit label and agent workerId.
+              Select a node to edit its settings.
             </p>
           ) : (
             <div className="stack" data-testid="workflow-config-form">
               <p className="muted" style={{ margin: 0, fontSize: 11 }}>
                 Type:{' '}
                 <span data-testid="workflow-config-type">
-                  {scrubText((selectedNode.data as NodeData).nodeType, 40)}
+                  {scrubText(nodeType, 40)}
                 </span>
               </p>
               <label className="stack" style={{ gap: 4 }}>
@@ -660,25 +922,332 @@ function WorkflowEditorInner() {
                   className="input"
                   data-testid="workflow-config-label"
                   value={String((selectedNode.data as NodeData).label ?? '')}
-                  onChange={(e) => updateSelected({ label: e.target.value })}
+                  onChange={(e) => {
+                    if (/[\0\r\n]/.test(e.target.value)) return;
+                    updateSelected({ label: e.target.value });
+                  }}
                 />
               </label>
-              {(selectedNode.data as NodeData).nodeType === 'agent' && (
+              {nodeType === 'agent' && (
+                <>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Worker</span>
+                    <select
+                      className="input"
+                      data-testid="workflow-config-worker-id"
+                      value={String(cfg.workerId ?? '')}
+                      onChange={(e) => {
+                        const workerId = e.target.value;
+                        const next: Record<string, unknown> = { workerId: workerId || undefined };
+                        if (workerId === 'general_coordinator' && cfg.mode !== 'solo') {
+                          next.mode = 'coordinator';
+                        }
+                        updateSelected({ config: next });
+                      }}
+                    >
+                      <option value="">Select worker…</option>
+                      {workers.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {String(w.name || w.id)}
+                        </option>
+                      ))}
+                      {typeof cfg.workerId === 'string'
+                        && cfg.workerId
+                        && !workers.some((w) => w.id === cfg.workerId)
+                        && (
+                          <option value={cfg.workerId}>{cfg.workerId}</option>
+                        )}
+                    </select>
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Mode</span>
+                    <select
+                      className="input"
+                      data-testid="workflow-config-mode"
+                      value={
+                        cfg.mode === 'coordinator' || cfg.mode === 'solo'
+                          ? String(cfg.mode)
+                          : cfg.workerId === 'general_coordinator'
+                            ? 'coordinator'
+                            : 'solo'
+                      }
+                      onChange={(e) =>
+                        updateSelected({
+                          config: { mode: e.target.value === 'coordinator' ? 'coordinator' : 'solo' },
+                        })
+                      }
+                    >
+                      <option value="solo">Solo</option>
+                      <option value="coordinator">Coordinator</option>
+                    </select>
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Provider</span>
+                    <select
+                      className="input"
+                      data-testid="workflow-config-provider"
+                      value={typeof cfg.llmProvider === 'string' ? cfg.llmProvider : 'anthropic'}
+                      onChange={(e) =>
+                        updateSelected({
+                          config: {
+                            llmProvider: e.target.value,
+                            provider: e.target.value,
+                            llmModel: '',
+                          },
+                        })
+                      }
+                    >
+                      {LLM_PROVIDERS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {!(typeof cfg.llmProvider === 'string' && cfg.llmProvider.startsWith('cli-')) && (
+                    <label className="stack" style={{ gap: 4 }}>
+                      <span className="muted">Model</span>
+                      <select
+                        className="input"
+                        data-testid="workflow-config-model"
+                        value={typeof cfg.llmModel === 'string' ? cfg.llmModel : ''}
+                        onChange={(e) =>
+                          updateSelected({ config: { llmModel: e.target.value || undefined } })
+                        }
+                      >
+                        <option value="">Select model…</option>
+                        {ALL_MODELS.filter((m) => {
+                          const p =
+                            typeof cfg.llmProvider === 'string' ? cfg.llmProvider : 'anthropic';
+                          return m.providerId === p;
+                        }).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </>
+              )}
+              {nodeType === 'block' && (
                 <label className="stack" style={{ gap: 4 }}>
-                  <span className="muted">workerId</span>
-                  <input
+                  <span className="muted">Block</span>
+                  <select
                     className="input"
-                    data-testid="workflow-config-worker-id"
-                    value={String(
-                      ((selectedNode.data as NodeData).config?.workerId as string) ?? '',
-                    )}
-                    onChange={(e) => updateSelected({ workerId: e.target.value })}
-                    placeholder="general_generalist"
+                    data-testid="workflow-config-block-id"
+                    value={String(cfg.blockId ?? '')}
+                    onChange={(e) => updateSelected({ config: { blockId: e.target.value || undefined } })}
+                  >
+                    <option value="">Select block…</option>
+                    {blocks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name || b.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {nodeType === 'trigger' && (
+                <label className="stack" style={{ gap: 4 }}>
+                  <span className="muted">Initial inputs (JSON)</span>
+                  <textarea
+                    className="input"
+                    data-testid="workflow-config-initial-inputs"
+                    rows={4}
+                    defaultValue={
+                      cfg.initialInputs && typeof cfg.initialInputs === 'object'
+                        ? JSON.stringify(cfg.initialInputs, null, 2)
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (/\0/.test(next)) return;
+                      if (!next.trim()) {
+                        updateSelected({ config: { initialInputs: undefined } });
+                        return;
+                      }
+                      try {
+                        const parsed = JSON.parse(next) as unknown;
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                          updateSelected({ config: { initialInputs: parsed } });
+                        }
+                      } catch {
+                        /* keep typing */
+                      }
+                    }}
                   />
+                </label>
+              )}
+              {nodeType === 'web_search' && (
+                <>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Query</span>
+                    <input
+                      className="input"
+                      data-testid="workflow-config-query"
+                      value={typeof cfg.query === 'string' ? cfg.query : ''}
+                      onChange={(e) => {
+                        if (/[\0\r\n]/.test(e.target.value)) return;
+                        updateSelected({ config: { query: e.target.value } });
+                      }}
+                    />
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Max results</span>
+                    <input
+                      className="input"
+                      data-testid="workflow-config-max-results"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={typeof cfg.maxResults === 'number' ? cfg.maxResults : ''}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        updateSelected({
+                          config: { maxResults: Number.isFinite(n) ? n : undefined },
+                        });
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+              {nodeType === 'slack_message' && (
+                <>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Channel</span>
+                    <input
+                      className="input"
+                      data-testid="workflow-config-channel"
+                      value={typeof cfg.channel === 'string' ? cfg.channel : ''}
+                      onChange={(e) => {
+                        if (/[\0\r\n]/.test(e.target.value)) return;
+                        updateSelected({ config: { channel: e.target.value } });
+                      }}
+                      placeholder="#alerts"
+                    />
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Text template</span>
+                    <textarea
+                      className="input"
+                      data-testid="workflow-config-text-template"
+                      rows={3}
+                      value={typeof cfg.textTemplate === 'string' ? cfg.textTemplate : ''}
+                      onChange={(e) => {
+                        if (/\0/.test(e.target.value)) return;
+                        updateSelected({ config: { textTemplate: e.target.value } });
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+              {nodeType === 'discord_message' && (
+                <label className="stack" style={{ gap: 4 }}>
+                  <span className="muted">Text template</span>
+                  <textarea
+                    className="input"
+                    data-testid="workflow-config-text-template"
+                    rows={3}
+                    value={typeof cfg.textTemplate === 'string' ? cfg.textTemplate : ''}
+                    onChange={(e) => {
+                      if (/\0/.test(e.target.value)) return;
+                      updateSelected({ config: { textTemplate: e.target.value } });
+                    }}
+                  />
+                </label>
+              )}
+              {nodeType === 'media' && (
+                <>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Media type</span>
+                    <select
+                      className="input"
+                      data-testid="workflow-config-media-type"
+                      value={typeof cfg.mediaType === 'string' ? cfg.mediaType : 'image'}
+                      onChange={(e) => updateSelected({ config: { mediaType: e.target.value } })}
+                    >
+                      <option value="image">Image</option>
+                      <option value="audio">Audio</option>
+                      <option value="video">Video</option>
+                    </select>
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Provider</span>
+                    <select
+                      className="input"
+                      data-testid="workflow-config-media-provider"
+                      value={typeof cfg.mediaProvider === 'string' ? cfg.mediaProvider : 'openai'}
+                      onChange={(e) => updateSelected({ config: { mediaProvider: e.target.value } })}
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="google">Google</option>
+                      <option value="xai">xAI</option>
+                      <option value="stub">Stub</option>
+                    </select>
+                  </label>
+                  <label className="stack" style={{ gap: 4 }}>
+                    <span className="muted">Prompt</span>
+                    <textarea
+                      className="input"
+                      data-testid="workflow-config-media-prompt"
+                      rows={3}
+                      value={typeof cfg.prompt === 'string' ? cfg.prompt : ''}
+                      onChange={(e) => {
+                        if (/\0/.test(e.target.value)) return;
+                        updateSelected({ config: { prompt: e.target.value } });
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+              {nodeType === 'deploy' && (
+                <label className="stack" style={{ gap: 4 }}>
+                  <span className="muted">Provider</span>
+                  <select
+                    className="input"
+                    data-testid="workflow-config-deploy-provider"
+                    value={typeof cfg.provider === 'string' ? cfg.provider : 'vercel'}
+                    onChange={(e) => updateSelected({ config: { provider: e.target.value } })}
+                  >
+                    <option value="vercel">vercel</option>
+                    <option value="cloudflare">cloudflare</option>
+                  </select>
                 </label>
               )}
             </div>
           )}
+
+          <div className="stack" data-testid="workflow-run-history" style={{ marginTop: 16 }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <p style={{ margin: 0, fontWeight: 600, fontSize: 13 }}>Run history</p>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-testid="workflow-runs-refresh"
+                disabled={runsLoading}
+                onClick={() => void loadRuns()}
+              >
+                {runsLoading ? '…' : 'Refresh'}
+              </button>
+            </div>
+            {runsError && (
+              <p className="err" role="alert" style={{ fontSize: 12 }}>
+                {runsError}
+              </p>
+            )}
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }} data-testid="workflow-run-list">
+              {runs.map((r) => (
+                <li key={r.id} className="muted" data-testid={`workflow-run-${r.id}`} style={{ fontSize: 12, marginBottom: 6 }}>
+                  <span className="mono">{r.id.slice(0, 8)}</span>
+                  {' · '}
+                  {r.status}
+                  {r.startedAt ? ` · ${scrubText(r.startedAt, 24)}` : ''}
+                </li>
+              ))}
+              {runs.length === 0 && !runsLoading && <li className="muted">No runs yet</li>}
+            </ul>
+          </div>
         </aside>
       </div>
     </div>

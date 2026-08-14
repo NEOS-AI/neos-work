@@ -49,6 +49,27 @@ CLI headless: `pnpm neos -- doctor` · `neos project list` · `neos mcp serve`
 **v0.22 plan:** [docs/plans/PLAN_FOR_V0_22_0.md](docs/plans/PLAN_FOR_V0_22_0.md) · **migration:** [docs/migration/v0.22.0.md](docs/migration/v0.22.0.md) · **release:** [docs/releases/v0.22.0.md](docs/releases/v0.22.0.md) · inventory `v22Features`  
 **v0.23 plan:** [docs/plans/PLAN_FOR_V0_23_0.md](docs/plans/PLAN_FOR_V0_23_0.md) · **migration:** [docs/migration/v0.23.0.md](docs/migration/v0.23.0.md) · **release:** [docs/releases/v0.23.0.md](docs/releases/v0.23.0.md) · inventory `v23Features`  
 **v0.24 plan:** [docs/plans/PLAN_FOR_V0_24_0.md](docs/plans/PLAN_FOR_V0_24_0.md) · **migration:** [docs/migration/v0.24.0.md](docs/migration/v0.24.0.md) · **release:** [docs/releases/v0.24.0.md](docs/releases/v0.24.0.md) · inventory `v24Features`  
+**v0.25 plan:** [docs/plans/PLAN_FOR_V0_25_0.md](docs/plans/PLAN_FOR_V0_25_0.md) · **migration:** [docs/migration/v0.25.0.md](docs/migration/v0.25.0.md) · **release:** [docs/releases/v0.25.0.md](docs/releases/v0.25.0.md) · inventory `v25Features`  
+**v0.26 plan:** [docs/plans/PLAN_FOR_V0_26_0.md](docs/plans/PLAN_FOR_V0_26_0.md) · **migration:** [docs/migration/v0.26.0.md](docs/migration/v0.26.0.md) · **release:** [docs/releases/v0.26.0.md](docs/releases/v0.26.0.md) · inventory `v26Features`  
+**v0.27 plan:** [docs/plans/PLAN_FOR_V0_27_0.md](docs/plans/PLAN_FOR_V0_27_0.md) · **migration:** [docs/migration/v0.27.0.md](docs/migration/v0.27.0.md) · **release:** [docs/releases/v0.27.0.md](docs/releases/v0.27.0.md) · inventory `v27Features`  
+
+## What's new in v0.27
+
+- **0.27.0** **Web Workflow editor v2** — full palette, per-type node config, run history ([plan](docs/plans/PLAN_FOR_V0_27_0.md) · [impl](docs/implementation/v0.27/v0.27.0.md))
+
+---
+
+## What's new in v0.26
+
+- **0.26.0** **Web parity for remaining desktop surfaces** — Blocks, Templates, Skills, Design systems + editor, Routines, Deployments; pack zip + marketplace catalog URL ([plan](docs/plans/PLAN_FOR_V0_26_0.md) · [impl](docs/implementation/v0.26/v0.26.0.md))
+
+---
+
+## What's new in v0.25
+
+- **0.25.0** **Web ops + Cowork skills + collab reconnect** — browser Sessions/Memory/Plugins/Workers/Packs; `pptx-deck` + `docx-report` skills; Design Project New file; SSE reconnect + workflow leave-blocker; shared `workflow-draft` ([plan](docs/plans/PLAN_FOR_V0_25_0.md) · [A](docs/implementation/v0.25/v0.25.0.md) · [B](docs/implementation/v0.25/v0.25.1.md) · [C](docs/implementation/v0.25/v0.25.2.md) · [D](docs/implementation/v0.25/v0.25.3.md) · [migration](docs/migration/v0.25.0.md) · [release](docs/releases/v0.25.0.md))
+
+---
 
 ## What's new in v0.24
 

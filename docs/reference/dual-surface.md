@@ -13,7 +13,7 @@
 | Surface | Role |
 |---|---|
 | **Desktop (Tauri)** | Full product: Workflow + Design Project + ops |
-| **Web (browser)** | Design Project loop + Media generate + Workflow editor — editor, collab, comments, zip, runs, settings keys, media list/generate (v0.23), workflow list/graph edit/save/run (v0.24) |
+| **Web (browser)** | Same product catalog as desktop (v0.26): Projects, Sessions, Workflows, Workers, Packs, Blocks, Templates, Skills, Plugins, Memory, Design systems, Routines, Deployments, Media |
 | **CLI** | Headless / automation (`neos` doctor, project, mcp, memory, …) |
 
 Web is intentionally **not** a clone of every desktop route. Expanding web is a product decision; see gaps below.
@@ -35,14 +35,19 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 | File revisions list/view/restore | yes | yes | — | Live tip uses **`hash`**; revisions **`contentHash`** |
 | Project runs + cancel + SSE | yes | yes | — | Shared run types |
 | API keys / settings | yes | yes (subset) | env/settings CLI | Web: Anthropic/Google/OpenAI + collab status |
-| Workflow editor | **yes** | **yes (v0.24)** | import/export CLI | Web: list + React Flow graph + save + run (simplified vs desktop) |
-| Domain packs / workers UI | **yes** | **no** | — | Intentional |
-| Plugins / remote marketplace | **yes** | **no** (badge) | — | **Q29:** desktop-only full marketplace (0.9.3) |
+| Workflow editor | **yes** | **yes (v0.27)** | import/export CLI | Web: full palette + per-type config + run history |
+| Domain packs / workers UI | **yes** | **yes (v0.25)** | — | Web: lists + pack zip install (v0.26) |
+| Plugins / remote marketplace | **yes** | **yes (v0.25/v0.26)** | — | Web: catalog URL + install; desktop keeps plugin-run SSE |
+| Blocks | **yes** | **yes (v0.26)** | — | Web: list + create prompt block |
+| Templates | **yes** | **yes (v0.26)** | — | Web: instantiate workflow |
+| Skills UI | **yes** | **yes (v0.26)** | — | Web: list/scan/toggle/delete |
+| Design systems | **yes** | **yes (v0.26)** | — | Web: list + DESIGN.md editor |
 | Media generate UI | **yes** | **yes** (v0.23) | yes | Web: list + generate; Desktop full studio |
-| Sessions / workspaces | **yes** | **no** | — | Intentional |
+| Sessions / workspaces | **yes** | **yes (v0.25)** | — | Web: list/create/chat SSE + workspace CRUD |
 | MCP install snippets | yes | yes | `neos mcp serve` | Thin panel on web Settings |
-| Memory UI | **yes** | **no** | `neos memory export` | — |
-| Deployments UI | **yes** | **no** | — | — |
+| Memory UI | **yes** | **yes (v0.25)** | `neos memory export` | Web: CRUD + toggle |
+| Routines | **yes** | **yes (v0.26)** | — | Web: create/toggle/run now |
+| Deployments | **yes** | **yes (v0.26)** | — | Web: preflight + create + refresh |
 
 ---
 
@@ -87,9 +92,9 @@ Wire conventions: [`skills/api-docs/references/conventions.md`](../../skills/api
 | Choice | Rationale |
 |---|---|
 | **Desktop-only full marketplace UI** | Trust tiers, zip install, catalog fetch already live on Plugins page (0.6.4) |
-| Web | **Badge only** — “Plugins marketplace is desktop-only” on Settings (no catalog install surface in 0.9.3) |
+| Web | **Catalog + install + catalog URL (v0.25/v0.26)** — plugin-run SSE studio remains desktop |
 
-Revisit thin web catalog install only if product pull requires browser-first plugin install.
+Revisit plugin-run SSE in the browser only if product pull requires it.
 
 ---
 
@@ -97,7 +102,7 @@ Revisit thin web catalog install only if product pull requires browser-first plu
 
 | App | Routes (approx) |
 |---|---|
-| Web | Connect · Projects · ProjectDetail · Media · Workflows · WorkflowEditor · Settings |
+| Web | Connect · Projects · ProjectDetail · Sessions · Media · Workflows · WorkflowEditor · Workers · Domain packs · Blocks · Templates · Skills · Plugins · Memory · Design systems · Routines · Deployments · Settings |
 | Desktop | ModeSelection · Sessions · Workflows · Projects · **Workers** (`/workers`; alias `/harnesses`) · Domain packs · Blocks · Templates · Skills · Memory · Settings · Design systems · Routines · Plugins · Deployments · Media |
 
 ---
