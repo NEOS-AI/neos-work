@@ -1005,3 +1005,74 @@ describe('WebApiClient workflows (v0.24)', () => {
     });
   });
 });
+
+describe('WebApiClient skills catalog', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('searchSkillCatalog GETs q and optional owner', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { query: 'find', skills: [] } }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.searchSkillCatalog('find', { owner: 'vercel-labs' });
+    expect(res.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/skills/catalog/search');
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('q=find');
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('owner=vercel-labs');
+  });
+
+  it('searchSkillCatalog rejects short query and invalid owner without fetch', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.searchSkillCatalog('a')).resolves.toMatchObject({
+      ok: false,
+      error: 'query_too_short',
+    });
+    await expect(
+      client.searchSkillCatalog('find', { owner: 'Not A Valid Owner' }),
+    ).resolves.toMatchObject({ ok: false, error: 'invalid_id' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('previewRemoteSkill GETs id', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'vercel-labs/skills/find-skills', skillMd: '#' } }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.previewRemoteSkill({ id: 'vercel-labs/skills/find-skills' });
+    expect(res.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('/api/skills/catalog/preview');
+    expect(String(fetchMock.mock.calls[0]![0])).toContain('vercel-labs');
+  });
+
+  it('installRemoteSkill requires confirm:true and POSTs it', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(
+      client.installRemoteSkill({ id: 'vercel-labs/skills/find-skills' } as { id: string; confirm: true }),
+    ).resolves.toMatchObject({ ok: false, error: 'confirm_required' });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { id: 'inst-1', source: 'remote' } }),
+    );
+    const res = await client.installRemoteSkill({
+      id: 'vercel-labs/skills/find-skills',
+      confirm: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(String(fetchMock.mock.calls[0]![0])).toMatch(/\/api\/skills\/install$/);
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1].body))).toEqual({
+      id: 'vercel-labs/skills/find-skills',
+      confirm: true,
+    });
+  });
+});

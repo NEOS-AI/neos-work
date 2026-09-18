@@ -49,6 +49,75 @@ export class ApiError extends Error {
 
 export { normalizeProjectRelPath } from '@neos-work/shared';
 
+export type SkillFetchPath = 'snapshot' | 'zipball' | 'well-known' | 'direct';
+
+export interface RemoteSkillHit {
+  id: string;
+  slug: string;
+  name: string;
+  source: string;
+  installs: number;
+  sourceType: 'github' | 'well-known' | 'unknown';
+  installUrl: string | null;
+  url: string;
+  installed: boolean;
+}
+
+export interface CatalogSearchResult {
+  query: string;
+  searchType: string;
+  count: number;
+  cached?: boolean;
+  stale?: boolean;
+  skills: RemoteSkillHit[];
+}
+
+export interface CatalogPreviewResult {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  license?: string;
+  hash: string | null;
+  fileCount: number;
+  files: Array<{ path: string; bytes: number }>;
+  skillMd: string;
+  truncated: boolean;
+  trust: 'unverified';
+  sourceUrl: string | null;
+  skillsShUrl: string;
+  fetchPath: SkillFetchPath;
+}
+
+export interface SkillAmbiguousCandidate {
+  slug: string;
+  name: string;
+}
+
+export interface InstallRemoteSkillInput {
+  id?: string;
+  source?: string;
+  slug?: string;
+  url?: string;
+  ref?: string;
+  scope?: 'global' | 'workspace';
+  confirm: true;
+  includeInternal?: boolean;
+}
+
+export interface InstallRemoteSkillResult {
+  id: string;
+  name: string;
+  source: 'remote';
+  version: string | null;
+  hash: string | null;
+  scope: 'global' | 'workspace';
+  path: string;
+  fetchPath: SkillFetchPath;
+  shadowed?: 'bundled';
+  unchanged?: boolean;
+}
+
 export class WebApiClient {
   constructor(
     public serverUrl: string,
@@ -2402,6 +2471,75 @@ export class WebApiClient {
     return this.requestEnvelope('DELETE', `/api/skills/${encodeURIComponent(sid)}`);
   }
 
+  /**
+   * GET /api/skills/catalog/search — skills.sh search (min 2 chars).
+   * Envelope: 403 catalogDisabled / 4xx do not throw.
+   */
+  searchSkillCatalog(
+    q: string,
+    opts?: { limit?: number; owner?: string },
+  ): Promise<ApiEnvelope<CatalogSearchResult>> {
+    const query = safeCatalogQuery(q);
+    if (query.length < 2) return Promise.resolve({ ok: false, error: 'query_too_short' });
+    const params = new URLSearchParams();
+    params.set('q', query);
+    if (typeof opts?.limit === 'number' && Number.isFinite(opts.limit)) {
+      params.set('limit', String(Math.max(1, Math.min(50, Math.trunc(opts.limit)))));
+    }
+    if (typeof opts?.owner === 'string' && opts.owner.trim()) {
+      const owner = safeCatalogOwner(opts.owner);
+      if (!owner) return Promise.resolve({ ok: false, error: 'invalid_id' });
+      params.set('owner', owner);
+    }
+    return this.requestEnvelope('GET', `/api/skills/catalog/search?${params}`);
+  }
+
+  /**
+   * GET /api/skills/catalog/preview — SKILL.md excerpt + license.
+   * Envelope: 4xx/5xx do not throw.
+   */
+  previewRemoteSkill(input: {
+    id?: string;
+    url?: string;
+  }): Promise<ApiEnvelope<CatalogPreviewResult>> {
+    const params = new URLSearchParams();
+    const id = safeCatalogId(input.id);
+    const url = safeCatalogUrl(input.url);
+    if (id) params.set('id', id);
+    else if (url) params.set('url', url);
+    else return Promise.resolve({ ok: false, error: 'invalid_id' });
+    return this.requestEnvelope('GET', `/api/skills/catalog/preview?${params}`);
+  }
+
+  /**
+   * POST /api/skills/install — remote ingest. `confirm: true` is required
+   * (never send an unverified install without an explicit confirm).
+   */
+  installRemoteSkill(
+    input: InstallRemoteSkillInput,
+  ): Promise<ApiEnvelope<InstallRemoteSkillResult> & { candidates?: SkillAmbiguousCandidate[] }> {
+    if (input.confirm !== true) {
+      return Promise.resolve({ ok: false, error: 'confirm_required' });
+    }
+    const body: Record<string, unknown> = { confirm: true };
+    const id = safeCatalogId(input.id);
+    if (id) body.id = id;
+    if (typeof input.source === 'string' && !/[\0\r\n]/.test(input.source) && input.source.trim()) {
+      body.source = input.source.trim().slice(0, 200);
+    }
+    if (typeof input.slug === 'string' && !/[\0\r\n]/.test(input.slug) && input.slug.trim()) {
+      body.slug = input.slug.trim().slice(0, 200);
+    }
+    const url = safeCatalogUrl(input.url);
+    if (url) body.url = url;
+    if (typeof input.ref === 'string' && !/[\0\r\n]/.test(input.ref) && input.ref.trim()) {
+      body.ref = input.ref.trim().slice(0, 200);
+    }
+    if (input.scope === 'global' || input.scope === 'workspace') body.scope = input.scope;
+    if (input.includeInternal === true) body.includeInternal = true;
+    return this.requestEnvelope('POST', '/api/skills/install', body);
+  }
+
   listBlocks(domain?: string): Promise<
     ApiEnvelope<
       Array<{
@@ -2741,4 +2879,34 @@ export class WebApiClient {
       };
     }
   }
+}
+
+/** Printable ASCII catalog id (owner/repo/slug). */
+function safeCatalogId(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const id = raw.trim();
+  if (!id || id.length > 200) return '';
+  if (id.includes('..')) return '';
+  if (!/^[a-zA-Z0-9._/-]+$/.test(id)) return '';
+  return id;
+}
+
+function safeCatalogOwner(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const owner = raw.trim();
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,38})$/.test(owner)) return '';
+  return owner;
+}
+
+function safeCatalogQuery(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  return raw.trim().slice(0, 200);
+}
+
+function safeCatalogUrl(raw: unknown): string {
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const url = raw.trim();
+  if (!url || url.length > 2_048) return '';
+  if (!/^https:\/\//i.test(url)) return '';
+  return url;
 }
