@@ -39,6 +39,12 @@ function scrubText(raw: unknown, max = 200): string {
   return raw.replace(/[\0\r\n]+/g, ' ').slice(0, max);
 }
 
+/** Strip NULs / CRs from SKILL.md but keep `\n` so the preview stays multiline. */
+function scrubSkillMd(raw: unknown, max = 32_000): string {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(/\0/g, '').replace(/\r\n/g, '\n').replace(/\r/g, '').slice(0, max);
+}
+
 export function Skills() {
   const nav = useNavigate();
   const conn = loadConnection();
@@ -355,7 +361,7 @@ export function Skills() {
               margin: 0,
             }}
           >
-            {scrubText(preview.skillMd, 32_000)}
+            {scrubSkillMd(preview.skillMd, 32_000)}
           </pre>
           <button
             type="button"

@@ -164,6 +164,9 @@ describe('Web Skills page', () => {
     await waitFor(() => expect(screen.getByTestId('skills-preview-drawer')).toBeInTheDocument());
     expect(screen.getByText(skillsCopy.licenseUnknown)).toBeInTheDocument();
     expect(screen.getByText(skillsCopy.thirdPartyDisclaimer)).toBeInTheDocument();
+    expect(screen.getByTestId('skills-preview-drawer').querySelector('pre')?.textContent).toBe(
+      '---\nname: find-skills\n---\n',
+    );
   });
 
   it('does not POST install when confirm is cancelled', async () => {
