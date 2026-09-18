@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
+
 import plugins from './plugins.js';
 
-const SKILLS_DIR = path.join(os.homedir(), '.config', 'neos-work', 'skills');
+const SKILLS_DIR = resolveUserSkillsDir();
 const DIR_NAME = `_cov_plugin_route_${process.pid}`;
 const DIR = path.join(SKILLS_DIR, DIR_NAME);
 
@@ -16,7 +18,7 @@ describe('plugins routes', () => {
   it('lists plugins as ok data array', async () => {
     const res = await plugins.request('/');
     expect(res.status).toBe(200);
-    const body = await res.json() as { ok: boolean; data: unknown[] };
+    const body = (await res.json()) as { ok: boolean; data: unknown[] };
     expect(body.ok).toBe(true);
     expect(Array.isArray(body.data)).toBe(true);
   });
@@ -222,18 +224,21 @@ describe('plugins routes', () => {
       }),
     });
     expect(up.status).toBe(201);
-    const created = await up.json() as { ok: boolean; data: { id: string; name: string; pipeline?: unknown[] } };
+    const created = (await up.json()) as {
+      ok: boolean;
+      data: { id: string; name: string; pipeline?: unknown[] };
+    };
     expect(created.ok).toBe(true);
     expect(created.data.id).toBe(DIR_NAME);
     expect(created.data.pipeline?.length).toBe(4);
 
     const get = await plugins.request(`/${DIR_NAME}`);
     expect(get.status).toBe(200);
-    const detail = await get.json() as { data: { name: string; skillContent?: string } };
+    const detail = (await get.json()) as { data: { name: string; skillContent?: string } };
     expect(detail.data.name).toBe('Cov Route Plugin');
     // list view should not require skillContent
     const list = await plugins.request('/');
-    const listBody = await list.json() as { data: Array<{ id: string; skillContent?: string }> };
+    const listBody = (await list.json()) as { data: Array<{ id: string; skillContent?: string }> };
     const row = listBody.data.find((p) => p.id === DIR_NAME);
     expect(row).toBeTruthy();
     expect(row).not.toHaveProperty('skillContent');
@@ -256,14 +261,7 @@ describe('plugins additional coverage', () => {
         `INSERT INTO skill (id, name, description, source, path, version, enabled)
          VALUES (?, ?, ?, ?, ?, ?, 1)`,
       )
-      .run(
-        skillId,
-        `${DIR_NAME}-skill-row`,
-        'cov',
-        'local',
-        path.join(DIR, 'SKILL.md'),
-        '0.0.1',
-      );
+      .run(skillId, `${DIR_NAME}-skill-row`, 'cov', 'local', path.join(DIR, 'SKILL.md'), '0.0.1');
 
     try {
       const up = await plugins.request('/upgrade-from-skill', {

@@ -36,7 +36,21 @@ export interface SkillExampleCard {
   title?: string;
 }
 
-export type SkillSource = 'local' | 'global' | 'bundled' | 'opencode';
+export type SkillSource = 'local' | 'global' | 'bundled' | 'opencode' | 'remote';
+
+export interface SkillProvenance {
+  schemaVersion: 'neos-skill-source/v1';
+  origin: 'skills.sh' | 'github' | 'well-known';
+  id: string;
+  source: string;
+  slug: string;
+  installUrl?: string;
+  ref?: string;
+  hash?: string;
+  trust: 'unverified';
+  installedAt: string;
+  updatedAt?: string;
+}
 
 export interface Skill {
   manifest: SkillManifest;

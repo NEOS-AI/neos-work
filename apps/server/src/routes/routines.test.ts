@@ -1,16 +1,57 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
+
+import * as routinesDb from '../db/routines.js';
 import { getDb } from '../db/schema.js';
 import * as workflows from '../db/workflows.js';
-import * as routinesDb from '../db/routines.js';
 import routines from './routines.js';
 
 const WF_NAME = `_cov_rtn_route_${process.pid}`;
 
+async function cleanupCrystallizeLeftovers() {
+  const db = getDb();
+  const rows = db.prepare(`SELECT path FROM skill WHERE source = 'crystallize'`).all() as Array<{
+    path: string;
+  }>;
+  db.prepare(`DELETE FROM skill WHERE source = 'crystallize'`).run();
+  for (const row of rows) {
+    if (typeof row.path === 'string' && row.path && !/[\0\r\n]/.test(row.path)) {
+      await fs.rm(path.dirname(row.path), { recursive: true, force: true }).catch(() => {});
+    }
+  }
+  const root = resolveUserSkillsDir();
+  let entries: string[] = [];
+  try {
+    entries = await fs.readdir(root);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!name || name.startsWith('.') || /[\0\r\n]/.test(name)) continue;
+    const dir = path.join(root, name);
+    try {
+      const body = await fs.readFile(path.join(dir, 'SKILL.md'), 'utf8');
+      if (body.includes('source: crystallize')) {
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    } catch {
+      // skip non-crystallize packages
+    }
+  }
+}
+
 function cleanup() {
   const db = getDb();
-  const wfs = db.prepare('SELECT id FROM workflow WHERE name = ?').all(WF_NAME) as Array<{ id: string }>;
+  const wfs = db.prepare('SELECT id FROM workflow WHERE name = ?').all(WF_NAME) as Array<{
+    id: string;
+  }>;
   for (const w of wfs) {
-    const rs = db.prepare('SELECT id FROM routine WHERE workflow_id = ?').all(w.id) as Array<{ id: string }>;
+    const rs = db.prepare('SELECT id FROM routine WHERE workflow_id = ?').all(w.id) as Array<{
+      id: string;
+    }>;
     for (const r of rs) {
       db.prepare('DELETE FROM routine_run WHERE routine_id = ?').run(r.id);
       db.prepare('DELETE FROM routine WHERE id = ?').run(r.id);
@@ -19,7 +60,10 @@ function cleanup() {
   }
 }
 
-afterEach(cleanup);
+afterEach(async () => {
+  cleanup();
+  await cleanupCrystallizeLeftovers();
+});
 
 describe('routines routes', () => {
   it('rejects create without required fields', async () => {
@@ -90,7 +134,7 @@ describe('routines routes', () => {
       }),
     });
     expect(bad.status).toBe(400);
-    const badBody = await bad.json() as { error: string };
+    const badBody = (await bad.json()) as { error: string };
     expect(badBody.error).toMatch(/cron/i);
 
     const create = await routines.request('/', {
@@ -104,7 +148,7 @@ describe('routines routes', () => {
       }),
     });
     expect([200, 201]).toContain(create.status);
-    const created = await create.json() as { data: { id: string } };
+    const created = (await create.json()) as { data: { id: string } };
 
     const putBad = await routines.request(`/${created.data.id}`, {
       method: 'PUT',
@@ -147,7 +191,7 @@ describe('routines routes', () => {
       }),
     });
     expect([200, 201]).toContain(create.status);
-    const created = await create.json() as {
+    const created = (await create.json()) as {
       data: { id: string; name: string; workflowId: string; schedule: string; timezone: string };
     };
     expect(created.data.name).toBe('Trimmed Routine');
@@ -178,13 +222,15 @@ describe('routines routes', () => {
       }),
     });
     expect([200, 201]).toContain(create.status);
-    const created = await create.json() as { data: { id: string; enabled: boolean; schedule: string } };
+    const created = (await create.json()) as {
+      data: { id: string; enabled: boolean; schedule: string };
+    };
     expect(created.data.enabled).toBe(false);
     expect(created.data.schedule).toBe('0 9 * * *');
     const id = created.data.id;
 
     const list = await routines.request('/');
-    const listBody = await list.json() as { data: Array<{ id: string }> };
+    const listBody = (await list.json()) as { data: Array<{ id: string }> };
     expect(listBody.data.some((r) => r.id === id)).toBe(true);
 
     const get = await routines.request(`/${id}`);
@@ -196,7 +242,7 @@ describe('routines routes', () => {
       body: JSON.stringify({ schedule: '0 * * * *', timezone: 'Asia/Seoul' }),
     });
     expect(put.status).toBe(200);
-    const updated = await put.json() as { data: { schedule: string; timezone: string } };
+    const updated = (await put.json()) as { data: { schedule: string; timezone: string } };
     expect(updated.data.schedule).toBe('0 * * * *');
     expect(updated.data.timezone).toBe('Asia/Seoul');
 
@@ -262,7 +308,9 @@ describe('routines routes', () => {
     // May succeed (200) or fail if skill FS/DB setup is limited — accept 200 or structured error
     expect([200, 201, 400, 500]).toContain(ok.status);
     if (ok.status === 200 || ok.status === 201) {
-      const body = await ok.json() as { data?: { name?: string; path?: string; description?: string } };
+      const body = (await ok.json()) as {
+        data?: { name?: string; path?: string; description?: string };
+      };
       expect(body.data?.name || body.data?.path).toBeTruthy();
     }
 
@@ -277,7 +325,7 @@ describe('routines routes', () => {
     });
     expect([200, 201, 400, 500]).toContain(longDesc.status);
     if (longDesc.status === 200 || longDesc.status === 201) {
-      const body = await longDesc.json() as { data?: { description?: string | null } };
+      const body = (await longDesc.json()) as { data?: { description?: string | null } };
       if (typeof body.data?.description === 'string') {
         expect(body.data.description.length).toBeLessThanOrEqual(4_000);
       }
@@ -350,7 +398,7 @@ describe('routines routes', () => {
       body: 'not-json',
     });
     expect(badJson.status).toBe(400);
-    const body = await badJson.json() as { error: string };
+    const body = (await badJson.json()) as { error: string };
     expect(body.error).toMatch(/Invalid JSON/i);
 
     // limit clamped to 1–100 (no throw on nonsense)

@@ -1,14 +1,17 @@
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import type { Skill } from '@neos-work/shared';
+
 import {
   discoverSkills,
   mergeSkillsByPrecedence,
   resolveBundledSkillsDir,
   scanSkillRoot,
 } from './discovery.js';
-import type { Skill } from '@neos-work/shared';
+import { writeSkillProvenance } from './provenance.js';
 
 function skillMd(name: string, body = 'body'): string {
   return `---
@@ -134,6 +137,37 @@ describe('discoverSkills', () => {
     }
   });
 
+  it('marks a global package with a valid sidecar as remote', async () => {
+    const data = await mkdtemp(join(tmpdir(), 'neos-data-'));
+    const prev = process.env.NEOS_DATA_DIR;
+    process.env.NEOS_DATA_DIR = data;
+    try {
+      const pkg = join(data, 'skills', 'remote-pack');
+      await mkdir(pkg, { recursive: true });
+      await writeFile(join(pkg, 'SKILL.md'), skillMd('remote-pack'));
+      await writeSkillProvenance(pkg, {
+        schemaVersion: 'neos-skill-source/v1',
+        origin: 'skills.sh',
+        id: 'owner/repo/remote-pack',
+        source: 'owner/repo',
+        slug: 'remote-pack',
+        trust: 'unverified',
+        installedAt: '2026-01-01T00:00:00.000Z',
+      });
+      const skills = await discoverSkills(undefined, {
+        includeBundled: false,
+        includeGlobal: true,
+      });
+      const hit = skills.find((s) => s.manifest.name === 'remote-pack');
+      expect(hit?.source).toBe('remote');
+      expect(hit?.packageDir).toBe(pkg);
+    } finally {
+      if (prev === undefined) delete process.env.NEOS_DATA_DIR;
+      else process.env.NEOS_DATA_DIR = prev;
+      await rm(data, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
   it('skips hidden markdown files in skill directories', async () => {
     const dir = join(workspace, '.neos-work', 'skills');
     await mkdir(dir, { recursive: true });
@@ -186,7 +220,9 @@ describe('bundled monorepo skills catalog', () => {
   it('finds ≥5 package skills when skills/ is on disk', async () => {
     // packages/core → repo root
     const repoSkills = join(process.cwd(), '..', '..', 'skills');
-    const root = resolveBundledSkillsDir(repoSkills) ?? resolveBundledSkillsDir(null, join(process.cwd(), '..', '..'));
+    const root =
+      resolveBundledSkillsDir(repoSkills) ??
+      resolveBundledSkillsDir(null, join(process.cwd(), '..', '..'));
     if (!root) {
       // CI may not copy skills; skip soft
       expect(root).toBeNull();
