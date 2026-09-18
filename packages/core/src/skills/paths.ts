@@ -1,6 +1,6 @@
 /**
  * User / workspace skill roots and sibling-safe path checks.
- * Functions only — never snapshot NEOS_DATA_DIR at module load.
+ * Do not cache NEOS_DATA_DIR at module load.
  */
 
 import { existsSync, realpathSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { lstat, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 
-import { readSkillProvenance } from './provenance.js';
+import { readSkillProvenance, SKILL_PROVENANCE_FILENAME } from './provenance.js';
 
 export type SkillOccupancy =
   | 'empty'
@@ -54,6 +54,8 @@ export function isPathInside(root: string, candidate: string): boolean {
     const prefix = rootAbs.endsWith(sep) ? rootAbs : rootAbs + sep;
     return abs === rootAbs || abs.startsWith(prefix);
   };
+  // Both exist: compare realpaths (macOS /var vs /private/var).
+  if (rootReal && candReal) return inside(candReal, rootReal);
   if (!inside(candLex, rootLex) && !(rootReal && inside(candLex, rootReal))) return false;
   if (candReal) {
     const bound = rootReal ?? rootLex;
@@ -117,9 +119,11 @@ export async function classifyOccupancy(
   if (hasSkillMd) return 'occupied_skill';
   if (hasPlugin) return 'occupied_plugin';
   if (visible.length === 0) {
-    // Hidden leftovers only (e.g. crashed .tmp-*) — reusable partial write.
     return names.length === 0 ? 'empty' : 'orphan';
   }
-  if (!remoteId) return 'occupied_unknown';
-  return 'orphan';
+  // Sidecar-only leftover is reusable; sidecar plus other files is not.
+  if (remoteId && visible.length === 1 && visible[0] === SKILL_PROVENANCE_FILENAME) {
+    return 'orphan';
+  }
+  return 'occupied_unknown';
 }

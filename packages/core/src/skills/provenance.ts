@@ -1,6 +1,4 @@
-/**
- * neos-skill-source.json sidecar — remote skill provenance (not neos-remote.json).
- */
+/** neos-skill-source.json sidecar for remote skill provenance. */
 
 import { lstat, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

@@ -26,7 +26,7 @@ export interface DiscoverSkillsOptions {
   bundledRoot?: string | null;
   /** Include bundled catalog (default true). */
   includeBundled?: boolean;
-  /** Include ~/.config/neos-work/skills (default true). */
+  /** Include the user skills root from resolveUserSkillsDir() (default true). */
   includeGlobal?: boolean;
 }
 

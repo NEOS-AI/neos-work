@@ -1,6 +1,6 @@
 /**
  * Plugin store — scans skill directories for open-design.json sidecar files
- * Skills directory: ~/.config/neos-work/skills/<plugin-name>/
+ * Skills directory: resolveUserSkillsDir() / <plugin-name>/
  */
 
 import { existsSync, type Dirent } from 'node:fs';

@@ -69,7 +69,6 @@ function skipDeeper(lines: string[], start: number, parentIndent: number): numbe
   return i;
 }
 
-/** Appendix C frontmatter: nested metadata + YAML list triggers. Not full YAML. */
 function parseSkillFrontmatter(yaml: string): ParsedFrontmatter | null {
   const lines = yaml.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l));
   const fields: Record<string, string> = {};

@@ -94,6 +94,7 @@ describe('isPathInside', () => {
     const realChild = realpathSync(child);
     expect(isPathInside(tmp, child)).toBe(true);
     expect(isPathInside(tmp, realChild)).toBe(true);
+    expect(isPathInside(realpathSync(tmp), child)).toBe(true);
     if (tmp !== realpathSync(tmp)) {
       expect(tmp.includes('/var/') || realChild.includes('/private/var/')).toBe(true);
     }
@@ -157,5 +158,30 @@ describe('classifyOccupancy', () => {
     await mkdir(dir);
     await writeFile(join(dir, 'notes.txt'), 'not a skill', 'utf8');
     expect(await classifyOccupancy(dir)).toBe('occupied_unknown');
+  });
+
+  it('hidden-only leftovers → orphan', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'neos-occ-'));
+    const dir = join(tmp, 'pkg');
+    await mkdir(dir);
+    await writeFile(join(dir, '.tmp-leftover'), 'partial', 'utf8');
+    expect(await classifyOccupancy(dir)).toBe('orphan');
+  });
+
+  it('sidecar-only leftover → orphan', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'neos-occ-'));
+    const dir = join(tmp, 'pkg');
+    await mkdir(dir);
+    await writeSkillProvenance(dir, sampleProv('owner/repo/x'));
+    expect(await classifyOccupancy(dir, 'owner/repo/x')).toBe('orphan');
+  });
+
+  it('sidecar plus extra files → occupied_unknown', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'neos-occ-'));
+    const dir = join(tmp, 'pkg');
+    await mkdir(dir);
+    await writeSkillProvenance(dir, sampleProv('owner/repo/x'));
+    await writeFile(join(dir, 'notes.txt'), 'not a skill', 'utf8');
+    expect(await classifyOccupancy(dir, 'owner/repo/x')).toBe('occupied_unknown');
   });
 });
