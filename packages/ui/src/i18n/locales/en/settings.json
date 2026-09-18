@@ -27,5 +27,16 @@
     "title": "Defaults",
     "provider": "Default Provider",
     "model": "Default Model"
+  },
+  "skillsCatalog": {
+    "title": "Skills catalog",
+    "description": "Browse and install third-party SKILL.md packages from skills.sh.",
+    "remoteCatalog": "Remote catalog",
+    "remoteCatalogHint": "Search and preview skills.sh from the Skills page.",
+    "remoteInstall": "Remote install",
+    "remoteInstallHint": "Allow installing third-party skills from GitHub and skills.sh.",
+    "telemetry": "Share anonymous install telemetry",
+    "telemetryHint": "Off by default. When on, a fire-and-forget request may be sent after install.",
+    "telemetryFootnote": "Telemetry is desktop-only and is never sent unless you turn this on."
   }
 }

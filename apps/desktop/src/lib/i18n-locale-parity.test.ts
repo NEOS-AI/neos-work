@@ -36,4 +36,32 @@ describe('UI i18n locale parity (en/ko)', () => {
       expect(leafKeys(en).length).toBeGreaterThan(0);
     }
   });
+
+  it('skills.json includes required catalog/delete keys in en and ko', () => {
+    const required = [
+      'licenseUnknown',
+      'thirdPartyDisclaimer',
+      'installConfirm',
+      'deleteRemoteFilesConfirm',
+      'deleteRegistryConfirm',
+      'shadowedBundled',
+      'catalogDisabled',
+      'skillAmbiguous',
+    ];
+    for (const locale of ['en', 'ko']) {
+      const json = JSON.parse(
+        readFileSync(path.join(localesRoot, locale, 'skills.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      for (const key of required) {
+        expect(typeof json[key]).toBe('string');
+        expect(String(json[key]).trim().length).toBeGreaterThan(0);
+      }
+    }
+    const ko = JSON.parse(readFileSync(path.join(localesRoot, 'ko', 'skills.json'), 'utf8')) as Record<
+      string,
+      string
+    >;
+    expect(ko.installConfirm).not.toMatch(/Install this third-party/i);
+    expect(ko.deleteRemoteFilesConfirm).not.toMatch(/Delete this remote skill/i);
+  });
 });

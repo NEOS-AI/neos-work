@@ -262,6 +262,8 @@ export function Settings() {
         </div>
       </section>
 
+      <SkillsCatalogSettingsSection />
+
       {/* MCP Servers */}
       <McpServersSection />
 
@@ -317,6 +319,156 @@ export function Settings() {
 
       {/* Dev Tools */}
       <DevToolsSection />
+    </div>
+  );
+}
+
+function settingFlagOn(raw: string | undefined, fallback: boolean): boolean {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  return raw.trim().toLowerCase() !== 'false';
+}
+
+function settingFlagTrue(raw: string | undefined): boolean {
+  if (typeof raw !== 'string' || !raw.trim()) return false;
+  return raw.trim().toLowerCase() === 'true';
+}
+
+function SkillsCatalogSettingsSection() {
+  const { t } = useTranslation('settings');
+  const { client } = useEngine();
+  const [catalog, setCatalog] = useState(true);
+  const [install, setInstall] = useState(true);
+  const [telemetry, setTelemetry] = useState(false);
+
+  useEffect(() => {
+    if (!client) return;
+    client
+      .getSettings()
+      .then((res) => {
+        if (!res.ok || !res.data) return;
+        setCatalog(settingFlagOn(res.data['skills.remoteCatalogEnabled'], true));
+        setInstall(settingFlagOn(res.data['skills.remoteInstallEnabled'], true));
+        setTelemetry(settingFlagTrue(res.data['skills.telemetryOptIn']));
+      })
+      .catch(() => {
+        /* keep defaults when settings are unavailable */
+      });
+  }, [client]);
+
+  const persist = async (key: string, next: boolean, revert: () => void) => {
+    if (!client) return;
+    try {
+      const res = await client.saveSetting(key, next ? 'true' : 'false');
+      if (!res.ok) {
+        revert();
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Save failed';
+        window.alert(err);
+      }
+    } catch (err) {
+      revert();
+      const msg = err instanceof Error ? err.message : 'Save failed';
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Save failed');
+    }
+  };
+
+  return (
+    <section
+      className="rounded-xl border p-5"
+      data-testid="settings-skills-catalog"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+    >
+      <h2 className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+        {t('skillsCatalog.title')}
+      </h2>
+      <p className="mb-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+        {t('skillsCatalog.description')}
+      </p>
+      <div className="flex flex-col gap-4">
+        <SettingsFlagRow
+          id="settings-skills-remote-catalog"
+          label={t('skillsCatalog.remoteCatalog')}
+          hint={t('skillsCatalog.remoteCatalogHint')}
+          on={catalog}
+          onToggle={() => {
+            const next = !catalog;
+            setCatalog(next);
+            void persist('skills.remoteCatalogEnabled', next, () => setCatalog(!next));
+          }}
+        />
+        <SettingsFlagRow
+          id="settings-skills-remote-install"
+          label={t('skillsCatalog.remoteInstall')}
+          hint={t('skillsCatalog.remoteInstallHint')}
+          on={install}
+          onToggle={() => {
+            const next = !install;
+            setInstall(next);
+            void persist('skills.remoteInstallEnabled', next, () => setInstall(!next));
+          }}
+        />
+        <SettingsFlagRow
+          id="settings-skills-telemetry"
+          label={t('skillsCatalog.telemetry')}
+          hint={t('skillsCatalog.telemetryHint')}
+          on={telemetry}
+          onToggle={() => {
+            const next = !telemetry;
+            setTelemetry(next);
+            void persist('skills.telemetryOptIn', next, () => setTelemetry(!next));
+          }}
+        />
+        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {t('skillsCatalog.telemetryFootnote')}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function SettingsFlagRow({
+  id,
+  label,
+  hint,
+  on,
+  onToggle,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  on: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <label className="text-sm" style={{ color: 'var(--text-secondary)' }} htmlFor={id}>
+          {label}
+        </label>
+        <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+          {hint}
+        </p>
+      </div>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={on}
+        data-testid={id}
+        onClick={onToggle}
+        className="rounded-md px-3 py-1 text-xs transition-colors"
+        style={{
+          border: '1px solid var(--border-secondary)',
+          backgroundColor: on ? 'var(--border-secondary)' : 'var(--bg-tertiary)',
+          color: 'var(--text-primary)',
+          minWidth: 52,
+        }}
+      >
+        {on ? 'On' : 'Off'}
+      </button>
     </div>
   );
 }

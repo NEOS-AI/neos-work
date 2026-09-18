@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useEngine } from '../hooks/useEngine.js';
-import type { SkillData } from '../lib/engine.js';
+import type {
+  CatalogPreviewResult,
+  RemoteSkillHit,
+  SkillAmbiguousCandidate,
+  SkillData,
+} from '../lib/engine.js';
 import {
   loadEnabledFilter,
   saveEnabledFilter,
@@ -14,9 +19,22 @@ import { formatListCount } from '../lib/list-count.js';
 import { loadSkillsCategoryFilter, saveSkillsCategoryFilter } from '../lib/skills-prefs.js';
 import { filterByEnabled, filterBySearchText } from '../lib/workflow-list-filter.js';
 
+const CATALOG_DEBOUNCE_MS = 250;
+const CATALOG_MIN_QUERY = 2;
+const TRY_LIST_IDS = [
+  'vercel-labs/skills/find-skills',
+  'vercel-labs/agent-skills/vercel-react-best-practices',
+  'anthropics/skills/frontend-design',
+] as const;
+
+function settingFlagOn(raw: string | undefined, fallback: boolean): boolean {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  return raw.trim().toLowerCase() !== 'false';
+}
+
 export function Skills() {
   const { client } = useEngine();
-  const { t } = useTranslation('common');
+  const { t } = useTranslation(['common', 'skills']);
   const [skills, setSkills] = useState<SkillData[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -28,6 +46,23 @@ export function Skills() {
   /** null | 'ok' | 'fail' — try-prompt Copy button feedback */
   const [tryPromptCopyStatus, setTryPromptCopyStatus] = useState<'ok' | 'fail' | null>(null);
   const [detailSkill, setDetailSkill] = useState<SkillData | null>(null);
+  const [catalogEnabled, setCatalogEnabled] = useState(true);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [catalogOwner, setCatalogOwner] = useState('');
+  const [catalogHits, setCatalogHits] = useState<RemoteSkillHit[] | null>(null);
+  const [catalogSearching, setCatalogSearching] = useState(false);
+  const [catalogSearchError, setCatalogSearchError] = useState<string | null>(null);
+  const [tryList, setTryList] = useState<CatalogPreviewResult[]>([]);
+  const [tryListErrors, setTryListErrors] = useState<string[]>([]);
+  const [preview, setPreview] = useState<CatalogPreviewResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [installNotice, setInstallNotice] = useState<string | null>(null);
+  const [ambiguous, setAmbiguous] = useState<{
+    input: { id?: string; url?: string };
+    candidates: SkillAmbiguousCandidate[];
+  } | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const handleEnabledFilter = (value: EnabledFilterPref) => {
     setEnabledFilter(value);
@@ -69,12 +104,130 @@ export function Skills() {
     loadSkills();
   }, [loadSkills]);
 
-  // Escape: detail drawer → try-prompt → clear search
   useEffect(() => {
-    if (!detailSkill && !tryPrompt && !search) return;
+    if (!client?.getSettings) {
+      setCatalogEnabled(true);
+      setCatalogReady(true);
+      return;
+    }
+    let cancelled = false;
+    client
+      .getSettings()
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok || !res.data) {
+          setCatalogEnabled(true);
+          return;
+        }
+        setCatalogEnabled(settingFlagOn(res.data['skills.remoteCatalogEnabled'], true));
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogEnabled(true);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (!catalogReady || !catalogEnabled || !client?.previewRemoteSkill) {
+      setTryList([]);
+      setTryListErrors([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const ok: CatalogPreviewResult[] = [];
+      const failed: string[] = [];
+      for (const id of TRY_LIST_IDS) {
+        try {
+          const res = await client.previewRemoteSkill({ id });
+          if (cancelled) return;
+          if (res.ok && res.data) ok.push(res.data);
+          else failed.push(id);
+        } catch {
+          if (!cancelled) failed.push(id);
+        }
+      }
+      if (cancelled) return;
+      setTryList(ok);
+      setTryListErrors(failed);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogReady, catalogEnabled, client]);
+
+  useEffect(() => {
+    if (!catalogEnabled || !client?.searchSkillCatalog) {
+      setCatalogHits(null);
+      setCatalogSearchError(null);
+      setCatalogSearching(false);
+      return;
+    }
+    const q = catalogQuery.trim();
+    if (q.length < CATALOG_MIN_QUERY) {
+      setCatalogHits(null);
+      setCatalogSearchError(null);
+      setCatalogSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setCatalogSearching(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const owner = catalogOwner.trim();
+          const res = await client.searchSkillCatalog(q, owner ? { owner } : undefined);
+          if (cancelled) return;
+          if (res.ok && res.data) {
+            setCatalogHits(res.data.skills);
+            setCatalogSearchError(null);
+          } else {
+            setCatalogHits([]);
+            setCatalogSearchError(
+              scrubDisplayText((res as { error?: string }).error, {
+                collapseLines: true,
+                maxChars: 200,
+              }) || t('skills:catalogUnavailable'),
+            );
+          }
+        } catch (err) {
+          if (cancelled) return;
+          const msg = err instanceof Error ? err.message : t('skills:catalogUnavailable');
+          setCatalogHits([]);
+          setCatalogSearchError(
+            scrubDisplayText(msg, { collapseLines: true, maxChars: 200 })
+            || t('skills:catalogUnavailable'),
+          );
+        } finally {
+          if (!cancelled) setCatalogSearching(false);
+        }
+      })();
+    }, CATALOG_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [catalogEnabled, catalogQuery, catalogOwner, client, t]);
+
+  // Escape: preview → ambiguous → detail drawer → try-prompt → catalog search → installed search
+  useEffect(() => {
+    if (!preview && !ambiguous && !detailSkill && !tryPrompt && !catalogQuery && !search) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
+      if (preview) {
+        setPreview(null);
+        return;
+      }
+      if (ambiguous) {
+        setAmbiguous(null);
+        return;
+      }
       if (detailSkill) {
         setDetailSkill(null);
         return;
@@ -84,11 +237,15 @@ export function Skills() {
         setTryPromptCopyStatus(null);
         return;
       }
+      if (catalogQuery) {
+        setCatalogQuery('');
+        return;
+      }
       if (search) setSearch('');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [detailSkill, tryPrompt, search]);
+  }, [preview, ambiguous, detailSkill, tryPrompt, catalogQuery, search]);
 
   const handleScan = async () => {
     if (!client || isScanning) return;
@@ -151,6 +308,12 @@ export function Skills() {
       window.alert('Skill id contains invalid control characters');
       return;
     }
+    const target = skills.find((s) => s.id === id || s.id === skillId);
+    const confirmKey =
+      target?.source === 'remote'
+        ? 'skills:deleteRemoteFilesConfirm'
+        : 'skills:deleteRegistryConfirm';
+    if (!window.confirm(t(confirmKey))) return;
     try {
       const res = await client.deleteSkill(skillId);
       if (!res.ok) {
@@ -162,10 +325,98 @@ export function Skills() {
         window.alert(err);
         return;
       }
+      if (res.data?.restored) {
+        await loadSkills();
+        return;
+      }
       setSkills((prev) => prev.filter((s) => s.id !== id && s.id !== skillId));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Delete failed';
       window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Delete failed');
+    }
+  };
+
+  const handlePreview = async (input: { id?: string; url?: string }) => {
+    if (!client?.previewRemoteSkill) return;
+    setPreviewLoading(true);
+    try {
+      const res = await client.previewRemoteSkill(input);
+      if (res.ok && res.data) {
+        setPreview(res.data);
+        return;
+      }
+      const err =
+        scrubDisplayText((res as { error?: string }).error, {
+          collapseLines: true,
+          maxChars: 300,
+        }) || t('skills:catalogUnavailable');
+      window.alert(err);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('skills:catalogUnavailable');
+      window.alert(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
+        || t('skills:catalogUnavailable'),
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleInstall = async (input: { id?: string; url?: string; slug?: string }) => {
+    if (!client?.installRemoteSkill) return;
+    if (!window.confirm(t('skills:installConfirm'))) return;
+    try {
+      const res = await client.installRemoteSkill({ ...input, confirm: true });
+      if (!res.ok) {
+        const candidates = Array.isArray(res.candidates) ? res.candidates : [];
+        if (res.error === 'skill_ambiguous' && candidates.length > 0) {
+          setAmbiguous({ input: { id: input.id, url: input.url }, candidates });
+          return;
+        }
+        const err =
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+          || 'Install failed';
+        window.alert(err);
+        return;
+      }
+      setAmbiguous(null);
+      setPreview(null);
+      if (res.data?.shadowed === 'bundled') {
+        setInstallNotice(t('skills:shadowedBundled'));
+        window.setTimeout(() => setInstallNotice(null), 6000);
+      }
+      await loadSkills();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Install failed';
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Install failed');
+    }
+  };
+
+  const handleUpdate = async (id: string) => {
+    if (!client?.updateSkill) return;
+    const skillId = safeEntityId(id);
+    if (!skillId) {
+      window.alert('Skill id contains invalid control characters');
+      return;
+    }
+    setUpdatingId(skillId);
+    try {
+      const res = await client.updateSkill(skillId);
+      if (!res.ok) {
+        const err =
+          scrubDisplayText((res as { error?: string }).error, {
+            collapseLines: true,
+            maxChars: 300,
+          }) || 'Update failed';
+        window.alert(err);
+        return;
+      }
+      await loadSkills();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      window.alert(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || 'Update failed');
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -296,6 +547,27 @@ export function Skills() {
           {scrubDisplayText(scanResult, { collapseLines: true, maxChars: 300 }) || scanResult}
         </p>
       )}
+      {installNotice && (
+        <p className="text-xs" data-testid="skills-shadowed-toast" style={{ color: 'var(--text-secondary)' }}>
+          {scrubDisplayText(installNotice, { collapseLines: true, maxChars: 400 }) || installNotice}
+        </p>
+      )}
+
+      <CatalogSection
+        enabled={catalogEnabled}
+        query={catalogQuery}
+        owner={catalogOwner}
+        hits={catalogHits}
+        searching={catalogSearching}
+        searchError={catalogSearchError}
+        tryList={tryList}
+        tryListErrors={tryListErrors}
+        previewLoading={previewLoading}
+        onQuery={setCatalogQuery}
+        onOwner={setCatalogOwner}
+        onPreview={(input) => void handlePreview(input)}
+        onInstall={(input) => void handleInstall(input)}
+      />
 
       {/* Skill directories info */}
       <section className="rounded-xl border p-5" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>
@@ -389,8 +661,12 @@ export function Skills() {
               <SkillCard
                 key={skill.id}
                 skill={skill}
+                updating={updatingId === skill.id}
                 onToggle={(enabled) => handleToggle(skill.id, enabled)}
                 onDelete={() => handleDelete(skill.id)}
+                onUpdate={
+                  skill.source === 'remote' ? () => void handleUpdate(skill.id) : undefined
+                }
                 onUpgrade={() => void handleUpgradeToPlugin(skill.id)}
                 onTry={skill.examplePrompt ? () => setTryPrompt(skill.examplePrompt!) : undefined}
                 onDetails={() => setDetailSkill(skill)}
@@ -400,6 +676,22 @@ export function Skills() {
         )}
       </section>
 
+
+      {preview && (
+        <CatalogPreviewDrawer
+          preview={preview}
+          onClose={() => setPreview(null)}
+          onInstall={() => void handleInstall({ id: preview.id, url: preview.sourceUrl ?? undefined })}
+        />
+      )}
+
+      {ambiguous && (
+        <AmbiguousPicker
+          candidates={ambiguous.candidates}
+          onCancel={() => setAmbiguous(null)}
+          onPick={(slug) => void handleInstall({ ...ambiguous.input, slug })}
+        />
+      )}
 
       {/* Package / skill detail drawer */}
       {detailSkill && (
@@ -654,20 +946,24 @@ function formatSkillPathDisplay(path: string | undefined | null): string {
 
 function SkillCard({
   skill,
+  updating,
   onToggle,
   onDelete,
+  onUpdate,
   onUpgrade,
   onTry,
   onDetails,
 }: {
   skill: SkillData;
+  updating?: boolean;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
+  onUpdate?: () => void;
   onUpgrade?: () => void;
   onTry?: () => void;
   onDetails?: () => void;
 }) {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation(['common', 'skills']);
   return (
     <div
       className="flex items-start justify-between rounded-lg border px-4 py-3"
@@ -702,6 +998,15 @@ function SkillCard({
               style={{ backgroundColor: '#3b82f620', color: '#3b82f6' }}
             >
               {scrubDisplayText(skill.mode, { collapseLines: true, maxChars: 40 }) || 'mode'}
+            </span>
+          )}
+          {skill.source === 'remote' && (
+            <span
+              className="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+              data-testid={`skill-remote-badge-${skill.id}`}
+              style={{ backgroundColor: '#0ea5e920', color: '#38bdf8' }}
+            >
+              remote
             </span>
           )}
           {skill.packageDir && (
@@ -744,6 +1049,27 @@ function SkillCard({
             Installed {formatRelativeTime(skill.installedAt)}
           </p>
         )}
+        {skill.source === 'remote' && (skill.remoteId || skill.remoteHash || skill.skillsShUrl) && (
+          <p className="mt-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }} data-testid={`skill-provenance-${skill.id}`}>
+            {skill.remoteId
+              ? scrubDisplayText(skill.remoteId, { collapseLines: true, maxChars: 80 })
+              : null}
+            {skill.remoteHash ? ` · ${skill.remoteHash.slice(0, 12)}` : ''}
+            {skill.skillsShUrl ? (
+              <>
+                {' · '}
+                <a
+                  href={skill.skillsShUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#38bdf8' }}
+                >
+                  {t('skills:skillsShLink')}
+                </a>
+              </>
+            ) : null}
+          </p>
+        )}
         {skill.triggers && skill.triggers.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {skill.triggers.map((trigger) => (
@@ -769,6 +1095,18 @@ function SkillCard({
             style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
           >
             {t('common.view')}
+          </button>
+        )}
+        {onUpdate && (
+          <button
+            type="button"
+            data-testid={`skill-update-${skill.id}`}
+            onClick={onUpdate}
+            disabled={updating}
+            className="rounded-lg border px-2 py-0.5 text-[10px] transition-colors disabled:opacity-40"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+          >
+            {t('skills:update')}
           </button>
         )}
         {onUpgrade && (
@@ -811,6 +1149,7 @@ function SkillCard({
         {/* Delete button */}
         <button
           onClick={onDelete}
+          data-testid={`skill-delete-${skill.id}`}
           className="rounded p-1 transition-colors"
           style={{ color: 'var(--text-muted)' }}
           aria-label="Remove skill"
@@ -819,6 +1158,390 @@ function SkillCard({
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogSection({
+  enabled,
+  query,
+  owner,
+  hits,
+  searching,
+  searchError,
+  tryList,
+  tryListErrors,
+  previewLoading,
+  onQuery,
+  onOwner,
+  onPreview,
+  onInstall,
+}: {
+  enabled: boolean;
+  query: string;
+  owner: string;
+  hits: RemoteSkillHit[] | null;
+  searching: boolean;
+  searchError: string | null;
+  tryList: CatalogPreviewResult[];
+  tryListErrors: string[];
+  previewLoading: boolean;
+  onQuery: (q: string) => void;
+  onOwner: (owner: string) => void;
+  onPreview: (input: { id?: string; url?: string }) => void;
+  onInstall: (input: { id?: string; url?: string }) => void;
+}) {
+  const { t } = useTranslation('skills');
+  const searchingCatalog = query.trim().length >= CATALOG_MIN_QUERY;
+  return (
+    <section
+      className="rounded-xl border p-5"
+      data-testid="skills-catalog"
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+    >
+      <h2 className="mb-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+        {t('catalogTitle')}
+      </h2>
+      {!enabled ? (
+        <p className="text-sm" data-testid="skills-catalog-disabled" style={{ color: 'var(--text-muted)' }}>
+          {t('catalogDisabled')}
+        </p>
+      ) : (
+        <>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <input
+              type="search"
+              data-testid="skills-catalog-search"
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder={t('catalogSearchPlaceholder')}
+              className="rounded-lg border px-3 py-1.5 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                minWidth: 220,
+                flex: 1,
+              }}
+            />
+            <input
+              type="text"
+              data-testid="skills-catalog-owner"
+              value={owner}
+              onChange={(e) => onOwner(e.target.value)}
+              placeholder={t('catalogOwnerPlaceholder')}
+              className="rounded-lg border px-3 py-1.5 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                minWidth: 140,
+              }}
+            />
+          </div>
+          {searchError && (
+            <p className="mb-2 text-xs text-red-400" data-testid="skills-catalog-search-error">
+              {searchError}
+            </p>
+          )}
+          {tryListErrors.length > 0 && !searchingCatalog && (
+            <p className="mb-2 text-xs text-red-400" data-testid="skills-catalog-try-error">
+              {t('catalogTryFailed')}
+            </p>
+          )}
+          {searching && (
+            <p className="mb-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {t('common:common.loading')}
+            </p>
+          )}
+          {searchingCatalog ? (
+            <CatalogHitList
+              hits={hits ?? []}
+              previewLoading={previewLoading}
+              onPreview={onPreview}
+              onInstall={onInstall}
+            />
+          ) : (
+            <div>
+              <p className="mb-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                {t('catalogEmpty')}
+              </p>
+              <div className="space-y-2" data-testid="skills-catalog-try-list">
+                {tryList.map((item) => (
+                  <CatalogRow
+                    key={item.id}
+                    id={item.id}
+                    name={item.name}
+                    source={item.sourceUrl ?? item.id}
+                    installs={null}
+                    href={item.skillsShUrl}
+                    previewLoading={previewLoading}
+                    onPreview={() => onPreview({ id: item.id })}
+                    onInstall={() => onInstall({ id: item.id })}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function CatalogHitList({
+  hits,
+  previewLoading,
+  onPreview,
+  onInstall,
+}: {
+  hits: RemoteSkillHit[];
+  previewLoading: boolean;
+  onPreview: (input: { id?: string; url?: string }) => void;
+  onInstall: (input: { id?: string; url?: string }) => void;
+}) {
+  if (hits.length === 0) return null;
+  return (
+    <div className="space-y-2" data-testid="skills-catalog-results">
+      {hits.map((hit) => (
+        <CatalogRow
+          key={hit.id}
+          id={hit.id}
+          name={hit.name}
+          source={hit.source}
+          installs={hit.installs}
+          href={hit.url}
+          previewLoading={previewLoading}
+          onPreview={() => onPreview({ id: hit.id })}
+          onInstall={() => onInstall({ id: hit.id })}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CatalogRow({
+  id,
+  name,
+  source,
+  installs,
+  href,
+  previewLoading,
+  onPreview,
+  onInstall,
+}: {
+  id: string;
+  name: string;
+  source: string;
+  installs: number | null;
+  href: string;
+  previewLoading: boolean;
+  onPreview: () => void;
+  onInstall: () => void;
+}) {
+  const { t } = useTranslation('skills');
+  const safeHref = /^https?:\/\//i.test(href) ? href : `https://skills.sh/${id}`;
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2"
+      data-testid={`skills-catalog-row-${id}`}
+      style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}
+    >
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {scrubDisplayText(name, { collapseLines: true, maxChars: 160 }) || name}
+        </div>
+        <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {scrubDisplayText(source, { collapseLines: true, maxChars: 80 })}
+          {typeof installs === 'number' ? ` · ${t('installs', { count: installs })}` : ''}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <a
+          href={safeHref}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[11px]"
+          style={{ color: '#38bdf8' }}
+        >
+          {t('skillsShLink')}
+        </a>
+        <button
+          type="button"
+          data-testid={`skills-catalog-preview-${id}`}
+          onClick={onPreview}
+          disabled={previewLoading}
+          className="rounded-lg border px-2 py-0.5 text-[10px] disabled:opacity-40"
+          style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-secondary)' }}
+        >
+          {t('preview')}
+        </button>
+        <button
+          type="button"
+          data-testid={`skills-catalog-install-${id}`}
+          onClick={onInstall}
+          className="rounded-lg border px-2 py-0.5 text-[10px]"
+          style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+        >
+          {t('install')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CatalogPreviewDrawer({
+  preview,
+  onClose,
+  onInstall,
+}: {
+  preview: CatalogPreviewResult;
+  onClose: () => void;
+  onInstall: () => void;
+}) {
+  const { t } = useTranslation(['skills', 'common']);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      data-testid="skills-preview-backdrop"
+      onClick={onClose}
+    >
+      <aside
+        role="dialog"
+        aria-modal="true"
+        data-testid="skills-preview-drawer"
+        className="flex h-full w-full max-w-md flex-col border-l shadow-xl"
+        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between border-b px-4 py-3"
+          style={{ borderColor: 'var(--border-primary)' }}
+        >
+          <h3 className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {scrubDisplayText(preview.name, { collapseLines: true, maxChars: 120 }) || preview.slug}
+          </h3>
+          <button type="button" className="rounded px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }} onClick={onClose}>
+            {t('common:common.cancel')}
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4 text-xs">
+          <p style={{ color: 'var(--text-secondary)' }}>
+            {scrubDisplayText(preview.description, { maxChars: 2_000 })}
+          </p>
+          <p style={{ color: 'var(--text-muted)' }}>
+            {preview.license
+              ? scrubDisplayText(preview.license, { collapseLines: true, maxChars: 80 })
+              : t('licenseUnknown')}
+          </p>
+          {preview.hash && (
+            <p className="font-mono" style={{ color: 'var(--text-muted)' }}>
+              {preview.hash}
+            </p>
+          )}
+          {preview.audits && preview.audits.length > 0 && (
+            <ul className="space-y-1">
+              {preview.audits.map((a) => (
+                <li key={`${a.provider}-${a.slug}`}>
+                  {scrubDisplayText(`${a.provider}: ${a.status}`, { collapseLines: true, maxChars: 120 })}
+                  {a.summary
+                    ? ` — ${scrubDisplayText(a.summary, { collapseLines: true, maxChars: 200 })}`
+                    : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+          {preview.sourceUrl && (
+            <a href={preview.sourceUrl} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>
+              {scrubDisplayText(preview.sourceUrl, { collapseLines: true, maxChars: 120 })}
+            </a>
+          )}
+          <p style={{ color: 'var(--text-muted)' }}>{t('thirdPartyDisclaimer')}</p>
+          <pre
+            className="whitespace-pre-wrap rounded border p-2 font-mono"
+            style={{
+              borderColor: 'var(--border-primary)',
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {scrubDisplayText(preview.skillMd, { maxChars: 32_000 })}
+          </pre>
+        </div>
+        <div className="border-t px-4 py-3" style={{ borderColor: 'var(--border-primary)' }}>
+          <button
+            type="button"
+            data-testid="skills-preview-install"
+            onClick={onInstall}
+            className="rounded-lg border px-3 py-1.5 text-xs"
+            style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+          >
+            {t('install')}
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function AmbiguousPicker({
+  candidates,
+  onCancel,
+  onPick,
+}: {
+  candidates: SkillAmbiguousCandidate[];
+  onCancel: () => void;
+  onPick: (slug: string) => void;
+}) {
+  const { t } = useTranslation(['skills', 'common']);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      data-testid="skills-ambiguous-backdrop"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        data-testid="skills-ambiguous"
+        className="w-full max-w-md rounded-xl border p-5"
+        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {t('skillAmbiguous')}
+        </h3>
+        <ul className="space-y-2">
+          {candidates.map((c) => (
+            <li key={c.slug} className="flex items-center justify-between gap-2">
+              <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                {scrubDisplayText(c.name || c.slug, { collapseLines: true, maxChars: 80 })}
+              </span>
+              <button
+                type="button"
+                data-testid={`skills-ambiguous-pick-${c.slug}`}
+                onClick={() => onPick(c.slug)}
+                className="rounded-lg border px-2 py-0.5 text-[10px]"
+                style={{ borderColor: 'var(--border-secondary)', color: 'var(--text-primary)' }}
+              >
+                {t('chooseSkill')}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg px-3 py-1.5 text-xs"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+          >
+            {t('common:common.cancel')}
+          </button>
+        </div>
       </div>
     </div>
   );

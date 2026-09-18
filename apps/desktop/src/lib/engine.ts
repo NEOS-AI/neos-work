@@ -68,6 +68,15 @@ export {
   EngineMediaClient,
   type SkillData,
   type SkillExampleCard,
+  type RemoteSkillHit,
+  type RemoteSkillAudit,
+  type CatalogSearchResult,
+  type CatalogPreviewResult,
+  type SkillAmbiguousCandidate,
+  type InstallRemoteSkillInput,
+  type InstallRemoteSkillResult,
+  type DeleteSkillResult,
+  type SkillContentResult,
 } from './engine-media.js';
 
 export {

@@ -907,6 +907,25 @@ describe('EngineClient', () => {
     await client.deleteSkill('sk1');
     expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
 
+    await client.searchSkillCatalog('find', { owner: 'vercel-labs' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills/catalog/search');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('q=find');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('owner=vercel-labs');
+
+    await client.previewRemoteSkill({ id: 'vercel-labs/skills/find-skills' });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills/catalog/preview');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('vercel-labs');
+
+    await client.installRemoteSkill({ id: 'vercel-labs/skills/find-skills', confirm: true });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/skills\/install$/);
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('POST');
+
+    await client.updateSkill('sk1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills/sk1/update');
+
+    await client.getSkillContent('sk1');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills/sk1/content');
+
     await client.upgradeSkillToPlugin('sk1');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/upgrade-from-skill/);
 

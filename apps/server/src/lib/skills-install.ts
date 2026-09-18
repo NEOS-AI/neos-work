@@ -4,11 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   classifyOccupancy,
+  discoverSkills,
   isPathInside,
   parseSkillFile,
+  resolveBundledSkillsDir,
   resolveUserSkillsDir,
   resolveWorkspaceSkillsDir,
   sanitizeSkillDirName,
@@ -598,6 +601,115 @@ export async function pruneMissingRemoteSkills(): Promise<Set<string>> {
     getDb().prepare('DELETE FROM skill WHERE id = ?').run(row.id);
   }
   return keepNames;
+}
+
+export type DeleteInstalledSkillResult = {
+  filesRemoved: boolean;
+  restored?: 'bundled' | 'local';
+};
+
+/** Monorepo `skills/` from apps/server/src/lib. */
+const REPO_SKILLS_CANDIDATE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../skills',
+);
+
+async function canRemoveRemotePackage(
+  row: SkillNameRow,
+  packageDir: string,
+): Promise<{ root: string } | null> {
+  if (row.source !== 'remote') return null;
+  const sidecar = await readSkillProvenance(packageDir);
+  if (!sidecar) return null;
+  const roots = ALLOWED_CONTENT_ROOTS();
+  let root: string | null = null;
+  for (const r of roots) {
+    if (isPathInside(r, packageDir)) {
+      root = r;
+      break;
+    }
+  }
+  if (!root) return null;
+  if (await pathHasEscapingSymlink(root, packageDir)) return null;
+  try {
+    const st = await fsp.lstat(packageDir);
+    if (st.isSymbolicLink() || !st.isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  return { root };
+}
+
+async function restoreShadowedSkill(
+  name: string,
+  upsert: SkillUpsertFn,
+): Promise<'bundled' | 'local' | undefined> {
+  const want = name.trim().toLowerCase();
+  if (!want) return undefined;
+  const ws = sessionsDb.listWorkspaces()[0];
+  const workspacePath =
+    typeof ws?.path === 'string' && ws.path.trim() && !/[\0\r\n]/.test(ws.path)
+      ? ws.path.trim()
+      : undefined;
+  const bundledRoot =
+    resolveBundledSkillsDir(REPO_SKILLS_CANDIDATE) ?? resolveBundledSkillsDir(null);
+  const found = await discoverSkills(workspacePath, {
+    bundledRoot,
+    includeBundled: true,
+    includeGlobal: true,
+  });
+  const matches = found.filter((s) => s.manifest.name.toLowerCase() === want);
+  const hit =
+    matches.find((s) => s.source === 'bundled')
+    ?? matches.find((s) => s.source === 'local');
+  if (!hit || (hit.source !== 'bundled' && hit.source !== 'local')) return undefined;
+  const sidecar = hit.packageDir ? await readSkillProvenance(hit.packageDir) : null;
+  if (sidecar) return undefined;
+  upsert({
+    name: hit.manifest.name,
+    description: hit.manifest.description,
+    source: hit.source,
+    path: hit.path,
+    version: hit.manifest.version ?? hit.manifest.metadata?.version,
+    manifestJson: JSON.stringify({
+      ...hit.manifest,
+      packageDir: hit.packageDir,
+      examples: hit.examples,
+      assets: hit.assets,
+      references: hit.references,
+    }),
+  });
+  return hit.source;
+}
+
+/**
+ * DELETE /api/skills/:id — rm remote package only when source, sidecar,
+ * isPathInside, and ancestor-symlink checks all pass (K12).
+ */
+export async function deleteInstalledSkill(
+  skillId: string,
+  opts: { upsert: SkillUpsertFn },
+): Promise<DeleteInstalledSkillResult> {
+  const row = findSkillById(skillId);
+  if (!row) throw new SkillsHttpError(404, 'not_found');
+
+  const packageDir = dirname(resolve(row.path));
+  const removable = await canRemoveRemotePackage(row, packageDir);
+  let filesRemoved = false;
+  if (removable) {
+    await fsp.rm(packageDir, { recursive: true, force: true });
+    filesRemoved = true;
+    try {
+      const restored = await restoreShadowedSkill(row.name, opts.upsert);
+      if (restored) return { filesRemoved: true, restored };
+    } catch {
+      // Row still points at a removed tree — drop it below.
+    }
+  }
+
+  const deleted = getDb().prepare('DELETE FROM skill WHERE id = ?').run(row.id);
+  if (deleted.changes === 0) throw new SkillsHttpError(404, 'not_found');
+  return { filesRemoved };
 }
 
 const CONTENT_BODY_MAX = 32 * 1024;
