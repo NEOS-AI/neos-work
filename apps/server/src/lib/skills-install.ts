@@ -683,8 +683,9 @@ async function restoreShadowedSkill(
 }
 
 /**
- * DELETE /api/skills/:id — rm remote package only when source, sidecar,
- * isPathInside, and ancestor-symlink checks all pass (K12).
+ * DELETE /api/skills/:id — rm remote package only when source is remote,
+ * sidecar is valid, packageDir is inside a skills root, and no ancestor
+ * symlink escapes that root.
  */
 export async function deleteInstalledSkill(
   skillId: string,

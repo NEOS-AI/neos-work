@@ -219,8 +219,11 @@ export class EngineMediaClient extends EngineSettingsClient {
     if (typeof opts?.limit === 'number' && Number.isFinite(opts.limit)) {
       params.set('limit', String(Math.max(1, Math.min(50, Math.trunc(opts.limit)))));
     }
-    const owner = safeCatalogOwner(opts?.owner);
-    if (owner) params.set('owner', owner);
+    if (typeof opts?.owner === 'string' && opts.owner.trim()) {
+      const owner = safeCatalogOwner(opts.owner);
+      if (!owner) return { ok: false, error: 'invalid_id' };
+      params.set('owner', owner);
+    }
     const res = await fetch(`${this.baseUrl}/api/skills/catalog/search?${params}`, {
       headers: this.getHeaders(),
     });

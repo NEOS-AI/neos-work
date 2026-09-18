@@ -912,6 +912,13 @@ describe('EngineClient', () => {
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('q=find');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('owner=vercel-labs');
 
+    fetchMock.mockClear();
+    await expect(client.searchSkillCatalog('find', { owner: 'Not A Valid Owner' })).resolves.toMatchObject({
+      ok: false,
+      error: 'invalid_id',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
     await client.previewRemoteSkill({ id: 'vercel-labs/skills/find-skills' });
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/api/skills/catalog/preview');
     expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('vercel-labs');

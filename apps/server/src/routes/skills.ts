@@ -447,7 +447,7 @@ skills.post('/:id/toggle', async (c) => {
   return c.json({ ok: true });
 });
 
-// DELETE /api/skills/:id — remote file delete when K12 conditions hold
+// DELETE /api/skills/:id — file delete only for remote + sidecar + inside root
 skills.delete('/:id', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
