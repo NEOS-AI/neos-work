@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react';
+import { createBrowserRouter, Outlet, RouterProvider, useLocation, useNavigate } from 'react-router-dom';
 
 import { Sidebar } from './components/Sidebar.js';
 import { EngineProvider, useEngine } from './hooks/useEngine.js';
@@ -24,6 +24,32 @@ import { Media } from './pages/Media.js';
 import { Projects } from './pages/Projects.js';
 import { ProjectWorkspace } from './pages/ProjectWorkspace.js';
 import { DomainPacks } from './pages/DomainPacks.js';
+const VideoLayout = lazy(() =>
+  import('./video/VideoLayout.js').then((m) => ({ default: m.VideoLayout })),
+);
+const VideoHomePage = lazy(() => import('./video/pages/HomePage.js'));
+const VideoProbePage = lazy(() => import('./video/pages/ProbePage.js'));
+const VideoExtractPage = lazy(() => import('./video/pages/ExtractPage.js'));
+const VideoTranscodePage = lazy(() => import('./video/pages/TranscodePage.js'));
+const VideoViewerPage = lazy(() => import('./video/pages/ViewerPage.js'));
+const VideoResizePage = lazy(() => import('./video/pages/ResizePage.js'));
+const VideoTrimPage = lazy(() => import('./video/pages/TrimPage.js'));
+const VideoClipsPage = lazy(() => import('./video/pages/ClipsPage.js'));
+const VideoConcatPage = lazy(() => import('./video/pages/ConcatPage.js'));
+const VideoCropPage = lazy(() => import('./video/pages/CropPage.js'));
+const VideoTransformPage = lazy(() => import('./video/pages/TransformPage.js'));
+const VideoSpeedPage = lazy(() => import('./video/pages/SpeedPage.js'));
+const VideoGifPage = lazy(() => import('./video/pages/GifPage.js'));
+const VideoFadePage = lazy(() => import('./video/pages/FadePage.js'));
+const VideoVolumePage = lazy(() => import('./video/pages/VolumePage.js'));
+const VideoWatermarkPage = lazy(() => import('./video/pages/WatermarkPage.js'));
+const VideoJobsPage = lazy(() => import('./video/pages/JobsPage.js'));
+const VideoTimelinePage = lazy(() => import('./video/pages/TimelinePage.js'));
+const VideoDownloadPage = lazy(() => import('./video/pages/DownloadPage.js'));
+
+function VideoRoute({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<div className="p-6 text-sm">Loading video studio…</div>}>{children}</Suspense>;
+}
 
 /** sessionStorage key for path to restore after ModeSelection connect gate. */
 const PENDING_PATH_KEY = 'neos-desktop-pending-path';
@@ -38,13 +64,18 @@ export default function App() {
   );
 }
 
+function isVideoPath(pathname: string): boolean {
+  return pathname === '/video' || pathname.startsWith('/video/');
+}
+
 /**
  * Data router so useBlocker works in WorkflowEditor / ProjectWorkspace (RR7).
- * Built once; only mounted while engine is connected.
+ * Instantiated per App mount so tests (and first paint) read the current URL.
+ * `/video` works without an engine connection.
  */
-const connectedRouter = createBrowserRouter([
+const appRoutes = [
   {
-    element: <MainLayout />,
+    element: <RootLayout />,
     children: [
       { index: true, element: <Dashboard /> },
       { path: 'sessions', element: <Sessions /> },
@@ -67,9 +98,38 @@ const connectedRouter = createBrowserRouter([
       { path: 'plugins', element: <Plugins /> },
       { path: 'deployments', element: <Deployments /> },
       { path: 'media', element: <Media /> },
+      {
+        path: 'video',
+        element: (
+          <VideoRoute>
+            <VideoLayout />
+          </VideoRoute>
+        ),
+        children: [
+          { index: true, element: <VideoHomePage /> },
+          { path: 'probe', element: <VideoProbePage /> },
+          { path: 'extract', element: <VideoExtractPage /> },
+          { path: 'transcode', element: <VideoTranscodePage /> },
+          { path: 'viewer', element: <VideoViewerPage /> },
+          { path: 'resize', element: <VideoResizePage /> },
+          { path: 'trim', element: <VideoTrimPage /> },
+          { path: 'clips', element: <VideoClipsPage /> },
+          { path: 'concat', element: <VideoConcatPage /> },
+          { path: 'crop', element: <VideoCropPage /> },
+          { path: 'transform', element: <VideoTransformPage /> },
+          { path: 'speed', element: <VideoSpeedPage /> },
+          { path: 'gif', element: <VideoGifPage /> },
+          { path: 'fade', element: <VideoFadePage /> },
+          { path: 'volume', element: <VideoVolumePage /> },
+          { path: 'watermark', element: <VideoWatermarkPage /> },
+          { path: 'jobs', element: <VideoJobsPage /> },
+          { path: 'timeline', element: <VideoTimelinePage /> },
+          { path: 'download', element: <VideoDownloadPage /> },
+        ],
+      },
     ],
   },
-]);
+];
 
 function isSafePendingPath(raw: string): boolean {
   if (!raw || raw.length > 500 || /[\0\r\n]/.test(raw)) return false;
@@ -89,7 +149,7 @@ function rememberPendingPath(): void {
   }
 }
 
-function restorePendingPath(): void {
+function restorePendingPath(navigate: (to: string, opts: { replace: boolean }) => void): void {
   try {
     const pending = sessionStorage.getItem(PENDING_PATH_KEY);
     if (!pending || !isSafePendingPath(pending)) {
@@ -99,37 +159,43 @@ function restorePendingPath(): void {
     sessionStorage.removeItem(PENDING_PATH_KEY);
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (pending !== current) {
-      void connectedRouter.navigate(pending, { replace: true });
+      navigate(pending, { replace: true });
     }
   } catch {
     /* ignore */
   }
 }
 
-function AppRouter() {
+function RootLayout() {
   const { status } = useEngine();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const connected = status === 'connected';
+  const videoOpen = isVideoPath(location.pathname);
 
-  // Capture deep link while gated so connect can restore it
+  // Capture deep links (except /video, which does not need the engine)
   useEffect(() => {
-    if (status === 'disconnected' || status === 'connecting' || status === 'error') {
-      rememberPendingPath();
-    }
-  }, [status]);
+    if (connected || videoOpen) return;
+    rememberPendingPath();
+  }, [connected, videoOpen, location.pathname, location.search, location.hash]);
 
   // After connect, restore intended path if browser location was reset
   useEffect(() => {
-    if (status !== 'connected') return;
-    // Defer until RouterProvider has mounted the data router
-    const t = window.setTimeout(() => restorePendingPath(), 0);
+    if (!connected) return;
+    const t = window.setTimeout(() => restorePendingPath(navigate), 0);
     return () => window.clearTimeout(t);
-  }, [status]);
+  }, [connected, navigate]);
 
-  // Show mode selection when not connected
-  if (status === 'disconnected' || status === 'connecting' || status === 'error') {
+  if (!connected && !videoOpen) {
     return <ModeSelection />;
   }
 
-  return <RouterProvider router={connectedRouter} />;
+  return <MainLayout />;
+}
+
+function AppRouter() {
+  const router = useMemo(() => createBrowserRouter(appRoutes), []);
+  return <RouterProvider router={router} />;
 }
 
 function MainLayout() {

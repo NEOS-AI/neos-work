@@ -20,7 +20,8 @@
     "routines": "Routines",
     "plugins": "Plugins",
     "deployments": "Deployments",
-    "media": "Media"
+    "media": "Media",
+    "video": "Video"
   },
   "common": {
     "loading": "Loading...",
@@ -194,6 +195,10 @@
     "client": {
       "title": "Client Mode",
       "description": "Connect to an existing NEOS Work instance."
+    },
+    "video": {
+      "title": "Video studio",
+      "description": "Analyze and edit local files with FFmpeg. No engine connection required."
     }
   },
   "connection": {

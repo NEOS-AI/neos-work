@@ -44,12 +44,16 @@ vi.mock('./pages/Projects.js', () => ({ Projects: () => <div>Projects</div> }));
 vi.mock('./pages/ProjectWorkspace.js', () => ({
   ProjectWorkspace: () => <div>ProjectWorkspace</div>,
 }));
+vi.mock('./video/VideoLayout.js', () => ({
+  VideoLayout: () => <div>Video</div>,
+}));
 
 const App = (await import('./App.js')).default;
 
 describe('App routing gate', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    window.history.pushState({}, '', '/');
   });
 
   it('shows ModeSelection when disconnected', () => {
@@ -88,5 +92,16 @@ describe('App routing gate', () => {
     expect(screen.queryByTestId('mode-selection')).not.toBeInTheDocument();
     expect(screen.getByTestId('sidebar')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
+  });
+
+  it('opens video studio without an engine connection', async () => {
+    window.history.pushState({}, '', '/video');
+    useEngine.mockReturnValue({ status: 'disconnected' });
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText('Video')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('mode-selection')).not.toBeInTheDocument();
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument();
   });
 });

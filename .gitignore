@@ -17,6 +17,11 @@ coverage
 target/
 src-tauri/target/
 
+# Machine-specific FFmpeg/FFprobe/yt-dlp sidecars (keep neos-engine)
+apps/desktop/src-tauri/binaries/ffmpeg-*
+apps/desktop/src-tauri/binaries/ffprobe-*
+apps/desktop/src-tauri/binaries/yt-dlp-*
+
 # Environment
 .env
 .env.local

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import type { AppMode } from '../hooks/useEngine.js';
 import { useEngine } from '../hooks/useEngine.js';
@@ -8,6 +9,7 @@ import { loadRemoteUrl, saveRemoteUrl } from '../lib/mode-prefs.js';
 
 export function ModeSelection() {
   const { t } = useTranslation('common');
+  const navigate = useNavigate();
   const { status, error, connect } = useEngine();
   const [remoteUrl, setRemoteUrl] = useState(() => loadRemoteUrl());
   const [devToken, setDevToken] = useState('');
@@ -135,6 +137,20 @@ export function ModeSelection() {
           </button>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => navigate('/video')}
+        className="flex w-[33.5rem] max-w-[calc(100%-2rem)] flex-col gap-1 rounded-xl border p-4 text-left transition-colors"
+        style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+      >
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {t('mode.video.title')}
+        </h2>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+          {t('mode.video.description')}
+        </p>
+      </button>
     </div>
   );
 }

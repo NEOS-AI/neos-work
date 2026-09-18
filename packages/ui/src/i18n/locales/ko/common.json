@@ -20,6 +20,7 @@
     "plugins": "플러그인",
     "deployments": "배포",
     "media": "미디어",
+    "video": "영상",
     "settings": "설정"
   },
   "common": {
@@ -194,6 +195,10 @@
     "client": {
       "title": "클라이언트 모드",
       "description": "기존 NEOS Work 인스턴스에 연결합니다."
+    },
+    "video": {
+      "title": "영상 스튜디오",
+      "description": "엔진 연결 없이 로컬 FFmpeg로 영상을 분석하고 편집합니다."
     }
   },
   "connection": {

@@ -6,6 +6,7 @@ Claude Cowork의 오픈소스 대안 — **로컬 우선 에이전트 플랫폼*
 |---|---|
 | **Workflow** | 자동화 그래프, 도메인 워커, 팩, 게이트 |
 | **Design Project** | 파일 작업공간 + **Design Editor** (생성 → 수동 편집 → 재프롬프트) |
+| **Video** | 데스크톱 전용 FFmpeg 스튜디오: 분석, 변환, 자르기, 타임라인, … |
 
 **한국어** | **[English](README.md)**
 
@@ -219,6 +220,14 @@ pnpm tauri dev
 ```
 
 Vite 개발 서버(`http://localhost:1420`)와 Tauri 앱이 함께 시작됩니다.
+
+**영상 스튜디오** (데스크톱 `/video`): 로컬 FFmpeg/FFprobe로 분석·변환·자르기·타임라인 등 video-rs 도구 전체. 파일은 이 기기에만 있습니다. 모드 선택 화면에서 엔진 연결 없이 열 수 있습니다.
+
+```bash
+cd apps/desktop
+pnpm setup:sidecars    # PATH 또는 Homebrew의 ffmpeg/ffprobe 연결
+# 선택: brew install yt-dlp
+```
 
 #### 전체 워크스페이스 동시 실행 (Turborepo)
 

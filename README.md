@@ -7,6 +7,7 @@ with two equal product surfaces:
 |---|---|
 | **Workflow** | Cowork-style automation graphs, Domain Workers, packs, gates |
 | **Design Project** | File workspace + **Design Editor** (LLM generate → edit → refine) |
+| **Video** | Desktop-only FFmpeg studio: probe, transcode, trim, timeline, … |
 
 **[한국어](README.ko.md)** | **English**
 
@@ -272,6 +273,14 @@ pnpm tauri dev
 ```
 
 This starts the Vite dev server (`http://localhost:1420`) and the Tauri window together.
+
+**Video studio** (desktop `/video`): local FFmpeg/FFprobe analyze, transcode, trim, timeline, and the rest of the video-rs toolbox. Files stay on the machine. Opens from Mode selection without connecting the engine.
+
+```bash
+cd apps/desktop
+pnpm setup:sidecars    # link ffmpeg/ffprobe from PATH or Homebrew
+# optional: brew install yt-dlp
+```
 
 #### Full workspace (Turborepo)
 

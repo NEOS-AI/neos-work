@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "pnpm setup:sidecars && pnpm dev",
+    "beforeBuildCommand": "pnpm setup:sidecars && pnpm build"
   },
   "app": {
     "windows": [
@@ -22,7 +22,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
@@ -36,7 +40,9 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/neos-engine"
+      "binaries/neos-engine",
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
     ]
   }
 }

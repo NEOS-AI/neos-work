@@ -73,6 +73,7 @@ describe('Sidebar', () => {
       'plugins',
       'deployments',
       'media',
+      'video',
       'settings',
     ]) {
       expect(screen.getByText(`nav.${id}`)).toBeInTheDocument();

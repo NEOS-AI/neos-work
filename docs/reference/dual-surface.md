@@ -48,6 +48,7 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 | Memory UI | **yes** | **yes (v0.25)** | `neos memory export` | Web: CRUD + toggle |
 | Routines | **yes** | **yes (v0.26)** | — | Web: create/toggle/run now |
 | Deployments | **yes** | **yes (v0.26)** | — | Web: preflight + create + refresh |
+| Video studio (FFmpeg/FFprobe) | **yes** | — | — | Desktop `/video` without engine connect: probe, transcode, extract, trim, timeline, … Local files only |
 
 ---
 

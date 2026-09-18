@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 
 const connect = vi.fn(async () => undefined);
 let engineState = {
@@ -21,6 +22,18 @@ vi.mock('react-i18next', () => ({
 
 const { ModeSelection } = await import('./ModeSelection.js');
 
+function modeTree() {
+  return (
+    <MemoryRouter>
+      <ModeSelection />
+    </MemoryRouter>
+  );
+}
+
+function renderMode() {
+  return render(modeTree());
+}
+
 describe('ModeSelection', () => {
   beforeEach(() => {
     connect.mockReset();
@@ -34,32 +47,33 @@ describe('ModeSelection', () => {
   });
 
   it('renders host and client mode cards', () => {
-    render(<ModeSelection />);
+    renderMode();
     expect(screen.getByText('mode.host.title')).toBeInTheDocument();
     expect(screen.getByText('mode.client.title')).toBeInTheDocument();
+    expect(screen.getByText('mode.video.title')).toBeInTheDocument();
     expect(screen.getByText('connection.disconnected')).toBeInTheDocument();
   });
 
   it('shows connecting and error status copy', () => {
     engineState = { status: 'connecting', error: null, connect };
-    const { rerender } = render(<ModeSelection />);
+    const { rerender } = renderMode();
     expect(screen.getAllByText('connection.connecting').length).toBeGreaterThan(0);
 
     engineState = { status: 'error', error: 'Could not connect', connect };
-    rerender(<ModeSelection />);
+    rerender(modeTree());
     expect(screen.getByText('Could not connect')).toBeInTheDocument();
   });
 
   it('connects as host without remote url', async () => {
     const user = userEvent.setup();
-    render(<ModeSelection />);
+    renderMode();
     await user.click(screen.getByRole('button', { name: /mode.host.title/i }));
     expect(connect).toHaveBeenCalledWith('host', undefined);
   });
 
   it('does not connect as client without remote url', async () => {
     const user = userEvent.setup();
-    render(<ModeSelection />);
+    renderMode();
     const connectBtn = screen.getByRole('button', { name: 'Connect' });
     expect(connectBtn).toBeDisabled();
     await user.click(connectBtn);
@@ -68,7 +82,7 @@ describe('ModeSelection', () => {
 
   it('connects as client with remote url and optional bearer token', async () => {
     const user = userEvent.setup();
-    render(<ModeSelection />);
+    renderMode();
 
     const urlInput = screen.getByPlaceholderText('http://192.168.1.100:57286');
     const tokenInput = screen.getByPlaceholderText('Bearer token (optional)');
@@ -84,7 +98,7 @@ describe('ModeSelection', () => {
   it('rejects control-char remote url and bearer token', async () => {
     const user = userEvent.setup();
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    render(<ModeSelection />);
+    renderMode();
 
     const urlInput = screen.getByPlaceholderText('http://192.168.1.100:57286');
     const tokenInput = screen.getByPlaceholderText('Bearer token (optional)');
@@ -111,14 +125,14 @@ describe('ModeSelection', () => {
 
   it('disables host while connecting', () => {
     engineState = { status: 'connecting', error: null, connect };
-    render(<ModeSelection />);
+    renderMode();
     const hostBtn = screen.getByRole('button', { name: /mode.host.title/i });
     expect(hostBtn).toBeDisabled();
   });
 
   it('Escape clears dev token and preventDefault', async () => {
     const user = userEvent.setup();
-    render(<ModeSelection />);
+    renderMode();
     const tokenInput = screen.getByPlaceholderText('Bearer token (optional)');
     await user.type(tokenInput, 'secret');
     expect((tokenInput as HTMLInputElement).value).toBe('secret');
@@ -137,7 +151,7 @@ describe('ModeSelection', () => {
 
   it('ignores Escape when defaultPrevented already set', async () => {
     const user = userEvent.setup();
-    render(<ModeSelection />);
+    renderMode();
     const tokenInput = screen.getByPlaceholderText('Bearer token (optional)');
     await user.type(tokenInput, 'keep');
 
@@ -164,12 +178,12 @@ describe('ModeSelection', () => {
   it('does not clear token via Escape while connecting', async () => {
     const user = userEvent.setup();
     engineState = { status: 'disconnected', error: null, connect };
-    const { rerender } = render(<ModeSelection />);
+    const { rerender } = renderMode();
     const tokenInput = screen.getByPlaceholderText('Bearer token (optional)');
     await user.type(tokenInput, 'busy');
 
     engineState = { status: 'connecting', error: null, connect };
-    rerender(<ModeSelection />);
+    rerender(modeTree());
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect((screen.getByPlaceholderText('Bearer token (optional)') as HTMLInputElement).value).toBe('busy');
@@ -182,7 +196,7 @@ describe('ModeSelection', () => {
       error: 'boom' + String.fromCharCode(0) + 'err' + String.fromCharCode(10) + 'next',
       connect: vi.fn(),
     };
-    render(<ModeSelection />);
+    renderMode();
     expect(screen.getByText(/boomerr next/)).toBeInTheDocument();
   });
 
@@ -192,7 +206,7 @@ describe('ModeSelection', () => {
       error: String.fromCharCode(0) + String.fromCharCode(10) + String.fromCharCode(13),
       connect: vi.fn(),
     };
-    render(<ModeSelection />);
+    renderMode();
     expect(screen.getByText('connection.disconnected')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });

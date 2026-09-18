@@ -2,6 +2,27 @@
 @import "highlight.js/styles/github-dark.css" layer(hljs-dark);
 @import "highlight.js/styles/github.css" layer(hljs-light);
 
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-secondary);
+  --color-card-foreground: var(--text-primary);
+  --color-muted: var(--bg-tertiary);
+  --color-muted-foreground: var(--text-secondary);
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--bg-tertiary);
+  --color-secondary-foreground: var(--text-primary);
+  --color-accent: var(--bg-tertiary);
+  --color-accent-foreground: var(--text-primary);
+  --color-border: var(--border-primary);
+  --color-input: var(--border-secondary);
+  --color-destructive: #ef4444;
+  --color-ring: #3b82f6;
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--text-primary);
+}
+
 /* Theme variables */
 :root,
 [data-theme="dark"] {
