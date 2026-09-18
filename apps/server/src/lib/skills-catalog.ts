@@ -8,9 +8,8 @@ import { NEOS_VERSION } from '@neos-work/shared';
 import { getSetting } from '../db/settings.js';
 import { getDb } from '../db/schema.js';
 import {
-  archiveFilesToText,
+  classifyArchivePath,
   extractSkillZip,
-  isSafeSnapshotRelPath,
   TEXT_FILE_MAX as ARCHIVE_TEXT_MAX,
   ZIPBALL_HTTP_MAX,
 } from './skills-archive.js';
@@ -18,12 +17,12 @@ import { fetchPublicHttp, SsrfError } from './ssrf.js';
 import {
   discoverSkillFolders,
   parseInstallSource,
+  pickBySlug,
   pickSkillFolder,
   safeCatalogId,
   snapshotDownloadPath,
   SkillsHttpError,
   type InstallSource,
-  type SkillFileBlob,
 } from './skills-source.js';
 
 export { SkillsHttpError, safeCatalogId } from './skills-source.js';
@@ -86,7 +85,7 @@ export type RemoteSkillAudit = {
   auditedAt?: string;
 };
 
-export type SnapshotFile = { path: string; contents: string };
+export type SnapshotFile = { path: string; contents: string | Buffer };
 
 export type SkillSnapshot = {
   files: SnapshotFile[];
@@ -561,8 +560,6 @@ export function computeSkillFolderHash(
   return hash.digest('hex');
 }
 
-export { isSafeSnapshotRelPath };
-
 function parseSnapshotBody(json: unknown): { files: SnapshotFile[]; hash: string | null } {
   if (!json || typeof json !== 'object' || Array.isArray(json)) {
     throw new SkillsHttpError(502, 'invalid_upstream');
@@ -583,7 +580,7 @@ function parseSnapshotBody(json: unknown): { files: SnapshotFile[]; hash: string
     if (typeof f.path !== 'string' || typeof f.contents !== 'string') {
       throw new SkillsHttpError(502, 'invalid_upstream');
     }
-    const verdict = isSafeSnapshotRelPath(f.path);
+    const verdict = classifyArchivePath(f.path);
     if (verdict === 'reject') throw new SkillsHttpError(502, 'invalid_upstream');
     if (verdict === 'skip') continue;
     if (Buffer.byteLength(f.contents, 'utf8') > TEXT_FILE_MAX) {
@@ -597,14 +594,6 @@ function parseSnapshotBody(json: unknown): { files: SnapshotFile[]; hash: string
     hash = o.hash.trim().toLowerCase();
   }
   return { files, hash };
-}
-
-function snapshotMiss(): never {
-  throw new SkillsHttpError(502, 'upstream_unavailable', { snapshotMiss: true });
-}
-
-export function isSnapshotMiss(err: unknown): boolean {
-  return err instanceof SkillsHttpError && err.extra.snapshotMiss === true;
 }
 
 function snapshotFromFiles(
@@ -629,10 +618,10 @@ function snapshotFromFiles(
 
 export async function fetchSkillSnapshot(
   src: InstallSource,
-  opts?: { fetchImpl?: FetchImpl; forInstall?: boolean },
+  opts?: { fetchImpl?: FetchImpl },
 ): Promise<SkillSnapshot> {
   const rel = snapshotDownloadPath(src);
-  if (!rel) snapshotMiss();
+  if (!rel) throw new SkillsHttpError(502, 'upstream_unavailable');
   const budget = consumeBudget('download', DOWNLOAD_BUDGET_PER_MIN, 2);
   if (!budget.ok) {
     throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: budget.retryAfterSec });
@@ -648,15 +637,15 @@ export async function fetchSkillSnapshot(
     } catch (err) {
       if (err instanceof SkillsHttpError && err.code === 'rate_limited') throw err;
       if (err instanceof SkillsHttpError && err.code === 'ssrf_blocked') throw err;
-      snapshotMiss();
+      throw new SkillsHttpError(502, 'upstream_unavailable');
     }
     if (res.status === 429) {
       throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: retryAfterSec(res) });
     }
     if (res.status === 404 || res.status === 401 || res.status === 403 || res.status >= 500) {
-      snapshotMiss();
+      throw new SkillsHttpError(502, 'upstream_unavailable');
     }
-    if (res.status !== 200) snapshotMiss();
+    if (res.status !== 200) throw new SkillsHttpError(502, 'upstream_unavailable');
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength > SNAPSHOT_HTTP_MAX) {
       throw new SkillsHttpError(502, 'upstream_too_large');
@@ -665,11 +654,11 @@ export async function fetchSkillSnapshot(
     try {
       json = JSON.parse(buf.toString('utf8'));
     } catch {
-      snapshotMiss();
+      throw new SkillsHttpError(502, 'upstream_unavailable');
     }
     if (json && typeof json === 'object' && !Array.isArray(json)
       && (json as { error?: unknown }).error === 'not_found') {
-      snapshotMiss();
+      throw new SkillsHttpError(502, 'upstream_unavailable');
     }
     const parsed = parseSnapshotBody(json);
     return snapshotFromFiles(src, parsed.files, parsed.hash, 'snapshot', rel);
@@ -742,13 +731,6 @@ async function fetchPublicBytes(
   } finally {
     clearTimeout(timer);
   }
-}
-
-function blobsToSnapshotFiles(files: SkillFileBlob[]): SnapshotFile[] {
-  return files.map((f) => ({
-    path: f.path,
-    contents: typeof f.contents === 'string' ? f.contents : f.contents.toString('utf8'),
-  }));
 }
 
 function wrapSkillMd(text: string): SnapshotFile[] {
@@ -850,11 +832,9 @@ async function fetchGithubZipball(
         lastMiss = true;
         continue;
       }
-      const extracted = archiveFilesToText(await extractSkillZip(got.buf));
-      const files = blobsToSnapshotFiles(extracted);
       return snapshotFromFiles(
         src,
-        files,
+        await extractSkillZip(got.buf),
         null,
         'zipball',
         src.id ?? `${src.owner}/${src.repo}`,
@@ -1060,21 +1040,11 @@ async function fetchWellKnownEntry(
   index: WkIndex,
   fetchImpl?: FetchImpl,
 ): Promise<SkillSnapshot> {
-  const cands = index.entries.map((e) => ({ slug: e.name, name: e.name }));
-  const picked = pickSkillFolder(
-    cands.map((c) => ({
-      slug: c.slug,
-      name: c.name,
-      files: [],
-      skillMd: '',
-      relDir: c.slug,
-    })),
+  const picked = pickBySlug(
+    index.entries.map((e) => ({ slug: e.name, name: e.name, entry: e })),
     src.slug,
   );
-  const entry = index.entries.find((e) => e.name === picked.slug) ?? index.entries.find(
-    (e) => e.name.toLowerCase() === picked.slug.toLowerCase(),
-  );
-  if (!entry) throw new SkillsHttpError(404, 'skill_not_in_source');
+  const entry = picked.entry;
 
   if (index.kind === 'v020') {
     if (!entry.url) throw new SkillsHttpError(404, 'no_skills');
@@ -1089,10 +1059,9 @@ async function fetchWellKnownEntry(
     }
     const hashHex = entry.digest?.slice('sha256:'.length) ?? null;
     if (entry.type === 'archive') {
-      const extracted = archiveFilesToText(await extractSkillZip(got.buf));
       return snapshotFromFiles(
         src,
-        blobsToSnapshotFiles(extracted),
+        await extractSkillZip(got.buf),
         hashHex,
         'well-known',
         src.id ?? src.url ?? entry.name,
@@ -1115,7 +1084,7 @@ async function fetchWellKnownEntry(
       : resolveAgainst(index.indexUrl, `${entry.name}/${rel}`);
     const text = await fetchDirectSkillMd(fileUrl, fetchImpl);
     const path = rel.replace(/\\/g, '/').replace(/^\.\//, '');
-    const verdict = isSafeSnapshotRelPath(path);
+    const verdict = classifyArchivePath(path);
     if (verdict === 'reject') throw new SkillsHttpError(502, 'invalid_upstream');
     if (verdict === 'skip') continue;
     out.push({ path, contents: text });
@@ -1151,7 +1120,7 @@ export async function resolveSkillFiles(
 
   if (!src.ref) {
     try {
-      return await fetchSkillSnapshot(src, { fetchImpl, forInstall: !opts?.preview });
+      return await fetchSkillSnapshot(src, { fetchImpl });
     } catch (err) {
       if (err instanceof SkillsHttpError && err.code === 'rate_limited') throw err;
       if (err instanceof SkillsHttpError && err.code === 'upstream_too_large') throw err;

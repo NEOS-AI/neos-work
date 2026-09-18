@@ -11,7 +11,6 @@ import {
   ageSkillsSearchCache,
   auditRemoteSkill,
   computeSkillFolderHash,
-  isSafeSnapshotRelPath,
   previewRemoteSkill,
   resetSkillsCatalogState,
   searchSkillCatalog,
@@ -28,6 +27,7 @@ import {
   FRONTEND_DESIGN_ID,
   FRONTEND_DESIGN_SKILL_MD,
 } from './fixtures/frontend-design-skill.js';
+import { classifyArchivePath } from './skills-archive.js';
 import { makeSkillZip, skillMd } from './fixtures/skill-zip.js';
 import { installRemoteSkill } from './skills-install.js';
 import { upsertSkill } from '../routes/skills.js';
@@ -271,12 +271,12 @@ describe('well-known + zipball resolve', () => {
   });
 });
 
-describe('isSafeSnapshotRelPath', () => {
+describe('classifyArchivePath (snapshot files)', () => {
   it('rejects . and .. segments', () => {
-    expect(isSafeSnapshotRelPath('.')).toBe('reject');
-    expect(isSafeSnapshotRelPath('foo/.')).toBe('reject');
-    expect(isSafeSnapshotRelPath('../SKILL.md')).toBe('reject');
-    expect(isSafeSnapshotRelPath('SKILL.md')).toBe('ok');
+    expect(classifyArchivePath('.')).toBe('reject');
+    expect(classifyArchivePath('foo/.')).toBe('reject');
+    expect(classifyArchivePath('../SKILL.md')).toBe('reject');
+    expect(classifyArchivePath('SKILL.md')).toBe('ok');
   });
 });
 

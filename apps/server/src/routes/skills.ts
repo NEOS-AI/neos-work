@@ -210,7 +210,6 @@ function skillsError(c: Context, err: unknown, ctx: string) {
       case 403: return c.json(body, 403);
       case 404: return c.json(body, 404);
       case 409: return c.json(body, 409);
-      case 422: return c.json(body, 422);
       case 429: return c.json(body, 429);
       case 502: return c.json(body, 502);
       default: return c.json(body, 500);

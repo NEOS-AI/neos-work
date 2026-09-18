@@ -87,6 +87,29 @@ describe('parseInstallSource', () => {
     ).toMatchObject({ kind: 'well-known' });
   });
 
+  it('re-parses sidecar URL ids as well-known / direct (not github shorthand)', () => {
+    const direct = parseInstallSource({
+      id: 'https://example.com/pkg/SKILL.md',
+      url: 'https://example.com/pkg/SKILL.md',
+    });
+    expect(direct).toMatchObject({
+      kind: 'direct',
+      url: 'https://example.com/pkg/SKILL.md',
+    });
+    const wk = parseInstallSource({
+      id: 'https://skills.example.com/catalog',
+      url: 'https://skills.example.com/catalog',
+      slug: 'archived',
+    });
+    expect(wk).toMatchObject({
+      kind: 'well-known',
+      url: 'https://skills.example.com/catalog',
+      slug: 'archived',
+    });
+    const longHost = `https://${'a'.repeat(180)}.example.com/deep/path/SKILL.md`;
+    expect(parseInstallSource({ id: longHost })).toMatchObject({ kind: 'direct', url: longHost });
+  });
+
   it('rejects gitlab/raw/codeload/.git and junk as invalid_source', () => {
     expect(() => parseInstallSource({ url: 'https://gitlab.com/foo/bar' })).toThrow(SkillsHttpError);
     expect(() => parseInstallSource({ url: 'https://codeload.github.com/foo/bar.zip' })).toThrow(
@@ -121,7 +144,7 @@ description: ${name}
       { path: 'LICENSE', contents: 'MIT' },
     ], 'fallback');
     expect(cands).toHaveLength(1);
-    expect(cands[0]).toMatchObject({ slug: 'fallback', name: 'root-skill', relDir: '' });
+    expect(cands[0]).toMatchObject({ slug: 'root-skill', name: 'root-skill', relDir: '' });
   });
 
   it('finds container children at depth ≤ 3 including hidden curated dirs', () => {

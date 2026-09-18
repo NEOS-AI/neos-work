@@ -12,12 +12,12 @@ export const ASSET_FILE_MAX = 2 * 1024 * 1024;
 
 export type ArchiveFile = { path: string; contents: Buffer };
 
-export function isAssetRelPath(rel: string): boolean {
+function isAssetRelPath(rel: string): boolean {
   const n = rel.replace(/\\/g, '/');
   return n === 'assets' || n.startsWith('assets/');
 }
 
-export function fileSizeCap(rel: string): number {
+function fileSizeCap(rel: string): number {
   return isAssetRelPath(rel) ? ASSET_FILE_MAX : TEXT_FILE_MAX;
 }
 
@@ -37,13 +37,14 @@ export function classifyArchivePath(raw: unknown): 'ok' | 'skip' | 'reject' {
   return 'ok';
 }
 
-/** Alias used by snapshot ingest / existing tests. */
-export function isSafeSnapshotRelPath(raw: unknown): 'ok' | 'skip' | 'reject' {
-  return classifyArchivePath(raw);
+function normalizeArchiveRelPath(raw: string): string {
+  return raw.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
-export function normalizeArchiveRelPath(raw: string): string {
-  return raw.replace(/\\/g, '/').replace(/^\.\//, '');
+function isZipSymlink(entry: { externalFileAttributes?: number }): boolean {
+  const attrs = entry.externalFileAttributes;
+  if (typeof attrs !== 'number') return false;
+  return ((attrs >>> 16) & 0o170000) === 0o120000;
 }
 
 function unwrapPrefix(paths: string[]): string {
@@ -96,7 +97,7 @@ export async function extractSkillZip(buf: Buffer): Promise<ArchiveFile[]> {
   for (const entry of directory.files) {
     const type = entryType(entry);
     if (type === 'Directory' || entry.path.endsWith('/')) continue;
-    if (type !== 'File') {
+    if (type !== 'File' || isZipSymlink(entry as { externalFileAttributes?: number })) {
       throw new SkillsHttpError(502, 'invalid_upstream');
     }
     const verdict = classifyArchivePath(entry.path);
@@ -155,16 +156,4 @@ export async function extractSkillZip(buf: Buffer): Promise<ArchiveFile[]> {
 
   if (out.length === 0) throw new SkillsHttpError(404, 'no_skills');
   return out;
-}
-
-export function archiveFilesToText(
-  files: ArchiveFile[],
-): Array<{ path: string; contents: string | Buffer }> {
-  return files.map((f) => {
-    const base = f.path.split('/').pop() ?? '';
-    if (base === 'SKILL.md' || !f.contents.includes(0)) {
-      return { path: f.path, contents: f.contents.toString('utf8') };
-    }
-    return { path: f.path, contents: f.contents };
-  });
 }

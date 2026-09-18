@@ -178,6 +178,26 @@ function parseHttpUrlLoose(raw: string): URL | null {
   }
 }
 
+function parseHttpSource(u: URL): InstallSource | null {
+  const gh = parseGithubUrl(u);
+  if (gh) return gh;
+  if (/\/skill\.md$/i.test(u.pathname)) {
+    return { kind: 'direct', url: u.href, id: u.href };
+  }
+  if (!isGitHostingHost(u.hostname) && !u.pathname.toLowerCase().endsWith('.git')) {
+    return { kind: 'well-known', url: u.href, id: u.href };
+  }
+  return null;
+}
+
+function parseRawSource(raw: string): InstallSource | null {
+  const aliasedUrl = applySourceAliases(raw);
+  const u = parseHttpUrlLoose(aliasedUrl);
+  if (u) return parseHttpSource(u);
+  const aliased = applySourceAliases(raw.replace(/^https?:\/\/(www\.)?github\.com\//i, ''));
+  return parseGithubShorthand(aliased);
+}
+
 export type ParseInstallSourceInput = {
   id?: unknown;
   source?: unknown;
@@ -194,49 +214,14 @@ export function parseInstallSource(input: ParseInstallSourceInput): InstallSourc
   const explicitSlug = normalizeSlug(nonEmpty(input.slug, 100) || undefined);
   const explicitRef = nonEmpty(input.ref, 200) || undefined;
 
-  const idRaw = nonEmpty(input.id, 200);
+  const idRaw = nonEmpty(input.id, 2_048);
   const urlRaw = nonEmpty(input.url, 2_048);
   const sourceRaw = nonEmpty(input.source, 400);
 
   let parsed: InstallSource | null = null;
-
-  if (idRaw) {
-    const aliased = applySourceAliases(idRaw);
-    parsed = parseGithubShorthand(aliased);
-  } else if (urlRaw) {
-    const aliasedUrl = applySourceAliases(urlRaw);
-    const u = parseHttpUrlLoose(aliasedUrl);
-    if (u) {
-      parsed = parseGithubUrl(u);
-      if (!parsed) {
-        const pathEndsSkillMd = /\/skill\.md$/i.test(u.pathname);
-        if (pathEndsSkillMd) {
-          parsed = { kind: 'direct', url: u.href, id: u.href };
-        } else if (!isGitHostingHost(u.hostname) && !u.pathname.toLowerCase().endsWith('.git')) {
-          parsed = { kind: 'well-known', url: u.href, id: u.href };
-        }
-      }
-    } else {
-      const aliased = applySourceAliases(urlRaw.replace(/^https?:\/\/(www\.)?github\.com\//i, ''));
-      parsed = parseGithubShorthand(aliased);
-    }
-  } else if (sourceRaw) {
-    const aliased = applySourceAliases(sourceRaw);
-    const u = parseHttpUrlLoose(aliased);
-    if (u) {
-      parsed = parseGithubUrl(u);
-      if (!parsed) {
-        const pathEndsSkillMd = /\/skill\.md$/i.test(u.pathname);
-        if (pathEndsSkillMd) {
-          parsed = { kind: 'direct', url: u.href, id: u.href };
-        } else if (!isGitHostingHost(u.hostname) && !u.pathname.toLowerCase().endsWith('.git')) {
-          parsed = { kind: 'well-known', url: u.href, id: u.href };
-        }
-      }
-    } else {
-      parsed = parseGithubShorthand(aliased);
-    }
-  }
+  if (idRaw) parsed = parseRawSource(idRaw);
+  if (!parsed && urlRaw) parsed = parseRawSource(urlRaw);
+  if (!parsed && sourceRaw) parsed = parseRawSource(sourceRaw);
 
   if (!parsed) {
     throw new SkillsHttpError(400, 'invalid_source');
@@ -301,8 +286,8 @@ function candidateFrom(
   fallbackSlug: string,
 ): SkillFolderCandidate {
   const parsed = parseSkillFile(skillMd, skillMdPath, 'remote');
-  const dirBase = relDir ? (relDir.split('/').pop() ?? fallbackSlug) : fallbackSlug;
-  const slug = dirBase || fallbackSlug;
+  const dirBase = relDir ? (relDir.split('/').pop() ?? fallbackSlug) : '';
+  const slug = dirBase || parsed?.manifest.name || fallbackSlug;
   return {
     slug,
     name: parsed?.manifest.name || slug,
@@ -351,10 +336,10 @@ export function discoverSkillFolders(
   return out;
 }
 
-export function pickSkillFolder(
-  cands: SkillFolderCandidate[],
+export function pickBySlug<T extends { slug: string; name: string }>(
+  cands: T[],
   slug?: string,
-): SkillFolderCandidate {
+): T {
   if (cands.length === 0) throw new SkillsHttpError(404, 'no_skills');
   if (!slug) {
     if (cands.length === 1) return cands[0]!;
@@ -368,4 +353,11 @@ export function pickSkillFolder(
   );
   if (!hit) throw new SkillsHttpError(404, 'skill_not_in_source');
   return hit;
+}
+
+export function pickSkillFolder(
+  cands: SkillFolderCandidate[],
+  slug?: string,
+): SkillFolderCandidate {
+  return pickBySlug(cands, slug);
 }

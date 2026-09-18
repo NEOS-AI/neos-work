@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -40,9 +41,9 @@ afterEach(async () => {
   setSkillsRenameForTests();
   try { deleteSetting('skills.remoteCatalogEnabled'); } catch { /* ignore */ }
   try { deleteSetting('skills.remoteInstallEnabled'); } catch { /* ignore */ }
-  getDb().prepare("DELETE FROM skill WHERE name LIKE 'find-skills%' OR name LIKE '_ins_%' OR name IN ('rooty','alpha','beta','orphaned','archived')").run();
+  getDb().prepare("DELETE FROM skill WHERE name LIKE 'find-skills%' OR name LIKE '_ins_%' OR name IN ('rooty','alpha','beta','orphaned','archived','binasset','directy')").run();
   const root = resolveUserSkillsDir();
-  for (const dir of ['find-skills', 'rooty', 'alpha', 'beta', 'orphaned', 'archived']) {
+  for (const dir of ['find-skills', 'rooty', 'alpha', 'beta', 'orphaned', 'archived', 'binasset', 'directy']) {
     await rm(join(root, dir), { recursive: true, force: true }).catch(() => {});
   }
 });
@@ -233,6 +234,69 @@ describe('installRemoteSkill', () => {
     expect(await readFile(join(dest, 'SKILL.md'), 'utf8')).toContain('name: find-skills');
   });
 
+  it('keeps zip asset bytes intact (no UTF-8 smash)', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xd8, 0x00, 0x80]);
+    const zip = await makeSkillZip([
+      { name: 'repo/SKILL.md', content: skillMd('binasset') },
+      { name: 'repo/assets/icon.bin', content: png },
+    ]);
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.includes('codeload.github.com')) return new Response(zip, { status: 200 });
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    const result = await installRemoteSkill(
+      { url: 'https://github.com/acme/bin-skill', confirm: true },
+      { upsert: upsertSkill },
+    );
+    expect(result.name).toBe('binasset');
+    const written = await readFile(join(resolveUserSkillsDir(), 'binasset', 'assets', 'icon.bin'));
+    expect(written.equals(png)).toBe(true);
+  });
+
+  it('updates a well-known install by re-parsing the sidecar URL id', async () => {
+    const md = skillMd('archived');
+    const digest = `sha256:${createHash('sha256').update(md).digest('hex')}`;
+    const index = {
+      $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
+      skills: [{
+        name: 'archived',
+        type: 'skill-md',
+        url: 'https://skills.example.com/archived/SKILL.md',
+        digest,
+        description: 'wk',
+      }],
+    };
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.endsWith('/.well-known/agent-skills/index.json')) return jsonResponse(index);
+      if (url.endsWith('/archived/SKILL.md')) return new Response(md, { status: 200 });
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    const installed = await installRemoteSkill(
+      { url: 'https://skills.example.com/', confirm: true },
+      { upsert: upsertSkill },
+    );
+    expect(installed.fetchPath).toBe('well-known');
+    const updated = await updateRemoteSkill(installed.id, { upsert: upsertSkill });
+    expect(updated.unchanged).toBe(true);
+    expect(updated.fetchPath).toBe('well-known');
+  });
+
+  it('updates a direct SKILL.md install by re-parsing the sidecar URL id', async () => {
+    const md = skillMd('directy');
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url === 'https://example.com/pkg/SKILL.md') return new Response(md, { status: 200 });
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    const installed = await installRemoteSkill(
+      { url: 'https://example.com/pkg/SKILL.md', confirm: true },
+      { upsert: upsertSkill },
+    );
+    expect(installed.fetchPath).toBe('direct');
+    const updated = await updateRemoteSkill(installed.id, { upsert: upsertSkill });
+    expect(updated.name).toBe('directy');
+    expect(updated.fetchPath).toBe('direct');
+  });
+
   it('restores bak when upsert throws mid-update', async () => {
     setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
     await installRemoteSkill({ id: FIND_SKILLS_ID, confirm: true }, { upsert: upsertSkill });
@@ -271,7 +335,7 @@ describe('installRemoteSkill', () => {
     ).rejects.toMatchObject({ http: 403, code: 'install_disabled' });
   });
 
-  it('still attempts install when catalog is disabled (422 or snapshot)', async () => {
+  it('still attempts install when catalog is disabled', async () => {
     setSetting('skills.remoteCatalogEnabled', 'false');
     setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
     const result = await installRemoteSkill(

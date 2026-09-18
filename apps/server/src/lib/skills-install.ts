@@ -555,26 +555,13 @@ export async function updateRemoteSkill(
   });
 }
 
-function currentSkillRoots(): string[] {
-  const roots = [resolveUserSkillsDir()];
-  const ws = sessionsDb.listWorkspaces()[0];
-  if (typeof ws?.path === 'string' && ws.path.trim() && !/[\0\r\n]/.test(ws.path)) {
-    roots.push(resolveWorkspaceSkillsDir(ws.path.trim()));
-  }
-  return roots;
-}
-
-function pathInsideAnyRoot(absPath: string, roots: string[]): boolean {
-  return roots.some((r) => isPathInside(r, absPath));
-}
-
 /**
  * Drop remote rows whose SKILL.md is missing inside the current data root.
  * Paths outside the current root are left alone (NEOS_DATA_DIR move).
  * Returns names that must not be overwritten by a later bundled/local upsert.
  */
 export async function pruneMissingRemoteSkills(): Promise<Set<string>> {
-  const roots = currentSkillRoots();
+  const roots = ALLOWED_CONTENT_ROOTS();
   const keepNames = new Set<string>();
   type Row = { id: string; name: string; source: string; path: string };
   let rows: Row[] = [];
@@ -589,12 +576,12 @@ export async function pruneMissingRemoteSkills(): Promise<Set<string>> {
   for (const row of rows) {
     if (row.source !== 'remote') continue;
     const abs = resolve(row.path);
-    if (!pathInsideAnyRoot(abs, roots)) {
+    if (!roots.some((r) => isPathInside(r, abs))) {
       keepNames.add(row.name.toLowerCase());
       continue;
     }
     const packageDir = dirname(abs);
-    if (!pathInsideAnyRoot(packageDir, roots)) {
+    if (!roots.some((r) => isPathInside(r, packageDir))) {
       keepNames.add(row.name.toLowerCase());
       continue;
     }
