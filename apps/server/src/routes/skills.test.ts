@@ -1,5 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
+
 import { getDb } from '../db/schema.js';
+import { deleteSetting, setSetting } from '../db/settings.js';
+import { isAuthExemptPath } from '../lib/auth-paths.js';
+import {
+  FIND_SKILLS_GOLDEN_HASH,
+  FIND_SKILLS_ID,
+  FIND_SKILLS_SEARCH_HIT,
+  FIND_SKILLS_SNAPSHOT,
+} from '../lib/fixtures/find-skills-snapshot.js';
+import { resetSkillsCatalogState, setSkillsCatalogFetchImpl } from '../lib/skills-catalog.js';
 import { skills, upsertSkill } from './skills.js';
 
 const SKILL_NAME = `_cov_skill_route_${process.pid}`;
@@ -300,5 +315,207 @@ describe('upsertSkill edge cases', () => {
     const found = body.data.find((s) => s.name === `${SKILL_NAME}_badjson`);
     expect(found).toBeTruthy();
     expect(found!.category).toBeUndefined();
+  });
+});
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function mockFetch(handler: (url: string) => Response | Promise<Response>): typeof fetch {
+  return (async (input: RequestInfo | URL) => {
+    const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    return handler(href);
+  }) as typeof fetch;
+}
+
+describe('skills catalog + snapshot install routes', () => {
+  afterEach(async () => {
+    resetSkillsCatalogState();
+    try { deleteSetting('skills.remoteCatalogEnabled'); } catch { /* ignore */ }
+    try { deleteSetting('skills.remoteInstallEnabled'); } catch { /* ignore */ }
+    getDb().prepare("DELETE FROM skill WHERE name = 'find-skills' OR name LIKE '_cat_route_%'").run();
+    await rm(join(resolveUserSkillsDir(), 'find-skills'), { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('does not add catalog or install routes to isAuthExemptPath', () => {
+    expect(isAuthExemptPath('/api/skills/catalog/search')).toBe(false);
+    expect(isAuthExemptPath('/api/skills/catalog/preview')).toBe(false);
+    expect(isAuthExemptPath('/api/skills/install')).toBe(false);
+    expect(isAuthExemptPath('/api/skills/some-id/content')).toBe(false);
+  });
+
+  it('GET /catalog/search happy path, empty, short query, 401 and 404 → 502', async () => {
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.includes('q=empty')) return jsonResponse({ query: 'empty', searchType: 'fuzzy', skills: [], count: 0 });
+      if (url.includes('q=denied')) return jsonResponse({ error: 'authentication_required' }, 401);
+      if (url.includes('q=missing')) return jsonResponse({ error: 'gone' }, 404);
+      return jsonResponse({ query: 'find', searchType: 'fuzzy', skills: [FIND_SKILLS_SEARCH_HIT], count: 1 });
+    }));
+
+    const ok = await skills.request('/catalog/search?q=find&limit=5');
+    expect(ok.status).toBe(200);
+    const okBody = await ok.json() as { data: { count: number; skills: Array<{ slug: string }> } };
+    expect(okBody.data.count).toBe(1);
+    expect(okBody.data.skills[0]?.slug).toBe('find-skills');
+
+    const empty = await skills.request('/catalog/search?q=empty');
+    expect(empty.status).toBe(200);
+    expect(((await empty.json()) as { data: { count: number } }).data.count).toBe(0);
+
+    const short = await skills.request('/catalog/search?q=a');
+    expect(short.status).toBe(400);
+    expect(((await short.json()) as { error: string }).error).toBe('query_too_short');
+
+    const denied = await skills.request('/catalog/search?q=denied');
+    expect(denied.status).toBe(502);
+    expect(((await denied.json()) as { error: string }).error).toBe('upstream_unavailable');
+
+    const missing = await skills.request('/catalog/search?q=missing');
+    expect(missing.status).toBe(502);
+    expect(((await missing.json()) as { error: string }).error).toBe('upstream_unavailable');
+  });
+
+  it('GET /catalog/preview find-skills snapshot and frontend-design 502', async () => {
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.includes('frontend-design')) return jsonResponse({ error: 'not_found' }, 404);
+      return jsonResponse(FIND_SKILLS_SNAPSHOT);
+    }));
+    const ok = await skills.request(`/catalog/preview?id=${encodeURIComponent(FIND_SKILLS_ID)}`);
+    expect(ok.status).toBe(200);
+    const body = await ok.json() as { data: { fetchPath?: string; hash: string; trust: string } };
+    expect(body.data.fetchPath).toBe('snapshot');
+    expect(body.data.hash).toBe(FIND_SKILLS_GOLDEN_HASH);
+    expect(body.data.trust).toBe('unverified');
+
+    const missing = await skills.request('/catalog/preview?id=anthropics/skills/frontend-design');
+    expect(missing.status).toBe(502);
+    const missBody = await missing.json() as { error: string; fetchPath?: string };
+    expect(missBody.error).toBe('upstream_unavailable');
+    expect(missBody.fetchPath).toBeUndefined();
+  });
+
+  it('POST /install snapshot, hash mismatch still installs, github without snapshot 422, confirm 400', async () => {
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse({
+      ...FIND_SKILLS_SNAPSHOT,
+      hash: 'bb'.repeat(32),
+    })));
+    const installed = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    expect(installed.status).toBe(200);
+    const instBody = await installed.json() as { data: { name: string; hash: string; fetchPath: string } };
+    expect(instBody.data.name).toBe('find-skills');
+    expect(instBody.data.hash).toBe('bb'.repeat(32));
+    expect(instBody.data.fetchPath).toBe('snapshot');
+
+    const root = resolveUserSkillsDir();
+    expect(root).not.toBe(join(homedir(), '.config', 'neos-work', 'skills'));
+    const md = await readFile(join(root, 'find-skills', 'SKILL.md'), 'utf8');
+    expect(md).toContain('name: find-skills');
+
+    const noConfirm = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID }),
+    });
+    expect(noConfirm.status).toBe(400);
+    expect(((await noConfirm.json()) as { error: string }).error).toBe('confirm_required');
+
+    resetSkillsCatalogState();
+    const noSnap = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://github.com/vercel-labs/skills', confirm: true }),
+    });
+    expect(noSnap.status).toBe(422);
+    expect(((await noSnap.json()) as { error: string }).error).toBe('install_source_unsupported');
+  });
+
+  it('catalog flag false blocks search but not install; install flag blocks install', async () => {
+    setSetting('skills.remoteCatalogEnabled', 'false');
+    const search = await skills.request('/catalog/search?q=find');
+    expect(search.status).toBe(403);
+    expect(((await search.json()) as { error: string }).error).toBe('catalog_disabled');
+
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
+    const installed = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    expect(installed.status).toBe(200);
+
+    setSetting('skills.remoteInstallEnabled', 'false');
+    const blocked = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    expect(blocked.status).toBe(403);
+    expect(((await blocked.json()) as { error: string }).error).toBe('install_disabled');
+  });
+
+  it('plugin-only dest dir returns 409 occupied_plugin', async () => {
+    const dest = join(resolveUserSkillsDir(), 'find-skills');
+    await mkdir(dest, { recursive: true });
+    await writeFile(join(dest, 'open-design.json'), '{"schemaVersion":"od-plugin/v1"}', 'utf8');
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
+    const res = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe('occupied_plugin');
+  });
+
+  it('DELETE remains registry-only (filesRemoved: false, files stay)', async () => {
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
+    const installed = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    const instBody = await installed.json() as { data: { id: string } };
+    const del = await skills.request(`/${instBody.data.id}`, { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    const delBody = await del.json() as { data?: { filesRemoved?: boolean } };
+    expect(delBody.data?.filesRemoved).toBe(false);
+    const md = await readFile(join(resolveUserSkillsDir(), 'find-skills', 'SKILL.md'), 'utf8');
+    expect(md).toContain('name: find-skills');
+  });
+
+  it('GET /:id/content reads SKILL.md and 404s without leaking paths', async () => {
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
+    const installed = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    const id = ((await installed.json()) as { data: { id: string } }).data.id;
+    const res = await skills.request(`/${id}/content`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { data: { body: string } };
+    expect(body.data.body).toContain('name: find-skills');
+    expect(JSON.stringify(body)).not.toContain(homedir());
+
+    const missing = await skills.request(`/${crypto.randomUUID()}/content`);
+    expect(missing.status).toBe(404);
+    const missText = await missing.text();
+    expect(missText).not.toContain(homedir());
+    expect(missText).not.toContain('/.config/neos-work');
+  });
+
+  it('POST /:id/update returns not_remote for local skills', async () => {
+    const id = insertSkill(`${SKILL_NAME}_localupd`);
+    const res = await skills.request(`/${id}/update`, { method: 'POST' });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('not_remote');
   });
 });
