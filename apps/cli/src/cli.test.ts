@@ -190,6 +190,219 @@ describe('runCli expanded commands', () => {
     expect(lines.join('')).toContain('web-landing');
   });
 
+  it('skills find maps to catalog search', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({ url, method: init?.method });
+      if (url.includes('/api/skills/catalog/search')) {
+        return jsonResponse({
+          ok: true,
+          data: {
+            query: 'find',
+            searchType: 'fuzzy',
+            count: 1,
+            skills: [
+              {
+                id: 'vercel-labs/skills/find-skills',
+                name: 'find-skills',
+                source: 'vercel-labs/skills',
+                installs: 12,
+                installed: false,
+              },
+            ],
+          },
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['skills', 'find', 'find', '--owner', 'vercel-labs'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.url).toContain('/api/skills/catalog/search');
+    expect(calls[0]?.url).toContain('q=find');
+    expect(calls[0]?.url).toContain('owner=vercel-labs');
+    expect(lines.join('')).toContain('find-skills');
+    expect(lines.join('')).not.toMatch(/\bnpx\b/);
+  });
+
+  it('skills add without --yes exits 2', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, data: {} })) as unknown as typeof fetch;
+    const err: string[] = [];
+    const code = await runCli(['skills', 'add', 'vercel-labs/skills'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: () => {},
+      stderr: (s) => err.push(s),
+    });
+    expect(code).toBe(EXIT.USAGE);
+    expect(err.join('')).toContain('pass --yes to confirm');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('skills add with --yes posts confirm:true', async () => {
+    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({
+        url,
+        method: init?.method,
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return jsonResponse({
+        ok: true,
+        data: { id: 's1', name: 'find-skills', source: 'remote' },
+      });
+    });
+    const code = await runCli(
+      ['skills', 'add', 'vercel-labs/skills', '--skill', 'find-skills', '--scope', 'global', '--yes'],
+      {
+        fetchImpl,
+        env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+        stdout: () => {},
+        stderr: () => {},
+      },
+    );
+    expect(code).toBe(EXIT.OK);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url).toContain('/api/skills/install');
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({
+      source: 'vercel-labs/skills',
+      slug: 'find-skills',
+      scope: 'global',
+      confirm: true,
+    });
+  });
+
+  it('skills add skill_ambiguous exits 14 and prints candidates', async () => {
+    const fetchImpl = mockFetch(() =>
+      jsonResponse(
+        {
+          ok: false,
+          error: 'skill_ambiguous',
+          candidates: [
+            { slug: 'alpha', name: 'Alpha' },
+            { slug: 'beta', name: 'Beta' },
+          ],
+        },
+        400,
+      ),
+    );
+    const err: string[] = [];
+    const code = await runCli(['skills', 'add', 'vercel-labs/skills', '--yes'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: () => {},
+      stderr: (s) => err.push(s),
+    });
+    expect(code).toBe(EXIT.VALIDATION);
+    expect(err.join('')).toContain('--skill');
+    expect(err.join('')).toContain('alpha');
+    expect(err.join('')).toContain('beta');
+  });
+
+  it('skills update with no args updates all remotes', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({ url, method: init?.method });
+      if (url.endsWith('/api/skills') && (init?.method ?? 'GET') === 'GET') {
+        return jsonResponse({
+          ok: true,
+          data: [
+            { id: 'r1', name: 'find-skills', source: 'remote' },
+            { id: 'r2', name: 'other', source: 'remote' },
+            { id: 'b1', name: 'bundled', source: 'bundled' },
+          ],
+        });
+      }
+      if (url.includes('/update')) {
+        const id = url.split('/').at(-2);
+        return jsonResponse({ ok: true, data: { id, unchanged: false } });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['skills', 'update', '--yes'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    const updateUrls = calls.filter((c) => c.method === 'POST' && c.url.includes('/update')).map((c) => c.url);
+    expect(updateUrls).toHaveLength(2);
+    expect(updateUrls.some((u) => u.includes('/api/skills/r1/update'))).toBe(true);
+    expect(updateUrls.some((u) => u.includes('/api/skills/r2/update'))).toBe(true);
+    expect(updateUrls.some((u) => u.includes('/api/skills/b1/update'))).toBe(false);
+    expect(lines.join('')).toContain('r1');
+    expect(lines.join('')).toContain('r2');
+  });
+
+  it('skills update with no remotes exits 0', async () => {
+    const fetchImpl = mockFetch((url, init) => {
+      if (url.endsWith('/api/skills') && (init?.method ?? 'GET') === 'GET') {
+        return jsonResponse({ ok: true, data: [{ id: 'b1', name: 'bundled', source: 'bundled' }] });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['skills', 'update', '--yes'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('0 remotes updated');
+  });
+
+  it('skills remove without --yes exits 2', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, data: {} })) as unknown as typeof fetch;
+    const err: string[] = [];
+    const code = await runCli(['skills', 'remove', 'find-skills'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: () => {},
+      stderr: (s) => err.push(s),
+    });
+    expect(code).toBe(EXIT.USAGE);
+    expect(err.join('')).toContain('pass --yes to confirm');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('skills commands do not spawn npx', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const files = [
+      readFileSync(join(here, 'commands/skills.ts'), 'utf8'),
+      readFileSync(join(here, 'client.ts'), 'utf8'),
+    ];
+    for (const src of files) {
+      expect(src).not.toMatch(/\bnpx\b/);
+      expect(src).not.toMatch(/child_process/);
+      expect(src).not.toMatch(/\bspawn\s*\(/);
+    }
+    const fetchImpl = mockFetch((url) => {
+      if (url.includes('/api/skills/catalog/search')) {
+        return jsonResponse({ ok: true, data: { query: 'x', skills: [], count: 0 } });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const code = await runCli(['skills', 'find', 'xx'], {
+      fetchImpl,
+      env: { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' },
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+  });
+
   it('cli-agents list and catalog', async () => {
     const fetchImpl = mockFetch((url) => {
       if (url.includes('/api/cli-agents/catalog')) {

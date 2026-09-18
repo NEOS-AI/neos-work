@@ -49,7 +49,7 @@ export function positional(argv: string[], skipFlags = true): string[] {
     if (skipFlags && a.startsWith('-')) {
       // skip flag value if present
       const next = argv[i + 1];
-      if (next && !next.startsWith('-') && a !== '--json' && a !== '-h' && a !== '--help') {
+      if (next && !next.startsWith('-') && a !== '--json' && a !== '--yes' && a !== '-h' && a !== '--help') {
         i++;
       }
       continue;
