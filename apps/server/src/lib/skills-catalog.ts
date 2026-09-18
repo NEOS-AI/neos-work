@@ -1,7 +1,4 @@
-/**
- * skills.sh search / preview / audit (PR 2a snapshot-only).
- * Network is injected via fetchImpl — no catalogBaseUrl, no HTML scrape.
- */
+/** skills.sh search / preview / audit. Tests inject fetchImpl. */
 
 import { createHash } from 'node:crypto';
 
@@ -117,15 +114,7 @@ export function setSkillsCatalogFetchImpl(impl?: FetchImpl): void {
   injectedFetch = impl;
 }
 
-export function getSkillsCatalogFetchImpl(): FetchImpl | undefined {
-  return injectedFetch;
-}
-
-export function setSkillsCatalogNow(fn?: () => number): void {
-  nowFn = fn ?? (() => Date.now());
-}
-
-type CacheEntry<T> = { value: T; storedAt: number; bytes: number };
+type CacheEntry<T> = { value: T; storedAt: number };
 
 function createTtlCache<T>(max: number) {
   const map = new Map<string, CacheEntry<T>>();
@@ -133,9 +122,9 @@ function createTtlCache<T>(max: number) {
     get(key: string): CacheEntry<T> | undefined {
       return map.get(key);
     },
-    set(key: string, value: T, bytes: number): void {
+    set(key: string, value: T): void {
       if (map.has(key)) map.delete(key);
-      map.set(key, { value, storedAt: nowFn(), bytes });
+      map.set(key, { value, storedAt: nowFn() });
       while (map.size > max) {
         const oldest = map.keys().next().value;
         if (oldest === undefined) break;
@@ -412,9 +401,13 @@ function parseLimit(raw: unknown): number {
 
 function parseOwner(raw: unknown): string | undefined {
   if (raw === undefined || raw === null || raw === '') return undefined;
-  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return undefined;
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) {
+    throw new SkillsHttpError(400, 'invalid_id');
+  }
   const owner = raw.trim().toLowerCase();
-  return OWNER_RE.test(owner) ? owner : undefined;
+  if (!owner) return undefined;
+  if (!OWNER_RE.test(owner)) throw new SkillsHttpError(400, 'invalid_id');
+  return owner;
 }
 
 export async function searchSkillCatalog(
@@ -514,7 +507,7 @@ export async function searchSkillCatalog(
         count: hits.length,
         skills: markInstalled(hits),
       };
-      searchCache.set(cacheKey, { ...result, skills: hits as RemoteSkillHit[] }, buf.byteLength);
+      searchCache.set(cacheKey, { ...result, skills: hits as RemoteSkillHit[] });
       const ms = nowFn() - started;
       console.log(`skills-catalog search q_len=${q.length} count=${result.count} ms=${ms} cached=false`);
       return result;
@@ -550,7 +543,7 @@ export function isSafeSnapshotRelPath(raw: unknown): 'ok' | 'skip' | 'reject' {
   if (!n || n.length > 500) return 'reject';
   if (n.startsWith('/') || /^[A-Za-z]:/.test(n)) return 'reject';
   const segs = n.split('/');
-  if (segs.some((s) => s === '..' || s === '')) return 'reject';
+  if (segs.some((s) => s === '..' || s === '.' || s === '')) return 'reject';
   if (/[\x00-\x1f]/.test(n)) return 'reject';
   const lowerSegs = segs.map((s) => s.toLowerCase());
   if (lowerSegs[0] === '__macosx' || lowerSegs.includes('.git') || lowerSegs.includes('node_modules')) {
@@ -678,13 +671,7 @@ export async function previewRemoteSkill(
     return cached.value;
   }
 
-  let src: InstallSource;
-  try {
-    src = parseInstallSource(id ? { id } : { url });
-  } catch (err) {
-    if (err instanceof SkillsHttpError) throw new SkillsHttpError(502, 'upstream_unavailable');
-    throw err;
-  }
+  const src = parseInstallSource(id ? { id } : { url });
 
   const snap = await fetchSkillSnapshot(src, { fetchImpl: resolveFetch(opts), forInstall: false });
   const skillFile = snap.files.find((f) => f.path === 'SKILL.md' || f.path.endsWith('/SKILL.md'));
@@ -719,7 +706,7 @@ export async function previewRemoteSkill(
   if (license) result.license = license;
 
   const bytes = Buffer.byteLength(JSON.stringify(result), 'utf8');
-  if (bytes <= PREVIEW_CACHE_ENTRY_BYTES) previewCache.set(cacheKey, result, bytes);
+  if (bytes <= PREVIEW_CACHE_ENTRY_BYTES) previewCache.set(cacheKey, result);
   return result;
 }
 
@@ -778,7 +765,7 @@ export async function auditRemoteSkill(
       fetchImpl: resolveFetch(opts),
     });
     if (res.status !== 200) {
-      auditCache.set(id, unavailable, 32);
+      auditCache.set(id, unavailable);
       return unavailable;
     }
     const buf = Buffer.from(await res.arrayBuffer());
@@ -786,14 +773,14 @@ export async function auditRemoteSkill(
     try {
       json = JSON.parse(buf.toString('utf8'));
     } catch {
-      auditCache.set(id, unavailable, 32);
+      auditCache.set(id, unavailable);
       return unavailable;
     }
     const result: CatalogAuditResult = { audits: parseAudits(json) };
-    auditCache.set(id, result, buf.byteLength);
+    auditCache.set(id, result);
     return result;
   } catch {
-    auditCache.set(id, unavailable, 32);
+    auditCache.set(id, unavailable);
     return unavailable;
   } finally {
     releaseBudget('audit');

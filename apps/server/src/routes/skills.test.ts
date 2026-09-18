@@ -518,4 +518,54 @@ describe('skills catalog + snapshot install routes', () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe('not_remote');
   });
+
+  it('scan keeps remote provenance and forces featured false', async () => {
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse({
+      files: [{
+        path: 'SKILL.md',
+        contents: `---
+name: find-skills
+description: fixture
+featured: true
+---
+# Find
+`,
+      }],
+      hash: FIND_SKILLS_GOLDEN_HASH,
+    })));
+    const installed = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    expect(installed.status).toBe(200);
+    const dest = join(resolveUserSkillsDir(), 'find-skills', 'SKILL.md');
+    await writeFile(dest, `---
+name: find-skills
+description: after disk edit
+featured: true
+---
+# Edited
+`, 'utf8');
+
+    const scan = await skills.request('/scan', { method: 'POST' });
+    expect(scan.status).toBe(200);
+
+    const list = await skills.request('/');
+    const body = await list.json() as {
+      data: Array<{
+        name: string;
+        featured?: boolean;
+        remoteId?: string;
+        remoteHash?: string;
+        source: string;
+      }>;
+    };
+    const found = body.data.find((s) => s.name === 'find-skills');
+    expect(found).toBeTruthy();
+    expect(found!.source).toBe('remote');
+    expect(found!.featured).toBe(false);
+    expect(found!.remoteId).toBe(FIND_SKILLS_ID);
+    expect(found!.remoteHash).toBe(FIND_SKILLS_GOLDEN_HASH);
+  });
 });

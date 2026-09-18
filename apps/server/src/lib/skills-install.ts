@@ -1,11 +1,8 @@
-/**
- * Snapshot-only remote skill ingest (PR 2a).
- * zipball / well-known / direct land in PR 2b.
- */
+/** Snapshot-only remote skill ingest. */
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
-import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import * as fsp from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 import {
@@ -26,7 +23,6 @@ import * as sessionsDb from '../db/sessions.js';
 import { publicPathTail } from './path-safety.js';
 import {
   fetchSkillSnapshot,
-  getSkillsCatalogFetchImpl,
   isRemoteInstallEnabled,
   type SkillSnapshot,
   type SnapshotFile,
@@ -39,6 +35,14 @@ import {
 } from './skills-source.js';
 
 const ROOT_WHITELIST_TOP = new Set(['skill.md', 'references', 'assets', 'scripts', 'examples']);
+
+type RenameFn = (from: string, to: string) => Promise<unknown>;
+let renameFn: RenameFn = (from, to) => fsp.rename(from, to);
+
+/** Test seam for bak restore when rename(tmp → final) fails. */
+export function setSkillsRenameForTests(fn?: RenameFn): void {
+  renameFn = fn ?? ((from, to) => fsp.rename(from, to));
+}
 
 export type SkillUpsertFn = (params: {
   name: string;
@@ -112,13 +116,13 @@ function resolveInstallRoot(scope: 'global' | 'workspace'): string {
   return resolveUserSkillsDir();
 }
 
-export async function pathHasEscapingSymlink(root: string, target: string): Promise<boolean> {
+async function pathHasEscapingSymlink(root: string, target: string): Promise<boolean> {
   if (!isPathInside(root, target)) return true;
   let cur = resolve(target);
   const stop = resolve(root);
   for (let i = 0; i < 64; i++) {
     try {
-      const st = await lstat(cur);
+      const st = await fsp.lstat(cur);
       if (st.isSymbolicLink()) {
         try {
           const real = realpathSync(cur);
@@ -147,7 +151,7 @@ const ALLOWED_CONTENT_ROOTS = (): string[] => {
   return roots;
 };
 
-export async function assertReadableSkillFile(absPath: string): Promise<string | null> {
+async function assertReadableSkillFile(absPath: string): Promise<string | null> {
   if (typeof absPath !== 'string' || /[\0\r\n]/.test(absPath) || !absPath.trim()) return null;
   const target = resolve(absPath.trim());
   const roots = ALLOWED_CONTENT_ROOTS();
@@ -161,7 +165,7 @@ export async function assertReadableSkillFile(absPath: string): Promise<string |
   if (!root) return null;
   if (await pathHasEscapingSymlink(root, target)) return null;
   try {
-    const st = await lstat(target);
+    const st = await fsp.lstat(target);
     if (st.isSymbolicLink() || !st.isFile()) return null;
   } catch {
     return null;
@@ -261,7 +265,7 @@ async function classifyInstallOccupancy(
   const occ = await classifyOccupancy(dir, expectedRemoteId);
   if (occ === 'occupied_skill' || occ === 'occupied_unknown') {
     try {
-      const md = await readFile(join(dir, 'SKILL.md'), 'utf8');
+      const md = await fsp.readFile(join(dir, 'SKILL.md'), 'utf8');
       if (isCrystallizeMarkdown(md)) return 'occupied_crystallize';
     } catch {
       /* no skill md */
@@ -272,20 +276,33 @@ async function classifyInstallOccupancy(
 
 async function writeTree(tmp: string, files: SnapshotFile[], root: string): Promise<void> {
   if (!isPathInside(root, tmp)) throw new SkillsHttpError(502, 'ssrf_blocked');
-  await mkdir(tmp, { recursive: true });
+  await fsp.mkdir(tmp, { recursive: true });
   for (const file of files) {
     const dest = resolve(tmp, file.path);
     if (!isPathInside(tmp, dest) || !isPathInside(root, dest)) {
       throw new SkillsHttpError(502, 'invalid_upstream');
     }
-    await mkdir(dirname(dest), { recursive: true });
+    await fsp.mkdir(dirname(dest), { recursive: true });
     try {
-      const st = await lstat(dest);
+      const st = await fsp.lstat(dest);
       if (st.isSymbolicLink()) throw new SkillsHttpError(502, 'invalid_upstream');
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     }
-    await writeFile(dest, file.contents, 'utf8');
+    await fsp.writeFile(dest, file.contents, 'utf8');
+  }
+}
+
+async function copyPluginManifest(finalDir: string, tmp: string, root: string): Promise<void> {
+  const src = join(finalDir, 'open-design.json');
+  const dest = join(tmp, 'open-design.json');
+  if (!isPathInside(finalDir, src) || !isPathInside(tmp, dest) || !isPathInside(root, dest)) return;
+  try {
+    const st = await fsp.lstat(src);
+    if (st.isSymbolicLink() || !st.isFile()) return;
+    await fsp.writeFile(dest, await fsp.readFile(src));
+  } catch {
+    // no plugin marker
   }
 }
 
@@ -302,20 +319,23 @@ async function atomicReplace(
   let movedAside = false;
   try {
     if (existsSync(finalDir)) {
-      await rename(finalDir, bak);
+      await renameFn(finalDir, bak);
       movedAside = true;
     }
-    await rename(tmp, finalDir);
+    await renameFn(tmp, finalDir);
     try {
       commit();
     } catch (err) {
-      await rm(finalDir, { recursive: true, force: true }).catch(() => {});
-      if (movedAside) await rename(bak, finalDir).catch(() => {});
+      await fsp.rm(finalDir, { recursive: true, force: true }).catch(() => {});
+      if (movedAside) await renameFn(bak, finalDir).catch(() => {});
       throw err;
     }
-    if (movedAside) await rm(bak, { recursive: true, force: true }).catch(() => {});
+    if (movedAside) await fsp.rm(bak, { recursive: true, force: true }).catch(() => {});
   } catch (err) {
-    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+    if (movedAside && !existsSync(finalDir)) {
+      await renameFn(bak, finalDir).catch(() => {});
+    }
+    await fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
     throw err;
   }
 }
@@ -327,6 +347,15 @@ function selectFilesForPackage(cand: SkillCandidate): SnapshotFile[] {
   return hasSkill ? filtered : cand.files;
 }
 
+function detectInstallScope(packageDir: string): 'global' | 'workspace' {
+  if (isPathInside(resolveUserSkillsDir(), packageDir)) return 'global';
+  const ws = sessionsDb.listWorkspaces()[0];
+  if (typeof ws?.path === 'string' && ws.path.trim() && !/[\0\r\n]/.test(ws.path)) {
+    if (isPathInside(resolveWorkspaceSkillsDir(ws.path.trim()), packageDir)) return 'workspace';
+  }
+  return 'global';
+}
+
 async function ingestSnapshot(opts: {
   src: InstallSource;
   snap: SkillSnapshot;
@@ -334,6 +363,7 @@ async function ingestSnapshot(opts: {
   includeInternal: boolean;
   upsert: SkillUpsertFn;
   existingSidecar?: SkillProvenance | null;
+  pinDir?: string;
 }): Promise<InstallRemoteResult> {
   const { src, snap, scope, includeInternal, upsert } = opts;
   const cands = discoverSnapshotSkills(snap.files, src.slug ?? snap.slug);
@@ -356,9 +386,6 @@ async function ingestSnapshot(opts: {
     if (!existingRemoteId) {
       if (existing.source === 'bundled') {
         shadowed = 'bundled';
-      } else if (existing.source === 'remote' || existing.source === 'crystallize'
-        || existing.source === 'local' || existing.source === 'global') {
-        throw new SkillsHttpError(409, 'name_conflict');
       } else {
         throw new SkillsHttpError(409, 'name_conflict');
       }
@@ -366,16 +393,20 @@ async function ingestSnapshot(opts: {
   }
 
   const root = resolveInstallRoot(scope);
-  await mkdir(root, { recursive: true });
+  await fsp.mkdir(root, { recursive: true });
+
+  if (existing && existing.source !== 'bundled' && !isPathInside(root, existing.path)) {
+    throw new SkillsHttpError(409, 'name_conflict');
+  }
 
   let dirName = sanitizeSkillDirName(parsed.manifest.name || cand.slug);
   if (!dirName) throw new SkillsHttpError(400, 'invalid_source');
 
-  let finalDir = resolve(root, dirName);
+  let finalDir = opts.pinDir ? resolve(opts.pinDir) : resolve(root, dirName);
   if (!isPathInside(root, finalDir)) throw new SkillsHttpError(400, 'invalid_source');
 
   let occ = await classifyInstallOccupancy(finalDir, remoteId);
-  if (occ === 'occupied_remote') {
+  if (!opts.pinDir && occ === 'occupied_remote') {
     const retry = `${sanitizeSkillDirName(`${src.owner}/${src.repo}`)}--${sanitizeSkillDirName(cand.slug)}`;
     if (retry && retry !== dirName) {
       dirName = retry;
@@ -421,11 +452,12 @@ async function ingestSnapshot(opts: {
 
   await writeTree(tmp, files, root);
   await writeSkillProvenance(tmp, provenance);
+  if (existsSync(finalDir)) await copyPluginManifest(finalDir, tmp, root);
 
   const skillMdPath = join(tmp, 'SKILL.md');
-  const written = parseSkillFile(await readFile(skillMdPath, 'utf8'), skillMdPath, 'remote');
+  const written = parseSkillFile(await fsp.readFile(skillMdPath, 'utf8'), skillMdPath, 'remote');
   if (!written) {
-    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+    await fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
     throw new SkillsHttpError(404, 'no_skills');
   }
 
@@ -469,7 +501,7 @@ async function ingestSnapshot(opts: {
 
 export async function installRemoteSkill(
   input: InstallRemoteInput,
-  opts: { upsert: SkillUpsertFn; fetchImpl?: typeof fetch },
+  opts: { upsert: SkillUpsertFn },
 ): Promise<InstallRemoteResult> {
   if (input.confirm !== true) throw new SkillsHttpError(400, 'confirm_required');
   if (!isRemoteInstallEnabled()) throw new SkillsHttpError(403, 'install_disabled');
@@ -480,10 +512,7 @@ export async function installRemoteSkill(
   }
 
   const scope = resolveScope(input.scope);
-  const snap = await fetchSkillSnapshot(src, {
-    fetchImpl: opts.fetchImpl ?? getSkillsCatalogFetchImpl(),
-    forInstall: true,
-  });
+  const snap = await fetchSkillSnapshot(src, { forInstall: true });
   return ingestSnapshot({
     src,
     snap,
@@ -495,7 +524,7 @@ export async function installRemoteSkill(
 
 export async function updateRemoteSkill(
   skillId: string,
-  opts: { upsert: SkillUpsertFn; fetchImpl?: typeof fetch },
+  opts: { upsert: SkillUpsertFn },
 ): Promise<InstallRemoteResult> {
   if (!isRemoteInstallEnabled()) throw new SkillsHttpError(403, 'install_disabled');
   const row = findSkillById(skillId);
@@ -504,6 +533,8 @@ export async function updateRemoteSkill(
   const packageDir = dirname(resolve(row.path));
   const sidecar = await readSkillProvenance(packageDir);
   if (!sidecar) throw new SkillsHttpError(400, 'not_remote');
+
+  const scope = detectInstallScope(packageDir);
 
   let src: InstallSource;
   try {
@@ -520,10 +551,7 @@ export async function updateRemoteSkill(
     throw new SkillsHttpError(422, 'install_source_unsupported');
   }
 
-  const snap = await fetchSkillSnapshot(src, {
-    fetchImpl: opts.fetchImpl ?? getSkillsCatalogFetchImpl(),
-    forInstall: true,
-  });
+  const snap = await fetchSkillSnapshot(src, { forInstall: true });
   if (sidecar.hash && snap.hash && sidecar.hash === snap.hash) {
     return {
       id: row.id,
@@ -531,7 +559,7 @@ export async function updateRemoteSkill(
       source: 'remote',
       version: null,
       hash: sidecar.hash,
-      scope: 'global',
+      scope,
       path: publicPathTail(row.path),
       fetchPath: 'snapshot',
       unchanged: true,
@@ -541,19 +569,20 @@ export async function updateRemoteSkill(
   return ingestSnapshot({
     src,
     snap,
-    scope: 'global',
+    scope,
     includeInternal: true,
     upsert: opts.upsert,
     existingSidecar: sidecar,
+    pinDir: packageDir,
   });
 }
 
-export const CONTENT_BODY_MAX = 32 * 1024;
+const CONTENT_BODY_MAX = 32 * 1024;
 
 export async function readSkillContent(absPath: string): Promise<{ body: string; truncated: boolean } | null> {
   const safe = await assertReadableSkillFile(absPath);
   if (!safe) return null;
-  const buf = await readFile(safe);
+  const buf = await fsp.readFile(safe);
   const truncated = buf.byteLength > CONTENT_BODY_MAX;
   const slice = truncated ? buf.subarray(0, CONTENT_BODY_MAX) : buf;
   return { body: slice.toString('utf8'), truncated };

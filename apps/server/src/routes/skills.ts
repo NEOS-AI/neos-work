@@ -7,7 +7,7 @@ import type { Context } from 'hono';
 
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { discoverSkills, resolveBundledSkillsDir } from '@neos-work/core';
+import { discoverSkills, readSkillProvenance, resolveBundledSkillsDir } from '@neos-work/core';
 import { safeError } from '../lib/errors.js';
 import { getDb } from '../db/schema.js';
 import * as db from '../db/sessions.js';
@@ -378,9 +378,11 @@ skills.post('/scan', async (c) => {
     });
 
     for (const skill of discovered) {
-      // Persist package metadata alongside frontmatter for UI package view
+      const sidecar = skill.packageDir ? await readSkillProvenance(skill.packageDir) : null;
       const manifestPayload = {
         ...skill.manifest,
+        featured: sidecar ? false : skill.manifest.featured,
+        ...(sidecar ? { provenance: sidecar } : {}),
         packageDir: skill.packageDir,
         examples: skill.examples,
         assets: skill.assets,
@@ -389,7 +391,7 @@ skills.post('/scan', async (c) => {
       upsertSkill({
         name: skill.manifest.name,
         description: skill.manifest.description,
-        source: skill.source,
+        source: sidecar ? 'remote' : skill.source,
         path: skill.path,
         version: skill.manifest.version ?? skill.manifest.metadata?.version,
         manifestJson: JSON.stringify(manifestPayload),
@@ -444,7 +446,7 @@ skills.post('/:id/toggle', async (c) => {
   return c.json({ ok: true });
 });
 
-// DELETE /api/skills/:id — registry-only (PR 2a; file delete is PR 3)
+// DELETE /api/skills/:id — registry-only
 skills.delete('/:id', (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);

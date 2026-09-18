@@ -6,6 +6,7 @@ import {
   ageSkillsSearchCache,
   auditRemoteSkill,
   computeSkillFolderHash,
+  isSafeSnapshotRelPath,
   previewRemoteSkill,
   resetSkillsCatalogState,
   searchSkillCatalog,
@@ -130,6 +131,17 @@ describe('searchSkillCatalog', () => {
       code: 'catalog_disabled',
     });
   });
+
+  it('rejects a present but invalid owner instead of searching unfiltered', async () => {
+    await expect(searchSkillCatalog({ q: 'find', owner: 'Not_Valid' })).rejects.toMatchObject({
+      http: 400,
+      code: 'invalid_id',
+    });
+    await expect(searchSkillCatalog({ q: 'find', owner: 'bad\nowner' })).rejects.toMatchObject({
+      http: 400,
+      code: 'invalid_id',
+    });
+  });
 });
 
 describe('previewRemoteSkill', () => {
@@ -147,6 +159,13 @@ describe('previewRemoteSkill', () => {
     expect(data.license).toBe('MIT');
   });
 
+  it('keeps 400 invalid_source for a malformed catalog id', async () => {
+    await expect(previewRemoteSkill({ id: 'not-a-github-id' })).rejects.toMatchObject({
+      http: 400,
+      code: 'invalid_source',
+    });
+  });
+
   it('returns mocked 502 upstream_unavailable for frontend-design without fetchPath', async () => {
     setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse({ error: 'not_found' }, 404)));
     try {
@@ -159,6 +178,15 @@ describe('previewRemoteSkill', () => {
       expect(e.code).toBe('upstream_unavailable');
       expect(e.extra.fetchPath).toBeUndefined();
     }
+  });
+});
+
+describe('isSafeSnapshotRelPath', () => {
+  it('rejects . and .. segments', () => {
+    expect(isSafeSnapshotRelPath('.')).toBe('reject');
+    expect(isSafeSnapshotRelPath('foo/.')).toBe('reject');
+    expect(isSafeSnapshotRelPath('../SKILL.md')).toBe('reject');
+    expect(isSafeSnapshotRelPath('SKILL.md')).toBe('ok');
   });
 });
 
