@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 
-import { resolveUserSkillsDir } from '@neos-work/core';
+import { resolveUserSkillsDir, writeSkillProvenance } from '@neos-work/core';
 
 import { getDb } from '../db/schema.js';
 import { deleteSetting, setSetting } from '../db/settings.js';
@@ -14,6 +14,11 @@ import {
   FIND_SKILLS_SEARCH_HIT,
   FIND_SKILLS_SNAPSHOT,
 } from '../lib/fixtures/find-skills-snapshot.js';
+import {
+  FRONTEND_DESIGN_ID,
+  FRONTEND_DESIGN_SKILL_MD,
+} from '../lib/fixtures/frontend-design-skill.js';
+import { makeSkillZip, skillMd } from '../lib/fixtures/skill-zip.js';
 import { resetSkillsCatalogState, setSkillsCatalogFetchImpl } from '../lib/skills-catalog.js';
 import { skills, upsertSkill } from './skills.js';
 
@@ -337,8 +342,9 @@ describe('skills catalog + snapshot install routes', () => {
     resetSkillsCatalogState();
     try { deleteSetting('skills.remoteCatalogEnabled'); } catch { /* ignore */ }
     try { deleteSetting('skills.remoteInstallEnabled'); } catch { /* ignore */ }
-    getDb().prepare("DELETE FROM skill WHERE name = 'find-skills' OR name LIKE '_cat_route_%'").run();
+    getDb().prepare("DELETE FROM skill WHERE name IN ('find-skills', 'code-review') OR name LIKE '_cat_route_%'").run();
     await rm(join(resolveUserSkillsDir(), 'find-skills'), { recursive: true, force: true }).catch(() => {});
+    await rm(join(resolveUserSkillsDir(), 'code-review'), { recursive: true, force: true }).catch(() => {});
   });
 
   it('does not add catalog or install routes to isAuthExemptPath', () => {
@@ -379,10 +385,15 @@ describe('skills catalog + snapshot install routes', () => {
     expect(((await missing.json()) as { error: string }).error).toBe('upstream_unavailable');
   });
 
-  it('GET /catalog/preview find-skills snapshot and frontend-design 502', async () => {
+  it('GET /catalog/preview find-skills snapshot and frontend-design raw', async () => {
     setSkillsCatalogFetchImpl(mockFetch((url) => {
-      if (url.includes('frontend-design')) return jsonResponse({ error: 'not_found' }, 404);
-      return jsonResponse(FIND_SKILLS_SNAPSHOT);
+      if (url.includes('codeload.github.com')) throw new Error('preview must not zip');
+      if (url.includes('/api/download/anthropics/')) return jsonResponse({ error: 'not_found' }, 404);
+      if (url.includes('raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md')) {
+        return new Response(FRONTEND_DESIGN_SKILL_MD, { status: 200 });
+      }
+      if (url.includes('/api/download/')) return jsonResponse(FIND_SKILLS_SNAPSHOT);
+      return jsonResponse({ error: 'not_found' }, 404);
     }));
     const ok = await skills.request(`/catalog/preview?id=${encodeURIComponent(FIND_SKILLS_ID)}`);
     expect(ok.status).toBe(200);
@@ -391,14 +402,14 @@ describe('skills catalog + snapshot install routes', () => {
     expect(body.data.hash).toBe(FIND_SKILLS_GOLDEN_HASH);
     expect(body.data.trust).toBe('unverified');
 
-    const missing = await skills.request('/catalog/preview?id=anthropics/skills/frontend-design');
-    expect(missing.status).toBe(502);
-    const missBody = await missing.json() as { error: string; fetchPath?: string };
-    expect(missBody.error).toBe('upstream_unavailable');
-    expect(missBody.fetchPath).toBeUndefined();
+    const raw = await skills.request(`/catalog/preview?id=${encodeURIComponent(FRONTEND_DESIGN_ID)}`);
+    expect(raw.status).toBe(200);
+    const rawBody = await raw.json() as { data: { fetchPath?: string; name: string } };
+    expect(rawBody.data.fetchPath).toBe('direct');
+    expect(rawBody.data.name).toBe('frontend-design');
   });
 
-  it('POST /install snapshot, hash mismatch still installs, github without snapshot 422, confirm 400', async () => {
+  it('POST /install snapshot, hash mismatch still installs, zipball fallback, confirm 400', async () => {
     setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse({
       ...FIND_SKILLS_SNAPSHOT,
       hash: 'bb'.repeat(32),
@@ -428,13 +439,21 @@ describe('skills catalog + snapshot install routes', () => {
     expect(((await noConfirm.json()) as { error: string }).error).toBe('confirm_required');
 
     resetSkillsCatalogState();
+    const zip = await makeSkillZip([
+      { name: 'repo/skills/find-skills/SKILL.md', content: FIND_SKILLS_SNAPSHOT.files[0]!.contents },
+    ]);
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.includes('/api/download/')) return jsonResponse({ error: 'not_found' }, 404);
+      if (url.includes('codeload.github.com')) return new Response(zip, { status: 200 });
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
     const noSnap = await skills.request('/install', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url: 'https://github.com/vercel-labs/skills', confirm: true }),
+      body: JSON.stringify({ url: 'https://github.com/vercel-labs/skills', slug: 'find-skills', confirm: true }),
     });
-    expect(noSnap.status).toBe(422);
-    expect(((await noSnap.json()) as { error: string }).error).toBe('install_source_unsupported');
+    expect(noSnap.status).toBe(200);
+    expect(((await noSnap.json()) as { data: { fetchPath: string } }).data.fetchPath).toBe('zipball');
   });
 
   it('catalog flag false blocks search but not install; install flag blocks install', async () => {
@@ -567,5 +586,53 @@ featured: true
     expect(found!.featured).toBe(false);
     expect(found!.remoteId).toBe(FIND_SKILLS_ID);
     expect(found!.remoteHash).toBe(FIND_SKILLS_GOLDEN_HASH);
+  });
+
+  it('scan prunes a missing remote package and restores bundled of the same name', async () => {
+    const root = resolveUserSkillsDir();
+    const dest = join(root, 'code-review');
+    await mkdir(dest, { recursive: true });
+    await writeFile(join(dest, 'SKILL.md'), skillMd('code-review'), 'utf8');
+    await writeSkillProvenance(dest, {
+      schemaVersion: 'neos-skill-source/v1',
+      origin: 'github',
+      id: 'acme/tmp/code-review',
+      source: 'acme/tmp',
+      slug: 'code-review',
+      trust: 'unverified',
+      installedAt: new Date().toISOString(),
+    });
+    upsertSkill({
+      name: 'code-review',
+      description: 'remote copy',
+      source: 'remote',
+      path: join(dest, 'SKILL.md'),
+      manifestJson: JSON.stringify({ featured: false }),
+    });
+    await rm(join(dest, 'SKILL.md'), { force: true });
+
+    const scan = await skills.request('/scan', { method: 'POST' });
+    expect(scan.status).toBe(200);
+    const list = await skills.request('/');
+    const body = await list.json() as { data: Array<{ name: string; source: string }> };
+    const found = body.data.find((s) => s.name === 'code-review');
+    expect(found).toBeTruthy();
+    expect(found!.source).toBe('bundled');
+  });
+
+  it('scan does not prune a remote row whose path is outside the current root', async () => {
+    const id = crypto.randomUUID();
+    getDb()
+      .prepare(
+        `INSERT INTO skill (id, name, description, source, path, version, enabled, manifest_json)
+         VALUES (?, ?, ?, 'remote', ?, NULL, 1, NULL)`,
+      )
+      .run(id, '_cat_route_stale_remote', 'stale', '/tmp/not-this-data-dir/SKILL.md');
+    const scan = await skills.request('/scan', { method: 'POST' });
+    expect(scan.status).toBe(200);
+    const row = getDb().prepare('SELECT id, source FROM skill WHERE id = ?').get(id) as
+      | { id: string; source: string }
+      | undefined;
+    expect(row?.source).toBe('remote');
   });
 });

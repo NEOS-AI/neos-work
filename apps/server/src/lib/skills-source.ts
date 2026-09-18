@@ -1,7 +1,9 @@
 /**
- * parseInstallSource + SOURCE_ALIASES (PLAN_SKILLS_SH_MIGRATION Appendix B.0).
+ * parseInstallSource + SOURCE_ALIASES + skill-folder discovery (Appendix B.0 / B.2).
  * Kind order: github → direct SKILL.md URL → well-known → invalid_source.
  */
+
+import { parseSkillFile } from '@neos-work/core';
 
 export const SOURCE_ALIASES: Readonly<Record<string, string>> = {
   'coinbase/agentWallet': 'coinbase/agentic-wallet-skills',
@@ -252,8 +254,118 @@ export function parseInstallSource(input: ParseInstallSourceInput): InstallSourc
   return parsed;
 }
 
-/** Snapshot download path segments — github + slug only in PR 2a. */
+/** Snapshot download path — github + slug, skipped when an explicit ref is set. */
 export function snapshotDownloadPath(src: InstallSource): string | null {
   if (src.kind !== 'github' || !src.owner || !src.repo || !src.slug || src.ref) return null;
   return `${src.owner}/${src.repo}/${src.slug}`;
+}
+
+export type SkillFileBlob = { path: string; contents: string | Buffer };
+
+export type SkillFolderCandidate = {
+  slug: string;
+  name: string;
+  files: SkillFileBlob[];
+  skillMd: string;
+  relDir: string;
+};
+
+const SKILL_CONTAINERS = [
+  'skills',
+  'skills/.curated',
+  'skills/.experimental',
+  'skills/.system',
+] as const;
+
+function blobText(contents: string | Buffer): string {
+  return typeof contents === 'string' ? contents : contents.toString('utf8');
+}
+
+function filesUnder(files: SkillFileBlob[], relDir: string): SkillFileBlob[] {
+  if (!relDir) return files.map((f) => ({ path: f.path, contents: f.contents }));
+  const prefix = `${relDir}/`;
+  const out: SkillFileBlob[] = [];
+  for (const f of files) {
+    if (f.path === relDir) continue;
+    if (!f.path.startsWith(prefix)) continue;
+    out.push({ path: f.path.slice(prefix.length), contents: f.contents });
+  }
+  return out;
+}
+
+function candidateFrom(
+  files: SkillFileBlob[],
+  relDir: string,
+  skillMdPath: string,
+  skillMd: string,
+  fallbackSlug: string,
+): SkillFolderCandidate {
+  const parsed = parseSkillFile(skillMd, skillMdPath, 'remote');
+  const dirBase = relDir ? (relDir.split('/').pop() ?? fallbackSlug) : fallbackSlug;
+  const slug = dirBase || fallbackSlug;
+  return {
+    slug,
+    name: parsed?.manifest.name || slug,
+    files: filesUnder(files, relDir),
+    skillMd,
+    relDir,
+  };
+}
+
+/**
+ * B.2: root SKILL.md (1 skill) else known containers at depth ≤ 3.
+ * No --full-depth / marketplace.json walk.
+ */
+export function discoverSkillFolders(
+  files: SkillFileBlob[],
+  fallbackSlug: string,
+): SkillFolderCandidate[] {
+  const byPath = new Map<string, SkillFileBlob>();
+  for (const f of files) {
+    const p = f.path.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!p) continue;
+    byPath.set(p, { path: p, contents: f.contents });
+  }
+  const all = [...byPath.values()];
+  const root = byPath.get('SKILL.md');
+  if (root) {
+    return [candidateFrom(all, '', 'SKILL.md', blobText(root.contents), fallbackSlug || 'skill')];
+  }
+
+  const seen = new Set<string>();
+  const out: SkillFolderCandidate[] = [];
+  for (const container of SKILL_CONTAINERS) {
+    const prefix = `${container}/`;
+    for (const f of all) {
+      if (!f.path.startsWith(prefix) || !f.path.endsWith('/SKILL.md')) continue;
+      const rest = f.path.slice(prefix.length);
+      const segs = rest.split('/');
+      if (segs.length !== 2 || segs[1] !== 'SKILL.md' || !segs[0]) continue;
+      const child = segs[0];
+      const relDir = `${container}/${child}`;
+      if (seen.has(relDir.toLowerCase())) continue;
+      seen.add(relDir.toLowerCase());
+      out.push(candidateFrom(all, relDir, f.path, blobText(f.contents), child));
+    }
+  }
+  return out;
+}
+
+export function pickSkillFolder(
+  cands: SkillFolderCandidate[],
+  slug?: string,
+): SkillFolderCandidate {
+  if (cands.length === 0) throw new SkillsHttpError(404, 'no_skills');
+  if (!slug) {
+    if (cands.length === 1) return cands[0]!;
+    throw new SkillsHttpError(400, 'skill_ambiguous', {
+      candidates: cands.map((c) => ({ slug: c.slug, name: c.name })),
+    });
+  }
+  const want = slug.toLowerCase();
+  const hit = cands.find(
+    (c) => c.slug.toLowerCase() === want || c.name.toLowerCase() === want,
+  );
+  if (!hit) throw new SkillsHttpError(404, 'skill_not_in_source');
+  return hit;
 }

@@ -1,5 +1,5 @@
 /**
- * Skills API — catalog search/preview/audit, snapshot install, scan, toggle, delete.
+ * Skills API — catalog search/preview/audit, remote install, scan, toggle, delete.
  */
 
 import { Hono } from 'hono';
@@ -19,7 +19,12 @@ import {
   searchSkillCatalog,
   SkillsHttpError,
 } from '../lib/skills-catalog.js';
-import { installRemoteSkill, readSkillContent, updateRemoteSkill } from '../lib/skills-install.js';
+import {
+  installRemoteSkill,
+  pruneMissingRemoteSkills,
+  readSkillContent,
+  updateRemoteSkill,
+} from '../lib/skills-install.js';
 
 /** Monorepo `skills/` catalog (apps/server/src/routes → repo root). */
 const REPO_SKILLS_CANDIDATE = resolve(
@@ -377,7 +382,10 @@ skills.post('/scan', async (c) => {
       includeGlobal: true,
     });
 
+    const keepRemoteNames = await pruneMissingRemoteSkills();
+
     for (const skill of discovered) {
+      if (keepRemoteNames.has(skill.manifest.name.toLowerCase())) continue;
       const sidecar = skill.packageDir ? await readSkillProvenance(skill.packageDir) : null;
       const manifestPayload = {
         ...skill.manifest,
