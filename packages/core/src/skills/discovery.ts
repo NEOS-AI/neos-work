@@ -6,15 +6,15 @@
  * Same manifest.name: higher-priority source wins (user shadows bundled).
  */
 
-import { readdir, readFile, lstat } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
 import { existsSync } from 'node:fs';
+import { lstat, readdir, readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 import type { Skill, SkillExampleCard, SkillSource } from '@neos-work/shared';
-import { parseSkillFile } from './parser.js';
 
-const GLOBAL_SKILL_DIR = join(homedir(), '.config', 'neos-work', 'skills');
+import { parseSkillFile } from './parser.js';
+import { resolveUserSkillsDir, resolveWorkspaceSkillsDir } from './paths.js';
+import { readSkillProvenance } from './provenance.js';
 
 const ENTRY_MAX = 500;
 const FILE_MAX_BYTES = 1 * 1024 * 1024;
@@ -26,17 +26,17 @@ export interface DiscoverSkillsOptions {
   bundledRoot?: string | null;
   /** Include bundled catalog (default true). */
   includeBundled?: boolean;
-  /** Include ~/.config/neos-work/skills (default true). */
+  /** Include the user skills root from resolveUserSkillsDir() (default true). */
   includeGlobal?: boolean;
 }
 
 function isSafeRelName(name: string): boolean {
   return (
-    typeof name === 'string'
-    && name.length > 0
-    && name.length <= 200
-    && !name.startsWith('.')
-    && !/[\0\r\n/\\]/.test(name)
+    typeof name === 'string' &&
+    name.length > 0 &&
+    name.length <= 200 &&
+    !name.startsWith('.') &&
+    !/[\0\r\n/\\]/.test(name)
   );
 }
 
@@ -85,10 +85,7 @@ async function deriveExampleCards(
   return cards;
 }
 
-async function loadPackageSkill(
-  packageDir: string,
-  source: SkillSource,
-): Promise<Skill | null> {
+async function loadPackageSkill(packageDir: string, source: SkillSource): Promise<Skill | null> {
   const skillMd = join(packageDir, 'SKILL.md');
   try {
     // Refuse SKILL.md that is a symlink (escape to outside content)
@@ -97,6 +94,8 @@ async function loadPackageSkill(
     const content = await readFile(skillMd, 'utf-8');
     const skill = parseSkillFile(content, skillMd, source);
     if (!skill) return null;
+    const prov = await readSkillProvenance(packageDir);
+    if (prov) skill.source = 'remote';
     const assets = await listSafeFiles(join(packageDir, 'assets'));
     const references = await listSafeFiles(join(packageDir, 'references'));
     const examples = await deriveExampleCards(packageDir, skill.manifest.name);
@@ -115,10 +114,7 @@ async function loadPackageSkill(
 /**
  * Scan a skill root: package dirs (`name/SKILL.md`) + flat `*.md` files.
  */
-export async function scanSkillRoot(
-  dir: string,
-  source: SkillSource,
-): Promise<Skill[]> {
+export async function scanSkillRoot(dir: string, source: SkillSource): Promise<Skill[]> {
   const skills: Skill[] = [];
   if (typeof dir !== 'string' || /[\0\r\n]/.test(dir)) return skills;
   const base = dir.trim();
@@ -181,9 +177,7 @@ export function mergeSkillsByPrecedence(lists: Skill[][]): Skill[] {
       if (!byName.has(key)) byName.set(key, skill);
     }
   }
-  return [...byName.values()].sort((a, b) =>
-    a.manifest.name.localeCompare(b.manifest.name),
-  );
+  return [...byName.values()].sort((a, b) => a.manifest.name.localeCompare(b.manifest.name));
 }
 
 /** Best-effort locate monorepo / install `skills/` catalog. */
@@ -229,14 +223,14 @@ export async function discoverSkills(
   if (typeof workspacePath === 'string' && !/[\0\r\n]/.test(workspacePath)) {
     const ws = workspacePath.trim();
     if (ws && ws.length <= 4_096) {
-      const localDir = resolve(ws, '.neos-work', 'skills');
+      const localDir = resolveWorkspaceSkillsDir(ws);
       priorityLists.push(await scanSkillRoot(localDir, 'local'));
     }
   }
 
   // 2) User global
   if (includeGlobal) {
-    priorityLists.push(await scanSkillRoot(GLOBAL_SKILL_DIR, 'global'));
+    priorityLists.push(await scanSkillRoot(resolveUserSkillsDir(), 'global'));
   }
 
   // 3) Bundled catalog
@@ -249,5 +243,3 @@ export async function discoverSkills(
 
   return mergeSkillsByPrecedence(priorityLists);
 }
-
-export { GLOBAL_SKILL_DIR };

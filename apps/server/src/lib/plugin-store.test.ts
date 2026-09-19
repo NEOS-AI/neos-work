@@ -2,15 +2,18 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
+
 import {
-  upgradeSkillToPlugin,
   getPlugin,
   listPlugins,
   normalizePipelineStageKind,
   resolveBundledPluginsDir,
+  upgradeSkillToPlugin,
 } from './plugin-store.js';
 
-const SKILLS_DIR = path.join(os.homedir(), '.config', 'neos-work', 'skills');
+const SKILLS_DIR = resolveUserSkillsDir();
 const DIR_NAME = `_cov_skill_${process.pid}`;
 const DIR = path.join(SKILLS_DIR, DIR_NAME);
 
@@ -28,7 +31,9 @@ describe('plugin-store upgradeSkillToPlugin', () => {
     await expect(upgradeSkillToPlugin({ skillDirName: 'bad\nname' })).rejects.toThrow(/Invalid/i);
     await expect(upgradeSkillToPlugin({ skillDirName: '\nok-dir' })).rejects.toThrow(/Invalid/i);
     await expect(upgradeSkillToPlugin({ skillDirName: `dir${'\0'}x` })).rejects.toThrow(/Invalid/i);
-    await expect(upgradeSkillToPlugin({ skillDirName: 'x'.repeat(201) })).rejects.toThrow(/Invalid/i);
+    await expect(upgradeSkillToPlugin({ skillDirName: 'x'.repeat(201) })).rejects.toThrow(
+      /Invalid/i,
+    );
   });
 
   it('getPlugin trims id and returns null for blank', async () => {
@@ -46,7 +51,9 @@ describe('plugin-store upgradeSkillToPlugin', () => {
   });
 
   it('rejects missing skill directory', async () => {
-    await expect(upgradeSkillToPlugin({ skillDirName: 'no-such-skill-dir-xyz' })).rejects.toThrow(/not found/i);
+    await expect(upgradeSkillToPlugin({ skillDirName: 'no-such-skill-dir-xyz' })).rejects.toThrow(
+      /not found/i,
+    );
   });
 
   it('drops control-char name/description on upgrade and falls back to dir name', async () => {
@@ -91,11 +98,7 @@ describe('plugin-store upgradeSkillToPlugin', () => {
 
   it('null-byte in SKILL.md body prevents first-line title fallback', async () => {
     await fs.mkdir(DIR, { recursive: true });
-    await fs.writeFile(
-      path.join(DIR, 'SKILL.md'),
-      `# Title\n\nBody with${'\0'}null\n`,
-      'utf8',
-    );
+    await fs.writeFile(path.join(DIR, 'SKILL.md'), `# Title\n\nBody with${'\0'}null\n`, 'utf8');
 
     const plugin = await upgradeSkillToPlugin({ skillDirName: DIR_NAME });
     expect(plugin.name).toBe(DIR_NAME);
@@ -507,14 +510,7 @@ describe('plugin-store pipeline/gates normalization', () => {
         name: 'PipeNorm',
         version: '1.0.0',
         description: `long${'\n'}desc`.repeat(500),
-        capabilityGates: [
-          'ok-gate',
-          `bad${'\n'}gate`,
-          '',
-          'x'.repeat(200),
-          42,
-          '  trim-me  ',
-        ],
+        capabilityGates: ['ok-gate', `bad${'\n'}gate`, '', 'x'.repeat(200), 42, '  trim-me  '],
         pipeline: [
           {
             id: `stage${'\n'}x`,
@@ -565,8 +561,8 @@ describe('plugin-store pipeline/gates normalization', () => {
 describe('bundled marketplace plugins', () => {
   it('discovers official/community stubs when plugins/ is present', async () => {
     const root =
-      resolveBundledPluginsDir(path.join(process.cwd(), '..', '..', 'plugins'))
-      ?? resolveBundledPluginsDir(null, path.join(process.cwd(), '..', '..'));
+      resolveBundledPluginsDir(path.join(process.cwd(), '..', '..', 'plugins')) ??
+      resolveBundledPluginsDir(null, path.join(process.cwd(), '..', '..'));
     if (!root) {
       expect(root).toBeNull();
       return;

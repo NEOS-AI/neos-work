@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { parseSkillFile } from './parser.js';
 
 describe('parseSkillFile', () => {
@@ -45,36 +46,17 @@ body
 
   it('returns null for control-char names before trim', () => {
     // Same-line control chars survive simple YAML line parse
-    const nullByte = [
-      '---',
-      `name: hi${'\0'}there`,
-      'description: x',
-      '---',
-      'body',
-      '',
-    ].join('\n');
+    const nullByte = ['---', `name: hi${'\0'}there`, 'description: x', '---', 'body', ''].join(
+      '\n',
+    );
     expect(parseSkillFile(nullByte, '/x.md', 'local')).toBeNull();
-    const cr = [
-      '---',
-      `name: bad${'\r'}name`,
-      'description: x',
-      '---',
-      'body',
-      '',
-    ].join('\n');
+    const cr = ['---', `name: bad${'\r'}name`, 'description: x', '---', 'body', ''].join('\n');
     expect(parseSkillFile(cr, '/x.md', 'local')).toBeNull();
   });
 
   it('drops control-char YAML keys rather than accepting stripped keys', () => {
     // Null byte inside key must not register as "name"
-    const mid = [
-      '---',
-      `na${'\0'}me: hi`,
-      'description: x',
-      '---',
-      'body',
-      '',
-    ].join('\n');
+    const mid = ['---', `na${'\0'}me: hi`, 'description: x', '---', 'body', ''].join('\n');
     expect(parseSkillFile(mid, '/x.md', 'local')).toBeNull();
 
     // Overlong YAML key (>100) is dropped before value association
@@ -101,14 +83,9 @@ description: ok
 body
 `;
     expect(parseSkillFile(content, `/skills/${'\n'}hello.md`, 'local')).toBeNull();
-    const nulDesc = [
-      '---',
-      'name: hello',
-      `description: bad${'\0'}desc`,
-      '---',
-      'body',
-      '',
-    ].join('\n');
+    const nulDesc = ['---', 'name: hello', `description: bad${'\0'}desc`, '---', 'body', ''].join(
+      '\n',
+    );
     expect(parseSkillFile(nulDesc, '/skills/hello.md', 'local')).toBeNull();
   });
 
@@ -125,14 +102,7 @@ body
   });
 
   it('returns null for null-byte anywhere in skill file (frontmatter included)', () => {
-    const inName = [
-      '---',
-      `name: hel${'\0'}lo`,
-      'description: ok',
-      '---',
-      'body',
-      '',
-    ].join('\n');
+    const inName = ['---', `name: hel${'\0'}lo`, 'description: ok', '---', 'body', ''].join('\n');
     expect(parseSkillFile(inName, '/skills/hello.md', 'local')).toBeNull();
 
     const inFrontmatterKey = [
@@ -318,14 +288,9 @@ body
     expect(skill!.content).toBe('');
 
     // Cap overlong name; coerce non-string path; whitespace-only path keeps raw
-    const longName = [
-      '---',
-      `name: ${'N'.repeat(250)}`,
-      'description: x',
-      '---',
-      'body',
-      '',
-    ].join('\n');
+    const longName = ['---', `name: ${'N'.repeat(250)}`, 'description: x', '---', 'body', ''].join(
+      '\n',
+    );
     const long = parseSkillFile(longName, 42 as unknown as string, 'global');
     expect(long!.manifest.name.length).toBe(200);
     expect(long!.path).toBe('42');
@@ -372,5 +337,113 @@ body
     // Non-string path with nullish → String(filePath ?? '')
     const nullPath = parseSkillFile(caps, null as unknown as string, 'local');
     expect(nullPath!.path).toBe('');
+  });
+
+  it('accepts source remote without collapsing to local', () => {
+    const content = `---
+name: hello
+description: d
+---
+body
+`;
+    expect(parseSkillFile(content, '/skills/hello.md', 'remote')!.source).toBe('remote');
+  });
+});
+
+describe('parseSkillFile Appendix C golden fixtures', () => {
+  it('1. flat — name/description/version/featured/comma triggers', () => {
+    const content = `---
+name: hello
+description: Greets the user
+version: 1.0.0
+featured: true
+triggers: hi, hello, hey
+---
+# Hello skill
+`;
+    const skill = parseSkillFile(content, '/skills/hello.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.name).toBe('hello');
+    expect(skill!.manifest.description).toBe('Greets the user');
+    expect(skill!.manifest.version).toBe('1.0.0');
+    expect(skill!.manifest.featured).toBe(true);
+    expect(skill!.manifest.triggers).toEqual(['hi', 'hello', 'hey']);
+  });
+
+  it('2. nested string metadata — version and internal stringify', () => {
+    const content = `---
+name: meta
+description: d
+metadata:
+  version: "1.0.0"
+  internal: true
+---
+body
+`;
+    const skill = parseSkillFile(content, '/skills/meta.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.metadata?.version).toBe('1.0.0');
+    expect(skill!.manifest.metadata?.internal).toBe('true');
+  });
+
+  it('3. nested object dropped — extra omitted, version kept', () => {
+    const content = `---
+name: nest
+description: d
+metadata:
+  extra:
+    foo: bar
+  version: 2
+---
+body
+`;
+    const skill = parseSkillFile(content, '/skills/nest.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.metadata).toEqual({ version: '2' });
+    expect(skill!.manifest.metadata).not.toHaveProperty('extra');
+  });
+
+  it('4. YAML list triggers', () => {
+    const content = `---
+name: list
+description: d
+triggers:
+  - hi
+  - hello
+---
+body
+`;
+    const skill = parseSkillFile(content, '/skills/list.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.triggers).toEqual(['hi', 'hello']);
+  });
+
+  it('5. comma triggers unchanged', () => {
+    const content = `---
+name: comma
+description: d
+triggers: hi, hello
+---
+body
+`;
+    const skill = parseSkillFile(content, '/skills/comma.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.triggers).toEqual(['hi', 'hello']);
+  });
+
+  it('6. multiline description is installable (name kept; description not null)', () => {
+    const content = `---
+description: |
+  line1
+  line2
+name: x
+---
+body
+`;
+    const skill = parseSkillFile(content, '/skills/multi.md', 'local');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.name).toBe('x');
+    expect(typeof skill!.manifest.description).toBe('string');
+    expect(skill!.manifest.description === '' || skill!.manifest.description === '|').toBe(true);
   });
 });

@@ -11,18 +11,19 @@
  */
 
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-
 import { Hono } from 'hono';
 import * as cron from 'node-cron';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
+
 import * as db from '../db/routines.js';
-import * as workflowDb from '../db/workflows.js';
 import { getDb } from '../db/schema.js';
-import { addOrUpdateSchedule, removeSchedule, runRoutine } from '../lib/routine-scheduler.js';
+import * as workflowDb from '../db/workflows.js';
 import { estimateNextCronRun } from '../lib/cron-next.js';
-import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
+import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
+import { addOrUpdateSchedule, removeSchedule, runRoutine } from '../lib/routine-scheduler.js';
 
 const routines = new Hono();
 
@@ -54,14 +55,16 @@ routines.get('/:id', (c) => {
 });
 
 routines.post('/', async (c) => {
-  const body = await c.req.json<{
-    name?: string;
-    workflowId?: string;
-    schedule?: string;
-    timezone?: string;
-    enabled?: boolean;
-    inputs?: Record<string, unknown>;
-  }>().catch(() => null);
+  const body = await c.req
+    .json<{
+      name?: string;
+      workflowId?: string;
+      schedule?: string;
+      timezone?: string;
+      enabled?: boolean;
+      inputs?: Record<string, unknown>;
+    }>()
+    .catch(() => null);
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
@@ -129,13 +132,15 @@ routines.post('/', async (c) => {
 routines.put('/:id', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
-  const body = await c.req.json<{
-    name?: string;
-    schedule?: string;
-    timezone?: string;
-    enabled?: boolean;
-    inputs?: Record<string, unknown>;
-  }>().catch(() => null);
+  const body = await c.req
+    .json<{
+      name?: string;
+      schedule?: string;
+      timezone?: string;
+      enabled?: boolean;
+      inputs?: Record<string, unknown>;
+    }>()
+    .catch(() => null);
   if (!body || typeof body !== 'object') {
     return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
   }
@@ -229,7 +234,10 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
   const routineId = paramId(c);
   const runParam = paramId(c, 'runId');
   if (!routineId || !runParam) {
-    return c.json({ ok: false, error: !routineId ? 'Routine not found' : 'Routine run not found' }, 404);
+    return c.json(
+      { ok: false, error: !routineId ? 'Routine not found' : 'Routine run not found' },
+      404,
+    );
   }
   const routine = db.getRoutine(routineId);
   if (!routine) return c.json({ ok: false, error: 'Routine not found' }, 404);
@@ -240,7 +248,9 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
     return c.json({ ok: false, error: 'Only completed runs can be crystallized' }, 400);
   }
 
-  const body = await c.req.json<{ name?: string; description?: string }>().catch(() => ({} as { name?: string; description?: string }));
+  const body = await c.req
+    .json<{ name?: string; description?: string }>()
+    .catch(() => ({}) as { name?: string; description?: string });
   const workflow = workflowDb.getWorkflow(routine.workflowId);
   const workflowRunId = routineRun.runId;
   const workflowRun = workflowRunId ? workflowDb.getRun(workflowRunId) : undefined;
@@ -254,11 +264,12 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
     const n = body.name.trim();
     if (n) rawName = n;
   }
-  const slugBase = rawName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 48) || 'crystallized-skill';
+  const slugBase =
+    rawName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 48) || 'crystallized-skill';
   const skillName = `${slugBase}-${routineRun.id.slice(0, 8)}`;
   let description =
     `Crystallized from routine "${routine.name}"` +
@@ -280,7 +291,7 @@ routines.post('/:id/runs/:runId/crystallize', async (c) => {
           const r = result as { status?: string; output?: unknown; error?: string };
           const out =
             r.output === undefined
-              ? r.error ?? r.status ?? ''
+              ? (r.error ?? r.status ?? '')
               : typeof r.output === 'string'
                 ? r.output
                 : JSON.stringify(r.output, null, 2);
@@ -317,7 +328,7 @@ ${outputsSummary}
 Review and edit this skill, then enable it under Skills. Use it as a prompt/reference for similar automated runs.
 `;
 
-  const skillsRoot = path.join(os.homedir(), '.config', 'neos-work', 'skills');
+  const skillsRoot = resolveUserSkillsDir();
   const skillsDir = path.join(skillsRoot, skillName);
   // Refuse planted skills root symlink (mkdir would follow outside)
   try {
@@ -350,8 +361,9 @@ Review and edit this skill, then enable it under Skills. Use it as a prompt/refe
 
   const skillId = crypto.randomUUID();
   const sqlite = getDb();
-  sqlite.prepare(
-    `INSERT INTO skill (id, name, description, source, path, version, manifest_json)
+  sqlite
+    .prepare(
+      `INSERT INTO skill (id, name, description, source, path, version, manifest_json)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(name) DO UPDATE SET
        description = excluded.description,
@@ -359,16 +371,19 @@ Review and edit this skill, then enable it under Skills. Use it as a prompt/refe
        path = excluded.path,
        version = excluded.version,
        manifest_json = excluded.manifest_json`,
-  ).run(
-    skillId,
-    skillName,
-    description,
-    'crystallize',
-    skillPath,
-    '0.1.0',
-    JSON.stringify({ mode: 'reference', category: 'crystallized', featured: false }),
-  );
-  const row = sqlite.prepare('SELECT id, name, description, path, source, version FROM skill WHERE name = ?').get(skillName) as {
+    )
+    .run(
+      skillId,
+      skillName,
+      description,
+      'crystallize',
+      skillPath,
+      '0.1.0',
+      JSON.stringify({ mode: 'reference', category: 'crystallized', featured: false }),
+    );
+  const row = sqlite
+    .prepare('SELECT id, name, description, path, source, version FROM skill WHERE name = ?')
+    .get(skillName) as {
     id: string;
     name: string;
     description: string | null;
@@ -377,18 +392,21 @@ Review and edit this skill, then enable it under Skills. Use it as a prompt/refe
     version: string | null;
   };
 
-  return c.json({
-    ok: true,
-    data: {
-      skillId: row.id,
-      name: row.name,
-      description: row.description,
-      // Redact absolute on-disk path (home / username leak)
-      path: publicPathTail(row.path),
-      source: row.source,
-      version: row.version,
+  return c.json(
+    {
+      ok: true,
+      data: {
+        skillId: row.id,
+        name: row.name,
+        description: row.description,
+        // Redact absolute on-disk path (home / username leak)
+        path: publicPathTail(row.path),
+        source: row.source,
+        version: row.version,
+      },
     },
-  }, 201);
+    201,
+  );
 });
 
 export default routines;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
@@ -744,6 +744,11 @@ function WorkflowWebhookSection() {
   const [busy, setBusy] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const [secretError, setSecretError] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!client || !workflowId) return;
@@ -804,7 +809,8 @@ function WorkflowWebhookSection() {
     setCopyMsg(
       scrubDisplayText(label, { collapseLines: true, maxChars: 200 }) || 'Done',
     );
-    setTimeout(() => setCopyMsg(null), 1500);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopyMsg(null), 1500);
   };
 
   const copyText = async (text: string, label: string) => {

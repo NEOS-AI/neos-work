@@ -5,10 +5,12 @@
  */
 
 import { createHash } from 'node:crypto';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import { existsSync } from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
+
 import { fetchPublicHttp, SsrfError } from './ssrf.js';
 
 export const MARKETPLACE_SCHEMA = 'neos-marketplace/v1' as const;
@@ -38,11 +40,7 @@ const PACKAGE_MAX_BYTES = 256_000;
 const ENTRY_MAX = 200;
 
 function userSkillsDir(): string {
-  if (process.env.NEOS_DATA_DIR && !/[\0\r\n]/.test(process.env.NEOS_DATA_DIR)) {
-    const root = path.resolve(process.env.NEOS_DATA_DIR.trim());
-    return path.join(root, 'skills');
-  }
-  return path.join(os.homedir(), '.config', 'neos-work', 'skills');
+  return resolveUserSkillsDir();
 }
 
 export function normalizeCatalogUrl(raw: unknown): string | null {
@@ -95,7 +93,11 @@ export function parseRemoteCatalog(raw: unknown): RemoteCatalog {
     }
     let description: string | undefined;
     if (typeof e.description === 'string' && !/\0/.test(e.description)) {
-      description = e.description.replace(/[\r\n]+/g, ' ').trim().slice(0, 2_000) || undefined;
+      description =
+        e.description
+          .replace(/[\r\n]+/g, ' ')
+          .trim()
+          .slice(0, 2_000) || undefined;
     }
     let version = '0.0.0';
     if (typeof e.version === 'string' && !/[\0\r\n]/.test(e.version)) {

@@ -1,22 +1,15 @@
 /**
  * Plugin store — scans skill directories for open-design.json sidecar files
- * Skills directory: ~/.config/neos-work/skills/<plugin-name>/
+ * Skills directory: resolveUserSkillsDir() / <plugin-name>/
  */
 
 import { existsSync, type Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 
-const SKILLS_DIR = path.join(os.homedir(), '.config', 'neos-work', 'skills');
+import { resolveUserSkillsDir } from '@neos-work/core';
 
-export type PipelineStageKind =
-  | 'discovery'
-  | 'plan'
-  | 'execute'
-  | 'critique'
-  | 'form'
-  | 'choice';
+export type PipelineStageKind = 'discovery' | 'plan' | 'execute' | 'critique' | 'form' | 'choice';
 
 const PIPELINE_STAGE_KINDS = new Set<string>([
   'discovery',
@@ -235,10 +228,7 @@ async function loadPluginFromDir(
  * - Direct children with open-design.json
  * - One-level groups (_official, community, …) containing packages
  */
-async function scanPluginRoot(
-  root: string,
-  channel: PluginChannel,
-): Promise<PluginManifest[]> {
+async function scanPluginRoot(root: string, channel: PluginChannel): Promise<PluginManifest[]> {
   const out: PluginManifest[] = [];
   let entries: Dirent[];
   try {
@@ -249,7 +239,12 @@ async function scanPluginRoot(
   }
   for (const entry of entries) {
     // Skip symlink dirs (Dirent.isDirectory is false for links; belt-and-suspenders)
-    if (entry.isSymbolicLink() || !entry.isDirectory() || !entry.name || entry.name.startsWith('.')) {
+    if (
+      entry.isSymbolicLink() ||
+      !entry.isDirectory() ||
+      !entry.name ||
+      entry.name.startsWith('.')
+    ) {
       continue;
     }
     const dir = path.join(root, entry.name);
@@ -273,14 +268,15 @@ async function scanPluginRoot(
           ? 'community'
           : channel;
     for (const child of children) {
-      if (child.isSymbolicLink() || !child.isDirectory() || !child.name || child.name.startsWith('.')) {
+      if (
+        child.isSymbolicLink() ||
+        !child.isDirectory() ||
+        !child.name ||
+        child.name.startsWith('.')
+      ) {
         continue;
       }
-      const pkg = await loadPluginFromDir(
-        path.join(dir, child.name),
-        child.name,
-        groupChannel,
-      );
+      const pkg = await loadPluginFromDir(path.join(dir, child.name), child.name, groupChannel);
       if (pkg) out.push(pkg);
     }
   }
@@ -297,7 +293,7 @@ export async function listPlugins(opts?: {
   const byId = new Map<string, PluginManifest>();
 
   // 1) User-installed (skills with open-design.json)
-  for (const p of await scanPluginRoot(SKILLS_DIR, 'user')) {
+  for (const p of await scanPluginRoot(resolveUserSkillsDir(), 'user')) {
     byId.set(p.id, p);
   }
 
@@ -340,8 +336,7 @@ export async function upgradeSkillToPlugin(options: {
   name?: string;
   description?: string;
 }): Promise<PluginManifest> {
-  const rawName =
-    typeof options.skillDirName === 'string' ? options.skillDirName : '';
+  const rawName = typeof options.skillDirName === 'string' ? options.skillDirName : '';
   // Control-char check before trim (trim strips leading/trailing \r\n)
   if (/[\0\r\n]/.test(rawName) || rawName.trim().length > 200) {
     throw new Error('Invalid skill directory name');
@@ -350,7 +345,7 @@ export async function upgradeSkillToPlugin(options: {
   if (!trimmed) throw new Error('Invalid skill directory name');
   const safe = trimmed.replace(/[^a-zA-Z0-9_-]/g, '_');
   if (!safe) throw new Error('Invalid skill directory name');
-  const dir = path.join(SKILLS_DIR, safe);
+  const dir = path.join(resolveUserSkillsDir(), safe);
   const skillPath = path.join(dir, 'SKILL.md');
   try {
     // Refuse planted skill-dir symlink (write would follow intermediate link outside)
@@ -389,13 +384,11 @@ export async function upgradeSkillToPlugin(options: {
   // Null-byte skill body cannot contribute title/description lines
   if (/\0/.test(skillBody)) skillBody = '';
   const firstLine =
-    skillBody
-      .split('\n')
-      .find((l) => {
-        if (/[\0\r\n]/.test(l)) return false;
-        const t = l.trim();
-        return t.length > 0 && !t.startsWith('---') && !t.startsWith('name:');
-      }) ?? '';
+    skillBody.split('\n').find((l) => {
+      if (/[\0\r\n]/.test(l)) return false;
+      const t = l.trim();
+      return t.length > 0 && !t.startsWith('---') && !t.startsWith('name:');
+    }) ?? '';
   let title =
     (typeof options.name === 'string' && !/[\0\r\n]/.test(options.name)
       ? options.name.trim()
@@ -404,8 +397,9 @@ export async function upgradeSkillToPlugin(options: {
   let description =
     (typeof options.description === 'string' && !/[\0\r\n]/.test(options.description)
       ? options.description.trim()
-      : '')
-    || (firstLine.replace(/^#+\s*/, '').slice(0, 200) || `Plugin upgraded from skill ${safe}`);
+      : '') ||
+    firstLine.replace(/^#+\s*/, '').slice(0, 200) ||
+    `Plugin upgraded from skill ${safe}`;
   if (description.length > 2_000) description = description.slice(0, 2_000);
 
   const manifest: PluginManifest = {
@@ -445,7 +439,12 @@ export async function upgradeSkillToPlugin(options: {
       },
     ],
     inputFields: [
-      { key: 'goal', label: 'Goal', type: 'textarea', placeholder: 'What should this plugin accomplish?' },
+      {
+        key: 'goal',
+        label: 'Goal',
+        type: 'textarea',
+        placeholder: 'What should this plugin accomplish?',
+      },
     ],
   };
 
