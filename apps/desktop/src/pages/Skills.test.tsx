@@ -252,7 +252,10 @@ describe('Skills page', () => {
     await waitFor(() => expect(screen.getByText('Alpha Skill')).toBeInTheDocument());
     // Both categories visible after fallback; chip "all" active
     expect(screen.getByText('Beta Skill')).toBeInTheDocument();
-    expect(localStorage.getItem('neos-skills-category')).toBe('all');
+    // Pref rewrite is in an effect after paint — wait rather than assert the same tick
+    await waitFor(() => {
+      expect(localStorage.getItem('neos-skills-category')).toBe('all');
+    });
   });
 
   it('shows scan unknown-error message and featured/source badges', async () => {
