@@ -16,6 +16,16 @@ vi.mock('../hooks/useEngine.js', () => ({
   }),
 }));
 
+vi.mock('react-i18next', () => {
+  const t = (key: string, opts?: { name?: string; time?: string; detail?: string }) => {
+    if (opts?.name) return `${key}:${opts.name}`;
+    if (opts?.time) return `${key}:${opts.time}`;
+    if (opts?.detail) return `${key}:${opts.detail}`;
+    return key;
+  };
+  return { useTranslation: () => ({ t }) };
+});
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return { ...actual, useNavigate: () => navigate };
@@ -63,7 +73,7 @@ describe('DesignSystems page', () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('No design systems found.')).toBeInTheDocument();
+      expect(screen.getByText('designSystems.empty')).toBeInTheDocument();
     });
   });
 
@@ -78,7 +88,7 @@ describe('DesignSystems page', () => {
     });
     expect(document.body.textContent).not.toContain('\0');
     // Leaves empty list (not stuck on Loading)
-    expect(screen.queryByText('Loading')).not.toBeInTheDocument();
+    expect(screen.queryByText('common.loading')).not.toBeInTheDocument();
   });
 
   it('shows scrubbed page error when list design systems throws', async () => {
@@ -98,10 +108,13 @@ describe('DesignSystems page', () => {
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
     const names = screen.getAllByText(/Brand$/).map((el) => el.textContent);
     expect(names[0]).toBe('Alpha Brand');
-    expect(screen.getByText('tokens')).toBeInTheDocument();
-    expect(screen.getByText('components')).toBeInTheDocument();
+    expect(screen.getByText('designSystems.tokens')).toBeInTheDocument();
+    expect(screen.getByText('designSystems.components')).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: 'common.view' })[0]!);
+    expect(navigate).toHaveBeenCalledWith('/design-systems/ds-a?mode=view');
+    navigate.mockClear();
+    await user.click(screen.getAllByRole('button', { name: 'common.edit' })[0]!);
     expect(navigate).toHaveBeenCalledWith('/design-systems/ds-a');
   });
 
@@ -117,14 +130,14 @@ describe('DesignSystems page', () => {
       },
     });
     renderPage();
-    await waitFor(() => expect(screen.getByText('No design systems found.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('designSystems.empty')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
-    fireEvent.change(screen.getByPlaceholderText('my-design-system'), { target: { value: 'NewDS' } });
-    fireEvent.change(screen.getByPlaceholderText('Brand guidelines and component styles'), {
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.new' }));
+    fireEvent.change(screen.getByPlaceholderText('designSystems.namePlaceholder'), { target: { value: 'NewDS' } });
+    fireEvent.change(screen.getByPlaceholderText('designSystems.descriptionPlaceholder'), {
       target: { value: 'desc' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.create' }));
 
     await waitFor(() => {
       expect(createDesignSystem).toHaveBeenCalledWith('NewDS', 'desc');
@@ -135,11 +148,11 @@ describe('DesignSystems page', () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     createDesignSystem.mockResolvedValue({ ok: false, error: 'invalid name' });
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'designSystems.new' })).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
-    fireEvent.change(screen.getByPlaceholderText('my-design-system'), { target: { value: 'bad' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.new' }));
+    fireEvent.change(screen.getByPlaceholderText('designSystems.namePlaceholder'), { target: { value: 'bad' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.create' }));
     await waitFor(() => {
       expect(screen.getByText('invalid name')).toBeInTheDocument();
     });
@@ -148,24 +161,24 @@ describe('DesignSystems page', () => {
   it('rejects control-char name and description without calling API', async () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'designSystems.new' })).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
-    fireEvent.change(screen.getByPlaceholderText('my-design-system'), {
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.new' }));
+    fireEvent.change(screen.getByPlaceholderText('designSystems.namePlaceholder'), {
       target: { value: `bad${'\0'}name` },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-    expect(screen.getByText('Name contains invalid control characters')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'common.create' }));
+    expect(screen.getByText('designSystems.invalidName')).toBeInTheDocument();
     expect(createDesignSystem).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByPlaceholderText('my-design-system'), {
+    fireEvent.change(screen.getByPlaceholderText('designSystems.namePlaceholder'), {
       target: { value: 'ValidDS' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Brand guidelines and component styles'), {
+    fireEvent.change(screen.getByPlaceholderText('designSystems.descriptionPlaceholder'), {
       target: { value: `desc${'\0'}line` },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-    expect(screen.getByText('Description contains invalid control characters')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'common.create' }));
+    expect(screen.getByText('designSystems.invalidDescription')).toBeInTheDocument();
     expect(createDesignSystem).not.toHaveBeenCalled();
   });
 
@@ -175,7 +188,7 @@ describe('DesignSystems page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
 
-    const deletes = screen.getAllByRole('button', { name: 'Delete' });
+    const deletes = screen.getAllByRole('button', { name: 'common.delete' });
     // Alpha is first in sort order
     fireEvent.click(deletes[0]!);
 
@@ -193,7 +206,7 @@ describe('DesignSystems page', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]!);
     await waitFor(() => {
       expect(deleteDesignSystem).toHaveBeenCalledWith('ds-a');
       expect(screen.getByText('in use!')).toBeInTheDocument();
@@ -208,21 +221,21 @@ describe('DesignSystems page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText('Search design systems…'), 'Beta');
+    await user.type(screen.getByPlaceholderText('designSystems.searchPlaceholder'), 'Beta');
     expect(screen.getByText('Beta Brand')).toBeInTheDocument();
     expect(screen.queryByText('Alpha Brand')).not.toBeInTheDocument();
     expect(screen.getByText('1/2')).toBeInTheDocument();
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await waitFor(() => {
-      expect((screen.getByPlaceholderText('Search design systems…') as HTMLInputElement).value).toBe('');
+      expect((screen.getByPlaceholderText('designSystems.searchPlaceholder') as HTMLInputElement).value).toBe('');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
-    expect(screen.getByRole('heading', { name: 'New Design System' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.new' }));
+    expect(screen.getByRole('heading', { name: 'designSystems.newTitle' })).toBeInTheDocument();
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: 'New Design System' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'designSystems.newTitle' })).not.toBeInTheDocument();
     });
   });
 
@@ -233,16 +246,16 @@ describe('DesignSystems page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]!);
     expect(deleteDesignSystem).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByPlaceholderText('Search design systems…'), {
+    fireEvent.change(screen.getByPlaceholderText('designSystems.searchPlaceholder'), {
       target: { value: 'zzzz-none' },
     });
     await waitFor(() => {
       expect(screen.queryByText('Alpha Brand')).not.toBeInTheDocument();
       expect(screen.getByText('0/2')).toBeInTheDocument();
-      expect(screen.getByText(/No design systems match your search/)).toBeInTheDocument();
+      expect(screen.getByText('designSystems.noMatch')).toBeInTheDocument();
     });
   });
 
@@ -276,11 +289,11 @@ describe('DesignSystems page', () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     createDesignSystem.mockResolvedValue({ ok: false, error: `invalid${'\n'}name${'\0'}` });
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'designSystems.new' })).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
-    fireEvent.change(screen.getByPlaceholderText('my-design-system'), { target: { value: 'ok-name' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.new' }));
+    fireEvent.change(screen.getByPlaceholderText('designSystems.namePlaceholder'), { target: { value: 'ok-name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.create' }));
     await waitFor(() => {
       expect(screen.getByText(/invalid name/)).toBeInTheDocument();
     });
@@ -307,10 +320,11 @@ describe('DesignSystems page', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText(/BrandX/)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
     expect(confirmSpy).toHaveBeenCalled();
     const msg = String(confirmSpy.mock.calls[0]?.[0] ?? '');
     expect(msg).toContain('BrandX Y');
+    expect(msg).toMatch(/^designSystems\.confirmDelete:/);
     expect(msg).not.toContain('\0');
     expect(deleteDesignSystem).not.toHaveBeenCalled();
   });
@@ -320,18 +334,18 @@ describe('DesignSystems page', () => {
     createDesignSystem.mockRejectedValue(new Error(`create${'\n'}boom${'\0'}`));
     renderPage();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '+ New Design System' })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'designSystems.new' })).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '+ New Design System' }));
-    fireEvent.change(screen.getByPlaceholderText('my-design-system'), {
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.new' }));
+    fireEvent.change(screen.getByPlaceholderText('designSystems.namePlaceholder'), {
       target: { value: 'ThrowDS' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.create' }));
     await waitFor(() => {
       expect(screen.getByText(/create boom/)).toBeInTheDocument();
     });
-    expect(screen.getByRole('heading', { name: 'New Design System' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'designSystems.newTitle' })).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('\0');
   });
 
@@ -342,7 +356,7 @@ describe('DesignSystems page', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPage();
     await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]!);
     await waitFor(() => {
       expect(deleteDesignSystem).toHaveBeenCalledWith('ds-a');
       expect(screen.getByText(/del fail!/)).toBeInTheDocument();
@@ -372,13 +386,61 @@ describe('DesignSystems page', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     renderPage();
     await waitFor(() => expect(screen.getByText('Evil DS')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(deleteDesignSystem).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Design system id contains invalid control characters',
-    );
+    expect(alertSpy).toHaveBeenCalledWith('designSystems.invalidId');
     alertSpy.mockRestore();
+  });
+
+  it('disables delete for bundled default design systems', async () => {
+    deleteDesignSystem.mockResolvedValue({ ok: true });
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds-default',
+          name: 'neos-default',
+          description: 'Bundled',
+          path: '/bundled/neos-default',
+          hasManifest: true,
+          hasTokens: true,
+          hasComponents: false,
+          source: 'bundled',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'ds-user',
+          name: 'My Brand',
+          description: 'User',
+          path: '/user/my-brand',
+          hasManifest: false,
+          hasTokens: false,
+          hasComponents: false,
+          source: 'user',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('neos-default')).toBeInTheDocument());
+    expect(screen.getByText('designSystems.bundled')).toBeInTheDocument();
+
+    const deletes = screen.getAllByRole('button', { name: 'common.delete' });
+    expect(deletes).toHaveLength(2);
+    expect(deletes[1]).toBeDisabled();
+    expect(deletes[1]).toHaveAttribute('title', 'designSystems.deleteDisabled');
+    fireEvent.click(deletes[1]!);
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(deleteDesignSystem).not.toHaveBeenCalled();
+
+    expect(deletes[0]).not.toBeDisabled();
+    fireEvent.click(deletes[0]!);
+    await waitFor(() => {
+      expect(deleteDesignSystem).toHaveBeenCalledWith('ds-user');
+    });
   });
 
 });

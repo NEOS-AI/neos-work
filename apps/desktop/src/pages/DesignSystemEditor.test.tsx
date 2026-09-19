@@ -16,7 +16,17 @@ vi.mock('../hooks/useEngine.js', () => ({
   }),
 }));
 
+vi.mock('react-i18next', () => {
+  const t = (key: string, opts?: { name?: string; detail?: string }) => {
+    if (opts?.name) return `${key}:${opts.name}`;
+    if (opts?.detail) return `${key}:${opts.detail}`;
+    return key;
+  };
+  return { useTranslation: () => ({ t }) };
+});
+
 const routeParams = { id: 'ds-1' as string };
+const routeQuery = { mode: '' as string };
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -24,6 +34,11 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => navigate,
     useParams: () => ({ id: routeParams.id }),
+    useSearchParams: () => {
+      const p = new URLSearchParams();
+      if (routeQuery.mode) p.set('mode', routeQuery.mode);
+      return [p];
+    },
   };
 });
 
@@ -40,6 +55,7 @@ function renderEditor() {
 describe('DesignSystemEditor page', () => {
   beforeEach(() => {
     routeParams.id = 'ds-1';
+    routeQuery.mode = '';
     listDesignSystems.mockReset().mockResolvedValue({
       ok: true,
       data: [{ id: 'ds-1', name: 'Brand X', description: '', updatedAt: '2026-01-01T00:00:00.000Z' }],
@@ -58,7 +74,7 @@ describe('DesignSystemEditor page', () => {
     renderEditor();
     await waitFor(() => {
       expect(
-        screen.getByText('Design system id contains invalid control characters'),
+        screen.getByText('designSystems.invalidId'),
       ).toBeInTheDocument();
     });
     expect(listDesignSystems).not.toHaveBeenCalled();
@@ -67,19 +83,19 @@ describe('DesignSystemEditor page', () => {
 
   it('loads design system content', async () => {
     renderEditor();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getByText('common.loading')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('Brand X')).toBeInTheDocument();
     });
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('# Brand\ncolors');
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
   });
 
   it('shows scrubbed load error when design system is missing', async () => {
     listDesignSystems.mockResolvedValue({ ok: true, data: [] });
     renderEditor();
     await waitFor(() => {
-      expect(screen.getByText('Design system not found')).toBeInTheDocument();
+      expect(screen.getByText('designSystems.notFound')).toBeInTheDocument();
     });
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
@@ -126,12 +142,12 @@ describe('DesignSystemEditor page', () => {
 
     const ta = screen.getByRole('textbox');
     fireEvent.change(ta, { target: { value: '# Updated' } });
-    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
 
     await waitFor(() => {
       expect(saveDesignSystemContent).toHaveBeenCalledWith('ds-1', '# Updated');
-      expect(screen.getByText('Saved')).toBeInTheDocument();
+      expect(screen.getByText('designSystems.saved')).toBeInTheDocument();
     });
   });
 
@@ -142,16 +158,14 @@ describe('DesignSystemEditor page', () => {
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: `# bad${'\0'}content` },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
     expect(saveDesignSystemContent).not.toHaveBeenCalled();
-    expect(
-      screen.getByText('Save failed: content contains invalid control characters'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('designSystems.invalidContent')).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
     expect(saveDesignSystemContent).not.toHaveBeenCalled();
-    expect(screen.getByText('Save failed: content cannot be empty')).toBeInTheDocument();
+    expect(screen.getByText('designSystems.emptyContent')).toBeInTheDocument();
   });
 
   it('saves via Cmd/Ctrl+S', async () => {
@@ -172,9 +186,9 @@ describe('DesignSystemEditor page', () => {
     await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
     await waitFor(() => {
-      expect(screen.getByText(/Save failed: disk full/)).toBeInTheDocument();
+      expect(screen.getByText('designSystems.saveFailed:disk full')).toBeInTheDocument();
     });
   });
 
@@ -185,7 +199,7 @@ describe('DesignSystemEditor page', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Brand\ncolors dirty' } });
     // dirty indicator
     expect(screen.getByText('●')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Design Systems/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.back' }));
     expect(window.confirm).toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith('/design-systems');
   });
@@ -240,10 +254,10 @@ describe('DesignSystemEditor page', () => {
     await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'x' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
     await waitFor(() => {
       // Store-time scrub collapses newlines / strips null before setSaveMessage
-      expect(screen.getByText(/Save failed: disk full!/)).toBeInTheDocument();
+      expect(screen.getByText('designSystems.saveFailed:disk full!')).toBeInTheDocument();
     });
     expect(document.body.textContent).not.toContain('\0');
   });
@@ -256,16 +270,46 @@ describe('DesignSystemEditor page', () => {
     const ta = screen.getByRole('textbox');
     fireEvent.change(ta, { target: { value: '# throw path' } });
     expect((ta as HTMLTextAreaElement).value).toBe('# throw path');
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
     await waitFor(() => {
       expect(saveDesignSystemContent).toHaveBeenCalledWith('ds-1', '# throw path');
-      expect(screen.getByText(/Save failed: net down!/)).toBeInTheDocument();
+      expect(screen.getByText('designSystems.saveFailed:net down!')).toBeInTheDocument();
     });
     expect(document.body.textContent).not.toContain('\0');
     // finally clears saving — label returns to Save (not stuck on Saving…)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'common.save' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'designSystems.saving' })).not.toBeInTheDocument();
     });
+  });
+
+  it('opens read-only view and switches to edit via startEdit', async () => {
+    routeQuery.mode = 'view';
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(ta).toHaveAttribute('readonly');
+    expect(screen.getByText('designSystems.readOnly')).toBeInTheDocument();
+    expect(screen.getByText('designSystems.viewHint')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'common.save' })).not.toBeInTheDocument();
+
+    fireEvent.change(ta, { target: { value: '# should not stick' } });
+    expect(ta.value).toBe('# Brand\ncolors');
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.startEdit' }));
+    expect(navigate).toHaveBeenCalledWith('/design-systems/ds-1');
+  });
+
+  it('does not start edit from view when route id is invalid', async () => {
+    routeParams.id = `ds${'\n'}1`;
+    routeQuery.mode = 'view';
+    renderEditor();
+    await waitFor(() => {
+      expect(screen.getByText('designSystems.invalidId')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: 'designSystems.startEdit' })).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { useEngine } from '../hooks/useEngine.js';
@@ -9,7 +10,12 @@ import { formatListCount } from '../lib/list-count.js';
 import { sortByName } from '../lib/list-sort.js';
 import { filterBySearchText } from '../lib/workflow-list-filter.js';
 
+function isBundledDesignSystem(ds: Pick<DesignSystem, 'source'>): boolean {
+  return ds.source === 'bundled';
+}
+
 export function DesignSystems() {
+  const { t } = useTranslation('common');
   const { client } = useEngine();
   const navigate = useNavigate();
   const [systems, setSystems] = useState<DesignSystem[]>([]);
@@ -39,20 +45,20 @@ export function DesignSystems() {
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
-          }) || 'Failed to load design systems',
+          }) || t('designSystems.loadFailed'),
         );
       }
     } catch (err) {
       setSystems([]);
-      const msg = err instanceof Error ? err.message : 'Failed to load design systems';
+      const msg = err instanceof Error ? err.message : t('designSystems.loadFailed');
       setPageError(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
-          || 'Failed to load design systems',
+          || t('designSystems.loadFailed'),
       );
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -83,11 +89,11 @@ export function DesignSystems() {
     if (!client) return;
     // Control-char name/description rejected before trim (align with design-systems API)
     if (/[\0\r\n]/.test(newName)) {
-      setCreateError('Name contains invalid control characters');
+      setCreateError(t('designSystems.invalidName'));
       return;
     }
     if (newDescription && /[\0\r\n]/.test(newDescription)) {
-      setCreateError('Description contains invalid control characters');
+      setCreateError(t('designSystems.invalidDescription'));
       return;
     }
     if (!newName.trim()) return;
@@ -102,14 +108,14 @@ export function DesignSystems() {
       } else {
         setCreateError(
           scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
-            || 'Failed to create design system',
+            || t('designSystems.createFailed'),
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create design system';
+      const msg = err instanceof Error ? err.message : t('designSystems.createFailed');
       setCreateError(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
-          || 'Failed to create design system',
+          || t('designSystems.createFailed'),
       );
     }
   };
@@ -118,12 +124,14 @@ export function DesignSystems() {
     if (!client) return;
     const entityId = safeEntityId(id);
     if (!entityId) {
-      window.alert('Design system id contains invalid control characters');
+      window.alert(t('designSystems.invalidId'));
       return;
     }
     const nameSafe =
-      scrubDisplayText(name, { collapseLines: true, maxChars: 200 }) || entityId || 'design system';
-    if (!window.confirm(`Delete design system "${nameSafe}"? This cannot be undone.`)) return;
+      scrubDisplayText(name, { collapseLines: true, maxChars: 200 })
+      || entityId
+      || t('designSystems.fallbackName');
+    if (!window.confirm(t('designSystems.confirmDelete', { name: nameSafe }))) return;
     try {
       const res = await client.deleteDesignSystem(entityId);
       if (res.ok) {
@@ -134,14 +142,14 @@ export function DesignSystems() {
           scrubDisplayText((res as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
-          }) || 'Failed to delete design system',
+          }) || t('designSystems.deleteFailed'),
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete design system';
+      const msg = err instanceof Error ? err.message : t('designSystems.deleteFailed');
       setPageError(
         scrubDisplayText(msg, { collapseLines: true, maxChars: 300 })
-          || 'Failed to delete design system',
+          || t('designSystems.deleteFailed'),
       );
     }
   };
@@ -150,9 +158,9 @@ export function DesignSystems() {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Design Systems</h1>
+          <h1 className="text-2xl font-bold text-white">{t('designSystems.title')}</h1>
           <p className="text-sm text-white/50 mt-1">
-            Manage design context files (DESIGN.md) injected into agent system prompts.
+            {t('designSystems.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -162,7 +170,7 @@ export function DesignSystems() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search design systems…"
+                placeholder={t('designSystems.searchPlaceholder')}
                 className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30"
               />
               <span className="text-xs text-white/40">
@@ -174,7 +182,7 @@ export function DesignSystems() {
             onClick={() => { setIsCreating(true); setCreateError(null); }}
             className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
           >
-            + New Design System
+            {t('designSystems.new')}
           </button>
         </div>
       </div>
@@ -188,7 +196,7 @@ export function DesignSystems() {
       {/* Create form */}
       {isCreating && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
-          <h2 className="text-base font-semibold text-white">New Design System</h2>
+          <h2 className="text-base font-semibold text-white">{t('designSystems.newTitle')}</h2>
           {createError && (
             <p className="text-sm text-red-400">
               {scrubDisplayText(createError, { collapseLines: true, maxChars: 300 }) || createError}
@@ -196,23 +204,23 @@ export function DesignSystems() {
           )}
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-white/50 block mb-1">Name (alphanumeric, - and _ only)</label>
+              <label className="text-xs text-white/50 block mb-1">{t('designSystems.nameLabel')}</label>
               <input
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="my-design-system"
+                placeholder={t('designSystems.namePlaceholder')}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
               />
             </div>
             <div>
-              <label className="text-xs text-white/50 block mb-1">Description (optional)</label>
+              <label className="text-xs text-white/50 block mb-1">{t('designSystems.descriptionLabel')}</label>
               <input
                 type="text"
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Brand guidelines and component styles"
+                placeholder={t('designSystems.descriptionPlaceholder')}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -223,13 +231,13 @@ export function DesignSystems() {
               disabled={!newName.trim()}
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm transition-colors"
             >
-              Create
+              {t('common.create')}
             </button>
             <button
               onClick={cancelCreate}
               className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 text-sm transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -237,18 +245,18 @@ export function DesignSystems() {
 
       {/* List */}
       {loading ? (
-        <p className="text-white/40 text-sm">Loading...</p>
+        <p className="text-white/40 text-sm">{t('common.loading')}</p>
       ) : systems.length === 0 ? (
         !pageError ? (
           <div className="text-center py-16 space-y-2">
-            <p className="text-white/40 text-sm">No design systems found.</p>
+            <p className="text-white/40 text-sm">{t('designSystems.empty')}</p>
             <p className="text-white/30 text-xs">
-              Create one to inject brand guidelines and component styles into agent prompts.
+              {t('designSystems.emptyHint')}
             </p>
           </div>
         ) : null
       ) : filteredSystems.length === 0 ? (
-        <p className="text-white/40 text-sm">No design systems match your search.</p>
+        <p className="text-white/40 text-sm">{t('designSystems.noMatch')}</p>
       ) : (
         <div className="grid gap-3">
           {filteredSystems.map((ds) => (
@@ -259,19 +267,25 @@ export function DesignSystems() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-white text-sm">
-                    {scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 }) || 'Design system'}
+                    {scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 })
+                      || t('designSystems.fallbackName')}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/50 font-mono">
                     {scrubDisplayText(ds.id, { collapseLines: true, maxChars: 80 }) || '—'}
                   </span>
+                  {isBundledDesignSystem(ds) && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                      {t('designSystems.bundled')}
+                    </span>
+                  )}
                   {ds.hasTokens && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">
-                      tokens
+                      {t('designSystems.tokens')}
                     </span>
                   )}
                   {ds.hasComponents && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                      components
+                      {t('designSystems.components')}
                     </span>
                   )}
                 </div>
@@ -281,26 +295,39 @@ export function DesignSystems() {
                   </p>
                 ) : null}
                 <p className="text-xs text-white/30 mt-0.5" title={formatAbsoluteTime(ds.updatedAt)}>
-                  Updated {formatRelativeTime(ds.updatedAt)}
+                  {t('designSystems.updated', { time: formatRelativeTime(ds.updatedAt) })}
                 </p>
               </div>
               <div className="flex items-center gap-2 ml-4 shrink-0">
                 <button
+                  type="button"
+                  onClick={() => navigate(`/design-systems/${ds.id}?mode=view`)}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 text-xs transition-colors"
+                >
+                  {t('common.view')}
+                </button>
+                <button
+                  type="button"
                   onClick={() => navigate(`/design-systems/${ds.id}`)}
                   className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 text-xs transition-colors"
                 >
-                  Edit
+                  {t('common.edit')}
                 </button>
                 <button
-                  onClick={() =>
+                  type="button"
+                  disabled={isBundledDesignSystem(ds)}
+                  title={isBundledDesignSystem(ds) ? t('designSystems.deleteDisabled') : undefined}
+                  aria-disabled={isBundledDesignSystem(ds)}
+                  onClick={() => {
+                    if (isBundledDesignSystem(ds)) return;
                     handleDelete(
                       ds.id,
                       scrubDisplayText(ds.name, { collapseLines: true, maxChars: 200 }) || ds.name,
-                    )
-                  }
-                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors"
+                    );
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-500/10"
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
