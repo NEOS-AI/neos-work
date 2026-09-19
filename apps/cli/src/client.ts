@@ -249,6 +249,42 @@ export class NeosApiClient {
     return this.request('POST', '/api/skills/scan', { body: {} });
   }
 
+  findSkills(
+    query: string,
+    opts?: { owner?: string; limit?: string },
+  ): Promise<ApiEnvelope<unknown>> {
+    return this.request('GET', '/api/skills/catalog/search', {
+      query: { q: query, owner: opts?.owner, limit: opts?.limit },
+    });
+  }
+
+  addSkill(input: {
+    id?: string;
+    source?: string;
+    slug?: string;
+    url?: string;
+    ref?: string;
+    scope?: 'global' | 'workspace';
+    confirm: boolean;
+  }): Promise<ApiEnvelope<unknown>> {
+    const body: Record<string, unknown> = { confirm: input.confirm === true };
+    if (input.id) body.id = input.id;
+    if (input.source) body.source = input.source;
+    if (input.slug) body.slug = input.slug;
+    if (input.url) body.url = input.url;
+    if (input.ref) body.ref = input.ref;
+    if (input.scope) body.scope = input.scope;
+    return this.request('POST', '/api/skills/install', { body });
+  }
+
+  removeSkill(id: string): Promise<ApiEnvelope<{ filesRemoved?: boolean; restored?: string }>> {
+    return this.request('DELETE', `/api/skills/${encodeURIComponent(id)}`);
+  }
+
+  updateSkill(id: string): Promise<ApiEnvelope<unknown>> {
+    return this.request('POST', `/api/skills/${encodeURIComponent(id)}/update`, { body: {} });
+  }
+
   listDesignSystems(): Promise<ApiEnvelope<unknown[]>> {
     return this.request('GET', '/api/design-systems');
   }

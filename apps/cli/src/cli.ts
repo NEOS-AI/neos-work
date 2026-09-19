@@ -36,7 +36,11 @@ Commands:
   project list|create|get
   files ls|read|write     Project files (NEOS_PROJECT_ID)
   run create|status|cancel
-  skills list|scan
+  skills list|scan|find|add|update|remove
+                          find <query> [--owner <owner>]
+                          add <owner/repo|url> [--skill <slug>] [--scope global|workspace] [--yes]
+                          update [name-or-id] [--yes]
+                          remove|rm <name-or-id> [--yes]
   design-systems list
   memory list|add|export
   mcp list|serve|install-info|live-artifacts
