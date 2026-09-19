@@ -1,16 +1,25 @@
 /**
- * Skills API — manage installed skills (scan, toggle, delete).
+ * Skills API — catalog search/preview/audit, snapshot install, scan, toggle, delete.
  */
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { discoverSkills, resolveBundledSkillsDir } from '@neos-work/core';
+import { discoverSkills, readSkillProvenance, resolveBundledSkillsDir } from '@neos-work/core';
 import { safeError } from '../lib/errors.js';
 import { getDb } from '../db/schema.js';
 import * as db from '../db/sessions.js';
 import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
+import { SsrfError } from '../lib/ssrf.js';
+import {
+  auditRemoteSkill,
+  previewRemoteSkill,
+  searchSkillCatalog,
+  SkillsHttpError,
+} from '../lib/skills-catalog.js';
+import { installRemoteSkill, readSkillContent, updateRemoteSkill } from '../lib/skills-install.js';
 
 /** Monorepo `skills/` catalog (apps/server/src/routes → repo root). */
 const REPO_SKILLS_CANDIDATE = resolve(
@@ -40,6 +49,12 @@ function listSkillRows(): SkillRow[] {
   return getDb()
     .prepare('SELECT * FROM skill ORDER BY name ASC')
     .all() as SkillRow[];
+}
+
+function getSkillById(id: string): SkillRow | undefined {
+  const trimmed = safeSkillLookupId(id);
+  if (!trimmed) return undefined;
+  return getDb().prepare('SELECT * FROM skill WHERE id = ?').get(trimmed) as SkillRow | undefined;
 }
 
 function upsertSkill(params: {
@@ -182,6 +197,121 @@ function sanitizeExampleCards(raw: unknown): Array<{
   return out.length > 0 ? out : undefined;
 }
 
+function skillsError(c: Context, err: unknown, ctx: string) {
+  if (err instanceof SkillsHttpError) {
+    const body: Record<string, unknown> = { ok: false, error: err.code, ...err.extra };
+    switch (err.http) {
+      case 400: return c.json(body, 400);
+      case 403: return c.json(body, 403);
+      case 404: return c.json(body, 404);
+      case 409: return c.json(body, 409);
+      case 422: return c.json(body, 422);
+      case 429: return c.json(body, 429);
+      case 502: return c.json(body, 502);
+      default: return c.json(body, 500);
+    }
+  }
+  if (err instanceof SsrfError) {
+    return c.json({ ok: false, error: 'ssrf_blocked' }, 502);
+  }
+  return c.json({ ok: false, error: safeError(err, ctx) }, 500);
+}
+
+function remoteListFields(manifest: Record<string, unknown> | null): {
+  remoteId?: string;
+  remoteSource?: string;
+  remoteHash?: string;
+  skillsShUrl?: string;
+  license?: string;
+} {
+  const extra: {
+    remoteId?: string;
+    remoteSource?: string;
+    remoteHash?: string;
+    skillsShUrl?: string;
+    license?: string;
+  } = {};
+  if (typeof manifest?.['license'] === 'string' && !/[\0\r\n]/.test(manifest['license'])) {
+    const license = manifest['license'].trim();
+    if (license) extra.license = license.slice(0, 100);
+  }
+  const prov = manifest?.['provenance'];
+  if (prov && typeof prov === 'object' && !Array.isArray(prov)) {
+    const p = prov as Record<string, unknown>;
+    if (typeof p.id === 'string' && !/[\0\r\n]/.test(p.id) && p.id.trim()) {
+      extra.remoteId = p.id.trim().slice(0, 200);
+      extra.skillsShUrl = `https://skills.sh/${extra.remoteId}`;
+    }
+    if (typeof p.source === 'string' && !/[\0\r\n]/.test(p.source) && p.source.trim()) {
+      extra.remoteSource = p.source.trim().slice(0, 200);
+    }
+    if (typeof p.hash === 'string' && !/[\0\r\n]/.test(p.hash) && p.hash.trim()) {
+      extra.remoteHash = p.hash.trim().slice(0, 64);
+    }
+  }
+  return extra;
+}
+
+// Static catalog routes BEFORE /:id
+skills.get('/catalog/search', async (c) => {
+  try {
+    const data = await searchSkillCatalog({
+      q: c.req.query('q'),
+      limit: c.req.query('limit'),
+      owner: c.req.query('owner'),
+    });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    return skillsError(c, err, 'skills-search');
+  }
+});
+
+skills.get('/catalog/preview', async (c) => {
+  try {
+    const data = await previewRemoteSkill({
+      id: c.req.query('id'),
+      url: c.req.query('url'),
+    });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    return skillsError(c, err, 'skills-preview');
+  }
+});
+
+skills.get('/catalog/audit', async (c) => {
+  try {
+    const data = await auditRemoteSkill({ id: c.req.query('id') });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    return skillsError(c, err, 'skills-audit');
+  }
+});
+
+skills.post('/install', async (c) => {
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return c.json({ ok: false, error: 'confirm_required' }, 400);
+  }
+  try {
+    const data = await installRemoteSkill(
+      {
+        id: body.id,
+        source: body.source,
+        slug: body.slug,
+        url: body.url,
+        ref: body.ref,
+        scope: body.scope,
+        confirm: body.confirm,
+        includeInternal: body.includeInternal,
+      },
+      { upsert: upsertSkill },
+    );
+    return c.json({ ok: true, data });
+  } catch (err) {
+    return skillsError(c, err, 'skills-install');
+  }
+});
+
 // GET /api/skills — list installed skills
 skills.get('/', (c) => {
   const rows = listSkillRows();
@@ -224,6 +354,7 @@ skills.get('/', (c) => {
       examples,
       assets: sanitizeNames(manifest?.['assets']),
       references: sanitizeNames(manifest?.['references']),
+      ...remoteListFields(manifest),
     };
   });
   return c.json({ ok: true, data });
@@ -247,9 +378,11 @@ skills.post('/scan', async (c) => {
     });
 
     for (const skill of discovered) {
-      // Persist package metadata alongside frontmatter for UI package view
+      const sidecar = skill.packageDir ? await readSkillProvenance(skill.packageDir) : null;
       const manifestPayload = {
         ...skill.manifest,
+        featured: sidecar ? false : skill.manifest.featured,
+        ...(sidecar ? { provenance: sidecar } : {}),
         packageDir: skill.packageDir,
         examples: skill.examples,
         assets: skill.assets,
@@ -258,7 +391,7 @@ skills.post('/scan', async (c) => {
       upsertSkill({
         name: skill.manifest.name,
         description: skill.manifest.description,
-        source: skill.source,
+        source: sidecar ? 'remote' : skill.source,
         path: skill.path,
         version: skill.manifest.version ?? skill.manifest.metadata?.version,
         manifestJson: JSON.stringify(manifestPayload),
@@ -269,6 +402,34 @@ skills.post('/scan', async (c) => {
     return c.json({ ok: true, data: { scanned: discovered.length, total: rows.length } });
   } catch (err) {
     return c.json({ ok: false, error: safeError(err, 'skills-scan') }, 500);
+  }
+});
+
+skills.get('/:id/content', async (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'not_found' }, 404);
+  const row = getSkillById(id);
+  if (!row) return c.json({ ok: false, error: 'not_found' }, 404);
+  try {
+    const content = await readSkillContent(row.path);
+    if (!content) return c.json({ ok: false, error: 'not_found' }, 404);
+    return c.json({
+      ok: true,
+      data: { id: row.id, name: row.name, body: content.body, truncated: content.truncated },
+    });
+  } catch {
+    return c.json({ ok: false, error: 'not_found' }, 404);
+  }
+});
+
+skills.post('/:id/update', async (c) => {
+  const id = paramId(c);
+  if (!id) return c.json({ ok: false, error: 'not_found' }, 404);
+  try {
+    const data = await updateRemoteSkill(id, { upsert: upsertSkill });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    return skillsError(c, err, 'skills-update');
   }
 });
 
@@ -285,13 +446,13 @@ skills.post('/:id/toggle', async (c) => {
   return c.json({ ok: true });
 });
 
-// DELETE /api/skills/:id — remove a skill from the registry
+// DELETE /api/skills/:id — registry-only
 skills.delete('/:id', (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
   const deleted = deleteSkillById(id);
   if (!deleted) return c.json({ ok: false, error: 'Skill not found' }, 404);
-  return c.json({ ok: true });
+  return c.json({ ok: true, data: { filesRemoved: false } });
 });
 
 /** Exported for unit tests (scan path hygiene). */
