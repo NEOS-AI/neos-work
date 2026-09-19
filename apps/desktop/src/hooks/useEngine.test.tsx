@@ -16,6 +16,7 @@ vi.mock('../lib/tauri.js', () => ({
 
 const checkConnection = vi.fn(async () => false);
 const setAuthToken = vi.fn();
+const fetchLocalAuthToken = vi.fn(async () => null as string | null);
 
 vi.mock('../lib/engine.js', () => {
   class EngineClient {
@@ -28,6 +29,7 @@ vi.mock('../lib/engine.js', () => {
     }
     checkConnection = (...args: unknown[]) => checkConnection(...args);
     setAuthToken = (...args: unknown[]) => setAuthToken(...args);
+    fetchLocalAuthToken = (...args: unknown[]) => fetchLocalAuthToken(...args);
   }
   return { EngineClient };
 });
@@ -65,6 +67,7 @@ describe('useEngine / EngineProvider', () => {
     getEnginePort.mockReset().mockResolvedValue(null);
     checkConnection.mockReset().mockResolvedValue(false);
     setAuthToken.mockReset();
+    fetchLocalAuthToken.mockReset().mockResolvedValue(null);
     sessionStorage.clear();
   });
 
@@ -111,6 +114,7 @@ describe('useEngine / EngineProvider', () => {
     expect(screen.getByTestId('url').textContent).toBe('http://127.0.0.1:60001');
     expect(screen.getByTestId('client').textContent).toBe('yes');
     expect(setAuthToken).toHaveBeenCalledWith('sidecar-token');
+    expect(fetchLocalAuthToken).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'disconnect' }));
     expect(stopEngine).toHaveBeenCalled();
@@ -136,8 +140,49 @@ describe('useEngine / EngineProvider', () => {
     });
     expect(setAuthToken).toHaveBeenCalledWith('dev-override');
     expect(screen.getByTestId('url').textContent).toBe('http://192.168.1.10:57286');
-    // client mode should not start sidecar
+    // client mode should not start sidecar or loopback-bootstrap
     expect(startEngine).not.toHaveBeenCalled();
+    expect(fetchLocalAuthToken).not.toHaveBeenCalled();
+  });
+
+  it('host mode bootstraps a loopback token when sidecar has none', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    checkConnection.mockResolvedValue(true);
+    getAuthToken.mockResolvedValue(null);
+    fetchLocalAuthToken.mockResolvedValue('loopback-bootstrap-token');
+
+    render(
+      <EngineProvider>
+        <Probe />
+      </EngineProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'host' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('connected');
+    });
+    expect(fetchLocalAuthToken).toHaveBeenCalled();
+    expect(setAuthToken).toHaveBeenCalledWith('loopback-bootstrap-token');
+  });
+
+  it('host mode errors when neither sidecar nor loopback token is available', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    checkConnection.mockResolvedValue(true);
+    getAuthToken.mockResolvedValue(null);
+    fetchLocalAuthToken.mockResolvedValue(null);
+
+    render(
+      <EngineProvider>
+        <Probe />
+      </EngineProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'host' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('error');
+    });
+    expect(screen.getByTestId('error').textContent).toMatch(/did not provide an auth token/);
+    expect(screen.getByTestId('client').textContent).toBe('no');
   });
 
   it('skips control-char auth tokens from sessionStorage and sidecar', async () => {

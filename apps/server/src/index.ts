@@ -10,6 +10,7 @@ import { logger } from 'hono/logger';
 import { NEOS_VERSION } from '@neos-work/shared';
 
 import { health } from './routes/health.js';
+import { localAuth } from './routes/local-auth.js';
 import { session, workspace, models } from './routes/session.js';
 import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
@@ -149,6 +150,7 @@ app.use('*', async (c, next) => {
 
 // Routes
 app.route('/api/health', health);
+app.route('/api/auth/local', localAuth);
 app.route('/api/workspace', workspace);
 app.route('/api/models', models);
 app.route('/api/session', session);

@@ -4,6 +4,7 @@ import { isAuthExemptPath } from './auth-paths.js';
 describe('isAuthExemptPath', () => {
   it('exempts health, webhook trigger, tool-token routes, and MCP OAuth callback', () => {
     expect(isAuthExemptPath('/api/health')).toBe(true);
+    expect(isAuthExemptPath('/api/auth/local')).toBe(true);
     // Trigger path only (single segment after /webhook/)
     expect(isAuthExemptPath('/api/webhook/wf-1')).toBe(true);
     expect(isAuthExemptPath('/api/tools/live-artifacts/list')).toBe(true);
@@ -26,6 +27,7 @@ describe('isAuthExemptPath', () => {
     expect(isAuthExemptPath('/api/mcp-servers')).toBe(false);
     expect(isAuthExemptPath('/api/mcp-servers/oauth/start')).toBe(false);
     expect(isAuthExemptPath('/api/settings')).toBe(false);
+    expect(isAuthExemptPath('/api/auth/local/extra')).toBe(false);
     expect(isAuthExemptPath('/api/session')).toBe(false);
     expect(isAuthExemptPath('/')).toBe(false);
   });

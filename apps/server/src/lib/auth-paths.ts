@@ -18,6 +18,8 @@ export function isAuthExemptPath(pathname: string): boolean {
   if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
   // Health check (connection probing before token is known)
   if (p === '/api/health') return true;
+  // Host-mode loopback bootstrap — handler itself requires loopback remote + Host
+  if (p === '/api/auth/local') return true;
   // Webhook *trigger* only (/api/webhook/:id) uses HMAC-SHA256 — no Bearer.
   // Admin ops (secret, regenerate, rate-limit) stay Bearer-protected so the
   // HMAC secret is not world-readable under the same prefix.

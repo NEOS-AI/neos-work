@@ -504,6 +504,29 @@ describe('EngineClient', () => {
     await expect(client.checkConnection()).resolves.toBe(false);
   });
 
+  it('fetchLocalAuthToken accepts a valid loopback token and rejects junk', async () => {
+    const client = new EngineClient('http://127.0.0.1:57286');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { token: 'loopback-token-value' } }),
+    );
+    await expect(client.fetchLocalAuthToken()).resolves.toBe('loopback-token-value');
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:57286/api/auth/local');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: 'Forbidden' }));
+    await expect(client.fetchLocalAuthToken()).resolves.toBeNull();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { token: `bad${'\n'}tok` } }),
+    );
+    await expect(client.fetchLocalAuthToken()).resolves.toBeNull();
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { token: 'short' } }));
+    await expect(client.fetchLocalAuthToken()).resolves.toBeNull();
+
+    fetchMock.mockRejectedValueOnce(new Error('network'));
+    await expect(client.fetchLocalAuthToken()).resolves.toBeNull();
+  });
+
   it('listSessions passes workspaceId query', async () => {
     const client = new EngineClient('http://engine.test');
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: [] }));
