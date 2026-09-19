@@ -87,6 +87,25 @@ export class EngineSessionsClient extends EngineMediaClient {
     }
   }
 
+  /**
+   * Host-mode bootstrap: loopback-only token from GET /api/auth/local.
+   * Returns null on network / 403 / malformed payload (fail closed).
+   */
+  async fetchLocalAuthToken(): Promise<string | null> {
+    if (!this.baseUrl) return null;
+    try {
+      const res = await fetch(`${this.baseUrl}/api/auth/local`);
+      const body = await readApiResponse<{ token?: string }>(res);
+      const token = body.ok ? body.data?.token : undefined;
+      if (typeof token !== 'string' || /[\0\r\n]/.test(token)) return null;
+      const t = token.trim();
+      if (t.length < 16 || t.length > 8_192) return null;
+      return t;
+    } catch {
+      return null;
+    }
+  }
+
   // --- Sessions ---
 
   async listSessions(workspaceId?: string): Promise<ApiResponse<SessionData[]>> {

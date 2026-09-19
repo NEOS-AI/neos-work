@@ -124,9 +124,23 @@ export function EngineProvider({ children }: { children: ReactNode }) {
           // Control-char tokens never applied (EngineClient.setAuthToken also rejects)
           const overrideToken = sessionStorage.getItem('devAuthToken');
           const tauriToken = await getAuthToken();
-          const token = overrideToken ?? tauriToken;
-          if (typeof token === 'string' && token && !/[\0\r\n]/.test(token) && token.trim()) {
-            client.setAuthToken(token);
+          const explicit = overrideToken ?? tauriToken;
+          if (typeof explicit === 'string' && explicit && !/[\0\r\n]/.test(explicit) && explicit.trim()) {
+            client.setAuthToken(explicit);
+          } else if (mode === 'host') {
+            // Sidecar stub / separately started daemon: loopback bootstrap
+            const local = await client.fetchLocalAuthToken();
+            if (local) client.setAuthToken(local);
+            else {
+              setState({
+                status: 'error',
+                mode,
+                serverUrl,
+                error: 'Local engine is running but did not provide an auth token',
+                client: null,
+              });
+              return;
+            }
           }
 
           setState({
