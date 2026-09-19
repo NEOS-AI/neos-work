@@ -948,7 +948,7 @@ describe('WebApiClient workflows (v0.24)', () => {
       implementationType: 'prompt',
     });
 
-    await expect(client.toggleSkill('')).resolves.toMatchObject({ ok: false, error: 'Invalid skill id' });
+    await expect(client.toggleSkill('', false)).resolves.toMatchObject({ ok: false, error: 'Invalid skill id' });
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
     await client.toggleSkill('code-review', false);
     expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/skills\/code-review\/toggle$/);
