@@ -7,8 +7,26 @@ const scanSkills = vi.fn();
 const toggleSkill = vi.fn();
 const deleteSkill = vi.fn();
 const upgradeSkillToPlugin = vi.fn();
+const getSettings = vi.fn();
+const searchSkillCatalog = vi.fn();
+const previewRemoteSkill = vi.fn();
+const installRemoteSkill = vi.fn();
+const updateSkill = vi.fn();
+const getSkillContent = vi.fn();
 
-const client = { listSkills, scanSkills, toggleSkill, deleteSkill, upgradeSkillToPlugin };
+const client = {
+  listSkills,
+  scanSkills,
+  toggleSkill,
+  deleteSkill,
+  upgradeSkillToPlugin,
+  getSettings,
+  searchSkillCatalog,
+  previewRemoteSkill,
+  installRemoteSkill,
+  updateSkill,
+  getSkillContent,
+};
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({ client }),
@@ -49,6 +67,18 @@ describe('Skills page', () => {
     toggleSkill.mockReset();
     deleteSkill.mockReset();
     upgradeSkillToPlugin.mockReset();
+    getSettings.mockReset().mockResolvedValue({ ok: true, data: {} });
+    searchSkillCatalog.mockReset().mockResolvedValue({
+      ok: true,
+      data: { query: '', searchType: 'fuzzy', count: 0, skills: [] },
+    });
+    previewRemoteSkill.mockReset().mockResolvedValue({ ok: false, error: 'upstream_unavailable' });
+    installRemoteSkill.mockReset().mockResolvedValue({
+      ok: true,
+      data: { id: 'inst-1', name: 'find-skills', source: 'remote' },
+    });
+    updateSkill.mockReset().mockResolvedValue({ ok: true, data: { unchanged: true } });
+    getSkillContent.mockReset().mockResolvedValue({ ok: true, data: { body: '# skill' } });
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.spyOn(window, 'alert').mockImplementation(() => {});
@@ -567,6 +597,210 @@ describe('Skills page', () => {
     expect(screen.getByTestId('skill-detail-drawer')).toBeInTheDocument();
     expect(screen.getByText('web-landing')).toBeInTheDocument();
     expect(screen.getByTestId('skill-detail-drawer').textContent).toMatch(/hero/i);
+  });
+
+  it('searches the catalog after debounce and opens preview', async () => {
+    const user = userEvent.setup();
+    listSkills.mockResolvedValue({ ok: true, data: [] });
+    searchSkillCatalog.mockResolvedValue({
+      ok: true,
+      data: {
+        query: 'find',
+        searchType: 'fuzzy',
+        count: 1,
+        skills: [
+          {
+            id: 'vercel-labs/skills/find-skills',
+            slug: 'find-skills',
+            name: 'find-skills',
+            source: 'vercel-labs/skills',
+            installs: 12,
+            sourceType: 'github',
+            installUrl: null,
+            url: 'https://skills.sh/vercel-labs/skills/find-skills',
+            installed: false,
+          },
+        ],
+      },
+    });
+    previewRemoteSkill.mockResolvedValue({
+      ok: true,
+      data: {
+        id: 'vercel-labs/skills/find-skills',
+        slug: 'find-skills',
+        name: 'find-skills',
+        description: 'Find skills',
+        hash: 'abc',
+        fileCount: 1,
+        files: [],
+        skillMd: '---\nname: find-skills\n---\n',
+        truncated: false,
+        trust: 'unverified',
+        sourceUrl: 'https://github.com/vercel-labs/skills',
+        skillsShUrl: 'https://skills.sh/vercel-labs/skills/find-skills',
+        fetchPath: 'snapshot',
+      },
+    });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByTestId('skills-catalog-search')).toBeInTheDocument());
+    await user.type(screen.getByTestId('skills-catalog-search'), 'find');
+    await waitFor(() => {
+      expect(searchSkillCatalog).toHaveBeenCalledWith('find', undefined);
+    });
+    expect(screen.getByText('find-skills')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('skills-catalog-preview-vercel-labs/skills/find-skills'));
+    await waitFor(() => expect(screen.getByTestId('skills-preview-drawer')).toBeInTheDocument());
+    expect(screen.getByText(/License not specified|licenseUnknown/i)).toBeInTheDocument();
+  });
+
+  it('confirms before catalog install', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: [] });
+    searchSkillCatalog.mockResolvedValue({
+      ok: true,
+      data: {
+        query: 'find',
+        searchType: 'fuzzy',
+        count: 1,
+        skills: [
+          {
+            id: 'vercel-labs/skills/find-skills',
+            slug: 'find-skills',
+            name: 'find-skills',
+            source: 'vercel-labs/skills',
+            installs: 1,
+            sourceType: 'github',
+            installUrl: null,
+            url: 'https://skills.sh/vercel-labs/skills/find-skills',
+            installed: false,
+          },
+        ],
+      },
+    });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByTestId('skills-catalog-search')).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId('skills-catalog-search'), { target: { value: 'find' } });
+    await waitFor(() => expect(screen.getByTestId('skills-catalog-install-vercel-labs/skills/find-skills')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('skills-catalog-install-vercel-labs/skills/find-skills'));
+    expect(confirm).toHaveBeenCalledWith('skills:installConfirm');
+    expect(installRemoteSkill).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByTestId('skills-catalog-install-vercel-labs/skills/find-skills'));
+    await waitFor(() => {
+      expect(installRemoteSkill).toHaveBeenCalledWith({
+        id: 'vercel-labs/skills/find-skills',
+        confirm: true,
+      });
+    });
+  });
+
+  it('shows ambiguous candidates and retries with the chosen slug', async () => {
+    listSkills.mockResolvedValue({ ok: true, data: [] });
+    searchSkillCatalog.mockResolvedValue({
+      ok: true,
+      data: {
+        query: 'agent',
+        searchType: 'fuzzy',
+        count: 1,
+        skills: [
+          {
+            id: 'vercel-labs/agent-skills',
+            slug: 'agent-skills',
+            name: 'agent-skills',
+            source: 'vercel-labs/agent-skills',
+            installs: 3,
+            sourceType: 'github',
+            installUrl: null,
+            url: 'https://skills.sh/vercel-labs/agent-skills',
+            installed: false,
+          },
+        ],
+      },
+    });
+    installRemoteSkill
+      .mockResolvedValueOnce({
+        ok: false,
+        error: 'skill_ambiguous',
+        candidates: [
+          { slug: 'alpha', name: 'Alpha' },
+          { slug: 'beta', name: 'Beta' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { id: 'inst-2', name: 'Alpha', source: 'remote' },
+      });
+    render(<Skills />);
+    fireEvent.change(screen.getByTestId('skills-catalog-search'), { target: { value: 'agent' } });
+    await waitFor(() => expect(screen.getByTestId('skills-catalog-install-vercel-labs/agent-skills')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('skills-catalog-install-vercel-labs/agent-skills'));
+    await waitFor(() => expect(screen.getByTestId('skills-ambiguous')).toBeInTheDocument());
+    expect(screen.getByText('skillAmbiguous')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('skills-ambiguous-pick-alpha'));
+    await waitFor(() => {
+      expect(installRemoteSkill).toHaveBeenLastCalledWith({
+        id: 'vercel-labs/agent-skills',
+        slug: 'alpha',
+        confirm: true,
+      });
+    });
+  });
+
+  it('confirms remote file delete and registry-only delete separately', async () => {
+    listSkills.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'sk-remote',
+          name: 'Remote Skill',
+          description: 'r',
+          enabled: true,
+          featured: false,
+          source: 'remote',
+          remoteId: 'acme/tmp/remote-skill',
+        },
+        {
+          id: 'sk-local',
+          name: 'Local Skill',
+          description: 'l',
+          enabled: true,
+          featured: false,
+          source: 'local',
+        },
+      ],
+    });
+    deleteSkill.mockResolvedValue({ ok: true, data: { filesRemoved: true } });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByText('Remote Skill')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('skill-delete-sk-remote'));
+    expect(confirm).toHaveBeenCalledWith('skills:deleteRemoteFilesConfirm');
+    expect(deleteSkill).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByTestId('skill-delete-sk-remote'));
+    await waitFor(() => expect(deleteSkill).toHaveBeenCalledWith('sk-remote'));
+
+    deleteSkill.mockClear();
+    confirm.mockClear();
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByTestId('skill-delete-sk-local'));
+    expect(confirm).toHaveBeenCalledWith('skills:deleteRegistryConfirm');
+    await waitFor(() => expect(deleteSkill).toHaveBeenCalledWith('sk-local'));
+  });
+
+  it('hides catalog search when remoteCatalogEnabled is false', async () => {
+    getSettings.mockResolvedValue({
+      ok: true,
+      data: { 'skills.remoteCatalogEnabled': 'false' },
+    });
+    listSkills.mockResolvedValue({ ok: true, data: [] });
+    render(<Skills />);
+    await waitFor(() => expect(screen.getByTestId('skills-catalog-disabled')).toBeInTheDocument());
+    expect(screen.getByText('catalogDisabled')).toBeInTheDocument();
+    expect(screen.queryByTestId('skills-catalog-search')).not.toBeInTheDocument();
+    expect(previewRemoteSkill).not.toHaveBeenCalled();
   });
 
   it('alerts scrubbed error when upgrade to plugin throws', async () => {

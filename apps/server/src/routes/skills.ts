@@ -20,6 +20,7 @@ import {
   SkillsHttpError,
 } from '../lib/skills-catalog.js';
 import {
+  deleteInstalledSkill,
   installRemoteSkill,
   pruneMissingRemoteSkills,
   readSkillContent,
@@ -150,13 +151,6 @@ function toggleSkill(id: string, enabled: boolean): boolean {
   const result = getDb()
     .prepare('UPDATE skill SET enabled = ? WHERE id = ?')
     .run(enabled ? 1 : 0, trimmed);
-  return result.changes > 0;
-}
-
-function deleteSkillById(id: string): boolean {
-  const trimmed = safeSkillLookupId(id);
-  if (!trimmed) return false;
-  const result = getDb().prepare('DELETE FROM skill WHERE id = ?').run(trimmed);
   return result.changes > 0;
 }
 
@@ -453,13 +447,19 @@ skills.post('/:id/toggle', async (c) => {
   return c.json({ ok: true });
 });
 
-// DELETE /api/skills/:id — registry-only
-skills.delete('/:id', (c) => {
+// DELETE /api/skills/:id — file delete only for remote + sidecar + inside root
+skills.delete('/:id', async (c) => {
   const id = paramId(c);
   if (!id) return c.json({ ok: false, error: 'Skill not found' }, 404);
-  const deleted = deleteSkillById(id);
-  if (!deleted) return c.json({ ok: false, error: 'Skill not found' }, 404);
-  return c.json({ ok: true, data: { filesRemoved: false } });
+  try {
+    const data = await deleteInstalledSkill(id, { upsert: upsertSkill });
+    return c.json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof SkillsHttpError && err.http === 404) {
+      return c.json({ ok: false, error: 'Skill not found' }, 404);
+    }
+    return skillsError(c, err, 'skills-delete');
+  }
 });
 
 /** Exported for unit tests (scan path hygiene). */

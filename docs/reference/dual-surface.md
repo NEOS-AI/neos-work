@@ -40,7 +40,7 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 | Plugins / remote marketplace | **yes** | **yes (v0.25/v0.26)** | — | Web: catalog URL + install; desktop keeps plugin-run SSE |
 | Blocks | **yes** | **yes (v0.26)** | — | Web: list + create prompt block |
 | Templates | **yes** | **yes (v0.26)** | — | Web: instantiate workflow |
-| Skills UI | **yes** | **yes (v0.26)** | — | Web: list/scan/toggle/delete |
+| Skills UI | **yes** | **yes (v0.26)** | — | Web: list/scan/toggle/delete. Desktop catalog search/preview/install. Remote delete removes files. |
 | Design systems | **yes** | **yes (v0.26)** | — | Web: list + DESIGN.md editor |
 | Media generate UI | **yes** | **yes** (v0.23) | yes | Web: list + generate; Desktop full studio |
 | Sessions / workspaces | **yes** | **yes (v0.25)** | — | Web: list/create/chat SSE + workspace CRUD |

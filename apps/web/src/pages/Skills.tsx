@@ -8,6 +8,7 @@ import { WebNav } from '../components/WebNav.js';
 import { clearConnection, loadConnection } from '../lib/auth.js';
 import { ApiError, WebApiClient } from '../lib/api.js';
 import { scrubError } from '../lib/scrub.js';
+import { skillsCopy } from '../lib/skills-i18n.js';
 
 type SkillRow = {
   id: string;
@@ -85,7 +86,12 @@ export function Skills() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this skill?')) return;
+    const target = items.find((s) => s.id === id);
+    const copy =
+      target?.source === 'remote'
+        ? skillsCopy.deleteRemoteFilesConfirm
+        : skillsCopy.deleteRegistryConfirm;
+    if (!window.confirm(copy)) return;
     const res = await client.deleteSkill(id);
     if (!res.ok) {
       setError(scrubError(res.error, 'Delete failed'));

@@ -9,5 +9,5 @@
     "noEmit": true,
     "composite": false
   },
-  "include": ["src"]
+  "include": ["src", "../../packages/ui/src/i18n/locales/en/skills.json"]
 }

@@ -198,6 +198,8 @@ describe('Settings page', () => {
     expect(screen.getByText('settings:title')).toBeInTheDocument();
     expect(screen.getByText('settings:apiKeys.title')).toBeInTheDocument();
     expect(screen.getByText('settings:workflowKeys.title')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-skills-catalog')).toBeInTheDocument();
+    expect(screen.getByText('skillsCatalog.title')).toBeInTheDocument();
     expect(screen.getByText('Deploy')).toBeInTheDocument();
     expect(screen.getByText('Media generation')).toBeInTheDocument();
     expect(screen.getByText('MCP Servers')).toBeInTheDocument();
@@ -230,6 +232,24 @@ describe('Settings page', () => {
       expect(screen.getByTestId('mcp-presets-list')).toHaveTextContent(/TradingView/);
     });
     expect(listMcpPresets).toHaveBeenCalled();
+  });
+
+  it('toggles skills catalog flags through settings API', async () => {
+    render(<Settings />);
+    await waitFor(() => expect(screen.getByTestId('settings-skills-remote-catalog')).toBeInTheDocument());
+    expect(screen.getByTestId('settings-skills-remote-catalog')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('settings-skills-remote-install')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('settings-skills-telemetry')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText('skillsCatalog.telemetryFootnote')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('settings-skills-remote-catalog'));
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('skills.remoteCatalogEnabled', 'false');
+    });
+    fireEvent.click(screen.getByTestId('settings-skills-telemetry'));
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('skills.telemetryOptIn', 'true');
+    });
   });
 
   it('runs connection probes for ollama and custom URL', async () => {

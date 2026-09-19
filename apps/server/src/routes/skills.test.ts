@@ -494,7 +494,7 @@ describe('skills catalog + snapshot install routes', () => {
     expect(((await res.json()) as { error: string }).error).toBe('occupied_plugin');
   });
 
-  it('DELETE remains registry-only (filesRemoved: false, files stay)', async () => {
+  it('DELETE remote+sidecar+inside removes files', async () => {
     setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
     const installed = await skills.request('/install', {
       method: 'POST',
@@ -502,12 +502,73 @@ describe('skills catalog + snapshot install routes', () => {
       body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
     });
     const instBody = await installed.json() as { data: { id: string } };
+    const dest = join(resolveUserSkillsDir(), 'find-skills');
+    const del = await skills.request(`/${instBody.data.id}`, { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    const delBody = await del.json() as { data?: { filesRemoved?: boolean; restored?: string } };
+    expect(delBody.data?.filesRemoved).toBe(true);
+    expect(delBody.data?.restored).toBeUndefined();
+    await expect(readFile(join(dest, 'SKILL.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    const list = await skills.request('/');
+    const body = await list.json() as { data: Array<{ name: string }> };
+    expect(body.data.find((s) => s.name === 'find-skills')).toBeUndefined();
+  });
+
+  it('DELETE remote without sidecar is registry-only', async () => {
+    setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse(FIND_SKILLS_SNAPSHOT)));
+    const installed = await skills.request('/install', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: FIND_SKILLS_ID, confirm: true }),
+    });
+    const instBody = await installed.json() as { data: { id: string } };
+    const dest = join(resolveUserSkillsDir(), 'find-skills');
+    await rm(join(dest, 'neos-skill-source.json'), { force: true });
     const del = await skills.request(`/${instBody.data.id}`, { method: 'DELETE' });
     expect(del.status).toBe(200);
     const delBody = await del.json() as { data?: { filesRemoved?: boolean } };
     expect(delBody.data?.filesRemoved).toBe(false);
-    const md = await readFile(join(resolveUserSkillsDir(), 'find-skills', 'SKILL.md'), 'utf8');
+    const md = await readFile(join(dest, 'SKILL.md'), 'utf8');
     expect(md).toContain('name: find-skills');
+    const list = await skills.request('/');
+    const body = await list.json() as { data: Array<{ name: string }> };
+    expect(body.data.find((s) => s.name === 'find-skills')).toBeUndefined();
+  });
+
+  it('DELETE remote that shadowed bundled restores the bundled row', async () => {
+    const root = resolveUserSkillsDir();
+    const dest = join(root, 'code-review');
+    await mkdir(dest, { recursive: true });
+    await writeFile(join(dest, 'SKILL.md'), skillMd('code-review'), 'utf8');
+    await writeSkillProvenance(dest, {
+      schemaVersion: 'neos-skill-source/v1',
+      origin: 'github',
+      id: 'acme/tmp/code-review',
+      source: 'acme/tmp',
+      slug: 'code-review',
+      trust: 'unverified',
+      installedAt: new Date().toISOString(),
+    });
+    upsertSkill({
+      name: 'code-review',
+      description: 'remote copy',
+      source: 'remote',
+      path: join(dest, 'SKILL.md'),
+      manifestJson: JSON.stringify({ featured: false }),
+    });
+    const row = getDb().prepare("SELECT id FROM skill WHERE name = 'code-review'").get() as { id: string };
+    const del = await skills.request(`/${row.id}`, { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    const delBody = await del.json() as { data?: { filesRemoved?: boolean; restored?: string } };
+    expect(delBody.data?.filesRemoved).toBe(true);
+    expect(delBody.data?.restored).toBe('bundled');
+    await expect(readFile(join(dest, 'SKILL.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    const list = await skills.request('/');
+    const body = await list.json() as { data: Array<{ name: string; source: string; id: string }> };
+    const found = body.data.find((s) => s.name === 'code-review');
+    expect(found).toBeTruthy();
+    expect(found!.source).toBe('bundled');
+    expect(found!.id).toBe(row.id);
   });
 
   it('GET /:id/content reads SKILL.md and 404s without leaking paths', async () => {

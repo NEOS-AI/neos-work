@@ -27,5 +27,16 @@
     "title": "기본값",
     "provider": "기본 프로바이더",
     "model": "기본 모델"
+  },
+  "skillsCatalog": {
+    "title": "스킬 카탈로그",
+    "description": "skills.sh에서 제3자 SKILL.md 패키지를 검색하고 설치합니다.",
+    "remoteCatalog": "원격 카탈로그",
+    "remoteCatalogHint": "스킬 페이지에서 skills.sh를 검색하고 미리봅니다.",
+    "remoteInstall": "원격 설치",
+    "remoteInstallHint": "GitHub와 skills.sh에서 제3자 스킬 설치를 허용합니다.",
+    "telemetry": "익명 설치 텔레메트리 공유",
+    "telemetryHint": "기본값은 꺼짐입니다. 켜면 설치 후 단방향 요청이 전송될 수 있습니다.",
+    "telemetryFootnote": "텔레메트리는 데스크톱 전용이며, 직접 켜기 전에는 전송되지 않습니다."
   }
 }
