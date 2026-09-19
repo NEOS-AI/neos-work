@@ -1,5 +1,5 @@
 /**
- * Skills API — catalog search/preview/audit, snapshot install, scan, toggle, delete.
+ * Skills API — catalog search/preview/audit, remote install, scan, toggle, delete.
  */
 
 import { Hono } from 'hono';
@@ -19,7 +19,12 @@ import {
   searchSkillCatalog,
   SkillsHttpError,
 } from '../lib/skills-catalog.js';
-import { installRemoteSkill, readSkillContent, updateRemoteSkill } from '../lib/skills-install.js';
+import {
+  installRemoteSkill,
+  pruneMissingRemoteSkills,
+  readSkillContent,
+  updateRemoteSkill,
+} from '../lib/skills-install.js';
 
 /** Monorepo `skills/` catalog (apps/server/src/routes → repo root). */
 const REPO_SKILLS_CANDIDATE = resolve(
@@ -205,7 +210,6 @@ function skillsError(c: Context, err: unknown, ctx: string) {
       case 403: return c.json(body, 403);
       case 404: return c.json(body, 404);
       case 409: return c.json(body, 409);
-      case 422: return c.json(body, 422);
       case 429: return c.json(body, 429);
       case 502: return c.json(body, 502);
       default: return c.json(body, 500);
@@ -377,7 +381,10 @@ skills.post('/scan', async (c) => {
       includeGlobal: true,
     });
 
+    const keepRemoteNames = await pruneMissingRemoteSkills();
+
     for (const skill of discovered) {
+      if (keepRemoteNames.has(skill.manifest.name.toLowerCase())) continue;
       const sidecar = skill.packageDir ? await readSkillProvenance(skill.packageDir) : null;
       const manifestPayload = {
         ...skill.manifest,

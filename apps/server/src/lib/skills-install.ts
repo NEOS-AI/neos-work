@@ -1,4 +1,4 @@
-/** Snapshot-only remote skill ingest. */
+/** Remote skill ingest: snapshot, zipball, well-known, or direct SKILL.md. */
 
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
@@ -22,16 +22,19 @@ import { getSetting } from '../db/settings.js';
 import * as sessionsDb from '../db/sessions.js';
 import { publicPathTail } from './path-safety.js';
 import {
-  fetchSkillSnapshot,
   isRemoteInstallEnabled,
+  resolveSkillFiles,
+  type FetchPath,
   type SkillSnapshot,
-  type SnapshotFile,
 } from './skills-catalog.js';
 import {
+  discoverSkillFolders,
   parseInstallSource,
+  pickSkillFolder,
   SkillsHttpError,
   type InstallSource,
   type ParseInstallSourceInput,
+  type SkillFileBlob,
 } from './skills-source.js';
 
 const ROOT_WHITELIST_TOP = new Set(['skill.md', 'references', 'assets', 'scripts', 'examples']);
@@ -67,7 +70,7 @@ export type InstallRemoteResult = {
   hash: string | null;
   scope: 'global' | 'workspace';
   path: string;
-  fetchPath: 'snapshot';
+  fetchPath: FetchPath;
   shadowed?: 'bundled';
   unchanged?: boolean;
 };
@@ -173,66 +176,12 @@ async function assertReadableSkillFile(absPath: string): Promise<string | null> 
   return target;
 }
 
-type SkillCandidate = {
-  slug: string;
-  name: string;
-  files: SnapshotFile[];
-  skillMd: string;
-  relDir: string;
-};
-
-function discoverSnapshotSkills(files: SnapshotFile[], fallbackSlug: string): SkillCandidate[] {
-  const skillMdFiles = files.filter((f) => {
-    const base = f.path.split('/').pop() ?? '';
-    return base === 'SKILL.md';
-  });
-  const out: SkillCandidate[] = [];
-  for (const md of skillMdFiles) {
-    const segs = md.path.split('/');
-    segs.pop();
-    const relDir = segs.join('/');
-    const prefix = relDir ? `${relDir}/` : '';
-    const pkgFiles = files.filter((f) => (relDir ? f.path === relDir || f.path.startsWith(prefix) : true));
-    const parsed = parseSkillFile(md.contents, md.path, 'remote');
-    const name = parsed?.manifest.name ?? fallbackSlug;
-    const dirBase = relDir ? (relDir.split('/').pop() ?? fallbackSlug) : fallbackSlug;
-    const slug = dirBase || fallbackSlug;
-    out.push({
-      slug,
-      name,
-      files: pkgFiles.map((f) => ({
-        path: relDir ? f.path.slice(prefix.length) : f.path,
-        contents: f.contents,
-      })),
-      skillMd: md.contents,
-      relDir,
-    });
-  }
-  return out;
-}
-
-function applyRootWhitelist(files: SnapshotFile[], isRepoRoot: boolean): SnapshotFile[] {
+function applyRootWhitelist(files: SkillFileBlob[], isRepoRoot: boolean): SkillFileBlob[] {
   if (!isRepoRoot) return files;
   return files.filter((f) => {
     const top = (f.path.split('/')[0] ?? '').toLowerCase();
     return ROOT_WHITELIST_TOP.has(top);
   });
-}
-
-function matchCandidate(cands: SkillCandidate[], slug: string | undefined): SkillCandidate {
-  if (cands.length === 0) throw new SkillsHttpError(404, 'no_skills');
-  if (!slug) {
-    if (cands.length === 1) return cands[0]!;
-    throw new SkillsHttpError(400, 'skill_ambiguous', {
-      candidates: cands.map((c) => ({ slug: c.slug, name: c.name })),
-    });
-  }
-  const want = slug.toLowerCase();
-  const hit = cands.find(
-    (c) => c.slug.toLowerCase() === want || c.name.toLowerCase() === want,
-  );
-  if (!hit) throw new SkillsHttpError(404, 'skill_not_in_source');
-  return hit;
 }
 
 function parseNameConflictProvenance(manifestJson: string | null): string | null {
@@ -274,7 +223,7 @@ async function classifyInstallOccupancy(
   return occ;
 }
 
-async function writeTree(tmp: string, files: SnapshotFile[], root: string): Promise<void> {
+async function writeTree(tmp: string, files: SkillFileBlob[], root: string): Promise<void> {
   if (!isPathInside(root, tmp)) throw new SkillsHttpError(502, 'ssrf_blocked');
   await fsp.mkdir(tmp, { recursive: true });
   for (const file of files) {
@@ -289,7 +238,11 @@ async function writeTree(tmp: string, files: SnapshotFile[], root: string): Prom
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     }
-    await fsp.writeFile(dest, file.contents, 'utf8');
+    if (typeof file.contents === 'string') {
+      await fsp.writeFile(dest, file.contents, 'utf8');
+    } else {
+      await fsp.writeFile(dest, file.contents);
+    }
   }
 }
 
@@ -340,11 +293,41 @@ async function atomicReplace(
   }
 }
 
-function selectFilesForPackage(cand: SkillCandidate): SnapshotFile[] {
+function selectFilesForPackage(cand: { relDir: string; files: SkillFileBlob[] }): SkillFileBlob[] {
   const isRepoRoot = cand.relDir === '' && cand.files.some((f) => f.path === 'SKILL.md');
   const filtered = applyRootWhitelist(cand.files, isRepoRoot);
   const hasSkill = filtered.some((f) => f.path === 'SKILL.md');
   return hasSkill ? filtered : cand.files;
+}
+
+const STALE_TMP_MS = 24 * 60 * 60 * 1000;
+
+async function cleanupStaleInstallDirs(root: string): Promise<void> {
+  let entries: string[] = [];
+  try {
+    entries = await fsp.readdir(root);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  for (const name of entries) {
+    if (!name.startsWith('.tmp-') && !name.startsWith('.bak-')) continue;
+    const p = resolve(root, name);
+    if (!isPathInside(root, p)) continue;
+    try {
+      const st = await fsp.lstat(p);
+      if (now - st.mtimeMs < STALE_TMP_MS) continue;
+      await fsp.rm(p, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function provenanceOrigin(fetchPath: FetchPath, src: InstallSource): SkillProvenance['origin'] {
+  if (fetchPath === 'snapshot') return 'skills.sh';
+  if (src.kind === 'github' || fetchPath === 'zipball') return 'github';
+  return 'well-known';
 }
 
 function detectInstallScope(packageDir: string): 'global' | 'workspace' {
@@ -366,8 +349,9 @@ async function ingestSnapshot(opts: {
   pinDir?: string;
 }): Promise<InstallRemoteResult> {
   const { src, snap, scope, includeInternal, upsert } = opts;
-  const cands = discoverSnapshotSkills(snap.files, src.slug ?? snap.slug);
-  const cand = matchCandidate(cands, src.slug);
+  const fetchPath = snap.fetchPath;
+  const cands = discoverSkillFolders(snap.files, src.slug ?? snap.slug);
+  const cand = pickSkillFolder(cands, src.slug);
   const parsed = parseSkillFile(cand.skillMd, 'SKILL.md', 'remote');
   if (!parsed) throw new SkillsHttpError(404, 'no_skills');
   if (parsed.manifest.metadata?.internal === 'true' && !includeInternal) {
@@ -394,6 +378,7 @@ async function ingestSnapshot(opts: {
 
   const root = resolveInstallRoot(scope);
   await fsp.mkdir(root, { recursive: true });
+  await cleanupStaleInstallDirs(root);
 
   if (existing && existing.source !== 'bundled' && !isPathInside(root, existing.path)) {
     throw new SkillsHttpError(409, 'name_conflict');
@@ -430,7 +415,7 @@ async function ingestSnapshot(opts: {
   const now = new Date().toISOString();
   const provenance: SkillProvenance = {
     schemaVersion: 'neos-skill-source/v1',
-    origin: 'skills.sh',
+    origin: provenanceOrigin(fetchPath, src),
     id: remoteId,
     source: src.kind === 'github' && src.owner && src.repo ? `${src.owner}/${src.repo}` : remoteId,
     slug: src.slug ?? cand.slug,
@@ -482,7 +467,7 @@ async function ingestSnapshot(opts: {
 
   const ms = Date.now() - started;
   console.log(
-    `skills-install id=${remoteId} origin=skills.sh fetchPath=snapshot files=${files.length} ms=${ms}${shadowed ? ' shadowed=bundled' : ''}`,
+    `skills-install id=${remoteId} origin=${provenance.origin} fetchPath=${fetchPath} files=${files.length} ms=${ms}${shadowed ? ' shadowed=bundled' : ''}`,
   );
 
   const result: InstallRemoteResult = {
@@ -493,7 +478,7 @@ async function ingestSnapshot(opts: {
     hash: snap.hash,
     scope,
     path: publicPathTail(finalSkillMd),
-    fetchPath: 'snapshot',
+    fetchPath,
   };
   if (shadowed) result.shadowed = shadowed;
   return result;
@@ -507,12 +492,8 @@ export async function installRemoteSkill(
   if (!isRemoteInstallEnabled()) throw new SkillsHttpError(403, 'install_disabled');
 
   const src = parseInstallSource(input);
-  if (src.ref || src.kind !== 'github' || !src.slug) {
-    throw new SkillsHttpError(422, 'install_source_unsupported');
-  }
-
   const scope = resolveScope(input.scope);
-  const snap = await fetchSkillSnapshot(src, { forInstall: true });
+  const snap = await resolveSkillFiles(src, { preview: false });
   return ingestSnapshot({
     src,
     snap,
@@ -545,13 +526,10 @@ export async function updateRemoteSkill(
       slug: sidecar.slug,
     });
   } catch {
-    throw new SkillsHttpError(422, 'install_source_unsupported');
-  }
-  if (src.ref || src.kind !== 'github' || !src.slug) {
-    throw new SkillsHttpError(422, 'install_source_unsupported');
+    throw new SkillsHttpError(400, 'invalid_source');
   }
 
-  const snap = await fetchSkillSnapshot(src, { forInstall: true });
+  const snap = await resolveSkillFiles(src, { preview: false });
   if (sidecar.hash && snap.hash && sidecar.hash === snap.hash) {
     return {
       id: row.id,
@@ -561,7 +539,7 @@ export async function updateRemoteSkill(
       hash: sidecar.hash,
       scope,
       path: publicPathTail(row.path),
-      fetchPath: 'snapshot',
+      fetchPath: snap.fetchPath,
       unchanged: true,
     };
   }
@@ -575,6 +553,51 @@ export async function updateRemoteSkill(
     existingSidecar: sidecar,
     pinDir: packageDir,
   });
+}
+
+/**
+ * Drop remote rows whose SKILL.md is missing inside the current data root.
+ * Paths outside the current root are left alone (NEOS_DATA_DIR move).
+ * Returns names that must not be overwritten by a later bundled/local upsert.
+ */
+export async function pruneMissingRemoteSkills(): Promise<Set<string>> {
+  const roots = ALLOWED_CONTENT_ROOTS();
+  const keepNames = new Set<string>();
+  type Row = { id: string; name: string; source: string; path: string };
+  let rows: Row[] = [];
+  try {
+    rows = getDb()
+      .prepare("SELECT id, name, source, path FROM skill WHERE source = 'remote'")
+      .all() as Row[];
+  } catch {
+    return keepNames;
+  }
+
+  for (const row of rows) {
+    if (row.source !== 'remote') continue;
+    const abs = resolve(row.path);
+    if (!roots.some((r) => isPathInside(r, abs))) {
+      keepNames.add(row.name.toLowerCase());
+      continue;
+    }
+    const packageDir = dirname(abs);
+    if (!roots.some((r) => isPathInside(r, packageDir))) {
+      keepNames.add(row.name.toLowerCase());
+      continue;
+    }
+    const sidecar = await readSkillProvenance(packageDir);
+    if (!sidecar) continue;
+    let missing = false;
+    try {
+      const st = await fsp.lstat(abs);
+      missing = st.isSymbolicLink() || !st.isFile();
+    } catch {
+      missing = true;
+    }
+    if (!missing) continue;
+    getDb().prepare('DELETE FROM skill WHERE id = ?').run(row.id);
+  }
+  return keepNames;
 }
 
 const CONTENT_BODY_MAX = 32 * 1024;

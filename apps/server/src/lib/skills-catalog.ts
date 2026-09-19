@@ -2,13 +2,23 @@
 
 import { createHash } from 'node:crypto';
 
+import { parseSkillFile } from '@neos-work/core';
 import { NEOS_VERSION } from '@neos-work/shared';
 
 import { getSetting } from '../db/settings.js';
 import { getDb } from '../db/schema.js';
+import {
+  classifyArchivePath,
+  extractSkillZip,
+  TEXT_FILE_MAX as ARCHIVE_TEXT_MAX,
+  ZIPBALL_HTTP_MAX,
+} from './skills-archive.js';
 import { fetchPublicHttp, SsrfError } from './ssrf.js';
 import {
+  discoverSkillFolders,
   parseInstallSource,
+  pickBySlug,
+  pickSkillFolder,
   safeCatalogId,
   snapshotDownloadPath,
   SkillsHttpError,
@@ -30,13 +40,25 @@ const AUDIT_CACHE_MAX = 32;
 const SEARCH_TIMEOUT_MS = 5_000;
 const SNAPSHOT_TIMEOUT_MS = 10_000;
 const AUDIT_TIMEOUT_MS = 3_000;
+const ZIPBALL_TIMEOUT_MS = 20_000;
+const WELLKNOWN_TIMEOUT_MS = 5_000;
+const DIRECT_TIMEOUT_MS = 5_000;
 const SNAPSHOT_HTTP_MAX = 5 * 1024 * 1024;
-const TEXT_FILE_MAX = 1 * 1024 * 1024;
+const TEXT_FILE_MAX = ARCHIVE_TEXT_MAX;
 const FILE_COUNT_MAX = 1_000;
 const SKILL_MD_PREVIEW_MAX = 32_000;
 const SEARCH_BUDGET_PER_MIN = 20;
 const DOWNLOAD_BUDGET_PER_MIN = 10;
 const AUDIT_BUDGET_PER_MIN = 10;
+const ZIPBALL_BUDGET_PER_MIN = 6;
+const WELLKNOWN_BUDGET_PER_MIN = 10;
+
+const RAW_HOSTS = new Set(['raw.githubusercontent.com']);
+const ZIPBALL_HOSTS = new Set(['codeload.github.com', 'github.com']);
+const WK_SCHEMA_V020 = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json';
+const DIGEST_RE = /^sha256:([a-fA-F0-9]{64})$/;
+
+export type FetchPath = 'snapshot' | 'zipball' | 'well-known' | 'direct';
 
 const GITHUB_SOURCE_RE = /^[a-z0-9](?:[a-z0-9-]{0,38})\/[A-Za-z0-9._-]+$/;
 const WELLKNOWN_SOURCE_RE = /^[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -63,7 +85,7 @@ export type RemoteSkillAudit = {
   auditedAt?: string;
 };
 
-export type SnapshotFile = { path: string; contents: string };
+export type SnapshotFile = { path: string; contents: string | Buffer };
 
 export type SkillSnapshot = {
   files: SnapshotFile[];
@@ -71,6 +93,7 @@ export type SkillSnapshot = {
   computedHash: string;
   id: string;
   slug: string;
+  fetchPath: FetchPath;
 };
 
 export type CatalogSearchResult = {
@@ -97,7 +120,7 @@ export type CatalogPreviewResult = {
   audits?: RemoteSkillAudit[];
   sourceUrl: string | null;
   skillsShUrl: string;
-  fetchPath: 'snapshot';
+  fetchPath: FetchPath;
 };
 
 export type CatalogAuditResult = {
@@ -537,21 +560,6 @@ export function computeSkillFolderHash(
   return hash.digest('hex');
 }
 
-export function isSafeSnapshotRelPath(raw: unknown): 'ok' | 'skip' | 'reject' {
-  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return 'reject';
-  const n = raw.replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!n || n.length > 500) return 'reject';
-  if (n.startsWith('/') || /^[A-Za-z]:/.test(n)) return 'reject';
-  const segs = n.split('/');
-  if (segs.some((s) => s === '..' || s === '.' || s === '')) return 'reject';
-  if (/[\x00-\x1f]/.test(n)) return 'reject';
-  const lowerSegs = segs.map((s) => s.toLowerCase());
-  if (lowerSegs[0] === '__macosx' || lowerSegs.includes('.git') || lowerSegs.includes('node_modules')) {
-    return 'skip';
-  }
-  return 'ok';
-}
-
 function parseSnapshotBody(json: unknown): { files: SnapshotFile[]; hash: string | null } {
   if (!json || typeof json !== 'object' || Array.isArray(json)) {
     throw new SkillsHttpError(502, 'invalid_upstream');
@@ -572,7 +580,7 @@ function parseSnapshotBody(json: unknown): { files: SnapshotFile[]; hash: string
     if (typeof f.path !== 'string' || typeof f.contents !== 'string') {
       throw new SkillsHttpError(502, 'invalid_upstream');
     }
-    const verdict = isSafeSnapshotRelPath(f.path);
+    const verdict = classifyArchivePath(f.path);
     if (verdict === 'reject') throw new SkillsHttpError(502, 'invalid_upstream');
     if (verdict === 'skip') continue;
     if (Buffer.byteLength(f.contents, 'utf8') > TEXT_FILE_MAX) {
@@ -588,40 +596,56 @@ function parseSnapshotBody(json: unknown): { files: SnapshotFile[]; hash: string
   return { files, hash };
 }
 
+function snapshotFromFiles(
+  src: InstallSource,
+  files: SnapshotFile[],
+  hash: string | null,
+  fetchPath: FetchPath,
+  idFallback: string,
+): SkillSnapshot {
+  const computedHash = computeSkillFolderHash(
+    files.map((f) => ({ relativePath: f.path, content: f.contents })),
+  );
+  return {
+    files,
+    hash,
+    computedHash,
+    id: src.id ?? idFallback,
+    slug: src.slug ?? lastSegment(idFallback),
+    fetchPath,
+  };
+}
+
 export async function fetchSkillSnapshot(
   src: InstallSource,
-  opts?: { fetchImpl?: FetchImpl; forInstall?: boolean },
+  opts?: { fetchImpl?: FetchImpl },
 ): Promise<SkillSnapshot> {
   const rel = snapshotDownloadPath(src);
-  if (!rel) {
-    if (opts?.forInstall) throw new SkillsHttpError(422, 'install_source_unsupported');
-    throw new SkillsHttpError(502, 'upstream_unavailable');
-  }
+  if (!rel) throw new SkillsHttpError(502, 'upstream_unavailable');
   const budget = consumeBudget('download', DOWNLOAD_BUDGET_PER_MIN, 2);
   if (!budget.ok) {
     throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: budget.retryAfterSec });
   }
   try {
     const url = `${CATALOG_ORIGIN}/api/download/${rel.split('/').map(encodeURIComponent).join('/')}`;
-    const res = await fetchCatalog(url, {
-      timeoutMs: SNAPSHOT_TIMEOUT_MS,
-      fetchImpl: resolveFetch(opts),
-    });
-    if (res.status === 404) {
-      throw new SkillsHttpError(
-        opts?.forInstall ? 422 : 502,
-        opts?.forInstall ? 'install_source_unsupported' : 'upstream_unavailable',
-      );
-    }
-    if (res.status === 401 || res.status === 403) {
+    let res: Response;
+    try {
+      res = await fetchCatalog(url, {
+        timeoutMs: SNAPSHOT_TIMEOUT_MS,
+        fetchImpl: resolveFetch(opts),
+      });
+    } catch (err) {
+      if (err instanceof SkillsHttpError && err.code === 'rate_limited') throw err;
+      if (err instanceof SkillsHttpError && err.code === 'ssrf_blocked') throw err;
       throw new SkillsHttpError(502, 'upstream_unavailable');
     }
     if (res.status === 429) {
       throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: retryAfterSec(res) });
     }
-    if (res.status !== 200) {
+    if (res.status === 404 || res.status === 401 || res.status === 403 || res.status >= 500) {
       throw new SkillsHttpError(502, 'upstream_unavailable');
     }
+    if (res.status !== 200) throw new SkillsHttpError(502, 'upstream_unavailable');
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength > SNAPSHOT_HTTP_MAX) {
       throw new SkillsHttpError(502, 'upstream_too_large');
@@ -630,26 +654,485 @@ export async function fetchSkillSnapshot(
     try {
       json = JSON.parse(buf.toString('utf8'));
     } catch {
-      throw new SkillsHttpError(502, 'invalid_upstream');
+      throw new SkillsHttpError(502, 'upstream_unavailable');
     }
     if (json && typeof json === 'object' && !Array.isArray(json)
       && (json as { error?: unknown }).error === 'not_found') {
-      throw new SkillsHttpError(opts?.forInstall ? 422 : 502, opts?.forInstall ? 'install_source_unsupported' : 'upstream_unavailable');
+      throw new SkillsHttpError(502, 'upstream_unavailable');
     }
     const parsed = parseSnapshotBody(json);
-    const computedHash = computeSkillFolderHash(
-      parsed.files.map((f) => ({ relativePath: f.path, content: f.contents })),
-    );
-    return {
-      files: parsed.files,
-      hash: parsed.hash,
-      computedHash,
-      id: src.id ?? rel,
-      slug: src.slug ?? lastSegment(rel),
-    };
+    return snapshotFromFiles(src, parsed.files, parsed.hash, 'snapshot', rel);
   } finally {
     releaseBudget('download');
   }
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.trim().toLowerCase().replace(/\.$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function hostOk(url: string, allow: Set<string>): boolean {
+  const h = hostOf(url);
+  return !!h && allow.has(h);
+}
+
+async function fetchPublicBytes(
+  url: string,
+  opts: {
+    timeoutMs: number;
+    maxBytes: number;
+    hosts?: Set<string>;
+    fetchImpl?: FetchImpl;
+    accept?: string;
+  },
+): Promise<{ status: number; buf: Buffer; headers: Headers }> {
+  if (opts.hosts && !hostOk(url, opts.hosts)) {
+    throw new SkillsHttpError(502, 'ssrf_blocked');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+  try {
+    const res = await fetchPublicHttp(url, {
+      method: 'GET',
+      headers: {
+        Accept: opts.accept ?? '*/*',
+        'User-Agent': `neos-work-skills/${NEOS_VERSION}`,
+      },
+      signal: controller.signal,
+      checkDns: !opts.fetchImpl,
+      followOneRedirect: true,
+      fetchImpl: opts.fetchImpl,
+    });
+    if (res.status >= 300 && res.status < 400) {
+      throw new SkillsHttpError(502, 'upstream_unavailable');
+    }
+    if (opts.hosts && !hostOk(res.url || url, opts.hosts) && res.status === 200) {
+      throw new SkillsHttpError(502, 'ssrf_blocked');
+    }
+    const clRaw = res.headers?.get?.('content-length') ?? '';
+    const cl = Number(clRaw);
+    if (Number.isFinite(cl) && cl > opts.maxBytes) {
+      throw new SkillsHttpError(502, 'upstream_too_large');
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength > opts.maxBytes) {
+      throw new SkillsHttpError(502, 'upstream_too_large');
+    }
+    return { status: res.status, buf, headers: res.headers };
+  } catch (err) {
+    if (err instanceof SkillsHttpError) throw err;
+    if (err instanceof SsrfError) throw new SkillsHttpError(502, 'ssrf_blocked');
+    if (isAbortError(err)) throw new SkillsHttpError(502, 'upstream_unavailable');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function wrapSkillMd(text: string): SnapshotFile[] {
+  if (Buffer.byteLength(text, 'utf8') > TEXT_FILE_MAX) {
+    throw new SkillsHttpError(502, 'upstream_too_large');
+  }
+  return [{ path: 'SKILL.md', contents: text }];
+}
+
+function githubRawUrls(src: InstallSource): string[] {
+  const owner = src.owner ?? '';
+  const repo = src.repo ?? '';
+  const refs = src.ref ? [src.ref] : ['main', 'master'];
+  const rels = src.slug ? [`skills/${src.slug}`, ''] : [''];
+  const urls: string[] = [];
+  for (const rel of rels) {
+    for (const ref of refs) {
+      const segs = [owner, repo, ref, ...(rel ? rel.split('/') : []), 'SKILL.md'];
+      urls.push(`https://raw.githubusercontent.com/${segs.map(encodeURIComponent).join('/')}`);
+    }
+  }
+  return urls;
+}
+
+async function fetchGithubRawPreview(
+  src: InstallSource,
+  fetchImpl?: FetchImpl,
+): Promise<SkillSnapshot> {
+  if (!src.owner || !src.repo) throw new SkillsHttpError(502, 'upstream_unavailable');
+  let lastStatus = 0;
+  for (const url of githubRawUrls(src)) {
+    const got = await fetchPublicBytes(url, {
+      timeoutMs: DIRECT_TIMEOUT_MS,
+      maxBytes: TEXT_FILE_MAX,
+      hosts: RAW_HOSTS,
+      fetchImpl,
+      accept: 'text/plain, text/markdown, */*',
+    });
+    lastStatus = got.status;
+    if (got.status === 404) continue;
+    if (got.status === 429) {
+      throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: retryAfterSec({
+        headers: got.headers,
+      } as Response) });
+    }
+    if (got.status !== 200) continue;
+    const text = got.buf.toString('utf8');
+    if (!text.trim()) continue;
+    return snapshotFromFiles(
+      src,
+      wrapSkillMd(text),
+      null,
+      'direct',
+      src.id ?? `${src.owner}/${src.repo}`,
+    );
+  }
+  if (lastStatus >= 500) throw new SkillsHttpError(502, 'upstream_unavailable');
+  throw new SkillsHttpError(502, 'upstream_unavailable');
+}
+
+function zipballUrl(owner: string, repo: string, ref: string): string {
+  return `https://codeload.github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/zip/${encodeURIComponent(ref)}`;
+}
+
+async function fetchGithubZipball(
+  src: InstallSource,
+  fetchImpl?: FetchImpl,
+): Promise<SkillSnapshot> {
+  if (!src.owner || !src.repo) {
+    throw new SkillsHttpError(502, 'upstream_unavailable', {
+      message: 'Could not fetch repository archive',
+    });
+  }
+  const refs = src.ref ? [src.ref] : ['main', 'master'];
+  let lastMiss = false;
+  for (const ref of refs) {
+    const budget = consumeBudget('zipball', ZIPBALL_BUDGET_PER_MIN, 1);
+    if (!budget.ok) {
+      throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: budget.retryAfterSec });
+    }
+    try {
+      const got = await fetchPublicBytes(zipballUrl(src.owner, src.repo, ref), {
+        timeoutMs: ZIPBALL_TIMEOUT_MS,
+        maxBytes: ZIPBALL_HTTP_MAX,
+        hosts: ZIPBALL_HOSTS,
+        fetchImpl,
+        accept: 'application/zip, application/octet-stream, */*',
+      });
+      if (got.status === 404) {
+        lastMiss = true;
+        continue;
+      }
+      if (got.status === 429) {
+        throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: retryAfterSec({
+          headers: got.headers,
+        } as Response) });
+      }
+      if (got.status !== 200) {
+        lastMiss = true;
+        continue;
+      }
+      return snapshotFromFiles(
+        src,
+        await extractSkillZip(got.buf),
+        null,
+        'zipball',
+        src.id ?? `${src.owner}/${src.repo}`,
+      );
+    } finally {
+      releaseBudget('zipball');
+    }
+  }
+  if (lastMiss) {
+    throw new SkillsHttpError(502, 'upstream_unavailable', {
+      message: 'Could not fetch repository archive',
+    });
+  }
+  throw new SkillsHttpError(502, 'upstream_unavailable', {
+    message: 'Could not fetch repository archive',
+  });
+}
+
+function isScopedWellKnownUrl(u: URL): boolean {
+  const path = u.pathname || '/';
+  return path !== '/';
+}
+
+function wellKnownProbeUrls(rawUrl: string): string[] {
+  const u = new URL(rawUrl);
+  if (/\/\.well-known\/(agent-skills|skills)\/index\.json$/i.test(u.pathname)) {
+    return [u.href];
+  }
+  const scoped = isScopedWellKnownUrl(u);
+  const pathBase = `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+  const urls: string[] = [
+    `${pathBase}/.well-known/agent-skills/index.json`,
+  ];
+  if (!scoped) urls.push(`${u.origin}/.well-known/agent-skills/index.json`);
+  urls.push(`${pathBase}/.well-known/skills/index.json`);
+  if (!scoped) urls.push(`${u.origin}/.well-known/skills/index.json`);
+  return [...new Set(urls)];
+}
+
+type WkIndexEntry = {
+  name: string;
+  type?: 'skill-md' | 'archive';
+  description?: string;
+  url?: string;
+  digest?: string;
+  files?: string[];
+};
+
+type WkIndex = { kind: 'v020' | 'legacy'; entries: WkIndexEntry[]; indexUrl: string };
+
+function parseDigest(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const m = DIGEST_RE.exec(raw.trim());
+  return m ? `sha256:${m[1]!.toLowerCase()}` : null;
+}
+
+function sha256Digest(bytes: Buffer): string {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function readWkEntries(raw: unknown): WkIndexEntry[] | null {
+  if (Array.isArray(raw)) return raw as WkIndexEntry[];
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (Array.isArray(o.skills)) return o.skills as WkIndexEntry[];
+  if (Array.isArray(o.entries)) return o.entries as WkIndexEntry[];
+  if (typeof o.name === 'string') return [o as WkIndexEntry];
+  return null;
+}
+
+function parseWellKnownIndex(json: unknown, indexUrl: string): WkIndex | 'ignore' | null {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const o = json as Record<string, unknown>;
+  if (typeof o.$schema === 'string' && o.$schema !== WK_SCHEMA_V020) return 'ignore';
+  const rawEntries = readWkEntries(json);
+  if (!rawEntries) return null;
+  if (o.$schema === WK_SCHEMA_V020) {
+    const entries: WkIndexEntry[] = [];
+    for (const item of rawEntries) {
+      if (!item || typeof item !== 'object') continue;
+      const name = typeof item.name === 'string' ? item.name.trim() : '';
+      if (!name || /[\0\r\n]/.test(name)) continue;
+      const digest = parseDigest(item.digest);
+      if (!digest) continue;
+      const url = typeof item.url === 'string' && !/[\0\r\n]/.test(item.url) ? item.url.trim() : '';
+      if (!url) continue;
+      const type = item.type === 'archive' ? 'archive' : 'skill-md';
+      const description =
+        typeof item.description === 'string' && !/[\0\r\n]/.test(item.description)
+          ? item.description.trim()
+          : undefined;
+      entries.push({ name, type, url, digest, description });
+    }
+    return { kind: 'v020', entries, indexUrl };
+  }
+  const entries: WkIndexEntry[] = [];
+  for (const item of rawEntries) {
+    if (!item || typeof item !== 'object') continue;
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
+    if (!name || /[\0\r\n]/.test(name)) continue;
+    const files = Array.isArray(item.files)
+      ? item.files.filter((f): f is string => typeof f === 'string' && !!f.trim() && !/[\0\r\n]/.test(f))
+      : [];
+    if (!files.some((f) => f.split('/').pop()?.toLowerCase() === 'skill.md')) continue;
+    const description =
+      typeof item.description === 'string' && !/[\0\r\n]/.test(item.description)
+        ? item.description.trim()
+        : undefined;
+    entries.push({ name, files, description });
+  }
+  return { kind: 'legacy', entries, indexUrl };
+}
+
+async function probeWellKnownIndex(
+  src: InstallSource,
+  fetchImpl?: FetchImpl,
+): Promise<WkIndex> {
+  if (!src.url) throw new SkillsHttpError(400, 'invalid_source');
+  let base: URL;
+  try {
+    base = new URL(src.url);
+  } catch {
+    throw new SkillsHttpError(400, 'invalid_source');
+  }
+  const scoped = isScopedWellKnownUrl(base);
+  const probes = wellKnownProbeUrls(src.url);
+  let sawServerError = false;
+  for (const url of probes) {
+    const budget = consumeBudget('well-known', WELLKNOWN_BUDGET_PER_MIN, 2);
+    if (!budget.ok) {
+      throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: budget.retryAfterSec });
+    }
+    try {
+      const got = await fetchPublicBytes(url, {
+        timeoutMs: WELLKNOWN_TIMEOUT_MS,
+        maxBytes: TEXT_FILE_MAX,
+        fetchImpl,
+        accept: 'application/json, */*',
+      });
+      if (got.status === 404) continue;
+      if (got.status === 429) {
+        throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: retryAfterSec({
+          headers: got.headers,
+        } as Response) });
+      }
+      if (got.status !== 200) {
+        if (got.status >= 500) sawServerError = true;
+        continue;
+      }
+      let json: unknown;
+      try {
+        json = JSON.parse(got.buf.toString('utf8'));
+      } catch {
+        continue;
+      }
+      const parsed = parseWellKnownIndex(json, url);
+      if (parsed === 'ignore' || !parsed) continue;
+      if (parsed.entries.length === 0) continue;
+      return parsed;
+    } catch (err) {
+      if (err instanceof SkillsHttpError && err.code === 'rate_limited') throw err;
+      if (err instanceof SkillsHttpError && err.code === 'ssrf_blocked') throw err;
+      if (err instanceof SkillsHttpError && err.code === 'upstream_too_large') throw err;
+      sawServerError = true;
+    } finally {
+      releaseBudget('well-known');
+    }
+  }
+  if (scoped) throw new SkillsHttpError(404, 'no_skills');
+  if (sawServerError) throw new SkillsHttpError(502, 'upstream_unavailable');
+  throw new SkillsHttpError(404, 'no_skills');
+}
+
+function resolveAgainst(indexUrl: string, rel: string): string {
+  if (/^https?:\/\//i.test(rel)) return rel;
+  const base = new URL(indexUrl);
+  const dir = base.pathname.replace(/\/index\.json$/i, '/');
+  return new URL(rel.replace(/^\/+/, ''), `${base.origin}${dir}`).href;
+}
+
+async function fetchDirectSkillMd(
+  url: string,
+  fetchImpl?: FetchImpl,
+): Promise<string> {
+  const got = await fetchPublicBytes(url, {
+    timeoutMs: DIRECT_TIMEOUT_MS,
+    maxBytes: TEXT_FILE_MAX,
+    fetchImpl,
+    accept: 'text/plain, text/markdown, */*',
+  });
+  if (got.status === 404) throw new SkillsHttpError(404, 'no_skills');
+  if (got.status === 429) {
+    throw new SkillsHttpError(429, 'rate_limited', { retryAfterSec: retryAfterSec({
+      headers: got.headers,
+    } as Response) });
+  }
+  if (got.status !== 200) throw new SkillsHttpError(502, 'upstream_unavailable');
+  return got.buf.toString('utf8');
+}
+
+async function fetchWellKnownEntry(
+  src: InstallSource,
+  index: WkIndex,
+  fetchImpl?: FetchImpl,
+): Promise<SkillSnapshot> {
+  const picked = pickBySlug(
+    index.entries.map((e) => ({ slug: e.name, name: e.name, entry: e })),
+    src.slug,
+  );
+  const entry = picked.entry;
+
+  if (index.kind === 'v020') {
+    if (!entry.url) throw new SkillsHttpError(404, 'no_skills');
+    const got = await fetchPublicBytes(entry.url, {
+      timeoutMs: entry.type === 'archive' ? ZIPBALL_TIMEOUT_MS : WELLKNOWN_TIMEOUT_MS,
+      maxBytes: entry.type === 'archive' ? ZIPBALL_HTTP_MAX : TEXT_FILE_MAX,
+      fetchImpl,
+    });
+    if (got.status !== 200) throw new SkillsHttpError(502, 'upstream_unavailable');
+    if (entry.digest && sha256Digest(got.buf) !== entry.digest) {
+      throw new SkillsHttpError(502, 'hash_mismatch');
+    }
+    const hashHex = entry.digest?.slice('sha256:'.length) ?? null;
+    if (entry.type === 'archive') {
+      return snapshotFromFiles(
+        src,
+        await extractSkillZip(got.buf),
+        hashHex,
+        'well-known',
+        src.id ?? src.url ?? entry.name,
+      );
+    }
+    return snapshotFromFiles(
+      src,
+      wrapSkillMd(got.buf.toString('utf8')),
+      hashHex,
+      'well-known',
+      src.id ?? src.url ?? entry.name,
+    );
+  }
+
+  const files = entry.files ?? [];
+  const out: SnapshotFile[] = [];
+  for (const rel of files) {
+    const fileUrl = /^https?:\/\//i.test(rel)
+      ? rel
+      : resolveAgainst(index.indexUrl, `${entry.name}/${rel}`);
+    const text = await fetchDirectSkillMd(fileUrl, fetchImpl);
+    const path = rel.replace(/\\/g, '/').replace(/^\.\//, '');
+    const verdict = classifyArchivePath(path);
+    if (verdict === 'reject') throw new SkillsHttpError(502, 'invalid_upstream');
+    if (verdict === 'skip') continue;
+    out.push({ path, contents: text });
+  }
+  if (!out.some((f) => f.path === 'SKILL.md' || f.path.endsWith('/SKILL.md'))) {
+    throw new SkillsHttpError(404, 'no_skills');
+  }
+  return snapshotFromFiles(src, out, null, 'well-known', src.id ?? src.url ?? entry.name);
+}
+
+async function fetchDirectSource(
+  src: InstallSource,
+  fetchImpl?: FetchImpl,
+): Promise<SkillSnapshot> {
+  if (!src.url) throw new SkillsHttpError(400, 'invalid_source');
+  const text = await fetchDirectSkillMd(src.url, fetchImpl);
+  return snapshotFromFiles(src, wrapSkillMd(text), null, 'direct', src.id ?? src.url);
+}
+
+/** Unified file resolve for preview + install. Preview never downloads a GitHub zip. */
+export async function resolveSkillFiles(
+  src: InstallSource,
+  opts?: { fetchImpl?: FetchImpl; preview?: boolean },
+): Promise<SkillSnapshot> {
+  const fetchImpl = resolveFetch(opts);
+  if (src.kind === 'direct') {
+    return fetchDirectSource(src, fetchImpl);
+  }
+  if (src.kind === 'well-known') {
+    const index = await probeWellKnownIndex(src, fetchImpl);
+    return fetchWellKnownEntry(src, index, fetchImpl);
+  }
+
+  if (!src.ref) {
+    try {
+      return await fetchSkillSnapshot(src, { fetchImpl });
+    } catch (err) {
+      if (err instanceof SkillsHttpError && err.code === 'rate_limited') throw err;
+      if (err instanceof SkillsHttpError && err.code === 'upstream_too_large') throw err;
+      if (err instanceof SkillsHttpError && err.code === 'ssrf_blocked') throw err;
+      // not_found / 401 / 5xx / non-JSON / invalid snapshot → zip or raw
+    }
+  }
+
+  if (opts?.preview) {
+    return fetchGithubRawPreview(src, fetchImpl);
+  }
+  return fetchGithubZipball(src, fetchImpl);
 }
 
 export async function previewRemoteSkill(
@@ -672,14 +1155,12 @@ export async function previewRemoteSkill(
   }
 
   const src = parseInstallSource(id ? { id } : { url });
-
-  const snap = await fetchSkillSnapshot(src, { fetchImpl: resolveFetch(opts), forInstall: false });
-  const skillFile = snap.files.find((f) => f.path === 'SKILL.md' || f.path.endsWith('/SKILL.md'));
-  const rawMd = skillFile?.contents ?? '';
+  const snap = await resolveSkillFiles(src, { fetchImpl: resolveFetch(opts), preview: true });
+  const picked = pickSkillFolder(discoverSkillFolders(snap.files, src.slug ?? snap.slug), src.slug);
+  const rawMd = picked.skillMd;
   const truncated = rawMd.length > SKILL_MD_PREVIEW_MAX;
   const skillMd = truncated ? rawMd.slice(0, SKILL_MD_PREVIEW_MAX) : rawMd;
 
-  const { parseSkillFile } = await import('@neos-work/core');
   const parsed = parseSkillFile(rawMd || '---\nname: unknown\n---\n', 'SKILL.md', 'remote');
   const name = parsed?.manifest.name || src.slug || snap.slug;
   const description = parsed?.manifest.description ?? '';
@@ -687,12 +1168,17 @@ export async function previewRemoteSkill(
 
   const result: CatalogPreviewResult = {
     id: src.id ?? id,
-    slug: src.slug ?? snap.slug,
+    slug: src.slug ?? picked.slug ?? snap.slug,
     name,
     description,
     hash: snap.hash,
-    fileCount: snap.files.length,
-    files: snap.files.map((f) => ({ path: f.path, bytes: Buffer.byteLength(f.contents, 'utf8') })),
+    fileCount: picked.files.length || snap.files.length,
+    files: (picked.files.length ? picked.files : snap.files).map((f) => ({
+      path: f.path,
+      bytes: typeof f.contents === 'string'
+        ? Buffer.byteLength(f.contents, 'utf8')
+        : f.contents.byteLength,
+    })),
     skillMd,
     truncated,
     trust: 'unverified',
@@ -701,7 +1187,7 @@ export async function previewRemoteSkill(
         ? `https://github.com/${src.owner}/${src.repo}`
         : src.url ?? null,
     skillsShUrl: `https://skills.sh/${src.id ?? id}`,
-    fetchPath: 'snapshot',
+    fetchPath: snap.fetchPath,
   };
   if (license) result.license = license;
 

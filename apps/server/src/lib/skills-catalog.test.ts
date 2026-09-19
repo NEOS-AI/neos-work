@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+
+import { resolveUserSkillsDir } from '@neos-work/core';
 
 import { getDb } from '../db/schema.js';
 import { deleteSetting, setSetting } from '../db/settings.js';
@@ -6,7 +11,6 @@ import {
   ageSkillsSearchCache,
   auditRemoteSkill,
   computeSkillFolderHash,
-  isSafeSnapshotRelPath,
   previewRemoteSkill,
   resetSkillsCatalogState,
   searchSkillCatalog,
@@ -19,6 +23,14 @@ import {
   FIND_SKILLS_SEARCH_HIT,
   FIND_SKILLS_SNAPSHOT,
 } from './fixtures/find-skills-snapshot.js';
+import {
+  FRONTEND_DESIGN_ID,
+  FRONTEND_DESIGN_SKILL_MD,
+} from './fixtures/frontend-design-skill.js';
+import { classifyArchivePath } from './skills-archive.js';
+import { makeSkillZip, skillMd } from './fixtures/skill-zip.js';
+import { installRemoteSkill } from './skills-install.js';
+import { upsertSkill } from '../routes/skills.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -34,11 +46,12 @@ function mockFetch(handler: (url: string) => Response | Promise<Response>): type
   }) as typeof fetch;
 }
 
-afterEach(() => {
+afterEach(async () => {
   resetSkillsCatalogState();
   try { deleteSetting('skills.remoteCatalogEnabled'); } catch { /* ignore */ }
   try { deleteSetting('skills.remoteInstallEnabled'); } catch { /* ignore */ }
-  getDb().prepare("DELETE FROM skill WHERE name LIKE 'find-skills%' OR name LIKE '_cat_%'").run();
+  getDb().prepare("DELETE FROM skill WHERE name LIKE 'find-skills%' OR name LIKE '_cat_%' OR name = 'archived'").run();
+  await rm(join(resolveUserSkillsDir(), 'archived'), { recursive: true, force: true }).catch(() => {});
 });
 
 describe('computeSkillFolderHash / golden fixture', () => {
@@ -166,27 +179,104 @@ describe('previewRemoteSkill', () => {
     });
   });
 
-  it('returns mocked 502 upstream_unavailable for frontend-design without fetchPath', async () => {
+  it('previews frontend-design from mocked raw SKILL.md (not zipball)', async () => {
+    const seen: string[] = [];
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      seen.push(url);
+      if (url.includes('codeload.github.com') || url.includes('/archive/')) {
+        throw new Error('preview must not download a zip');
+      }
+      if (url.includes('/api/download/')) return jsonResponse({ error: 'not_found' }, 404);
+      if (url.includes('raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md')) {
+        return new Response(FRONTEND_DESIGN_SKILL_MD, { status: 200 });
+      }
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    const data = await previewRemoteSkill({ id: FRONTEND_DESIGN_ID });
+    expect(data.fetchPath).toBe('direct');
+    expect(data.name).toBe('frontend-design');
+    expect(data.skillMd).toContain('name: frontend-design');
+    expect(seen.some((u) => u.includes('raw.githubusercontent.com'))).toBe(true);
+    expect(seen.some((u) => u.includes('codeload.github.com'))).toBe(false);
+  });
+
+  it('returns 502 when snapshot and raw SKILL.md are both missing', async () => {
     setSkillsCatalogFetchImpl(mockFetch(() => jsonResponse({ error: 'not_found' }, 404)));
-    try {
-      await previewRemoteSkill({ id: 'anthropics/skills/frontend-design' });
-      expect.unreachable('should reject');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SkillsHttpError);
-      const e = err as SkillsHttpError;
-      expect(e.http).toBe(502);
-      expect(e.code).toBe('upstream_unavailable');
-      expect(e.extra.fetchPath).toBeUndefined();
-    }
+    await expect(previewRemoteSkill({ id: FRONTEND_DESIGN_ID })).rejects.toMatchObject({
+      http: 502,
+      code: 'upstream_unavailable',
+    });
   });
 });
 
-describe('isSafeSnapshotRelPath', () => {
+describe('well-known + zipball resolve', () => {
+  it('does not fall back to origin index for a scoped well-known URL', async () => {
+    const seen: string[] = [];
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      seen.push(url);
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    await expect(
+      previewRemoteSkill({ url: 'https://skills.example.com/s/team' }),
+    ).rejects.toMatchObject({ http: 404, code: 'no_skills' });
+    expect(seen.some((u) => u === 'https://skills.example.com/.well-known/agent-skills/index.json')).toBe(false);
+    expect(seen.some((u) => u === 'https://skills.example.com/.well-known/skills/index.json')).toBe(false);
+    expect(seen.some((u) => u.includes('/s/team/.well-known/'))).toBe(true);
+  });
+
+  it('accepts v0.2.0 type:archive when digest matches and rejects mismatch', async () => {
+    const zip = await makeSkillZip([
+      { name: 'pkg/SKILL.md', content: skillMd('archived') },
+    ]);
+    const digest = `sha256:${createHash('sha256').update(zip).digest('hex')}`;
+    const index = {
+      $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
+      skills: [{
+        name: 'archived',
+        type: 'archive',
+        url: 'https://skills.example.com/archived.zip',
+        digest,
+        description: 'zip skill',
+      }],
+    };
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.endsWith('/.well-known/agent-skills/index.json')) return jsonResponse(index);
+      if (url.endsWith('/archived.zip')) {
+        return new Response(zip, { status: 200, headers: { 'content-type': 'application/zip' } });
+      }
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    const ok = await previewRemoteSkill({ url: 'https://skills.example.com/' });
+    expect(ok.fetchPath).toBe('well-known');
+    expect(ok.name).toBe('archived');
+
+    resetSkillsCatalogState();
+    const badIndex = {
+      ...index,
+      skills: [{ ...index.skills[0], digest: `sha256:${'ab'.repeat(32)}` }],
+    };
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.endsWith('/.well-known/agent-skills/index.json')) return jsonResponse(badIndex);
+      if (url.endsWith('/archived.zip')) {
+        return new Response(zip, { status: 200 });
+      }
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    await expect(
+      installRemoteSkill(
+        { url: 'https://skills.example.com/', confirm: true },
+        { upsert: upsertSkill },
+      ),
+    ).rejects.toMatchObject({ http: 502, code: 'hash_mismatch' });
+  });
+});
+
+describe('classifyArchivePath (snapshot files)', () => {
   it('rejects . and .. segments', () => {
-    expect(isSafeSnapshotRelPath('.')).toBe('reject');
-    expect(isSafeSnapshotRelPath('foo/.')).toBe('reject');
-    expect(isSafeSnapshotRelPath('../SKILL.md')).toBe('reject');
-    expect(isSafeSnapshotRelPath('SKILL.md')).toBe('ok');
+    expect(classifyArchivePath('.')).toBe('reject');
+    expect(classifyArchivePath('foo/.')).toBe('reject');
+    expect(classifyArchivePath('../SKILL.md')).toBe('reject');
+    expect(classifyArchivePath('SKILL.md')).toBe('ok');
   });
 });
 
