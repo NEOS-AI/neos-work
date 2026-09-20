@@ -12,6 +12,8 @@ pub struct Fixtures {
     pub in_rot: PathBuf,
     pub mark_png: PathBuf,
     pub subs_srt: PathBuf,
+    pub in_ts_copy: PathBuf,
+    pub in_ts_mpeg2: PathBuf,
 }
 
 static FIXTURES: OnceLock<Fixtures> = OnceLock::new();
@@ -42,6 +44,8 @@ fn create_fixtures() -> Result<Fixtures, String> {
     let mark_png = dir.join("mark.png");
     let subs_srt = dir.join("subs.srt");
     let rot_raw = dir.join("in_rot_raw.mp4");
+    let in_ts_copy = dir.join("in_ts_copy.ts");
+    let in_ts_mpeg2 = dir.join("in_ts_mpeg2.ts");
 
     run_ffmpeg_raw(&[
         "-y",
@@ -142,11 +146,60 @@ fn create_fixtures() -> Result<Fixtures, String> {
         &path_str(&mark_png),
     ])?;
 
-    fs::write(
-        &subs_srt,
-        "1\n00:00:00,000 --> 00:00:01,000\nhello smoke\n",
-    )
-    .map_err(|e| format!("write srt: {e}"))?;
+    fs::write(&subs_srt, "1\n00:00:00,000 --> 00:00:01,000\nhello smoke\n")
+        .map_err(|e| format!("write srt: {e}"))?;
+
+    run_ffmpeg_raw(&[
+        "-y",
+        "-hide_banner",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=320x240:rate=25:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=1000:sample_rate=44100:duration=2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "28",
+        "-g",
+        "12",
+        "-c:a",
+        "aac",
+        "-ac",
+        "2",
+        "-f",
+        "mpegts",
+        &path_str(&in_ts_copy),
+    ])?;
+
+    run_ffmpeg_raw(&[
+        "-y",
+        "-hide_banner",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=320x240:rate=25:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=1000:sample_rate=44100:duration=2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:v",
+        "mpeg2video",
+        "-c:a",
+        "mp2",
+        "-f",
+        "mpegts",
+        &path_str(&in_ts_mpeg2),
+    ])?;
 
     Ok(Fixtures {
         dir,
@@ -155,6 +208,8 @@ fn create_fixtures() -> Result<Fixtures, String> {
         in_rot,
         mark_png,
         subs_srt,
+        in_ts_copy,
+        in_ts_mpeg2,
     })
 }
 

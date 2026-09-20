@@ -8,11 +8,14 @@ use crate::services::ffmpeg::{
 };
 use crate::services::gif::build_gif_args;
 use crate::services::speed::build_speed_args;
+use crate::services::ts_to_mp4::{build_ts_to_mp4_args, choose_ts_codecs, TsConvertMode};
 use crate::services::volume::build_volume_args;
 use crate::services::watermark::{build_image_watermark_args, OverlayPosition};
 
 use super::fixtures::{fixtures, unique_out};
-use super::runner::{assert_duration_near, audio_count, first_video, path_str, probe_file, run_ffmpeg};
+use super::runner::{
+    assert_duration_near, audio_count, first_video, path_str, probe_file, run_ffmpeg,
+};
 use super::skip_unless_smoke;
 
 #[test]
@@ -114,7 +117,8 @@ fn s3_5_volume() {
     }
     let fx = fixtures();
     let out = unique_out("s3_5_vol.mp4");
-    let args = build_volume_args(&path_str(&fx.in_av), &path_str(&out), false, 6.0).expect("volume");
+    let args =
+        build_volume_args(&path_str(&fx.in_av), &path_str(&out), false, 6.0).expect("volume");
     run_ffmpeg(&args).expect("volume ffmpeg");
     assert!(audio_count(&probe_file(&out).unwrap()) >= 1);
 }
@@ -221,4 +225,97 @@ fn s3_9_extract_subtitle() {
     run_ffmpeg(&args).expect("extract srt");
     let text = fs::read_to_string(&out).expect("read srt");
     assert!(text.contains("hello smoke"), "srt contents: {text}");
+}
+
+#[test]
+fn s3_10_ts_to_mp4_copy() {
+    if skip_unless_smoke() {
+        return;
+    }
+    let fx = fixtures();
+    let info = probe_file(&fx.in_ts_copy).unwrap();
+    let video = first_video(&info);
+    let audio = info
+        .streams
+        .iter()
+        .find(|s| s.codec_type == "audio")
+        .expect("audio stream");
+    let plan = choose_ts_codecs(
+        &video.codec_name,
+        Some(audio.codec_name.as_str()),
+        TsConvertMode::Auto,
+        None,
+        None,
+        None,
+    )
+    .expect("plan");
+    let out = unique_out("s3_10_ts_copy.mp4");
+    let args = build_ts_to_mp4_args(
+        &path_str(&fx.in_ts_copy),
+        &path_str(&out),
+        &plan,
+        video.index,
+        Some(audio.index),
+    );
+    run_ffmpeg(&args).expect("ts copy");
+    let out_info = probe_file(&out).unwrap();
+    assert!(
+        out_info.format.format_name.contains("mp4"),
+        "format_name={}",
+        out_info.format.format_name
+    );
+    assert!(
+        out_info
+            .streams
+            .iter()
+            .any(|s| s.codec_type == "audio" && s.codec_name == "aac"),
+        "expected aac audio"
+    );
+}
+
+#[test]
+fn s3_11_ts_to_mp4_encode() {
+    if skip_unless_smoke() {
+        return;
+    }
+    let fx = fixtures();
+    let info = probe_file(&fx.in_ts_mpeg2).unwrap();
+    let video = first_video(&info);
+    let audio = info
+        .streams
+        .iter()
+        .find(|s| s.codec_type == "audio")
+        .expect("audio stream");
+    let plan = choose_ts_codecs(
+        &video.codec_name,
+        Some(audio.codec_name.as_str()),
+        TsConvertMode::Auto,
+        None,
+        None,
+        None,
+    )
+    .expect("plan");
+    let out = unique_out("s3_11_ts_enc.mp4");
+    let args = build_ts_to_mp4_args(
+        &path_str(&fx.in_ts_mpeg2),
+        &path_str(&out),
+        &plan,
+        video.index,
+        Some(audio.index),
+    );
+    run_ffmpeg(&args).expect("ts encode");
+    let out_info = probe_file(&out).unwrap();
+    assert!(
+        out_info.format.format_name.contains("mp4"),
+        "format_name={}",
+        out_info.format.format_name
+    );
+    assert!(first_video(&out_info).width.is_some());
+    assert!(
+        out_info
+            .streams
+            .iter()
+            .any(|s| s.codec_type == "audio" && s.codec_name == "aac"),
+        "expected aac audio"
+    );
 }
