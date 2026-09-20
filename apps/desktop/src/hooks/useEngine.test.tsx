@@ -91,9 +91,39 @@ describe('useEngine / EngineProvider', () => {
     expect(screen.getByTestId('client').textContent).toBe('no');
   });
 
-  it('connect host succeeds, uses sidecar port/token, and disconnects', async () => {
+  it('connect host reuses a healthy local engine without starting one', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     checkConnection.mockResolvedValue(true);
+    fetchLocalAuthToken.mockResolvedValue('loopback-bootstrap-token');
+
+    render(
+      <EngineProvider>
+        <Probe />
+      </EngineProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'host' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status').textContent).toBe('connected');
+    });
+
+    expect(startEngine).not.toHaveBeenCalled();
+    expect(getEnginePort).not.toHaveBeenCalled();
+    expect(screen.getByTestId('mode').textContent).toBe('host');
+    expect(screen.getByTestId('url').textContent).toBe('http://127.0.0.1:57286');
+    expect(setAuthToken).toHaveBeenCalledWith('loopback-bootstrap-token');
+
+    await user.click(screen.getByRole('button', { name: 'disconnect' }));
+    // stopEngine is a no-op unless this app stored a child
+    expect(stopEngine).toHaveBeenCalled();
+    expect(screen.getByTestId('status').textContent).toBe('disconnected');
+  });
+
+  it('connect host starts engine when nothing is listening, uses sidecar port/token, and disconnects', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    checkConnection.mockResolvedValueOnce(false).mockResolvedValue(true);
+    startEngine.mockResolvedValue(true);
     getEnginePort.mockResolvedValue(60_001);
     getAuthToken.mockResolvedValue('sidecar-token');
 
@@ -161,6 +191,7 @@ describe('useEngine / EngineProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('status').textContent).toBe('connected');
     });
+    expect(startEngine).not.toHaveBeenCalled();
     expect(fetchLocalAuthToken).toHaveBeenCalled();
     expect(setAuthToken).toHaveBeenCalledWith('loopback-bootstrap-token');
   });
@@ -293,7 +324,7 @@ describe('useEngine / EngineProvider', () => {
 
     const clickPromise = user.click(screen.getByRole('button', { name: 'host' }));
     await act(async () => {
-      // host waits 1s for sidecar, then 20 × 500ms retries
+      // probe fails, startEngine, 4 × 200ms port polls, then 20 × 500ms health retries
       await vi.advanceTimersByTimeAsync(1000);
       for (let i = 0; i < 25; i++) {
         await vi.advanceTimersByTimeAsync(500);
@@ -308,7 +339,8 @@ describe('useEngine / EngineProvider', () => {
     expect(screen.getByTestId('error').textContent).toMatch(
       /Could not connect to engine at http:\/\/127\.0\.0\.1:57286/,
     );
-    expect(checkConnection.mock.calls.length).toBe(20);
+    // 1 probe + 20 health retries (startEngine returned false → 20, not 30)
+    expect(checkConnection.mock.calls.length).toBe(21);
   });
 
   it('health check marks lost connection then recovers', async () => {

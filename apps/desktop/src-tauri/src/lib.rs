@@ -1,6 +1,5 @@
 /// NEOS Work desktop application.
 /// Uses Tauri v2 as the desktop shell with a React frontend.
-
 mod commands;
 mod models;
 mod services;
@@ -9,73 +8,102 @@ mod utils;
 #[cfg(test)]
 mod smoke;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
+
 use tauri::Manager;
-use tauri_plugin_shell::ShellExt;
-use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
 use commands::license::LicenseState;
+use services::engine::{
+    is_engine_placeholder_line, parse_engine_meta_line, resolve_server_entry, spawn_node_engine,
+    spawn_sidecar_engine, EngineMeta,
+};
 use services::job::JobRegistry;
 
 struct EngineState {
     child: Mutex<Option<CommandChild>>,
     auth_token: Mutex<Option<String>>,
     port: Mutex<Option<u16>>,
+    alive: AtomicBool,
 }
 
-/// Attempt to start the engine server as a sidecar process.
-/// Parses NEOS_PORT and NEOS_AUTH_TOKEN from sidecar stdout.
-/// Returns "ok" on success, or an error string if the sidecar binary is not available.
-#[tauri::command]
-async fn start_engine(app: tauri::AppHandle, state: tauri::State<'_, EngineState>) -> Result<String, String> {
-    // Don't start if already running
-    {
-        let guard = state.child.lock().map_err(|e| e.to_string())?;
-        if guard.is_some() {
-            return Ok("already_running".into());
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EngineWatch {
+    Pending,
+    Ready,
+    Dead,
+}
+
+fn engine_is_live(state: &EngineState) -> bool {
+    state.alive.load(Ordering::SeqCst) && state.child.lock().map(|g| g.is_some()).unwrap_or(false)
+}
+
+fn clear_engine_meta(state: &EngineState) {
+    if let Ok(mut token) = state.auth_token.lock() {
+        *token = None;
+    }
+    if let Ok(mut port) = state.port.lock() {
+        *port = None;
+    }
+}
+
+fn kill_stored_child(state: &EngineState) {
+    if let Ok(mut guard) = state.child.lock() {
+        if let Some(child) = guard.take() {
+            let _ = child.kill();
         }
     }
+    state.alive.store(false, Ordering::SeqCst);
+    clear_engine_meta(state);
+}
 
-    // Try to spawn the sidecar binary (available in production builds)
-    let sidecar = app.shell().sidecar("neos-engine").map_err(|e| e.to_string())?;
+fn store_child(state: &EngineState, child: CommandChild) -> Result<u32, String> {
+    let pid = child.pid();
+    let mut guard = state.child.lock().map_err(|e| e.to_string())?;
+    *guard = Some(child);
+    state.alive.store(true, Ordering::SeqCst);
+    Ok(pid)
+}
 
-    let (mut rx, child) = sidecar.spawn().map_err(|e| format!("Failed to spawn engine: {}", e))?;
-
-    // Store child handle for later cleanup
-    {
-        let mut guard = state.child.lock().map_err(|e| e.to_string())?;
-        *guard = Some(child);
+fn apply_engine_meta(app: &tauri::AppHandle, meta: EngineMeta) {
+    if let Some(token) = meta.token {
+        if let Ok(mut guard) = app.state::<EngineState>().auth_token.lock() {
+            *guard = Some(token);
+        }
     }
+    if let Some(port) = meta.port {
+        if let Ok(mut guard) = app.state::<EngineState>().port.lock() {
+            *guard = Some(port);
+        }
+    }
+}
 
-    // Clone state handles for the async task
-    let auth_token_state = app.state::<EngineState>();
-    let auth_token_mutex = auth_token_state.auth_token.lock().map_err(|e| e.to_string())?;
-    drop(auth_token_mutex); // Release immediately, we'll lock again inside the task
-
-    let app_handle = app.clone();
-
-    // Spawn a task to log sidecar output and parse metadata lines
+fn attach_engine_reader(
+    app: tauri::AppHandle,
+    mut rx: tauri::async_runtime::Receiver<CommandEvent>,
+    expected_pid: u32,
+    watch_tx: tokio::sync::watch::Sender<EngineWatch>,
+) {
     tauri::async_runtime::spawn(async move {
-        use tauri_plugin_shell::process::CommandEvent;
+        let mut got_port = false;
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(line) => {
                     let text = String::from_utf8_lossy(&line);
                     let trimmed = text.trim();
-
-                    // Parse structured metadata from engine stdout
-                    if let Some(token) = trimmed.strip_prefix("NEOS_AUTH_TOKEN=") {
-                        if let Ok(mut guard) = app_handle.state::<EngineState>().auth_token.lock() {
-                            *guard = Some(token.to_string());
-                        }
-                    } else if let Some(port_str) = trimmed.strip_prefix("NEOS_PORT=") {
-                        if let Ok(port) = port_str.parse::<u16>() {
-                            if let Ok(mut guard) = app_handle.state::<EngineState>().port.lock() {
-                                *guard = Some(port);
-                            }
-                        }
+                    if is_engine_placeholder_line(trimmed) {
+                        let _ = watch_tx.send(EngineWatch::Dead);
                     }
-
+                    let meta = parse_engine_meta_line(trimmed);
+                    if meta.port.is_some() {
+                        got_port = true;
+                    }
+                    apply_engine_meta(&app, meta);
+                    if got_port {
+                        let _ = watch_tx.send(EngineWatch::Ready);
+                    }
                     println!("[engine] {}", trimmed);
                 }
                 CommandEvent::Stderr(line) => {
@@ -83,30 +111,110 @@ async fn start_engine(app: tauri::AppHandle, state: tauri::State<'_, EngineState
                 }
                 CommandEvent::Terminated(payload) => {
                     println!("[engine] terminated with code: {:?}", payload.code);
+                    let state = app.state::<EngineState>();
+                    if let Ok(mut guard) = state.child.lock() {
+                        if guard.as_ref().map(|c| c.pid()) == Some(expected_pid) {
+                            *guard = None;
+                            state.alive.store(false, Ordering::SeqCst);
+                            clear_engine_meta(&state);
+                        }
+                    }
+                    if !got_port {
+                        let _ = watch_tx.send(EngineWatch::Dead);
+                    }
                     break;
                 }
                 _ => {}
             }
         }
     });
-
-    Ok("ok".into())
 }
 
-/// Stop the engine server process if running.
+async fn await_engine_watch(
+    mut rx: tokio::sync::watch::Receiver<EngineWatch>,
+    timeout: Duration,
+) -> EngineWatch {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match *rx.borrow() {
+            EngineWatch::Ready => return EngineWatch::Ready,
+            EngineWatch::Dead => return EngineWatch::Dead,
+            EngineWatch::Pending => {}
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return *rx.borrow();
+        }
+        match tokio::time::timeout(remaining, rx.changed()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) | Err(_) => return *rx.borrow(),
+        }
+    }
+}
+
+async fn spawn_and_watch(
+    app: &tauri::AppHandle,
+    state: &EngineState,
+    rx: tauri::async_runtime::Receiver<CommandEvent>,
+    child: CommandChild,
+    timeout: Duration,
+) -> Result<EngineWatch, String> {
+    let pid = store_child(state, child)?;
+    let (watch_tx, watch_rx) = tokio::sync::watch::channel(EngineWatch::Pending);
+    attach_engine_reader(app.clone(), rx, pid, watch_tx);
+    Ok(await_engine_watch(watch_rx, timeout).await)
+}
+
+/// Start the local engine: bundled sidecar first, then Node `@neos-work/server`.
+/// Parses NEOS_PORT and NEOS_AUTH_TOKEN from stdout.
+/// Returns "ok" / "already_running", or an error string.
+#[tauri::command]
+async fn start_engine(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, EngineState>,
+) -> Result<String, String> {
+    if engine_is_live(&state) {
+        return Ok("already_running".into());
+    }
+    kill_stored_child(&state);
+
+    match spawn_sidecar_engine(&app) {
+        Ok((rx, child)) => {
+            match spawn_and_watch(&app, &state, rx, child, Duration::from_millis(1_500)).await? {
+                EngineWatch::Ready | EngineWatch::Pending => return Ok("ok".into()),
+                EngineWatch::Dead => {
+                    eprintln!("[engine] sidecar exited without NEOS_PORT; trying node fallback");
+                    kill_stored_child(&state);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("[engine] sidecar spawn failed ({e}); trying node fallback");
+        }
+    }
+
+    let entry = resolve_server_entry().ok_or_else(|| {
+        "Engine sidecar is not a live server and @neos-work/server was not found. Build the server or set NEOS_SERVER_ENTRY.".to_string()
+    })?;
+    eprintln!(
+        "[engine] spawning node {} (ts={})",
+        entry.path.display(),
+        entry.is_typescript
+    );
+    let (rx, child) = spawn_node_engine(&app, &entry)?;
+    match spawn_and_watch(&app, &state, rx, child, Duration::from_secs(8)).await? {
+        EngineWatch::Ready | EngineWatch::Pending => Ok("ok".into()),
+        EngineWatch::Dead => {
+            kill_stored_child(&state);
+            Err("Failed to start local engine".into())
+        }
+    }
+}
+
+/// Stop the engine server process if this app started it.
 #[tauri::command]
 async fn stop_engine(state: tauri::State<'_, EngineState>) -> Result<(), String> {
-    let mut guard = state.child.lock().map_err(|e| e.to_string())?;
-    if let Some(child) = guard.take() {
-        child.kill().map_err(|e| format!("Failed to kill engine: {}", e))?;
-    }
-    // Clear stored metadata
-    if let Ok(mut token) = state.auth_token.lock() {
-        *token = None;
-    }
-    if let Ok(mut port) = state.port.lock() {
-        *port = None;
-    }
+    kill_stored_child(&state);
     Ok(())
 }
 
@@ -185,6 +293,7 @@ pub fn run() {
             child: Mutex::new(None),
             auth_token: Mutex::new(None),
             port: Mutex::new(None),
+            alive: AtomicBool::new(false),
         })
         .manage(JobRegistry::default())
         .manage(LicenseState::default())
@@ -230,14 +339,10 @@ pub fn run() {
             commands::download::download_video,
         ])
         .on_window_event(|window, event| {
-            // Stop engine when window is destroyed (app close)
+            // Stop only the engine this app started (reused daemons are left running)
             if let tauri::WindowEvent::Destroyed = event {
                 let state = window.app_handle().state::<EngineState>();
-                if let Ok(mut guard) = state.child.lock() {
-                    if let Some(child) = guard.take() {
-                        let _ = child.kill();
-                    }
-                };
+                kill_stored_child(&state);
             }
         })
         .run(tauri::generate_context!())
