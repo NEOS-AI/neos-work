@@ -271,7 +271,6 @@ export async function cmdSkills(
       const data = (res.data ?? {}) as { filesRemoved?: boolean; restored?: string };
       if (ctx.json) printJson(ctx, { id: skill.id, name: skill.name, ...data });
       else {
-        // DELETE is registry-only until PR 3 file-delete lands.
         const note = data.filesRemoved === true ? 'files deleted' : 'registry only';
         ctx.out(`removed ${skill.id} ${skill.name} (${note})`);
       }
