@@ -137,6 +137,10 @@ export function setSkillsCatalogFetchImpl(impl?: FetchImpl): void {
   injectedFetch = impl;
 }
 
+export function getSkillsCatalogFetchImpl(): FetchImpl | undefined {
+  return injectedFetch;
+}
+
 type CacheEntry<T> = { value: T; storedAt: number };
 
 function createTtlCache<T>(max: number) {

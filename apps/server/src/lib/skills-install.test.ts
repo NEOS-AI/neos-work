@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 
 import { readSkillProvenance, resolveUserSkillsDir, resolveWorkspaceSkillsDir } from '@neos-work/core';
+import { NEOS_VERSION } from '@neos-work/shared';
 
 import { getDb } from '../db/schema.js';
 import { createWorkspace, deleteWorkspace } from '../db/sessions.js';
@@ -41,9 +42,10 @@ afterEach(async () => {
   setSkillsRenameForTests();
   try { deleteSetting('skills.remoteCatalogEnabled'); } catch { /* ignore */ }
   try { deleteSetting('skills.remoteInstallEnabled'); } catch { /* ignore */ }
-  getDb().prepare("DELETE FROM skill WHERE name LIKE 'find-skills%' OR name LIKE '_ins_%' OR name IN ('rooty','alpha','beta','orphaned','archived','binasset','directy')").run();
+  try { deleteSetting('skills.telemetryOptIn'); } catch { /* ignore */ }
+  getDb().prepare("DELETE FROM skill WHERE name LIKE 'find-skills%' OR name LIKE '_ins_%' OR name IN ('rooty','alpha','beta','orphaned','archived','binasset','directy','k15-skill')").run();
   const root = resolveUserSkillsDir();
-  for (const dir of ['find-skills', 'rooty', 'alpha', 'beta', 'orphaned', 'archived', 'binasset', 'directy']) {
+  for (const dir of ['find-skills', 'rooty', 'alpha', 'beta', 'orphaned', 'archived', 'binasset', 'directy', 'k15-skill']) {
     await rm(join(root, dir), { recursive: true, force: true }).catch(() => {});
   }
 });
@@ -434,6 +436,82 @@ describe('installRemoteSkill', () => {
     );
     expect(await readFile(join(dest, 'SKILL.md'), 'utf8')).toContain('name: find-skills');
     expect(await readFile(join(dest, 'marker.txt'), 'utf8')).toBe('keep-me');
+  });
+
+  it('stores owner/repo/slug remoteId when GitHub source omitted the slug', async () => {
+    const zip = await makeSkillZip([
+      { name: 'repo/skills/k15-skill/SKILL.md', content: skillMd('k15-skill') },
+    ]);
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.includes('codeload.github.com')) return new Response(zip, { status: 200 });
+      return jsonResponse({ error: 'not_found' }, 404);
+    }));
+    await installRemoteSkill(
+      { id: 'acme/k15-repo', confirm: true },
+      { upsert: upsertSkill },
+    );
+    const dest = join(resolveUserSkillsDir(), 'k15-skill');
+    const prov = await readSkillProvenance(dest);
+    expect(prov?.id).toBe('acme/k15-repo/k15-skill');
+    expect(prov?.slug).toBe('k15-skill');
+    expect(prov?.source).toBe('acme/k15-repo');
+
+    const again = await installRemoteSkill(
+      { id: 'acme/k15-repo/k15-skill', confirm: true },
+      { upsert: upsertSkill },
+    );
+    expect(again.name).toBe('k15-skill');
+    expect((await readSkillProvenance(dest))?.id).toBe('acme/k15-repo/k15-skill');
+  });
+
+  it('sends allowlisted telemetry after install only when opted in', async () => {
+    const telemetryUrls: string[] = [];
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.startsWith('https://add-skill.vercel.sh/t')) {
+        telemetryUrls.push(url);
+        return new Response('', { status: 204 });
+      }
+      return jsonResponse(FIND_SKILLS_SNAPSHOT);
+    }));
+
+    await installRemoteSkill({ id: FIND_SKILLS_ID, confirm: true }, { upsert: upsertSkill });
+    await Promise.resolve();
+    expect(telemetryUrls).toEqual([]);
+
+    setSetting('skills.telemetryOptIn', 'true');
+    getDb().prepare("DELETE FROM skill WHERE name = 'find-skills'").run();
+    await rm(join(resolveUserSkillsDir(), 'find-skills'), { recursive: true, force: true });
+
+    await installRemoteSkill({ id: FIND_SKILLS_ID, confirm: true }, { upsert: upsertSkill });
+    await vi.waitFor(() => expect(telemetryUrls).toHaveLength(1));
+    const sent = new URL(telemetryUrls[0]!);
+    expect(sent.origin + sent.pathname).toBe('https://add-skill.vercel.sh/t');
+    expect([...sent.searchParams.keys()].sort()).toEqual(['event', 'skills', 'source', 'v']);
+    expect(sent.searchParams.get('event')).toBe('install');
+    expect(sent.searchParams.get('source')).toBe('vercel-labs/skills');
+    expect(sent.searchParams.get('skills')).toBe('find-skills');
+    expect(sent.searchParams.get('v')).toBe(NEOS_VERSION);
+
+    const unchanged = await updateRemoteSkill(
+      (getDb().prepare('SELECT id FROM skill WHERE name = ?').get('find-skills') as { id: string }).id,
+      { upsert: upsertSkill },
+    );
+    expect(unchanged.unchanged).toBe(true);
+    await Promise.resolve();
+    expect(telemetryUrls).toHaveLength(1);
+  });
+
+  it('still installs when opted-in telemetry fetch fails', async () => {
+    setSetting('skills.telemetryOptIn', 'true');
+    setSkillsCatalogFetchImpl(mockFetch((url) => {
+      if (url.startsWith('https://add-skill.vercel.sh/t')) throw new Error('telemetry down');
+      return jsonResponse(FIND_SKILLS_SNAPSHOT);
+    }));
+    const result = await installRemoteSkill(
+      { id: FIND_SKILLS_ID, confirm: true },
+      { upsert: upsertSkill },
+    );
+    expect(result.name).toBe('find-skills');
   });
 
   it('preserves open-design.json on same_remote update', async () => {

@@ -7,6 +7,7 @@
   "catalogSearchPlaceholder": "skills.sh 검색…",
   "catalogOwnerPlaceholder": "소유자 (선택)",
   "catalogEmpty": "공개 skills.sh 카탈로그를 검색하거나 아래 추천 스킬을 시도하세요:",
+  "catalogEmptySearch": "공개 skills.sh 카탈로그를 검색하세요.",
   "catalogUnavailable": "카탈로그 검색에 실패했습니다.",
   "catalogTryFailed": "추천 스킬을 미리보지 못했습니다.",
   "install": "설치",

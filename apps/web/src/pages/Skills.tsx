@@ -328,7 +328,7 @@ export function Skills() {
                 ))}
               </ul>
             ) : (
-              <p className="muted">{skillsCopy.catalogEmpty}</p>
+              <p className="muted">{skillsCopy.catalogEmptySearch}</p>
             )}
           </>
         )}

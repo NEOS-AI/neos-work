@@ -18,18 +18,20 @@ import {
   writeSkillProvenance,
   readSkillProvenance,
 } from '@neos-work/core';
-import type { SkillProvenance } from '@neos-work/shared';
+import { NEOS_VERSION, type SkillProvenance } from '@neos-work/shared';
 
 import { getDb } from '../db/schema.js';
 import { getSetting } from '../db/settings.js';
 import * as sessionsDb from '../db/sessions.js';
 import { publicPathTail } from './path-safety.js';
 import {
+  getSkillsCatalogFetchImpl,
   isRemoteInstallEnabled,
   resolveSkillFiles,
   type FetchPath,
   type SkillSnapshot,
 } from './skills-catalog.js';
+import { fetchPublicHttp } from './ssrf.js';
 import {
   discoverSkillFolders,
   parseInstallSource,
@@ -41,6 +43,64 @@ import {
 } from './skills-source.js';
 
 const ROOT_WHITELIST_TOP = new Set(['skill.md', 'references', 'assets', 'scripts', 'examples']);
+
+const TELEMETRY_URL = 'https://add-skill.vercel.sh/t';
+const TELEMETRY_TIMEOUT_MS = 2_000;
+const TELEMETRY_QUERY_ALLOWLIST = new Set(['event', 'source', 'skills', 'v']);
+
+function resolvedRemoteId(src: InstallSource, candSlug: string): string {
+  const slug = src.slug ?? candSlug;
+  if (src.kind === 'github' && src.owner && src.repo) {
+    return `${src.owner}/${src.repo}/${slug}`;
+  }
+  return src.id ?? `${src.owner}/${src.repo}/${slug}`;
+}
+
+function telemetrySource(src: InstallSource): string {
+  if (src.kind === 'github' && src.owner && src.repo) return `${src.owner}/${src.repo}`;
+  if (typeof src.url === 'string' && src.url.trim()) return src.url.trim();
+  if (typeof src.id === 'string' && src.id.trim()) return src.id.trim();
+  return '';
+}
+
+function buildTelemetryUrl(source: string, slug: string): string {
+  const u = new URL(TELEMETRY_URL);
+  u.searchParams.set('event', 'install');
+  u.searchParams.set('source', source);
+  u.searchParams.set('skills', slug);
+  u.searchParams.set('v', NEOS_VERSION);
+  for (const key of [...u.searchParams.keys()]) {
+    if (!TELEMETRY_QUERY_ALLOWLIST.has(key)) u.searchParams.delete(key);
+  }
+  return u.href;
+}
+
+/** Appendix E: opt-in fire-and-forget GET. Failures never block install. */
+function maybeSendInstallTelemetry(src: InstallSource, slug: string): void {
+  try {
+    if (getSetting('skills.telemetryOptIn') !== 'true') return;
+    const source = telemetrySource(src);
+    if (!source || !slug) return;
+    const url = buildTelemetryUrl(source, slug);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TELEMETRY_TIMEOUT_MS);
+    const fetchImpl = getSkillsCatalogFetchImpl();
+    void fetchPublicHttp(url, {
+      method: 'GET',
+      headers: { 'User-Agent': `neos-work-skills/${NEOS_VERSION}` },
+      signal: controller.signal,
+      checkDns: !fetchImpl,
+      followOneRedirect: true,
+      fetchImpl,
+    }).catch(() => {
+      /* swallow */
+    }).finally(() => {
+      clearTimeout(timer);
+    });
+  } catch {
+    /* swallow */
+  }
+}
 
 type RenameFn = (from: string, to: string) => Promise<unknown>;
 let renameFn: RenameFn = (from, to) => fsp.rename(from, to);
@@ -362,7 +422,8 @@ async function ingestSnapshot(opts: {
   }
 
   const name = parsed.manifest.name;
-  const remoteId = src.id ?? `${src.owner}/${src.repo}/${cand.slug}`;
+  const remoteId = resolvedRemoteId(src, cand.slug);
+  if (src.kind === 'github') src.id = remoteId;
   const existing = findSkillByName(name);
   let shadowed: 'bundled' | undefined;
   if (existing) {
@@ -484,6 +545,7 @@ async function ingestSnapshot(opts: {
     fetchPath,
   };
   if (shadowed) result.shadowed = shadowed;
+  maybeSendInstallTelemetry(src, src.slug ?? cand.slug);
   return result;
 }
 

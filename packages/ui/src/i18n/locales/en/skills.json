@@ -7,6 +7,7 @@
   "catalogSearchPlaceholder": "Search skills.sh…",
   "catalogOwnerPlaceholder": "Owner (optional)",
   "catalogEmpty": "Search the public skills.sh catalog, or try one of these:",
+  "catalogEmptySearch": "Search the public skills.sh catalog.",
   "catalogUnavailable": "Catalog search failed.",
   "catalogTryFailed": "Could not preview a suggested skill.",
   "install": "Install",

@@ -241,6 +241,14 @@ describe('Web Skills page', () => {
     });
   });
 
+  it('shows search-only empty catalog copy without a try-list', async () => {
+    renderSkills();
+    await waitFor(() => expect(screen.getByTestId('skills-catalog-search')).toBeInTheDocument());
+    expect(screen.getByText(skillsCopy.catalogEmptySearch)).toBeInTheDocument();
+    expect(screen.queryByText(/try one of these/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(skillsCopy.catalogEmpty)).not.toBeInTheDocument();
+  });
+
   it('hides catalog search when remoteCatalogEnabled is false', async () => {
     getSettings.mockResolvedValue({
       ok: true,
