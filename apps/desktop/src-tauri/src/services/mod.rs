@@ -11,6 +11,7 @@ pub mod license;
 pub mod sidecar;
 pub mod speed;
 pub mod timeline;
+pub mod ts_to_mp4;
 pub mod volume;
 pub mod watermark;
 pub mod ytdlp;
