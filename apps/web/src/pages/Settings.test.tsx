@@ -184,7 +184,7 @@ describe('Web Settings', () => {
   });
 
   it('treats missing skills catalog setting rows as enabled', async () => {
-    getSettings.mockResolvedValue({ ok: true, data: {} });
+    getSettings.mockResolvedValue({ ok: true, data: { ANTHROPIC_API_KEY: 'sk-a...xyz1' } });
     renderSettings();
     await waitFor(() => expect(screen.getByTestId('settings-skills-remote-catalog')).toBeInTheDocument());
     expect(screen.getByTestId('settings-skills-remote-catalog')).toHaveAttribute('aria-checked', 'true');
