@@ -7,6 +7,7 @@ import type {
   EnvironmentInfo,
   MuxOptions,
   TranscodeOptions,
+  TsToMp4Options,
   VideoInfo,
 } from "@video/lib/types/video";
 
@@ -104,6 +105,24 @@ export function muxVideo(options: MuxOptions): Promise<void> {
       subtitle_streams: options.subtitle_streams ?? null,
       subtitle_input: options.subtitle_input ?? null,
       subtitle_input_streams: options.subtitle_input_streams ?? null,
+      duration_secs: options.duration_secs ?? null,
+      job_id: options.job_id ?? null,
+    },
+  });
+}
+
+/** Convert a single MPEG-TS file to MP4. */
+export function convertTsToMp4(options: TsToMp4Options): Promise<void> {
+  return invoke<void>("convert_ts_to_mp4", {
+    options: {
+      input_path: options.input_path,
+      output_path: options.output_path,
+      mode: options.mode ?? null,
+      video_codec: options.video_codec ?? null,
+      audio_codec: options.audio_codec ?? null,
+      crf: options.crf ?? null,
+      video_stream_index: options.video_stream_index ?? null,
+      audio_stream_index: options.audio_stream_index ?? null,
       duration_secs: options.duration_secs ?? null,
       job_id: options.job_id ?? null,
     },

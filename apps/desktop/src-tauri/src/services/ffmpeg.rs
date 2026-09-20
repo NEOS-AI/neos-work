@@ -10,6 +10,10 @@ use crate::services::encoders::{
 use crate::services::ffprobe::FFprobeService;
 use crate::services::job::{resolve_job_id, JobRegistry};
 use crate::services::sidecar::spawn_ffmpeg;
+use crate::services::ts_to_mp4::{
+    build_ts_to_mp4_args, choose_ts_codecs, is_hls_playlist_path, is_mpegts_format, output_is_mp4,
+    validate_ts_streams, TsConvertMode,
+};
 
 // ---------------------------------------------------------------------------
 // Progress event payload
@@ -858,6 +862,113 @@ impl FFmpegService {
             subtitle_input_streams,
         );
         Self::run(app, args, duration, job_id).await
+    }
+
+    /// Convert a single MPEG-TS file to MP4. Policy lives in `ts_to_mp4`; this
+    /// method is probe → plan → `run` / `run_with_hw_fallback`.
+    pub async fn convert_ts_to_mp4(
+        app: &AppHandle,
+        input: &str,
+        output: &str,
+        mode: Option<&str>,
+        video_codec: Option<&str>,
+        audio_codec: Option<&str>,
+        crf: Option<u8>,
+        video_stream_index: Option<u32>,
+        audio_stream_index: Option<u32>,
+        total_duration_secs: Option<f64>,
+        job_id: Option<&str>,
+    ) -> Result<(), AppError> {
+        if input.is_empty() || output.is_empty() {
+            return Err(AppError::InvalidArgument(
+                "input_path and output_path must not be empty".into(),
+            ));
+        }
+        // HLS playlists share a `.ts` segment extension; reject before probe (K8).
+        if is_hls_playlist_path(input) {
+            return Err(AppError::InvalidArgument(
+                "HLS playlists are not supported; use a single MPEG-TS file".into(),
+            ));
+        }
+        if !output_is_mp4(output) {
+            return Err(AppError::InvalidArgument(
+                "output_path must end with .mp4".into(),
+            ));
+        }
+
+        let info = FFprobeService::probe(app, input).await?;
+        if !is_mpegts_format(&info.format.format_name) {
+            return Err(AppError::InvalidArgument("input is not MPEG-TS".into()));
+        }
+
+        let first_video = info
+            .streams
+            .iter()
+            .filter(|s| s.codec_type == "video")
+            .map(|s| s.index)
+            .min();
+        let Some(default_video) = first_video else {
+            return Err(AppError::InvalidArgument(
+                "input has no video stream".into(),
+            ));
+        };
+        let video_idx = video_stream_index.unwrap_or(default_video);
+        let audio_idx = audio_stream_index.or_else(|| {
+            info.streams
+                .iter()
+                .filter(|s| s.codec_type == "audio")
+                .map(|s| s.index)
+                .min()
+        });
+        validate_ts_streams(&info.streams, video_idx, audio_idx)?;
+
+        let video_codec_name = info
+            .streams
+            .iter()
+            .find(|s| s.index == video_idx)
+            .map(|s| s.codec_name.as_str())
+            .unwrap_or("");
+        let audio_codec_name = audio_idx.and_then(|idx| {
+            info.streams
+                .iter()
+                .find(|s| s.index == idx)
+                .map(|s| s.codec_name.as_str())
+        });
+
+        let parsed_mode = TsConvertMode::parse(mode)?;
+        // auto follows the codec table even if the UI leaked codec/crf fields (K21).
+        let (user_video, user_audio, user_crf) = match parsed_mode {
+            TsConvertMode::Auto => (None, None, None),
+            _ => (video_codec, audio_codec, crf),
+        };
+        let plan = choose_ts_codecs(
+            video_codec_name,
+            audio_codec_name,
+            parsed_mode,
+            user_video,
+            user_audio,
+            user_crf,
+        )?;
+
+        let duration = Self::resolve_duration(app, input, total_duration_secs).await;
+        let primary = build_ts_to_mp4_args(input, output, &plan, video_idx, audio_idx);
+        if hwaccel_for_codec(&plan.video_codec).is_some() {
+            let mut fallback_plan = plan.clone();
+            fallback_plan.video_codec = software_fallback_codec(&plan.video_codec).to_string();
+            let fallback =
+                build_ts_to_mp4_args(input, output, &fallback_plan, video_idx, audio_idx);
+            Self::run_with_hw_fallback(
+                app,
+                primary,
+                Some(fallback),
+                duration,
+                job_id,
+                &plan.video_codec,
+            )
+            .await
+        } else {
+            Self::run(app, primary, duration, job_id).await
+        }
     }
 
     /// Resize a video to target dimensions, optionally with a hardware encoder.
