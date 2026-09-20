@@ -93,6 +93,11 @@ impl FFmpegCommandBuilder {
         self
     }
 
+    pub fn no_data(mut self) -> Self {
+        self.args.push("-dn".into());
+        self
+    }
+
     pub fn no_audio(mut self) -> Self {
         self.args.push("-an".into());
         self
@@ -609,8 +614,10 @@ impl FFmpegService {
                     stderr_buf.push_str(&text);
                     stderr_buf.push('\n');
 
-                    if let Some(percent) = parse_progress_percent(&text, total_duration_secs) {
-                        emit_progress(app, &job_id, percent, text.trim());
+                    if let Some((percent, message)) =
+                        progress_event_from_stderr(&text, total_duration_secs)
+                    {
+                        emit_progress(app, &job_id, percent, message);
                     }
                 }
                 CommandEvent::Terminated(status) => {
@@ -1022,6 +1029,23 @@ pub(crate) fn build_resize_args(
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Map an ffmpeg stderr line to `(percent, trimmed line)` for `ffmpeg-progress`.
+/// Falls back to 0% when `time=` is present but duration is missing or zero.
+pub(crate) fn progress_event_from_stderr(
+    line: &str,
+    total_secs: Option<f64>,
+) -> Option<(f64, String)> {
+    if let Some(percent) = parse_progress_percent(line, total_secs) {
+        return Some((percent, line.trim().to_string()));
+    }
+    let duration_unknown = total_secs.map(|t| t <= 0.0).unwrap_or(true);
+    if duration_unknown && line.contains("time=") {
+        Some((0.0, line.trim().to_string()))
+    } else {
+        None
+    }
+}
+
 /// Parse "time=HH:MM:SS.mm" from an ffmpeg stderr line and convert to a
 /// 0–100 percentage given `total_duration_secs`.
 fn parse_progress_percent(line: &str, total_secs: Option<f64>) -> Option<f64> {
@@ -1185,6 +1209,41 @@ mod tests {
     fn parse_progress() {
         let line = "frame= 123 fps= 60 time=00:00:10.00 bitrate=1000kbits/s";
         assert_eq!(parse_progress_percent(line, Some(40.0)), Some(25.0));
+        assert_eq!(parse_progress_percent(line, None), None);
+        assert_eq!(parse_progress_percent(line, Some(0.0)), None);
+    }
+
+    #[test]
+    fn progress_event_from_stderr_with_duration() {
+        let line = "frame= 123 fps= 60 time=00:00:10.00 bitrate=1000kbits/s";
+        let (percent, msg) = progress_event_from_stderr(line, Some(40.0)).unwrap();
+        assert_eq!(percent, 25.0);
+        assert_eq!(msg, line.trim());
+    }
+
+    #[test]
+    fn progress_event_from_stderr_without_duration() {
+        let line = "frame= 123 fps= 60 time=00:00:10.00 bitrate=1000kbits/s";
+        let (percent, msg) = progress_event_from_stderr(line, None).unwrap();
+        assert_eq!(percent, 0.0);
+        assert_eq!(msg, line.trim());
+    }
+
+    #[test]
+    fn progress_event_from_stderr_zero_duration() {
+        let line = "frame= 123 fps= 60 time=00:00:10.00 bitrate=1000kbits/s";
+        let (percent, _) = progress_event_from_stderr(line, Some(0.0)).unwrap();
+        assert_eq!(percent, 0.0);
+    }
+
+    #[test]
+    fn progress_event_from_stderr_no_time() {
+        assert_eq!(progress_event_from_stderr("frame=1 fps=1", None), None);
+    }
+
+    #[test]
+    fn parse_progress_percent_none_duration_stays_none() {
+        let line = "frame= 123 fps= 60 time=00:00:10.00 bitrate=1000kbits/s";
         assert_eq!(parse_progress_percent(line, None), None);
         assert_eq!(parse_progress_percent(line, Some(0.0)), None);
     }
