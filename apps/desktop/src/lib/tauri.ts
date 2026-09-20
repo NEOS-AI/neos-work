@@ -10,10 +10,10 @@ export function isTauri(): boolean {
 }
 
 /**
- * Start the engine server via Tauri sidecar.
- * Returns true if started successfully, false if sidecar is unavailable.
- * In development, sidecar may not be available — the user should start
- * the server manually with `pnpm --filter @neos-work/server dev`.
+ * Start a local engine this app owns (Host mode, after a failed health probe).
+ * Production uses the bundled neos-engine sidecar; `tauri dev` falls back to
+ * spawning `@neos-work/server` via Node when the sidecar is a placeholder.
+ * Returns true if a process was started or already owned by this app.
  */
 export async function startEngine(): Promise<boolean> {
   if (!isTauri()) return false;

@@ -1,5 +1,6 @@
 pub mod crop;
 pub mod encoders;
+pub mod engine;
 pub mod environment;
 pub mod fade;
 pub mod ffmpeg;

@@ -30,6 +30,12 @@ const EngineContext = createContext<EngineContextValue | null>(null);
 
 const DEFAULT_HOST_URL = 'http://127.0.0.1:57286';
 const HEALTH_CHECK_INTERVAL = 5000;
+const HOST_PORT_POLL_ATTEMPTS = 5;
+const HOST_PORT_POLL_MS = 200;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export function EngineProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<EngineState>({
@@ -97,24 +103,29 @@ export function EngineProvider({ children }: { children: ReactNode }) {
         client: null,
       });
 
-      // For host mode, try starting the engine via Tauri sidecar.
-      // If sidecar is unavailable (dev mode), the server must be running manually.
+      // Host: reuse a healthy local daemon; only spawn if nothing is listening.
+      // Sidecar (production) or Node @neos-work/server (dev placeholder sidecar)
+      // is started by Tauri; stopEngine only kills a child this app stored.
+      let startedHostEngine = false;
       if (mode === 'host') {
-        await startEngine();
-
-        // Wait briefly for sidecar to output port/token metadata
-        await new Promise((r) => setTimeout(r, 1000));
-
-        // Try to get the dynamic port from the sidecar
-        const port = await getEnginePort();
-        if (port) {
-          serverUrl = `http://127.0.0.1:${port}`;
+        const probe = new EngineClient(DEFAULT_HOST_URL);
+        const alreadyUp = await probe.checkConnection();
+        if (!alreadyUp) {
+          startedHostEngine = await startEngine();
+          for (let i = 0; i < HOST_PORT_POLL_ATTEMPTS; i++) {
+            const port = await getEnginePort();
+            if (port) {
+              serverUrl = `http://127.0.0.1:${port}`;
+              break;
+            }
+            if (i < HOST_PORT_POLL_ATTEMPTS - 1) await delay(HOST_PORT_POLL_MS);
+          }
         }
       }
 
       const client = new EngineClient(serverUrl);
 
-      const maxRetries = mode === 'host' ? 20 : 3;
+      const maxRetries = mode === 'host' ? (startedHostEngine ? 30 : 20) : 3;
       const retryDelay = mode === 'host' ? 500 : 1000;
 
       for (let i = 0; i < maxRetries; i++) {
