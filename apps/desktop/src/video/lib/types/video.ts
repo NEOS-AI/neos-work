@@ -75,6 +75,19 @@ export interface MuxOptions {
   job_id?: string;
 }
 
+export interface TsToMp4Options {
+  input_path: string;
+  output_path: string;
+  mode?: "auto" | "force_copy" | "force_encode";
+  video_codec?: string;
+  audio_codec?: string;
+  crf?: number;
+  video_stream_index?: number;
+  audio_stream_index?: number;
+  duration_secs?: number;
+  job_id?: string;
+}
+
 export interface EnvironmentInfo {
   os: string;
   arch: string;

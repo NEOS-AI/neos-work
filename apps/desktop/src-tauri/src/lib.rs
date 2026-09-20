@@ -311,6 +311,7 @@ pub fn run() {
             commands::audio::extract_subtitle,
             commands::transcode::transcode_video,
             commands::transcode::mux_video,
+            commands::transcode::convert_ts_to_mp4,
             commands::resize::resize_video,
             commands::trim::trim_video,
             commands::concat::concat_videos,

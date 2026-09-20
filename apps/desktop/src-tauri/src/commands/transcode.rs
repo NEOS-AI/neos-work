@@ -43,6 +43,22 @@ pub struct MuxOptions {
     pub job_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct TsToMp4Options {
+    pub input_path: String,
+    pub output_path: String,
+    /// "auto" | "force_copy" | "force_encode". omit / null = auto
+    pub mode: Option<String>,
+    /// force_encode only; auto/force_copy ignore even if present
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+    pub crf: Option<u8>,
+    pub video_stream_index: Option<u32>,
+    pub audio_stream_index: Option<u32>,
+    pub duration_secs: Option<f64>,
+    pub job_id: Option<String>,
+}
+
 /// Transcode a video file to a different codec or container.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn transcode_video(app: AppHandle, options: TranscodeOptions) -> Result<(), AppError> {
@@ -95,6 +111,30 @@ pub async fn mux_video(app: AppHandle, options: MuxOptions) -> Result<(), AppErr
             .as_deref()
             .filter(|s| !s.is_empty()),
         options.subtitle_input_streams.as_deref().unwrap_or(&empty),
+        options.duration_secs,
+        options.job_id.as_deref(),
+    )
+    .await
+}
+
+/// Convert a single MPEG-TS file to MP4. No subtitle fields in v1.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn convert_ts_to_mp4(app: AppHandle, options: TsToMp4Options) -> Result<(), AppError> {
+    if options.input_path.is_empty() || options.output_path.is_empty() {
+        return Err(AppError::InvalidArgument(
+            "input_path and output_path must not be empty".into(),
+        ));
+    }
+    FFmpegService::convert_ts_to_mp4(
+        &app,
+        &options.input_path,
+        &options.output_path,
+        options.mode.as_deref(),
+        options.video_codec.as_deref(),
+        options.audio_codec.as_deref(),
+        options.crf,
+        options.video_stream_index,
+        options.audio_stream_index,
         options.duration_secs,
         options.job_id.as_deref(),
     )
