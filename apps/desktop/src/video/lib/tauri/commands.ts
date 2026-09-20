@@ -194,13 +194,24 @@ export function cancelJob(jobId?: string): Promise<void> {
 // File dialog helpers
 // ---------------------------------------------------------------------------
 
-const VIDEO_EXTS = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"];
+export const VIDEO_EXTS = ["mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v"]; // same members
+export const MPEG_TS_EXTS = ["ts", "m2ts", "mts"];
 const AUDIO_EXTS = ["mp3", "aac", "m4a", "flac", "wav", "opus", "ogg", "ac3"];
 const SUBTITLE_EXTS = ["srt", "ass", "ssa", "vtt", "sub"];
 
 /** Open a native file picker for video files. Returns the selected path or null. */
 export async function openVideoFile(): Promise<string | null> {
   return openMediaFile("video");
+}
+
+/** MPEG-TS only — not added to VIDEO_EXTS so other tools keep a broken-copy-free picker. */
+export async function openMpegTsFile(): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const result = await open({
+    multiple: false,
+    filters: [{ name: "MPEG transport stream", extensions: MPEG_TS_EXTS }],
+  });
+  return typeof result === "string" ? result : null;
 }
 
 export async function openAudioFile(): Promise<string | null> {

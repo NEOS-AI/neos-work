@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@video/lib/toast";
 import { FolderOpen, Repeat2 } from "lucide-react";
 import { Button } from "@video/components/ui/button";
@@ -26,8 +26,10 @@ import { StreamPicker } from "@video/components/media/StreamPicker";
 import {
   analyzeVideo,
   checkEnvironment,
+  convertTsToMp4,
   muxVideo,
   openAudioFile,
+  openMpegTsFile,
   openSubtitleFile,
   openVideoFile,
   saveFile,
@@ -35,13 +37,34 @@ import {
 } from "@video/lib/tauri/commands";
 import { useFfmpegJob } from "@video/hooks/useFfmpegJob";
 import { useRememberedFile } from "@video/hooks/useRememberedFile";
-import type { StreamInfo } from "@video/lib/types/video";
+import type { StreamInfo, TsToMp4Options } from "@video/lib/types/video";
 import { toastJobDone } from "@video/lib/jobToast";
 import { useI18n } from "@video/lib/i18n";
 
 const SOFTWARE_VIDEO_CODECS = ["libx264", "libx265", "libvpx-vp9", "copy"];
+const TS_SOFTWARE_VIDEO_CODECS = ["libx264", "libx265", "libvpx-vp9"];
 const AUDIO_CODECS = ["aac", "mp3", "libopus", "copy"];
 const CONTAINERS = ["mp4", "mkv", "webm", "mov", "avi"];
+
+type TsMode = "auto" | "force_copy" | "force_encode";
+
+function isMpegtsFormat(formatName: string): boolean {
+  return formatName.split(",").some((p) => p.trim().toLowerCase() === "mpegts");
+}
+
+function hasMpegTsExtension(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return ext === "ts" || ext === "m2ts" || ext === "mts";
+}
+
+function videoCopyCompatible(codec: string): boolean {
+  const c = codec.toLowerCase();
+  return c === "h264" || c === "avc" || c === "hevc" || c === "h265";
+}
+
+function audioCopyCompatible(codec: string): boolean {
+  return codec.toLowerCase() === "aac";
+}
 
 export default function TranscodePage() {
   const { t } = useI18n();
@@ -64,6 +87,7 @@ export default function TranscodePage() {
         <TabsList>
           <TabsTrigger value="transcode">{t("tc.tab.transcode")}</TabsTrigger>
           <TabsTrigger value="mux">{t("tc.tab.mux")}</TabsTrigger>
+          <TabsTrigger value="ts">{t("tc.tab.tsToMp4")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="transcode" className="space-y-4 pt-4">
@@ -71,6 +95,9 @@ export default function TranscodePage() {
         </TabsContent>
         <TabsContent value="mux" className="space-y-4 pt-4">
           <MuxPanel />
+        </TabsContent>
+        <TabsContent value="ts" className="space-y-4 pt-4">
+          <TsToMp4Panel hwEncoders={hwEncoders} />
         </TabsContent>
       </Tabs>
     </div>
@@ -542,6 +569,303 @@ function MuxPanel() {
       <Button onClick={handleMux} disabled={job.isRunning} className="gap-2">
         <Repeat2 className="h-4 w-4" />
         {job.isRunning ? t("tc.mux.running") : t("tc.mux.run")}
+      </Button>
+    </>
+  );
+}
+
+function TsToMp4Panel({ hwEncoders }: { hwEncoders: string[] }) {
+  const { t } = useI18n();
+  const job = useFfmpegJob("TS to MP4");
+  const [remembered, setRemembered] = useRememberedFile();
+  const [inputPath, setInputPath] = useState("");
+  const [outputPath, setOutputPath] = useState("");
+  const [mode, setMode] = useState<TsMode>("auto");
+  const [videoCodec, setVideoCodec] = useState("libx264");
+  const [crf, setCrf] = useState("23");
+  const [formatName, setFormatName] = useState<string | null>(null);
+  const [streams, setStreams] = useState<StreamInfo[]>([]);
+  const [videoSel, setVideoSel] = useState<number[]>([]);
+  const [audioSel, setAudioSel] = useState<number[]>([]);
+  const seeded = useRef(false);
+
+  useEffect(() => {
+    if (seeded.current || !remembered) return;
+    seeded.current = true;
+    // Non-TS remembered files (typical .mp4) would trap this tab in notMpegts.
+    if (hasMpegTsExtension(remembered)) {
+      setInputPath(remembered);
+    }
+  }, [remembered]);
+
+  const applyInput = (path: string) => {
+    setInputPath(path);
+    if (path) setRemembered(path);
+  };
+
+  useEffect(() => {
+    if (!inputPath) {
+      setFormatName(null);
+      setStreams([]);
+      setVideoSel([]);
+      setAudioSel([]);
+      return;
+    }
+    setOutputPath(inputPath.replace(/\.[^.]+$/, "") + ".mp4");
+    analyzeVideo(inputPath)
+      .then((info) => {
+        setFormatName(info.format.format_name);
+        setStreams(info.streams);
+        const firstV = info.streams.find((s) => s.codec_type === "video");
+        const firstA = info.streams.find((s) => s.codec_type === "audio");
+        setVideoSel(firstV ? [firstV.index] : []);
+        setAudioSel(firstA ? [firstA.index] : []);
+      })
+      .catch(() => {
+        setFormatName(null);
+        setStreams([]);
+        setVideoSel([]);
+        setAudioSel([]);
+      });
+  }, [inputPath]);
+
+  const videoStream = streams.find((s) => s.index === videoSel[0] && s.codec_type === "video");
+  const audioStream = streams.find((s) => s.index === audioSel[0] && s.codec_type === "audio");
+  const isMpegts = formatName != null && isMpegtsFormat(formatName);
+  const encodeVcodec = mode === "force_encode" ? videoCodec : "libx264";
+  const videoIsCopy =
+    mode === "force_encode" ? false : mode === "force_copy" ? true : videoCopyCompatible(videoStream?.codec_name ?? "");
+  const audioIsCopy =
+    !audioStream
+      ? true
+      : mode === "force_encode"
+        ? false
+        : mode === "force_copy"
+          ? true
+          : audioCopyCompatible(audioStream.codec_name);
+  const planLine =
+    videoIsCopy && audioIsCopy
+      ? t("tc.ts.planCopy")
+      : videoIsCopy && !audioIsCopy
+        ? t("tc.ts.planMix")
+        : !videoIsCopy && audioIsCopy
+          ? t("tc.ts.planMixVideo", { vcodec: encodeVcodec })
+          : t("tc.ts.planEncode", { vcodec: encodeVcodec, acodec: "aac" });
+  const copyIncompatibleCodec =
+    mode === "force_copy"
+      ? videoStream && !videoCopyCompatible(videoStream.codec_name)
+        ? videoStream.codec_name
+        : audioStream && !audioCopyCompatible(audioStream.codec_name)
+          ? audioStream.codec_name
+          : null
+      : null;
+  const canRun =
+    Boolean(inputPath && outputPath && isMpegts && videoStream && !copyIncompatibleCodec && !job.isRunning);
+
+  const handleConvert = async () => {
+    if (!inputPath || !outputPath) {
+      toast.error(t("tc.setPaths"));
+      return;
+    }
+    if (!videoStream) {
+      toast.error(t("tc.ts.noVideo"));
+      return;
+    }
+    const options: TsToMp4Options = {
+      input_path: inputPath,
+      output_path: outputPath,
+      mode,
+      video_stream_index: videoStream.index,
+    };
+    if (audioStream) {
+      options.audio_stream_index = audioStream.index;
+    }
+    if (mode === "force_encode") {
+      options.video_codec = videoCodec;
+      options.audio_codec = "aac";
+      options.crf = Number.parseInt(crf, 10);
+    }
+    const result = await job.runJob(
+      (jobId) => convertTsToMp4({ ...options, job_id: jobId }),
+      {
+        outputPath,
+        replay: { command: "convert_ts_to_mp4", args: { options } },
+      }
+    );
+    if (result.ok) {
+      toastJobDone(t("tc.ts.done"), outputPath);
+    } else if (result.cancelled) {
+      toast.message(t("common.cancelled"));
+    } else {
+      toast.error(t("tc.ts.failed"), { description: result.error });
+    }
+  };
+
+  return (
+    <>
+      <p className="text-muted-foreground">{t("tc.ts.blurb")}</p>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("common.files")}</CardTitle>
+          <CardDescription>{t("tc.ts.inputHint")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <PathRow
+            label={t("common.input")}
+            value={inputPath}
+            onChange={applyInput}
+            onBrowse={async () => {
+              const path = await openMpegTsFile();
+              if (path) applyInput(path);
+            }}
+          />
+          <PathRow
+            label={t("common.output")}
+            value={outputPath}
+            onChange={setOutputPath}
+            onBrowse={async () => {
+              const stem = inputPath.replace(/\.[^.]+$/, "") || "output";
+              const path = await saveFile(`${stem}.mp4`, ["mp4"]);
+              if (path) setOutputPath(path);
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      {formatName != null && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("probe.container")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>{formatName}</p>
+            <p>
+              {[videoStream?.codec_name, audioStream?.codec_name].filter(Boolean).join(" / ")}
+            </p>
+            <p>{planLine}</p>
+            {!isMpegts && (
+              <p className="text-destructive">{t("tc.ts.notMpegts", { format: formatName })}</p>
+            )}
+            {isMpegts && !videoStream && (
+              <p className="text-destructive">{t("tc.ts.noVideo")}</p>
+            )}
+            {copyIncompatibleCodec && (
+              <p className="text-destructive">
+                {t("tc.ts.copyIncompatible", { codec: copyIncompatibleCodec })}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {streams.some((s) => s.codec_type === "video" || s.codec_type === "audio") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("tc.mux.vstreams")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <StreamPicker
+              streams={streams}
+              types={["video"]}
+              selected={videoSel}
+              onChange={setVideoSel}
+              name="ts-video"
+              emptyLabel={t("tc.ts.noVideo")}
+            />
+            <StreamPicker
+              streams={streams}
+              types={["audio"]}
+              selected={audioSel}
+              onChange={setAudioSel}
+              name="ts-audio"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("tc.ts.mode")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Select value={mode} onValueChange={(v) => v && setMode(v as TsMode)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">{t("tc.ts.mode.auto")}</SelectItem>
+              <SelectItem value="force_copy">{t("tc.ts.mode.copy")}</SelectItem>
+              <SelectItem value="force_encode">{t("tc.ts.mode.encode")}</SelectItem>
+            </SelectContent>
+          </Select>
+          {mode === "force_encode" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>{t("tc.videoCodec")}</Label>
+                  <Select value={videoCodec} onValueChange={(v) => v && setVideoCodec(v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>{t("resize.software")}</SelectLabel>
+                        {TS_SOFTWARE_VIDEO_CODECS.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      {hwEncoders.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>{t("resize.hardware")}</SelectLabel>
+                          {hwEncoders.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>{t("tc.audioCodec")}</Label>
+                  <p className="flex h-8 items-center text-sm">AAC</p>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>{t("quality.hint", { label: qualityLabel(videoCodec, t) })}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={51}
+                  value={crf}
+                  onChange={(e) => setCrf(e.target.value)}
+                  className="w-24"
+                />
+              </div>
+            </>
+          )}
+          <p className="text-sm text-muted-foreground">{t("tc.ts.hwHint")}</p>
+          <p className="text-sm text-muted-foreground">{t("tc.ts.subHint")}</p>
+        </CardContent>
+      </Card>
+
+      <p className="text-sm text-muted-foreground">{t("tc.ts.progressUnknown")}</p>
+
+      {job.isRunning && (
+        <JobProgress
+          percent={job.percent}
+          message={job.message}
+          label={t("tc.ts.running")}
+          onCancel={job.cancel}
+        />
+      )}
+
+      <Button onClick={handleConvert} disabled={!canRun} className="gap-2">
+        <Repeat2 className="h-4 w-4" />
+        {job.isRunning ? t("tc.ts.running") : t("tc.ts.run")}
       </Button>
     </>
   );

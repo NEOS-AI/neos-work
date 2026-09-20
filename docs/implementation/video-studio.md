@@ -28,4 +28,4 @@ The studio is available **without an engine connection**: Mode selection → Vid
 
 ## Tools
 
-Analyze, transcode/mux, extract, GIF, YouTube download, trim, clips, concat, crop, resize, rotate/flip, speed, fade, volume, watermark, viewer, multi-track timeline, job history.
+Analyze, transcode/mux, MPEG-TS → MP4 (third tab on the transcode page; MPEG-TS picker only, not the global Video filter), extract, GIF, YouTube download, trim, clips, concat, crop, resize, rotate/flip, speed, fade, volume, watermark, viewer, multi-track timeline, job history.
