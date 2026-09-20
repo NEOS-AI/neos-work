@@ -40,7 +40,7 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 | Plugins / remote marketplace | **yes** | **yes (v0.25/v0.26)** | — | Web: catalog URL + install; desktop keeps plugin-run SSE |
 | Blocks | **yes** | **yes (v0.26)** | — | Web: list + create prompt block |
 | Templates | **yes** | **yes (v0.26)** | — | Web: instantiate workflow |
-| Skills UI | **yes** | **yes (v0.26)** | — | Web: list/scan/toggle/delete. Desktop catalog search/preview/install. Remote delete removes files. |
+| Skills UI | **yes** | **yes** | — | Web + desktop: list/scan/toggle/delete + catalog search/preview/install. Remote delete removes files. Web is thin (no detail/Try/upgrade chrome). |
 | Design systems | **yes** | **yes (v0.26)** | — | Web: list + DESIGN.md editor |
 | Media generate UI | **yes** | **yes** (v0.23) | yes | Web: list + generate; Desktop full studio |
 | Sessions / workspaces | **yes** | **yes (v0.25)** | — | Web: list/create/chat SSE + workspace CRUD |
@@ -82,7 +82,7 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 
 - Big-bang merge into one mega client in 0.9  
 - Map revision `contentHash` into live tip `hash` (or the reverse) outside adapter boundaries  
-- Assume web marketplace install (workflows yes since v0.24; plugins still desktop-only)
+- Assume web marketplace/catalog install is missing (workflows, plugins, and skills catalog are on web)
 
 Wire conventions: [`skills/api-docs/references/conventions.md`](../../skills/api-docs/references/conventions.md).
 
@@ -93,7 +93,7 @@ Wire conventions: [`skills/api-docs/references/conventions.md`](../../skills/api
 | Choice | Rationale |
 |---|---|
 | **Desktop-only full marketplace UI** | Trust tiers, zip install, catalog fetch already live on Plugins page (0.6.4) |
-| Web | **Catalog + install + catalog URL (v0.25/v0.26)** — plugin-run SSE studio remains desktop |
+| Web | **Catalog + install + catalog URL (v0.25/v0.26)**; skills catalog search/preview/install — plugin-run SSE studio remains desktop |
 
 Revisit plugin-run SSE in the browser only if product pull requires it.
 

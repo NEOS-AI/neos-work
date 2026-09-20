@@ -167,6 +167,30 @@ describe('Web Settings', () => {
     });
   });
 
+  it('toggles skills catalog and install flags through settings API', async () => {
+    renderSettings();
+    await waitFor(() => expect(screen.getByTestId('settings-skills-catalog')).toBeInTheDocument());
+    expect(screen.getByTestId('settings-skills-remote-catalog')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('settings-skills-remote-install')).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(screen.getByTestId('settings-skills-remote-catalog'));
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('skills.remoteCatalogEnabled', 'false');
+    });
+    fireEvent.click(screen.getByTestId('settings-skills-remote-install'));
+    await waitFor(() => {
+      expect(saveSetting).toHaveBeenCalledWith('skills.remoteInstallEnabled', 'false');
+    });
+  });
+
+  it('treats missing skills catalog setting rows as enabled', async () => {
+    getSettings.mockResolvedValue({ ok: true, data: { ANTHROPIC_API_KEY: 'sk-a...xyz1' } });
+    renderSettings();
+    await waitFor(() => expect(screen.getByTestId('settings-skills-remote-catalog')).toBeInTheDocument());
+    expect(screen.getByTestId('settings-skills-remote-catalog')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('settings-skills-remote-install')).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('shows desktop-only dual-surface badge (v0.9.3 Q29)', async () => {
     renderSettings();
     await waitFor(() => {

@@ -16,6 +16,11 @@ import { ApiError, WebApiClient } from '../lib/api.js';
 type VerifyState = 'idle' | 'checking' | 'valid' | 'invalid' | 'error';
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
+function settingFlagOn(raw: string | undefined, fallback: boolean): boolean {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  return raw.trim().toLowerCase() !== 'false';
+}
+
 const API_KEY_ROWS: Array<{
   label: string;
   settingKey: string;
@@ -63,6 +68,9 @@ export function Settings() {
   const [verifyState, setVerifyState] = useState<Record<string, VerifyState>>({});
   const [saveState, setSaveState] = useState<Record<string, SaveState>>({});
 
+  const [skillsCatalog, setSkillsCatalog] = useState(true);
+  const [skillsInstall, setSkillsInstall] = useState(true);
+
   const [collabStatus, setCollabStatus] = useState<{
     bus?: string;
     nodeId?: string;
@@ -108,7 +116,10 @@ export function Settings() {
         setSettingsMap({});
         return;
       }
-      setSettingsMap(res.data && typeof res.data === 'object' ? res.data : {});
+      const map = res.data && typeof res.data === 'object' ? res.data : {};
+      setSettingsMap(map);
+      setSkillsCatalog(settingFlagOn(map['skills.remoteCatalogEnabled'], true));
+      setSkillsInstall(settingFlagOn(map['skills.remoteInstallEnabled'], true));
     } catch (err) {
       setSettingsMap({});
       setSettingsError(err instanceof ApiError ? err.message : 'Failed to load settings');
@@ -201,6 +212,23 @@ export function Settings() {
     window.setTimeout(() => {
       setSaveState((s) => ({ ...s, [settingKey]: 'idle' }));
     }, 2500);
+  };
+
+  const persistSkillsFlag = async (
+    key: string,
+    next: boolean,
+    revert: () => void,
+  ) => {
+    try {
+      const res = await client.saveSetting(key, next ? 'true' : 'false');
+      if (!res.ok) {
+        revert();
+        setSettingsError(res.error || 'Save failed');
+      }
+    } catch (err) {
+      revert();
+      setSettingsError(err instanceof ApiError ? err.message : 'Save failed');
+    }
   };
 
   const handleClearKey = async (settingKey: string) => {
@@ -333,6 +361,63 @@ export function Settings() {
             </div>
           );
         })}
+      </section>
+
+      <section className="card stack" data-testid="settings-skills-catalog">
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1rem' }}>Skills catalog</h2>
+          <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+            Browse and install third-party SKILL.md packages from skills.sh.
+          </p>
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div>Remote catalog</div>
+            <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: 12 }}>
+              Search and preview skills.sh from the Skills page.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn"
+            role="switch"
+            aria-checked={skillsCatalog}
+            data-testid="settings-skills-remote-catalog"
+            onClick={() => {
+              const next = !skillsCatalog;
+              setSkillsCatalog(next);
+              void persistSkillsFlag('skills.remoteCatalogEnabled', next, () =>
+                setSkillsCatalog(!next),
+              );
+            }}
+          >
+            {skillsCatalog ? 'On' : 'Off'}
+          </button>
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div>Remote install</div>
+            <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: 12 }}>
+              Allow installing third-party skills from GitHub and skills.sh.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn"
+            role="switch"
+            aria-checked={skillsInstall}
+            data-testid="settings-skills-remote-install"
+            onClick={() => {
+              const next = !skillsInstall;
+              setSkillsInstall(next);
+              void persistSkillsFlag('skills.remoteInstallEnabled', next, () =>
+                setSkillsInstall(!next),
+              );
+            }}
+          >
+            {skillsInstall ? 'On' : 'Off'}
+          </button>
+        </div>
       </section>
 
       <section className="card stack" data-testid="editor-prefs-section">
