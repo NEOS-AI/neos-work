@@ -156,6 +156,51 @@ describe('TranscodePage TS → MP4', () => {
     expect(screen.queryByText(/\{vcodec\}/)).not.toBeInTheDocument();
   });
 
+  it('does not claim stream copy when force_copy codecs are incompatible', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'TS → MP4' }));
+    fireEvent.change(screen.getAllByPlaceholderText('/path/to/file')[0], {
+      target: { value: '/tmp/clip.ts' },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('비디오 복사, 오디오 AAC로 인코딩')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByDisplayValue('자동 (가능한 트랙 복사)'), {
+      target: { value: 'force_copy' },
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText('스트림 복사 불가 (mp2). 자동 또는 다시 인코딩을 쓰세요'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText('이 코덱은 MP4에 복사할 수 없습니다: mp2')).toBeInTheDocument();
+    expect(screen.queryByText('비디오·오디오 스트림 복사')).not.toBeInTheDocument();
+    expect(screen.queryByText('{codec}')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'MP4로 변환' })).toBeDisabled();
+  });
+
+  it('keeps the copy plan when force_copy codecs are compatible', async () => {
+    analyzeVideo.mockResolvedValue(
+      videoInfo('mpegts', [stream(0, 'video', 'h264'), stream(1, 'audio', 'aac')]),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'TS → MP4' }));
+    fireEvent.change(screen.getAllByPlaceholderText('/path/to/file')[0], {
+      target: { value: '/tmp/clip.ts' },
+    });
+    await waitFor(() => {
+      expect(screen.getByText('비디오·오디오 스트림 복사')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByDisplayValue('자동 (가능한 트랙 복사)'), {
+      target: { value: 'force_copy' },
+    });
+    expect(screen.getByText('비디오·오디오 스트림 복사')).toBeInTheDocument();
+    expect(screen.queryByText(/스트림 복사 불가/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'MP4로 변환' })).not.toBeDisabled();
+  });
+
   it('disables Run and substitutes format= for non-mpegts', async () => {
     analyzeVideo.mockResolvedValue(
       videoInfo('mov,mp4,m4a,3gp,3g2,mj2', [stream(0, 'video', 'h264'), stream(1, 'audio', 'aac')]),

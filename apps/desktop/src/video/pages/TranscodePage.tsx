@@ -643,14 +643,6 @@ function TsToMp4Panel({ hwEncoders }: { hwEncoders: string[] }) {
         : mode === "force_copy"
           ? true
           : audioCopyCompatible(audioStream.codec_name);
-  const planLine =
-    videoIsCopy && audioIsCopy
-      ? t("tc.ts.planCopy")
-      : videoIsCopy && !audioIsCopy
-        ? t("tc.ts.planMix")
-        : !videoIsCopy && audioIsCopy
-          ? t("tc.ts.planMixVideo", { vcodec: encodeVcodec })
-          : t("tc.ts.planEncode", { vcodec: encodeVcodec, acodec: "aac" });
   const copyIncompatibleCodec =
     mode === "force_copy"
       ? videoStream && !videoCopyCompatible(videoStream.codec_name)
@@ -659,6 +651,15 @@ function TsToMp4Panel({ hwEncoders }: { hwEncoders: string[] }) {
           ? audioStream.codec_name
           : null
       : null;
+  const planLine = copyIncompatibleCodec
+    ? t("tc.ts.planCopyBlocked", { codec: copyIncompatibleCodec })
+    : videoIsCopy && audioIsCopy
+      ? t("tc.ts.planCopy")
+      : videoIsCopy && !audioIsCopy
+        ? t("tc.ts.planMix")
+        : !videoIsCopy && audioIsCopy
+          ? t("tc.ts.planMixVideo", { vcodec: encodeVcodec })
+          : t("tc.ts.planEncode", { vcodec: encodeVcodec, acodec: "aac" });
   const canRun =
     Boolean(inputPath && outputPath && isMpegts && videoStream && !copyIncompatibleCodec && !job.isRunning);
 
