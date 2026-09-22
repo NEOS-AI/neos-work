@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-14T01:57:55.590Z",
+  "generatedAt": "2026-09-22T07:04:28.028Z",
   "version": "0.27.0",
-  "root": "/Users/yeonwoosung/Desktop/neos-work",
+  "root": "/Users/yeonwoosung/.grok/worktrees/desktop-neos-work/subagent-01a0c7dc-646c-7f11-a13a-35d3fe8bb8c1",
   "catalogs": {
     "agentCliDefs": {
       "count": 13,
@@ -57,7 +57,7 @@
       ]
     },
     "skills": {
-      "count": 7,
+      "count": 9,
       "items": [
         {
           "id": "api-docs",
@@ -75,6 +75,11 @@
           "path": "skills/design-critique/SKILL.md"
         },
         {
+          "id": "design-harness-review",
+          "kind": "package",
+          "path": "skills/design-harness-review/SKILL.md"
+        },
+        {
           "id": "docx-report",
           "kind": "package",
           "path": "skills/docx-report/SKILL.md"
@@ -88,6 +93,11 @@
           "id": "refactor-safe",
           "kind": "package",
           "path": "skills/refactor-safe/SKILL.md"
+        },
+        {
+          "id": "video-analyze",
+          "kind": "package",
+          "path": "skills/video-analyze/SKILL.md"
         },
         {
           "id": "web-landing",
@@ -597,7 +607,7 @@
   "summary": {
     "agentCliDefs": 13,
     "pluginAtoms": 15,
-    "skills": 7,
+    "skills": 9,
     "designSystems": 2,
     "plugins": 3,
     "mediaProviders": 6,
@@ -667,7 +677,7 @@
       {
         "id": "skills",
         "ok": true,
-        "actual": 7,
+        "actual": 9,
         "min": 5
       },
       {
