@@ -21,11 +21,12 @@ vi.mock('@neos-work/office-sheets/node', () => ({
   ]),
 }));
 
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DomainWorker } from '@neos-work/shared';
+import { DESIGN_HARNESS_WRAP_MAX, type DomainWorker } from '@neos-work/shared';
 import { mockAdapter } from '../test-utils/mock-adapter.js';
 import {
   buildWorkerSystemPrompt,
@@ -333,6 +334,29 @@ describe('buildWorkerToolRegistry + path jail', () => {
   });
 });
 
+function designContextMarkerPairs(s: string): number {
+  const open = s.match(/<!-- DESIGN CONTEXT -->/g)?.length ?? 0;
+  const close = s.match(/<!-- \/DESIGN CONTEXT -->/g)?.length ?? 0;
+  return open === close ? open : -1;
+}
+
+function buildDesign30kInner(): string {
+  return [
+    'Design system: wrap-fixture',
+    'D'.repeat(30_000),
+    'X'.repeat(2_200),
+    '',
+    '### RULES.md',
+    '# Agent rules',
+    '- keep-rules',
+    '',
+    '### tokens.css',
+    '```css',
+    ':root { --keep-token: 1; }',
+    '```',
+  ].join('\n');
+}
+
 describe('buildWorkerSystemPrompt', () => {
   it('merges worker prompt, append, design, memory with caps', () => {
     const worker = makeWorker({
@@ -368,12 +392,37 @@ describe('buildWorkerSystemPrompt', () => {
     const worker = makeWorker({ id: 'p', systemPrompt: 'Base' });
     const prompt = buildWorkerSystemPrompt({
       worker,
-      designSystemContent: 'D'.repeat(40_000),
+      designSystemContent: 'D'.repeat(DESIGN_HARNESS_WRAP_MAX + 1_000),
       memoryContext: 'M'.repeat(40_000),
     });
     expect(prompt).toContain('…[design context truncated]');
     expect(prompt).toContain('…[memory truncated]');
-    expect(prompt.length).toBeLessThan(40_000 + 40_000);
+    expect(prompt.length).toBeLessThan(DESIGN_HARNESS_WRAP_MAX + 1_000 + 40_000);
+  });
+
+  it('buildWorkerSystemPrompt keeps RULES + tokens at 64k wrap', () => {
+    const inner = buildDesign30kInner();
+    expect(inner).not.toMatch(/DESIGN CONTEXT/);
+    expect(inner.length).toBeGreaterThan(32_000);
+    expect(inner.length).toBeLessThan(DESIGN_HARNESS_WRAP_MAX);
+    const worker = makeWorker({ id: 'p', systemPrompt: 'Base worker prompt.' });
+    const prompt = buildWorkerSystemPrompt({
+      worker,
+      designSystemContent: inner,
+    });
+    expect(prompt).toContain('### RULES.md');
+    expect(prompt).toContain('keep-rules');
+    expect(prompt).toContain('### tokens.css');
+    expect(prompt).toContain('--keep-token');
+    expect(designContextMarkerPairs(prompt)).toBe(1);
+    expect(prompt).not.toContain('…[design context truncated]');
+  });
+
+  it('worker-runtime.ts does not bind DESIGN_CONTEXT_MAX = 32_000 for design wrap', () => {
+    const src = readFileSync(new URL('./worker-runtime.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/const DESIGN_CONTEXT_MAX\s*=\s*32_000/);
+    expect(src).toContain('DESIGN_HARNESS_WRAP_MAX');
+    expect(src).toMatch(/MEMORY_CONTEXT_MAX\s*=\s*32_000/);
   });
 
   it('strips null bytes from system prompt and caps total length', () => {

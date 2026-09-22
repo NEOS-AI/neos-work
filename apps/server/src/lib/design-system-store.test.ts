@@ -20,6 +20,7 @@ import {
   getDesignSystemRules,
   getDesignSystemTokens,
   listDesignSystems,
+  loadDesignHarnessFragment,
   parseDesignSystemManifest,
   pruneDesignSystemRules,
   resolveBundledDesignSystemsDir,
@@ -35,12 +36,23 @@ afterEach(async () => {
   try {
     const list = await listDesignSystems();
     for (const ds of list) {
-      if (ds.name === NAME) await deleteDesignSystem(ds.id);
+      if (ds.name === NAME || ds.name.startsWith(`${NAME}_`)) await deleteDesignSystem(ds.id);
     }
   } catch {
     // ignore
   }
   await fs.rm(path.join(DESIGN_SYSTEMS_DIR, NAME), { recursive: true, force: true }).catch(() => {});
+  const extraRoot = DESIGN_SYSTEMS_DIR;
+  try {
+    const entries = await fs.readdir(extraRoot);
+    for (const entry of entries) {
+      if (entry === NAME || entry.startsWith(`${NAME}_`)) {
+        await fs.rm(path.join(extraRoot, entry), { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  } catch {
+    // ignore
+  }
 });
 
 describe('design-system-store', () => {
@@ -840,5 +852,51 @@ describe('design-system-store RULES.md / tokens write', () => {
 
     const viaStore = await getDesignSystemRules(neo!.id);
     expect(viaStore === null || viaStore.includes('# Agent rules')).toBe(true);
+  });
+
+  it('loadDesignHarnessFragment returns name, DESIGN.md, RULES.md, tokens.css', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    await updateDesignSystemContent(created!.id, '# DesignKeep\n');
+    await updateDesignSystemRules(created!.id, '# RulesKeep\n');
+    await updateDesignSystemTokens(created!.id, ':root { --frag: 1 }');
+    const frag = await loadDesignHarnessFragment(created!.id);
+    expect(frag).not.toBeNull();
+    expect(frag!.name).toBe(NAME);
+    expect(frag!.designMd).toContain('DesignKeep');
+    expect(frag!.rulesMd).toContain('RulesKeep');
+    expect(frag!.tokensCss).toContain('--frag');
+  });
+
+  it('loadDesignHarnessFragment returns null when DESIGN.md is missing and omits missing optional files', async () => {
+    expect(await loadDesignHarnessFragment('nope')).toBeNull();
+    expect(await loadDesignHarnessFragment('bad\nid')).toBeNull();
+
+    const extraName = `${NAME}_extra`;
+    const extra = await createDesignSystem(extraName);
+    expect(extra).not.toBeNull();
+    await fs.rm(path.join(extra!.path, 'RULES.md'), { force: true });
+    await fs.rm(path.join(extra!.path, 'tokens.css'), { force: true });
+    const frag = await loadDesignHarnessFragment(extra!.id);
+    expect(frag).not.toBeNull();
+    expect(frag!.designMd).toBeTruthy();
+    expect(frag!.rulesMd == null || frag!.rulesMd === '').toBe(true);
+    expect(frag!.tokensCss == null || frag!.tokensCss === '').toBe(true);
+
+    const orphanName = `${NAME}_orphan`;
+    const orphan = await createDesignSystem(orphanName);
+    expect(orphan).not.toBeNull();
+    await fs.writeFile(path.join(orphan!.path, 'RULES.md'), '# Only rules\n', 'utf8');
+    await fs.rm(path.join(orphan!.path, 'DESIGN.md'), { force: true });
+    expect(await loadDesignHarnessFragment(orphan!.id)).toBeNull();
+  });
+
+  it('loadDesignHarnessFragment does not read components.html', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    await fs.writeFile(path.join(created!.path, 'components.html'), 'SECRET_COMPONENT', 'utf8');
+    const frag = await loadDesignHarnessFragment(created!.id);
+    expect(frag).not.toBeNull();
+    expect(JSON.stringify(frag)).not.toContain('SECRET_COMPONENT');
   });
 });

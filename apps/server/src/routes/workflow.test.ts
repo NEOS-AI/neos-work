@@ -1302,6 +1302,73 @@ describe('workflow export design system + import content-type edges', () => {
     }
   });
 
+  it('export.zip includes DESIGN.md, RULES.md, and tokens.css', async () => {
+    const unzipper = await import('unzipper');
+    const {
+      createDesignSystem,
+      updateDesignSystemContent,
+      updateDesignSystemRules,
+      updateDesignSystemTokens,
+      deleteDesignSystem,
+    } = await import('../lib/design-system-store.js');
+    const dsName = `cov_ds_zip3_${process.pid}`;
+    let dsId: string | undefined;
+    let wfId: string | undefined;
+    try {
+      const ds = await createDesignSystem(dsName, 'for zip three files');
+      if (!ds) return;
+      dsId = ds.id;
+      await updateDesignSystemContent(ds.id, '# Design\n\nzip-export-design\n');
+      await updateDesignSystemRules(ds.id, '# Agent rules\n\n- zip-export-rules\n');
+      await updateDesignSystemTokens(ds.id, ':root { --zip-export-token: 1; }\n');
+
+      const create = await workflow.request('/', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: `${WF_NAME}_dszip3`,
+          ...minimalGraph,
+        }),
+      });
+      wfId = ((await create.json()) as { data: { id: string } }).data.id;
+      await workflow.request(`/${wfId}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ designSystemId: ds.id }),
+      });
+
+      const zip = await workflow.request(`/${wfId}/export.zip`);
+      expect(zip.status).toBe(200);
+      const buf = Buffer.from(await zip.arrayBuffer());
+      const dir = await unzipper.Open.buffer(buf);
+      const names = dir.files.map((f) => f.path.replace(/\\/g, '/'));
+      expect(names).toContain(`design-systems/${ds.id}/DESIGN.md`);
+      expect(names).toContain(`design-systems/${ds.id}/RULES.md`);
+      expect(names).toContain(`design-systems/${ds.id}/tokens.css`);
+      expect(names.some((n) => n.includes('components.html'))).toBe(false);
+
+      const read = async (name: string) => {
+        const file = dir.files.find((f) => f.path.replace(/\\/g, '/') === name);
+        expect(file).toBeTruthy();
+        return (await file!.buffer()).toString('utf8');
+      };
+      expect(await read(`design-systems/${ds.id}/DESIGN.md`)).toContain('zip-export-design');
+      expect(await read(`design-systems/${ds.id}/RULES.md`)).toContain('zip-export-rules');
+      expect(await read(`design-systems/${ds.id}/tokens.css`)).toContain('--zip-export-token');
+    } finally {
+      if (wfId) {
+        await workflow.request(`/${wfId}`, { method: 'DELETE' }).catch(() => {});
+      }
+      if (dsId) {
+        try {
+          await deleteDesignSystem(dsId);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
+
   it('import.zip rejects unsupported content-type', async () => {
     const res = await workflow.request('/import.zip', {
       method: 'POST',
@@ -1383,6 +1450,192 @@ describe('workflow import.zip artifacts + design systems', () => {
       } catch {
         /* ignore */
       }
+    }
+  });
+
+  it('import.zip of DESIGN.md + RULES.md + tokens.css sets hasRules and hasTokens', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const dsDir = `cov_ds_imp3_${process.pid}`;
+    const zipBuf: Buffer = await new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      archive.append(
+        JSON.stringify({
+          version: '1',
+          workflow: {
+            name: `${WF_NAME}_zip_ds_three`,
+            description: 'three files',
+            domain: 'coding',
+            nodes: minimalGraph.nodes,
+            edges: minimalGraph.edges,
+          },
+        }),
+        { name: 'workflow.json' },
+      );
+      archive.append('# Design\n\nButtons.\n', {
+        name: `design-systems/${dsDir}/DESIGN.md`,
+      });
+      archive.append('# Agent rules\n\n- zip-import-keep\n', {
+        name: `design-systems/${dsDir}/RULES.md`,
+      });
+      archive.append(':root { --zip-import-token: 1; }\n', {
+        name: `design-systems/${dsDir}/tokens.css`,
+      });
+      void archive.finalize();
+    });
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as {
+      ok: boolean;
+      data: { id: string; designSystemId?: string };
+      meta?: { designSystemId?: string };
+    };
+    expect(body.ok).toBe(true);
+    const dsId = body.meta?.designSystemId ?? body.data.designSystemId;
+    expect(dsId).toBeTruthy();
+    const {
+      getDesignSystem,
+      getDesignSystemRules,
+      getDesignSystemTokens,
+      deleteDesignSystem,
+    } = await import('../lib/design-system-store.js');
+    const ds = await getDesignSystem(dsId!);
+    expect(ds?.hasRules).toBe(true);
+    expect(ds?.hasTokens).toBe(true);
+    expect(await getDesignSystemRules(dsId!)).toContain('zip-import-keep');
+    expect(await getDesignSystemTokens(dsId!)).toContain('--zip-import-token');
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+    if (dsId) {
+      try {
+        await deleteDesignSystem(dsId);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it('import.zip skips RULES.md without DESIGN.md and still 201', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const orphan = `orphan_rules_${process.pid}`;
+    const zipBuf: Buffer = await new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      archive.append(
+        JSON.stringify({
+          version: '1',
+          workflow: {
+            name: `${WF_NAME}_zip_orphan_rules`,
+            domain: 'general',
+            nodes: minimalGraph.nodes,
+            edges: minimalGraph.edges,
+          },
+        }),
+        { name: 'workflow.json' },
+      );
+      archive.append('# Agent rules\n- orphan\n', {
+        name: `design-systems/${orphan}/RULES.md`,
+      });
+      void archive.finalize();
+    });
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as { data: { id: string } };
+    const { listDesignSystems, deleteDesignSystem } = await import('../lib/design-system-store.js');
+    const listed = await listDesignSystems();
+    expect(listed.some((d) => d.name === orphan)).toBe(false);
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+    for (const ds of listed) {
+      if (ds.name === orphan) await deleteDesignSystem(ds.id).catch(() => {});
+    }
+  });
+
+  it('import.zip bundled RULES/tokens 403-skip does not fail the zip', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const {
+      listDesignSystems,
+      getDesignSystemRules,
+      deleteDesignSystem,
+    } = await import('../lib/design-system-store.js');
+    const before = await listDesignSystems({ includeBundled: true });
+    const bundled = before.find((d) => d.source === 'bundled' && d.name === 'neos-default')
+      ?? before.find((d) => d.source === 'bundled');
+    expect(bundled).toBeTruthy();
+    const hadUserShadow = before.some((d) => d.name === 'neos-default' && d.source === 'user');
+    const bundledRulesBefore = await fs.readFile(path.join(bundled!.path, 'RULES.md'), 'utf8').catch(() => '');
+    const hack = `HACK_BUNDLED_RULES_${process.pid}`;
+    const zipBuf: Buffer = await new Promise((resolve, reject) => {
+      const archive = new ZipArchive({ zlib: { level: 1 } });
+      const chunks: Buffer[] = [];
+      const stream = new PassThrough();
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      archive.on('error', reject);
+      archive.pipe(stream);
+      archive.append(
+        JSON.stringify({
+          version: '1',
+          workflow: {
+            name: `${WF_NAME}_zip_bundled_skip`,
+            domain: 'general',
+            nodes: minimalGraph.nodes,
+            edges: minimalGraph.edges,
+          },
+        }),
+        { name: 'workflow.json' },
+      );
+      archive.append('# Design hack\n', { name: 'design-systems/neos-default/DESIGN.md' });
+      archive.append(`# Agent rules\n- ${hack}\n`, { name: 'design-systems/neos-default/RULES.md' });
+      archive.append(':root { --hack: 1; }\n', { name: 'design-systems/neos-default/tokens.css' });
+      void archive.finalize();
+    });
+
+    const imp = await workflow.request('/import.zip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/zip' },
+      body: zipBuf,
+    });
+    expect(imp.status).toBe(201);
+    const body = (await imp.json()) as { data: { id: string } };
+    const bundledRulesAfter = await fs.readFile(path.join(bundled!.path, 'RULES.md'), 'utf8').catch(() => '');
+    expect(bundledRulesAfter).not.toContain(hack);
+    expect(bundledRulesAfter).toBe(bundledRulesBefore);
+    const viaStore = await getDesignSystemRules(bundled!.id);
+    if (!hadUserShadow) {
+      expect(viaStore ?? '').not.toContain(hack);
+    }
+
+    await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
+    if (!hadUserShadow) {
+      const after = await listDesignSystems();
+      const userShadow = after.find((d) => d.name === 'neos-default' && d.source === 'user');
+      if (userShadow) await deleteDesignSystem(userShadow.id).catch(() => {});
     }
   });
 
