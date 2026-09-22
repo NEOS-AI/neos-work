@@ -769,6 +769,7 @@ workflow.post('/import.zip', async (c) => {
   // Optional: restore design systems from design-systems/<name>/DESIGN.md (plan Tasks 1 / 10)
   let importedDesignSystemId: string | undefined =
     typeof wf.designSystemId === 'string' ? wf.designSystemId : undefined;
+  const importedDsByName = new Map<string, string>();
   const dsFiles = dir.files.filter((f) => {
     const p = f.path.replace(/\\/g, '/');
     return /^design-systems\/[^/]+\/DESIGN\.md$/i.test(p);
@@ -793,6 +794,7 @@ workflow.post('/import.zip', async (c) => {
     }
     if (ds) {
       importedDesignSystemId = ds.id;
+      importedDsByName.set(safeName, ds.id);
     }
   }
 
@@ -806,14 +808,14 @@ workflow.post('/import.zip', async (c) => {
     const rawName = parts[1] ?? '';
     const safeName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
     if (!safeName) continue;
-    const existingDs = (await listDesignSystems()).find((d) => d.name === safeName);
-    if (!existingDs) continue;
+    const dsId = importedDsByName.get(safeName);
+    if (!dsId) continue;
     const extraContent = (await f.buffer()).toString('utf-8');
     try {
       if (/RULES\.md$/i.test(p)) {
-        await updateDesignSystemRules(existingDs.id, extraContent);
+        await updateDesignSystemRules(dsId, extraContent);
       } else {
-        await updateDesignSystemTokens(existingDs.id, extraContent);
+        await updateDesignSystemTokens(dsId, extraContent);
       }
     } catch {
       // bundled 403 / invalid body — skip that file, do not fail the zip

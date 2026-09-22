@@ -1577,6 +1577,79 @@ describe('workflow import.zip artifacts + design systems', () => {
     }
   });
 
+  it('import.zip does not overwrite existing RULES.md when zip has no DESIGN.md', async () => {
+    const { ZipArchive } = await import('archiver');
+    const { PassThrough } = await import('node:stream');
+    const dsName = `brand_keep_${process.pid}`;
+    const {
+      createDesignSystem,
+      updateDesignSystemRules,
+      getDesignSystemRules,
+      deleteDesignSystem,
+    } = await import('../lib/design-system-store.js');
+    let dsId: string | undefined;
+    let wfId: string | undefined;
+    try {
+      const ds = await createDesignSystem(dsName, 'keep existing rules');
+      expect(ds).not.toBeNull();
+      dsId = ds!.id;
+      await updateDesignSystemRules(ds!.id, '# Agent rules\n- keep-existing-rules\n');
+
+      const zipBuf: Buffer = await new Promise((resolve, reject) => {
+        const archive = new ZipArchive({ zlib: { level: 1 } });
+        const chunks: Buffer[] = [];
+        const stream = new PassThrough();
+        stream.on('data', (c: Buffer) => chunks.push(c));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        archive.on('error', reject);
+        archive.pipe(stream);
+        archive.append(
+          JSON.stringify({
+            version: '1',
+            workflow: {
+              name: `${WF_NAME}_zip_brand_keep`,
+              domain: 'general',
+              nodes: minimalGraph.nodes,
+              edges: minimalGraph.edges,
+            },
+          }),
+          { name: 'workflow.json' },
+        );
+        archive.append('# Agent rules\n- zip-overwrite-hack\n', {
+          name: `design-systems/${dsName}/RULES.md`,
+        });
+        void archive.finalize();
+      });
+
+      const imp = await workflow.request('/import.zip', {
+        method: 'POST',
+        headers: { 'content-type': 'application/zip' },
+        body: zipBuf,
+      });
+      expect(imp.status).toBe(201);
+      const body = (await imp.json()) as { data: { id: string } };
+      wfId = body.data.id;
+      const rules = await getDesignSystemRules(dsId);
+      expect(rules).toContain('keep-existing-rules');
+      expect(rules).not.toContain('zip-overwrite-hack');
+    } finally {
+      if (wfId) {
+        try {
+          await workflow.request(`/${wfId}`, { method: 'DELETE' });
+        } catch {
+          /* ignore */
+        }
+      }
+      if (dsId) {
+        try {
+          await deleteDesignSystem(dsId);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
+
   it('import.zip bundled RULES/tokens 403-skip does not fail the zip', async () => {
     const { ZipArchive } = await import('archiver');
     const { PassThrough } = await import('node:stream');

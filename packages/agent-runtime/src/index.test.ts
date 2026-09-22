@@ -584,6 +584,17 @@ describe('formatDesignHarnessInner', () => {
     expect(inner).not.toContain('keep-me-at-end');
   });
 
+  it('oversized newest Corrections bullet is sliced to RULES_MD_INJECT_TAIL', () => {
+    const giant = `- 2026-09-22: ${'G'.repeat(RULES_MD_INJECT_TAIL + 500)}`;
+    const rulesMd = `# Agent rules\n\n## Corrections\n- 2026-09-21: old-keep\n${giant}\n`;
+    const inner = formatDesignHarnessInner({ designMd: '# D', rulesMd });
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('…[rules truncated]');
+    expect(inner).not.toContain('G'.repeat(RULES_MD_INJECT_TAIL + 1));
+    const rulesSection = inner.slice(inner.indexOf('### RULES.md'));
+    expect(rulesSection.length).toBeLessThanOrEqual(RULES_MD_INJECT_MAX + '\n\n…[rules truncated]'.length);
+  });
+
   it('barrel does not export assembleDesignHarnessPrompt', async () => {
     const runtime = await import('./index.js');
     expect('assembleDesignHarnessPrompt' in runtime).toBe(false);

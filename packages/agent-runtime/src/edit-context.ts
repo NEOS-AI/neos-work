@@ -109,8 +109,9 @@ export const RULES_MD_INJECT_TAIL = 8_000;
 export const TOKENS_INJECT_MAX = 8_000;
 export { DESIGN_HARNESS_WRAP_MAX } from '@neos-work/shared';
 
-const CORRECTIONS_HEADING_RE = /^\s*##\s+corrections\s*$/im;
-const NEXT_ATX_HEADING_RE = /^\s*#{1,6}\s+/m;
+// [ \t] not \s: JS \s includes newlines, which would let ^/$ span blank lines.
+const CORRECTIONS_HEADING_RE = /^[ \t]*##[ \t]+corrections[ \t]*$/im;
+const NEXT_ATX_HEADING_RE = /^[ \t]*#{1,6}[ \t]+/m;
 const CORRECTION_BULLET_RE = /^\s*-\s+(\d{4}-\d{2}-\d{2}):\s*(.*)$/;
 
 function formatRulesInject(rulesMd: string | null | undefined): string {
@@ -152,7 +153,15 @@ function formatRulesInject(rulesMd: string | null | undefined): string {
     selected.unshift(bullets[i]!);
   }
 
-  return `${head}\n## Corrections\n${selected.join('\n')}`;
+  let tail = selected.join('\n');
+  if (tail.length > RULES_MD_INJECT_TAIL) {
+    tail = tail.slice(0, RULES_MD_INJECT_TAIL) + '\n\n…[rules truncated]';
+  }
+  let out = `${head}\n## Corrections\n${tail}`;
+  if (out.length > RULES_MD_INJECT_MAX) {
+    out = out.slice(0, RULES_MD_INJECT_MAX) + '\n\n…[rules truncated]';
+  }
+  return out;
 }
 
 /** Marker-free inner. Empty/null-byte DESIGN.md skips the entire block. */
