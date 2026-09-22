@@ -235,6 +235,51 @@ export function DesignSystemEditor() {
     return () => window.clearTimeout(t);
   }, [saveMessage]);
 
+  const handlePrune = useCallback(async () => {
+    if (readOnly || !client || !id || saving) return;
+    const safeId = safeEntityId(id);
+    if (!safeId) {
+      setSaveKind('err');
+      setSaveMessage(t('designSystems.invalidIdSave'));
+      return;
+    }
+    if (bundled || rulesMissing || dirty(rules)) return;
+    if (!window.confirm(t('designSystems.pruneConfirm'))) return;
+    setSaving(true);
+    setSaveKind(null);
+    setSaveMessage(null);
+    try {
+      const res = await client.pruneDesignSystemRules(safeId);
+      if (!res.ok) {
+        setSaveKind('err');
+        setSaveMessage(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown',
+        );
+        return;
+      }
+      const rulesRes = await client.getDesignSystemRules(safeId);
+      if (rulesRes.ok && rulesRes.data) {
+        const raw = typeof rulesRes.data.content === 'string' ? rulesRes.data.content : '';
+        const safe = stripNullBytes(raw);
+        setRules({ content: safe, savedContent: safe });
+        setRulesMissing(false);
+      } else {
+        setSaveKind('err');
+        setSaveMessage(
+          scrubDisplayText(rulesRes.error, { collapseLines: true, maxChars: 200 }) || 'unknown',
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      setSaveKind('err');
+      setSaveMessage(
+        scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || 'unknown',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [client, id, saving, t, readOnly, bundled, rulesMissing, rules]);
+
   const handleBack = useCallback(() => {
     if (anyDirty && !window.confirm(t('designSystems.unsavedLeave'))) return;
     navigate('/design-systems');
@@ -392,8 +437,19 @@ export function DesignSystemEditor() {
       </div>
 
       {/* Hint */}
-      <div className="px-6 py-2 bg-white/[0.02] border-b border-white/5 text-xs text-white/30 shrink-0">
-        {t(hintKey)}
+      <div className="flex items-center justify-between gap-3 px-6 py-2 bg-white/[0.02] border-b border-white/5 text-xs text-white/30 shrink-0">
+        <span>{t(hintKey)}</span>
+        {!readOnly && activeTab === 'rules' && (
+          <button
+            type="button"
+            data-testid="ds-prune"
+            disabled={saving || bundled || rulesMissing || dirty(rules)}
+            onClick={() => void handlePrune()}
+            className="shrink-0 rounded border border-white/10 px-2 py-1 text-[11px] text-white/60 hover:text-white/80 disabled:opacity-40"
+          >
+            {t('designSystems.prune')}
+          </button>
+        )}
       </div>
 
       {/* Editor */}

@@ -47,6 +47,14 @@ import { normalizeProjectRelPath } from '../lib/engine.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
+const PROMOTE_TEXT_MAX = 500;
+
+function promoteReady(text: string): boolean {
+  if (/\0/.test(text)) return false;
+  const trimmed = text.trim();
+  return trimmed.length >= 1 && trimmed.length <= PROMOTE_TEXT_MAX;
+}
+
 export function ProjectWorkspace() {
   const { t, i18n } = useTranslation('common');
   const { client } = useEngine();
@@ -109,8 +117,10 @@ export function ProjectWorkspace() {
   const [dsRules, setDsRules] = useState<string | null>(null);
   const [dsBusy, setDsBusy] = useState(false);
   const [dsError, setDsError] = useState<string | null>(null);
+  const [promoteText, setPromoteText] = useState('');
 
   const dirty = isDirty(buffer);
+  const editorPromoteText = selectDetail?.outerHTML ?? selection?.selector ?? '';
   const bufferRef = useRef(buffer);
   bufferRef.current = buffer;
   const [collabSelf, setCollabSelf] = useState<PresencePeerInfo | null>(null);
@@ -986,6 +996,46 @@ export function ProjectWorkspace() {
       void loadDesignContext();
     }
   }, [sideTab, loadDesignSystems, loadDesignContext]);
+
+  const handlePromoteToRules = useCallback(
+    async (
+      source: 'manual' | 'editor' | 'preview-comment',
+      text: string,
+      commentId?: string,
+    ) => {
+      if (!client || !project?.designSystemId) return;
+      if (!promoteReady(text)) return;
+      if (!window.confirm(t('designSystems.promoteConfirm'))) return;
+      const payload: { text: string; source: 'manual' | 'editor' | 'preview-comment'; commentId?: string } = {
+        text: text.trim(),
+        source,
+      };
+      if (commentId) payload.commentId = commentId;
+      const setError = source === 'preview-comment' ? setCommentError : setDsError;
+      const setBusy = source === 'preview-comment' ? setCommentBusy : setDsBusy;
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await client.appendDesignSystemRules(project.designSystemId, payload);
+        if (!res.ok) {
+          setError(
+            scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 })
+              || res.error
+              || 'unknown',
+          );
+          return;
+        }
+        if (source === 'manual') setPromoteText('');
+        if (source !== 'preview-comment') await loadDesignContext();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown';
+        setError(scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || msg);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [client, project?.designSystemId, t, loadDesignContext],
+  );
 
   const handleDesignSystemChange = useCallback(
     async (designSystemId: string) => {
@@ -1978,14 +2028,26 @@ export function ProjectWorkspace() {
                       <div style={{ color: 'var(--text-secondary)' }}>
                         {scrubDisplayText(c.body, { collapseLines: true, maxChars: 200 })}
                       </div>
-                      <button
-                        type="button"
-                        className="mt-1 text-[10px] underline"
-                        style={{ color: 'var(--text-muted)' }}
-                        onClick={() => void handleDeleteComment(c.id)}
-                      >
-                        {t('common.delete')}
-                      </button>
+                      <div className="mt-1 flex items-center gap-2">
+                        <button
+                          type="button"
+                          data-testid={`comment-promote-${c.id}`}
+                          disabled={commentBusy || !project.designSystemId || !promoteReady(c.body)}
+                          className="text-[10px] underline disabled:opacity-40"
+                          style={{ color: 'var(--text-muted)' }}
+                          onClick={() => void handlePromoteToRules('preview-comment', c.body, c.id)}
+                        >
+                          {t('designSystems.promote')}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[10px] underline"
+                          style={{ color: 'var(--text-muted)' }}
+                          onClick={() => void handleDeleteComment(c.id)}
+                        >
+                          {t('common.delete')}
+                        </button>
+                      </div>
                     </li>
                   ))
                 )}
@@ -2206,6 +2268,46 @@ export function ProjectWorkspace() {
                     )}
                   </>
                 )}
+              </div>
+              <div className="flex shrink-0 flex-col gap-1.5 border-t pt-2" style={{ borderColor: 'var(--border-primary)' }}>
+                <textarea
+                  data-testid="ds-promote-text"
+                  aria-label={t('designSystems.promote')}
+                  value={promoteText}
+                  onChange={(e) => setPromoteText(e.target.value)}
+                  rows={3}
+                  className="w-full resize-none rounded border p-2 text-xs"
+                  style={{
+                    borderColor: 'var(--border-primary)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="ds-promote"
+                    disabled={dsBusy || !project.designSystemId || !promoteReady(promoteText)}
+                    onClick={() => void handlePromoteToRules('manual', promoteText)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                    style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+                  >
+                    {t('designSystems.promote')}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="ds-promote-selection"
+                    disabled={dsBusy || !project.designSystemId || !promoteReady(editorPromoteText)}
+                    onClick={() => void handlePromoteToRules('editor', editorPromoteText)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+                    style={{
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {t('designSystems.promote')}
+                  </button>
+                </div>
               </div>
             </div>
           )}

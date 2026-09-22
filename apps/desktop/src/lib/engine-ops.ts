@@ -30,6 +30,8 @@ export interface DesignSystem {
   updatedAt: string;
 }
 
+export type RulesAppendSource = 'preview-comment' | 'editor' | 'manual';
+
 export interface RoutineRun {
   id: string;
   routineId: string;
@@ -123,29 +125,33 @@ export class EngineOpsClient extends EnginePluginsClient {
     return readApiResponse(res);
   }
 
-  // RED stubs: invalid-id short-circuit so Cycle A collects; GREEN fills POST bodies.
   async appendDesignSystemRules(
     id: string,
-    _body: { text: string; source?: 'preview-comment' | 'editor' | 'manual'; commentId?: string },
+    body: { text: string; source?: RulesAppendSource; commentId?: string },
   ): Promise<ApiResponse<null>> {
     const seg = this.pathSegment(id);
     if (!seg) return this.invalidIdResponse('design system id');
-    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules`, {
-      method: 'GET',
-      headers: this.getHeaders(),
+    const payload: Record<string, string> = { text: body.text };
+    if (body.source) payload.source = body.source;
+    if (body.commentId) payload.commentId = body.commentId;
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules/append`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     return readApiResponse(res);
   }
 
   async pruneDesignSystemRules(
     id: string,
-    _opts?: { maxEntries?: number; maxAgeDays?: number },
+    opts?: { maxEntries?: number; maxAgeDays?: number },
   ): Promise<ApiResponse<{ pruned: number }>> {
     const seg = this.pathSegment(id);
     if (!seg) return this.invalidIdResponse('design system id');
-    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules`, {
-      method: 'GET',
-      headers: this.getHeaders(),
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules/prune`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts ?? {}),
     });
     return readApiResponse(res);
   }

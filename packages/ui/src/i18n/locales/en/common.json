@@ -259,7 +259,11 @@
     "notWorkerHarness": "A design harness is not a domain worker (legacy /harnesses).",
     "rulesPlaceholder": "# Agent rules\n\nThis file is the behavioral half of the design harness.\nVisual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.\n\n## Tools\n- Prefer editing the open project HTML/CSS. Do not start from an empty document when a seed file exists.\n- Use Design Editor selection / preview comments when present.\n- Produce self-contained, clickable HTML (hover, focus, scroll, transitions). Not a screenshot mock.\n\n## Never\n- Do not invent a new color palette or font stack when tokens.css defines one.\n- Do not use raw hex/rgb for brand colors; use CSS custom properties from tokens.css.\n- Do not ship inaccessible contrast or missing focus rings.\n- Do not overwrite unrelated manual edits (prefer a minimal patch).\n\n## Preferred workflow\n- Start from the seed (current file, components.html, or a starter), generate a few variants as sibling files, then narrow to one.\n- After a human correction, wait for an explicit promote; do not rewrite RULES.md yourself unless asked.\n\n## Corrections\n<!-- dated bullets, pruned when stale. format: - YYYY-MM-DD: text -->",
     "tokensSaveFailed": "Failed to save tokens.css: {{detail}}",
-    "rulesSaveFailed": "Failed to save RULES.md: {{detail}}"
+    "rulesSaveFailed": "Failed to save RULES.md: {{detail}}",
+    "promote": "Promote to RULES.md",
+    "promoteConfirm": "Add this correction to RULES.md?",
+    "prune": "Prune stale corrections",
+    "pruneConfirm": "Delete Corrections older than 90 days, then drop down to 20?"
   },
   "action": {
     "save": "Save",
