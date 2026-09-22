@@ -16,10 +16,6 @@ function dirty(buf: TabBuffer): boolean {
   return buf.content !== buf.savedContent;
 }
 
-function isNotFound(res: { ok: boolean; error?: string }): boolean {
-  return !res.ok && /not found/i.test(res.error ?? '');
-}
-
 function stripNullBytes(raw: string): string {
   return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
 }
@@ -108,7 +104,7 @@ export function DesignSystemEditor() {
         const safe = stripNullBytes(raw);
         setRules({ content: safe, savedContent: safe });
         setRulesMissing(false);
-      } else if (isNotFound(rulesRes)) {
+      } else if (!rulesRes.ok && /not found/i.test(rulesRes.error ?? '')) {
         const placeholder = t('designSystems.rulesPlaceholder');
         setRules({ content: placeholder, savedContent: placeholder });
         setRulesMissing(true);
@@ -145,14 +141,6 @@ export function DesignSystemEditor() {
   }, [client, id, t]);
 
   useEffect(() => { void load(); }, [load]);
-
-  const setActiveContent = useCallback((value: string) => {
-    if (readOnly || tabLocked) return;
-    const patch = (buf: TabBuffer): TabBuffer => ({ ...buf, content: value });
-    if (activeTab === 'design') setDesign(patch);
-    else if (activeTab === 'rules') setRules(patch);
-    else setTokens(patch);
-  }, [activeTab, readOnly, tabLocked]);
 
   const handleSave = useCallback(async () => {
     if (readOnly || !client || !id || saving) return;
@@ -202,7 +190,7 @@ export function DesignSystemEditor() {
             ? await client.saveDesignSystemTokens(safeId, content)
             : await client.saveDesignSystemContent(safeId, content);
       if (res.ok) {
-        const saved = (buf: TabBuffer): TabBuffer => ({ ...buf, savedContent: buf.content });
+        const saved = (buf: TabBuffer): TabBuffer => ({ ...buf, savedContent: content });
         if (activeTab === 'design') setDesign(saved);
         else if (activeTab === 'rules') {
           setRules(saved);
@@ -415,7 +403,14 @@ export function DesignSystemEditor() {
           value={activeBuf.content}
           readOnly={textareaReadOnly}
           aria-readonly={textareaReadOnly}
-          onChange={(e) => setActiveContent(e.target.value)}
+          onChange={(e) => {
+            if (readOnly || tabLocked) return;
+            const value = e.target.value;
+            const patch = (buf: TabBuffer): TabBuffer => ({ ...buf, content: value });
+            if (activeTab === 'design') setDesign(patch);
+            else if (activeTab === 'rules') setRules(patch);
+            else setTokens(patch);
+          }}
           spellCheck={false}
           className={`w-full h-full resize-none bg-transparent text-sm font-mono text-white/80 focus:outline-none leading-relaxed ${
             textareaReadOnly ? 'cursor-default' : ''

@@ -182,6 +182,37 @@ describe('DesignSystemEditor page', () => {
     });
   });
 
+  it('keeps in-flight keystrokes dirty after save resolves', async () => {
+    let resolveSave!: (value: { ok: true }) => void;
+    saveDesignSystemContent.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Updated' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(saveDesignSystemContent).toHaveBeenCalledWith('ds-1', '# Updated');
+      expect(screen.getByRole('button', { name: 'designSystems.saving' })).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Updated extra' } });
+    resolveSave({ ok: true });
+
+    await waitFor(() => {
+      expect(screen.getByText('designSystems.saved')).toBeInTheDocument();
+    });
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('# Updated extra');
+    expect(screen.getByText('●')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.back' }));
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.unsavedLeave');
+  });
+
   it('rejects null-byte and empty content without calling API', async () => {
     renderEditor();
     await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
