@@ -123,6 +123,33 @@ export class EngineOpsClient extends EnginePluginsClient {
     return readApiResponse(res);
   }
 
+  // RED stubs: invalid-id short-circuit so Cycle A collects; GREEN fills POST bodies.
+  async appendDesignSystemRules(
+    id: string,
+    _body: { text: string; source?: 'preview-comment' | 'editor' | 'manual'; commentId?: string },
+  ): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async pruneDesignSystemRules(
+    id: string,
+    _opts?: { maxEntries?: number; maxAgeDays?: number },
+  ): Promise<ApiResponse<{ pruned: number }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   // --- Artifacts ---
 
   async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {

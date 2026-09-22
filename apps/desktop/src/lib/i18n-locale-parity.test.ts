@@ -150,6 +150,69 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
     expect(koNotWorker.trim()).not.toBe('하네스');
   });
 
+  it('common.json includes PR 4 promote/prune keys in en and ko', () => {
+    const required = [
+      'designSystems.promote',
+      'designSystems.promoteConfirm',
+      'designSystems.prune',
+      'designSystems.pruneConfirm',
+    ];
+    const expected: Record<string, { en: string; ko: string }> = {
+      'designSystems.promote': {
+        ko: 'RULES.md에 승격',
+        en: 'Promote to RULES.md',
+      },
+      'designSystems.promoteConfirm': {
+        ko: '이 교정 사항을 RULES.md Corrections에 추가할까요?',
+        en: 'Add this correction to RULES.md?',
+      },
+      'designSystems.prune': {
+        ko: '오래된 교정 정리',
+        en: 'Prune stale corrections',
+      },
+      'designSystems.pruneConfirm': {
+        ko: '90일이 지난 교정을 지우고, 그래도 20개를 넘으면 가장 오래된 것부터 삭제할까요?',
+        en: 'Delete Corrections older than 90 days, then drop down to 20?',
+      },
+    };
+    const locales: Record<'en' | 'ko', Record<string, unknown>> = {
+      en: JSON.parse(readFileSync(path.join(localesRoot, 'en', 'common.json'), 'utf8')),
+      ko: JSON.parse(readFileSync(path.join(localesRoot, 'ko', 'common.json'), 'utf8')),
+    };
+    for (const locale of ['en', 'ko'] as const) {
+      const json = locales[locale];
+      for (const key of required) {
+        const value = atPath(json, key);
+        expect(typeof value).toBe('string');
+        expect(String(value).trim().length).toBeGreaterThan(0);
+        expect(String(value)).toBe(expected[key][locale]);
+      }
+      expect(atPath(json, 'designSystems.promoteFailed')).toBeUndefined();
+      expect(atPath(json, 'designSystems.pruneFailed')).toBeUndefined();
+      expect(atPath(json, 'project.promoteDesktopOnly')).toBeUndefined();
+    }
+
+    const koPrune = String(atPath(locales.ko, 'designSystems.pruneConfirm'));
+    expect(koPrune).toContain('90일');
+    expect(koPrune).toContain('20개');
+    expect(koPrune).toContain('그래도');
+    expect(koPrune).not.toMatch(/\bAND\b/i);
+    expect(koPrune).not.toMatch(/지우고\s*그리고/);
+
+    const enPrune = String(atPath(locales.en, 'designSystems.pruneConfirm'));
+    expect(enPrune).toContain('90 days');
+    expect(enPrune).toContain('then');
+    expect(enPrune).toContain('20');
+
+    for (const locale of ['en', 'ko'] as const) {
+      for (const key of required) {
+        const value = String(atPath(locales[locale], key)).trim();
+        expect(value.toLowerCase()).not.toBe('harness');
+        expect(value).not.toBe('하네스');
+      }
+    }
+  });
+
   it('common.harness has no new keys', () => {
     const frozen = [
       'title',

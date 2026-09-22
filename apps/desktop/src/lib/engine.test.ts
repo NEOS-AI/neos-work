@@ -2268,6 +2268,83 @@ describe('EngineClient', () => {
     expect(fetchMock.mock.calls.length).toBe(fetchCount);
   });
 
+  it('design system rules append and prune', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.appendDesignSystemRules('ds1', {
+      text: 'keep the focus ring',
+      source: 'preview-comment',
+      commentId: 'c1',
+    });
+    const appendFull = fetchMock.mock.calls.at(-1)!;
+    expect(String(appendFull[0])).toMatch(/\/api\/design-systems\/ds1\/rules\/append/);
+    expect(appendFull[1].method).toBe('POST');
+    expect((appendFull[1].headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(appendFull[1].body as string)).toEqual({
+      text: 'keep the focus ring',
+      source: 'preview-comment',
+      commentId: 'c1',
+    });
+
+    await client.appendDesignSystemRules('ds1', { text: 'typed correction' });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
+      text: 'typed correction',
+    });
+
+    await client.appendDesignSystemRules('ds1', { text: 'from editor', source: 'editor' });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
+      text: 'from editor',
+      source: 'editor',
+    });
+
+    await client.appendDesignSystemRules('ds1', { text: 'manual', source: 'manual' });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
+      text: 'manual',
+      source: 'manual',
+    });
+
+    await client.appendDesignSystemRules('ds1', { text: 'x'.repeat(501) });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string).text).toHaveLength(501);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { pruned: 3 } }));
+    const pruned = await client.pruneDesignSystemRules('ds1');
+    const pruneCall = fetchMock.mock.calls.at(-1)!;
+    expect(String(pruneCall[0])).toMatch(/\/api\/design-systems\/ds1\/rules\/prune/);
+    expect(pruneCall[1].method).toBe('POST');
+    expect((pruneCall[1].headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(pruneCall[1].body).toBe('{}');
+    expect(pruned).toEqual({ ok: true, data: { pruned: 3 } });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { pruned: 1 } }));
+    await client.pruneDesignSystemRules('ds1', { maxEntries: 20, maxAgeDays: 90 });
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)).toEqual({
+      maxEntries: 20,
+      maxAgeDays: 90,
+    });
+
+    const fetchCount = fetchMock.mock.calls.length;
+    await expect(
+      client.appendDesignSystemRules(`d${'\n'}s`, { text: 'x' }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.appendDesignSystemRules('', { text: 'x' })).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.pruneDesignSystemRules(`id${'\0'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.pruneDesignSystemRules('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    expect(fetchMock.mock.calls.length).toBe(fetchCount);
+  });
+
 
   it('live artifact refresh/delete and tool token APIs', async () => {
     const client = new EngineClient('http://engine.test');

@@ -10,6 +10,8 @@ const getDesignSystemRules = vi.fn();
 const saveDesignSystemRules = vi.fn();
 const getDesignSystemTokens = vi.fn();
 const saveDesignSystemTokens = vi.fn();
+const pruneDesignSystemRules = vi.fn();
+const appendDesignSystemRules = vi.fn();
 const navigate = vi.fn();
 
 const client = {
@@ -20,6 +22,8 @@ const client = {
   saveDesignSystemRules,
   getDesignSystemTokens,
   saveDesignSystemTokens,
+  pruneDesignSystemRules,
+  appendDesignSystemRules,
 };
 
 vi.mock('../hooks/useEngine.js', () => ({
@@ -91,6 +95,8 @@ describe('DesignSystemEditor page', () => {
     });
     saveDesignSystemRules.mockReset().mockResolvedValue({ ok: true });
     saveDesignSystemTokens.mockReset().mockResolvedValue({ ok: true });
+    pruneDesignSystemRules.mockReset().mockResolvedValue({ ok: true, data: { pruned: 2 } });
+    appendDesignSystemRules.mockReset().mockResolvedValue({ ok: true });
     navigate.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -653,5 +659,137 @@ describe('DesignSystemEditor page', () => {
     await openTab('rules');
     expect(screen.getByText('designSystems.viewHint')).toBeInTheDocument();
     expect(screen.queryByText('designSystems.rulesHint')).not.toBeInTheDocument();
+  });
+
+  it('RULES tab prune confirm POSTs prune and reloads rules', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    expect(screen.queryByTestId('ds-prune')).not.toBeInTheDocument();
+    await openTab('tokens');
+    expect(screen.queryByTestId('ds-prune')).not.toBeInTheDocument();
+
+    await openTab('rules');
+    const pruneBtn = screen.getByTestId('ds-prune');
+    expect(pruneBtn).toHaveTextContent('designSystems.prune');
+    expect(pruneBtn).not.toBeDisabled();
+
+    getDesignSystemRules.mockResolvedValue({
+      ok: true,
+      data: { content: '# Agent rules\n\n## Corrections\n' },
+    });
+    fireEvent.click(pruneBtn);
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.pruneConfirm');
+    await waitFor(() => {
+      expect(pruneDesignSystemRules).toHaveBeenCalledTimes(1);
+    });
+    const args = pruneDesignSystemRules.mock.calls[0];
+    expect(args[0]).toBe('ds-1');
+    if (args[1] !== undefined) {
+      expect(args[1]).toEqual({});
+      expect(args[1]).not.toHaveProperty('maxEntries');
+      expect(args[1]).not.toHaveProperty('maxAgeDays');
+    }
+    await waitFor(() => {
+      expect(getDesignSystemRules.mock.calls.length).toBeGreaterThan(1);
+      expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+        '# Agent rules\n\n## Corrections\n',
+      );
+    });
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('cancelling prune confirm does not call the API', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    const before = (screen.getByRole('textbox') as HTMLTextAreaElement).value;
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    fireEvent.click(screen.getByTestId('ds-prune'));
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.pruneConfirm');
+    expect(pruneDesignSystemRules).not.toHaveBeenCalled();
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(before);
+  });
+
+  it('prune disabled for bundled, view mode, missing RULES file, and dirty RULES buffer', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'ds-1',
+        name: 'Brand X',
+        description: '',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        source: 'bundled',
+      }],
+    });
+    const bundled = renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    expect(screen.getByTestId('ds-prune')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('ds-prune'));
+    expect(pruneDesignSystemRules).not.toHaveBeenCalled();
+    bundled.unmount();
+
+    routeQuery.mode = 'view';
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [{ id: 'ds-1', name: 'Brand X', description: '', updatedAt: '2026-01-01T00:00:00.000Z' }],
+    });
+    const view = renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    expect(screen.queryByTestId('ds-prune')).not.toBeInTheDocument();
+    await openTab('rules');
+    expect(screen.queryByTestId('ds-prune')).not.toBeInTheDocument();
+    await openTab('tokens');
+    expect(screen.queryByTestId('ds-prune')).not.toBeInTheDocument();
+    view.unmount();
+    routeQuery.mode = '';
+
+    getDesignSystemRules.mockResolvedValue({ ok: false, error: 'Not found' });
+    const missing = renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    expect(screen.getByTestId('ds-prune')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('ds-prune'));
+    expect(pruneDesignSystemRules).not.toHaveBeenCalled();
+    missing.unmount();
+
+    getDesignSystemRules.mockResolvedValue({
+      ok: true,
+      data: { content: '# Agent rules\n' },
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Agent rules\n!' } });
+    expect(screen.getByTestId('ds-prune')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('ds-prune'));
+    expect(pruneDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('prune 404/403/throw surfaces a scrubbed error without adding i18n keys', async () => {
+    pruneDesignSystemRules.mockResolvedValue({ ok: false, error: 'Not found' });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    fireEvent.click(screen.getByTestId('ds-prune'));
+    await waitFor(() => {
+      expect(screen.getByText(/Not found/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('designSystems.pruneFailed')).not.toBeInTheDocument();
+
+    pruneDesignSystemRules.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    fireEvent.click(screen.getByTestId('ds-prune'));
+    await waitFor(() => {
+      expect(screen.getByText(/net down!/)).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'common.save' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'designSystems.saving' })).not.toBeInTheDocument();
+    });
   });
 });

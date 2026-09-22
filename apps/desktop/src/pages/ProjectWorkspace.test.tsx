@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -19,6 +19,8 @@ const listDesignSystems = vi.fn();
 const getDesignSystemContent = vi.fn();
 const getDesignSystemTokens = vi.fn();
 const getDesignSystemRules = vi.fn();
+const appendDesignSystemRules = vi.fn();
+const pruneDesignSystemRules = vi.fn();
 const updateProject = vi.fn();
 const createProjectRun = vi.fn();
 const listProjectRunEvents = vi.fn();
@@ -83,6 +85,8 @@ const client = {
   getDesignSystemContent,
   getDesignSystemTokens,
   getDesignSystemRules,
+  appendDesignSystemRules,
+  pruneDesignSystemRules,
   updateProject,
   createProjectRun,
   listProjectRunEvents,
@@ -253,6 +257,18 @@ vi.mock('@neos-work/design-editor', () => {
           </button>
           <button
             type="button"
+            data-testid="mock-select-long"
+            onClick={() =>
+              props.onSelectionChange?.(
+                { filePath: props.buffer.path ?? 'index.html', selector: '#hero' },
+                { outerHTML: 'x'.repeat(501) },
+              )
+            }
+          >
+            select-long
+          </button>
+          <button
+            type="button"
             data-testid="mock-edit-ai"
             onClick={() =>
               props.onEditWithAi?.(
@@ -315,6 +331,32 @@ function mockLoadedProject(overrides?: Partial<typeof baseProject>) {
   }));
 }
 
+function userDesignSystem(overrides?: Record<string, unknown>) {
+  return {
+    id: 'ds1',
+    name: 'Brand',
+    path: '/x',
+    hasManifest: true,
+    hasTokens: true,
+    hasComponents: false,
+    hasRules: true,
+    source: 'user' as const,
+    createdAt: 't',
+    updatedAt: 't',
+    ...overrides,
+  };
+}
+
+async function openContext(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('side-tab-context'));
+  await waitFor(() => expect(screen.getByTestId('project-context')).toBeInTheDocument());
+}
+
+async function openComments(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('side-tab-comments'));
+  await waitFor(() => expect(screen.getByTestId('project-comments')).toBeInTheDocument());
+}
+
 describe('ProjectWorkspace', () => {
   beforeEach(() => {
     getProject.mockReset();
@@ -336,6 +378,8 @@ describe('ProjectWorkspace', () => {
       ok: true,
       data: { content: '## Never\n- no hex\n' },
     });
+    appendDesignSystemRules.mockReset().mockResolvedValue({ ok: true });
+    pruneDesignSystemRules.mockReset().mockResolvedValue({ ok: true, data: { pruned: 0 } });
     updateProject.mockReset();
     createProjectRun.mockReset();
     listProjectRunEvents.mockReset();
@@ -803,9 +847,6 @@ describe('ProjectWorkspace', () => {
       expect(screen.getByText('RULES.md')).toBeInTheDocument();
       expect(screen.getByText(/## Never/)).toBeInTheDocument();
     });
-    expect(screen.queryByRole('button', { name: /promote/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('designSystems.promote')).not.toBeInTheDocument();
-    expect(screen.queryByText('designSystems.promoteConfirm')).not.toBeInTheDocument();
   });
 
   it('RULES preview slices to 6000 characters', async () => {
@@ -839,7 +880,6 @@ describe('ProjectWorkspace', () => {
     });
     expect(screen.queryByText('RULES.md')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /promote/i })).not.toBeInTheDocument();
   });
 
   it('switches to comments and revisions side tabs', async () => {
@@ -1586,6 +1626,300 @@ describe('ProjectWorkspace', () => {
     });
     await waitFor(() => expect(screen.getByTestId('design-editor')).toBeInTheDocument());
     expect(screen.queryByTestId('sheets-pane')).not.toBeInTheDocument();
+  });
+
+  it('context Promote confirm appends manual text', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    await waitFor(() => {
+      expect(screen.getByText(/## Never/)).toBeInTheDocument();
+    });
+    const context = screen.getByTestId('project-context');
+    await user.type(within(context).getByTestId('ds-promote-text'), 'keep the focus ring');
+    await user.click(within(context).getByTestId('ds-promote'));
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.promoteConfirm');
+    await waitFor(() => {
+      expect(appendDesignSystemRules).toHaveBeenCalledTimes(1);
+    });
+    const payload = appendDesignSystemRules.mock.calls[0][1] as Record<string, unknown>;
+    expect(appendDesignSystemRules).toHaveBeenCalledWith(
+      'ds1',
+      expect.objectContaining({ text: 'keep the focus ring', source: 'manual' }),
+    );
+    expect(payload).not.toHaveProperty('commentId');
+    expect(getDesignSystemRules.mock.calls.length).toBeGreaterThan(1);
+    expect(pruneDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('cancelling Promote confirm does not append', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    await user.type(screen.getByTestId('ds-promote-text'), 'keep the focus ring');
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    await user.click(screen.getByTestId('ds-promote'));
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.promoteConfirm');
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('501-char Context text is blocked in the client', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    const field = screen.getByTestId('ds-promote-text');
+    const promote = screen.getByTestId('ds-promote');
+    expect(promote).toBeDisabled();
+
+    fireEvent.change(field, { target: { value: 'x'.repeat(501) } });
+    expect(promote).toBeDisabled();
+    await user.click(promote);
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: '   ' } });
+    expect(promote).toBeDisabled();
+    await user.click(promote);
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: `keep${'\0'}me` } });
+    expect(promote).toBeDisabled();
+    await user.click(promote);
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+
+    fireEvent.change(field, { target: { value: 'x'.repeat(500) } });
+    expect(promote).not.toBeDisabled();
+    await user.click(promote);
+    await waitFor(() => {
+      expect(appendDesignSystemRules).toHaveBeenCalledTimes(1);
+    });
+    expect((appendDesignSystemRules.mock.calls[0][1] as { text: string }).text).toHaveLength(500);
+  });
+
+  it('preview-comment row Promote sends source preview-comment and commentId', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    listProjectPreviewComments.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'c1',
+        filePath: 'index.html',
+        selector: '#hero',
+        body: 'tighten spacing',
+        createdAt: 't',
+      }],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openComments(user);
+    await waitFor(() => expect(screen.getByTestId('comment-c1')).toBeInTheDocument());
+    await user.click(
+      within(screen.getByTestId('comment-c1')).getByTestId('comment-promote-c1'),
+    );
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.promoteConfirm');
+    await waitFor(() => {
+      expect(appendDesignSystemRules).toHaveBeenCalledWith('ds1', {
+        text: 'tighten spacing',
+        source: 'preview-comment',
+        commentId: 'c1',
+      });
+    });
+    expect(deleteProjectPreviewComment).not.toHaveBeenCalled();
+    await user.click(within(screen.getByTestId('comment-c1')).getByRole('button', { name: 'common.delete' }));
+    await waitFor(() => {
+      expect(deleteProjectPreviewComment).toHaveBeenCalledWith('proj-1', 'c1');
+    });
+  });
+
+  it('preview-comment body longer than 500 is blocked without fetch', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    listProjectPreviewComments.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'c1',
+        filePath: 'index.html',
+        selector: '#hero',
+        body: 'y'.repeat(501),
+        createdAt: 't',
+      }],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openComments(user);
+    const promote = within(screen.getByTestId('comment-c1')).getByTestId('comment-promote-c1');
+    expect(promote).toBeDisabled();
+    await user.click(promote);
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('Promote is disabled when no designSystemId is bound', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listProjectPreviewComments.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'c1',
+        filePath: 'index.html',
+        selector: '#hero',
+        body: 'tighten spacing',
+        createdAt: 't',
+      }],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    const contextPromote = within(screen.getByTestId('project-context')).getByTestId('ds-promote');
+    expect(contextPromote).toBeDisabled();
+    fireEvent.change(screen.getByTestId('ds-promote-text'), { target: { value: 'keep the focus ring' } });
+    expect(contextPromote).toBeDisabled();
+    await user.click(contextPromote);
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+
+    await openComments(user);
+    const commentPromote = within(screen.getByTestId('comment-c1')).getByTestId('comment-promote-c1');
+    expect(commentPromote).toBeDisabled();
+    await user.click(commentPromote);
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('bundled design system Promote still calls API and surfaces 403', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [userDesignSystem({ name: 'neos-default', source: 'bundled' })],
+    });
+    appendDesignSystemRules.mockResolvedValue({
+      ok: false,
+      error: 'Bundled design systems are read-only',
+    });
+    listProjectPreviewComments.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'c1',
+        filePath: 'index.html',
+        selector: '#hero',
+        body: 'tighten spacing',
+        createdAt: 't',
+      }],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    await user.type(screen.getByTestId('ds-promote-text'), 'keep the focus ring');
+    await user.click(screen.getByTestId('ds-promote'));
+    await waitFor(() => {
+      expect(appendDesignSystemRules).toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent('Bundled design systems are read-only');
+    });
+    expect(document.body.textContent).not.toContain('\0');
+
+    appendDesignSystemRules.mockClear();
+    await openComments(user);
+    await user.click(within(screen.getByTestId('comment-c1')).getByTestId('comment-promote-c1'));
+    await waitFor(() => {
+      expect(appendDesignSystemRules).toHaveBeenCalledWith('ds1', {
+        text: 'tighten spacing',
+        source: 'preview-comment',
+        commentId: 'c1',
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Bundled design systems are read-only');
+    });
+  });
+
+  it('Context Promote from Design Editor selection uses source editor', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    expect(screen.getByTestId('ds-promote-selection')).toBeDisabled();
+
+    await user.click(screen.getByTestId('mock-select'));
+    const selectionPromote = screen.getByTestId('ds-promote-selection');
+    expect(selectionPromote).not.toBeDisabled();
+    await user.click(selectionPromote);
+    await waitFor(() => {
+      expect(appendDesignSystemRules).toHaveBeenCalledWith('ds1', {
+        text: '<div id="hero">Hello</div>',
+        source: 'editor',
+      });
+    });
+    expect(appendDesignSystemRules.mock.calls[0][1]).not.toHaveProperty('commentId');
+
+    appendDesignSystemRules.mockClear();
+    await user.click(screen.getByTestId('mock-select-long'));
+    expect(screen.getByTestId('ds-promote-selection')).toBeDisabled();
+    await user.click(screen.getByTestId('ds-promote-selection'));
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('append failure shows scrubbed error; success does not auto-run', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    appendDesignSystemRules.mockResolvedValue({
+      ok: false,
+      error: `disk${'\n'}full${'\0'}!`,
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await openContext(user);
+    await user.type(screen.getByTestId('ds-promote-text'), 'keep the focus ring');
+    await user.click(screen.getByTestId('ds-promote'));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('disk full!');
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    expect(createProjectRun).not.toHaveBeenCalled();
+  });
+
+  it('ProjectWorkspace does not append RULES on run completion', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [userDesignSystem()] });
+    createProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-abcdef01', status: 'running' },
+    });
+    streamProjectRunEvents.mockImplementation((_runId, onEvent, opts) => {
+      queueMicrotask(() => {
+        onEvent({
+          type: 'run.stdout',
+          id: 'ev1',
+          ts: 't',
+          data: { chunk: 'hello from dry-run' },
+        });
+        opts?.onDone?.();
+      });
+      return () => {};
+    });
+    getProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-abcdef01', status: 'succeeded', error: null },
+    });
+
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('project.chat'), 'Improve the hero');
+    await user.click(screen.getByRole('button', { name: 'project.chatSend' }));
+    await waitFor(() => {
+      expect(createProjectRun).toHaveBeenCalled();
+      expect(getProjectRun).toHaveBeenCalledWith('run-abcdef01');
+    });
+    expect(appendDesignSystemRules).not.toHaveBeenCalled();
   });
 
 });
