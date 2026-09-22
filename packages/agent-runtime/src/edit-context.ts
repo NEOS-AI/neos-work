@@ -98,36 +98,86 @@ export function assemblePreviewCommentsPrompt(
 export interface DesignContextFragment {
   name?: string;
   designMd: string;
+  rulesMd?: string | null;
   tokensCss?: string | null;
 }
 
-const DESIGN_MD_INJECT_MAX = 32_000;
-const TOKENS_INJECT_MAX = 8_000;
+export const DESIGN_MD_INJECT_MAX = 32_000;
+export const RULES_MD_INJECT_MAX = 16_000;
+export const RULES_MD_INJECT_HEAD = 8_000;
+export const RULES_MD_INJECT_TAIL = 8_000;
+export const TOKENS_INJECT_MAX = 8_000;
+export { DESIGN_HARNESS_WRAP_MAX } from '@neos-work/shared';
 
-/**
- * Prepend DESIGN.md (+ optional tokens.css) for project-linked design systems.
- * Mirrors workflow AgentNode DESIGN CONTEXT injection (Task 5 unify path).
- */
-export function assembleDesignContextPrompt(
-  basePrompt: string,
-  fragment: DesignContextFragment | null | undefined,
-): string {
-  const base = typeof basePrompt === 'string' ? basePrompt : '';
-  if (!fragment || typeof fragment.designMd !== 'string') return base;
-  if (/\0/.test(fragment.designMd)) return base;
+const CORRECTIONS_HEADING_RE = /^\s*##\s+corrections\s*$/im;
+const NEXT_ATX_HEADING_RE = /^\s*#{1,6}\s+/m;
+const CORRECTION_BULLET_RE = /^\s*-\s+(\d{4}-\d{2}-\d{2}):\s*(.*)$/;
+
+function formatRulesInject(rulesMd: string | null | undefined): string {
+  if (typeof rulesMd !== 'string' || /\0/.test(rulesMd)) return '';
+  const text = rulesMd.trim();
+  if (!text) return '';
+
+  CORRECTIONS_HEADING_RE.lastIndex = 0;
+  const match = CORRECTIONS_HEADING_RE.exec(text);
+  if (!match) {
+    if (text.length > RULES_MD_INJECT_MAX) {
+      return text.slice(0, RULES_MD_INJECT_MAX) + '\n\n…[rules truncated]';
+    }
+    return text;
+  }
+
+  let head = text.slice(0, match.index);
+  if (head.length > RULES_MD_INJECT_HEAD) {
+    head = head.slice(0, RULES_MD_INJECT_HEAD) + '\n\n…[rules truncated]';
+  }
+
+  const lineEnd = text.indexOf('\n', match.index + match[0].length);
+  const afterStart = lineEnd === -1 ? text.length : lineEnd + 1;
+  const afterHeading = text.slice(afterStart);
+  NEXT_ATX_HEADING_RE.lastIndex = 0;
+  const next = NEXT_ATX_HEADING_RE.exec(afterHeading);
+  const body = next ? afterHeading.slice(0, next.index) : afterHeading;
+
+  const bullets: string[] = [];
+  for (const line of body.split('\n')) {
+    if (/^\s*<!--\s*source:/.test(line)) continue;
+    if (CORRECTION_BULLET_RE.test(line)) bullets.push(line.replace(/\s+$/, ''));
+  }
+
+  const selected: string[] = [];
+  for (let i = bullets.length - 1; i >= 0; i -= 1) {
+    const candidate = [bullets[i], ...selected].join('\n');
+    if (selected.length > 0 && candidate.length > RULES_MD_INJECT_TAIL) break;
+    selected.unshift(bullets[i]!);
+  }
+
+  return `${head}\n## Corrections\n${selected.join('\n')}`;
+}
+
+/** Marker-free inner. Empty/null-byte DESIGN.md skips the entire block. */
+export function formatDesignHarnessInner(fragment: DesignContextFragment): string {
+  if (!fragment || typeof fragment.designMd !== 'string') return '';
+  if (/\0/.test(fragment.designMd)) return '';
   let designMd = fragment.designMd.trim();
-  if (!designMd) return base;
+  if (!designMd) return '';
   if (designMd.length > DESIGN_MD_INJECT_MAX) {
     designMd = designMd.slice(0, DESIGN_MD_INJECT_MAX) + '\n\n…[design system truncated]';
   }
 
   const parts: string[] = [];
-  parts.push('<!-- DESIGN CONTEXT -->');
   if (fragment.name && typeof fragment.name === 'string' && !/[\0\r\n]/.test(fragment.name)) {
     const n = fragment.name.trim().slice(0, 100);
     if (n) parts.push(`Design system: ${n}`);
   }
   parts.push(designMd);
+
+  const rules = formatRulesInject(fragment.rulesMd);
+  if (rules) {
+    parts.push('');
+    parts.push('### RULES.md');
+    parts.push(rules);
+  }
 
   if (typeof fragment.tokensCss === 'string' && !/\0/.test(fragment.tokensCss)) {
     let tokens = fragment.tokensCss.trim();
@@ -142,8 +192,19 @@ export function assembleDesignContextPrompt(
       parts.push('```');
     }
   }
-  parts.push('<!-- /DESIGN CONTEXT -->');
-  parts.push('');
-  parts.push(base.trim());
+
   return parts.join('\n');
+}
+
+/**
+ * MUST call formatDesignHarnessInner, then wrap DESIGN CONTEXT markers.
+ */
+export function assembleDesignContextPrompt(
+  basePrompt: string,
+  fragment: DesignContextFragment | null | undefined,
+): string {
+  const base = typeof basePrompt === 'string' ? basePrompt : '';
+  const inner = formatDesignHarnessInner(fragment ?? { designMd: '' });
+  if (!inner) return base;
+  return `<!-- DESIGN CONTEXT -->\n${inner}\n<!-- /DESIGN CONTEXT -->\n\n${base.trim()}`;
 }

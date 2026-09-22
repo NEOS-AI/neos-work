@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import { scrubErrorMessage } from '@neos-work/core';
 import type { WorkflowSSEEvent } from '@neos-work/shared';
+import { formatDesignHarnessInner } from '@neos-work/agent-runtime';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
 import { getExecutionSettings } from '../db/settings.js';
@@ -16,7 +17,7 @@ import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 import * as artifactDb from '../db/artifacts.js';
-import { getDesignSystemContent } from '../lib/design-system-store.js';
+import { loadDesignHarnessFragment } from '../lib/design-system-store.js';
 import { webhookRateLimiter } from '../lib/rate-limit.js';
 import { safeRouteId } from '../lib/path-safety.js';
 
@@ -134,9 +135,11 @@ webhooks.post('/:workflowId', async (c) => {
   const now = new Date().toISOString();
   const nodeResults: Record<string, unknown> = {};
 
-  // Load Design System content if the workflow has one configured
-  const designSystemContent = wf.designSystemId
-    ? (await getDesignSystemContent(wf.designSystemId)) ?? undefined
+  const fragment = wf.designSystemId
+    ? await loadDesignHarnessFragment(wf.designSystemId)
+    : null;
+  const designSystemContent = fragment
+    ? formatDesignHarnessInner(fragment) || undefined
     : undefined;
 
   db.saveRun({

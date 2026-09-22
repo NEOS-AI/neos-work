@@ -67,6 +67,13 @@ export {
   assembleEditContextPrompt,
   assemblePreviewCommentsPrompt,
   assembleDesignContextPrompt,
+  formatDesignHarnessInner,
+  DESIGN_MD_INJECT_MAX,
+  RULES_MD_INJECT_MAX,
+  RULES_MD_INJECT_HEAD,
+  RULES_MD_INJECT_TAIL,
+  TOKENS_INJECT_MAX,
+  DESIGN_HARNESS_WRAP_MAX,
   type PreviewCommentFragment,
   type DesignContextFragment,
 } from './edit-context.js';

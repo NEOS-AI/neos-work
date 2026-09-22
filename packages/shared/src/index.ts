@@ -14,3 +14,4 @@ export * from './schemas/api-envelopes.js';
 export * from './collab-ux.js';
 export * from './workflow-draft.js';
 export * from './version.js';
+export * from './design-harness.js';
