@@ -576,6 +576,10 @@ export function deletePreviewComment(id: string): boolean {
   return result.changes > 0;
 }
 
+export function getPreviewComment(_id: string): PreviewComment | undefined {
+  return undefined;
+}
+
 // ── Conversations / messages (minimal for M1 shell) ────────
 
 function rowToConversation(row: ConversationRow): ProjectConversation {

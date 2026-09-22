@@ -52,6 +52,8 @@ export interface DesignSystem {
   hasManifest: boolean;
   hasTokens: boolean;
   hasComponents: boolean;
+  hasRules?: boolean;
+  rulesUpdatedAt?: string;
   source: DesignSystemSource;
   /** Parsed manifest when present (OD-compatible subset). */
   manifest?: DesignSystemManifest | null;
@@ -349,6 +351,60 @@ export async function getDesignSystemTokens(id: string): Promise<string | null> 
 
 export const DESIGN_MD_MAX_CHARS = 1 * 1024 * 1024;
 export const DESIGN_DESCRIPTION_MAX_CHARS = 2_000;
+export const RULES_MD_MAX_CHARS = 1 * 1024 * 1024;
+export const TOKENS_CSS_MAX_CHARS = 256 * 1024;
+export const COMPONENTS_HTML_MAX_CHARS = 256 * 1024;
+export const RULES_APPEND_TEXT_MAX = 500;
+export const PRUNE_MAX_ENTRIES_DEFAULT = 20;
+export const PRUNE_MAX_ENTRIES_MIN = 1;
+export const PRUNE_MAX_ENTRIES_MAX = 100;
+export const PRUNE_MAX_AGE_DAYS_DEFAULT = 90;
+export const PRUNE_MAX_AGE_DAYS_MIN = 1;
+export const PRUNE_MAX_AGE_DAYS_MAX = 365;
+export type RulesAppendSource = 'preview-comment' | 'editor' | 'manual';
+export const RULES_APPEND_SOURCES: readonly RulesAppendSource[] = [
+  'preview-comment', 'editor', 'manual',
+];
+
+export const DEFAULT_RULES_MD = `# Agent rules
+
+This file is the behavioral half of the design harness.
+Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
+
+## Tools
+- Prefer editing the open project HTML/CSS. Do not start from an empty document when a seed file exists.
+- Use Design Editor selection / preview comments when present.
+- Produce self-contained, clickable HTML (hover, focus, scroll, transitions). Not a screenshot mock.
+
+## Never
+- Do not invent a new color palette or font stack when tokens.css defines one.
+- Do not use raw hex/rgb for brand colors; use CSS custom properties from tokens.css.
+- Do not ship inaccessible contrast or missing focus rings.
+- Do not overwrite unrelated manual edits (prefer a minimal patch).
+
+## Preferred workflow
+- Start from the seed (current file, components.html, or a starter), generate a few variants as sibling files, then narrow to one.
+- After a human correction, wait for an explicit promote; do not rewrite RULES.md yourself unless asked.
+
+## Corrections
+<!-- dated bullets, pruned when stale. format: - YYYY-MM-DD: text -->
+`;
+
+export const DEFAULT_TOKENS_CSS = `:root {
+  --color-primary: #3B82F6;
+  --color-secondary: #6366F1;
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --font-sans: Inter, system-ui, sans-serif;
+  --text-base: 1rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+}
+`;
 
 export async function updateDesignSystemContent(id: string, content: string): Promise<boolean> {
   const ds = await getDesignSystem(id);
@@ -451,4 +507,35 @@ export async function deleteDesignSystem(id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function getDesignSystemRules(_id: string): Promise<string | null> {
+  return null;
+}
+
+export async function updateDesignSystemRules(_id: string, _content: string): Promise<boolean> {
+  return false;
+}
+
+export async function appendDesignSystemRules(
+  _id: string,
+  _text: string,
+  _source?: string,
+): Promise<boolean> {
+  return false;
+}
+
+export async function pruneDesignSystemRules(
+  _id: string,
+  _opts?: { maxEntries?: number; maxAgeDays?: number; nowUtcDate?: string },
+): Promise<{ pruned: number } | null> {
+  return null;
+}
+
+export async function updateDesignSystemTokens(_id: string, _content: string): Promise<boolean> {
+  return false;
+}
+
+export async function getDesignSystemComponents(_id: string): Promise<string | null> {
+  return null;
 }
