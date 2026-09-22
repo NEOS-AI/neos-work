@@ -366,10 +366,8 @@ export const PRUNE_MAX_ENTRIES_MAX = 100;
 export const PRUNE_MAX_AGE_DAYS_DEFAULT = 90;
 export const PRUNE_MAX_AGE_DAYS_MIN = 1;
 export const PRUNE_MAX_AGE_DAYS_MAX = 365;
-export type RulesAppendSource = 'preview-comment' | 'editor' | 'manual';
-export const RULES_APPEND_SOURCES: readonly RulesAppendSource[] = [
-  'preview-comment', 'editor', 'manual',
-];
+
+type RulesAppendSource = 'preview-comment' | 'editor' | 'manual';
 
 export const DEFAULT_RULES_MD = `# Agent rules
 
@@ -605,9 +603,10 @@ export async function appendDesignSystemRules(
   const cleaned = text.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
   if (!cleaned || cleaned.length > RULES_APPEND_TEXT_MAX) return false;
 
-  const persistSource = (RULES_APPEND_SOURCES as readonly string[]).includes(source ?? '')
-    ? (source as RulesAppendSource)
-    : undefined;
+  const persistSource =
+    source === 'preview-comment' || source === 'editor' || source === 'manual'
+      ? source
+      : undefined;
   const date = new Date().toISOString().slice(0, 10);
   const insertion =
     (persistSource ? `<!-- source: ${persistSource} -->\n` : '') +
