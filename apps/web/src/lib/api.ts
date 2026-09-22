@@ -2680,19 +2680,24 @@ export class WebApiClient {
   getDesignSystemRules(id: string): Promise<ApiEnvelope<{ content: string }>> {
     const did = this.safeEntityId(id);
     if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(did)}/rules`);
   }
 
-  saveDesignSystemRules(id: string, _content: string): Promise<ApiEnvelope<null>> {
+  saveDesignSystemRules(id: string, content: string): Promise<ApiEnvelope<null>> {
     const did = this.safeEntityId(id);
     if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+    if (typeof content !== 'string' || /\0/.test(content)) {
+      return Promise.resolve({ ok: false, error: 'Invalid content' });
+    }
+    return this.requestEnvelope('PUT', `/api/design-systems/${encodeURIComponent(did)}/rules`, {
+      content,
+    });
   }
 
   getDesignSystemTokens(id: string): Promise<ApiEnvelope<{ content: string }>> {
     const did = this.safeEntityId(id);
     if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(did)}/tokens`);
   }
 
   listRoutines(): Promise<

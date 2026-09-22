@@ -289,28 +289,34 @@ export class NeosApiClient {
     return this.request('GET', '/api/design-systems');
   }
 
-  getDesignSystemContent(_id: string): Promise<ApiEnvelope<{ content: string }>> {
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+  getDesignSystemContent(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(id)}/content`);
   }
 
-  saveDesignSystemContent(_id: string, _content: string): Promise<ApiEnvelope<null>> {
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+  saveDesignSystemContent(id: string, content: string): Promise<ApiEnvelope<null>> {
+    return this.request('PUT', `/api/design-systems/${encodeURIComponent(id)}/content`, {
+      body: { content },
+    });
   }
 
-  getDesignSystemRules(_id: string): Promise<ApiEnvelope<{ content: string }>> {
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+  getDesignSystemRules(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(id)}/rules`);
   }
 
-  saveDesignSystemRules(_id: string, _content: string): Promise<ApiEnvelope<null>> {
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+  saveDesignSystemRules(id: string, content: string): Promise<ApiEnvelope<null>> {
+    return this.request('PUT', `/api/design-systems/${encodeURIComponent(id)}/rules`, {
+      body: { content },
+    });
   }
 
-  getDesignSystemTokens(_id: string): Promise<ApiEnvelope<{ content: string }>> {
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+  getDesignSystemTokens(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(id)}/tokens`);
   }
 
-  saveDesignSystemTokens(_id: string, _content: string): Promise<ApiEnvelope<null>> {
-    return Promise.resolve({ ok: false, error: 'not implemented' });
+  saveDesignSystemTokens(id: string, content: string): Promise<ApiEnvelope<null>> {
+    return this.request('PUT', `/api/design-systems/${encodeURIComponent(id)}/tokens`, {
+      body: { content },
+    });
   }
 
   listMemories(): Promise<ApiEnvelope<unknown[]>> {

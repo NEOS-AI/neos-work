@@ -141,6 +141,9 @@ export function CommentsPanel({
           </span>
         ) : null}
       </div>
+      <p className="muted" style={{ fontSize: 11, margin: '0 0 8px' }} data-testid="web-promote-desktop-only">
+        Promote to RULES.md is available in the desktop app.
+      </p>
       {!filePath ? (
         <p className="muted" style={{ fontSize: 11, margin: 0 }}>
           Open a file to list comments.

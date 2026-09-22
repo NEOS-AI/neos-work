@@ -41,7 +41,8 @@ Commands:
                           add <owner/repo|url> [--skill <slug>] [--scope global|workspace] [--yes]
                           update [name-or-id] [--yes]
                           remove|rm <name-or-id> [--yes]
-  design-systems list
+  design-systems list|content|rules|tokens
+                          content|rules|tokens <id> [--file path]
   memory list|add|export
   mcp list|serve|install-info|live-artifacts
   media list|config|generate
