@@ -157,11 +157,8 @@ function formatRulesInject(rulesMd: string | null | undefined): string {
   if (tail.length > RULES_MD_INJECT_TAIL) {
     tail = tail.slice(0, RULES_MD_INJECT_TAIL) + '\n\n…[rules truncated]';
   }
-  let out = `${head}\n## Corrections\n${tail}`;
-  if (out.length > RULES_MD_INJECT_MAX) {
-    out = out.slice(0, RULES_MD_INJECT_MAX) + '\n\n…[rules truncated]';
-  }
-  return out;
+  // Do not front-slice head+heading+tail: newest Corrections sit at the end (K32).
+  return `${head}\n## Corrections\n${tail}`;
 }
 
 /** Marker-free inner. Empty/null-byte DESIGN.md skips the entire block. */

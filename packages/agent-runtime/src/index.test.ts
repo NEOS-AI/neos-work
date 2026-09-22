@@ -529,6 +529,27 @@ describe('formatDesignHarnessInner', () => {
     expect(out.indexOf('### tokens.css')).toBeLessThan(out.indexOf('task'));
   });
 
+  it('truncated head plus 8k Corrections tail keeps keep-me', () => {
+    const prefix = '# Agent rules\n\n## Tools\n';
+    const heading = '\n## Corrections\n';
+    const keepLine = '- 2026-09-21: keep-me';
+    const pad = 'H'.repeat(Math.max(9_000 - prefix.length, 0));
+    const fillerBudget = RULES_MD_INJECT_TAIL - keepLine.length - 1;
+    const fillerPrefix = '- 2026-01-01: ';
+    const filler = `${fillerPrefix}${'P'.repeat(Math.max(fillerBudget - fillerPrefix.length, 0))}`;
+    const rulesMd = `${prefix}${pad}${heading}${filler}\n${keepLine}\n`;
+    const fragment = { designMd: '# D', rulesMd };
+    const inner = formatDesignHarnessInner(fragment);
+    const wrapped = assembleDesignContextPrompt('task', fragment);
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('keep-me');
+    expect(inner).toContain('…[rules truncated]');
+    const rulesBody = inner.slice(inner.indexOf('### RULES.md') + '### RULES.md\n'.length);
+    expect(rulesBody.length).toBeGreaterThan(RULES_MD_INJECT_MAX);
+    expect(wrapped).toContain('keep-me');
+    expect(wrapped).toContain('### RULES.md');
+  });
+
   it('20k RULES.md head 9k + keep-me tail survives K32 split', () => {
     expect(RULES_MD_INJECT_MAX).toBe(16_000);
     expect(RULES_MD_INJECT_HEAD).toBe(8_000);
