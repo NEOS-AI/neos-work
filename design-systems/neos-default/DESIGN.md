@@ -2,6 +2,7 @@
 
 ## Overview
 Default visual language for NEOS Work Design Projects and generated UI.
+Generated CSS must use tokens.css variables; hex below documents the token values.
 
 ## Brand Colors
 - Primary: `#6366f1` (indigo)

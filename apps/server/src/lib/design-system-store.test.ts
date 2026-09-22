@@ -626,9 +626,10 @@ describe('design-system-store RULES.md / tokens write', () => {
     expect(await appendDesignSystemRules(created!.id, 'unknown src', 'other')).toBe(true);
     const withUnknown = await getDesignSystemRules(created!.id);
     expect(withUnknown).toContain(`- ${utc}: unknown src`);
+    expect(withUnknown).not.toMatch(/<!-- source: other -->/);
     const unknownIdx = withUnknown!.lastIndexOf(`- ${utc}: unknown src`);
-    const window = withUnknown!.slice(Math.max(0, unknownIdx - 80), unknownIdx);
-    expect(window).not.toMatch(/<!-- source:/);
+    const prevLine = withUnknown!.slice(0, unknownIdx).replace(/\n+$/, '').split('\n').pop() ?? '';
+    expect(prevLine).not.toMatch(/<!--\s*source:/);
   });
 
   it('appendDesignSystemRules writes the §5 template then a bullet when RULES.md is missing (user only)', async () => {

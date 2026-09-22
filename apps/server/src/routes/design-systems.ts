@@ -7,11 +7,18 @@
  * GET    /api/design-systems/:id/content  — DESIGN.md raw text
  * PUT    /api/design-systems/:id/content  — save DESIGN.md (user only)
  * GET    /api/design-systems/:id/tokens   — tokens.css raw text
+ * PUT    /api/design-systems/:id/tokens   — save tokens.css (user only)
+ * GET    /api/design-systems/:id/rules    — RULES.md raw text
+ * PUT    /api/design-systems/:id/rules    — save RULES.md (user only)
+ * POST   /api/design-systems/:id/rules/append — promote a correction bullet
+ * POST   /api/design-systems/:id/rules/prune  — prune stale Corrections
+ * GET    /api/design-systems/:id/components   — components.html raw text
  */
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
+import { getPreviewComment } from '../db/projects.js';
 import * as store from '../lib/design-system-store.js';
 import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
 
@@ -127,6 +134,153 @@ designSystems.get('/:id/tokens', async (c) => {
   const id = paramDesignId(c);
   if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
   const content = await store.getDesignSystemTokens(id);
+  if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: { content } });
+});
+
+designSystems.put('/:id/tokens', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json<{ content: string }>().catch(() => null);
+  if (!body || typeof body.content !== 'string') {
+    return c.json({ ok: false, error: 'content string required' }, 400);
+  }
+  if (/\0/.test(body.content)) {
+    return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
+  }
+  if (!body.content.trim()) {
+    return c.json({ ok: false, error: 'content cannot be empty' }, 400);
+  }
+  if (body.content.length > store.TOKENS_CSS_MAX_CHARS) {
+    return c.json({
+      ok: false,
+      error: `content exceeds max size (${store.TOKENS_CSS_MAX_CHARS} characters)`,
+    }, 400);
+  }
+  const updated = await store.updateDesignSystemTokens(id, body.content);
+  if (!updated) {
+    const ds = await store.getDesignSystem(id);
+    if (ds?.source === 'bundled') {
+      return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+    }
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
+  return c.json({ ok: true });
+});
+
+designSystems.get('/:id/rules', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const content = await store.getDesignSystemRules(id);
+  if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: { content } });
+});
+
+designSystems.put('/:id/rules', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json<{ content: string }>().catch(() => null);
+  if (!body || typeof body.content !== 'string') {
+    return c.json({ ok: false, error: 'content string required' }, 400);
+  }
+  if (/\0/.test(body.content)) {
+    return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
+  }
+  if (!body.content.trim()) {
+    return c.json({ ok: false, error: 'content cannot be empty' }, 400);
+  }
+  if (body.content.length > store.RULES_MD_MAX_CHARS) {
+    return c.json({
+      ok: false,
+      error: `content exceeds max size (${store.RULES_MD_MAX_CHARS} characters)`,
+    }, 400);
+  }
+  const updated = await store.updateDesignSystemRules(id, body.content);
+  if (!updated) {
+    const ds = await store.getDesignSystem(id);
+    if (ds?.source === 'bundled') {
+      return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+    }
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
+  return c.json({ ok: true });
+});
+
+function isIntInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+designSystems.post('/:id/rules/append', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json<{ text?: unknown; source?: unknown; commentId?: unknown }>().catch(() => null);
+  if (!body || typeof body.text !== 'string') {
+    return c.json({ ok: false, error: 'text string required' }, 400);
+  }
+  if (/\0/.test(body.text)) {
+    return c.json({ ok: false, error: 'text contains invalid control characters' }, 400);
+  }
+  const trimmed = body.text.trim();
+  if (!trimmed) {
+    return c.json({ ok: false, error: 'text cannot be empty' }, 400);
+  }
+  if (trimmed.length > store.RULES_APPEND_TEXT_MAX) {
+    return c.json({ ok: false, error: 'text exceeds max size (500 characters)' }, 400);
+  }
+  if (typeof body.commentId === 'string' && body.commentId.trim()) {
+    if (!getPreviewComment(body.commentId)) {
+      return c.json({ ok: false, error: 'Not found' }, 404);
+    }
+  }
+  const source = typeof body.source === 'string' ? body.source : undefined;
+  const updated = await store.appendDesignSystemRules(id, body.text, source);
+  if (!updated) {
+    const ds = await store.getDesignSystem(id);
+    if (ds?.source === 'bundled') {
+      return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+    }
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
+  return c.json({ ok: true });
+});
+
+designSystems.post('/:id/rules/prune', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  if (body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    return c.json({ ok: false, error: 'invalid prune options' }, 400);
+  }
+  const raw = body ?? {};
+  let maxEntries: number | undefined;
+  let maxAgeDays: number | undefined;
+  if ('maxEntries' in raw && raw.maxEntries !== undefined) {
+    if (!isIntInRange(raw.maxEntries, store.PRUNE_MAX_ENTRIES_MIN, store.PRUNE_MAX_ENTRIES_MAX)) {
+      return c.json({ ok: false, error: 'maxEntries must be an integer from 1 to 100' }, 400);
+    }
+    maxEntries = raw.maxEntries;
+  }
+  if ('maxAgeDays' in raw && raw.maxAgeDays !== undefined) {
+    if (!isIntInRange(raw.maxAgeDays, store.PRUNE_MAX_AGE_DAYS_MIN, store.PRUNE_MAX_AGE_DAYS_MAX)) {
+      return c.json({ ok: false, error: 'maxAgeDays must be an integer from 1 to 365' }, 400);
+    }
+    maxAgeDays = raw.maxAgeDays;
+  }
+  const result = await store.pruneDesignSystemRules(id, { maxEntries, maxAgeDays });
+  if (!result) {
+    const ds = await store.getDesignSystem(id);
+    if (ds?.source === 'bundled') {
+      return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+    }
+    return c.json({ ok: false, error: 'Not found' }, 404);
+  }
+  return c.json({ ok: true, data: { pruned: result.pruned } });
+});
+
+designSystems.get('/:id/components', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const content = await store.getDesignSystemComponents(id);
   if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: { content } });
 });
