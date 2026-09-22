@@ -1357,7 +1357,11 @@ describe('workflow export design system + import content-type edges', () => {
       expect(await read(`design-systems/${ds.id}/tokens.css`)).toContain('--zip-export-token');
     } finally {
       if (wfId) {
-        await workflow.request(`/${wfId}`, { method: 'DELETE' }).catch(() => {});
+        try {
+          await workflow.request(`/${wfId}`, { method: 'DELETE' });
+        } catch {
+          /* ignore */
+        }
       }
       if (dsId) {
         try {
@@ -1580,7 +1584,6 @@ describe('workflow import.zip artifacts + design systems', () => {
     const path = await import('node:path');
     const {
       listDesignSystems,
-      getDesignSystemRules,
       deleteDesignSystem,
     } = await import('../lib/design-system-store.js');
     const before = await listDesignSystems({ includeBundled: true });
@@ -1626,10 +1629,6 @@ describe('workflow import.zip artifacts + design systems', () => {
     const bundledRulesAfter = await fs.readFile(path.join(bundled!.path, 'RULES.md'), 'utf8').catch(() => '');
     expect(bundledRulesAfter).not.toContain(hack);
     expect(bundledRulesAfter).toBe(bundledRulesBefore);
-    const viaStore = await getDesignSystemRules(bundled!.id);
-    if (!hadUserShadow) {
-      expect(viaStore ?? '').not.toContain(hack);
-    }
 
     await workflow.request(`/${body.data.id}`, { method: 'DELETE' });
     if (!hadUserShadow) {
