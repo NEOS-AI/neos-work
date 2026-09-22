@@ -2677,6 +2677,24 @@ export class WebApiClient {
     });
   }
 
+  getDesignSystemRules(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
+    return Promise.resolve({ ok: false, error: 'not implemented' });
+  }
+
+  saveDesignSystemRules(id: string, _content: string): Promise<ApiEnvelope<null>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
+    return Promise.resolve({ ok: false, error: 'not implemented' });
+  }
+
+  getDesignSystemTokens(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    const did = this.safeEntityId(id);
+    if (!did) return Promise.resolve({ ok: false, error: 'Invalid design system id' });
+    return Promise.resolve({ ok: false, error: 'not implemented' });
+  }
+
   listRoutines(): Promise<
     ApiEnvelope<
       Array<{

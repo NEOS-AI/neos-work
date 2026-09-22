@@ -805,6 +805,10 @@ describe('ProjectDetail Design Editor', () => {
       expect(screen.getByTestId('web-comment-c1')).toBeInTheDocument();
     });
     expect(screen.getByTestId('web-comment-c1').textContent).toContain('existing note');
+    expect(
+      screen.getByText('Promote to RULES.md is available in the desktop app.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /promote/i })).toBeNull();
 
     // No selection → add disabled
     fireEvent.change(screen.getByTestId('web-comment-body'), {

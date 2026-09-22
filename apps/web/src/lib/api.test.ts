@@ -1006,6 +1006,133 @@ describe('WebApiClient workflows (v0.24)', () => {
   });
 });
 
+describe('WebApiClient design system rules/tokens', () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function lastCall(): { url: string; method?: string; headers?: Record<string, string>; body?: string } {
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
+    return {
+      url: String(url),
+      method: init?.method,
+      headers: init?.headers as Record<string, string> | undefined,
+      body: typeof init?.body === 'string' ? init.body : undefined,
+    };
+  }
+
+  it('getDesignSystemRules GETs /api/design-systems/:id/rules', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { content: '# Agent rules\n' } }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const res = await client.getDesignSystemRules('ds1');
+    expect(res.ok).toBe(true);
+    const call = lastCall();
+    expect(call.url).toMatch(/\/api\/design-systems\/ds1\/rules$/);
+    expect(call.method === undefined || call.method === 'GET').toBe(true);
+  });
+
+  it('saveDesignSystemRules PUTs { content } to /rules via requestEnvelope', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await client.saveDesignSystemRules('ds1', '# Agent rules\n\nok');
+    const call = lastCall();
+    expect(call.url).toMatch(/\/api\/design-systems\/ds1\/rules$/);
+    expect(call.method).toBe('PUT');
+    expect(call.headers?.['Content-Type']).toBe('application/json');
+    expect(JSON.parse(call.body ?? '{}')).toEqual({ content: '# Agent rules\n\nok' });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: false, error: 'Bundled design systems are read-only' }, 403),
+    );
+    await expect(client.saveDesignSystemRules('ds1', '# Agent rules\n\nok')).resolves.toMatchObject({
+      ok: false,
+    });
+  });
+
+  it('getDesignSystemTokens GETs /api/design-systems/:id/tokens', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { content: ':root { --color-primary: #3B82F6; }' } }),
+    );
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await client.getDesignSystemTokens('ds1');
+    const call = lastCall();
+    expect(call.url).toMatch(/\/api\/design-systems\/ds1\/tokens$/);
+    expect(call.method === undefined || call.method === 'GET').toBe(true);
+  });
+
+  it('rules/tokens methods reject control-char and blank ids without fetch', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const n = fetchMock.mock.calls.length;
+    await expect(client.getDesignSystemRules('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.getDesignSystemRules(`d${'\n'}s`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemRules('', 'x')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.getDesignSystemTokens(`id${'\0'}`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(n);
+  });
+
+  it('saveDesignSystemRules rejects null-byte content without fetch', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    await expect(client.saveDesignSystemRules('ds1', `ok${'\0'}bad`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid content',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('GET rules/tokens 404 throws ApiError', async () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: 'Not found' }, 404));
+    await expect(client.getDesignSystemRules('ds1')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 404,
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: 'Not found' }, 404));
+    await expect(client.getDesignSystemTokens('ds1')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 404,
+    });
+  });
+
+  it('WebApiClient has no tokens PUT / append / prune / components / starters', () => {
+    const client = new WebApiClient('http://engine.test', 'tok');
+    const names = Object.getOwnPropertyNames(Object.getPrototypeOf(client));
+    expect(typeof (client as { saveDesignSystemTokens?: unknown }).saveDesignSystemTokens).toBe(
+      'undefined',
+    );
+    expect(typeof (client as { appendDesignSystemRules?: unknown }).appendDesignSystemRules).toBe(
+      'undefined',
+    );
+    expect(typeof (client as { pruneDesignSystemRules?: unknown }).pruneDesignSystemRules).toBe(
+      'undefined',
+    );
+    expect(typeof (client as { getDesignSystemComponents?: unknown }).getDesignSystemComponents).toBe(
+      'undefined',
+    );
+    expect(names.filter((n) => /starter/i.test(n))).toEqual([]);
+  });
+});
+
 describe('WebApiClient skills catalog', () => {
   const fetchMock = vi.fn();
 
