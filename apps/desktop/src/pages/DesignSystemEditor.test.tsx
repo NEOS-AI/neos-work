@@ -6,9 +6,21 @@ import { MemoryRouter } from 'react-router-dom';
 const listDesignSystems = vi.fn();
 const getDesignSystemContent = vi.fn();
 const saveDesignSystemContent = vi.fn();
+const getDesignSystemRules = vi.fn();
+const saveDesignSystemRules = vi.fn();
+const getDesignSystemTokens = vi.fn();
+const saveDesignSystemTokens = vi.fn();
 const navigate = vi.fn();
 
-const client = { listDesignSystems, getDesignSystemContent, saveDesignSystemContent };
+const client = {
+  listDesignSystems,
+  getDesignSystemContent,
+  saveDesignSystemContent,
+  getDesignSystemRules,
+  saveDesignSystemRules,
+  getDesignSystemTokens,
+  saveDesignSystemTokens,
+};
 
 vi.mock('../hooks/useEngine.js', () => ({
   useEngine: () => ({
@@ -52,6 +64,10 @@ function renderEditor() {
   );
 }
 
+async function openTab(name: 'design' | 'rules' | 'tokens') {
+  fireEvent.click(screen.getByRole('tab', { name: `designSystems.tab.${name}` }));
+}
+
 describe('DesignSystemEditor page', () => {
   beforeEach(() => {
     routeParams.id = 'ds-1';
@@ -65,6 +81,16 @@ describe('DesignSystemEditor page', () => {
       data: { content: '# Brand\ncolors' },
     });
     saveDesignSystemContent.mockReset().mockResolvedValue({ ok: true });
+    getDesignSystemRules.mockReset().mockResolvedValue({
+      ok: true,
+      data: { content: '# Agent rules\n' },
+    });
+    getDesignSystemTokens.mockReset().mockResolvedValue({
+      ok: true,
+      data: { content: ':root { --x: 1; }' },
+    });
+    saveDesignSystemRules.mockReset().mockResolvedValue({ ok: true });
+    saveDesignSystemTokens.mockReset().mockResolvedValue({ ok: true });
     navigate.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -79,6 +105,11 @@ describe('DesignSystemEditor page', () => {
     });
     expect(listDesignSystems).not.toHaveBeenCalled();
     expect(getDesignSystemContent).not.toHaveBeenCalled();
+    expect(getDesignSystemRules).not.toHaveBeenCalled();
+    expect(getDesignSystemTokens).not.toHaveBeenCalled();
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
   });
 
   it('loads design system content', async () => {
@@ -311,5 +342,285 @@ describe('DesignSystemEditor page', () => {
       expect(screen.getByText('designSystems.invalidId')).toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: 'designSystems.startEdit' })).not.toBeInTheDocument();
+  });
+
+  it('renders three editor tabs and keeps independent dirty buffers', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    const designTab = screen.getByRole('tab', { name: 'designSystems.tab.design' });
+    const rulesTab = screen.getByRole('tab', { name: 'designSystems.tab.rules' });
+    const tokensTab = screen.getByRole('tab', { name: 'designSystems.tab.tokens' });
+    expect(designTab).toHaveAttribute('aria-selected', 'true');
+    expect(rulesTab).toHaveAttribute('aria-selected', 'false');
+    expect(tokensTab).toHaveAttribute('aria-selected', 'false');
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('# Brand\ncolors');
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Updated' } });
+    expect(screen.getByText('●')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+
+    await openTab('rules');
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('# Agent rules\n');
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    expect(screen.getByText('●')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Agent rules\n\nextra' } });
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(saveDesignSystemRules).toHaveBeenCalledWith('ds-1', '# Agent rules\n\nextra');
+    });
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+
+    await openTab('design');
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('# Updated');
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+  });
+
+  it('Save on a clean RULES tab does not PUT DESIGN even if DESIGN is dirty', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Updated' } });
+    await openTab('rules');
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+  });
+
+  it('GET rules 404 shows §5 placeholder that is not dirty; first edit then Save PUTs', async () => {
+    getDesignSystemRules.mockResolvedValue({ ok: false, error: 'Not found' });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    expect(screen.queryByText('●')).not.toBeInTheDocument();
+
+    await openTab('rules');
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(ta.value).toBe('designSystems.rulesPlaceholder');
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    expect(screen.queryByText('●')).not.toBeInTheDocument();
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+
+    fireEvent.change(ta, { target: { value: `${ta.value}!` } });
+    expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(saveDesignSystemRules).toHaveBeenCalledWith(
+        'ds-1',
+        'designSystems.rulesPlaceholder!',
+      );
+    });
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+  });
+
+  it('untouched 404 placeholder is never PUT', async () => {
+    getDesignSystemRules.mockResolvedValue({ ok: false, error: 'Not found' });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('GET tokens 404 is empty and not dirty; empty Save stays disabled', async () => {
+    getDesignSystemTokens.mockResolvedValue({ ok: false, error: 'Not found' });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('tokens');
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: ':root{--a:1;}' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(saveDesignSystemTokens).toHaveBeenCalledWith('ds-1', ':root{--a:1;}');
+    });
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+  });
+
+  it('view mode makes all three tabs readonly', async () => {
+    routeQuery.mode = 'view';
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    const designTa = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(designTa).toHaveAttribute('readonly');
+    expect(screen.queryByRole('button', { name: 'common.save' })).not.toBeInTheDocument();
+    expect(screen.getByText('designSystems.viewHint')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'designSystems.startEdit' })).toBeInTheDocument();
+
+    await openTab('rules');
+    const rulesTa = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(rulesTa).toHaveAttribute('readonly');
+    expect(screen.getByText('designSystems.viewHint')).toBeInTheDocument();
+    fireEvent.change(rulesTa, { target: { value: '# should not stick' } });
+    expect(rulesTa.value).toBe('# Agent rules\n');
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    expect(saveDesignSystemContent).not.toHaveBeenCalled();
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+
+    await openTab('tokens');
+    const tokensTa = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(tokensTa).toHaveAttribute('readonly');
+    fireEvent.change(tokensTa, { target: { value: ':root{--no:1;}' } });
+    expect(tokensTa.value).toBe(':root { --x: 1; }');
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.startEdit' }));
+    expect(navigate).toHaveBeenCalledWith('/design-systems/ds-1');
+  });
+
+  it('leave-warn if any tab is dirty', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    await openTab('rules');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Agent rules\n\ndirty' } });
+    await openTab('design');
+    expect(window.confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.back' }));
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.unsavedLeave');
+    expect(navigate).toHaveBeenCalledWith('/design-systems');
+
+    vi.mocked(window.confirm).mockClear();
+    navigate.mockClear();
+    await openTab('tokens');
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('leave-warn for dirty tokens with clean DESIGN and RULES', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('tokens');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: ':root { --x: 2; }' } });
+    fireEvent.click(screen.getByRole('button', { name: 'designSystems.back' }));
+    expect(window.confirm).toHaveBeenCalledWith('designSystems.unsavedLeave');
+    expect(navigate).toHaveBeenCalledWith('/design-systems');
+  });
+
+  it('bundled rules/tokens tabs are readonly and Save is a no-op with 403 copy', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'ds-1',
+        name: 'Brand X',
+        description: '',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        source: 'bundled',
+      }],
+    });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    await openTab('rules');
+    expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText(/designSystems\.rulesSaveFailed:Bundled design systems are read-only/)).toBeInTheDocument();
+    });
+
+    await openTab('tokens');
+    expect(screen.getByRole('textbox')).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText(/designSystems\.tokensSaveFailed:Bundled design systems are read-only/)).toBeInTheDocument();
+    });
+
+    await openTab('design');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Updated bundled' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(saveDesignSystemContent).toHaveBeenCalledWith('ds-1', '# Updated bundled');
+    });
+  });
+
+  it('rules/tokens save failures use the tab-specific saveFailed keys', async () => {
+    saveDesignSystemRules.mockResolvedValue({ ok: false, error: 'disk full' });
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    await openTab('rules');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '# Agent rules\n\nfail' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(screen.getByText('designSystems.rulesSaveFailed:disk full')).toBeInTheDocument();
+    });
+
+    saveDesignSystemTokens.mockRejectedValue(new Error(`net${'\n'}down${'\0'}!`));
+    await openTab('tokens');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: ':root { --x: 9; }' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    await waitFor(() => {
+      expect(screen.getByText('designSystems.tokensSaveFailed:net down!')).toBeInTheDocument();
+    });
+    expect(document.body.textContent).not.toContain('\0');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'common.save' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'designSystems.saving' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('null-byte and empty bodies are rejected for rules and tokens without calling API', async () => {
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+
+    await openTab('rules');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: `bad${'\0'}x` } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    expect(screen.getByText('designSystems.invalidContent')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(saveDesignSystemRules).not.toHaveBeenCalled();
+    expect(screen.getByText('designSystems.emptyContent')).toBeInTheDocument();
+
+    await openTab('tokens');
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: `bad${'\0'}x` } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+    expect(screen.getByText('designSystems.invalidContent')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
+    expect(saveDesignSystemTokens).not.toHaveBeenCalled();
+    expect(screen.getByText('designSystems.emptyContent')).toBeInTheDocument();
+  });
+
+  it('shows rulesHint on the RULES tab in edit mode', async () => {
+    const { unmount } = renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    expect(screen.getByText('designSystems.hint')).toBeInTheDocument();
+    expect(screen.queryByText('designSystems.rulesHint')).not.toBeInTheDocument();
+
+    await openTab('rules');
+    expect(screen.getByText('designSystems.rulesHint')).toBeInTheDocument();
+
+    unmount();
+    routeQuery.mode = 'view';
+    renderEditor();
+    await waitFor(() => expect(screen.getByText('Brand X')).toBeInTheDocument());
+    expect(screen.getByText('designSystems.viewHint')).toBeInTheDocument();
+    await openTab('rules');
+    expect(screen.getByText('designSystems.viewHint')).toBeInTheDocument();
+    expect(screen.queryByText('designSystems.rulesHint')).not.toBeInTheDocument();
   });
 });

@@ -92,6 +92,24 @@ export class EngineOpsClient extends EnginePluginsClient {
     return readApiResponse(res);
   }
 
+  async getDesignSystemRules(id: string): Promise<ApiResponse<{ content: string }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    return { ok: false, error: 'not implemented' };
+  }
+
+  async saveDesignSystemRules(id: string, _content: string): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    return { ok: false, error: 'not implemented' };
+  }
+
+  async saveDesignSystemTokens(id: string, _content: string): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    return { ok: false, error: 'not implemented' };
+  }
+
   // --- Artifacts ---
 
   async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {
