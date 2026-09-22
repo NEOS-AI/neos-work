@@ -162,6 +162,9 @@ export function DesignSystems() {
           <p className="text-sm text-white/50 mt-1">
             {t('designSystems.subtitle')}
           </p>
+          <p className="text-xs text-white/40 mt-0.5">
+            {t('designSystems.notWorkerHarness')}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {systems.length > 0 && (
@@ -286,6 +289,11 @@ export function DesignSystems() {
                   {ds.hasComponents && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
                       {t('designSystems.components')}
+                    </span>
+                  )}
+                  {ds.hasRules && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">
+                      {t('designSystems.rulesBadge')}
                     </span>
                   )}
                 </div>
