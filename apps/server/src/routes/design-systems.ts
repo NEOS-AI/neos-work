@@ -13,14 +13,22 @@
  * POST   /api/design-systems/:id/rules/append — promote a correction bullet
  * POST   /api/design-systems/:id/rules/prune  — prune stale Corrections
  * GET    /api/design-systems/:id/components   — components.html raw text
+ * GET    /api/design-systems/:id/starters     — list starters/*.html|css
+ * POST   /api/design-systems/:id/starters     — pin from project/live/components (no overwrite)
+ * GET    /api/design-systems/:id/starters/:name
+ * PUT    /api/design-systems/:id/starters/:name
+ * DELETE /api/design-systems/:id/starters/:name
  */
 
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
-import { getPreviewComment } from '../db/projects.js';
+import { getLiveArtifact } from '../db/live-artifacts.js';
+import { getPreviewComment, getProject } from '../db/projects.js';
 import * as store from '../lib/design-system-store.js';
+import { PathSandboxError } from '../lib/path-sandbox.js';
 import { publicPathTail, safeRouteId } from '../lib/path-safety.js';
+import { readProjectFile } from '../lib/project-files.js';
 
 const REPO_DS_CANDIDATE = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -283,6 +291,152 @@ designSystems.get('/:id/components', async (c) => {
   const content = await store.getDesignSystemComponents(id);
   if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
   return c.json({ ok: true, data: { content } });
+});
+
+function paramStarterName(c: { req: { param: (k: string) => string } }): string {
+  const raw = c.req.param('name');
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return '';
+  const name = raw.trim();
+  if (!store.isSafeStarterName(name)) return '';
+  return name;
+}
+
+function starterWriteError(
+  result: store.StarterWriteResult,
+  ds: store.DesignSystem | null,
+) {
+  if (result === 'exists') return { status: 409 as const, error: 'Starter already exists' };
+  if (result === 'limit') return { status: 400 as const, error: 'starters_limit' };
+  if (result === 'bundled' || ds?.source === 'bundled') {
+    return { status: 403 as const, error: 'Bundled design systems are read-only' };
+  }
+  if (!ds) return { status: 404 as const, error: 'Not found' };
+  return { status: 400 as const, error: 'Invalid starter' };
+}
+
+designSystems.get('/:id/starters', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const list = await store.listDesignSystemStarters(id);
+  if (list === null) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: list });
+});
+
+designSystems.post('/:id/starters', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const ds = await store.getDesignSystem(id);
+  if (!ds) return c.json({ ok: false, error: 'Not found' }, 404);
+  if (ds.source === 'bundled') {
+    return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+  }
+  const body = await c.req.json<{
+    from?: unknown;
+    name?: unknown;
+    projectId?: unknown;
+    path?: unknown;
+    liveArtifactId?: unknown;
+  }>().catch(() => null);
+  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+  if (!store.isSafeStarterName(name)) {
+    return c.json({ ok: false, error: 'name must be a safe html or css filename' }, 400);
+  }
+  const from = typeof body?.from === 'string' ? body.from : '';
+  let content: string | null = null;
+  if (from === 'components') {
+    content = await store.getDesignSystemComponents(id);
+    if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
+  } else if (from === 'projectFile') {
+    const projectId = typeof body?.projectId === 'string' ? body.projectId : '';
+    const rel = typeof body?.path === 'string' ? body.path : '';
+    if (!projectId || !rel) {
+      return c.json({ ok: false, error: 'projectId and path are required' }, 400);
+    }
+    const project = getProject(projectId);
+    if (!project) return c.json({ ok: false, error: 'Not found' }, 404);
+    try {
+      content = readProjectFile(project.baseDir, rel).content;
+    } catch (err) {
+      if (err instanceof PathSandboxError) {
+        const status = err.code === 'not_found' ? 404 : 400;
+        return c.json({ ok: false, error: 'Not found' }, status);
+      }
+      return c.json({ ok: false, error: 'Not found' }, 404);
+    }
+  } else if (from === 'liveArtifact') {
+    const liveId = typeof body?.liveArtifactId === 'string' ? body.liveArtifactId : '';
+    if (!liveId) return c.json({ ok: false, error: 'liveArtifactId is required' }, 400);
+    const projectId = typeof body?.projectId === 'string' ? body.projectId : undefined;
+    const art = getLiveArtifact(liveId, projectId);
+    if (!art || art.content == null) return c.json({ ok: false, error: 'Not found' }, 404);
+    content = art.content;
+  } else {
+    return c.json({ ok: false, error: 'from must be projectFile, liveArtifact, or components' }, 400);
+  }
+  const result = await store.createDesignSystemStarter(id, name, content);
+  if (result !== true) {
+    const mapped = starterWriteError(result, ds);
+    return c.json({ ok: false, error: mapped.error }, mapped.status);
+  }
+  const listed = await store.listDesignSystemStarters(id);
+  const item = listed?.find((s) => s.name === name);
+  return c.json(
+    { ok: true, data: item ?? { name, bytes: Buffer.byteLength(content), updatedAt: new Date().toISOString() } },
+    201,
+  );
+});
+
+designSystems.get('/:id/starters/:name', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const name = paramStarterName(c);
+  if (!name) return c.json({ ok: false, error: 'Not found' }, 400);
+  const content = await store.getDesignSystemStarter(id, name);
+  if (content === null) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true, data: { content } });
+});
+
+designSystems.put('/:id/starters/:name', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const name = paramStarterName(c);
+  if (!name) return c.json({ ok: false, error: 'name must be a safe html or css filename' }, 400);
+  const body = await c.req.json<{ content: string }>().catch(() => null);
+  if (!body || typeof body.content !== 'string') {
+    return c.json({ ok: false, error: 'content string required' }, 400);
+  }
+  if (/\0/.test(body.content)) {
+    return c.json({ ok: false, error: 'content contains invalid control characters' }, 400);
+  }
+  if (!body.content.trim()) {
+    return c.json({ ok: false, error: 'content cannot be empty' }, 400);
+  }
+  if (body.content.length > store.STARTERS_MAX_CHARS) {
+    return c.json({
+      ok: false,
+      error: `content exceeds max size (${store.STARTERS_MAX_CHARS} characters)`,
+    }, 400);
+  }
+  const result = await store.putDesignSystemStarter(id, name, body.content);
+  if (result !== true) {
+    const ds = await store.getDesignSystem(id);
+    const mapped = starterWriteError(result, ds);
+    return c.json({ ok: false, error: mapped.error }, mapped.status);
+  }
+  return c.json({ ok: true });
+});
+
+designSystems.delete('/:id/starters/:name', async (c) => {
+  const id = paramDesignId(c);
+  if (!id) return c.json({ ok: false, error: 'Not found' }, 404);
+  const name = paramStarterName(c);
+  if (!name) return c.json({ ok: false, error: 'Not found' }, 404);
+  const result = await store.deleteDesignSystemStarter(id, name);
+  if (result === 'bundled') {
+    return c.json({ ok: false, error: 'Bundled design systems are read-only' }, 403);
+  }
+  if (result !== true) return c.json({ ok: false, error: 'Not found' }, 404);
+  return c.json({ ok: true });
 });
 
 export default designSystems;

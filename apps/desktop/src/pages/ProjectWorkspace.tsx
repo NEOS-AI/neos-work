@@ -63,7 +63,15 @@ function promoteReady(text: string): boolean {
   return trimmed.length >= 1 && trimmed.length <= PROMOTE_TEXT_MAX;
 }
 
-type VariantSeedKind = 'current' | 'live' | 'components';
+type VariantSeedKind = 'current' | 'live' | 'components' | 'starter';
+
+function fileBasename(p: string): string {
+  return p.split(/[/\\]/).pop() || p;
+}
+
+function isPinablePath(path: string): boolean {
+  return /\.(html|css)$/i.test(path);
+}
 
 export function ProjectWorkspace() {
   const { t, i18n } = useTranslation('common');
@@ -132,6 +140,8 @@ export function ProjectWorkspace() {
   const [variantCount, setVariantCount] = useState<2 | 3 | 4>(3);
   const [variantLiveId, setVariantLiveId] = useState<string | null>(null);
   const [openVariantPaths, setOpenVariantPaths] = useState<string[]>([]);
+  const [starters, setStarters] = useState<Array<{ name: string; bytes: number; updatedAt: string }>>([]);
+  const [variantStarterName, setVariantStarterName] = useState<string | null>(null);
 
   const dirty = isDirty(buffer);
   const editorPromoteText = selectDetail?.outerHTML ?? selection?.selector ?? '';
@@ -1489,6 +1499,19 @@ export function ProjectWorkspace() {
     [designSystems, project?.designSystemId],
   );
   const canSeedComponents = boundDesignSystem?.hasComponents === true;
+  const htmlStarters = useMemo(
+    () => starters.filter((s) => /\.html$/i.test(s.name)),
+    [starters],
+  );
+  const selectedStarterName = useMemo(() => {
+    if (variantStarterName && htmlStarters.some((s) => s.name === variantStarterName)) {
+      return variantStarterName;
+    }
+    return htmlStarters[0]?.name ?? null;
+  }, [variantStarterName, htmlStarters]);
+  const canPinStarter = Boolean(
+    project?.designSystemId && buffer.path && isPinablePath(buffer.path),
+  );
 
   const variantSeedReady = useMemo(() => {
     if (variantSeed === 'current') return isHtmlPath(buffer.path ?? '');
@@ -1496,8 +1519,83 @@ export function ProjectWorkspace() {
       return Boolean(selectedLiveArtifact) && isHtmlContentType(selectedLiveArtifact?.contentType);
     }
     if (variantSeed === 'components') return canSeedComponents;
+    if (variantSeed === 'starter') return Boolean(selectedStarterName);
     return false;
-  }, [variantSeed, buffer.path, selectedLiveArtifact, canSeedComponents]);
+  }, [variantSeed, buffer.path, selectedLiveArtifact, canSeedComponents, selectedStarterName]);
+
+  useEffect(() => {
+    if (!client || !project?.designSystemId) {
+      setStarters([]);
+      setVariantStarterName(null);
+      return;
+    }
+    const dsId = project.designSystemId;
+    let cancelled = false;
+    void client.listDesignSystemStarters(dsId).then((res) => {
+      if (cancelled) return;
+      if (res.ok && res.data) {
+        setStarters(res.data);
+        setVariantStarterName((prev) => {
+          const html = res.data.filter((s) => /\.html$/i.test(s.name));
+          if (prev && html.some((s) => s.name === prev)) return prev;
+          return html[0]?.name ?? null;
+        });
+      } else {
+        setStarters([]);
+      }
+    }).catch(() => {
+      if (!cancelled) setStarters([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, project?.designSystemId]);
+
+  const handlePinStarter = useCallback(async () => {
+    if (!client || !projectId || !project?.designSystemId || !buffer.path || !isPinablePath(buffer.path)) {
+      return;
+    }
+    setChatError(null);
+    const res = await client.pinDesignSystemStarter(project.designSystemId, {
+      from: 'projectFile',
+      projectId,
+      path: buffer.path,
+      name: fileBasename(buffer.path),
+    });
+    if (!res.ok) {
+      setChatError(
+        scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+          || t('project.chatFailed'),
+      );
+      return;
+    }
+    const listed = await client.listDesignSystemStarters(project.designSystemId);
+    if (listed.ok && listed.data) setStarters(listed.data);
+  }, [client, projectId, project?.designSystemId, buffer.path, t]);
+
+  const handleCloneStarter = useCallback(async () => {
+    if (!client || !projectId || !project?.designSystemId || !selectedStarterName) return;
+    setChatError(null);
+    const got = await client.getDesignSystemStarter(project.designSystemId, selectedStarterName);
+    if (!got.ok || !got.data) {
+      setChatError(
+        scrubDisplayText(got.error, { collapseLines: true, maxChars: 300 })
+          || t('project.chatFailed'),
+      );
+      return;
+    }
+    const dest = fileBasename(selectedStarterName);
+    const written = await client.writeProjectFile(projectId, dest, got.data.content);
+    if (!written.ok) {
+      setChatError(
+        scrubDisplayText(written.error, { collapseLines: true, maxChars: 300 })
+          || t('project.chatFailed'),
+      );
+      return;
+    }
+    const filesRes = await client.listProjectFiles(projectId);
+    if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+  }, [client, projectId, project?.designSystemId, selectedStarterName, t]);
 
   const handleMakeVariants = useCallback(async () => {
     if (!client || !projectId || chatBusy || !variantSeedReady) return;
@@ -1506,6 +1604,7 @@ export function ProjectWorkspace() {
       return;
     }
     if (variantSeed === 'components' && (!project?.designSystemId || !canSeedComponents)) return;
+    if (variantSeed === 'starter' && (!project?.designSystemId || !selectedStarterName)) return;
 
     setChatBusy(true);
     setChatError(null);
@@ -1528,6 +1627,17 @@ export function ProjectWorkspace() {
       } else if (variantSeed === 'live') {
         seedHtml = selectedLiveArtifact?.content ?? '';
         stemSource = selectedLiveArtifact?.name || 'seed';
+      } else if (variantSeed === 'starter') {
+        const got = await client.getDesignSystemStarter(project!.designSystemId!, selectedStarterName!);
+        if (!got.ok || !got.data) {
+          setChatError(
+            scrubDisplayText(got.error, { collapseLines: true, maxChars: 300 })
+              || t('project.chatFailed'),
+          );
+          return;
+        }
+        seedHtml = got.data.content;
+        stemSource = selectedStarterName!;
       } else {
         const got = await client.getDesignSystemComponents(project!.designSystemId!);
         if (!got.ok || !got.data) {
@@ -1601,6 +1711,7 @@ export function ProjectWorkspace() {
     selectedLiveArtifact,
     project,
     canSeedComponents,
+    selectedStarterName,
     files,
     chatAgentId,
     t,
@@ -1872,7 +1983,32 @@ export function ProjectWorkspace() {
               {canSeedComponents ? (
                 <option value="components">{t('designSystems.seedComponents')}</option>
               ) : null}
+              {htmlStarters.length > 0 ? (
+                <option value="starter">{t('designSystems.seedStarter')}</option>
+              ) : null}
             </select>
+            {htmlStarters.length > 0 ? (
+              <select
+                data-testid="variant-seed-starter"
+                value={selectedStarterName ?? ''}
+                onChange={(e) => {
+                  setVariantStarterName(e.target.value || null);
+                  setVariantSeed('starter');
+                }}
+                className="rounded border px-1.5 py-1 text-[11px]"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {htmlStarters.map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             {variantSeed === 'live' && liveArtifacts.length > 1 ? (
               <select
                 data-testid="variant-live-id"
@@ -1923,6 +2059,35 @@ export function ProjectWorkspace() {
             >
               {t('designSystems.variants')}
             </button>
+            <button
+              type="button"
+              data-testid="pin-starter"
+              disabled={chatBusy || !canPinStarter}
+              aria-label={t('designSystems.pinStarter')}
+              onClick={() => void handlePinStarter()}
+              className="rounded-lg px-2.5 py-1 text-[11px] font-medium disabled:opacity-40"
+              style={{
+                color: 'var(--text-primary)',
+                backgroundColor: 'var(--bg-tertiary)',
+              }}
+            >
+              {t('designSystems.pinStarter')}
+            </button>
+            {selectedStarterName ? (
+              <button
+                type="button"
+                data-testid="clone-starter"
+                disabled={chatBusy || !project?.designSystemId}
+                onClick={() => void handleCloneStarter()}
+                className="rounded-lg px-2.5 py-1 text-[11px] font-medium disabled:opacity-40"
+                style={{
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                }}
+              >
+                {t('designSystems.seedStarter')}
+              </button>
+            ) : null}
             {!variantSeedReady ? (
               <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                 {t('designSystems.variantsNeedHtml')}

@@ -271,7 +271,8 @@
     "seedLive": "Live artifact",
     "seedComponents": "components.html",
     "seedStarter": "Starter",
-    "openVariant": "Open variant"
+    "openVariant": "Open variant",
+    "pinStarter": "Save as starter"
   },
   "action": {
     "save": "Save",

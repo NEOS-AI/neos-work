@@ -960,7 +960,7 @@ describe('design-system-store RULES.md / tokens write', () => {
     expect(created).not.toBeNull();
     const names = ['../x.html', 'foo/bar.html', '/tmp/x.html', '..', '.'];
     for (const name of names) {
-      expect(path.basename(name) === name && !name.includes(path.sep)).toBe(false);
+      expect(path.basename(name) === name && name !== '.' && name !== '..').toBe(false);
       expect(await putDesignSystemStarter(created!.id, name, '<h1/>')).toBe(false);
     }
     const parentHtml = path.join(created!.path, '..', 'x.html');
