@@ -85,6 +85,35 @@ describe('createEmptyWorkbookSnapshot / parse / serialize', () => {
     );
   });
 
+  it('throws not_workbook for sheets array, null, and bad appVersion', () => {
+    expectSnapshotCode(
+      () =>
+        parseWorkbookSnapshot(
+          JSON.stringify({ appVersion: '1.0.2', sheets: [] }),
+        ),
+      'not_workbook',
+    );
+    expectSnapshotCode(
+      () =>
+        parseWorkbookSnapshot(
+          JSON.stringify({ appVersion: '1.0.2', sheets: null }),
+        ),
+      'not_workbook',
+    );
+    expectSnapshotCode(
+      () =>
+        parseWorkbookSnapshot(JSON.stringify({ sheets: { a: { id: 'a' } } })),
+      'not_workbook',
+    );
+    expectSnapshotCode(
+      () =>
+        parseWorkbookSnapshot(
+          JSON.stringify({ appVersion: 1, sheets: { a: { id: 'a' } } }),
+        ),
+      'not_workbook',
+    );
+  });
+
   it('throws empty_sheets for sheets {}', () => {
     expectSnapshotCode(
       () =>
@@ -142,23 +171,30 @@ describe('UNIVER_SNAPSHOT_MAX_CHARS', () => {
   it('callers reject 3MiB content before parse; parser does not slice', () => {
     const oversized = 'x'.repeat(3 * 1024 * 1024);
     expect(oversized.length).toBeGreaterThan(UNIVER_SNAPSHOT_MAX_CHARS);
-    // Caller-side guard: do not call parse on oversized content.
-    if (oversized.length > UNIVER_SNAPSHOT_MAX_CHARS) {
-      expect(oversized.length).toBeGreaterThan(UNIVER_SNAPSHOT_MAX_CHARS);
-    } else {
-      parseWorkbookSnapshot(oversized);
-    }
-    const small = serializeWorkbookSnapshot(
-      createEmptyWorkbookSnapshot({ id: 'wb1', locale: 'enUS' }),
-    );
-    expect(small.length).toBeLessThanOrEqual(UNIVER_SNAPSHOT_MAX_CHARS);
-    expect(parseWorkbookSnapshot(small).id).toBe('wb1');
+    // Size is the caller's job; parse is not invoked on this payload.
+
+    const pad = 'y'.repeat(3 * 1024 * 1024);
+    const oversizedJson = JSON.stringify({
+      id: 'wb-big',
+      name: pad,
+      appVersion: '1.0.2',
+      locale: 'enUS',
+      styles: {},
+      sheetOrder: ['a'],
+      sheets: { a: { id: 'a' } },
+    });
+    expect(oversizedJson.length).toBeGreaterThan(UNIVER_SNAPSHOT_MAX_CHARS);
+    const parsed = parseWorkbookSnapshot(oversizedJson);
+    expect(parsed.name).toBe(pad);
+    expect(parsed.name.length).toBe(pad.length);
   });
 });
 
 describe('localeFromNeosI18n', () => {
-  it('maps ko to koKR and en to enUS', () => {
+  it('maps ko / ko-KR to koKR and other values to enUS', () => {
     expect(localeFromNeosI18n('ko')).toBe('koKR');
+    expect(localeFromNeosI18n('ko-KR')).toBe('koKR');
     expect(localeFromNeosI18n('en')).toBe('enUS');
+    expect(localeFromNeosI18n(undefined)).toBe('enUS');
   });
 });
