@@ -263,7 +263,15 @@
     "promote": "Promote to RULES.md",
     "promoteConfirm": "Add this correction to RULES.md?",
     "prune": "Prune stale corrections",
-    "pruneConfirm": "Delete Corrections older than 90 days, then drop down to 20?"
+    "pruneConfirm": "Delete Corrections older than 90 days, then drop down to 20?",
+    "variants": "Make variants from seed",
+    "variantsNeedHtml": "Variants require an HTML seed",
+    "variantsCount": "Number of variants",
+    "seedCurrent": "Current file",
+    "seedLive": "Live artifact",
+    "seedComponents": "components.html",
+    "seedStarter": "Starter",
+    "openVariant": "Open variant"
   },
   "action": {
     "save": "Save",
