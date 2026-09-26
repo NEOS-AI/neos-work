@@ -15,6 +15,7 @@ import {
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
+import { isUniverWorkbookPath } from '@neos-work/office-sheets';
 import {
   extractLockHolder,
   formatLockHolderMessage,
@@ -1437,6 +1438,12 @@ export function ProjectDetail() {
 
         <main className="editor-main" data-testid="design-editor-host">
           {buffer.path ? (
+            <>
+            {isUniverWorkbookPath(buffer.path) ? (
+              <p data-testid="sheets-desktop-only" style={{ margin: 0, padding: '8px 10px', fontSize: 12 }}>
+                Sheets editor is available in the desktop app.
+              </p>
+            ) : null}
             <DesignEditor
               buffer={buffer}
               mode={mode}
@@ -1488,6 +1495,7 @@ export function ProjectDetail() {
                 )
               }
             />
+            </>
           ) : (
             <div className="card muted" style={{ margin: '1rem' }}>
               Open a file to start the Design Editor (Preview · Code · Layers).

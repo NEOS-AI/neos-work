@@ -99,6 +99,8 @@ describe('SheetsPane', () => {
 
   it('serializes onEdit with pretty JSON and trailing newline', async () => {
     const onEdit = vi.fn();
+    const edited = { ...snapshot, name: 'Edited' };
+    save.mockImplementation(() => edited);
     render(
       <SheetsPane
         buffer={openBuffer()}
@@ -122,8 +124,8 @@ describe('SheetsPane', () => {
     expect(onEdit).toHaveBeenCalled();
     const arg = onEdit.mock.calls.at(-1)?.[0] as string;
     expect(arg.endsWith('\n')).toBe(true);
-    expect(arg).toBe(serializeWorkbookSnapshot(snapshot));
-    expect(arg).not.toBe(JSON.stringify(snapshot));
+    expect(arg).toBe(serializeWorkbookSnapshot(edited));
+    expect(arg).not.toBe(JSON.stringify(edited));
     expect(arg).toContain('\n  ');
   });
 

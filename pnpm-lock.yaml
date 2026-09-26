@@ -75,6 +75,9 @@ importers:
       '@neos-work/design-editor':
         specifier: workspace:*
         version: link:../../packages/design-editor
+      '@neos-work/office-sheets':
+        specifier: workspace:*
+        version: link:../../packages/office-sheets
       '@neos-work/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -96,6 +99,12 @@ importers:
       '@types/dagre':
         specifier: ^0.7.54
         version: 0.7.54
+      '@univerjs/preset-sheets-core':
+        specifier: 1.0.2
+        version: 1.0.2(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rxjs@7.8.2)
+      '@univerjs/presets':
+        specifier: 1.0.2
+        version: 1.0.2(react@19.2.4)(rxjs@7.8.2)
       '@xyflow/react':
         specifier: ^12.0.0
         version: 12.10.2(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -288,6 +297,9 @@ importers:
       '@neos-work/design-editor':
         specifier: workspace:*
         version: link:../../packages/design-editor
+      '@neos-work/office-sheets':
+        specifier: workspace:*
+        version: link:../../packages/office-sheets
       '@neos-work/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -468,6 +480,9 @@ importers:
 
   packages/office-sheets:
     dependencies:
+      '@neos-work/design-editor':
+        specifier: workspace:*
+        version: link:../design-editor
       '@univerjs/preset-sheets-node-core':
         specifier: 1.0.2
         version: 1.0.2(react@19.2.4)(rxjs@7.8.2)

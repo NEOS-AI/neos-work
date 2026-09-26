@@ -126,7 +126,7 @@ vi.mock('react-i18next', () => {
   const t = (key: string, opts?: Record<string, string>) =>
     opts?.selector ? `${key}:${opts.selector}` : key;
   return {
-    useTranslation: () => ({ t }),
+    useTranslation: () => ({ t, i18n: { language: 'en' } }),
   };
 });
 

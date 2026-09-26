@@ -320,5 +320,17 @@
     "featured": "추천",
     "tryPrompt": "사용해 보기",
     "triggers": "트리거"
+  },
+  "officeSheets": {
+    "parseFailed": "스프레드시트 파일을 열 수 없습니다. JSON이 올바른 워크북인지 확인하세요.",
+    "saveFailed": "스프레드시트 저장 실패: {{detail}}",
+    "loading": "시트 불러오는 중…",
+    "shortcutHint": "시트에 포커스가 있을 때만 시트 단축키가 켜집니다.",
+    "conflictHint": "디스크의 시트와 로컬 편집이 다릅니다.",
+    "keepMine": "내 편집 유지",
+    "takeAgent": "디스크 버전 사용",
+    "showDiff": "차이 보기",
+    "dismissDiff": "차이 닫기",
+    "notASheet": "이 파일은 스프레드시트가 아닙니다."
   }
 }

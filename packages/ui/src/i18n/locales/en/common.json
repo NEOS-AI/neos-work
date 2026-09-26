@@ -320,5 +320,17 @@
     "featured": "Featured",
     "tryPrompt": "Try",
     "triggers": "Triggers"
+  },
+  "officeSheets": {
+    "parseFailed": "Could not open this spreadsheet. Check that the JSON is a valid workbook.",
+    "saveFailed": "Failed to save spreadsheet: {{detail}}",
+    "loading": "Loading sheet…",
+    "shortcutHint": "Sheet shortcuts are on only while the sheet is focused.",
+    "conflictHint": "The sheet on disk differs from local edits.",
+    "keepMine": "Keep mine",
+    "takeAgent": "Take disk version",
+    "showDiff": "Show diff",
+    "dismissDiff": "Hide diff",
+    "notASheet": "This file is not a spreadsheet."
   }
 }

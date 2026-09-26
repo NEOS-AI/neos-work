@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@neos-work/design-editor": "workspace:*",
+    "@neos-work/office-sheets": "workspace:*",
     "@neos-work/shared": "workspace:*",
     "@neos-work/ui-app": "workspace:*",
     "@xyflow/react": "^12.0.0",
