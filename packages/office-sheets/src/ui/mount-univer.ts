@@ -15,12 +15,6 @@ export interface MountUniverHandle {
   dispose: () => void;
 }
 
-function univerLocaleFromNeos(locale: string | undefined): typeof LocaleType.EN_US | typeof LocaleType.KO_KR {
-  if (locale === 'koKR' || locale === LocaleType.KO_KR) return LocaleType.KO_KR;
-  if (locale === 'enUS' || locale === LocaleType.EN_US) return LocaleType.EN_US;
-  return localeFromNeosI18n(locale) === 'koKR' ? LocaleType.KO_KR : LocaleType.EN_US;
-}
-
 export function mountUniver(opts: {
   hostEl: HTMLElement;
   snapshot: UniverWorkbookSnapshot;
@@ -29,7 +23,8 @@ export function mountUniver(opts: {
   onEdit: (content: string) => void;
 }): MountUniverHandle {
   const { hostEl, snapshot, locale, getDisk, onEdit } = opts;
-  const univerLocale = univerLocaleFromNeos(locale);
+  const univerLocale =
+    localeFromNeosI18n(locale) === 'koKR' ? LocaleType.KO_KR : LocaleType.EN_US;
   const { univer, univerAPI } = createUniver({
     locale: univerLocale,
     locales: {
@@ -62,8 +57,10 @@ export function mountUniver(opts: {
   hostEl.addEventListener('focusin', onHostFocusIn);
   document.addEventListener('focusin', onDocFocusIn);
 
+  let fWorkbook: { save: () => unknown } | undefined;
+
   const flushDirty = () => {
-    if (disposed || !ready) return;
+    if (disposed || !ready || !fWorkbook) return;
     try {
       const serialized = serializeWorkbookSnapshot(
         fWorkbook.save() as UniverWorkbookSnapshot,
@@ -81,9 +78,9 @@ export function mountUniver(opts: {
     debounceTimer = setTimeout(flushDirty, DIRTY_DEBOUNCE_MS);
   };
 
-  const fWorkbook = univerAPI.createWorkbook(snapshot as never);
   const eventKey = univerAPI.Event.SheetValueChanged;
   const eventDisposable = univerAPI.addEvent(eventKey, onSheetValueChanged);
+  fWorkbook = univerAPI.createWorkbook(snapshot as never);
   ready = true;
 
   return {

@@ -33,23 +33,24 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "@neos-work/design-editor": "workspace:*",
     "@univerjs/preset-sheets-node-core": "1.0.2",
     "rxjs": "^7.8.0"
   },
   "peerDependencies": {
+    "@neos-work/design-editor": "workspace:*",
     "@univerjs/preset-sheets-core": "1.0.2",
     "@univerjs/presets": "1.0.2",
     "react": "^19",
     "react-dom": "^19"
   },
   "peerDependenciesMeta": {
+    "@neos-work/design-editor": { "optional": true },
     "@univerjs/preset-sheets-core": { "optional": true },
     "react": { "optional": true },
     "react-dom": { "optional": true }
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.3",
+    "@neos-work/design-editor": "workspace:*",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

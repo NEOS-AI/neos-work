@@ -480,9 +480,6 @@ importers:
 
   packages/office-sheets:
     dependencies:
-      '@neos-work/design-editor':
-        specifier: workspace:*
-        version: link:../design-editor
       '@univerjs/preset-sheets-node-core':
         specifier: 1.0.2
         version: 1.0.2(react@19.2.4)(rxjs@7.8.2)
@@ -490,9 +487,9 @@ importers:
         specifier: ^7.8.0
         version: 7.8.2
     devDependencies:
-      '@testing-library/jest-dom':
-        specifier: ^6.6.3
-        version: 6.9.1
+      '@neos-work/design-editor':
+        specifier: workspace:*
+        version: link:../design-editor
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

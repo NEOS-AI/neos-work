@@ -67,9 +67,14 @@ function openBuffer(
   };
 }
 
-function dirtyBuffer(local = `${snapshotText.slice(0, -2)}\n`): EditorBufferState {
-  const base = openBuffer();
-  return { ...base, local };
+function dirtyBuffer(): EditorBufferState {
+  const local = serializeWorkbookSnapshot({ ...snapshot, name: 'Edited' });
+  return { ...openBuffer(), local };
+}
+
+function sheetValueHandler(): (() => void) | undefined {
+  const hit = addEvent.mock.calls.find((c) => c[0] === 'SheetValueChanged');
+  return hit?.[1] as (() => void) | undefined;
 }
 
 const { SheetsPane } = await import('./SheetsPane.js');
@@ -111,9 +116,15 @@ describe('SheetsPane', () => {
     );
 
     await waitFor(() => expect(addEvent).toHaveBeenCalled());
-    const handler = addEvent.mock.calls.find(
-      (c) => c[0] === 'SheetValueChanged' || c[0]?.event === 'SheetValueChanged',
-    )?.[1] as (() => void) | undefined;
+    const boot = createUniver.mock.calls[0]?.[0] as {
+      collaboration?: unknown;
+      presets: Array<{ opts: { container?: unknown; workerURL?: unknown } }>;
+    };
+    expect(boot).not.toHaveProperty('collaboration');
+    expect(boot.presets[0]?.opts.container).toBeInstanceOf(HTMLElement);
+    expect(boot.presets[0]?.opts).not.toHaveProperty('workerURL');
+    expect(addEvent.mock.calls.every((c) => c[0] === 'SheetValueChanged')).toBe(true);
+    const handler = sheetValueHandler();
     expect(handler).toEqual(expect.any(Function));
 
     await act(async () => {
@@ -186,10 +197,89 @@ describe('SheetsPane', () => {
       />,
     );
     const pane = screen.getByTestId('sheets-pane');
-    fireEvent.focusIn(pane);
+    pane.focus();
     fireEvent.keyDown(window, { key: 's', metaKey: true });
-    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    expect(onSave).toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cmd/Ctrl+S does not save when unfocused or clean', () => {
+    const onSave = vi.fn();
+    const { rerender } = render(
+      <SheetsPane
+        buffer={dirtyBuffer()}
+        onEdit={vi.fn()}
+        onSave={onSave}
+        labels={LABELS}
+      />,
+    );
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(onSave).toHaveBeenCalledTimes(0);
+
+    rerender(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={vi.fn()}
+        onSave={onSave}
+        labels={LABELS}
+      />,
+    );
+    screen.getByTestId('sheets-pane').focus();
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+    expect(onSave).toHaveBeenCalledTimes(0);
+  });
+
+  it('ignores SheetValueChanged until ready', async () => {
+    const onEdit = vi.fn();
+    const edited = { ...snapshot, name: 'Edited' };
+    save.mockImplementation(() => edited);
+    addEvent.mockImplementation((_ev: unknown, handler: () => void) => {
+      handler();
+      return { dispose: vi.fn() };
+    });
+    render(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={onEdit}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(addEvent).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    expect(onEdit).toHaveBeenCalledTimes(0);
+  });
+
+  it('does not remount Univer after the first onEdit dirties the buffer', async () => {
+    const onEdit = vi.fn();
+    const edited = { ...snapshot, name: 'Edited' };
+    save.mockImplementation(() => edited);
+    const { rerender } = render(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={onEdit}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(createWorkbook).toHaveBeenCalledTimes(1));
+    const handler = sheetValueHandler();
+    await act(async () => {
+      handler?.();
+      await new Promise((r) => setTimeout(r, 250));
+    });
+    expect(onEdit).toHaveBeenCalled();
+    rerender(
+      <SheetsPane
+        buffer={dirtyBuffer()}
+        onEdit={onEdit}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    expect(createWorkbook).toHaveBeenCalledTimes(1);
+    expect(dispose).not.toHaveBeenCalled();
   });
 
   it('shows conflict-banner with keep-mine and take-agent', () => {

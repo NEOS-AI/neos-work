@@ -44,7 +44,6 @@ export function SheetsPane({
 }: SheetsPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
-  const focusedRef = useRef(false);
   const bufferRef = useRef(buffer);
   bufferRef.current = buffer;
   const onEditRef = useRef(onEdit);
@@ -63,8 +62,12 @@ export function SheetsPane({
     }
   }, [buffer.local]);
 
-  const remountToken =
-    !dirty && !conflict ? `${buffer.local}::${buffer.diskHash ?? ''}` : 'dirty-or-conflict';
+  // Keep the last clean identity while dirty/conflict so the first onEdit
+  // does not dispose + remount Univer (spec: remount on path or clean disk only).
+  const cleanToken = `${buffer.local}::${buffer.diskHash ?? ''}`;
+  const remountTokenRef = useRef(cleanToken);
+  if (!dirty && !conflict) remountTokenRef.current = cleanToken;
+  const remountToken = remountTokenRef.current;
 
   const [showDiff, setShowDiff] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -101,28 +104,11 @@ export function SheetsPane({
   }, [buffer.path, remountToken, parsed.ok, locale]);
 
   useEffect(() => {
-    const el = paneRef.current;
-    if (!el) return;
-    const onFocusIn = () => {
-      focusedRef.current = true;
-    };
-    const onFocusOut = (e: FocusEvent) => {
-      if (e.relatedTarget instanceof Node && el.contains(e.relatedTarget)) return;
-      focusedRef.current = false;
-    };
-    el.addEventListener('focusin', onFocusIn);
-    el.addEventListener('focusout', onFocusOut);
-    return () => {
-      el.removeEventListener('focusin', onFocusIn);
-      el.removeEventListener('focusout', onFocusOut);
-    };
-  }, []);
-
-  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key !== 's' && e.key !== 'S') return;
-      if (!focusedRef.current) return;
+      const pane = paneRef.current;
+      if (!pane || !document.activeElement || !pane.contains(document.activeElement)) return;
       const current = bufferRef.current;
       if (!isDirty(current) || !current.path) return;
       e.preventDefault();
@@ -140,14 +126,6 @@ export function SheetsPane({
       className="sheets-pane"
       data-testid="sheets-pane"
       tabIndex={0}
-      onFocusCapture={() => {
-        focusedRef.current = true;
-      }}
-      onBlurCapture={(e) => {
-        const next = e.relatedTarget;
-        if (next instanceof Node && paneRef.current?.contains(next)) return;
-        focusedRef.current = false;
-      }}
       style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, height: '100%' }}
     >
       <div
