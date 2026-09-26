@@ -604,15 +604,16 @@ export function ProjectWorkspace() {
   );
 
   const handleSave = useCallback(async () => {
-    if (!client || !projectId || !buffer.path || !isDirty(buffer)) return;
+    const current = bufferRef.current;
+    if (!client || !projectId || !current.path || !isDirty(current)) return;
     setSaving(true);
     setSaveError(null);
     try {
       // Pass collab session so NEOS_SHARED_EDIT hard enforce accepts our own lock
       const res = await client.writeProjectFile(
         projectId,
-        buffer.path,
-        buffer.local,
+        current.path,
+        current.local,
         'user',
         collabSessionId ? { sessionId: collabSessionId } : undefined,
       );
@@ -626,8 +627,8 @@ export function ProjectWorkspace() {
         );
         const filesRes = await client.listProjectFiles(projectId);
         if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
-        if (buffer.path) {
-          const revRes = await client.listProjectRevisions(projectId, buffer.path);
+        if (current.path) {
+          const revRes = await client.listProjectRevisions(projectId, current.path);
           if (revRes.ok && revRes.data) setRevisions(revRes.data);
         }
       } else {
@@ -635,7 +636,7 @@ export function ProjectWorkspace() {
         if (holder) {
           const lockPath =
             (holder.path && normalizeProjectRelPath(holder.path))
-            || (buffer.path ? normalizeProjectRelPath(buffer.path) : '')
+            || (current.path ? normalizeProjectRelPath(current.path) : '')
             || '';
           if (lockPath) {
             setForeignLocks((m) => ({
@@ -660,7 +661,7 @@ export function ProjectWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [client, projectId, buffer, collabSessionId, t]);
+  }, [client, projectId, collabSessionId, t]);
 
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [mkdirBusy, setMkdirBusy] = useState(false);

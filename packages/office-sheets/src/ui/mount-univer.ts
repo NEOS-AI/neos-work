@@ -14,6 +14,8 @@ const DIRTY_DEBOUNCE_MS = 200;
 
 export interface MountUniverHandle {
   dispose: () => void;
+  /** Serialize now, cancel the debounce, and push onEdit when the snapshot changed. */
+  flush: () => string | undefined;
 }
 
 export function mountUniver(opts: {
@@ -66,22 +68,35 @@ export function mountUniver(opts: {
 
   let fWorkbook: { save: () => unknown } | undefined;
 
-  const flushDirty = () => {
-    if (disposed || !ready || !fWorkbook) return;
+  const runFlush = (): string | undefined => {
+    if (!ready || !fWorkbook) return;
     try {
       const serialized = serializeWorkbookSnapshot(
         fWorkbook.save() as UniverWorkbookSnapshot,
       );
       if (serialized === getDisk()) return;
       onEdit(serialized);
+      return serialized;
     } catch {
       // ignore serialize failures from a tearing-down instance
     }
   };
 
+  const clearDebounce = () => {
+    if (!debounceTimer) return;
+    clearTimeout(debounceTimer);
+    debounceTimer = undefined;
+  };
+
+  const flushDirty = () => {
+    debounceTimer = undefined;
+    if (disposed) return;
+    runFlush();
+  };
+
   const onSheetValueChanged = () => {
     if (!ready || disposed) return;
-    if (debounceTimer) clearTimeout(debounceTimer);
+    clearDebounce();
     debounceTimer = setTimeout(flushDirty, DIRTY_DEBOUNCE_MS);
   };
 
@@ -91,11 +106,18 @@ export function mountUniver(opts: {
   ready = true;
 
   return {
+    flush() {
+      if (disposed) return;
+      clearDebounce();
+      return runFlush();
+    },
     dispose() {
       if (disposed) return;
+      const hadPending = Boolean(debounceTimer);
+      clearDebounce();
+      if (hadPending) runFlush();
       disposed = true;
       ready = false;
-      if (debounceTimer) clearTimeout(debounceTimer);
       hostEl.removeEventListener('focusin', onHostFocusIn);
       document.removeEventListener('focusin', onDocFocusIn);
       try {

@@ -219,6 +219,83 @@ describe('SheetsPane', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('flushes a pending SheetValueChanged snapshot before Cmd+S on a clean buffer', async () => {
+    const onEdit = vi.fn();
+    const onSave = vi.fn();
+    const edited = { ...snapshot, name: 'Edited' };
+    save.mockImplementation(() => edited);
+    render(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={onEdit}
+        onSave={onSave}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(addEvent).toHaveBeenCalled());
+    const handler = sheetValueHandler();
+    act(() => {
+      handler?.();
+    });
+    expect(onEdit).not.toHaveBeenCalled();
+
+    screen.getByTestId('sheets-pane').focus();
+    fireEvent.keyDown(window, { key: 's', metaKey: true });
+
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onEdit.mock.calls[0]?.[0]).toBe(serializeWorkbookSnapshot(edited));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes a pending snapshot before Save click on an already-dirty buffer', async () => {
+    const onEdit = vi.fn();
+    const onSave = vi.fn();
+    const edited = { ...snapshot, name: 'Second edit' };
+    save.mockImplementation(() => edited);
+    render(
+      <SheetsPane
+        buffer={dirtyBuffer()}
+        onEdit={onEdit}
+        onSave={onSave}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(addEvent).toHaveBeenCalled());
+    const handler = sheetValueHandler();
+    act(() => {
+      handler?.();
+    });
+    expect(onEdit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('save-button'));
+
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onEdit.mock.calls[0]?.[0]).toBe(serializeWorkbookSnapshot(edited));
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes a pending snapshot on unmount instead of dropping it', async () => {
+    const onEdit = vi.fn();
+    const edited = { ...snapshot, name: 'Edited' };
+    save.mockImplementation(() => edited);
+    const { unmount } = render(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={onEdit}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(addEvent).toHaveBeenCalled());
+    act(() => {
+      sheetValueHandler()?.();
+    });
+    expect(onEdit).not.toHaveBeenCalled();
+    unmount();
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onEdit.mock.calls[0]?.[0]).toBe(serializeWorkbookSnapshot(edited));
+  });
+
   it('Cmd/Ctrl+S saves when pane is focused and dirty', async () => {
     const onSave = vi.fn();
     render(

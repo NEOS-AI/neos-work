@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   isConflict,
   isDirty,
@@ -106,16 +107,25 @@ export function SheetsPane({
     };
   }, [buffer.path, remountToken, parsed.ok, locale, formulaWorker]);
 
+  const requestSave = () => {
+    let flushed: string | undefined;
+    flushSync(() => {
+      flushed = handleRef.current?.flush();
+    });
+    const current = bufferRef.current;
+    if (!current.path) return;
+    if (!isDirty(current) && !flushed) return;
+    onSaveRef.current();
+  };
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key !== 's' && e.key !== 'S') return;
       const pane = paneRef.current;
       if (!pane || !document.activeElement || !pane.contains(document.activeElement)) return;
-      const current = bufferRef.current;
-      if (!isDirty(current) || !current.path) return;
       e.preventDefault();
-      onSaveRef.current();
+      requestSave();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -151,7 +161,7 @@ export function SheetsPane({
             type="button"
             data-testid="save-button"
             disabled={saveDisabled}
-            onClick={() => onSave()}
+            onClick={() => requestSave()}
             style={{
               fontSize: 12,
               padding: '4px 10px',
