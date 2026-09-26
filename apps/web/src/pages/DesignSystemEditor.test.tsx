@@ -108,6 +108,36 @@ describe('Web Design System editor', () => {
     await waitFor(() => expect(saveDesignSystemContent).toHaveBeenCalledWith('ds1', '# Next'));
   });
 
+  it('keeps in-flight keystrokes dirty after save resolves', async () => {
+    let resolveSave!: (value: { ok: true }) => void;
+    saveDesignSystemContent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    renderEditor();
+    await waitForLoaded();
+    fireEvent.change(screen.getByTestId('ds-editor-content'), { target: { value: '# Updated' } });
+    fireEvent.click(screen.getByTestId('ds-editor-save'));
+    await waitFor(() => {
+      expect(saveDesignSystemContent).toHaveBeenCalledWith('ds1', '# Updated');
+      expect(screen.getByTestId('ds-editor-save')).toHaveTextContent('Saving…');
+    });
+
+    fireEvent.change(screen.getByTestId('ds-editor-content'), {
+      target: { value: '# Updated extra' },
+    });
+    resolveSave({ ok: true });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ds-editor-save')).toHaveTextContent('Save');
+    });
+    expect(screen.getByTestId('ds-editor-content')).toHaveValue('# Updated extra');
+    expect(screen.getByText('Unsaved')).toBeInTheDocument();
+    expect(screen.getByTestId('ds-editor-save')).toBeEnabled();
+  });
+
   it('renders DESIGN.md and RULES.md tabs and keeps independent dirty buffers', async () => {
     const confirm = vi.spyOn(window, 'confirm');
     renderEditor();

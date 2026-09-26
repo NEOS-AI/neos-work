@@ -45,15 +45,6 @@ function stripNullBytes(raw: string): string {
   return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
 }
 
-function isRulesNotFound(outcome: unknown): boolean {
-  if (outcome instanceof ApiError && outcome.status === 404) return true;
-  if (outcome && typeof outcome === 'object' && 'ok' in outcome) {
-    const env = outcome as ApiEnvelope;
-    return env.ok === false && /not found/i.test(env.error ?? '');
-  }
-  return false;
-}
-
 export function DesignSystemEditor() {
   const { id: routeId } = useParams<{ id: string }>();
   const nav = useNavigate();
@@ -105,7 +96,14 @@ export function DesignSystemEditor() {
       setDesign({ content: safe, savedContent: safe });
       if (!body.ok) setError(scrubError(body.error, 'Failed to load content'));
 
-      if (isRulesNotFound(rulesOutcome)) {
+      const rulesEnv =
+        rulesOutcome && typeof rulesOutcome === 'object' && 'ok' in rulesOutcome
+          ? (rulesOutcome as ApiEnvelope<{ content: string }>)
+          : null;
+      if (
+        (rulesOutcome instanceof ApiError && rulesOutcome.status === 404)
+        || (rulesEnv?.ok === false && /not found/i.test(rulesEnv.error ?? ''))
+      ) {
         setRules({ content: RULES_PLACEHOLDER, savedContent: RULES_PLACEHOLDER });
         setRulesMissing(true);
       } else if (rulesOutcome instanceof Error) {
@@ -113,16 +111,15 @@ export function DesignSystemEditor() {
         setRulesMissing(false);
         if (body.ok) setError(scrubError(rulesOutcome, 'Failed to load'));
       } else {
-        const env = rulesOutcome as ApiEnvelope<{ content: string }>;
-        if (env.ok) {
-          const rulesRaw = typeof env.data?.content === 'string' ? env.data.content : '';
+        if (rulesEnv?.ok) {
+          const rulesRaw = typeof rulesEnv.data?.content === 'string' ? rulesEnv.data.content : '';
           const rulesSafe = stripNullBytes(rulesRaw);
           setRules({ content: rulesSafe, savedContent: rulesSafe });
           setRulesMissing(false);
         } else {
           setRules(EMPTY_BUF);
           setRulesMissing(false);
-          if (body.ok) setError(scrubError(env.error, 'Failed to load'));
+          if (body.ok) setError(scrubError(rulesEnv?.error, 'Failed to load'));
         }
       }
     } catch (err) {
@@ -153,7 +150,8 @@ export function DesignSystemEditor() {
   const handleSave = async () => {
     if (!id || saving || !activeDirty) return;
     if (activeTab === 'rules' && rulesMissing && !dirty(rules)) return;
-    if (/\0/.test(activeBuf.content)) {
+    const content = activeBuf.content;
+    if (/\0/.test(content)) {
       setError(scrubError('Invalid content', 'Save failed'));
       return;
     }
@@ -162,17 +160,17 @@ export function DesignSystemEditor() {
     try {
       const res =
         activeTab === 'rules'
-          ? await client.saveDesignSystemRules(id, activeBuf.content)
-          : await client.saveDesignSystemContent(id, activeBuf.content);
+          ? await client.saveDesignSystemRules(id, content)
+          : await client.saveDesignSystemContent(id, content);
       if (!res.ok) {
         setError(scrubError(res.error, 'Save failed'));
         return;
       }
       if (activeTab === 'rules') {
-        setRules({ content: activeBuf.content, savedContent: activeBuf.content });
+        setRules((buf) => ({ ...buf, savedContent: content }));
         setRulesMissing(false);
       } else {
-        setDesign({ content: activeBuf.content, savedContent: activeBuf.content });
+        setDesign((buf) => ({ ...buf, savedContent: content }));
       }
     } catch (err) {
       setError(scrubError(err, 'Save failed'));
