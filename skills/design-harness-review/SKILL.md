@@ -27,7 +27,7 @@ specific to keep injecting. This skill only suggests.
 ## Do not
 
 - Do not delete files. Do not rewrite `RULES.md` yourself.
-- Do not POST prune or append unless the user explicitly confirms after the list.
+- Do not POST prune or append. The user runs Desktop prune or `POST /api/design-systems/:id/rules/prune` themselves.
 - Do not critique HTML/CSS (use `design-critique` for that).
 - Do not edit workers or `/api/workers`.
 - Do not invent another review skill name. This package is `design-harness-review` only.
