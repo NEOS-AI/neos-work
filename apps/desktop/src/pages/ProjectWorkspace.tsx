@@ -44,6 +44,14 @@ import type {
   ProjectPreviewComment,
 } from '../lib/engine.js';
 import { normalizeProjectRelPath } from '../lib/engine.js';
+import {
+  VARIANT_SEED_MAX_CHARS,
+  allocateVariantPaths,
+  buildVariantTaskSuffix,
+  isHtmlContentType,
+  isHtmlPath,
+  variantStem,
+} from '../lib/design-variants.js';
 import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
@@ -54,6 +62,8 @@ function promoteReady(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.length >= 1 && trimmed.length <= PROMOTE_TEXT_MAX;
 }
+
+type VariantSeedKind = 'current' | 'live' | 'components';
 
 export function ProjectWorkspace() {
   const { t, i18n } = useTranslation('common');
@@ -118,6 +128,10 @@ export function ProjectWorkspace() {
   const [dsBusy, setDsBusy] = useState(false);
   const [dsError, setDsError] = useState<string | null>(null);
   const [promoteText, setPromoteText] = useState('');
+  const [variantSeed, setVariantSeed] = useState<VariantSeedKind>('current');
+  const [variantCount, setVariantCount] = useState<2 | 3 | 4>(3);
+  const [variantLiveId, setVariantLiveId] = useState<string | null>(null);
+  const [openVariantPaths, setOpenVariantPaths] = useState<string[]>([]);
 
   const dirty = isDirty(buffer);
   const editorPromoteText = selectDetail?.outerHTML ?? selection?.selector ?? '';
@@ -167,6 +181,13 @@ export function ProjectWorkspace() {
       const filesRes = await client.listProjectFiles(projectId);
       const entries = filesRes.ok && filesRes.data ? filesRes.data : [];
       setFiles(entries);
+      const liveRes = await client.listLiveArtifacts(projectId);
+      if (liveRes.ok && liveRes.data) {
+        setLiveArtifacts(liveRes.data);
+        setVariantLiveId((prev) => prev ?? liveRes.data[0]?.id ?? null);
+      }
+      const dsRes = await client.listDesignSystems();
+      if (dsRes.ok && dsRes.data) setDesignSystems(dsRes.data);
       const entry =
         res.data.entryFile
         || entries.find((e) => e.type === 'file' && e.path.endsWith('.html'))?.path
@@ -1242,6 +1263,102 @@ export function ProjectWorkspace() {
     }
   }, [client, activeRunId, appendLog, t]);
 
+  const watchProjectRun = useCallback(
+    async (
+      runId: string,
+      hooks?: {
+        onSucceeded?: () => Promise<void> | void;
+        onTerminal?: (status: string, error?: string | null) => Promise<void> | void;
+      },
+    ) => {
+      if (!client) return;
+      const logRunEvent = (ev: { type: string; data?: unknown }) => {
+        const detail =
+          ev.type === 'run.stdout' && ev.data && typeof ev.data === 'object' && 'chunk' in ev.data
+            ? String((ev.data as { chunk: string }).chunk).slice(0, 120)
+            : ev.type === 'run.failed' && ev.data && typeof ev.data === 'object' && 'error' in ev.data
+              ? String((ev.data as { error: string }).error)
+              : '';
+        appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
+        if (ev.type === 'run.failed' && detail) {
+          const lockMsg = formatRunLockFailureMessage(detail);
+          if (lockMsg) setChatError(lockMsg);
+        } else if ((ev.type === 'run.stdout' || ev.type === 'run.stderr') && detail) {
+          const lockMsg = formatRunLockFailureMessage(detail);
+          if (lockMsg) setChatError(lockMsg);
+        }
+      };
+
+      const applyTerminalStatus = async (): Promise<boolean> => {
+        const st = await client.getProjectRun(runId);
+        if (st.ok && st.data && isTerminalRunStatus(st.data.status)) {
+          setRunStatus(st.data.status);
+          appendLog(`✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`);
+          if (st.data.status === 'succeeded') {
+            await hooks?.onSucceeded?.();
+          }
+          const lockFail = formatRunLockFailureMessage(st.data.error);
+          if (lockFail) setChatError(lockFail);
+          await hooks?.onTerminal?.(st.data.status, st.data.error);
+          return true;
+        }
+        if (st.ok && st.data?.status) {
+          setRunStatus(st.data.status);
+        }
+        return false;
+      };
+
+      let sawStreamEvent = false;
+      let streamErrored = false;
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = (errored = false) => {
+          if (settled) return;
+          settled = true;
+          runStreamStopRef.current = null;
+          if (errored) streamErrored = true;
+          resolve();
+        };
+        const stop = client.streamProjectRunEvents(
+          runId,
+          (ev) => {
+            sawStreamEvent = true;
+            logRunEvent(ev);
+          },
+          {
+            onDone: () => finish(false),
+            onError: () => finish(true),
+          },
+        );
+        runStreamStopRef.current = () => {
+          stop();
+          finish(false);
+        };
+      });
+
+      if (runCancelRequestedRef.current) return;
+
+      let terminal = await applyTerminalStatus();
+      if (!terminal && (streamErrored || !sawStreamEvent)) {
+        let after: string | undefined;
+        for (let i = 0; i < 10; i++) {
+          if (runCancelRequestedRef.current) return;
+          const evRes = await client.listProjectRunEvents(runId, after);
+          if (evRes.ok && evRes.data) {
+            for (const ev of evRes.data) {
+              after = ev.id;
+              logRunEvent(ev);
+            }
+          }
+          terminal = await applyTerminalStatus();
+          if (terminal) break;
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+    },
+    [client, appendLog],
+  );
+
   const handleChatSend = useCallback(async () => {
     if (!client || !projectId) return;
     // Null bytes rejected; newlines allowed in multi-line prompts
@@ -1316,119 +1433,28 @@ export function ProjectWorkspace() {
       setChatPrompt('');
 
       const runId = res.data.id;
-      const logRunEvent = (ev: { type: string; data?: unknown }) => {
-        const detail =
-          ev.type === 'run.stdout' && ev.data && typeof ev.data === 'object' && 'chunk' in ev.data
-            ? String((ev.data as { chunk: string }).chunk).slice(0, 120)
-            : ev.type === 'run.failed' && ev.data && typeof ev.data === 'object' && 'error' in ev.data
-              ? String((ev.data as { error: string }).error)
-              : '';
-        appendLog(detail ? `${ev.type}: ${detail}` : ev.type);
-        // v0.11 M1 — surface lock failures from agent runs (not silent in log only)
-        if (ev.type === 'run.failed' && detail) {
-          const lockMsg = formatRunLockFailureMessage(detail);
-          if (lockMsg) setChatError(lockMsg);
-        } else if (
-          (ev.type === 'run.stdout' || ev.type === 'run.stderr')
-          && detail
-        ) {
-          const lockMsg = formatRunLockFailureMessage(detail);
-          if (lockMsg) setChatError(lockMsg);
-        }
-      };
-
-      const persistAssistant = async (status: string, error?: string | null) => {
-        const cid = conversationIdRef.current;
-        if (!cid) return;
-        const summary = error
-          ? `Run ${status}: ${error}`
-          : `Run ${status} (${runId.slice(0, 8)}…)`;
-        const am = await client.addProjectMessage(projectId, cid, {
-          role: 'assistant',
-          content: summary.slice(0, 8_000),
-          agentId: chatAgentId || undefined,
-        });
-        if (am.ok && am.data) {
-          setChatMessages((prev) => [...prev, am.data!]);
-        }
-      };
-
-      const applyTerminalStatus = async (): Promise<boolean> => {
-        const st = await client.getProjectRun(runId);
-        if (st.ok && st.data && isTerminalRunStatus(st.data.status)) {
-          setRunStatus(st.data.status);
-          appendLog(`✓ ${st.data.status}${st.data.error ? `: ${st.data.error}` : ''}`);
-          // Reload files if CLI may have written
-          if (st.data.status === 'succeeded' && chatAgentId) {
-            const filesRes = await client.listProjectFiles(projectId);
-            if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+      await watchProjectRun(runId, {
+        onSucceeded: async () => {
+          if (!chatAgentId) return;
+          const filesRes = await client.listProjectFiles(projectId);
+          if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
+        },
+        onTerminal: async (status, error) => {
+          const cid = conversationIdRef.current;
+          if (!cid) return;
+          const summary = error
+            ? `Run ${status}: ${error}`
+            : `Run ${status} (${runId.slice(0, 8)}…)`;
+          const am = await client.addProjectMessage(projectId, cid, {
+            role: 'assistant',
+            content: summary.slice(0, 8_000),
+            agentId: chatAgentId || undefined,
+          });
+          if (am.ok && am.data) {
+            setChatMessages((prev) => [...prev, am.data!]);
           }
-          const lockFail = formatRunLockFailureMessage(st.data.error);
-          if (lockFail) setChatError(lockFail);
-          await persistAssistant(st.data.status, st.data.error);
-          return true;
-        }
-        if (st.ok && st.data?.status) {
-          setRunStatus(st.data.status);
-        }
-        return false;
-      };
-
-      // Prefer SSE for live run events; fall back to short poll if stream fails
-      let sawStreamEvent = false;
-      let streamErrored = false;
-      await new Promise<void>((resolve) => {
-        let settled = false;
-        const finish = (errored = false) => {
-          if (settled) return;
-          settled = true;
-          runStreamStopRef.current = null;
-          if (errored) streamErrored = true;
-          resolve();
-        };
-        const stop = client.streamProjectRunEvents(
-          runId,
-          (ev) => {
-            sawStreamEvent = true;
-            logRunEvent(ev);
-          },
-          {
-            onDone: () => finish(false),
-            onError: () => finish(true),
-          },
-        );
-        // Abort resolves the wait (engine abort does not call onDone/onError)
-        runStreamStopRef.current = () => {
-          stop();
-          finish(false);
-        };
+        },
       });
-
-      // User cancel owns terminal log/status — avoid double append
-      if (runCancelRequestedRef.current) {
-        return;
-      }
-
-      // Always fetch final status once stream ends (or errors)
-      let terminal = await applyTerminalStatus();
-
-      // Short poll fallback when SSE fails immediately / yields nothing useful
-      if (!terminal && (streamErrored || !sawStreamEvent)) {
-        let after: string | undefined;
-        for (let i = 0; i < 10; i++) {
-          if (runCancelRequestedRef.current) return;
-          const evRes = await client.listProjectRunEvents(runId, after);
-          if (evRes.ok && evRes.data) {
-            for (const ev of evRes.data) {
-              after = ev.id;
-              logRunEvent(ev);
-            }
-          }
-          terminal = await applyTerminalStatus();
-          if (terminal) break;
-          await new Promise((r) => setTimeout(r, 300));
-        }
-      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('project.chatFailed');
       setChatError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
@@ -1447,6 +1473,139 @@ export function ProjectWorkspace() {
     selectDetail,
     t,
     appendLog,
+    watchProjectRun,
+  ]);
+
+  const selectedLiveArtifact = useMemo(() => {
+    if (variantLiveId) {
+      const found = liveArtifacts.find((a) => a.id === variantLiveId);
+      if (found) return found;
+    }
+    return liveArtifacts[0] ?? null;
+  }, [liveArtifacts, variantLiveId]);
+
+  const boundDesignSystem = useMemo(
+    () => designSystems.find((d) => d.id === project?.designSystemId) ?? null,
+    [designSystems, project?.designSystemId],
+  );
+  const canSeedComponents = boundDesignSystem?.hasComponents === true;
+
+  const variantSeedReady = useMemo(() => {
+    if (variantSeed === 'current') return isHtmlPath(buffer.path ?? '');
+    if (variantSeed === 'live') {
+      return Boolean(selectedLiveArtifact) && isHtmlContentType(selectedLiveArtifact?.contentType);
+    }
+    if (variantSeed === 'components') return canSeedComponents;
+    return false;
+  }, [variantSeed, buffer.path, selectedLiveArtifact, canSeedComponents]);
+
+  const handleMakeVariants = useCallback(async () => {
+    if (!client || !projectId || chatBusy || !variantSeedReady) return;
+    if (variantSeed === 'current' && (!buffer.path || !isHtmlPath(buffer.path))) return;
+    if (variantSeed === 'live' && (!selectedLiveArtifact || !isHtmlContentType(selectedLiveArtifact.contentType))) {
+      return;
+    }
+    if (variantSeed === 'components' && (!project?.designSystemId || !canSeedComponents)) return;
+
+    setChatBusy(true);
+    setChatError(null);
+    setOpenVariantPaths([]);
+    runCancelRequestedRef.current = false;
+    try {
+      let seedHtml = '';
+      let stemSource = '';
+      let editContext:
+        | { filePath: string; mode: 'patch'; snippet: string }
+        | undefined;
+      if (variantSeed === 'current') {
+        seedHtml = buffer.local;
+        stemSource = buffer.path!;
+        editContext = {
+          filePath: buffer.path!,
+          mode: 'patch',
+          snippet: seedHtml.slice(0, VARIANT_SEED_MAX_CHARS),
+        };
+      } else if (variantSeed === 'live') {
+        seedHtml = selectedLiveArtifact?.content ?? '';
+        stemSource = selectedLiveArtifact?.name || 'seed';
+      } else {
+        const got = await client.getDesignSystemComponents(project!.designSystemId!);
+        if (!got.ok || !got.data) {
+          setChatError(
+            scrubDisplayText(got.error, { collapseLines: true, maxChars: 300 })
+              || t('project.chatFailed'),
+          );
+          return;
+        }
+        seedHtml = got.data.content;
+        stemSource = 'components.html';
+      }
+
+      const listing = await client.listProjectFiles(projectId);
+      const diskFiles = listing.ok && listing.data ? listing.data : files;
+      if (listing.ok && listing.data) setFiles(listing.data);
+      const paths = allocateVariantPaths({
+        stem: variantStem(stemSource),
+        count: variantCount,
+        existingPaths: diskFiles.map((f) => f.path),
+      });
+      const { suffix } = buildVariantTaskSuffix({ paths, seedHtml });
+
+      const res = await client.createProjectRun({
+        projectId,
+        prompt: suffix,
+        agentId: chatAgentId || undefined,
+        dryRun: !chatAgentId,
+        editContext,
+        sessionId: collabSessionRef.current || undefined,
+      });
+      if (!res.ok || !res.data) {
+        setChatError(
+          scrubDisplayText(res.error, { collapseLines: true, maxChars: 300 })
+            || t('project.chatFailed'),
+        );
+        return;
+      }
+      setActiveRunId(res.data.id);
+      setRunStatus(res.data.status);
+      appendLog(`→ run ${res.data.id.slice(0, 8)}… (${res.data.status})`);
+
+      await watchProjectRun(res.data.id, {
+        onSucceeded: async () => {
+          const filesRes = await client.listProjectFiles(projectId);
+          if (filesRes.ok && filesRes.data) {
+            setFiles(filesRes.data);
+            const have = new Set(
+              filesRes.data.filter((f) => f.type === 'file').map((f) => f.path),
+            );
+            setOpenVariantPaths(paths.filter((p) => have.has(p)));
+          }
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('project.chatFailed');
+      setChatError(scrubDisplayText(msg, { collapseLines: true, maxChars: 300 }) || msg);
+    } finally {
+      runStreamStopRef.current = null;
+      setChatBusy(false);
+    }
+  }, [
+    client,
+    projectId,
+    chatBusy,
+    variantSeedReady,
+    variantSeed,
+    variantCount,
+    buffer.path,
+    buffer.local,
+    selectedLiveArtifact,
+    project,
+    canSeedComponents,
+    files,
+    chatAgentId,
+    t,
+    appendLog,
+    watchProjectRun,
   ]);
 
   const fileTree = useMemo(() => {
@@ -1686,6 +1845,90 @@ export function ProjectWorkspace() {
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div
+            data-testid="project-variants-toolbar"
+            className="flex flex-wrap items-center gap-2 border-b px-2 py-1.5"
+            style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}
+          >
+            <select
+              data-testid="variant-seed"
+              value={variantSeed}
+              onChange={(e) => {
+                const next = e.target.value as VariantSeedKind;
+                setVariantSeed(next);
+                if (next === 'live' && !variantLiveId && liveArtifacts[0]) {
+                  setVariantLiveId(liveArtifacts[0].id);
+                }
+              }}
+              className="rounded border px-1.5 py-1 text-[11px]"
+              style={{
+                borderColor: 'var(--border-primary)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <option value="current">{t('designSystems.seedCurrent')}</option>
+              <option value="live">{t('designSystems.seedLive')}</option>
+              {canSeedComponents ? (
+                <option value="components">{t('designSystems.seedComponents')}</option>
+              ) : null}
+            </select>
+            {variantSeed === 'live' && liveArtifacts.length > 1 ? (
+              <select
+                data-testid="variant-live-id"
+                value={variantLiveId ?? selectedLiveArtifact?.id ?? ''}
+                onChange={(e) => setVariantLiveId(e.target.value || null)}
+                className="rounded border px-1.5 py-1 text-[11px]"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {liveArtifacts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {scrubDisplayText(a.name, { collapseLines: true, maxChars: 40 })}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <select
+              data-testid="variant-count"
+              aria-label={t('designSystems.variantsCount')}
+              value={String(variantCount)}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (n === 2 || n === 3 || n === 4) setVariantCount(n);
+              }}
+              className="rounded border px-1.5 py-1 text-[11px]"
+              style={{
+                borderColor: 'var(--border-primary)',
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+            <button
+              type="button"
+              data-testid="make-variants"
+              disabled={chatBusy || !variantSeedReady}
+              title={!variantSeedReady ? t('designSystems.variantsNeedHtml') : undefined}
+              aria-label={t('designSystems.variants')}
+              onClick={() => void handleMakeVariants()}
+              className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+              style={{ backgroundColor: 'var(--accent, #6366f1)' }}
+            >
+              {t('designSystems.variants')}
+            </button>
+            {!variantSeedReady ? (
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {t('designSystems.variantsNeedHtml')}
+              </span>
+            ) : null}
+          </div>
           {isUniverWorkbookPath(buffer.path) ? (
             <SheetsPane
               buffer={buffer}
@@ -1915,6 +2158,27 @@ export function ProjectWorkspace() {
                       {runStatus}
                     </span>
                   )}
+                  {runStatus === 'succeeded'
+                    && openVariantPaths.map((path) => {
+                      const letter = path.match(/\.variant-([a-z])(?:-\d+)?\.html$/i)?.[1]?.toLowerCase() ?? 'a';
+                      return (
+                        <button
+                          key={path}
+                          type="button"
+                          data-testid={`open-variant-${letter}`}
+                          aria-label={t('designSystems.openVariant')}
+                          onClick={() => void openFile(path)}
+                          className="rounded border px-2 py-0.5 text-[10px]"
+                          style={{
+                            borderColor: 'var(--border-primary)',
+                            color: 'var(--text-primary)',
+                            backgroundColor: 'var(--bg-primary)',
+                          }}
+                        >
+                          {t('designSystems.openVariant')} {letter}
+                        </button>
+                      );
+                    })}
                 </div>
               )}
               <div

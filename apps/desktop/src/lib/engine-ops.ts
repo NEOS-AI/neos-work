@@ -156,6 +156,15 @@ export class EngineOpsClient extends EnginePluginsClient {
     return readApiResponse(res);
   }
 
+  async getDesignSystemComponents(id: string): Promise<ApiResponse<{ content: string }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/components`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
   // --- Artifacts ---
 
   async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {

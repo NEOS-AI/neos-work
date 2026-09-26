@@ -173,6 +173,37 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
       'designSystems.pruneConfirm': {
         ko: '90일이 지난 교정을 지우고, 그래도 20개를 넘으면 가장 오래된 것부터 삭제할까요?',
         en: 'Delete Corrections older than 90 days, then drop down to 20?',
+  it('common.json includes PR 5 designSystems keys in en and ko', () => {
+    const required = [
+      'designSystems.variants',
+      'designSystems.variantsNeedHtml',
+      'designSystems.variantsCount',
+      'designSystems.seedCurrent',
+      'designSystems.seedLive',
+      'designSystems.seedComponents',
+      'designSystems.seedStarter',
+      'designSystems.openVariant',
+    ];
+    const copy: Record<'en' | 'ko', Record<string, string>> = {
+      en: {
+        'designSystems.variants': 'Make variants from seed',
+        'designSystems.variantsNeedHtml': 'Variants require an HTML seed',
+        'designSystems.variantsCount': 'Number of variants',
+        'designSystems.seedCurrent': 'Current file',
+        'designSystems.seedLive': 'Live artifact',
+        'designSystems.seedComponents': 'components.html',
+        'designSystems.seedStarter': 'Starter',
+        'designSystems.openVariant': 'Open variant',
+      },
+      ko: {
+        'designSystems.variants': '시드에서 변형 만들기',
+        'designSystems.variantsNeedHtml': 'HTML 시드가 있을 때만 변형을 만들 수 있습니다',
+        'designSystems.variantsCount': '변형 개수',
+        'designSystems.seedCurrent': '현재 파일',
+        'designSystems.seedLive': 'Live artifact',
+        'designSystems.seedComponents': 'components.html',
+        'designSystems.seedStarter': '스타터',
+        'designSystems.openVariant': '변형 열기',
       },
     };
     const locales: Record<'en' | 'ko', Record<string, unknown>> = {
@@ -209,6 +240,15 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
         const value = String(atPath(locales[locale], key)).trim();
         expect(value.toLowerCase()).not.toBe('harness');
         expect(value).not.toBe('하네스');
+        expect(String(value).trim()).toBe(copy[locale][key]);
+      }
+      expect(atPath(json, 'designSystems.seedComponents')).toBe('components.html');
+      expect(String(atPath(json, 'designSystems.openVariant'))).not.toContain('{{letter}}');
+      for (const key of required.filter((k) => k.includes('variants'))) {
+        const value = String(atPath(json, key));
+        expect(value).not.toMatch(/harness/i);
+        expect(value).not.toContain('워커');
+        expect(value.trim()).not.toBe('하네스');
       }
     }
   });

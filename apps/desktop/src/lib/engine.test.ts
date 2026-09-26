@@ -2339,10 +2339,38 @@ describe('EngineClient', () => {
       error: 'Invalid design system id',
     });
     await expect(client.pruneDesignSystemRules('')).resolves.toMatchObject({
+  it('getDesignSystemComponents GETs /api/design-systems/:id/components', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { content: '<div/>' } }),
+    );
+
+    const got = await client.getDesignSystemComponents('ds1');
+    expect(got).toEqual({ ok: true, data: { content: '<div/>' } });
+    const getCall = fetchMock.mock.calls.at(-1)!;
+    expect(String(getCall[0])).toMatch(/\/api\/design-systems\/ds1\/components/);
+    expect(getCall[1]?.method === undefined || getCall[1]?.method === 'GET').toBe(true);
+
+    const fetchCount = fetchMock.mock.calls.length;
+    await expect(client.getDesignSystemComponents(`d${'\n'}s`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.getDesignSystemComponents('')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.getDesignSystemComponents(`id${'\0'}`)).resolves.toMatchObject({
       ok: false,
       error: 'Invalid design system id',
     });
     expect(fetchMock.mock.calls.length).toBe(fetchCount);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false, error: 'Not found' }, 404));
+    await expect(client.getDesignSystemComponents('ds-missing')).resolves.toMatchObject({
+      ok: false,
+      error: 'Not found',
+    });
   });
 
 

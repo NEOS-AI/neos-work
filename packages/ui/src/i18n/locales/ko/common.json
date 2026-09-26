@@ -263,7 +263,15 @@
     "promote": "RULES.md에 승격",
     "promoteConfirm": "이 교정 사항을 RULES.md Corrections에 추가할까요?",
     "prune": "오래된 교정 정리",
-    "pruneConfirm": "90일이 지난 교정을 지우고, 그래도 20개를 넘으면 가장 오래된 것부터 삭제할까요?"
+    "pruneConfirm": "90일이 지난 교정을 지우고, 그래도 20개를 넘으면 가장 오래된 것부터 삭제할까요?",
+    "variants": "시드에서 변형 만들기",
+    "variantsNeedHtml": "HTML 시드가 있을 때만 변형을 만들 수 있습니다",
+    "variantsCount": "변형 개수",
+    "seedCurrent": "현재 파일",
+    "seedLive": "Live artifact",
+    "seedComponents": "components.html",
+    "seedStarter": "스타터",
+    "openVariant": "변형 열기"
   },
   "action": {
     "save": "저장",
