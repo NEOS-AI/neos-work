@@ -30,6 +30,8 @@ export interface DesignSystem {
   updatedAt: string;
 }
 
+export type RulesAppendSource = 'preview-comment' | 'editor' | 'manual';
+
 export interface RoutineRun {
   id: string;
   routineId: string;
@@ -119,6 +121,37 @@ export class EngineOpsClient extends EnginePluginsClient {
       method: 'PUT',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
+    });
+    return readApiResponse(res);
+  }
+
+  async appendDesignSystemRules(
+    id: string,
+    body: { text: string; source?: RulesAppendSource; commentId?: string },
+  ): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const payload: Record<string, string> = { text: body.text };
+    if (body.source) payload.source = body.source;
+    if (body.commentId) payload.commentId = body.commentId;
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules/append`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return readApiResponse(res);
+  }
+
+  async pruneDesignSystemRules(
+    id: string,
+    opts?: { maxEntries?: number; maxAgeDays?: number },
+  ): Promise<ApiResponse<{ pruned: number }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules/prune`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts ?? {}),
     });
     return readApiResponse(res);
   }
