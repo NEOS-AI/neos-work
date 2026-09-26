@@ -27,6 +27,9 @@ function mockBackend(partial: Partial<NeosMcpBackend> = {}): NeosMcpBackend {
       artifact: { id: artifactId, projectId, name: 'Preview' },
       refresh: { status: 'succeeded' },
     })),
+    getSheetRange: vi.fn(async () => ({ success: true, output: { value: 'hello' } })),
+    setSheetRange: vi.fn(async () => ({ success: true, output: { value: 'hello' } })),
+    evalSheetRange: vi.fn(async () => ({ success: true, output: { value: 2 } })),
     ...partial,
   };
 }
@@ -46,6 +49,9 @@ describe('listNeosMcpTools', () => {
     expect(names).toContain('neos_live_artifacts_refresh');
     expect(names).toContain('neos_status');
     expect(names).toContain('neos_projects_list');
+    expect(names).toContain('neos_sheets_get');
+    expect(names).toContain('neos_sheets_set');
+    expect(names).toContain('neos_sheets_eval');
   });
 });
 
@@ -142,6 +148,47 @@ describe('dispatchNeosMcpTool', () => {
     );
     expect(refresh.isError).toBeFalsy();
     expect(backend.refreshLiveArtifact).toHaveBeenCalledWith('p1', 'a1');
+  });
+
+  it('neos_sheets_* dispatch to mockBackend three methods', async () => {
+    const backend = mockBackend();
+    const get = await dispatchNeosMcpTool(
+      backend,
+      'neos_sheets_get',
+      { projectId: 'p1', path: 'budget.univer.json', a1: 'A1' },
+    );
+    expect(get.isError).toBeFalsy();
+    expect(backend.getSheetRange).toHaveBeenCalledWith({
+      projectId: 'p1',
+      path: 'budget.univer.json',
+      a1: 'A1',
+    });
+
+    const set = await dispatchNeosMcpTool(
+      backend,
+      'neos_sheets_set',
+      { projectId: 'p1', path: 'budget.univer.json', a1: 'A1', value: 'hello' },
+    );
+    expect(set.isError).toBeFalsy();
+    expect(backend.setSheetRange).toHaveBeenCalledWith({
+      projectId: 'p1',
+      path: 'budget.univer.json',
+      a1: 'A1',
+      value: 'hello',
+    });
+
+    const ev = await dispatchNeosMcpTool(
+      backend,
+      'neos_sheets_eval',
+      { projectId: 'p1', path: 'budget.univer.json', a1: 'B1', sheet: 'Sheet1' },
+    );
+    expect(ev.isError).toBeFalsy();
+    expect(backend.evalSheetRange).toHaveBeenCalledWith({
+      projectId: 'p1',
+      path: 'budget.univer.json',
+      a1: 'B1',
+      sheet: 'Sheet1',
+    });
   });
 
   it('unknown tool is error', async () => {

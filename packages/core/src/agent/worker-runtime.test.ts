@@ -28,18 +28,23 @@ function makeWorker(partial: Partial<DomainWorker> & Pick<DomainWorker, 'id'>): 
 describe('toolsForPermissionProfile / canonicalizeToolName', () => {
   it('maps profiles to expected tool sets', () => {
     expect([...toolsForPermissionProfile('read_only')].sort()).toEqual(
-      ['list_directory', 'read_file', 'search_files'].sort(),
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
     );
     expect(toolsForPermissionProfile('execute').has('run_command')).toBe(true);
     expect(toolsForPermissionProfile('execute').has('write_file')).toBe(true);
+    expect(toolsForPermissionProfile('execute').has('sheets_get_range')).toBe(true);
+    expect(toolsForPermissionProfile('execute').has('sheets_eval')).toBe(true);
+    expect(toolsForPermissionProfile('execute').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile('network').has('web_search')).toBe(true);
     expect(toolsForPermissionProfile('network').has('run_command')).toBe(false);
+    expect(toolsForPermissionProfile('network').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile('full').has('web_search')).toBe(true);
     expect(toolsForPermissionProfile('full').has('run_command')).toBe(true);
     expect(toolsForPermissionProfile(undefined).has('web_search')).toBe(true);
     // read_write has writes but no shell/network
     expect(toolsForPermissionProfile('read_write').has('write_file')).toBe(true);
     expect(toolsForPermissionProfile('read_write').has('move_file')).toBe(true);
+    expect(toolsForPermissionProfile('read_write').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile('read_write').has('run_command')).toBe(false);
     expect(toolsForPermissionProfile('read_write').has('web_search')).toBe(false);
   });
@@ -87,7 +92,7 @@ describe('resolveWorkerToolNames', () => {
       permissionProfile: 'read_only',
     });
     expect(resolveWorkerToolNames(missing).sort()).toEqual(
-      ['list_directory', 'read_file', 'search_files'].sort(),
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
     );
   });
 
@@ -130,7 +135,9 @@ describe('resolveWorkerToolNames', () => {
       }),
       'coordinator',
     );
-    expect(names.sort()).toEqual(['list_directory', 'read_file', 'search_files'].sort());
+    expect(names.sort()).toEqual(
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
+    );
   });
 
   it('keeps network profile for coordinator (not forced down from network)', () => {
