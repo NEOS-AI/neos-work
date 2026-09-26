@@ -106,6 +106,7 @@ export function ProjectWorkspace() {
   const [designSystems, setDesignSystems] = useState<DesignSystem[]>([]);
   const [dsContent, setDsContent] = useState<string | null>(null);
   const [dsTokens, setDsTokens] = useState<string | null>(null);
+  const [dsRules, setDsRules] = useState<string | null>(null);
   const [dsBusy, setDsBusy] = useState(false);
   const [dsError, setDsError] = useState<string | null>(null);
 
@@ -951,17 +952,20 @@ export function ProjectWorkspace() {
     if (!client || !project?.designSystemId) {
       setDsContent(null);
       setDsTokens(null);
+      setDsRules(null);
       return;
     }
     setDsBusy(true);
     setDsError(null);
     try {
-      const [cRes, tRes] = await Promise.all([
+      const [cRes, tRes, rRes] = await Promise.all([
         client.getDesignSystemContent(project.designSystemId),
         client.getDesignSystemTokens(project.designSystemId),
+        client.getDesignSystemRules(project.designSystemId),
       ]);
       setDsContent(cRes.ok && cRes.data ? cRes.data.content : null);
       setDsTokens(tRes.ok && tRes.data ? tRes.data.content : null);
+      setDsRules(rRes.ok && rRes.data ? rRes.data.content : null);
       if (!cRes.ok && !tRes.ok) {
         setDsError(
           scrubDisplayText(cRes.error || tRes.error, { collapseLines: true, maxChars: 200 })
@@ -2154,6 +2158,29 @@ export function ProjectWorkspace() {
                           : t('project.dsNoContent')}
                       </pre>
                     </div>
+                    {dsRules && (
+                      <div>
+                        <div
+                          className="mb-1 text-[10px] font-semibold uppercase tracking-wide"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          RULES.md
+                        </div>
+                        <pre
+                          className="max-h-48 overflow-auto whitespace-pre-wrap rounded border p-2 font-mono text-[10px] leading-relaxed"
+                          style={{
+                            borderColor: 'var(--border-primary)',
+                            backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {scrubDisplayText(dsRules.slice(0, 6_000), {
+                            collapseLines: false,
+                            maxChars: 6_000,
+                          })}
+                        </pre>
+                      </div>
+                    )}
                     {dsTokens && (
                       <div>
                         <div

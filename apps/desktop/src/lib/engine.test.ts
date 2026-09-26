@@ -2229,6 +2229,45 @@ describe('EngineClient', () => {
     expect(liveBody.projectId).toBe('p1');
   });
 
+  it('design system rules get/put and tokens put', async () => {
+    const client = new EngineClient('http://engine.test');
+    fetchMock.mockImplementation(async () => jsonResponse({ ok: true, data: {} }));
+
+    await client.getDesignSystemRules('ds1');
+    const getCall = fetchMock.mock.calls.at(-1)!;
+    expect(String(getCall[0])).toMatch(/\/api\/design-systems\/ds1\/rules/);
+    expect(getCall[1]?.method === undefined || getCall[1]?.method === 'GET').toBe(true);
+
+    await client.saveDesignSystemRules('ds1', '# Agent rules\n\nok');
+    const rulesPut = fetchMock.mock.calls.at(-1)!;
+    expect(String(rulesPut[0])).toMatch(/\/api\/design-systems\/ds1\/rules/);
+    expect(rulesPut[1].method).toBe('PUT');
+    expect((rulesPut[1].headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(rulesPut[1].body as string)).toEqual({ content: '# Agent rules\n\nok' });
+
+    await client.saveDesignSystemTokens('ds1', ':root{--x:1;}');
+    const tokensPut = fetchMock.mock.calls.at(-1)!;
+    expect(String(tokensPut[0])).toMatch(/\/api\/design-systems\/ds1\/tokens/);
+    expect(tokensPut[1].method).toBe('PUT');
+    expect((tokensPut[1].headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(tokensPut[1].body as string)).toEqual({ content: ':root{--x:1;}' });
+
+    const fetchCount = fetchMock.mock.calls.length;
+    await expect(client.getDesignSystemRules(`d${'\n'}s`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemRules('', 'x')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemTokens(`id${'\0'}`, 'x')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    expect(fetchMock.mock.calls.length).toBe(fetchCount);
+  });
+
 
   it('live artifact refresh/delete and tool token APIs', async () => {
     const client = new EngineClient('http://engine.test');

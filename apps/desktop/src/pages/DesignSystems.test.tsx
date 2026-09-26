@@ -393,6 +393,28 @@ describe('DesignSystems page', () => {
     alertSpy.mockRestore();
   });
 
+  it('shows rules badge when hasRules is true', async () => {
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        { ...systems[0], hasRules: false },
+        { ...systems[1], hasRules: true },
+      ],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Alpha Brand')).toBeInTheDocument());
+    expect(screen.getAllByText('designSystems.rulesBadge')).toHaveLength(1);
+    expect(screen.getByText('designSystems.tokens')).toBeInTheDocument();
+    expect(screen.getByText('designSystems.components')).toBeInTheDocument();
+  });
+
+  it('renders notWorkerHarness near the list subtitle', async () => {
+    listDesignSystems.mockResolvedValue({ ok: true, data: systems });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('designSystems.subtitle')).toBeInTheDocument());
+    expect(screen.getByText('designSystems.notWorkerHarness')).toBeInTheDocument();
+  });
+
   it('disables delete for bundled default design systems', async () => {
     deleteDesignSystem.mockResolvedValue({ ok: true });
     listDesignSystems.mockResolvedValue({

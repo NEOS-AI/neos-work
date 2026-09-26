@@ -6,6 +6,20 @@ import { useEngine } from '../hooks/useEngine.js';
 import type { DesignSystem } from '../lib/engine.js';
 import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
+type EditorTab = 'design' | 'rules' | 'tokens';
+type TabBuffer = { content: string; savedContent: string };
+
+const EMPTY_BUF: TabBuffer = { content: '', savedContent: '' };
+const TABS: EditorTab[] = ['design', 'rules', 'tokens'];
+
+function dirty(buf: TabBuffer): boolean {
+  return buf.content !== buf.savedContent;
+}
+
+function stripNullBytes(raw: string): string {
+  return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+}
+
 export function DesignSystemEditor() {
   const { t } = useTranslation('common');
   const { id } = useParams<{ id: string }>();
@@ -15,8 +29,11 @@ export function DesignSystemEditor() {
   const navigate = useNavigate();
 
   const [ds, setDs] = useState<DesignSystem | null>(null);
-  const [content, setContent] = useState('');
-  const [savedContent, setSavedContent] = useState('');
+  const [activeTab, setActiveTab] = useState<EditorTab>('design');
+  const [design, setDesign] = useState<TabBuffer>(EMPTY_BUF);
+  const [rules, setRules] = useState<TabBuffer>(EMPTY_BUF);
+  const [tokens, setTokens] = useState<TabBuffer>(EMPTY_BUF);
+  const [rulesMissing, setRulesMissing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveKind, setSaveKind] = useState<'ok' | 'err' | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -24,7 +41,12 @@ export function DesignSystemEditor() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const isDirty = !readOnly && content !== savedContent;
+  const bundled = ds?.source === 'bundled';
+  const anyDirty = !readOnly && (dirty(design) || dirty(rules) || dirty(tokens));
+  const activeBuf = activeTab === 'design' ? design : activeTab === 'rules' ? rules : tokens;
+  const activeDirty = !readOnly && dirty(activeBuf);
+  const tabLocked = Boolean(bundled && activeTab !== 'design');
+  const textareaReadOnly = readOnly || tabLocked;
 
   const load = useCallback(async () => {
     if (!client || !id) return;
@@ -40,9 +62,11 @@ export function DesignSystemEditor() {
       return;
     }
     try {
-      const [dsRes, contentRes] = await Promise.all([
+      const [dsRes, contentRes, rulesRes, tokensRes] = await Promise.all([
         client.listDesignSystems(),
         client.getDesignSystemContent(safeId),
+        client.getDesignSystemRules(safeId),
+        client.getDesignSystemTokens(safeId),
       ]);
       if (!dsRes.ok) {
         setDs(null);
@@ -62,20 +86,47 @@ export function DesignSystemEditor() {
       }
       setDs(found);
       if (contentRes.ok && contentRes.data) {
-        // Multi-line DESIGN.md OK; strip null bytes so the editor never holds them
         const raw = typeof contentRes.data.content === 'string' ? contentRes.data.content : '';
-        const safe = /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
-        setContent(safe);
-        setSavedContent(safe);
+        const safe = stripNullBytes(raw);
+        setDesign({ content: safe, savedContent: safe });
       } else {
-        setContent('');
-        setSavedContent('');
+        setDesign(EMPTY_BUF);
         setLoadError(
           scrubDisplayText((contentRes as { error?: string }).error, {
             collapseLines: true,
             maxChars: 300,
           }) || t('designSystems.loadContentFailed'),
         );
+      }
+
+      if (rulesRes.ok && rulesRes.data) {
+        const raw = typeof rulesRes.data.content === 'string' ? rulesRes.data.content : '';
+        const safe = stripNullBytes(raw);
+        setRules({ content: safe, savedContent: safe });
+        setRulesMissing(false);
+      } else if (!rulesRes.ok && /not found/i.test(rulesRes.error ?? '')) {
+        const placeholder = t('designSystems.rulesPlaceholder');
+        setRules({ content: placeholder, savedContent: placeholder });
+        setRulesMissing(true);
+      } else {
+        setRules(EMPTY_BUF);
+        setRulesMissing(false);
+        if (contentRes.ok) {
+          setLoadError(
+            scrubDisplayText((rulesRes as { error?: string }).error, {
+              collapseLines: true,
+              maxChars: 300,
+            }) || t('designSystems.loadFailedGeneric'),
+          );
+        }
+      }
+
+      if (tokensRes.ok && tokensRes.data) {
+        const raw = typeof tokensRes.data.content === 'string' ? tokensRes.data.content : '';
+        const safe = stripNullBytes(raw);
+        setTokens({ content: safe, savedContent: safe });
+      } else {
+        setTokens(EMPTY_BUF);
       }
     } catch (err) {
       setDs(null);
@@ -99,7 +150,25 @@ export function DesignSystemEditor() {
       setSaveMessage(t('designSystems.invalidIdSave'));
       return;
     }
-    // Null-byte content rejected (align with design-systems content API)
+    if (bundled && (activeTab === 'rules' || activeTab === 'tokens')) {
+      const detail = 'Bundled design systems are read-only';
+      setSaveKind('err');
+      setSaveMessage(
+        t(
+          activeTab === 'rules' ? 'designSystems.rulesSaveFailed' : 'designSystems.tokensSaveFailed',
+          { detail },
+        ),
+      );
+      return;
+    }
+    if (!activeDirty) return;
+    const content = activeBuf.content;
+    const failKey =
+      activeTab === 'rules'
+        ? 'designSystems.rulesSaveFailed'
+        : activeTab === 'tokens'
+          ? 'designSystems.tokensSaveFailed'
+          : 'designSystems.saveFailed';
     if (/\0/.test(content)) {
       setSaveKind('err');
       setSaveMessage(t('designSystems.invalidContent'));
@@ -114,27 +183,47 @@ export function DesignSystemEditor() {
     setSaveKind(null);
     setSaveMessage(null);
     try {
-      const res = await client.saveDesignSystemContent(safeId, content);
+      const res =
+        activeTab === 'rules'
+          ? await client.saveDesignSystemRules(safeId, content)
+          : activeTab === 'tokens'
+            ? await client.saveDesignSystemTokens(safeId, content)
+            : await client.saveDesignSystemContent(safeId, content);
       if (res.ok) {
-        setSavedContent(content);
+        const saved = (buf: TabBuffer): TabBuffer => ({ ...buf, savedContent: content });
+        if (activeTab === 'design') setDesign(saved);
+        else if (activeTab === 'rules') {
+          setRules(saved);
+          setRulesMissing(false);
+        } else setTokens(saved);
         setSaveKind('ok');
         setSaveMessage(t('designSystems.saved'));
       } else {
         const detail =
           scrubDisplayText(res.error, { collapseLines: true, maxChars: 200 }) || 'unknown';
         setSaveKind('err');
-        setSaveMessage(t('designSystems.saveFailed', { detail }));
+        setSaveMessage(t(failKey, { detail }));
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';
       const detail =
         scrubDisplayText(msg, { collapseLines: true, maxChars: 200 }) || 'unknown';
       setSaveKind('err');
-      setSaveMessage(t('designSystems.saveFailed', { detail }));
+      setSaveMessage(t(failKey, { detail }));
     } finally {
       setSaving(false);
     }
-  }, [client, id, content, saving, t, readOnly]);
+  }, [
+    client,
+    id,
+    saving,
+    t,
+    readOnly,
+    bundled,
+    activeTab,
+    activeDirty,
+    activeBuf.content,
+  ]);
 
   // Clear save toast after a short delay (and on unmount)
   useEffect(() => {
@@ -147,9 +236,9 @@ export function DesignSystemEditor() {
   }, [saveMessage]);
 
   const handleBack = useCallback(() => {
-    if (isDirty && !window.confirm(t('designSystems.unsavedLeave'))) return;
+    if (anyDirty && !window.confirm(t('designSystems.unsavedLeave'))) return;
     navigate('/design-systems');
-  }, [isDirty, navigate, t]);
+  }, [anyDirty, navigate, t]);
 
   const handleStartEdit = useCallback(() => {
     if (!id) return;
@@ -170,16 +259,15 @@ export function DesignSystemEditor() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave]);
 
-  // Warn on tab close / refresh when DESIGN.md is dirty
   useEffect(() => {
-    if (!isDirty) return;
+    if (!anyDirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [isDirty]);
+  }, [anyDirty]);
 
   // Escape returns to list (confirms when dirty via handleBack).
   // Ignore when a nested dialog already handled Escape, or while still loading.
@@ -219,6 +307,12 @@ export function DesignSystemEditor() {
     );
   }
 
+  const hintKey = readOnly
+    ? 'designSystems.viewHint'
+    : activeTab === 'rules'
+      ? 'designSystems.rulesHint'
+      : 'designSystems.hint';
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -240,7 +334,7 @@ export function DesignSystemEditor() {
               {t('designSystems.readOnly')}
             </span>
           )}
-          {isDirty && <span className="text-xs text-amber-400">●</span>}
+          {anyDirty && <span className="text-xs text-amber-400">●</span>}
         </div>
         <div className="flex items-center gap-3">
           {saveMessage && !readOnly && (
@@ -259,7 +353,7 @@ export function DesignSystemEditor() {
           ) : (
             <button
               onClick={handleSave}
-              disabled={saving || !isDirty}
+              disabled={saving || !activeDirty || tabLocked}
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm transition-colors"
             >
               {saving ? t('designSystems.saving') : t('common.save')}
@@ -273,27 +367,55 @@ export function DesignSystemEditor() {
         </div>
       )}
 
+      <div
+        role="tablist"
+        aria-label={`${t('designSystems.tab.design')} ${t('designSystems.tab.rules')} ${t('designSystems.tab.tokens')}`}
+        className="flex items-center gap-1 px-6 pt-2 border-b border-white/5 shrink-0"
+      >
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            data-testid={`ds-tab-${tab}`}
+            onClick={() => setActiveTab(tab)}
+            className={`px-3 py-1.5 text-xs rounded-t-md transition-colors ${
+              activeTab === tab
+                ? 'bg-white/10 text-white'
+                : 'text-white/40 hover:text-white/70'
+            }`}
+          >
+            {t(`designSystems.tab.${tab}`)}
+          </button>
+        ))}
+      </div>
+
       {/* Hint */}
       <div className="px-6 py-2 bg-white/[0.02] border-b border-white/5 text-xs text-white/30 shrink-0">
-        {t(readOnly ? 'designSystems.viewHint' : 'designSystems.hint')}
+        {t(hintKey)}
       </div>
 
       {/* Editor */}
       <div className="flex-1 min-h-0 p-4">
         <textarea
           ref={textareaRef}
-          value={content}
-          readOnly={readOnly}
-          aria-readonly={readOnly}
+          value={activeBuf.content}
+          readOnly={textareaReadOnly}
+          aria-readonly={textareaReadOnly}
           onChange={(e) => {
-            if (readOnly) return;
-            setContent(e.target.value);
+            if (readOnly || tabLocked) return;
+            const value = e.target.value;
+            const patch = (buf: TabBuffer): TabBuffer => ({ ...buf, content: value });
+            if (activeTab === 'design') setDesign(patch);
+            else if (activeTab === 'rules') setRules(patch);
+            else setTokens(patch);
           }}
           spellCheck={false}
           className={`w-full h-full resize-none bg-transparent text-sm font-mono text-white/80 focus:outline-none leading-relaxed ${
-            readOnly ? 'cursor-default' : ''
+            textareaReadOnly ? 'cursor-default' : ''
           }`}
-          placeholder={readOnly ? undefined : t('designSystems.editorPlaceholder')}
+          placeholder={textareaReadOnly ? undefined : t('designSystems.editorPlaceholder')}
         />
       </div>
     </div>

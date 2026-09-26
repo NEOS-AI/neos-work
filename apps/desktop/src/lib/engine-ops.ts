@@ -22,6 +22,8 @@ export interface DesignSystem {
   hasManifest: boolean;
   hasTokens: boolean;
   hasComponents: boolean;
+  hasRules?: boolean;
+  rulesUpdatedAt?: string;
   /** user writable vs bundled catalog (v0.5.8). */
   source?: 'user' | 'bundled';
   createdAt: string;
@@ -85,6 +87,35 @@ export class EngineOpsClient extends EnginePluginsClient {
     const seg = this.pathSegment(id);
     if (!seg) return this.invalidIdResponse('design system id');
     const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/content`, {
+      method: 'PUT',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    return readApiResponse(res);
+  }
+
+  async getDesignSystemRules(id: string): Promise<ApiResponse<{ content: string }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules`, { headers: this.getHeaders() });
+    return readApiResponse(res);
+  }
+
+  async saveDesignSystemRules(id: string, content: string): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/rules`, {
+      method: 'PUT',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    return readApiResponse(res);
+  }
+
+  async saveDesignSystemTokens(id: string, content: string): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/tokens`, {
       method: 'PUT',
       headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),

@@ -18,6 +18,7 @@ const restoreProjectRevision = vi.fn();
 const listDesignSystems = vi.fn();
 const getDesignSystemContent = vi.fn();
 const getDesignSystemTokens = vi.fn();
+const getDesignSystemRules = vi.fn();
 const updateProject = vi.fn();
 const createProjectRun = vi.fn();
 const listProjectRunEvents = vi.fn();
@@ -81,6 +82,7 @@ const client = {
   listDesignSystems,
   getDesignSystemContent,
   getDesignSystemTokens,
+  getDesignSystemRules,
   updateProject,
   createProjectRun,
   listProjectRunEvents,
@@ -330,6 +332,10 @@ describe('ProjectWorkspace', () => {
     listDesignSystems.mockReset().mockResolvedValue({ ok: true, data: [] });
     getDesignSystemContent.mockReset().mockResolvedValue({ ok: true, data: { content: '# DS' } });
     getDesignSystemTokens.mockReset().mockResolvedValue({ ok: true, data: { content: ':root{}' } });
+    getDesignSystemRules.mockReset().mockResolvedValue({
+      ok: true,
+      data: { content: '## Never\n- no hex\n' },
+    });
     updateProject.mockReset();
     createProjectRun.mockReset();
     listProjectRunEvents.mockReset();
@@ -766,6 +772,74 @@ describe('ProjectWorkspace', () => {
       expect(getDesignSystemContent).toHaveBeenCalledWith('ds1');
       expect(screen.getByText('# DS')).toBeInTheDocument();
     });
+  });
+
+  it('context tab previews RULES.md 6k slice with DESIGN and tokens', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: 'ds1',
+          name: 'neos-default',
+          path: '/x',
+          hasManifest: true,
+          hasTokens: true,
+          hasComponents: false,
+          source: 'bundled',
+          createdAt: 't',
+          updatedAt: 't',
+        },
+      ],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-context'));
+    await waitFor(() => {
+      expect(getDesignSystemContent).toHaveBeenCalledWith('ds1');
+      expect(getDesignSystemTokens).toHaveBeenCalledWith('ds1');
+      expect(getDesignSystemRules).toHaveBeenCalledWith('ds1');
+      expect(screen.getByText('RULES.md')).toBeInTheDocument();
+      expect(screen.getByText(/## Never/)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: /promote/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('designSystems.promote')).not.toBeInTheDocument();
+    expect(screen.queryByText('designSystems.promoteConfirm')).not.toBeInTheDocument();
+  });
+
+  it('RULES preview slices to 6000 characters', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    getDesignSystemRules.mockResolvedValue({
+      ok: true,
+      data: { content: `${'A'.repeat(6000)}TAIL-MARKER` },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-context'));
+    await waitFor(() => {
+      expect(getDesignSystemRules).toHaveBeenCalledWith('ds1');
+      expect(screen.getByText('RULES.md')).toBeInTheDocument();
+    });
+    const preview = screen.getByTestId('project-ds-preview');
+    expect(preview.textContent).not.toContain('TAIL-MARKER');
+    expect(preview.textContent).toContain('A'.repeat(32));
+  });
+
+  it('omits RULES preview on GET 404 and does not error the panel if DESIGN loaded', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    getDesignSystemRules.mockResolvedValue({ ok: false, error: 'Not found' });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('side-tab-context'));
+    await waitFor(() => {
+      expect(screen.getByText('# DS')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('RULES.md')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /promote/i })).not.toBeInTheDocument();
   });
 
   it('switches to comments and revisions side tabs', async () => {
