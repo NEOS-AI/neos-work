@@ -941,4 +941,35 @@ describe('ProjectDetail Design Editor', () => {
     expect(screen.getByTestId('web-run-events').textContent).toMatch(/run\.stdout/);
     expect(screen.getByTestId('web-run-events').textContent).toMatch(/hello from agent/);
   });
+
+  it('shows desktop-only copy for .univer.json and keeps DesignEditor', async () => {
+    listFiles.mockResolvedValue({
+      ok: true,
+      data: [
+        { path: 'index.html', type: 'file' },
+        { path: 'budget.univer.json', type: 'file' },
+      ],
+    });
+    readFile.mockImplementation(async (_pid: string, path: string) => ({
+      ok: true,
+      data: {
+        path,
+        content:
+          path === 'budget.univer.json'
+            ? '{"id":"wb1","name":"Workbook","appVersion":"1.0.2","sheets":{"sheet-01":{"id":"sheet-01"}}}'
+            : '<html><body><h1 id="hero">Hi</h1></body></html>',
+        hash: 'abc',
+      },
+    }));
+    renderProject();
+    await waitFor(() => screen.getByTestId('file-tree'));
+    fireEvent.click(screen.getByTestId('file-budget.univer.json'));
+    await waitFor(() => {
+      expect(
+        screen.getByText('Sheets editor is available in the desktop app.'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('design-editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('sheets-pane')).not.toBeInTheDocument();
+  });
 });

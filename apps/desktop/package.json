@@ -19,6 +19,7 @@
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
     "@neos-work/design-editor": "workspace:*",
+    "@neos-work/office-sheets": "workspace:*",
     "@neos-work/shared": "workspace:*",
     "@neos-work/ui": "workspace:*",
     "@neos-work/ui-app": "workspace:*",
@@ -26,6 +27,8 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-shell": "^2.2.2",
     "@types/dagre": "^0.7.54",
+    "@univerjs/preset-sheets-core": "1.0.2",
+    "@univerjs/presets": "1.0.2",
     "@xyflow/react": "^12.0.0",
     "highlight.js": "^11.11.1",
     "i18next": "^25.1.3",

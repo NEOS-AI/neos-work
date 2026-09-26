@@ -1,7 +1,30 @@
+vi.mock('@neos-work/office-sheets/node', () => ({
+  createSheetsTools: vi.fn((workspaceRoot: string) => [
+    {
+      name: 'sheets_get_range',
+      description: 'mock get',
+      inputSchema: { type: 'object' },
+      execute: async () => ({ success: true, output: { path: workspaceRoot, value: 'mocked' } }),
+    },
+    {
+      name: 'sheets_eval',
+      description: 'mock eval',
+      inputSchema: { type: 'object' },
+      execute: async () => ({ success: true, output: { value: 2 } }),
+    },
+    {
+      name: 'sheets_set_range',
+      description: 'mock set',
+      inputSchema: { type: 'object' },
+      execute: async () => ({ success: true, output: { value: 'set' } }),
+    },
+  ]),
+}));
+
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DomainWorker } from '@neos-work/shared';
 import { mockAdapter } from '../test-utils/mock-adapter.js';
 import {
@@ -28,18 +51,24 @@ function makeWorker(partial: Partial<DomainWorker> & Pick<DomainWorker, 'id'>): 
 describe('toolsForPermissionProfile / canonicalizeToolName', () => {
   it('maps profiles to expected tool sets', () => {
     expect([...toolsForPermissionProfile('read_only')].sort()).toEqual(
-      ['list_directory', 'read_file', 'search_files'].sort(),
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
     );
     expect(toolsForPermissionProfile('execute').has('run_command')).toBe(true);
     expect(toolsForPermissionProfile('execute').has('write_file')).toBe(true);
+    expect(toolsForPermissionProfile('execute').has('sheets_get_range')).toBe(true);
+    expect(toolsForPermissionProfile('execute').has('sheets_eval')).toBe(true);
+    expect(toolsForPermissionProfile('execute').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile('network').has('web_search')).toBe(true);
     expect(toolsForPermissionProfile('network').has('run_command')).toBe(false);
+    expect(toolsForPermissionProfile('network').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile('full').has('web_search')).toBe(true);
     expect(toolsForPermissionProfile('full').has('run_command')).toBe(true);
+    expect(toolsForPermissionProfile('full').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile(undefined).has('web_search')).toBe(true);
     // read_write has writes but no shell/network
     expect(toolsForPermissionProfile('read_write').has('write_file')).toBe(true);
     expect(toolsForPermissionProfile('read_write').has('move_file')).toBe(true);
+    expect(toolsForPermissionProfile('read_write').has('sheets_set_range')).toBe(true);
     expect(toolsForPermissionProfile('read_write').has('run_command')).toBe(false);
     expect(toolsForPermissionProfile('read_write').has('web_search')).toBe(false);
   });
@@ -87,7 +116,7 @@ describe('resolveWorkerToolNames', () => {
       permissionProfile: 'read_only',
     });
     expect(resolveWorkerToolNames(missing).sort()).toEqual(
-      ['list_directory', 'read_file', 'search_files'].sort(),
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
     );
   });
 
@@ -130,7 +159,9 @@ describe('resolveWorkerToolNames', () => {
       }),
       'coordinator',
     );
-    expect(names.sort()).toEqual(['list_directory', 'read_file', 'search_files'].sort());
+    expect(names.sort()).toEqual(
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
+    );
   });
 
   it('keeps network profile for coordinator (not forced down from network)', () => {
@@ -279,6 +310,26 @@ describe('buildWorkerToolRegistry + path jail', () => {
     const reg = buildWorkerToolRegistry({ worker, workspaceRoot: root });
     expect(reg.get('write_file')).toBeUndefined();
     expect(reg.get('read_file')).toBeDefined();
+  });
+
+  it('read_only registers sheets get/eval stubs, not set, and execute lazy-imports', async () => {
+    const { createSheetsTools } = await import('@neos-work/office-sheets/node');
+    vi.mocked(createSheetsTools).mockClear();
+    const worker = makeWorker({
+      id: 'ro-sheets',
+      permissionProfile: 'read_only',
+    });
+    const reg = buildWorkerToolRegistry({ worker, workspaceRoot: root });
+    const names = reg.getAll().map((t) => t.name).sort();
+    expect(names).toEqual(
+      ['list_directory', 'read_file', 'search_files', 'sheets_eval', 'sheets_get_range'].sort(),
+    );
+    expect(reg.get('sheets_set_range')).toBeUndefined();
+    expect(vi.mocked(createSheetsTools)).not.toHaveBeenCalled();
+
+    const got = await reg.get('sheets_get_range')!.execute({ path: 'x.univer.json', a1: 'A1' });
+    expect(got.success).toBe(true);
+    expect(vi.mocked(createSheetsTools)).toHaveBeenCalledWith(root);
   });
 });
 

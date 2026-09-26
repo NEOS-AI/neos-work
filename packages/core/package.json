@@ -23,6 +23,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
     "@google/genai": "^1.40.0",
+    "@neos-work/office-sheets": "workspace:*",
     "@neos-work/shared": "workspace:*"
   },
   "devDependencies": {

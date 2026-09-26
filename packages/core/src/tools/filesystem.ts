@@ -18,7 +18,7 @@ const MAX_LIST_ENTRIES = 1_000;
 /** Cap relative path length accepted by FS tools. */
 const MAX_PATH_CHARS = 4_096;
 
-const PROTECTED_PATTERNS = [
+export const PROTECTED_PATTERNS = [
   /^\.env($|\.)/,     // .env, .env.local, .env.production, etc.
   /^\.git\//,         // .git directory
   /\.pem$/,
@@ -26,7 +26,7 @@ const PROTECTED_PATTERNS = [
   /^\.ssh\//,
 ];
 
-function isProtectedPath(relativePath: string): boolean {
+export function isProtectedPath(relativePath: string): boolean {
   return PROTECTED_PATTERNS.some((p) => p.test(relativePath));
 }
 
@@ -48,7 +48,7 @@ function isOutsideWorkspace(root: string, abs: string, rel?: string): boolean {
 }
 
 /** Resolve a user-provided path within the workspace, preventing traversal and symlink escape. */
-function safePath(workspaceRoot: string, userPath: string): string {
+export function safePath(workspaceRoot: string, userPath: string): string {
   if (typeof userPath !== 'string') {
     throw new Error('Path is required');
   }

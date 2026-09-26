@@ -15,6 +15,7 @@ export default defineConfig({
     alias: {
       '@video': path.join(desktopRoot, 'src/video'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   clearScreen: false,
   server: {

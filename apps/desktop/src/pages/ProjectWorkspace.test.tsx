@@ -126,11 +126,15 @@ vi.mock('react-i18next', () => {
   const t = (key: string, opts?: Record<string, string>) =>
     opts?.selector ? `${key}:${opts.selector}` : key;
   return {
-    useTranslation: () => ({ t }),
+    useTranslation: () => ({ t, i18n: { language: 'en' } }),
   };
 });
 
 // Lightweight mock — avoid requiring built dist for unit tests
+vi.mock('@neos-work/office-sheets/ui', () => ({
+  SheetsPane: () => <div data-testid="sheets-pane">sheets</div>,
+}));
+
 vi.mock('@neos-work/design-editor', () => {
   type Buf = {
     path: string | null;
@@ -382,6 +386,7 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
     expect(screen.getAllByText('index.html').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('design-editor')).toBeInTheDocument();
+    expect(screen.queryByTestId('sheets-pane')).not.toBeInTheDocument();
 
     const ta = screen.getByLabelText('project.mode.code') as HTMLTextAreaElement;
     await waitFor(() => expect(ta.value).toContain('hi'));
@@ -1447,6 +1452,66 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => {
       expect(readProjectFile).toHaveBeenCalledWith('proj-1', 'index.html');
     });
+  });
+
+  it('opens .univer.json in SheetsPane instead of DesignEditor', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listProjectFiles.mockResolvedValue({
+      ok: true,
+      data: [
+        { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+        { path: 'budget.univer.json', name: 'budget.univer.json', type: 'file', isEntry: false },
+      ],
+    });
+    readProjectFile.mockImplementation(async (_id: string, path: string) => ({
+      ok: true,
+      data: {
+        path,
+        content:
+          path === 'budget.univer.json'
+            ? '{"id":"wb1","name":"Workbook","appVersion":"1.0.2","sheets":{"sheet-01":{"id":"sheet-01"}}}'
+            : '<html>hi</html>',
+        hash: path === 'budget.univer.json' ? 'sheet-hash' : 'abc',
+      },
+    }));
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /budget\.univer\.json/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('sheets-pane')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('design-editor')).not.toBeInTheDocument();
+  });
+
+  it('keeps DesignEditor for .html and .csv files', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject();
+    listProjectFiles.mockResolvedValue({
+      ok: true,
+      data: [
+        { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+        { path: 'data.csv', name: 'data.csv', type: 'file', isEntry: false },
+      ],
+    });
+    readProjectFile.mockImplementation(async (_id: string, path: string) => ({
+      ok: true,
+      data: {
+        path,
+        content: path === 'data.csv' ? 'a,b\n1,2\n' : '<html>hi</html>',
+        hash: path === 'data.csv' ? 'csv-hash' : 'abc',
+      },
+    }));
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByTestId('design-editor')).toBeInTheDocument());
+    expect(screen.queryByTestId('sheets-pane')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /data\.csv/i }));
+    await waitFor(() => {
+      expect(readProjectFile).toHaveBeenCalledWith('proj-1', 'data.csv');
+    });
+    await waitFor(() => expect(screen.getByTestId('design-editor')).toBeInTheDocument());
+    expect(screen.queryByTestId('sheets-pane')).not.toBeInTheDocument();
   });
 
 });

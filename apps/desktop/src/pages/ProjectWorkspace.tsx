@@ -17,6 +17,8 @@ import {
   type DesignEditorMode,
   type EditorBufferState,
 } from '@neos-work/design-editor';
+import { isUniverWorkbookPath } from '@neos-work/office-sheets';
+import { SheetsPane } from '@neos-work/office-sheets/ui';
 import {
   extractLockHolder,
   formatLockHolderMessage,
@@ -46,7 +48,7 @@ import { ConfirmLeaveModal } from '../components/workflow/ConfirmLeaveModal.js';
 import { safeEntityId, scrubDisplayText } from '../lib/format-duration.js';
 
 export function ProjectWorkspace() {
-  const { t } = useTranslation('common');
+  const { t, i18n } = useTranslation('common');
   const { client } = useEngine();
   const navigate = useNavigate();
   const { id: rawId } = useParams<{ id: string }>();
@@ -602,15 +604,16 @@ export function ProjectWorkspace() {
   );
 
   const handleSave = useCallback(async () => {
-    if (!client || !projectId || !buffer.path || !isDirty(buffer)) return;
+    const current = bufferRef.current;
+    if (!client || !projectId || !current.path || !isDirty(current)) return;
     setSaving(true);
     setSaveError(null);
     try {
       // Pass collab session so NEOS_SHARED_EDIT hard enforce accepts our own lock
       const res = await client.writeProjectFile(
         projectId,
-        buffer.path,
-        buffer.local,
+        current.path,
+        current.local,
         'user',
         collabSessionId ? { sessionId: collabSessionId } : undefined,
       );
@@ -624,8 +627,8 @@ export function ProjectWorkspace() {
         );
         const filesRes = await client.listProjectFiles(projectId);
         if (filesRes.ok && filesRes.data) setFiles(filesRes.data);
-        if (buffer.path) {
-          const revRes = await client.listProjectRevisions(projectId, buffer.path);
+        if (current.path) {
+          const revRes = await client.listProjectRevisions(projectId, current.path);
           if (revRes.ok && revRes.data) setRevisions(revRes.data);
         }
       } else {
@@ -633,7 +636,7 @@ export function ProjectWorkspace() {
         if (holder) {
           const lockPath =
             (holder.path && normalizeProjectRelPath(holder.path))
-            || (buffer.path ? normalizeProjectRelPath(buffer.path) : '')
+            || (current.path ? normalizeProjectRelPath(current.path) : '')
             || '';
           if (lockPath) {
             setForeignLocks((m) => ({
@@ -658,7 +661,7 @@ export function ProjectWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [client, projectId, buffer, collabSessionId, t]);
+  }, [client, projectId, collabSessionId, t]);
 
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
   const [mkdirBusy, setMkdirBusy] = useState(false);
@@ -1629,63 +1632,91 @@ export function ProjectWorkspace() {
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <DesignEditor
-            buffer={buffer}
-            mode={mode}
-            onModeChange={setMode}
-            onEdit={(content) =>
-              setBuffer((prev) => reduceEditorBuffer(prev, { type: 'edit', content }))
-            }
-            onSave={() => void handleSave()}
-            saving={saving}
-            selection={selection}
-            onSelectionChange={(sel, detail) => {
-              setSelection(sel);
-              setSelectDetail(detail ?? null);
-            }}
-            peerAwareness={Object.entries(peerSelections)
-              .filter(([, sel]) => {
-                if (!openBufferPath) return false;
-                const sp =
-                  sel?.path != null ? normalizeProjectRelPath(sel.path) : '';
-                return sp === openBufferPath;
-              })
-              .map(([sessionId, sel]) => ({
-                sessionId,
-                colorHint: sel?.colorHint,
-                displayName: sel?.displayName,
-                path: sel?.path ?? null,
-                selector: sel?.selector ?? null,
-                selectors: sel?.selectors,
-              }))}
-            onEditWithAi={(sel, detail) => {
-              setSelection(sel);
-              setSelectDetail(detail ?? null);
-              const hint = sel.selector
-                ? t('project.editWithAiHint', { selector: sel.selector })
-                : t('project.editWithAi');
-              setChatPrompt((prev) => (prev.trim() ? prev : hint));
-            }}
-            labels={{
-              preview: t('project.mode.preview'),
-              code: t('project.mode.code'),
-              split: t('project.mode.split'),
-              inspect: t('project.mode.inspect'),
-              save: saving ? t('common.loading') : t('common.save'),
-              dirty: t('project.dirty'),
-              layers: t('project.layers'),
-              layersSearch: t('project.layersSearch'),
-              layersEmpty: t('project.layersEmpty'),
-              editWithAi: t('project.editWithAi'),
-              copySelector: t('project.copySelector'),
-              selection: t('project.selection'),
-            }}
-            onResolveConflict={(choice, merged) =>
-              setBuffer((prev) =>
-                reduceEditorBuffer(prev, { type: 'resolve-conflict', choice, merged }),
-              )
-            }
-          />
+          {isUniverWorkbookPath(buffer.path) ? (
+            <SheetsPane
+              buffer={buffer}
+              onEdit={(content) =>
+                setBuffer((prev) => reduceEditorBuffer(prev, { type: 'edit', content }))
+              }
+              onSave={() => void handleSave()}
+              saving={saving}
+              locale={i18n.language}
+              labels={{
+                save: saving ? t('common.loading') : t('common.save'),
+                dirty: t('project.dirty'),
+                conflictTitle: t('officeSheets.conflictHint'),
+                keepMine: t('officeSheets.keepMine'),
+                takeAgent: t('officeSheets.takeAgent'),
+                showDiff: t('officeSheets.showDiff'),
+                dismissDiff: t('officeSheets.dismissDiff'),
+                parseFailed: t('officeSheets.parseFailed'),
+                loading: t('officeSheets.loading'),
+              }}
+              onResolveConflict={(choice, merged) =>
+                setBuffer((prev) =>
+                  reduceEditorBuffer(prev, { type: 'resolve-conflict', choice, merged }),
+                )
+              }
+            />
+          ) : (
+            <DesignEditor
+              buffer={buffer}
+              mode={mode}
+              onModeChange={setMode}
+              onEdit={(content) =>
+                setBuffer((prev) => reduceEditorBuffer(prev, { type: 'edit', content }))
+              }
+              onSave={() => void handleSave()}
+              saving={saving}
+              selection={selection}
+              onSelectionChange={(sel, detail) => {
+                setSelection(sel);
+                setSelectDetail(detail ?? null);
+              }}
+              peerAwareness={Object.entries(peerSelections)
+                .filter(([, sel]) => {
+                  if (!openBufferPath) return false;
+                  const sp =
+                    sel?.path != null ? normalizeProjectRelPath(sel.path) : '';
+                  return sp === openBufferPath;
+                })
+                .map(([sessionId, sel]) => ({
+                  sessionId,
+                  colorHint: sel?.colorHint,
+                  displayName: sel?.displayName,
+                  path: sel?.path ?? null,
+                  selector: sel?.selector ?? null,
+                  selectors: sel?.selectors,
+                }))}
+              onEditWithAi={(sel, detail) => {
+                setSelection(sel);
+                setSelectDetail(detail ?? null);
+                const hint = sel.selector
+                  ? t('project.editWithAiHint', { selector: sel.selector })
+                  : t('project.editWithAi');
+                setChatPrompt((prev) => (prev.trim() ? prev : hint));
+              }}
+              labels={{
+                preview: t('project.mode.preview'),
+                code: t('project.mode.code'),
+                split: t('project.mode.split'),
+                inspect: t('project.mode.inspect'),
+                save: saving ? t('common.loading') : t('common.save'),
+                dirty: t('project.dirty'),
+                layers: t('project.layers'),
+                layersSearch: t('project.layersSearch'),
+                layersEmpty: t('project.layersEmpty'),
+                editWithAi: t('project.editWithAi'),
+                copySelector: t('project.copySelector'),
+                selection: t('project.selection'),
+              }}
+              onResolveConflict={(choice, merged) =>
+                setBuffer((prev) =>
+                  reduceEditorBuffer(prev, { type: 'resolve-conflict', choice, merged }),
+                )
+              }
+            />
+          )}
         </div>
 
         {/* Chat / Comments / Revisions */}

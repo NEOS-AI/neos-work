@@ -7,6 +7,9 @@
  *   neos mcp live-artifacts     # list live artifacts for NEOS_PROJECT_ID
  */
 
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import {
   buildMcpInstallInfo,
   resolveNeosBinPath,
@@ -20,7 +23,46 @@ import { EXIT, type ExitCode } from '../exit-codes.js';
 import { fail, printJson, printLines, type CmdContext } from '../util.js';
 import { CLI_VERSION } from './version.js';
 
-function createHttpBackend(client: NeosApiClient, cfg: CliConfig): NeosMcpBackend {
+let nodeMod: Promise<typeof import('@neos-work/office-sheets/node')> | null = null;
+function loadNode() {
+  nodeMod ??= import('@neos-work/office-sheets/node');
+  return nodeMod;
+}
+
+type SheetToolName = 'sheets_get_range' | 'sheets_set_range' | 'sheets_eval';
+
+async function runSheetTool(
+  backend: Pick<NeosMcpBackend, 'readFile' | 'writeFile'>,
+  projectId: string,
+  relPath: string,
+  toolName: SheetToolName,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  const { content } = await backend.readFile(projectId, relPath);
+  const dir = await mkdtemp(join(tmpdir(), 'neos-sheets-'));
+  const localName = basename(relPath) || 'workbook.univer.json';
+  await writeFile(join(dir, localName), content, 'utf8');
+  try {
+    const { createSheetsTools } = await loadNode();
+    const tool = createSheetsTools(dir).find((t) => t.name === toolName);
+    if (!tool) {
+      return { success: false, output: null, error: `Tool not found: ${toolName}` };
+    }
+    const result = await tool.execute({ ...input, path: localName });
+    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
+      (result.output as Record<string, unknown>).path = relPath;
+    }
+    if (toolName === 'sheets_set_range' && result.success) {
+      const next = await readFile(join(dir, localName), 'utf8');
+      await backend.writeFile(projectId, relPath, next);
+    }
+    return result;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+export function createHttpBackend(client: NeosApiClient, cfg: CliConfig): NeosMcpBackend {
   return {
     async status() {
       const h = await client.health();
@@ -134,6 +176,15 @@ function createHttpBackend(client: NeosApiClient, cfg: CliConfig): NeosMcpBacken
             })
           : { id: artifactId, projectId, name: artifactId };
       return { artifact, refresh: data.refresh ?? data };
+    },
+    async getSheetRange(input) {
+      return runSheetTool(this, input.projectId, input.path, 'sheets_get_range', input);
+    },
+    async setSheetRange(input) {
+      return runSheetTool(this, input.projectId, input.path, 'sheets_set_range', input);
+    },
+    async evalSheetRange(input) {
+      return runSheetTool(this, input.projectId, input.path, 'sheets_eval', input);
     },
   };
 }
