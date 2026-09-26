@@ -360,6 +360,8 @@ export const DESIGN_DESCRIPTION_MAX_CHARS = 2_000;
 export const RULES_MD_MAX_CHARS = 1 * 1024 * 1024;
 export const TOKENS_CSS_MAX_CHARS = 256 * 1024;
 export const COMPONENTS_HTML_MAX_CHARS = 256 * 1024;
+export const STARTERS_MAX_FILES = 20;
+export const STARTERS_MAX_CHARS = 256 * 1024;
 export const RULES_APPEND_TEXT_MAX = 500;
 export const PRUNE_MAX_ENTRIES_DEFAULT = 20;
 export const PRUNE_MAX_ENTRIES_MIN = 1;
@@ -735,6 +737,144 @@ export async function getDesignSystemComponents(id: string): Promise<string | nu
     return content.trim().length > 0 ? content : null;
   } catch {
     return null;
+  }
+}
+
+export interface DesignSystemStarterInfo {
+  name: string;
+  bytes: number;
+  updatedAt: string;
+}
+
+export type StarterWriteResult = true | false | 'bundled' | 'limit' | 'exists';
+
+export function isSafeStarterName(name: string): boolean {
+  if (typeof name !== 'string' || /[\0\r\n]/.test(name)) return false;
+  if (!name || name === '.' || name === '..') return false;
+  if (path.basename(name) !== name) return false;
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) return false;
+  return /\.(html|css)$/i.test(name);
+}
+
+function starterAbsPath(dsPath: string, name: string): string | null {
+  if (!isSafeStarterName(name)) return null;
+  const abs = path.join(dsPath, 'starters', name);
+  if (path.basename(abs) !== name) return null;
+  return abs;
+}
+
+async function countImmediateStarters(startersDir: string): Promise<number> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(startersDir);
+  } catch {
+    return 0;
+  }
+  let n = 0;
+  for (const entry of entries) {
+    if (!isSafeStarterName(entry)) continue;
+    if (await regularFileStatOrNull(path.join(startersDir, entry))) n += 1;
+  }
+  return n;
+}
+
+export async function listDesignSystemStarters(
+  id: string,
+): Promise<DesignSystemStarterInfo[] | null> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return null;
+  let entries: string[];
+  try {
+    entries = await fs.readdir(path.join(ds.path, 'starters'));
+  } catch {
+    return [];
+  }
+  const out: DesignSystemStarterInfo[] = [];
+  for (const entry of entries) {
+    if (!isSafeStarterName(entry)) continue;
+    const st = await regularFileStatOrNull(path.join(ds.path, 'starters', entry));
+    if (!st) continue;
+    out.push({ name: entry, bytes: st.size, updatedAt: st.mtime.toISOString() });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+export async function getDesignSystemStarter(id: string, name: string): Promise<string | null> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return null;
+  const p = starterAbsPath(ds.path, name);
+  if (!p) return null;
+  try {
+    if (!(await regularFileStatOrNull(p))) return null;
+    const content = await fs.readFile(p, 'utf8');
+    if (/\0/.test(content)) return null;
+    if (content.length > STARTERS_MAX_CHARS) return content.slice(0, STARTERS_MAX_CHARS);
+    return content.trim().length > 0 ? content : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeDesignSystemStarter(
+  id: string,
+  name: string,
+  content: string,
+  mode: 'put' | 'create',
+): Promise<StarterWriteResult> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return false;
+  if (ds.source === 'bundled') return 'bundled';
+  const p = starterAbsPath(ds.path, name);
+  if (!p) return false;
+  const body = typeof content === 'string' ? content : '';
+  if (!body.trim() || /\0/.test(body) || body.length > STARTERS_MAX_CHARS) return false;
+  const dir = path.join(ds.path, 'starters');
+  if (mode === 'create' && (await regularFileStatOrNull(p))) return 'exists';
+  if (!(await regularFileStatOrNull(p))) {
+    if ((await countImmediateStarters(dir)) >= STARTERS_MAX_FILES) return 'limit';
+  }
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    await unlinkIfSymlink(p);
+    await fs.writeFile(p, body, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function putDesignSystemStarter(
+  id: string,
+  name: string,
+  content: string,
+): Promise<StarterWriteResult> {
+  return writeDesignSystemStarter(id, name, content, 'put');
+}
+
+export async function createDesignSystemStarter(
+  id: string,
+  name: string,
+  content: string,
+): Promise<StarterWriteResult> {
+  return writeDesignSystemStarter(id, name, content, 'create');
+}
+
+export async function deleteDesignSystemStarter(
+  id: string,
+  name: string,
+): Promise<true | false | 'bundled'> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return false;
+  if (ds.source === 'bundled') return 'bundled';
+  const p = starterAbsPath(ds.path, name);
+  if (!p) return false;
+  if (!(await regularFileStatOrNull(p))) return false;
+  try {
+    await fs.unlink(p);
+    return true;
+  } catch {
+    return false;
   }
 }
 

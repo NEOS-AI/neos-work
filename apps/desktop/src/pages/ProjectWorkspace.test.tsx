@@ -22,6 +22,10 @@ const getDesignSystemRules = vi.fn();
 const appendDesignSystemRules = vi.fn();
 const pruneDesignSystemRules = vi.fn();
 const getDesignSystemComponents = vi.fn();
+const listDesignSystemStarters = vi.fn();
+const getDesignSystemStarter = vi.fn();
+const pinDesignSystemStarter = vi.fn();
+const saveDesignSystemStarter = vi.fn();
 const updateProject = vi.fn();
 const createProjectRun = vi.fn();
 const listProjectRunEvents = vi.fn();
@@ -89,6 +93,10 @@ const client = {
   appendDesignSystemRules,
   pruneDesignSystemRules,
   getDesignSystemComponents,
+  listDesignSystemStarters,
+  getDesignSystemStarter,
+  pinDesignSystemStarter,
+  saveDesignSystemStarter,
   updateProject,
   createProjectRun,
   listProjectRunEvents,
@@ -435,6 +443,17 @@ describe('ProjectWorkspace', () => {
       ok: true,
       data: { content: '<button class="ds-btn">Ok</button>' },
     });
+    listDesignSystemStarters.mockReset().mockResolvedValue({ ok: true, data: [] });
+    getDesignSystemStarter.mockReset().mockResolvedValue({
+      ok: true,
+      data: { content: '<section>hero</section>' },
+    });
+    pinDesignSystemStarter.mockReset().mockResolvedValue({
+      ok: true,
+      data: { name: 'hero.html', bytes: 12, updatedAt: 't' },
+    });
+    saveDesignSystemStarter.mockReset();
+    writeProjectFile.mockReset();
     updateProject.mockReset();
     createProjectRun.mockReset();
     listProjectRunEvents.mockReset();
@@ -2444,6 +2463,231 @@ describe('ProjectWorkspace', () => {
     await waitFor(() => expect(getProjectRun).toHaveBeenCalled());
     expect(screen.queryByTestId('open-variant-a')).toBeNull();
     expect(screen.queryByTestId('open-variant-b')).toBeNull();
+  });
+
+  it('pin-starter lives in the variants toolbar, not Context', async () => {
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    const pin = screen.getByTestId('pin-starter');
+    expect(pin).toBeInTheDocument();
+    expect(pin).toHaveAccessibleName('designSystems.pinStarter');
+    expect(within(screen.getByTestId('project-variants-toolbar')).getByTestId('pin-starter')).toBeInTheDocument();
+    expect(within(screen.getByTestId('project-side-panel')).queryByTestId('pin-starter')).toBeNull();
+  });
+
+  it('enables pin-starter for current html/css when designSystemId is bound', async () => {
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    const html = renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.getByTestId('pin-starter')).toBeEnabled();
+    html.unmount();
+
+    mockHtmlProject([{ path: 'styles.css', type: 'file' }], {
+      designSystemId: 'ds1',
+      entryFile: 'styles.css',
+    });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    readProjectFile.mockImplementation(async (_id: string, path: string) => ({
+      ok: true,
+      data: { path, content: 'body{}', hash: 'css' },
+    }));
+    const css = renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.getByTestId('pin-starter')).toBeEnabled();
+    css.unmount();
+
+    mockHtmlProject([{ path: 'notes.txt', type: 'file' }], {
+      designSystemId: 'ds1',
+      entryFile: 'notes.txt',
+    });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    readProjectFile.mockImplementation(async (_id: string, path: string) => ({
+      ok: true,
+      data: { path, content: 'hi', hash: 'txt' },
+    }));
+    const txt = renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.getByTestId('pin-starter')).toBeDisabled();
+    txt.unmount();
+
+    mockHtmlProject([{ path: 'page.htm', type: 'file' }], {
+      designSystemId: 'ds1',
+      entryFile: 'page.htm',
+    });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    readProjectFile.mockImplementation(async (_id: string, path: string) => ({
+      ok: true,
+      data: { path, content: '<p/>', hash: 'htm' },
+    }));
+    const htm = renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.getByTestId('pin-starter')).toBeDisabled();
+    htm.unmount();
+
+    mockLoadedProject();
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.getByTestId('pin-starter')).toBeDisabled();
+  });
+
+  it('pin current src/hero.html POSTs pinDesignSystemStarter with basename, not PUT', async () => {
+    const user = userEvent.setup();
+    mockHtmlProject([{ path: 'src/hero.html', type: 'file' }], {
+      designSystemId: 'ds1',
+      entryFile: 'src/hero.html',
+    });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('pin-starter'));
+    await waitFor(() => expect(pinDesignSystemStarter).toHaveBeenCalledTimes(1));
+    expect(pinDesignSystemStarter).toHaveBeenCalledWith('ds1', {
+      from: 'projectFile',
+      projectId: 'proj-1',
+      path: 'src/hero.html',
+      name: 'hero.html',
+    });
+    expect(saveDesignSystemStarter).not.toHaveBeenCalled();
+  });
+
+  it('pin 409 surfaces the API error and does not PUT to overwrite', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    pinDesignSystemStarter.mockResolvedValue({ ok: false, error: 'Starter already exists' });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('pin-starter'));
+    await waitFor(() => expect(pinDesignSystemStarter).toHaveBeenCalled());
+    expect(saveDesignSystemStarter).not.toHaveBeenCalled();
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toMatch(/Starter already exists/i);
+  });
+
+  it('seed picker lists HTML starters only, not css', async () => {
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    listDesignSystemStarters.mockResolvedValue({
+      ok: true,
+      data: [
+        { name: 'hero.html', bytes: 12, updatedAt: 't' },
+        { name: 'theme.css', bytes: 8, updatedAt: 't' },
+      ],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await waitFor(() => expect(listDesignSystemStarters).toHaveBeenCalledWith('ds1'));
+    const starterSelect = screen.getByTestId('variant-seed-starter') as HTMLSelectElement;
+    const values = [...starterSelect.options].map((o) => o.value);
+    expect(values).toContain('hero.html');
+    expect(values).not.toContain('theme.css');
+    expect(screen.queryByRole('option', { name: 'theme.css' })).toBeNull();
+  });
+
+  it('HTML starter seed omits editContext and uses stem from hero', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    listDesignSystemStarters.mockResolvedValue({
+      ok: true,
+      data: [
+        { name: 'hero.html', bytes: 12, updatedAt: 't' },
+        { name: 'theme.css', bytes: 8, updatedAt: 't' },
+      ],
+    });
+    getDesignSystemStarter.mockResolvedValue({
+      ok: true,
+      data: { content: '<section>hero</section>' },
+    });
+    await startSucceededRun();
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await waitFor(() => expect(listDesignSystemStarters).toHaveBeenCalledWith('ds1'));
+    await user.selectOptions(screen.getByTestId('variant-seed'), 'starter');
+    const starterSelect = screen.getByTestId('variant-seed-starter');
+    await user.selectOptions(starterSelect, 'hero.html');
+    expect(screen.getByTestId('make-variants')).toBeEnabled();
+    await user.click(screen.getByTestId('make-variants'));
+    await waitFor(() => expect(createProjectRun).toHaveBeenCalled());
+    expect(getDesignSystemStarter).toHaveBeenCalledWith('ds1', 'hero.html');
+    const payload = createProjectRun.mock.calls[0]![0] as {
+      editContext?: unknown;
+      prompt: string;
+    };
+    expect(payload.editContext).toBeUndefined();
+    expect(payload.prompt).toContain('hero.variant-a.html');
+    expect(payload.prompt).toContain('<section>hero</section>');
+  });
+
+  it('clone-starter GETs the starter then writeProjectFile with basename only', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    listDesignSystemStarters.mockResolvedValue({
+      ok: true,
+      data: [
+        { name: 'hero.html', bytes: 12, updatedAt: 't' },
+        { name: 'theme.css', bytes: 8, updatedAt: 't' },
+      ],
+    });
+    getDesignSystemStarter.mockResolvedValue({
+      ok: true,
+      data: { content: '<section>hero</section>' },
+    });
+    writeProjectFile.mockResolvedValue({
+      ok: true,
+      data: { path: 'hero.html', hash: 'h', bytes: 12, created: true },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await waitFor(() => expect(listDesignSystemStarters).toHaveBeenCalledWith('ds1'));
+    await user.selectOptions(screen.getByTestId('variant-seed'), 'starter');
+    await user.selectOptions(screen.getByTestId('variant-seed-starter'), 'hero.html');
+    await user.click(screen.getByTestId('clone-starter'));
+    await waitFor(() => expect(writeProjectFile).toHaveBeenCalled());
+    expect(getDesignSystemStarter).toHaveBeenCalledWith('ds1', 'hero.html');
+    expect(writeProjectFile).toHaveBeenCalledWith('proj-1', 'hero.html', '<section>hero</section>');
+    const paths = writeProjectFile.mock.calls.map((c) => c[1]);
+    expect(paths).not.toContain('starters/hero.html');
+    expect(paths).not.toContain('src/hero.html');
+  });
+
+  it('regular chat still does not fetch starters or components', async () => {
+    const user = userEvent.setup();
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({ ok: true, data: [boundDesignSystemRow(true)] });
+    listDesignSystemStarters.mockResolvedValue({
+      ok: true,
+      data: [{ name: 'hero.html', bytes: 12, updatedAt: 't' }],
+    });
+    createProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-abcdef01', status: 'running' },
+    });
+    streamProjectRunEvents.mockImplementation((_runId, onEvent, opts) => {
+      queueMicrotask(() => {
+        onEvent({ type: 'run.started', id: 'ev1', ts: 't' });
+        opts?.onDone?.();
+      });
+      return () => {};
+    });
+    getProjectRun.mockResolvedValue({
+      ok: true,
+      data: { id: 'run-abcdef01', status: 'succeeded', error: null },
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    getDesignSystemStarter.mockClear();
+    getDesignSystemComponents.mockClear();
+    await user.type(screen.getByLabelText('project.chat'), 'Improve the hero');
+    await user.click(screen.getByRole('button', { name: 'project.chatSend' }));
+    await waitFor(() => expect(createProjectRun).toHaveBeenCalled());
+    expect(getDesignSystemStarter).not.toHaveBeenCalled();
+    expect(getDesignSystemComponents).not.toHaveBeenCalled();
+    expect(String(createProjectRun.mock.calls[0]![0].prompt)).toBe('Improve the hero');
   });
 
 });

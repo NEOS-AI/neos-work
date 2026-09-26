@@ -487,4 +487,132 @@ describe('design-systems RULES.md / tokens / components routes', () => {
     const neo = listBody.data.find((d) => d.name === 'neos-default');
     expect(neo?.hasRules).toBe(true);
   });
+
+  it('GET /:id/starters returns [] when missing dir and 404 for unknown id', async () => {
+    const { id } = await createRouteSystem();
+    const res = await designSystems.request(`/${id}/starters`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown }).data).toEqual([]);
+    expect((await designSystems.request('/no-such-ds-xyz/starters')).status).toBe(404);
+  });
+
+  it('PUT /:id/starters/hero.html then GET name and list', async () => {
+    const { id } = await createRouteSystem();
+    const put = await jsonReq(`/${id}/starters/hero.html`, 'PUT', { content: '<h1/>' });
+    expect(put.status).toBe(200);
+    const got = await designSystems.request(`/${id}/starters/hero.html`);
+    expect(got.status).toBe(200);
+    expect(((await got.json()) as { data: { content: string } }).data.content).toBe('<h1/>');
+    const list = await designSystems.request(`/${id}/starters`);
+    const names = ((await list.json()) as { data: Array<{ name: string }> }).data.map((s) => s.name);
+    expect(names).toContain('hero.html');
+  });
+
+  it('PUT starters rejects .txt / escape / nested / .htm and empty/null-byte/oversize', async () => {
+    const { id } = await createRouteSystem();
+    expect((await jsonReq(`/${id}/starters/notes.txt`, 'PUT', { content: 'x' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters/${encodeURIComponent('../x.html')}`, 'PUT', { content: '<h1/>' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters/${encodeURIComponent('foo/bar.css')}`, 'PUT', { content: 'a{}' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters/page.htm`, 'PUT', { content: '<p/>' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters/empty.html`, 'PUT', { content: '' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters/null.html`, 'PUT', { content: `ok${'\0'}bad` })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters/big.html`, 'PUT', { content: 'x'.repeat(256 * 1024 + 1) })).status).toBe(400);
+  });
+
+  it('PUT 21st starter returns 400 starters_limit', async () => {
+    const { id } = await createRouteSystem();
+    for (let i = 0; i < 20; i++) {
+      const put = await jsonReq(`/${id}/starters/s${String(i).padStart(2, '0')}.html`, 'PUT', { content: `<i>${i}</i>` });
+      expect(put.status).toBe(200);
+    }
+    const over = await jsonReq(`/${id}/starters/s20.html`, 'PUT', { content: '<overflow/>' });
+    expect(over.status).toBe(400);
+    expect(((await over.json()) as { error: string }).error).toMatch(/starters_limit/);
+  });
+
+  it('POST pin 409 does not overwrite an existing PUT starter', async () => {
+    const { id } = await createRouteSystem();
+    const put = await jsonReq(`/${id}/starters/hero.html`, 'PUT', { content: '<h1>put-body</h1>' });
+    expect(put.status).toBe(200);
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, NAME, 'components.html'), '<button>comp</button>', 'utf8');
+    const pin = await jsonReq(`/${id}/starters`, 'POST', { from: 'components', name: 'hero.html' });
+    expect(pin.status).toBe(409);
+    const got = await designSystems.request(`/${id}/starters/hero.html`);
+    expect(((await got.json()) as { data: { content: string } }).data.content).toBe('<h1>put-body</h1>');
+  });
+
+  it('POST pin from components returns 201 with gallery.html body', async () => {
+    const { id } = await createRouteSystem();
+    const components = '<section>gallery</section>';
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, NAME, 'components.html'), components, 'utf8');
+    const pin = await jsonReq(`/${id}/starters`, 'POST', { from: 'components', name: 'gallery.html' });
+    expect(pin.status).toBe(201);
+    const body = (await pin.json()) as { data: { name: string; bytes: number; updatedAt: string } };
+    expect(body.data.name).toBe('gallery.html');
+    expect(body.data.bytes).toBe(Buffer.byteLength(components));
+    expect(body.data.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const got = await designSystems.request(`/${id}/starters/gallery.html`);
+    expect(((await got.json()) as { data: { content: string } }).data.content).toBe(components);
+  });
+
+  it('POST pin rejects missing name / bad from / .txt; bundled 403; unknown 404', async () => {
+    const { id } = await createRouteSystem();
+    await fs.writeFile(path.join(DESIGN_SYSTEMS_DIR, NAME, 'components.html'), '<x/>', 'utf8');
+    expect((await jsonReq(`/${id}/starters`, 'POST', { from: 'components' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters`, 'POST', { from: 'nope', name: 'a.html' })).status).toBe(400);
+    expect((await jsonReq(`/${id}/starters`, 'POST', { from: 'components', name: 'a.txt' })).status).toBe(400);
+    const bid = await bundledId();
+    expect((await jsonReq(`/${bid}/starters`, 'POST', { from: 'components', name: 'a.html' })).status).toBe(403);
+    expect((await jsonReq('/no-such-ds-xyz/starters', 'POST', { from: 'components', name: 'a.html' })).status).toBe(404);
+  });
+
+  it('POST pin from projectFile with missing/invalid projectId or path is 404/400', async () => {
+    const { id } = await createRouteSystem();
+    const missingProject = await jsonReq(`/${id}/starters`, 'POST', {
+      from: 'projectFile',
+      name: 'hero.html',
+    });
+    expect([400, 404]).toContain(missingProject.status);
+    const badProject = await jsonReq(`/${id}/starters`, 'POST', {
+      from: 'projectFile',
+      projectId: 'no-such-project',
+      path: 'index.html',
+      name: 'hero.html',
+    });
+    expect([400, 404]).toContain(badProject.status);
+    const badPath = await jsonReq(`/${id}/starters`, 'POST', {
+      from: 'projectFile',
+      projectId: 'no-such-project',
+      path: '../secret.html',
+      name: 'hero.html',
+    });
+    expect([400, 404]).toContain(badPath.status);
+  });
+
+  it('DELETE starter is 200 then GET 404; missing 404; bundled 403', async () => {
+    const { id } = await createRouteSystem();
+    expect((await jsonReq(`/${id}/starters/hero.html`, 'PUT', { content: '<h1/>' })).status).toBe(200);
+    expect((await designSystems.request(`/${id}/starters/hero.html`, { method: 'DELETE' })).status).toBe(200);
+    expect((await designSystems.request(`/${id}/starters/hero.html`)).status).toBe(404);
+    expect((await designSystems.request(`/${id}/starters/missing.html`, { method: 'DELETE' })).status).toBe(404);
+    const bid = await bundledId();
+    expect((await designSystems.request(`/${bid}/starters/hero.html`, { method: 'DELETE' })).status).toBe(403);
+  });
+
+  it('GET encoded traversal starter does not read a file outside the DS dir', async () => {
+    const { id } = await createRouteSystem();
+    const outside = path.join(DESIGN_SYSTEMS_DIR, `escape-starter-${process.pid}.html`);
+    await fs.writeFile(outside, 'OUTSIDE_STARTER', 'utf8');
+    try {
+      const res = await designSystems.request(`/${id}/starters/${encodeURIComponent('../x.html')}`);
+      expect([400, 404]).toContain(res.status);
+      if (res.status === 200) {
+        const body = (await res.json()) as { data?: { content?: string } };
+        expect(body.data?.content).not.toContain('OUTSIDE_STARTER');
+      }
+      expect(await fs.readFile(outside, 'utf8')).toBe('OUTSIDE_STARTER');
+    } finally {
+      await fs.rm(outside, { force: true }).catch(() => {});
+    }
+  });
 });

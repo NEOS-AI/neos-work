@@ -271,7 +271,8 @@
     "seedLive": "Live artifact",
     "seedComponents": "components.html",
     "seedStarter": "스타터",
-    "openVariant": "변형 열기"
+    "openVariant": "변형 열기",
+    "pinStarter": "스타터로 보관"
   },
   "action": {
     "save": "저장",

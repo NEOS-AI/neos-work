@@ -165,6 +165,83 @@ export class EngineOpsClient extends EnginePluginsClient {
     return readApiResponse(res);
   }
 
+  async listDesignSystemStarters(
+    id: string,
+  ): Promise<ApiResponse<Array<{ name: string; bytes: number; updatedAt: string }>>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/starters`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async getDesignSystemStarter(id: string, name: string): Promise<ApiResponse<{ content: string }>> {
+    const seg = this.pathSegment(id);
+    const nameSeg = this.pathSegment(name);
+    if (!seg) return this.invalidIdResponse('design system id');
+    if (!nameSeg) return this.invalidIdResponse('starter name');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/starters/${nameSeg}`, {
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async saveDesignSystemStarter(
+    id: string,
+    name: string,
+    content: string,
+  ): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    const nameSeg = this.pathSegment(name);
+    if (!seg) return this.invalidIdResponse('design system id');
+    if (!nameSeg) return this.invalidIdResponse('starter name');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/starters/${nameSeg}`, {
+      method: 'PUT',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    return readApiResponse(res);
+  }
+
+  async deleteDesignSystemStarter(id: string, name: string): Promise<ApiResponse<null>> {
+    const seg = this.pathSegment(id);
+    const nameSeg = this.pathSegment(name);
+    if (!seg) return this.invalidIdResponse('design system id');
+    if (!nameSeg) return this.invalidIdResponse('starter name');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/starters/${nameSeg}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    return readApiResponse(res);
+  }
+
+  async pinDesignSystemStarter(
+    id: string,
+    body: {
+      from: 'projectFile' | 'liveArtifact' | 'components';
+      name: string;
+      projectId?: string;
+      path?: string;
+      liveArtifactId?: string;
+    },
+  ): Promise<ApiResponse<{ name: string; bytes: number; updatedAt: string }>> {
+    const seg = this.pathSegment(id);
+    if (!seg) return this.invalidIdResponse('design system id');
+    const res = await fetch(`${this.baseUrl}/api/design-systems/${seg}/starters`, {
+      method: 'POST',
+      headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: body.from,
+        name: body.name,
+        projectId: body.projectId,
+        path: body.path,
+        liveArtifactId: body.liveArtifactId,
+      }),
+    });
+    return readApiResponse(res);
+  }
+
   // --- Artifacts ---
 
   async listArtifacts(params: { workflowId?: string; runId?: string }): Promise<ApiResponse<Artifact[]>> {

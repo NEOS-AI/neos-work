@@ -2373,6 +2373,89 @@ describe('EngineClient', () => {
     });
   });
 
+  it('design system starters list/get/put/delete/pin; invalid id does not fetch; no clone method', async () => {
+    const client = new EngineClient('http://engine.test');
+    expect((client as { cloneDesignSystemStarter?: unknown }).cloneDesignSystemStarter).toBeUndefined();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: [{ name: 'hero.html', bytes: 12, updatedAt: 't' }] }),
+    );
+    const listed = await client.listDesignSystemStarters('ds1');
+    expect(listed).toEqual({
+      ok: true,
+      data: [{ name: 'hero.html', bytes: 12, updatedAt: 't' }],
+    });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/design-systems\/ds1\/starters$/);
+    expect(fetchMock.mock.calls.at(-1)![1]?.method === undefined || fetchMock.mock.calls.at(-1)![1]?.method === 'GET').toBe(true);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { content: '<h1/>' } }));
+    const got = await client.getDesignSystemStarter('ds1', 'hero.html');
+    expect(got).toEqual({ ok: true, data: { content: '<h1/>' } });
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toMatch(/\/api\/design-systems\/ds1\/starters\/hero\.html$/);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: { content: 'body{}' } }));
+    await client.getDesignSystemStarter('ds1', 'theme.css');
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain(
+      `/api/design-systems/ds1/starters/${encodeURIComponent('theme.css')}`,
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await client.saveDesignSystemStarter('ds1', 'hero.html', '<h1>x</h1>');
+    const putCall = fetchMock.mock.calls.at(-1)!;
+    expect(String(putCall[0])).toMatch(/\/api\/design-systems\/ds1\/starters\/hero\.html$/);
+    expect(putCall[1].method).toBe('PUT');
+    expect(JSON.parse(putCall[1].body as string)).toEqual({ content: '<h1>x</h1>' });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+    await client.deleteDesignSystemStarter('ds1', 'hero.html');
+    expect(fetchMock.mock.calls.at(-1)![1].method).toBe('DELETE');
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, data: { name: 'hero.html', bytes: 4, updatedAt: 't' } }, { status: 201 }),
+    );
+    const pin = await client.pinDesignSystemStarter('ds1', {
+      from: 'projectFile',
+      name: 'hero.html',
+      projectId: 'proj-1',
+      path: 'src/hero.html',
+    });
+    expect(pin.ok).toBe(true);
+    const pinCall = fetchMock.mock.calls.at(-1)!;
+    expect(String(pinCall[0])).toMatch(/\/api\/design-systems\/ds1\/starters$/);
+    expect(pinCall[1].method).toBe('POST');
+    expect(JSON.parse(pinCall[1].body as string)).toEqual({
+      from: 'projectFile',
+      name: 'hero.html',
+      projectId: 'proj-1',
+      path: 'src/hero.html',
+    });
+
+    const fetchCount = fetchMock.mock.calls.length;
+    await expect(client.listDesignSystemStarters(`d${'\n'}s`)).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.getDesignSystemStarter('', 'hero.html')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.saveDesignSystemStarter(`id${'\0'}`, 'hero.html', 'x')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(client.deleteDesignSystemStarter(`d${'\n'}s`, 'hero.html')).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    await expect(
+      client.pinDesignSystemStarter(`id${'\0'}`, { from: 'components', name: 'a.html' }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'Invalid design system id',
+    });
+    expect(fetchMock.mock.calls.length).toBe(fetchCount);
+  });
+
 
   it('live artifact refresh/delete and tool token APIs', async () => {
     const client = new EngineClient('http://engine.test');
