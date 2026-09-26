@@ -57,12 +57,12 @@ vi.mock('@univerjs/preset-sheets-core/worker?worker&url', () => ({
 class MockWorker {
   url: URL | string;
   options?: WorkerOptions;
+  terminate = vi.fn();
   constructor(url: URL | string, options?: WorkerOptions) {
     this.url = url;
     this.options = options;
   }
   postMessage(): void {}
-  terminate(): void {}
   addEventListener(): void {}
   removeEventListener(): void {}
   dispatchEvent(): boolean {
@@ -381,7 +381,7 @@ describe('SheetsPane', () => {
   });
 
   it('passes a Worker instance when formulaWorker is enabled', async () => {
-    render(
+    const { unmount } = render(
       <SheetsPane
         formulaWorker
         buffer={openBuffer()}
@@ -391,8 +391,14 @@ describe('SheetsPane', () => {
       />,
     );
     await waitFor(() => expect(createUniver).toHaveBeenCalled());
-    const workerURL = presetOpts().workerURL;
+    const workerURL = presetOpts().workerURL as MockWorker;
     expect(workerURL).toBeInstanceOf(Worker);
+    expect(workerURL.options?.type).toBe('module');
+    const href = String(workerURL.url);
+    expect(href).toContain('mock-univer-formula-worker.js');
+    expect(href).not.toContain('/api/workers');
+    unmount();
+    expect(workerURL.terminate).toHaveBeenCalledTimes(1);
   });
 
   it('clears theme CSS, univer-dark, and disables shortcuts on unmount', async () => {
