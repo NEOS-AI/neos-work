@@ -10,9 +10,9 @@ export function isHtmlPath(path: string): boolean {
 }
 
 export function isHtmlContentType(contentType?: string | null): boolean {
-  if (contentType == null || contentType.trim() === '') return true;
+  if (contentType == null || contentType.trim() === '') return false;
   const lower = contentType.toLowerCase();
-  return lower.includes('html') || lower.includes('xhtml');
+  return lower.includes('html');
 }
 
 export function variantStem(path: string): string {

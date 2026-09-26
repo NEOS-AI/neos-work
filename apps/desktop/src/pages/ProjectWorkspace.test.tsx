@@ -2033,6 +2033,21 @@ describe('ProjectWorkspace', () => {
       ok: true,
       data: [{ id: 'live-html', name: 'Hero', content: '<section>ok</section>' }],
     });
+    const missingType = renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.selectOptions(screen.getByTestId('variant-seed'), 'live');
+    expect(screen.getByTestId('make-variants')).toBeDisabled();
+    missingType.unmount();
+
+    listLiveArtifacts.mockResolvedValue({
+      ok: true,
+      data: [{
+        id: 'live-html',
+        name: 'Hero',
+        content: '<section>ok</section>',
+        contentType: 'text/html',
+      }],
+    });
     renderWorkspace();
     await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
     await user.selectOptions(screen.getByTestId('variant-seed'), 'live');
@@ -2052,10 +2067,20 @@ describe('ProjectWorkspace', () => {
       ok: true,
       data: [boundDesignSystemRow(true)],
     });
-    renderWorkspace();
+    const second = renderWorkspace();
     await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
     expect(screen.getByRole('option', { name: 'designSystems.seedComponents' })).toBeInTheDocument();
     expect(getDesignSystemComponents).not.toHaveBeenCalled();
+    second.unmount();
+
+    mockLoadedProject({ designSystemId: 'ds1' });
+    listDesignSystems.mockResolvedValue({
+      ok: true,
+      data: [boundDesignSystemRow(false)],
+    });
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    expect(screen.queryByRole('option', { name: 'designSystems.seedComponents' })).toBeNull();
   });
 
   it('count select defaults to 3 and accepts 2/4', async () => {
@@ -2162,6 +2187,36 @@ describe('ProjectWorkspace', () => {
     ]);
     expect(prompt).not.toMatch(/^- index\.variant-a\.html$/m);
     expect(createProjectRun.mock.calls[0]![0].editContext.filePath).toBe('index.html');
+  });
+
+  it('fresh listProjectFiles is used for collisions when files state is stale', async () => {
+    const user = userEvent.setup();
+    mockHtmlProject([{ path: 'index.html', type: 'file' }]);
+    let listCalls = 0;
+    listProjectFiles.mockImplementation(async () => {
+      listCalls += 1;
+      if (listCalls === 1) {
+        return {
+          ok: true,
+          data: [{ path: 'index.html', name: 'index.html', type: 'file', isEntry: true }],
+        };
+      }
+      return {
+        ok: true,
+        data: [
+          { path: 'index.html', name: 'index.html', type: 'file', isEntry: true },
+          { path: 'index.variant-a.html', name: 'index.variant-a.html', type: 'file', isEntry: false },
+        ],
+      };
+    });
+    await startSucceededRun();
+    renderWorkspace();
+    await waitFor(() => expect(screen.getByText('Demo')).toBeInTheDocument());
+    await user.click(screen.getByTestId('make-variants'));
+    await waitFor(() => expect(createProjectRun).toHaveBeenCalled());
+    const prompt = String(createProjectRun.mock.calls[0]![0].prompt);
+    expect(prompt).toContain('- index.variant-a-2.html');
+    expect(prompt).not.toMatch(/^- index\.variant-a\.html$/m);
   });
 
   it('components.html seed omits editContext and fetches GET components', async () => {
@@ -2336,6 +2391,12 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByTestId('open-variant-b')).toBeInTheDocument();
     expect(screen.getByTestId('open-variant-c')).toBeInTheDocument();
     expect(screen.getByTestId('open-variant-a')).toHaveAccessibleName(/designSystems\.openVariant/);
+    expect(
+      within(screen.getByTestId('project-side-panel')).getByTestId('open-variant-a'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('project-variants-toolbar')).queryByTestId('open-variant-a'),
+    ).toBeNull();
     expect(screen.queryByTestId('variant-canvas')).toBeNull();
     expect(screen.queryByTestId('variant-split')).toBeNull();
     await user.click(screen.getByTestId('open-variant-a'));

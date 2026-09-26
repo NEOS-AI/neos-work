@@ -133,8 +133,9 @@ describe('design-variants', () => {
     expect(isHtmlContentType('application/xhtml+xml')).toBe(true);
     expect(isHtmlContentType('text/plain')).toBe(false);
     expect(isHtmlContentType('image/png')).toBe(false);
-    expect(isHtmlContentType(undefined)).toBe(true);
-    expect(isHtmlContentType(null)).toBe(true);
-    expect(isHtmlContentType('')).toBe(true);
+    expect(isHtmlContentType(undefined)).toBe(false);
+    expect(isHtmlContentType(null)).toBe(false);
+    expect(isHtmlContentType('')).toBe(false);
+    expect(isHtmlContentType('   ')).toBe(false);
   });
 });
