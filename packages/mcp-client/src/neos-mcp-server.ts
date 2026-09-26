@@ -67,6 +67,28 @@ export interface NeosMcpBackend {
     projectId: string,
     artifactId: string,
   ): Promise<{ artifact: NeosMcpLiveArtifact; refresh?: unknown }>;
+  getSheetRange(input: {
+    projectId: string;
+    path: string;
+    a1: string;
+    sheet?: string;
+  }): Promise<unknown>;
+  setSheetRange(input: {
+    projectId: string;
+    path: string;
+    a1: string;
+    sheet?: string;
+    value?: unknown;
+    values?: unknown;
+    formula?: unknown;
+    formulas?: unknown;
+  }): Promise<unknown>;
+  evalSheetRange(input: {
+    projectId: string;
+    path: string;
+    a1: string;
+    sheet?: string;
+  }): Promise<unknown>;
 }
 
 export interface NeosMcpServerOptions {
@@ -215,6 +237,52 @@ export function listNeosMcpTools(): Tool[] {
         required: ['artifactId'],
       },
     },
+    {
+      name: 'neos_sheets_get',
+      description: 'Read cell values from a .univer.json workbook (A1 notation).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectId: projectIdProp,
+          path: { type: 'string', description: 'Project-relative .univer.json path' },
+          a1: { type: 'string', description: 'A1 range, e.g. A1 or A1:B2' },
+          sheet: { type: 'string', description: 'Sheet name. Default: active/first sheet' },
+        },
+        required: ['path', 'a1'],
+      },
+    },
+    {
+      name: 'neos_sheets_set',
+      description: 'Write values or formulas into a .univer.json workbook and save via files API.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectId: projectIdProp,
+          path: { type: 'string', description: 'Project-relative .univer.json path' },
+          a1: { type: 'string', description: 'A1 without sheet qualifier, e.g. A1 or A1:B2' },
+          sheet: { type: 'string' },
+          value: { description: 'Scalar CellValue for a single cell' },
+          values: { description: '2D CellValue[][] matching A1 bounding box' },
+          formula: { type: 'string', description: 'Single-cell formula, e.g. =1+1' },
+          formulas: { description: '2D string[][] matching A1 bounding box' },
+        },
+        required: ['path', 'a1'],
+      },
+    },
+    {
+      name: 'neos_sheets_eval',
+      description: 'Force formula calculation on a .univer.json range and return computed values.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectId: projectIdProp,
+          path: { type: 'string', description: 'Project-relative .univer.json path' },
+          a1: { type: 'string' },
+          sheet: { type: 'string' },
+        },
+        required: ['path', 'a1'],
+      },
+    },
   ];
 }
 
@@ -321,6 +389,29 @@ export async function dispatchNeosMcpTool(
         const result = await backend.refreshLiveArtifact(projectId, artifactId);
         return jsonResult({ ok: true, ...result });
       }
+      case 'neos_sheets_get':
+      case 'neos_sheets_set':
+      case 'neos_sheets_eval': {
+        const projectId = resolveToolProjectId(args, options.defaultProjectId);
+        const path = asPath(args.path);
+        const a1 = asString(args.a1, 200);
+        const sheet = asString(args.sheet, 200) || undefined;
+        if (!projectId) return textResult('projectId is required', true);
+        if (!path) return textResult('path is required and must be project-relative', true);
+        if (!a1) return textResult('a1 is required', true);
+        const base = { projectId, path, a1, ...(sheet ? { sheet } : {}) };
+        if (name === 'neos_sheets_get') {
+          return jsonResult(await backend.getSheetRange(base));
+        }
+        if (name === 'neos_sheets_eval') {
+          return jsonResult(await backend.evalSheetRange(base));
+        }
+        const write: Record<string, unknown> = { ...base };
+        for (const key of ['value', 'values', 'formula', 'formulas'] as const) {
+          if (args[key] !== undefined) write[key] = args[key];
+        }
+        return jsonResult(await backend.setSheetRange(write as Parameters<NeosMcpBackend['setSheetRange']>[0]));
+      }
       default:
         return textResult(`Unknown tool: ${name}`, true);
     }
@@ -341,7 +432,7 @@ export function createNeosMcpServer(
       capabilities: { tools: {} },
       instructions:
         options.instructions
-        ?? 'NEOS Work MCP server. Use neos_files_* for Design Project files and neos_live_artifacts_* for live previews. Prefer project-relative paths; never escape the project root.',
+        ?? 'NEOS Work MCP server. Use neos_sheets_* for cell edits on .univer.json. neos_files_* remains whole-file UTF-8. Prefer project-relative paths; never escape the project root.',
     },
   );
 

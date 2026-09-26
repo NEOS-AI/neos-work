@@ -45,6 +45,9 @@ export const WORKER_TOOL_NAMES = {
   move_file: 'move_file',
   run_command: 'run_command',
   web_search: 'web_search',
+  sheets_get_range: 'sheets_get_range',
+  sheets_set_range: 'sheets_set_range',
+  sheets_eval: 'sheets_eval',
 } as const;
 
 /** Legacy allowlist aliases used by harness/worker catalogs. */
@@ -128,11 +131,14 @@ const READ_TOOLS = [
   WORKER_TOOL_NAMES.read_file,
   WORKER_TOOL_NAMES.list_directory,
   WORKER_TOOL_NAMES.search_files,
+  WORKER_TOOL_NAMES.sheets_get_range,
+  WORKER_TOOL_NAMES.sheets_eval,
 ] as const;
 
 const WRITE_TOOLS = [
   WORKER_TOOL_NAMES.write_file,
   WORKER_TOOL_NAMES.move_file,
+  WORKER_TOOL_NAMES.sheets_set_range,
 ] as const;
 
 /**
@@ -150,7 +156,12 @@ export function toolsForPermissionProfile(
     case 'execute':
       return new Set([...READ_TOOLS, ...WRITE_TOOLS, WORKER_TOOL_NAMES.run_command]);
     case 'network':
-      return new Set([...READ_TOOLS, WORKER_TOOL_NAMES.web_search, WORKER_TOOL_NAMES.write_file]);
+      return new Set([
+        ...READ_TOOLS,
+        WORKER_TOOL_NAMES.web_search,
+        WORKER_TOOL_NAMES.write_file,
+        WORKER_TOOL_NAMES.sheets_set_range,
+      ]);
     case 'full':
     default:
       return new Set([
@@ -256,6 +267,68 @@ export interface BuildWorkerToolRegistryOptions {
   extraTools?: Tool[];
 }
 
+const SHEETS_TOOL_DESCRIPTIONS: Record<string, string> = {
+  sheets_get_range:
+    'Read cell values from a .univer.json workbook (A1 notation). Waits for formula results.',
+  sheets_set_range: 'Write values or formulas into a .univer.json workbook and save the snapshot.',
+  sheets_eval: 'Wait for formula calculation on a range and return computed values.',
+};
+
+const SHEETS_TOOL_SCHEMAS: Record<string, Record<string, unknown>> = {
+  sheets_get_range: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Workspace-relative .univer.json path' },
+      a1: { type: 'string', description: 'A1 range, e.g. A1 or A1:B2' },
+      sheet: { type: 'string', description: 'Sheet name. Default: active/first sheet' },
+    },
+    required: ['path', 'a1'],
+  },
+  sheets_set_range: {
+    type: 'object',
+    properties: {
+      path: { type: 'string' },
+      a1: { type: 'string', description: 'A1 without sheet qualifier, e.g. A1 or A1:B2' },
+      sheet: { type: 'string' },
+      value: { description: 'Scalar CellValue for a single cell' },
+      values: { description: '2D CellValue[][] matching A1 bounding box' },
+      formula: { type: 'string', description: 'Single-cell formula, e.g. =1+1' },
+      formulas: { description: '2D string[][] matching A1 bounding box' },
+    },
+    required: ['path', 'a1'],
+  },
+  sheets_eval: {
+    type: 'object',
+    properties: {
+      path: { type: 'string' },
+      a1: { type: 'string' },
+      sheet: { type: 'string' },
+    },
+    required: ['path', 'a1'],
+  },
+};
+
+let cachedSheetsNode: Promise<typeof import('@neos-work/office-sheets/node')> | null = null;
+
+function loadSheetsNode(): Promise<typeof import('@neos-work/office-sheets/node')> {
+  cachedSheetsNode ??= import('@neos-work/office-sheets/node');
+  return cachedSheetsNode;
+}
+
+function createSheetsToolStub(name: string, workspaceRoot: string): Tool {
+  return {
+    name,
+    description: SHEETS_TOOL_DESCRIPTIONS[name] ?? name,
+    inputSchema: SHEETS_TOOL_SCHEMAS[name] ?? { type: 'object', properties: {} },
+    async execute(input) {
+      const { createSheetsTools } = await loadSheetsNode();
+      const real = createSheetsTools(workspaceRoot).find((t) => t.name === name);
+      if (!real) return { success: false, output: null, error: `Tool not found: ${name}` };
+      return real.execute(input);
+    },
+  };
+}
+
 /**
  * Build a ToolRegistry scoped to the worker's permission profile + workspace root.
  * `extraTools` are always registered (coordinator spawn tools, host injections).
@@ -270,6 +343,16 @@ export function buildWorkerToolRegistry(opts: BuildWorkerToolRegistryOptions): T
     ...createFilesystemTools(workspaceRoot),
     createShellTool(workspaceRoot),
   ];
+
+  for (const name of [
+    WORKER_TOOL_NAMES.sheets_get_range,
+    WORKER_TOOL_NAMES.sheets_set_range,
+    WORKER_TOOL_NAMES.sheets_eval,
+  ]) {
+    if (allowedNames.has(name)) {
+      candidates.push(createSheetsToolStub(name, workspaceRoot));
+    }
+  }
 
   for (const tool of candidates) {
     if (allowedNames.has(tool.name)) {

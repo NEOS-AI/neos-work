@@ -26,7 +26,9 @@
   },
   "dependencies": {
     "@neos-work/mcp-client": "workspace:*",
-    "@neos-work/shared": "workspace:*"
+    "@neos-work/office-sheets": "workspace:*",
+    "@neos-work/shared": "workspace:*",
+    "@univerjs/presets": "1.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
