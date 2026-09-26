@@ -31,8 +31,7 @@
     "redis": "^4.7.0",
     "unzipper": "^0.12.3",
     "@neos-work/agent-runtime": "workspace:*",
-    "@neos-work/plugin-runtime": "workspace:*",
-    "@univerjs/presets": "1.0.2"
+    "@neos-work/plugin-runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
