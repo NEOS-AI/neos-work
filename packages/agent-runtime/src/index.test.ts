@@ -4,6 +4,13 @@ import {
   assembleEditContextPrompt,
   assemblePreviewCommentsPrompt,
   assembleDesignContextPrompt,
+  formatDesignHarnessInner,
+  DESIGN_HARNESS_WRAP_MAX,
+  DESIGN_MD_INJECT_MAX,
+  RULES_MD_INJECT_MAX,
+  RULES_MD_INJECT_HEAD,
+  RULES_MD_INJECT_TAIL,
+  TOKENS_INJECT_MAX,
   buildLaunchArgs,
   buildLaunchForId,
   detectAllAgents,
@@ -447,5 +454,174 @@ describe('assembleDesignContextPrompt', () => {
     expect(out).toContain('tokens.css');
     expect(out).toMatch(/tokens truncated/i);
     expect(out.length).toBeLessThan(designMd.length + tokensCss.length);
+    expect(DESIGN_MD_INJECT_MAX).toBe(32_000);
+    expect(TOKENS_INJECT_MAX).toBe(8_000);
   });
 });
+
+function designContextMarkerPairs(s: string): number {
+  const open = s.match(/<!-- DESIGN CONTEXT -->/g)?.length ?? 0;
+  const close = s.match(/<!-- \/DESIGN CONTEXT -->/g)?.length ?? 0;
+  return open === close ? open : -1;
+}
+
+function buildRules20k(): string {
+  const prefix = '# Agent rules\n\n## Tools\n';
+  const heading = '\n## Corrections\n';
+  const source = '<!-- source: editor -->\n';
+  const keep = '- 2026-09-21: keep-me\n';
+  let pad = 'H'.repeat(Math.max(9_000 - prefix.length, 0));
+  let old = '';
+  for (let i = 1; i <= 40; i += 1) {
+    const label = i === 1 ? 'stale-padding old-01' : `old-${String(i).padStart(2, '0')}`;
+    old += `- 2026-01-${String(Math.min(i, 28)).padStart(2, '0')}: ${label} ${'P'.repeat(220)}\n`;
+  }
+  let rulesMd = prefix + pad + heading + source + old + keep;
+  if (rulesMd.length < 20_000) {
+    pad += 'H'.repeat(20_000 - rulesMd.length);
+    rulesMd = prefix + pad + heading + source + old + keep;
+  }
+  return rulesMd;
+}
+
+const HARNESS_FRAGMENT = {
+  name: 'neos-default',
+  designMd: '# Brand\nPrimary indigo',
+  rulesMd: '# Agent rules\n- never hex',
+  tokensCss: ':root { --c: #6366f1 }',
+};
+
+describe('formatDesignHarnessInner', () => {
+  it('formatDesignHarnessInner omits DESIGN CONTEXT markers', () => {
+    const inner = formatDesignHarnessInner(HARNESS_FRAGMENT);
+    expect(inner).toContain('Design system: neos-default');
+    expect(inner).toContain('Primary indigo');
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('never hex');
+    expect(inner).toContain('### tokens.css');
+    expect(inner).toContain('--c');
+    expect(inner).not.toMatch(/DESIGN CONTEXT/);
+    expect(inner.indexOf('Primary indigo')).toBeLessThan(inner.indexOf('### RULES.md'));
+    expect(inner.indexOf('### RULES.md')).toBeLessThan(inner.indexOf('### tokens.css'));
+  });
+
+  it('assembleDesignContextPrompt wrap equals formatDesignHarnessInner plus markers', () => {
+    const inner = formatDesignHarnessInner(HARNESS_FRAGMENT);
+    const out = assembleDesignContextPrompt('Fix hero', HARNESS_FRAGMENT);
+    expect(out.startsWith(`<!-- DESIGN CONTEXT -->\n${inner}\n<!-- /DESIGN CONTEXT -->`)).toBe(true);
+    expect(inner).not.toMatch(/DESIGN CONTEXT/);
+    expect(designContextMarkerPairs(out)).toBe(1);
+    expect(out.endsWith('Fix hero') || out.includes('\nFix hero')).toBe(true);
+    const close = '<!-- /DESIGN CONTEXT -->';
+    expect(out.indexOf(close)).toBeGreaterThan(-1);
+    expect(out.slice(out.indexOf(close) + close.length)).toContain('Fix hero');
+  });
+
+  it('rulesMd sits after DESIGN.md and before tokens.css', () => {
+    const out = assembleDesignContextPrompt('task', {
+      designMd: '# D',
+      rulesMd: '# R',
+      tokensCss: ':root{}',
+    });
+    expect(out.indexOf('# D')).toBeLessThan(out.indexOf('### RULES.md'));
+    expect(out.indexOf('### RULES.md')).toBeLessThan(out.indexOf('# R'));
+    expect(out.indexOf('# R')).toBeLessThan(out.indexOf('### tokens.css'));
+    expect(out.indexOf('### tokens.css')).toBeLessThan(out.indexOf('task'));
+  });
+
+  it('truncated head plus 8k Corrections tail keeps keep-me', () => {
+    const prefix = '# Agent rules\n\n## Tools\n';
+    const heading = '\n## Corrections\n';
+    const keepLine = '- 2026-09-21: keep-me';
+    const pad = 'H'.repeat(Math.max(9_000 - prefix.length, 0));
+    const fillerBudget = RULES_MD_INJECT_TAIL - keepLine.length - 1;
+    const fillerPrefix = '- 2026-01-01: ';
+    const filler = `${fillerPrefix}${'P'.repeat(Math.max(fillerBudget - fillerPrefix.length, 0))}`;
+    const rulesMd = `${prefix}${pad}${heading}${filler}\n${keepLine}\n`;
+    const fragment = { designMd: '# D', rulesMd };
+    const inner = formatDesignHarnessInner(fragment);
+    const wrapped = assembleDesignContextPrompt('task', fragment);
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('keep-me');
+    expect(inner).toContain('…[rules truncated]');
+    const rulesBody = inner.slice(inner.indexOf('### RULES.md') + '### RULES.md\n'.length);
+    expect(rulesBody.length).toBeGreaterThan(RULES_MD_INJECT_MAX);
+    expect(wrapped).toContain('keep-me');
+    expect(wrapped).toContain('### RULES.md');
+  });
+
+  it('20k RULES.md head 9k + keep-me tail survives K32 split', () => {
+    expect(RULES_MD_INJECT_MAX).toBe(16_000);
+    expect(RULES_MD_INJECT_HEAD).toBe(8_000);
+    expect(RULES_MD_INJECT_TAIL).toBe(8_000);
+    const rulesMd = buildRules20k();
+    expect(rulesMd.length).toBeGreaterThanOrEqual(20_000);
+    const inner = formatDesignHarnessInner({ designMd: '# D', rulesMd });
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('keep-me');
+    expect(inner).toContain('…[rules truncated]');
+    expect(inner).toContain('## Corrections');
+    expect(inner).not.toContain('<!-- source:');
+    expect(inner).not.toContain('stale-padding');
+    expect(inner).not.toContain('H'.repeat(8_500));
+  });
+
+  it('rules null-byte omits RULES section and keeps DESIGN', () => {
+    const inner = formatDesignHarnessInner({
+      designMd: '# KeepDesign',
+      rulesMd: 'x\0y',
+      tokensCss: ':root { --ok: 1 }',
+    });
+    expect(inner).toContain('KeepDesign');
+    expect(inner).toContain('### tokens.css');
+    expect(inner).not.toContain('### RULES.md');
+  });
+
+  it('empty / whitespace rulesMd omits ### RULES.md header', () => {
+    expect(formatDesignHarnessInner({ designMd: '# D', rulesMd: '  \n  ' })).not.toContain(
+      '### RULES.md',
+    );
+    expect(formatDesignHarnessInner({ designMd: '# D' })).not.toContain('### RULES.md');
+    expect(formatDesignHarnessInner({ designMd: '# D' })).toContain('# D');
+  });
+
+  it('tokens null-byte omits tokens section and keeps DESIGN + RULES', () => {
+    const inner = formatDesignHarnessInner({
+      designMd: '# D',
+      rulesMd: '# Agent rules',
+      tokensCss: 'x\0y',
+    });
+    expect(inner).toContain('# D');
+    expect(inner).toContain('### RULES.md');
+    expect(inner).not.toContain('### tokens.css');
+  });
+
+  it('no Corrections heading slices RULES from the front at 16k', () => {
+    const rulesMd = `${'HEAD'.repeat(5_000)}\n- 2026-09-21: keep-me-at-end`;
+    expect(rulesMd.length).toBeGreaterThan(RULES_MD_INJECT_MAX);
+    expect(rulesMd).not.toMatch(/##\s+Corrections/i);
+    const inner = formatDesignHarnessInner({ designMd: '# D', rulesMd });
+    expect(inner).toContain('…[rules truncated]');
+    expect(inner).not.toContain('keep-me-at-end');
+  });
+
+  it('oversized newest Corrections bullet is sliced to RULES_MD_INJECT_TAIL', () => {
+    const giant = `- 2026-09-22: ${'G'.repeat(RULES_MD_INJECT_TAIL + 500)}`;
+    const rulesMd = `# Agent rules\n\n## Corrections\n- 2026-09-21: old-keep\n${giant}\n`;
+    const inner = formatDesignHarnessInner({ designMd: '# D', rulesMd });
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('…[rules truncated]');
+    expect(inner).not.toContain('G'.repeat(RULES_MD_INJECT_TAIL + 1));
+    const rulesSection = inner.slice(inner.indexOf('### RULES.md'));
+    expect(rulesSection.length).toBeLessThanOrEqual(RULES_MD_INJECT_MAX + '\n\n…[rules truncated]'.length);
+  });
+
+  it('barrel does not export assembleDesignHarnessPrompt', async () => {
+    const runtime = await import('./index.js');
+    expect('assembleDesignHarnessPrompt' in runtime).toBe(false);
+    expect('formatDesignHarnessInner' in runtime).toBe(true);
+    expect('DESIGN_HARNESS_WRAP_MAX' in runtime).toBe(true);
+    expect(DESIGN_HARNESS_WRAP_MAX).toBe(64_000);
+  });
+});
+

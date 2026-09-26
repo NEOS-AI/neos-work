@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getExecutionSettings: vi.fn(() => ({})),
   spawnRegistryAgent: vi.fn(),
   getDesignSystemContent: vi.fn(),
+  loadDesignHarnessFragment: vi.fn(),
   getRuntimeAuthToken: vi.fn(() => 'tok'),
   getRuntimeServerUrl: vi.fn(() => 'http://127.0.0.1:3000'),
   createFirstHtmlArtifact: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock('./registry-spawn.js', () => ({
 
 vi.mock('./design-system-store.js', () => ({
   getDesignSystemContent: mocks.getDesignSystemContent,
+  loadDesignHarnessFragment: mocks.loadDesignHarnessFragment,
 }));
 
 vi.mock('./runtime-context.js', () => ({
@@ -95,6 +97,7 @@ beforeEach(() => {
   mocks.createRoutineRun.mockReturnValue({ id: 'rr-1' });
   mocks.executeWorkflow.mockResolvedValue(undefined);
   mocks.getDesignSystemContent.mockResolvedValue(null);
+  mocks.loadDesignHarnessFragment.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -335,12 +338,23 @@ describe('runRoutine', () => {
       nodes: [],
       edges: [],
     });
-    mocks.getDesignSystemContent.mockResolvedValue('# Brand');
+    mocks.loadDesignHarnessFragment.mockResolvedValue({
+      name: 'brand',
+      designMd: '# Brand',
+      rulesMd: '# Agent rules\n- sched-keep',
+      tokensCss: ':root { --sched-token: 1 }',
+    });
 
     await runRoutine('r1');
-    expect(mocks.getDesignSystemContent).toHaveBeenCalledWith('ds1');
+    expect(mocks.loadDesignHarnessFragment).toHaveBeenCalledWith('ds1');
     const call = mocks.executeWorkflow.mock.calls[0]![0] as { designSystemContent?: string };
-    expect(call.designSystemContent).toBe('# Brand');
+    const inner = call.designSystemContent ?? '';
+    expect(inner).toContain('### RULES.md');
+    expect(inner).toContain('sched-keep');
+    expect(inner).toContain('### tokens.css');
+    expect(inner).toContain('--sched-token');
+    expect(inner).not.toContain('DESIGN CONTEXT');
+    expect(inner).not.toBe('# Brand');
   });
 
   it('marks routine run failed when executeWorkflow throws', async () => {

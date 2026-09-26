@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DESIGN_HARNESS_WRAP_MAX } from '@neos-work/shared';
 
 const orchestratorCtor = vi.fn();
 const orchestratorRun = vi.fn(async function* () {
@@ -71,6 +73,29 @@ function ctx(partial: Partial<NodeContext> = {}): NodeContext {
     config: {},
     ...partial,
   };
+}
+
+function designContextMarkerPairs(s: string): number {
+  const open = s.match(/<!-- DESIGN CONTEXT -->/g)?.length ?? 0;
+  const close = s.match(/<!-- \/DESIGN CONTEXT -->/g)?.length ?? 0;
+  return open === close ? open : -1;
+}
+
+function buildDesign30kInner(): string {
+  return [
+    'Design system: wrap-fixture',
+    'D'.repeat(30_000),
+    'X'.repeat(2_200),
+    '',
+    '### RULES.md',
+    '# Agent rules',
+    '- keep-rules',
+    '',
+    '### tokens.css',
+    '```css',
+    ':root { --keep-token: 1; }',
+    '```',
+  ].join('\n');
 }
 
 describe('AgentNode coordinator mode', () => {
@@ -365,7 +390,7 @@ describe('AgentNode CLI provider', () => {
     const result = await node.execute(
       ctx({
         cliSpawn,
-        // DESIGN_CONTEXT_MAX 32k + base 100k + inputs 256k pushes past hard cap
+        // DESIGN_HARNESS_WRAP_MAX + base 100k + inputs 256k pushes past hard cap
         designSystemContent: 'D'.repeat(40_000),
         inputs: { blob: 'X'.repeat(300_000) },
       }),
@@ -406,6 +431,30 @@ describe('AgentNode CLI provider', () => {
     expect(prompt).toContain('DESIGN CONTEXT');
     expect(prompt).toContain('Use blue');
     expect(prompt).toContain('Be helpful');
+    expect(designContextMarkerPairs(prompt)).toBe(1);
+  });
+
+  it('CLI spawn wrap is also a single marker pair', async () => {
+    const inner = buildDesign30kInner();
+    expect(inner).not.toMatch(/DESIGN CONTEXT/);
+    expect(inner.length).toBeGreaterThan(32_000);
+    expect(inner.length).toBeLessThan(DESIGN_HARNESS_WRAP_MAX);
+    const cliSpawn = vi.fn().mockResolvedValue({ output: 'ok', exitCode: 0 });
+    const node = new AgentNode('agent_coding', {
+      provider: 'cli-claude',
+      systemPrompt: 'Be helpful',
+    });
+    await node.execute(
+      ctx({
+        cliSpawn,
+        designSystemContent: inner,
+      }),
+    );
+    const prompt = cliSpawn.mock.calls[0][1] as string;
+    expect(prompt).toContain('keep-rules');
+    expect(prompt).toContain('--keep-token');
+    expect(designContextMarkerPairs(prompt)).toBe(1);
+    expect(prompt).not.toContain('…[design context truncated]');
   });
 
   it('forwards AbortSignal to cliSpawn', async () => {
@@ -1073,17 +1122,46 @@ describe('AgentNode LLM model selection', () => {
   });
 
   it('truncates oversized design system context', async () => {
+    orchestratorRun.mockClear();
     const node = new AgentNode('agent_coding', { systemPrompt: 'Agent body' });
     await node.execute(
       ctx({
         settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
-        designSystemContent: 'D'.repeat(40_000),
+        designSystemContent: 'D'.repeat(DESIGN_HARNESS_WRAP_MAX + 1_000),
       }),
     );
     const goal = orchestratorRun.mock.calls[0]?.[0] as string;
-    expect(goal).toContain('DESIGN CONTEXT');
+    expect(goal).toContain('<!-- DESIGN CONTEXT -->');
     expect(goal).toContain('…[design context truncated]');
-    expect(goal.length).toBeLessThan(40_000 + 5_000);
+  });
+
+  it('wraps inner once and keeps RULES + tokens when DESIGN.md is 30_000 chars', async () => {
+    orchestratorRun.mockClear();
+    const inner = buildDesign30kInner();
+    expect(inner).not.toMatch(/DESIGN CONTEXT/);
+    expect(inner.length).toBeGreaterThan(32_000);
+    expect(inner.length).toBeLessThan(DESIGN_HARNESS_WRAP_MAX);
+    const node = new AgentNode('agent_coding', { systemPrompt: 'Agent body' });
+    await node.execute(
+      ctx({
+        settings: { ANTHROPIC_API_KEY: 'sk-ant-test' },
+        designSystemContent: inner,
+      }),
+    );
+    const goal = orchestratorRun.mock.calls[0]?.[0] as string;
+    expect(goal).toContain('### RULES.md');
+    expect(goal).toContain('keep-rules');
+    expect(goal).toContain('### tokens.css');
+    expect(goal).toContain('--keep-token');
+    expect(goal).toContain('Agent body');
+    expect(designContextMarkerPairs(goal)).toBe(1);
+    expect(goal).not.toContain('…[design context truncated]');
+  });
+
+  it('source no longer binds DESIGN_CONTEXT_MAX_CHARS = 32_000', () => {
+    const src = readFileSync(new URL('./agent.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/DESIGN_CONTEXT_MAX_CHARS\s*=\s*32_000/);
+    expect(src).toContain('DESIGN_HARNESS_WRAP_MAX');
   });
 
   it('prepends design system content on the LLM path', async () => {

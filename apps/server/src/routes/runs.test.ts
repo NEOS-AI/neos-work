@@ -145,9 +145,16 @@ describe('runs routes', () => {
 
 
   it('injects design system DESIGN.md into assembled prompt', async () => {
-    const { createDesignSystem, deleteDesignSystem } = await import('../lib/design-system-store.js');
+    const {
+      createDesignSystem,
+      deleteDesignSystem,
+      updateDesignSystemRules,
+      updateDesignSystemTokens,
+    } = await import('../lib/design-system-store.js');
     const ds = await createDesignSystem(`_run_ds_${process.pid}`, 'Brand for runs');
     expect(ds).not.toBeNull();
+    await updateDesignSystemRules(ds!.id, '# Agent rules\n\n## Never\n- run-keep-me\n');
+    await updateDesignSystemTokens(ds!.id, ':root { --run-token: 1 }');
     const p = projects.createProject({
       name: `${NAME}_ds`,
       designSystemId: ds!.id,
@@ -168,11 +175,19 @@ describe('runs routes', () => {
       ok: boolean;
       data: { prompt?: string };
     };
-    expect(created.data.prompt).toContain('DESIGN CONTEXT');
-    expect(created.data.prompt).toMatch(/Brand|Design System|Polish landing/i);
-    expect(created.data.prompt!.indexOf('DESIGN CONTEXT')).toBeLessThan(
-      created.data.prompt!.indexOf('Polish landing'),
-    );
+    const prompt = created.data.prompt ?? '';
+    expect(prompt).toContain('DESIGN CONTEXT');
+    expect(prompt).toContain('### RULES.md');
+    expect(prompt).toContain('run-keep-me');
+    expect(prompt).toContain('### tokens.css');
+    expect(prompt).toContain('--run-token');
+    expect(prompt).toContain('Polish landing');
+    expect(prompt.indexOf('DESIGN CONTEXT')).toBeLessThan(prompt.indexOf('### RULES.md'));
+    expect(prompt.indexOf('### RULES.md')).toBeLessThan(prompt.indexOf('### tokens.css'));
+    expect(prompt.indexOf('### tokens.css')).toBeLessThan(prompt.indexOf('Polish landing'));
+    const open = prompt.match(/<!-- DESIGN CONTEXT -->/g)?.length ?? 0;
+    const close = prompt.match(/<!-- \/DESIGN CONTEXT -->/g)?.length ?? 0;
+    expect(open === close ? open : -1).toBe(1);
 
     await deleteDesignSystem(ds!.id);
   });

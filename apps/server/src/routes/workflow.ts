@@ -17,6 +17,7 @@ import { Readable } from 'node:stream';
 import { scrubErrorMessage } from '@neos-work/core';
 import type { Workflow, WorkflowSSEEvent } from '@neos-work/shared';
 import { migrateWorkflowV1ToV2, needsWorkflowMigration } from '@neos-work/shared';
+import { formatDesignHarnessInner } from '@neos-work/agent-runtime';
 import { executeWorkflow } from '@neos-work/workflow-engine';
 import * as db from '../db/workflows.js';
 import * as artifactDb from '../db/artifacts.js';
@@ -27,7 +28,13 @@ import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context
 import {
   createDesignSystem,
   getDesignSystemContent,
+  getDesignSystemRules,
+  getDesignSystemTokens,
+  listDesignSystems,
+  loadDesignHarnessFragment,
   updateDesignSystemContent,
+  updateDesignSystemRules,
+  updateDesignSystemTokens,
 } from '../lib/design-system-store.js';
 import { createFirstHtmlArtifact } from '../lib/html-artifact.js';
 import { assessWorkflowPreflight } from '../lib/workflow-preflight.js';
@@ -461,7 +468,7 @@ workflow.get('/:id/export.zip', async (c) => {
     );
   }
 
-  // Design system DESIGN.md when workflow is bound (plan Tasks 1 / 10)
+  // Design system DESIGN.md / RULES.md / tokens.css when workflow is bound
   if (wf.designSystemId) {
     try {
       const content = await getDesignSystemContent(wf.designSystemId);
@@ -471,6 +478,22 @@ workflow.get('/:id/export.zip', async (c) => {
           JSON.stringify({ id: wf.designSystemId, exportedAt: new Date().toISOString() }, null, 2),
           { name: `design-systems/${wf.designSystemId}/meta.json` },
         );
+        try {
+          const rules = await getDesignSystemRules(wf.designSystemId);
+          if (rules) {
+            archive.append(rules, { name: `design-systems/${wf.designSystemId}/RULES.md` });
+          }
+        } catch {
+          // missing optional RULES.md is non-fatal
+        }
+        try {
+          const tokens = await getDesignSystemTokens(wf.designSystemId);
+          if (tokens) {
+            archive.append(tokens, { name: `design-systems/${wf.designSystemId}/tokens.css` });
+          }
+        } catch {
+          // missing optional tokens.css is non-fatal
+        }
       }
     } catch {
       // non-fatal — export without design system content
@@ -746,6 +769,7 @@ workflow.post('/import.zip', async (c) => {
   // Optional: restore design systems from design-systems/<name>/DESIGN.md (plan Tasks 1 / 10)
   let importedDesignSystemId: string | undefined =
     typeof wf.designSystemId === 'string' ? wf.designSystemId : undefined;
+  const importedDsByName = new Map<string, string>();
   const dsFiles = dir.files.filter((f) => {
     const p = f.path.replace(/\\/g, '/');
     return /^design-systems\/[^/]+\/DESIGN\.md$/i.test(p);
@@ -760,7 +784,6 @@ workflow.post('/import.zip', async (c) => {
     let ds = await createDesignSystem(safeName, `Imported with ${finalName}`);
     if (!ds) {
       // already exists — overwrite content and re-bind id
-      const { listDesignSystems } = await import('../lib/design-system-store.js');
       const existingDs = (await listDesignSystems()).find((d) => d.name === safeName);
       if (existingDs) {
         await updateDesignSystemContent(existingDs.id, content);
@@ -771,6 +794,31 @@ workflow.post('/import.zip', async (c) => {
     }
     if (ds) {
       importedDesignSystemId = ds.id;
+      importedDsByName.set(safeName, ds.id);
+    }
+  }
+
+  const extraDsFiles = dir.files.filter((f) => {
+    const p = f.path.replace(/\\/g, '/');
+    return /^design-systems\/[^/]+\/(RULES\.md|tokens\.css)$/i.test(p);
+  });
+  for (const f of extraDsFiles) {
+    const p = f.path.replace(/\\/g, '/');
+    const parts = p.split('/');
+    const rawName = parts[1] ?? '';
+    const safeName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    if (!safeName) continue;
+    const dsId = importedDsByName.get(safeName);
+    if (!dsId) continue;
+    const extraContent = (await f.buffer()).toString('utf-8');
+    try {
+      if (/RULES\.md$/i.test(p)) {
+        await updateDesignSystemRules(dsId, extraContent);
+      } else {
+        await updateDesignSystemTokens(dsId, extraContent);
+      }
+    } catch {
+      // bundled 403 / invalid body — skip that file, do not fail the zip
     }
   }
 
@@ -918,9 +966,11 @@ workflow.post('/:id/run', async (c) => {
   });
   const controller = new AbortController();
 
-  // Load Design System content if the workflow has one configured
-  const designSystemContent = wf.designSystemId
-    ? (await getDesignSystemContent(wf.designSystemId)) ?? undefined
+  const fragment = wf.designSystemId
+    ? await loadDesignHarnessFragment(wf.designSystemId)
+    : null;
+  const designSystemContent = fragment
+    ? formatDesignHarnessInner(fragment) || undefined
     : undefined;
 
   // Create an initial run record

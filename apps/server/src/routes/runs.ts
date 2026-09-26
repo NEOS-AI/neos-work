@@ -31,11 +31,7 @@ import { assertProjectRunSummary } from '../lib/wire-assert.js';
 import { safeRouteId } from '../lib/path-safety.js';
 import { publicErrorMessage } from '../lib/errors.js';
 import { getProject, listPreviewComments } from '../db/projects.js';
-import {
-  getDesignSystem,
-  getDesignSystemContent,
-  getDesignSystemTokens,
-} from '../lib/design-system-store.js';
+import { loadDesignHarnessFragment } from '../lib/design-system-store.js';
 import { spawnRegistryAgent } from '../lib/registry-spawn.js';
 import { getRuntimeAuthToken, getRuntimeServerUrl } from '../lib/runtime-context.js';
 import {
@@ -358,17 +354,9 @@ runs.post('/', async (c) => {
     const project = getProject(projectId);
     if (project?.designSystemId) {
       try {
-        const [designMd, tokensCss, dsMeta] = await Promise.all([
-          getDesignSystemContent(project.designSystemId),
-          getDesignSystemTokens(project.designSystemId),
-          getDesignSystem(project.designSystemId),
-        ]);
-        if (designMd) {
-          assembled = assembleDesignContextPrompt(assembled, {
-            name: dsMeta?.name,
-            designMd,
-            tokensCss,
-          });
+        const fragment = await loadDesignHarnessFragment(project.designSystemId);
+        if (fragment) {
+          assembled = assembleDesignContextPrompt(assembled, fragment);
           designSystemInjected = true;
         }
       } catch {

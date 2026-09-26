@@ -18,7 +18,7 @@ import {
   runWorker,
   scrubErrorMessage,
 } from '@neos-work/core';
-import type { DomainWorker, WorkerMode } from '@neos-work/shared';
+import { DESIGN_HARNESS_WRAP_MAX, type DomainWorker, type WorkerMode } from '@neos-work/shared';
 import type { ExecutableNode, NodeContext, NodeResult } from '../types.js';
 // Namespace import so vitest can spyOn packs.resolveWorker (live binding).
 import * as packs from '../packs/index.js';
@@ -75,8 +75,6 @@ function buildAdapter(settings: Record<string, string>) {
 
 /** Cap injected memory context so runaway exports cannot bloat the system prompt. */
 const MEMORY_CONTEXT_MAX_CHARS = 32_000;
-/** Cap Design System DESIGN.md injection. */
-const DESIGN_CONTEXT_MAX_CHARS = 32_000;
 /** Cap node/harness system prompts before memory/design injection. */
 const SYSTEM_PROMPT_MAX_CHARS = 100_000;
 /** Cap serialized agent inputs passed to CLI spawn / orchestrator goal. */
@@ -265,9 +263,9 @@ export class AgentNode implements ExecutableNode {
       designCtx = ctx.designSystemContent.trim();
     }
     if (designCtx) {
-      if (designCtx.length > DESIGN_CONTEXT_MAX_CHARS) {
+      if (designCtx.length > DESIGN_HARNESS_WRAP_MAX) {
         designCtx =
-          designCtx.slice(0, DESIGN_CONTEXT_MAX_CHARS) +
+          designCtx.slice(0, DESIGN_HARNESS_WRAP_MAX) +
           '\n\n…[design context truncated]';
       }
       systemPrompt = `<!-- DESIGN CONTEXT -->\n${designCtx}\n<!-- /DESIGN CONTEXT -->\n\n${systemPrompt}`;

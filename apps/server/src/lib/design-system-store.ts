@@ -18,6 +18,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import type { DesignContextFragment } from '@neos-work/agent-runtime';
 
 export const DESIGN_SYSTEMS_DIR = path.join(
   os.homedir(),
@@ -735,4 +736,18 @@ export async function getDesignSystemComponents(id: string): Promise<string | nu
   } catch {
     return null;
   }
+}
+
+export async function loadDesignHarnessFragment(
+  id: string,
+): Promise<DesignContextFragment | null> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return null;
+  const designMd = await getDesignSystemContent(id);
+  if (!designMd) return null;
+  const [rulesMd, tokensCss] = await Promise.all([
+    getDesignSystemRules(id),
+    getDesignSystemTokens(id),
+  ]);
+  return { name: ds.name, designMd, rulesMd, tokensCss };
 }

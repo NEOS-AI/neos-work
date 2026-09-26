@@ -9,11 +9,12 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import type {
-  DomainWorker,
-  ToolPermissionProfile,
-  WorkerMode,
-  WorkspacePolicy,
+import {
+  DESIGN_HARNESS_WRAP_MAX,
+  type DomainWorker,
+  type ToolPermissionProfile,
+  type WorkerMode,
+  type WorkspacePolicy,
 } from '@neos-work/shared';
 
 import type { LLMProviderAdapter } from '../llm/provider.js';
@@ -30,7 +31,6 @@ import type { AgentEvent } from './types.js';
 const DEFAULT_WORKSPACE_BASE = join(homedir(), '.config', 'neos-work', 'workspaces');
 const GOAL_MAX = AgentOrchestrator.GOAL_MAX_CHARS;
 const SYSTEM_PROMPT_MAX = 100_000;
-const DESIGN_CONTEXT_MAX = 32_000;
 const MEMORY_CONTEXT_MAX = 32_000;
 const INPUTS_JSON_MAX = 256 * 1024;
 const HARD_TIMEOUT_MS_MAX = 30 * 60_000;
@@ -393,8 +393,8 @@ export function buildWorkerSystemPrompt(opts: {
     design = opts.designSystemContent.trim();
   }
   if (design) {
-    if (design.length > DESIGN_CONTEXT_MAX) {
-      design = design.slice(0, DESIGN_CONTEXT_MAX) + '\n\n…[design context truncated]';
+    if (design.length > DESIGN_HARNESS_WRAP_MAX) {
+      design = design.slice(0, DESIGN_HARNESS_WRAP_MAX) + '\n\n…[design context truncated]';
     }
     prompt = `<!-- DESIGN CONTEXT -->\n${design}\n<!-- /DESIGN CONTEXT -->\n\n${prompt}`;
   }

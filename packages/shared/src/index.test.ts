@@ -67,4 +67,9 @@ describe('@neos-work/shared barrel exports', () => {
     const port: PortDef = { key: 'out', required: false };
     expect(port.key).toBe('out');
   });
+
+  it('exports DESIGN_HARNESS_WRAP_MAX', async () => {
+    const mod = await import('./index.js');
+    expect('DESIGN_HARNESS_WRAP_MAX' in mod).toBe(true);
+  });
 });
