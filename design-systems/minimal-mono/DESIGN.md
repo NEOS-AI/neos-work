@@ -2,6 +2,7 @@
 
 ## Overview
 High-contrast monochrome palette for wireframes, docs, and low-fidelity prototypes.
+Generated CSS must use tokens.css variables; hex below documents the token values.
 
 ## Colors
 - Ink: `#111111`

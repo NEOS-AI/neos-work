@@ -7,6 +7,7 @@
  * Package layout:
  *   <name>/
  *     DESIGN.md          (required)
+ *     RULES.md           (optional; agent behavior / corrections)
  *     manifest.json      (optional; od-design-system-project/v1 compatible)
  *     tokens.css         (optional)
  *     components.html    (optional)
@@ -52,6 +53,8 @@ export interface DesignSystem {
   hasManifest: boolean;
   hasTokens: boolean;
   hasComponents: boolean;
+  hasRules: boolean;
+  rulesUpdatedAt?: string;
   source: DesignSystemSource;
   /** Parsed manifest when present (OD-compatible subset). */
   manifest?: DesignSystemManifest | null;
@@ -200,6 +203,8 @@ async function loadFromDir(
   const hasManifest = !!(await regularFileStatOrNull(path.join(dirPath, 'manifest.json')));
   const hasTokens = !!(await regularFileStatOrNull(path.join(dirPath, 'tokens.css')));
   const hasComponents = !!(await regularFileStatOrNull(path.join(dirPath, 'components.html')));
+  const rulesStat = await regularFileStatOrNull(path.join(dirPath, 'RULES.md'));
+  const hasRules = !!rulesStat;
 
   let description: string | undefined;
   let manifest: DesignSystemManifest | null = null;
@@ -221,6 +226,8 @@ async function loadFromDir(
     hasManifest,
     hasTokens,
     hasComponents,
+    hasRules,
+    ...(rulesStat ? { rulesUpdatedAt: rulesStat.mtime.toISOString() } : {}),
     source,
     manifest,
     createdAt: dirStat.birthtime.toISOString(),
@@ -349,6 +356,58 @@ export async function getDesignSystemTokens(id: string): Promise<string | null> 
 
 export const DESIGN_MD_MAX_CHARS = 1 * 1024 * 1024;
 export const DESIGN_DESCRIPTION_MAX_CHARS = 2_000;
+export const RULES_MD_MAX_CHARS = 1 * 1024 * 1024;
+export const TOKENS_CSS_MAX_CHARS = 256 * 1024;
+export const COMPONENTS_HTML_MAX_CHARS = 256 * 1024;
+export const RULES_APPEND_TEXT_MAX = 500;
+export const PRUNE_MAX_ENTRIES_DEFAULT = 20;
+export const PRUNE_MAX_ENTRIES_MIN = 1;
+export const PRUNE_MAX_ENTRIES_MAX = 100;
+export const PRUNE_MAX_AGE_DAYS_DEFAULT = 90;
+export const PRUNE_MAX_AGE_DAYS_MIN = 1;
+export const PRUNE_MAX_AGE_DAYS_MAX = 365;
+
+type RulesAppendSource = 'preview-comment' | 'editor' | 'manual';
+
+export const DEFAULT_RULES_MD = `# Agent rules
+
+This file is the behavioral half of the design harness.
+Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
+
+## Tools
+- Prefer editing the open project HTML/CSS. Do not start from an empty document when a seed file exists.
+- Use Design Editor selection / preview comments when present.
+- Produce self-contained, clickable HTML (hover, focus, scroll, transitions). Not a screenshot mock.
+
+## Never
+- Do not invent a new color palette or font stack when tokens.css defines one.
+- Do not use raw hex/rgb for brand colors; use CSS custom properties from tokens.css.
+- Do not ship inaccessible contrast or missing focus rings.
+- Do not overwrite unrelated manual edits (prefer a minimal patch).
+
+## Preferred workflow
+- Start from the seed (current file, components.html, or a starter), generate a few variants as sibling files, then narrow to one.
+- After a human correction, wait for an explicit promote; do not rewrite RULES.md yourself unless asked.
+
+## Corrections
+<!-- dated bullets, pruned when stale. format: - YYYY-MM-DD: text -->
+`;
+
+export const DEFAULT_TOKENS_CSS = `:root {
+  --color-primary: #3B82F6;
+  --color-secondary: #6366F1;
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --font-sans: Inter, system-ui, sans-serif;
+  --text-base: 1rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+}
+`;
 
 export async function updateDesignSystemContent(id: string, content: string): Promise<boolean> {
   const ds = await getDesignSystem(id);
@@ -405,15 +464,15 @@ export async function createDesignSystem(name: string, description?: string): Pr
 ${trimmedDescription ?? 'Describe your design system here.'}
 
 ## Brand Colors
-- Primary: #3B82F6
-- Secondary: #6366F1
-- Success: #10B981
-- Error: #EF4444
+Use CSS variables from tokens.css in generated CSS. Do not introduce new brand hex/rgb.
+- Primary: \`var(--color-primary)\`
+- Secondary: \`var(--color-secondary)\`
+- Success: \`var(--color-success)\`
+- Error: \`var(--color-error)\`
 
 ## Typography
-- Font family: Inter, system-ui, sans-serif
-- Heading sizes: 2xl (1.5rem), xl (1.25rem), lg (1.125rem)
-- Body: base (1rem), sm (0.875rem)
+- Font family: \`var(--font-sans)\`
+- Body: \`var(--text-base)\`
 
 ## Spacing
 - Base unit: 4px (0.25rem)
@@ -437,6 +496,8 @@ Describe your component conventions here.
     JSON.stringify(manifest, null, 2),
     'utf8',
   );
+  await fs.writeFile(path.join(dirPath, 'RULES.md'), DEFAULT_RULES_MD, 'utf8');
+  await fs.writeFile(path.join(dirPath, 'tokens.css'), DEFAULT_TOKENS_CSS, 'utf8');
 
   return getDesignSystem(dirToId(trimmedName));
 }
@@ -450,5 +511,228 @@ export async function deleteDesignSystem(id: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function unlinkIfSymlink(filePath: string): Promise<void> {
+  try {
+    const st = await fs.lstat(filePath);
+    if (st.isSymbolicLink()) await fs.unlink(filePath);
+  } catch {
+    // ENOENT
+  }
+}
+
+// [ \t] not \s: JS \s includes newlines, which would let ^/$ span blank lines.
+const CORRECTIONS_HEADING_RE = /^[ \t]*##[ \t]+corrections[ \t]*$/im;
+const NEXT_ATX_HEADING_RE = /^[ \t]*#{1,6}[ \t]+/m;
+const SOURCE_COMMENT_RE = /^\s*<!--\s*source:\s*(preview-comment|editor|manual)\s*-->\s*$/;
+const CORRECTION_BULLET_RE = /^\s*-\s+(\d{4}-\d{2}-\d{2}):\s*(.*)$/;
+
+function utcDateMinusDays(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dt = new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1));
+  dt.setUTCDate(dt.getUTCDate() - days);
+  return dt.toISOString().slice(0, 10);
+}
+
+function findCorrectionsHeading(content: string): RegExpExecArray | null {
+  CORRECTIONS_HEADING_RE.lastIndex = 0;
+  return CORRECTIONS_HEADING_RE.exec(content);
+}
+
+function afterHeadingLine(content: string, match: RegExpExecArray): number {
+  const lineEnd = content.indexOf('\n', match.index + match[0].length);
+  return lineEnd === -1 ? content.length : lineEnd + 1;
+}
+
+function insertCorrectionBullet(content: string, insertion: string): string {
+  const match = findCorrectionsHeading(content);
+  if (!match) {
+    const prefix = content.endsWith('\n') || content.length === 0 ? content : `${content}\n`;
+    return `${prefix}## Corrections\n${insertion}`;
+  }
+  const afterHeadingStart = afterHeadingLine(content, match);
+  const afterHeading = content.slice(afterHeadingStart);
+  NEXT_ATX_HEADING_RE.lastIndex = 0;
+  const next = NEXT_ATX_HEADING_RE.exec(afterHeading);
+  const insertAt = next ? afterHeadingStart + next.index : content.length;
+  const before = content.slice(0, insertAt);
+  const after = content.slice(insertAt);
+  const beforeNl = before.endsWith('\n') || before.length === 0 ? before : `${before}\n`;
+  return beforeNl + insertion + after;
+}
+
+export async function getDesignSystemRules(id: string): Promise<string | null> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return null;
+  try {
+    const p = path.join(ds.path, 'RULES.md');
+    if (!(await regularFileStatOrNull(p))) return null;
+    const content = await fs.readFile(p, 'utf8');
+    if (/\0/.test(content)) return null;
+    return content.trim().length > 0 ? content : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateDesignSystemRules(id: string, content: string): Promise<boolean> {
+  const ds = await getDesignSystem(id);
+  if (!ds || ds.source === 'bundled') return false;
+  const body = typeof content === 'string' ? content : '';
+  if (!body.trim() || /\0/.test(body) || body.length > RULES_MD_MAX_CHARS) return false;
+  try {
+    const p = path.join(ds.path, 'RULES.md');
+    await unlinkIfSymlink(p);
+    await fs.writeFile(p, body, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function appendDesignSystemRules(
+  id: string,
+  text: string,
+  source?: string,
+): Promise<boolean> {
+  const ds = await getDesignSystem(id);
+  if (!ds || ds.source === 'bundled') return false;
+  if (typeof text !== 'string' || /\0/.test(text)) return false;
+  const cleaned = text.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
+  if (!cleaned || cleaned.length > RULES_APPEND_TEXT_MAX) return false;
+
+  const persistSource =
+    source === 'preview-comment' || source === 'editor' || source === 'manual'
+      ? source
+      : undefined;
+  const date = new Date().toISOString().slice(0, 10);
+  const insertion =
+    (persistSource ? `<!-- source: ${persistSource} -->\n` : '') +
+    `- ${date}: ${cleaned}\n`;
+
+  const p = path.join(ds.path, 'RULES.md');
+  let current = DEFAULT_RULES_MD;
+  if (await regularFileStatOrNull(p)) {
+    try {
+      current = await fs.readFile(p, 'utf8');
+    } catch {
+      current = DEFAULT_RULES_MD;
+    }
+  }
+
+  try {
+    await unlinkIfSymlink(p);
+    await fs.writeFile(p, insertCorrectionBullet(current, insertion), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function pruneDesignSystemRules(
+  id: string,
+  opts?: { maxEntries?: number; maxAgeDays?: number; nowUtcDate?: string },
+): Promise<{ pruned: number } | null> {
+  const ds = await getDesignSystem(id);
+  if (!ds || ds.source === 'bundled') return null;
+  const p = path.join(ds.path, 'RULES.md');
+  if (!(await regularFileStatOrNull(p))) return null;
+
+  let content: string;
+  try {
+    content = await fs.readFile(p, 'utf8');
+  } catch {
+    return null;
+  }
+
+  const match = findCorrectionsHeading(content);
+  if (!match) return { pruned: 0 };
+
+  const maxEntries = opts?.maxEntries ?? PRUNE_MAX_ENTRIES_DEFAULT;
+  const maxAgeDays = opts?.maxAgeDays ?? PRUNE_MAX_AGE_DAYS_DEFAULT;
+  const nowUtcDate = opts?.nowUtcDate ?? new Date().toISOString().slice(0, 10);
+
+  const afterHeadingStart = afterHeadingLine(content, match);
+  const head = content.slice(0, match.index);
+  const afterHeading = content.slice(afterHeadingStart);
+  NEXT_ATX_HEADING_RE.lastIndex = 0;
+  const next = NEXT_ATX_HEADING_RE.exec(afterHeading);
+  const body = next ? afterHeading.slice(0, next.index) : afterHeading;
+  const rest = next ? afterHeading.slice(next.index) : '';
+
+  type Bullet = { date: string; text: string; order: number; source?: RulesAppendSource };
+  const bullets: Bullet[] = [];
+  let pendingSource: RulesAppendSource | null = null;
+  let order = 0;
+  for (const line of body.split('\n')) {
+    const src = SOURCE_COMMENT_RE.exec(line);
+    if (src) {
+      pendingSource = src[1] as RulesAppendSource;
+      continue;
+    }
+    const bullet = CORRECTION_BULLET_RE.exec(line);
+    if (bullet) {
+      bullets.push({
+        date: bullet[1]!,
+        text: bullet[2]!,
+        order,
+        source: pendingSource ?? undefined,
+      });
+      order += 1;
+      pendingSource = null;
+    } else {
+      pendingSource = null;
+    }
+  }
+
+  const cutoff = utcDateMinusDays(nowUtcDate, maxAgeDays);
+  let kept = bullets.filter((b) => b.date >= cutoff);
+  kept.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.order - b.order));
+  if (kept.length > maxEntries) kept = kept.slice(kept.length - maxEntries);
+
+  let section = '## Corrections\n';
+  for (const b of kept) {
+    if (b.source) section += `<!-- source: ${b.source} -->\n`;
+    section += `- ${b.date}: ${b.text}\n`;
+  }
+
+  try {
+    await unlinkIfSymlink(p);
+    await fs.writeFile(p, head + section + rest, 'utf8');
+    return { pruned: bullets.length - kept.length };
+  } catch {
+    return null;
+  }
+}
+
+export async function updateDesignSystemTokens(id: string, content: string): Promise<boolean> {
+  const ds = await getDesignSystem(id);
+  if (!ds || ds.source === 'bundled') return false;
+  const body = typeof content === 'string' ? content : '';
+  if (!body.trim() || /\0/.test(body) || body.length > TOKENS_CSS_MAX_CHARS) return false;
+  try {
+    const p = path.join(ds.path, 'tokens.css');
+    await unlinkIfSymlink(p);
+    await fs.writeFile(p, body, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getDesignSystemComponents(id: string): Promise<string | null> {
+  const ds = await getDesignSystem(id);
+  if (!ds) return null;
+  try {
+    const p = path.join(ds.path, 'components.html');
+    if (!(await regularFileStatOrNull(p))) return null;
+    const content = await fs.readFile(p, 'utf8');
+    if (/\0/.test(content)) return null;
+    if (content.length > COMPONENTS_HTML_MAX_CHARS) return content.slice(0, COMPONENTS_HTML_MAX_CHARS);
+    return content.trim().length > 0 ? content : null;
+  } catch {
+    return null;
   }
 }

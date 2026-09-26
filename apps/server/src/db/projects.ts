@@ -576,6 +576,18 @@ export function deletePreviewComment(id: string): boolean {
   return result.changes > 0;
 }
 
+export function getPreviewComment(id: string): PreviewComment | undefined {
+  const cid = safeLookupId(id);
+  if (!cid) return undefined;
+  const db = getDb();
+  const row = db
+    .prepare(
+      'SELECT id, project_id, file_path, selector, body, created_at, updated_at FROM preview_comments WHERE id = ?',
+    )
+    .get(cid) as PreviewCommentRow | undefined;
+  return row ? rowToComment(row) : undefined;
+}
+
 // ── Conversations / messages (minimal for M1 shell) ────────
 
 function rowToConversation(row: ConversationRow): ProjectConversation {

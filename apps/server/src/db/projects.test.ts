@@ -10,6 +10,7 @@ import {
   createProject,
   deletePreviewComment,
   deleteProject,
+  getPreviewComment,
   getFileRevision,
   getProject,
   listFileRevisions,
@@ -110,6 +111,22 @@ describe('projects CRUD', () => {
     expect(listConversations(p.id).some((c) => c.id === conv.id)).toBe(true);
     const msg = addMessage({ conversationId: conv.id, role: 'user', content: 'Hello design' });
     expect(listMessages(conv.id).map((m) => m.id)).toContain(msg.id);
+  });
+
+  it('getPreviewComment returns a row by id and undefined when missing', () => {
+    const p = createProject({ name: `${NAME}_pcget` });
+    createdIds.push(p.id);
+    const comment = createPreviewComment({
+      projectId: p.id,
+      filePath: 'index.html',
+      selector: 'h1',
+      body: 'Make larger',
+    });
+    expect(getPreviewComment(comment.id)).toEqual(comment);
+    expect(getPreviewComment('00000000-0000-0000-0000-000000000001')).toBeUndefined();
+    expect(getPreviewComment('bad\nid')).toBeUndefined();
+    expect(getPreviewComment('')).toBeUndefined();
+    expect(getPreviewComment('   ')).toBeUndefined();
   });
 
   it('rejects invalid names', () => {
