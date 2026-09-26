@@ -183,6 +183,7 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
       'designSystems.seedComponents',
       'designSystems.seedStarter',
       'designSystems.openVariant',
+      'designSystems.pinStarter',
     ];
     const copy: Record<'en' | 'ko', Record<string, string>> = {
       en: {
@@ -194,6 +195,7 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
         'designSystems.seedComponents': 'components.html',
         'designSystems.seedStarter': 'Starter',
         'designSystems.openVariant': 'Open variant',
+        'designSystems.pinStarter': 'Save as starter',
       },
       ko: {
         'designSystems.variants': '시드에서 변형 만들기',
@@ -204,6 +206,7 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
         'designSystems.seedComponents': 'components.html',
         'designSystems.seedStarter': '스타터',
         'designSystems.openVariant': '변형 열기',
+        'designSystems.pinStarter': '스타터로 보관',
       },
     };
     const locales: Record<'en' | 'ko', Record<string, unknown>> = {
@@ -244,6 +247,7 @@ Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
       }
       expect(atPath(json, 'designSystems.seedComponents')).toBe('components.html');
       expect(String(atPath(json, 'designSystems.openVariant'))).not.toContain('{{letter}}');
+      expect(atPath(json, 'designSystems.cloneStarter')).toBeUndefined();
       for (const key of required.filter((k) => k.includes('variants'))) {
         const value = String(atPath(json, key));
         expect(value).not.toMatch(/harness/i);

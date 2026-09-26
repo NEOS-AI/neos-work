@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   COMPONENTS_HTML_MAX_CHARS,
@@ -9,20 +11,27 @@ import {
   DESIGN_MD_MAX_CHARS,
   DESIGN_SYSTEMS_DIR,
   RULES_MD_MAX_CHARS,
+  STARTERS_MAX_CHARS,
+  STARTERS_MAX_FILES,
   TOKENS_CSS_MAX_CHARS,
   appendDesignSystemRules,
   createDesignSystem,
+  createDesignSystemStarter,
   deleteDesignSystem,
+  deleteDesignSystemStarter,
   ensureDesignSystemsDir,
   getDesignSystem,
   getDesignSystemComponents,
   getDesignSystemContent,
   getDesignSystemRules,
+  getDesignSystemStarter,
   getDesignSystemTokens,
   listDesignSystems,
+  listDesignSystemStarters,
   loadDesignHarnessFragment,
   parseDesignSystemManifest,
   pruneDesignSystemRules,
+  putDesignSystemStarter,
   resolveBundledDesignSystemsDir,
   scanDesignSystemsRoot,
   updateDesignSystemContent,
@@ -898,5 +907,170 @@ describe('design-system-store RULES.md / tokens write', () => {
     const frag = await loadDesignHarnessFragment(created!.id);
     expect(frag).not.toBeNull();
     expect(JSON.stringify(frag)).not.toContain('SECRET_COMPONENT');
+  });
+
+  it('design-system-store source does not import isPathInside or @neos-work/core', () => {
+    const src = readFileSync(fileURLToPath(new URL('./design-system-store.ts', import.meta.url)), 'utf8');
+    expect(src).not.toMatch(/isPathInside/);
+    expect(src).not.toMatch(/@neos-work\/core/);
+  });
+
+  it('createDesignSystem does not mkdir starters/', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    await expect(fs.stat(path.join(created!.path, 'starters'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('list/get starters return empty/null when starters/ is missing', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    expect(await listDesignSystemStarters(created!.id)).toEqual([]);
+    expect(await getDesignSystemStarter(created!.id, 'hero.html')).toBeNull();
+  });
+
+  it('putDesignSystemStarter creates starters/ + file; GET and list expose body/bytes/updatedAt', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    const body = '<h1>Hero</h1>';
+    expect(await putDesignSystemStarter(created!.id, 'hero.html', body)).toBe(true);
+    const stDir = await fs.stat(path.join(created!.path, 'starters'));
+    expect(stDir.isDirectory()).toBe(true);
+    expect(await getDesignSystemStarter(created!.id, 'hero.html')).toBe(body);
+    const listed = await listDesignSystemStarters(created!.id);
+    expect(listed).toHaveLength(1);
+    expect(listed![0]!.name).toBe('hero.html');
+    expect(listed![0]!.bytes).toBe(Buffer.byteLength(body));
+    expect(listed![0]!.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const disk = await fs.stat(path.join(created!.path, 'starters', 'hero.html'));
+    expect(listed![0]!.bytes).toBe(disk.size);
+  });
+
+  it('putDesignSystemStarter accepts html/css and rejects txt/htm/compound extensions', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    expect(await putDesignSystemStarter(created!.id, 'hero.html', '<h1/>')).toBe(true);
+    expect(await putDesignSystemStarter(created!.id, 'theme.css', 'body{}')).toBe(true);
+    expect(await putDesignSystemStarter(created!.id, 'notes.txt', 'x')).toBe(false);
+    expect(await putDesignSystemStarter(created!.id, 'page.htm', '<p/>')).toBe(false);
+    expect(await putDesignSystemStarter(created!.id, 'hero.HTML.md', '<p/>')).toBe(false);
+  });
+
+  it('putDesignSystemStarter rejects path escape via basename check, not isPathInside', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    const names = ['../x.html', 'foo/bar.html', '/tmp/x.html', '..', '.'];
+    for (const name of names) {
+      expect(path.basename(name) === name && !name.includes(path.sep)).toBe(false);
+      expect(await putDesignSystemStarter(created!.id, name, '<h1/>')).toBe(false);
+    }
+    const parentHtml = path.join(created!.path, '..', 'x.html');
+    await fs.rm(parentHtml, { force: true });
+    expect(await putDesignSystemStarter(created!.id, '../x.html', 'escaped')).toBe(false);
+    await expect(fs.stat(parentHtml)).rejects.toMatchObject({ code: 'ENOENT' });
+    const abs = path.join(os.tmpdir(), `neos-ds-starter-escape-${process.pid}.html`);
+    await fs.rm(abs, { force: true });
+    expect(await putDesignSystemStarter(created!.id, abs, 'escaped')).toBe(false);
+    await expect(fs.stat(abs)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('listDesignSystemStarters is non-recursive and PUT nested names are invalid', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    const nestedDir = path.join(created!.path, 'starters', 'nested');
+    await fs.mkdir(nestedDir, { recursive: true });
+    await fs.writeFile(path.join(nestedDir, 'x.html'), '<nested/>', 'utf8');
+    expect(await putDesignSystemStarter(created!.id, 'top.html', '<top/>')).toBe(true);
+    const listed = await listDesignSystemStarters(created!.id);
+    expect(listed!.map((s) => s.name)).toEqual(['top.html']);
+    expect(await putDesignSystemStarter(created!.id, 'nested/x.html', '<p/>')).toBe(false);
+  });
+
+  it('symlink starter is skipped on list/GET; PUT unlinks then writes without touching target', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    await fs.mkdir(path.join(created!.path, 'starters'), { recursive: true });
+    const outside = path.join(os.tmpdir(), `neos-ds-starter-target-${process.pid}.html`);
+    await fs.writeFile(outside, 'outside-starter\n', 'utf8');
+    const linkPath = path.join(created!.path, 'starters', 'hero.html');
+    try {
+      try {
+        await fs.symlink(outside, linkPath);
+      } catch {
+        return;
+      }
+      const listed = await listDesignSystemStarters(created!.id);
+      expect(listed!.some((s) => s.name === 'hero.html')).toBe(false);
+      expect(await getDesignSystemStarter(created!.id, 'hero.html')).toBeNull();
+      expect(await putDesignSystemStarter(created!.id, 'hero.html', '<h1>in</h1>')).toBe(true);
+      const st = await fs.lstat(linkPath);
+      expect(st.isSymbolicLink()).toBe(false);
+      expect(await getDesignSystemStarter(created!.id, 'hero.html')).toBe('<h1>in</h1>');
+      expect(await fs.readFile(outside, 'utf8')).toBe('outside-starter\n');
+    } finally {
+      await fs.rm(outside, { force: true }).catch(() => {});
+    }
+  });
+
+  it('caps starters at 20 regular html/css files; nested dir does not consume a slot', async () => {
+    expect(STARTERS_MAX_FILES).toBe(20);
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    await fs.mkdir(path.join(created!.path, 'starters', 'nested'), { recursive: true });
+    await fs.writeFile(path.join(created!.path, 'starters', 'nested', 'x.html'), '<n/>', 'utf8');
+    for (let i = 0; i < 20; i++) {
+      const name = i % 2 === 0 ? `s${String(i).padStart(2, '0')}.html` : `s${String(i).padStart(2, '0')}.css`;
+      expect(await putDesignSystemStarter(created!.id, name, `<i>${i}</i>`)).toBe(true);
+    }
+    expect(await putDesignSystemStarter(created!.id, 's20.html', '<overflow/>')).toBe('limit');
+    expect(await createDesignSystemStarter(created!.id, 's20.html', '<overflow/>')).toBe('limit');
+  });
+
+  it('PUT over 256KiB is false; GET of oversized disk file slices to 256KiB', async () => {
+    expect(STARTERS_MAX_CHARS).toBe(256 * 1024);
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    expect(await putDesignSystemStarter(created!.id, 'big.html', 'x'.repeat(256 * 1024 + 1))).toBe(false);
+    await fs.mkdir(path.join(created!.path, 'starters'), { recursive: true });
+    await fs.writeFile(
+      path.join(created!.path, 'starters', 'huge.html'),
+      'h'.repeat(256 * 1024 + 50),
+      'utf8',
+    );
+    const sliced = await getDesignSystemStarter(created!.id, 'huge.html');
+    expect(sliced).toHaveLength(256 * 1024);
+  });
+
+  it('empty and null-byte PUT starters are false', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    expect(await putDesignSystemStarter(created!.id, 'empty.html', '')).toBe(false);
+    expect(await putDesignSystemStarter(created!.id, 'blank.html', '   \n')).toBe(false);
+    expect(await putDesignSystemStarter(created!.id, 'null.html', `ok${'\0'}bad`)).toBe(false);
+  });
+
+  it('createDesignSystemStarter does not overwrite; PUT same name does', async () => {
+    const created = await createDesignSystem(NAME);
+    expect(created).not.toBeNull();
+    expect(await createDesignSystemStarter(created!.id, 'hero.html', '<h1>one</h1>')).toBe(true);
+    expect(await createDesignSystemStarter(created!.id, 'hero.html', '<h1>two</h1>')).toBe('exists');
+    expect(await getDesignSystemStarter(created!.id, 'hero.html')).toBe('<h1>one</h1>');
+    expect(await putDesignSystemStarter(created!.id, 'hero.html', '<h1>put</h1>')).toBe(true);
+    expect(await getDesignSystemStarter(created!.id, 'hero.html')).toBe('<h1>put</h1>');
+  });
+
+  it('bundled starters create/put/delete return bundled', async () => {
+    const bundled = (await listDesignSystems({ includeBundled: true })).find((d) => d.source === 'bundled');
+    expect(bundled).toBeTruthy();
+    expect(await createDesignSystemStarter(bundled!.id, 'hero.html', '<h1/>')).toBe('bundled');
+    expect(await putDesignSystemStarter(bundled!.id, 'hero.html', '<h1/>')).toBe('bundled');
+    expect(await deleteDesignSystemStarter(bundled!.id, 'hero.html')).toBe('bundled');
+  });
+
+  it('unknown id starters list/get/put/delete are null/false', async () => {
+    expect(await listDesignSystemStarters('nope')).toBeNull();
+    expect(await getDesignSystemStarter('nope', 'hero.html')).toBeNull();
+    expect(await putDesignSystemStarter('nope', 'hero.html', '<h1/>')).toBe(false);
+    expect(await createDesignSystemStarter('nope', 'hero.html', '<h1/>')).toBe(false);
+    expect(await deleteDesignSystemStarter('nope', 'hero.html')).toBe(false);
   });
 });
