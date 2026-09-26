@@ -5,22 +5,24 @@ import { createHttpBackend } from './mcp.js';
 
 vi.mock('@neos-work/office-sheets/node', () => ({
   createSheetsTools(workspaceRoot: string) {
+    async function readLocal(input: Record<string, unknown>): Promise<string> {
+      const { readFile } = await import('node:fs/promises');
+      const { join } = await import('node:path');
+      return readFile(join(workspaceRoot, String(input.path)), 'utf8');
+    }
     return [
       {
         name: 'sheets_set_range',
         description: 'mock set',
         inputSchema: { type: 'object' },
         async execute(input: Record<string, unknown>) {
+          const current = await readLocal(input);
           if (input.value === 'fail-me') {
             return { success: false, output: null, error: 'exactly one of value, values, formula, formulas' };
           }
           const { writeFile } = await import('node:fs/promises');
           const { join } = await import('node:path');
-          await writeFile(
-            join(workspaceRoot, String(input.path)),
-            '{"id":"wb","updated":true}\n',
-            'utf8',
-          );
+          await writeFile(join(workspaceRoot, String(input.path)), current, 'utf8');
           return { success: true, output: { path: input.path, a1: input.a1, value: input.value } };
         },
       },
@@ -29,6 +31,7 @@ vi.mock('@neos-work/office-sheets/node', () => ({
         description: 'mock get',
         inputSchema: { type: 'object' },
         async execute(input: Record<string, unknown>) {
+          await readLocal(input);
           return { success: true, output: { path: input.path, a1: input.a1, value: 'hello' } };
         },
       },
@@ -37,6 +40,7 @@ vi.mock('@neos-work/office-sheets/node', () => ({
         description: 'mock eval',
         inputSchema: { type: 'object' },
         async execute(input: Record<string, unknown>) {
+          await readLocal(input);
           return { success: true, output: { path: input.path, a1: input.a1, value: 2 } };
         },
       },
@@ -80,7 +84,7 @@ describe('createHttpBackend sheets path', () => {
     const putArgs = writeProjectFile.mock.calls[0];
     expect(putArgs[0]).toBe('p1');
     expect(putArgs[1]).toBe('sheets/budget.univer.json');
-    expect(putArgs[2]).toBe('{"id":"wb","updated":true}\n');
+    expect(putArgs[2]).toBe(snapshot);
     expect(result).toMatchObject({
       success: true,
       output: { path: 'sheets/budget.univer.json', value: 'hello' },
@@ -128,6 +132,8 @@ describe('createHttpBackend sheets path', () => {
     });
 
     expect(failed).toMatchObject({ success: false });
+    expect(readProjectFile).toHaveBeenCalledWith('p1', 'budget.univer.json');
+    expect(readProjectFile).toHaveBeenCalledTimes(3);
     expect(writeProjectFile).not.toHaveBeenCalled();
   });
 });
