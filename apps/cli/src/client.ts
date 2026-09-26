@@ -289,6 +289,36 @@ export class NeosApiClient {
     return this.request('GET', '/api/design-systems');
   }
 
+  getDesignSystemContent(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(id)}/content`);
+  }
+
+  saveDesignSystemContent(id: string, content: string): Promise<ApiEnvelope<null>> {
+    return this.request('PUT', `/api/design-systems/${encodeURIComponent(id)}/content`, {
+      body: { content },
+    });
+  }
+
+  getDesignSystemRules(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(id)}/rules`);
+  }
+
+  saveDesignSystemRules(id: string, content: string): Promise<ApiEnvelope<null>> {
+    return this.request('PUT', `/api/design-systems/${encodeURIComponent(id)}/rules`, {
+      body: { content },
+    });
+  }
+
+  getDesignSystemTokens(id: string): Promise<ApiEnvelope<{ content: string }>> {
+    return this.request('GET', `/api/design-systems/${encodeURIComponent(id)}/tokens`);
+  }
+
+  saveDesignSystemTokens(id: string, content: string): Promise<ApiEnvelope<null>> {
+    return this.request('PUT', `/api/design-systems/${encodeURIComponent(id)}/tokens`, {
+      body: { content },
+    });
+  }
+
   listMemories(): Promise<ApiEnvelope<unknown[]>> {
     return this.request('GET', '/api/memory');
   }

@@ -1,13 +1,49 @@
 /**
- * Web Design System editor — DESIGN.md content (v0.26).
+ * Web Design System editor — DESIGN.md + RULES.md (thin; English hardcoded).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { WebNav } from '../components/WebNav.js';
 import { clearConnection, loadConnection } from '../lib/auth.js';
-import { ApiError, WebApiClient } from '../lib/api.js';
+import { ApiError, type ApiEnvelope, WebApiClient } from '../lib/api.js';
 import { scrubError } from '../lib/scrub.js';
+
+type EditorTab = 'design' | 'rules';
+type TabBuffer = { content: string; savedContent: string };
+
+const EMPTY_BUF: TabBuffer = { content: '', savedContent: '' };
+
+const RULES_PLACEHOLDER = `# Agent rules
+
+This file is the behavioral half of the design harness.
+Visual tokens live in DESIGN.md and tokens.css. Do not duplicate palettes here.
+
+## Tools
+- Prefer editing the open project HTML/CSS. Do not start from an empty document when a seed file exists.
+- Use Design Editor selection / preview comments when present.
+- Produce self-contained, clickable HTML (hover, focus, scroll, transitions). Not a screenshot mock.
+
+## Never
+- Do not invent a new color palette or font stack when tokens.css defines one.
+- Do not use raw hex/rgb for brand colors; use CSS custom properties from tokens.css.
+- Do not ship inaccessible contrast or missing focus rings.
+- Do not overwrite unrelated manual edits (prefer a minimal patch).
+
+## Preferred workflow
+- Start from the seed (current file, components.html, or a starter), generate a few variants as sibling files, then narrow to one.
+- After a human correction, wait for an explicit promote; do not rewrite RULES.md yourself unless asked.
+
+## Corrections
+<!-- dated bullets, pruned when stale. format: - YYYY-MM-DD: text -->`;
+
+function dirty(buf: TabBuffer): boolean {
+  return buf.content !== buf.savedContent;
+}
+
+function stripNullBytes(raw: string): string {
+  return /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
+}
 
 export function DesignSystemEditor() {
   const { id: routeId } = useParams<{ id: string }>();
@@ -20,12 +56,17 @@ export function DesignSystemEditor() {
   const id =
     typeof routeId === 'string' && routeId.trim() && !/[\0\r\n]/.test(routeId) ? routeId.trim() : '';
   const [name, setName] = useState(id);
-  const [content, setContent] = useState('');
-  const [saved, setSaved] = useState('');
+  const [activeTab, setActiveTab] = useState<EditorTab>('design');
+  const [design, setDesign] = useState<TabBuffer>(EMPTY_BUF);
+  const [rules, setRules] = useState<TabBuffer>(EMPTY_BUF);
+  const [rulesMissing, setRulesMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const dirty = content !== saved;
+
+  const activeBuf = activeTab === 'design' ? design : rules;
+  const activeDirty = dirty(activeBuf);
+  const anyDirty = dirty(design) || dirty(rules);
 
   const load = useCallback(async () => {
     if (!conn.token) {
@@ -40,17 +81,47 @@ export function DesignSystemEditor() {
     setLoading(true);
     setError(null);
     try {
-      const [list, body] = await Promise.all([
+      const [list, body, rulesOutcome] = await Promise.all([
         client.listDesignSystems(),
         client.getDesignSystemContent(id),
+        client.getDesignSystemRules(id).then(
+          (r) => r,
+          (err: unknown) => err,
+        ),
       ]);
       const found = (list.data ?? []).find((d) => d.id === id);
       setName(found?.name || id);
       const raw = typeof body.data?.content === 'string' ? body.data.content : '';
-      const safe = /\0/.test(raw) ? raw.replace(/\0/g, '') : raw;
-      setContent(safe);
-      setSaved(safe);
+      const safe = stripNullBytes(raw);
+      setDesign({ content: safe, savedContent: safe });
       if (!body.ok) setError(scrubError(body.error, 'Failed to load content'));
+
+      const rulesEnv =
+        rulesOutcome && typeof rulesOutcome === 'object' && 'ok' in rulesOutcome
+          ? (rulesOutcome as ApiEnvelope<{ content: string }>)
+          : null;
+      if (
+        (rulesOutcome instanceof ApiError && rulesOutcome.status === 404)
+        || (rulesEnv?.ok === false && /not found/i.test(rulesEnv.error ?? ''))
+      ) {
+        setRules({ content: RULES_PLACEHOLDER, savedContent: RULES_PLACEHOLDER });
+        setRulesMissing(true);
+      } else if (rulesOutcome instanceof Error) {
+        setRules(EMPTY_BUF);
+        setRulesMissing(false);
+        if (body.ok) setError(scrubError(rulesOutcome, 'Failed to load'));
+      } else {
+        if (rulesEnv?.ok) {
+          const rulesRaw = typeof rulesEnv.data?.content === 'string' ? rulesEnv.data.content : '';
+          const rulesSafe = stripNullBytes(rulesRaw);
+          setRules({ content: rulesSafe, savedContent: rulesSafe });
+          setRulesMissing(false);
+        } else {
+          setRules(EMPTY_BUF);
+          setRulesMissing(false);
+          if (body.ok) setError(scrubError(rulesEnv?.error, 'Failed to load'));
+        }
+      }
     } catch (err) {
       setError(scrubError(err, 'Failed to load'));
       if (err instanceof ApiError && err.status === 401) {
@@ -67,26 +138,40 @@ export function DesignSystemEditor() {
   }, [load]);
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!anyDirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  }, [anyDirty]);
 
   const handleSave = async () => {
-    if (!id || saving) return;
+    if (!id || saving || !activeDirty) return;
+    if (activeTab === 'rules' && rulesMissing && !dirty(rules)) return;
+    const content = activeBuf.content;
+    if (/\0/.test(content)) {
+      setError(scrubError('Invalid content', 'Save failed'));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      const res = await client.saveDesignSystemContent(id, content);
+      const res =
+        activeTab === 'rules'
+          ? await client.saveDesignSystemRules(id, content)
+          : await client.saveDesignSystemContent(id, content);
       if (!res.ok) {
         setError(scrubError(res.error, 'Save failed'));
         return;
       }
-      setSaved(content);
+      if (activeTab === 'rules') {
+        setRules((buf) => ({ ...buf, savedContent: content }));
+        setRulesMissing(false);
+      } else {
+        setDesign((buf) => ({ ...buf, savedContent: content }));
+      }
     } catch (err) {
       setError(scrubError(err, 'Save failed'));
     } finally {
@@ -102,10 +187,16 @@ export function DesignSystemEditor() {
             ← Design systems
           </button>
           <h1 style={{ margin: 0, fontSize: '1.1rem' }}>{name}</h1>
-          {dirty && <span className="muted">Unsaved</span>}
+          {anyDirty && <span className="muted">Unsaved</span>}
         </div>
         <div className="row">
-          <button type="button" className="btn" data-testid="ds-editor-save" disabled={saving} onClick={() => void handleSave()}>
+          <button
+            type="button"
+            className="btn"
+            data-testid="ds-editor-save"
+            disabled={saving || !activeDirty}
+            onClick={() => void handleSave()}
+          >
             {saving ? 'Saving…' : 'Save'}
           </button>
           <WebNav current="/design-systems" />
@@ -119,14 +210,45 @@ export function DesignSystemEditor() {
       {loading ? (
         <p className="muted">Loading…</p>
       ) : (
-        <textarea
-          className="input"
-          data-testid="ds-editor-content"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          rows={24}
-          style={{ fontFamily: 'monospace', fontSize: 13 }}
-        />
+        <>
+          <div role="tablist" className="row" style={{ gap: 4 }}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'design'}
+              data-testid="ds-tab-design"
+              className="btn btn-ghost"
+              onClick={() => setActiveTab('design')}
+            >
+              DESIGN.md
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'rules'}
+              data-testid="ds-tab-rules"
+              className="btn btn-ghost"
+              onClick={() => setActiveTab('rules')}
+            >
+              RULES.md
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+            DESIGN.md is visual guidance. Use the RULES.md tab for agent behavior.
+          </p>
+          <textarea
+            className="input"
+            data-testid="ds-editor-content"
+            value={activeBuf.content}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (activeTab === 'design') setDesign((buf) => ({ ...buf, content: value }));
+              else setRules((buf) => ({ ...buf, content: value }));
+            }}
+            rows={24}
+            style={{ fontFamily: 'monospace', fontSize: 13 }}
+          />
+        </>
       )}
     </div>
   );

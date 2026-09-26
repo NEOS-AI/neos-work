@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runCli } from './cli.js';
 import { CLI_VERSION } from './commands/version.js';
 import { EXIT } from './exit-codes.js';
@@ -627,5 +632,290 @@ describe('runCli expanded commands', () => {
       stderr: () => {},
     });
     expect(code).toBe(EXIT.USAGE);
+  });
+});
+
+describe('design-systems content/rules/tokens', () => {
+  const env = { NEOS_AUTH_TOKEN: 't', NEOS_SERVER_URL: 'http://127.0.0.1:3000' };
+  const tmpFiles: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(tmpFiles.splice(0).map((p) => rm(p, { force: true })));
+  });
+
+  function recordFetch(handler?: (url: string, init?: RequestInit) => Response) {
+    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchImpl = mockFetch((url, init) => {
+      calls.push({
+        url,
+        method: init?.method,
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      if (handler) return handler(url, init);
+      return jsonResponse({ ok: true, data: {} });
+    });
+    return { fetchImpl, calls };
+  }
+
+  it('design-systems list still prints id/name/source', async () => {
+    const { fetchImpl } = recordFetch((url) => {
+      if (url.endsWith('/api/design-systems')) {
+        return jsonResponse({
+          ok: true,
+          data: [{ id: 'ds1', name: 'Mine', source: 'user' }],
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['design-systems', 'list'], {
+      fetchImpl,
+      env,
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('ds1');
+    expect(lines.join('')).toContain('Mine');
+  });
+
+  it('design-systems rules <id> prints RULES.md on stdout', async () => {
+    const { fetchImpl, calls } = recordFetch((url) => {
+      if (url.includes('/rules')) {
+        return jsonResponse({
+          ok: true,
+          data: { content: '# Agent rules\n- never hex\n' },
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['design-systems', 'rules', 'ds1'], {
+      fetchImpl,
+      env,
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('# Agent rules');
+    expect(lines.join('')).toContain('never hex');
+    expect(calls[0]?.url).toContain('/rules');
+    expect(calls[0]?.method === undefined || calls[0]?.method === 'GET').toBe(true);
+  });
+
+  it('design-systems content <id> prints DESIGN.md', async () => {
+    const { fetchImpl } = recordFetch((url) => {
+      if (url.includes('/content')) {
+        return jsonResponse({ ok: true, data: { content: '# Design\n' } });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['design-systems', 'content', 'ds1'], {
+      fetchImpl,
+      env,
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('# Design');
+  });
+
+  it('design-systems tokens <id> prints tokens.css', async () => {
+    const { fetchImpl } = recordFetch((url) => {
+      if (url.includes('/tokens')) {
+        return jsonResponse({
+          ok: true,
+          data: { content: ':root { --color-primary: #3B82F6; }' },
+        });
+      }
+      return jsonResponse({ ok: false }, 404);
+    });
+    const lines: string[] = [];
+    const code = await runCli(['design-systems', 'tokens', 'ds1'], {
+      fetchImpl,
+      env,
+      stdout: (s) => lines.push(s),
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toContain('--color-primary');
+  });
+
+  it('rules <id> --file <path> PUTs file contents', async () => {
+    const tmpRules = join(tmpdir(), `neos-cli-ds-rules-${process.pid}-${Date.now()}.md`);
+    tmpFiles.push(tmpRules);
+    const body = '# Agent rules\n\n## Never\n- x\n';
+    await writeFile(tmpRules, body, 'utf8');
+    const { fetchImpl, calls } = recordFetch(() => jsonResponse({ ok: true }));
+    const code = await runCli(['design-systems', 'rules', 'ds1', '--file', tmpRules], {
+      fetchImpl,
+      env,
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.OK);
+    const put = calls.at(-1);
+    expect(put?.method).toBe('PUT');
+    expect(put?.url).toContain('/rules');
+    expect(JSON.parse(put?.body ?? '{}')).toEqual({ content: body });
+  });
+
+  it('content <id> --file and tokens <id> --file PUT the matching routes', async () => {
+    const tmpContent = join(tmpdir(), `neos-cli-ds-content-${process.pid}-${Date.now()}.md`);
+    const tmpTokens = join(tmpdir(), `neos-cli-ds-tokens-${process.pid}-${Date.now()}.css`);
+    tmpFiles.push(tmpContent, tmpTokens);
+    await writeFile(tmpContent, '# D\n', 'utf8');
+    await writeFile(tmpTokens, ':root{}\n', 'utf8');
+    const { fetchImpl, calls } = recordFetch(() => jsonResponse({ ok: true }));
+    const contentCode = await runCli(['design-systems', 'content', 'ds1', '--file', tmpContent], {
+      fetchImpl,
+      env,
+      stdout: () => {},
+      stderr: () => {},
+    });
+    const tokensCode = await runCli(['design-systems', 'tokens', 'ds1', '--file', tmpTokens], {
+      fetchImpl,
+      env,
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(contentCode).toBe(EXIT.OK);
+    expect(tokensCode).toBe(EXIT.OK);
+    expect(calls[0]?.method).toBe('PUT');
+    expect(calls[0]?.url).toContain('/content');
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ content: '# D\n' });
+    expect(calls[1]?.method).toBe('PUT');
+    expect(calls[1]?.url).toContain('/tokens');
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({ content: ':root{}\n' });
+  });
+
+  it('unknown subcommand and missing id → EXIT.USAGE with the new usage string', async () => {
+    const err: string[] = [];
+    const nope = await runCli(['design-systems', 'nope'], {
+      stdout: () => {},
+      stderr: (s) => err.push(s),
+    });
+    expect(nope).toBe(EXIT.USAGE);
+    expect(err.join('')).toMatch(/content/);
+    expect(err.join('')).toMatch(/rules/);
+    expect(err.join('')).toMatch(/tokens/);
+
+    expect(await runCli(['design-systems', 'rules'], { stdout: () => {}, stderr: () => {} })).toBe(
+      EXIT.USAGE,
+    );
+    expect(
+      await runCli(['design-systems', 'append', 'ds1'], { stdout: () => {}, stderr: () => {} }),
+    ).toBe(EXIT.USAGE);
+    expect(
+      await runCli(['design-systems', 'prune', 'ds1'], { stdout: () => {}, stderr: () => {} }),
+    ).toBe(EXIT.USAGE);
+    expect(
+      await runCli(['design-systems', 'components', 'ds1'], { stdout: () => {}, stderr: () => {} }),
+    ).toBe(EXIT.USAGE);
+    expect(
+      await runCli(['design-systems', 'starters', 'ds1'], { stdout: () => {}, stderr: () => {} }),
+    ).toBe(EXIT.USAGE);
+    expect(
+      await runCli(['design-systems', 'rules', 'ds1', '--file'], {
+        stdout: () => {},
+        stderr: () => {},
+      }),
+    ).toBe(EXIT.USAGE);
+  });
+
+  it('help lists design-systems content/rules/tokens', async () => {
+    const lines: string[] = [];
+    const code = await runCli(['help'], { stdout: (s) => lines.push(s), stderr: () => {} });
+    expect(code).toBe(EXIT.OK);
+    expect(lines.join('')).toMatch(/design-systems/);
+    expect(lines.join('')).toMatch(/content/);
+    expect(lines.join('')).toMatch(/rules/);
+    expect(lines.join('')).toMatch(/tokens/);
+
+    const usage: string[] = [];
+    const empty = await runCli([], { stdout: (s) => usage.push(s), stderr: () => {} });
+    expect(empty).toBe(EXIT.USAGE);
+    expect(usage.join('')).toMatch(/Usage/);
+  });
+
+  it('--json GET prints JSON data; --json PUT prints JSON', async () => {
+    const tmpRules = join(tmpdir(), `neos-cli-ds-json-${process.pid}-${Date.now()}.md`);
+    tmpFiles.push(tmpRules);
+    await writeFile(tmpRules, '# Agent rules\n', 'utf8');
+    const { fetchImpl } = recordFetch((url, init) => {
+      if (init?.method === 'PUT') return jsonResponse({ ok: true, data: { ok: true } });
+      return jsonResponse({ ok: true, data: { content: '# Agent rules\n' } });
+    });
+    const getLines: string[] = [];
+    const getCode = await runCli(['--json', 'design-systems', 'rules', 'ds1'], {
+      fetchImpl,
+      env,
+      stdout: (s) => getLines.push(s),
+      stderr: () => {},
+    });
+    expect(getCode).toBe(EXIT.OK);
+    expect(JSON.parse(getLines.join(''))).toMatchObject({ content: '# Agent rules\n' });
+
+    const putLines: string[] = [];
+    const putCode = await runCli(
+      ['--json', 'design-systems', 'rules', 'ds1', '--file', tmpRules],
+      {
+        fetchImpl,
+        env,
+        stdout: (s) => putLines.push(s),
+        stderr: () => {},
+      },
+    );
+    expect(putCode).toBe(EXIT.OK);
+    expect(() => JSON.parse(putLines.join(''))).not.toThrow();
+  });
+
+  it('GET 404 maps to EXIT.NOT_FOUND', async () => {
+    const { fetchImpl } = recordFetch(() => jsonResponse({ ok: false, error: 'Not found' }, 404));
+    const code = await runCli(['design-systems', 'rules', 'ds1'], {
+      fetchImpl,
+      env,
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.NOT_FOUND);
+  });
+
+  it('PUT --file missing path on disk → EXIT.VALIDATION; no PUT', async () => {
+    const missing = join(tmpdir(), `neos-cli-ds-missing-${process.pid}.md`);
+    const { fetchImpl, calls } = recordFetch(() => jsonResponse({ ok: true }));
+    const code = await runCli(['design-systems', 'rules', 'ds1', '--file', missing], {
+      fetchImpl,
+      env,
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.VALIDATION);
+    expect(calls.filter((c) => c.method === 'PUT')).toEqual([]);
+  });
+
+  it('PUT --file with null byte → EXIT.VALIDATION; no PUT', async () => {
+    const tmpRules = join(tmpdir(), `neos-cli-ds-null-${process.pid}-${Date.now()}.md`);
+    tmpFiles.push(tmpRules);
+    await writeFile(tmpRules, `ok${'\0'}bad`, 'utf8');
+    const { fetchImpl, calls } = recordFetch(() => jsonResponse({ ok: true }));
+    const code = await runCli(['design-systems', 'rules', 'ds1', '--file', tmpRules], {
+      fetchImpl,
+      env,
+      stdout: () => {},
+      stderr: () => {},
+    });
+    expect(code).toBe(EXIT.VALIDATION);
+    expect(calls.filter((c) => c.method === 'PUT')).toEqual([]);
+  });
+
+  it('source scan: CLI design-systems command has no append/prune/components/starters branches', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(join(here, 'commands/design-systems.ts'), 'utf8');
+    expect(src).not.toMatch(/sub === ['"]append['"]/);
+    expect(src).not.toMatch(/sub === ['"]prune['"]/);
+    expect(src).not.toMatch(/sub === ['"]components['"]/);
+    expect(src).not.toMatch(/sub === ['"]starters['"]/);
   });
 });

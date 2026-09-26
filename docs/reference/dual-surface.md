@@ -41,7 +41,7 @@ Web is intentionally **not** a clone of every desktop route. Expanding web is a 
 | Blocks | **yes** | **yes (v0.26)** | — | Web: list + create prompt block |
 | Templates | **yes** | **yes (v0.26)** | — | Web: instantiate workflow |
 | Skills UI | **yes** | **yes** | — | Web + desktop: list/scan/toggle/delete + catalog search/preview/install. Remote delete removes files. Web is thin (no detail/Try/upgrade chrome). |
-| Design systems | **yes** | **yes (v0.26)** | — | Web: list + DESIGN.md editor |
+| Design systems | **yes** | **yes (v0.26)** | list + content/rules/tokens get/put | Web: list + DESIGN.md + RULES.md editors. Promote, prune UX, variants, starters, project Context RULES preview = Desktop only. |
 | Media generate UI | **yes** | **yes** (v0.23) | yes | Web: list + generate; Desktop full studio |
 | Sessions / workspaces | **yes** | **yes (v0.25)** | — | Web: list/create/chat SSE + workspace CRUD |
 | MCP install snippets | yes | yes | `neos mcp serve` | Thin panel on web Settings |

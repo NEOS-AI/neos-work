@@ -101,4 +101,71 @@ describe('NeosApiClient', () => {
     expect(urls[0]).toMatch(/\/api\/cli-agents$/);
     expect(urls[1]).toMatch(/\/api\/cli-agents\/catalog$/);
   });
+
+  it('design-system content/rules/tokens get and put hit the daemon routes', async () => {
+    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      calls.push({
+        url,
+        method: init?.method,
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return new Response(JSON.stringify({ ok: true, data: { content: 'ok' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const client = new NeosApiClient(cfg, fetchImpl);
+    await client.getDesignSystemContent('ds1');
+    await client.saveDesignSystemContent('ds1', '# D');
+    await client.getDesignSystemRules('ds1');
+    await client.saveDesignSystemRules('ds1', '# R');
+    await client.getDesignSystemTokens('ds1');
+    await client.saveDesignSystemTokens('ds1', ':root{}');
+    expect(calls[0]?.method).toBe('GET');
+    expect(calls[0]?.url).toMatch(/\/api\/design-systems\/ds1\/content$/);
+    expect(calls[1]?.method).toBe('PUT');
+    expect(calls[1]?.url).toMatch(/\/api\/design-systems\/ds1\/content$/);
+    expect(JSON.parse(calls[1]?.body ?? '{}')).toEqual({ content: '# D' });
+    expect(calls[2]?.method).toBe('GET');
+    expect(calls[2]?.url).toMatch(/\/api\/design-systems\/ds1\/rules$/);
+    expect(calls[3]?.method).toBe('PUT');
+    expect(calls[3]?.url).toMatch(/\/api\/design-systems\/ds1\/rules$/);
+    expect(JSON.parse(calls[3]?.body ?? '{}')).toEqual({ content: '# R' });
+    expect(calls[4]?.method).toBe('GET');
+    expect(calls[4]?.url).toMatch(/\/api\/design-systems\/ds1\/tokens$/);
+    expect(calls[5]?.method).toBe('PUT');
+    expect(calls[5]?.url).toMatch(/\/api\/design-systems\/ds1\/tokens$/);
+    expect(JSON.parse(calls[5]?.body ?? '{}')).toEqual({ content: ':root{}' });
+  });
+
+  it('CLI client has no append/prune/components/starters helpers', () => {
+    const client = new NeosApiClient(cfg, vi.fn() as unknown as typeof fetch);
+    expect(typeof (client as { appendDesignSystemRules?: unknown }).appendDesignSystemRules).toBe(
+      'undefined',
+    );
+    expect(typeof (client as { pruneDesignSystemRules?: unknown }).pruneDesignSystemRules).toBe(
+      'undefined',
+    );
+    expect(typeof (client as { getDesignSystemComponents?: unknown }).getDesignSystemComponents).toBe(
+      'undefined',
+    );
+    const names = Object.getOwnPropertyNames(Object.getPrototypeOf(client));
+    expect(names.filter((n) => /starter/i.test(n))).toEqual([]);
+  });
+
+  it('GET 404 throws CliHttpError NOT_FOUND', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: false, error: 'Not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    ) as unknown as typeof fetch;
+    const client = new NeosApiClient(cfg, fetchImpl);
+    await expect(client.getDesignSystemRules('missing')).rejects.toMatchObject({
+      exitCode: EXIT.NOT_FOUND,
+    });
+  });
 });
