@@ -26,6 +26,7 @@ export interface SheetsPaneProps {
   onSave: () => void;
   saving?: boolean;
   locale?: string;
+  formulaWorker?: boolean;
   labels: SheetsPaneLabels;
   onResolveConflict?: (
     choice: 'keep-mine' | 'take-agent' | 'diff',
@@ -39,6 +40,7 @@ export function SheetsPane({
   onSave,
   saving = false,
   locale,
+  formulaWorker = false,
   labels,
   onResolveConflict,
 }: SheetsPaneProps) {
@@ -92,6 +94,7 @@ export function SheetsPane({
       hostEl,
       snapshot: parsed.snapshot,
       locale,
+      formulaWorker,
       getDisk: () => bufferRef.current.disk,
       onEdit: (content) => onEditRef.current(content),
     });
@@ -101,7 +104,7 @@ export function SheetsPane({
       handleRef.current = null;
       setMounted(false);
     };
-  }, [buffer.path, remountToken, parsed.ok, locale]);
+  }, [buffer.path, remountToken, parsed.ok, locale, formulaWorker]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

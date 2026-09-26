@@ -2,6 +2,7 @@ import '@univerjs/preset-sheets-core/lib/index.css';
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US';
 import UniverPresetSheetsCoreKoKR from '@univerjs/preset-sheets-core/locales/ko-KR';
+import formulaWorkerURL from '@univerjs/preset-sheets-core/worker?worker&url';
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets';
 import {
   localeFromNeosI18n,
@@ -19,12 +20,17 @@ export function mountUniver(opts: {
   hostEl: HTMLElement;
   snapshot: UniverWorkbookSnapshot;
   locale?: string;
+  formulaWorker?: boolean;
   getDisk: () => string;
   onEdit: (content: string) => void;
 }): MountUniverHandle {
-  const { hostEl, snapshot, locale, getDisk, onEdit } = opts;
+  const { hostEl, snapshot, locale, formulaWorker = false, getDisk, onEdit } = opts;
   const univerLocale =
     localeFromNeosI18n(locale) === 'koKR' ? LocaleType.KO_KR : LocaleType.EN_US;
+  // Formula RPC offload (K11/K24); omit workerURL so the preset stays in-process.
+  const worker = formulaWorker
+    ? new Worker(new URL(formulaWorkerURL, import.meta.url), { type: 'module' })
+    : undefined;
   const { univer, univerAPI } = createUniver({
     locale: univerLocale,
     locales: {
@@ -34,6 +40,7 @@ export function mountUniver(opts: {
     presets: [
       UniverSheetsCorePreset({
         container: hostEl,
+        ...(worker ? { workerURL: worker } : {}),
       }),
     ],
   });
@@ -103,6 +110,11 @@ export function mountUniver(opts: {
       }
       try {
         univer.dispose();
+      } catch {
+        // ignore
+      }
+      try {
+        worker?.terminate();
       } catch {
         // ignore
       }
