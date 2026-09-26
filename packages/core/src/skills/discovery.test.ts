@@ -235,4 +235,24 @@ describe('bundled monorepo skills catalog', () => {
     const landing = scanned.find((s) => s.manifest.name === 'web-landing');
     expect(landing?.examples?.some((e) => e.key === 'hero')).toBe(true);
   });
+
+  it('bundled catalog includes design-harness-review as a package skill', async () => {
+    const repoSkills = join(process.cwd(), '..', '..', 'skills');
+    const root =
+      resolveBundledSkillsDir(repoSkills) ??
+      resolveBundledSkillsDir(null, join(process.cwd(), '..', '..'));
+    expect(root).not.toBeNull();
+    const scanned = await scanSkillRoot(root!, 'bundled');
+    const hit = scanned.find((s) => s.manifest.name === 'design-harness-review');
+    expect(hit).toBeTruthy();
+    expect(hit!.source).toBe('bundled');
+    expect(hit!.manifest.featured).toBe(false);
+    expect(hit!.manifest.designSystemRequired).toBe(true);
+    expect(hit!.manifest.mode).toBe('design');
+    expect(hit!.manifest.category).toBe('design');
+    expect(hit!.packageDir?.endsWith('skills/design-harness-review')).toBe(true);
+    expect(hit!.examples === undefined || hit!.examples.length === 0).toBe(true);
+    expect(scanned.some((s) => s.manifest.name === 'design-critique')).toBe(true);
+    expect(scanned.every((s) => s.manifest.name !== 'human-review')).toBe(true);
+  });
 });

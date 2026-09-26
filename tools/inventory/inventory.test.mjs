@@ -4,8 +4,20 @@
  */
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { buildInventory, evaluateGates } from './inventory.mjs';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const COMMITTED_INVENTORY = path.join(REPO_ROOT, 'docs/generated/capability-inventory.json');
+
+function skillIdKindPath(items) {
+  return items
+    .map((item) => ({ id: item.id, kind: item.kind, path: item.path }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
 
 describe('buildInventory', () => {
   it('collects catalogs with version and gates', () => {
@@ -434,5 +446,42 @@ describe('buildInventory', () => {
     assert.ok(inv.catalogs.v27Features.features.paletteV2);
     assert.ok(inv.catalogs.v27Features.features.runHistory);
     assert.ok(inv.checks.results.some((r) => r.id === 'v27Features' && r.ok));
+  });
+
+  it('live scan includes design-harness-review package path', () => {
+    const inv = buildInventory();
+    assert.equal(inv.checks.ok, true);
+    const hit = inv.catalogs.skills.items.find((s) => s.id === 'design-harness-review');
+    assert.deepEqual(hit, {
+      id: 'design-harness-review',
+      kind: 'package',
+      path: 'skills/design-harness-review/SKILL.md',
+    });
+    assert.ok(inv.catalogs.skills.count >= 8);
+    const critique = inv.catalogs.skills.items.find((s) => s.id === 'design-critique');
+    assert.deepEqual(critique, {
+      id: 'design-critique',
+      kind: 'package',
+      path: 'skills/design-critique/SKILL.md',
+    });
+    assert.equal(
+      inv.catalogs.skills.items.some((s) => s.id === 'human-review'),
+      false,
+    );
+  });
+
+  it('committed capability-inventory.json matches live skill ids and includes design-harness-review', () => {
+    const live = buildInventory();
+    const committed = JSON.parse(fs.readFileSync(COMMITTED_INVENTORY, 'utf8'));
+    assert.deepEqual(
+      skillIdKindPath(committed.catalogs.skills.items),
+      skillIdKindPath(live.catalogs.skills.items),
+    );
+    const hit = committed.catalogs.skills.items.find((s) => s.id === 'design-harness-review');
+    assert.deepEqual(hit, {
+      id: 'design-harness-review',
+      kind: 'package',
+      path: 'skills/design-harness-review/SKILL.md',
+    });
   });
 });

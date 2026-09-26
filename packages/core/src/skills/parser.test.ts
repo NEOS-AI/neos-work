@@ -1,6 +1,28 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
+import { mergeSkillsByPrecedence } from './discovery.js';
 import { parseSkillFile } from './parser.js';
+
+const REPO_SKILLS = join(process.cwd(), '..', '..', 'skills');
+
+function bundledSkillMd(dirName: string): string {
+  return join(REPO_SKILLS, dirName, 'SKILL.md');
+}
+
+const SECTION_12_FRONTMATTER = `---
+name: design-harness-review
+description: Suggest stale RULES.md Corrections to prune. Does not delete files.
+version: 1.0.0
+mode: design
+category: design
+featured: false
+triggers: prune rules, stale design harness, corrections cleanup
+example-prompt: Review RULES.md Corrections and list bullets that are stale or too specific
+design-system-required: true
+---`;
 
 describe('parseSkillFile', () => {
   it('parses YAML frontmatter and body', () => {
@@ -445,5 +467,106 @@ body
     expect(skill!.manifest.name).toBe('x');
     expect(typeof skill!.manifest.description).toBe('string');
     expect(skill!.manifest.description === '' || skill!.manifest.description === '|').toBe(true);
+  });
+});
+
+describe('bundled design-harness-review', () => {
+  it('parses skills/design-harness-review/SKILL.md §12 frontmatter', () => {
+    const skillPath = bundledSkillMd('design-harness-review');
+    expect(existsSync(skillPath)).toBe(true);
+    const content = readFileSync(skillPath, 'utf8');
+    expect(content.startsWith(SECTION_12_FRONTMATTER)).toBe(true);
+    const closing = content.indexOf('\n---', 4);
+    expect(closing).toBeGreaterThan(0);
+    const yaml = content.slice(0, closing + '\n---'.length);
+    expect(yaml).toBe(SECTION_12_FRONTMATTER);
+    expect(yaml).not.toMatch(/^fidelity:/m);
+    expect(yaml).not.toMatch(/^license:/m);
+    expect(yaml).not.toMatch(/^platform:/m);
+
+    const skill = parseSkillFile(content, skillPath, 'bundled');
+    expect(skill).not.toBeNull();
+    expect(skill!.manifest.name).toBe('design-harness-review');
+    expect(skill!.manifest.description).toBe(
+      'Suggest stale RULES.md Corrections to prune. Does not delete files.',
+    );
+    expect(skill!.manifest.version).toBe('1.0.0');
+    expect(skill!.manifest.mode).toBe('design');
+    expect(skill!.manifest.category).toBe('design');
+    expect(skill!.manifest.featured).toBe(false);
+    expect(skill!.manifest.triggers).toEqual([
+      'prune rules',
+      'stale design harness',
+      'corrections cleanup',
+    ]);
+    expect(skill!.manifest.examplePrompt).toBe(
+      'Review RULES.md Corrections and list bullets that are stale or too specific',
+    );
+    expect(skill!.manifest.designSystemRequired).toBe(true);
+    expect(skill!.manifest.fidelity).toBeUndefined();
+    expect(skill!.source).toBe('bundled');
+    expect(skill!.path.endsWith('skills/design-harness-review/SKILL.md')).toBe(true);
+  });
+
+  it('body suggests prune and does not delete or critique HTML', () => {
+    const skillPath = bundledSkillMd('design-harness-review');
+    expect(existsSync(skillPath)).toBe(true);
+    const skill = parseSkillFile(readFileSync(skillPath, 'utf8'), skillPath, 'bundled');
+    expect(skill).not.toBeNull();
+    const body = skill!.content;
+    expect(body).toMatch(/Corrections/);
+    expect(body).toMatch(/\/api\/design-systems\//);
+    expect(body).toMatch(/rules\/prune/);
+    expect(body).toMatch(/do(?:es)? not delete/i);
+    expect(body).toMatch(/90/);
+    expect(body).toMatch(/20/);
+    expect(body).not.toMatch(/\bhuman-review\b/);
+    expect(body).not.toMatch(/name:\s*human-review/);
+    expect(body).not.toMatch(/skills\/human-review/);
+    expect(body).not.toMatch(/\/api\/harness(es)?\b/);
+    expect(body).not.toMatch(/\bunlink\b/i);
+    expect(body).not.toMatch(/rm -rf/i);
+    expect(body.replace(/do(?:es)? not delete files/gi, '')).not.toMatch(/delete files/i);
+    expect(body).not.toMatch(/Visual hierarchy/);
+    expect(body).not.toMatch(/WCAG/);
+    expect(body).not.toMatch(/Responsive breakpoints/);
+  });
+
+  it('name does not collide with design-critique and is not human-review', () => {
+    const critiquePath = bundledSkillMd('design-critique');
+    const reviewPath = bundledSkillMd('design-harness-review');
+    expect(existsSync(critiquePath)).toBe(true);
+    expect(existsSync(reviewPath)).toBe(true);
+    const critique = parseSkillFile(readFileSync(critiquePath, 'utf8'), critiquePath, 'bundled');
+    const review = parseSkillFile(readFileSync(reviewPath, 'utf8'), reviewPath, 'bundled');
+    expect(critique).not.toBeNull();
+    expect(review).not.toBeNull();
+    expect(critique!.manifest.name).toBe('design-critique');
+    expect(review!.manifest.name).toBe('design-harness-review');
+    expect(critique!.manifest.name).not.toBe(review!.manifest.name);
+    expect(critique!.manifest.name).not.toBe('human-review');
+    expect(review!.manifest.name).not.toBe('human-review');
+    const merged = mergeSkillsByPrecedence([[critique!, review!]]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it('design-critique SKILL.md is unchanged', () => {
+    const content = readFileSync(bundledSkillMd('design-critique'), 'utf8');
+    expect(content).toContain('name: design-critique');
+    expect(content).toContain('design-system-required: false');
+    expect(content).toContain('featured: true');
+    expect(content).toContain('Critique HTML/CSS');
+    expect(content).not.toContain('design-harness-review');
+    expect(content).not.toContain('rules/prune');
+  });
+
+  it('skills/human-review/ does not exist', () => {
+    expect(existsSync(join(REPO_SKILLS, 'human-review'))).toBe(false);
+    expect(existsSync(join(REPO_SKILLS, 'human-review', 'SKILL.md'))).toBe(false);
+  });
+
+  it('design-harness-review has no remote provenance sidecar', () => {
+    const pkgDir = join(REPO_SKILLS, 'design-harness-review');
+    expect(existsSync(pkgDir) && existsSync(join(pkgDir, 'neos-skill-source.json'))).toBe(false);
   });
 });
