@@ -119,7 +119,7 @@ describe('createSheetsTools', () => {
       value: 'x',
     });
     expect(got.success).toBe(false);
-    expect(got.error).toBeTruthy();
+    expect(got.error).toMatch(/range exceeds max size \(10000 cells\)/);
     const after = await readFile(join(root, path), 'utf8');
     expect(after).toBe(before);
   });
@@ -145,6 +145,38 @@ describe('createSheetsTools', () => {
     });
     expect(shape.success).toBe(false);
     expect(shape.error).toMatch(/values shape mismatch/);
+
+    const formulasShape = await getTool('sheets_set_range').execute({
+      path,
+      a1: 'A1:B2',
+      formulas: [['=1']],
+    });
+    expect(formulasShape.success).toBe(false);
+    expect(formulasShape.error).toMatch(/formulas shape mismatch/);
+
+    const rangeScalar = await getTool('sheets_set_range').execute({
+      path,
+      a1: 'A1:B2',
+      value: 'x',
+    });
+    expect(rangeScalar.success).toBe(false);
+    expect(rangeScalar.error).toMatch(/value and formula require a single cell/);
+
+    const badSheet = await getTool('sheets_get_range').execute({
+      path,
+      a1: 'A1',
+      sheet: ' \n',
+    });
+    expect(badSheet.success).toBe(false);
+    expect(badSheet.error).toMatch(/invalid sheet|control characters/i);
+
+    const badFormula = await getTool('sheets_set_range').execute({
+      path,
+      a1: 'A1',
+      formula: 123 as unknown as string,
+    });
+    expect(badFormula.success).toBe(false);
+    expect(badFormula.error).toMatch(/formula must be a string/);
   });
 
   it('rejects protected path writes and 2MiB+ content', async () => {

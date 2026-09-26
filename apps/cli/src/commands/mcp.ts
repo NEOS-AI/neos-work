@@ -49,6 +49,9 @@ async function runSheetTool(
       return { success: false, output: null, error: `Tool not found: ${toolName}` };
     }
     const result = await tool.execute({ ...input, path: localName });
+    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
+      (result.output as Record<string, unknown>).path = relPath;
+    }
     if (toolName === 'sheets_set_range' && result.success) {
       const next = await readFile(join(dir, localName), 'utf8');
       await backend.writeFile(projectId, relPath, next);

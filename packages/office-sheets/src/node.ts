@@ -120,9 +120,12 @@ function boundingArea(parsed: ParsedA1): number {
 
 function asOptionalSheet(raw: unknown): string | undefined {
   if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) return undefined;
+  if (typeof raw !== 'string' || /[\0\r\n]/.test(raw)) {
+    throw new Error('invalid sheet');
+  }
   const s = raw.trim();
-  return s || undefined;
+  if (!s) throw new Error('invalid sheet');
+  return s;
 }
 
 function xorWriteFields(input: Record<string, unknown>): {
@@ -141,19 +144,20 @@ function xorWriteFields(input: Record<string, unknown>): {
 function assertValuesShape(values: unknown, parsed: ParsedA1, label: 'values' | 'formulas'): void {
   const rows = parsed.endRow - parsed.startRow + 1;
   const cols = parsed.endCol - parsed.startCol + 1;
+  const mismatch = label === 'formulas' ? 'formulas shape mismatch' : VALUES_SHAPE;
   if (!Array.isArray(values) || values.length !== rows) {
-    throw new Error(label === 'values' ? VALUES_SHAPE : VALUES_SHAPE);
+    throw new Error(mismatch);
   }
   for (const row of values) {
     if (!Array.isArray(row) || row.length !== cols) {
-      throw new Error(VALUES_SHAPE);
+      throw new Error(mismatch);
     }
   }
 }
 
 function formulaCell(formula: unknown): { f: string; v: null; p: null } {
   if (typeof formula !== 'string') {
-    throw new Error(INVALID_A1);
+    throw new Error('formula must be a string');
   }
   return { f: formula, v: null, p: null };
 }
@@ -203,12 +207,12 @@ export async function withHeadlessWorkbook<T>(
   snapshot: UniverWorkbookSnapshot,
   fn: (api: HeadlessApi) => Promise<T>,
 ): Promise<T> {
+  const locale = snapshot.locale === 'koKR' ? LocaleType.KO_KR : LocaleType.EN_US;
+  const localePack =
+    snapshot.locale === 'koKR' ? UniverPresetSheetsNodeCoreKoKR : UniverPresetSheetsNodeCoreEnUS;
   const { univer, univerAPI } = createUniver({
-    locale: snapshot.locale === 'koKR' ? LocaleType.KO_KR : LocaleType.EN_US,
-    locales: {
-      [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsNodeCoreEnUS),
-      [LocaleType.KO_KR]: mergeLocales(UniverPresetSheetsNodeCoreKoKR),
-    },
+    locale,
+    locales: { [locale]: mergeLocales(localePack) },
     presets: [UniverSheetsNodeCorePreset()],
   });
   try {
@@ -415,6 +419,12 @@ async function executeSet(
     if (parsed.sheetFromA1 && sheetArg) return fail(SHEET_BOTH_ERROR);
     if (boundingArea(parsed) > RANGE_CELL_LIMIT) {
       return fail(`range exceeds max size (${RANGE_CELL_LIMIT} cells)`);
+    }
+    if (
+      (write.kind === 'value' || write.kind === 'formula')
+      && boundingArea(parsed) !== 1
+    ) {
+      return fail('value and formula require a single cell');
     }
     if (write.kind === 'values') assertValuesShape(write.payload, parsed, 'values');
     if (write.kind === 'formulas') assertValuesShape(write.payload, parsed, 'formulas');

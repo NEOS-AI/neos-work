@@ -400,17 +400,27 @@ export async function dispatchNeosMcpTool(
         if (!path) return textResult('path is required and must be project-relative', true);
         if (!a1) return textResult('a1 is required', true);
         const base = { projectId, path, a1, ...(sheet ? { sheet } : {}) };
+        let result: unknown;
         if (name === 'neos_sheets_get') {
-          return jsonResult(await backend.getSheetRange(base));
+          result = await backend.getSheetRange(base);
+        } else if (name === 'neos_sheets_eval') {
+          result = await backend.evalSheetRange(base);
+        } else {
+          const write: Record<string, unknown> = { ...base };
+          for (const key of ['value', 'values', 'formula', 'formulas'] as const) {
+            if (args[key] !== undefined) write[key] = args[key];
+          }
+          result = await backend.setSheetRange(
+            write as Parameters<NeosMcpBackend['setSheetRange']>[0],
+          );
         }
-        if (name === 'neos_sheets_eval') {
-          return jsonResult(await backend.evalSheetRange(base));
-        }
-        const write: Record<string, unknown> = { ...base };
-        for (const key of ['value', 'values', 'formula', 'formulas'] as const) {
-          if (args[key] !== undefined) write[key] = args[key];
-        }
-        return jsonResult(await backend.setSheetRange(write as Parameters<NeosMcpBackend['setSheetRange']>[0]));
+        const failed =
+          result
+          && typeof result === 'object'
+          && !Array.isArray(result)
+          && 'success' in result
+          && (result as { success: unknown }).success === false;
+        return jsonResult(result, Boolean(failed));
       }
       default:
         return textResult(`Unknown tool: ${name}`, true);

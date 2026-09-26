@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -22,6 +22,19 @@ describe('workspace-path safePath', () => {
 
   it('rejects null bytes before trim', () => {
     expect(() => safePath(root, 'ok\0x')).toThrow(/control characters/i);
+  });
+
+  it('rejects symlink that resolves outside the workspace', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'neos-sheets-path-out-'));
+    try {
+      await writeFile(join(outside, 'secret.txt'), 'leak');
+      await symlink(join(outside, 'secret.txt'), join(root, 'link.txt'));
+      expect(() => safePath(root, 'link.txt')).toThrow(
+        'Path "link.txt" resolves outside the workspace via symlink',
+      );
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 });
 

@@ -9,7 +9,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 /** Cap relative path length accepted by FS tools. */
 const MAX_PATH_CHARS = 4_096;
 
-export const PROTECTED_PATTERNS = [
+const PROTECTED_PATTERNS = [
   /^\.env($|\.)/,     // .env, .env.local, .env.production, etc.
   /^\.git\//,         // .git directory
   /\.pem$/,
@@ -26,7 +26,7 @@ export function isProtectedPath(relativePath: string): boolean {
  * Uses path.sep boundary — bare startsWith(root) allows sibling-prefix escapes.
  * Relative `rel` from path.relative: only `..` / `../` escape (not `...hidden` / `..foo`).
  */
-export function isOutsideWorkspace(root: string, abs: string, rel?: string): boolean {
+function isOutsideWorkspace(root: string, abs: string, rel?: string): boolean {
   if (abs === root) return false;
   const prefix = root.endsWith(sep) ? root : root + sep;
   if (!abs.startsWith(prefix)) return true;
