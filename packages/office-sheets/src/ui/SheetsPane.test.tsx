@@ -50,6 +50,35 @@ vi.mock('@univerjs/preset-sheets-core', () => ({
 vi.mock('@univerjs/preset-sheets-core/lib/index.css', () => ({}));
 vi.mock('@univerjs/preset-sheets-core/locales/en-US', () => ({ default: { en: true } }));
 vi.mock('@univerjs/preset-sheets-core/locales/ko-KR', () => ({ default: { ko: true } }));
+vi.mock('@univerjs/preset-sheets-core/worker?worker&url', () => ({
+  default: '/mock-univer-formula-worker.js',
+}));
+
+class MockWorker {
+  url: URL | string;
+  options?: WorkerOptions;
+  constructor(url: URL | string, options?: WorkerOptions) {
+    this.url = url;
+    this.options = options;
+  }
+  postMessage(): void {}
+  terminate(): void {}
+  addEventListener(): void {}
+  removeEventListener(): void {}
+  dispatchEvent(): boolean {
+    return false;
+  }
+  onmessage = null;
+  onerror = null;
+  onmessageerror = null;
+}
+
+function presetOpts(): { container?: HTMLElement; workerURL?: unknown } {
+  const boot = createUniver.mock.calls[0]?.[0] as {
+    presets: Array<{ opts: { container?: HTMLElement; workerURL?: unknown } }>;
+  };
+  return boot.presets[0]?.opts ?? {};
+}
 
 function openBuffer(
   content = snapshotText,
@@ -96,10 +125,14 @@ describe('SheetsPane', () => {
         getShortcut: () => ({ enableShortcut, disableShortcut }),
       },
     });
+    vi.stubGlobal('Worker', MockWorker);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+    document.getElementById('univer-theme-css-variables')?.remove();
+    document.documentElement.classList.remove('univer-dark');
   });
 
   it('serializes onEdit with pretty JSON and trailing newline', async () => {
@@ -345,5 +378,97 @@ describe('SheetsPane', () => {
     expect(screen.getByText(LABELS.parseFailed)).toBeTruthy();
     expect(createUniver).not.toHaveBeenCalled();
     expect(screen.queryByTestId('design-editor')).toBeNull();
+  });
+
+  it('passes a Worker instance when formulaWorker is enabled', async () => {
+    render(
+      <SheetsPane
+        formulaWorker
+        buffer={openBuffer()}
+        onEdit={vi.fn()}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(createUniver).toHaveBeenCalled());
+    const workerURL = presetOpts().workerURL;
+    expect(workerURL).toBeInstanceOf(Worker);
+  });
+
+  it('clears theme CSS, univer-dark, and disables shortcuts on unmount', async () => {
+    const style = document.createElement('style');
+    style.id = 'univer-theme-css-variables';
+    document.head.append(style);
+    document.documentElement.classList.add('univer-dark');
+
+    const { unmount } = render(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={vi.fn()}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(createUniver).toHaveBeenCalled());
+    const disableBeforeUnmount = disableShortcut.mock.calls.length;
+
+    unmount();
+
+    expect(document.getElementById('univer-theme-css-variables')).toBeNull();
+    expect(document.documentElement.classList.contains('univer-dark')).toBe(false);
+    expect(disableShortcut.mock.calls.length).toBeGreaterThan(disableBeforeUnmount);
+  });
+
+  it('enables shortcuts on host focusin and disables on outside focusin', async () => {
+    render(
+      <SheetsPane
+        buffer={openBuffer()}
+        onEdit={vi.fn()}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(createUniver).toHaveBeenCalled());
+    const host = presetOpts().container;
+    expect(host).toBeInstanceOf(HTMLElement);
+
+    enableShortcut.mockClear();
+    disableShortcut.mockClear();
+    fireEvent.focusIn(host!);
+    expect(enableShortcut).toHaveBeenCalled();
+
+    disableShortcut.mockClear();
+    fireEvent.focusIn(document.body);
+    expect(disableShortcut).toHaveBeenCalled();
+  });
+
+  it('does not dispose on dirty file.changed and shows the conflict bar', async () => {
+    const { rerender } = render(
+      <SheetsPane
+        buffer={dirtyBuffer()}
+        onEdit={vi.fn()}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+    await waitFor(() => expect(createWorkbook).toHaveBeenCalledTimes(1));
+    dispose.mockClear();
+
+    rerender(
+      <SheetsPane
+        buffer={{
+          ...dirtyBuffer(),
+          pendingDisk: serializeWorkbookSnapshot({ ...snapshot, name: 'Disk' }),
+          pendingDiskHash: 'h-disk',
+        }}
+        onEdit={vi.fn()}
+        onSave={vi.fn()}
+        labels={LABELS}
+      />,
+    );
+
+    expect(dispose).not.toHaveBeenCalled();
+    expect(createWorkbook).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('conflict-banner')).toBeTruthy();
   });
 });
